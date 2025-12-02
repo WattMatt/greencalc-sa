@@ -53,9 +53,25 @@ Deno.serve(async (req) => {
     const sheetResponse = await fetch(url);
     if (!sheetResponse.ok) {
       const errorText = await sheetResponse.text();
-      console.error("Google Sheets API error:", errorText);
+      console.error("Google Sheets API error:", sheetResponse.status, errorText);
+      
+      let errorMessage = "Failed to fetch sheet data.";
+      try {
+        const errorJson = JSON.parse(errorText);
+        const apiError = errorJson.error?.message || errorJson.error?.status;
+        if (apiError?.includes("API has not been enabled")) {
+          errorMessage = "Google Sheets API not enabled. Enable it at: console.cloud.google.com/apis/library/sheets.googleapis.com";
+        } else if (apiError?.includes("PERMISSION_DENIED") || sheetResponse.status === 403) {
+          errorMessage = "Permission denied. Make sure the sheet is shared as 'Anyone with the link can view'";
+        } else if (sheetResponse.status === 404) {
+          errorMessage = "Sheet not found. Check the URL or Sheet ID";
+        } else if (apiError) {
+          errorMessage = apiError;
+        }
+      } catch {}
+      
       return new Response(
-        JSON.stringify({ error: "Failed to fetch sheet data. Make sure the sheet is public or shared." }),
+        JSON.stringify({ error: errorMessage }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
