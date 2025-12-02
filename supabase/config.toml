@@ -2,3 +2,6 @@ project_id = "zhhcwtftckdwfoactkea"
 
 [functions.import-google-sheet]
 verify_jwt = false
+
+[functions.ai-import-sheet]
+verify_jwt = false
