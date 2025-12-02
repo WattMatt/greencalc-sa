@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.86.0";
+import { create } from "https://deno.land/x/djwt@v3.0.2/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,6 +24,72 @@ interface SheetRow {
   time_of_use?: string;
 }
 
+// Get access token using service account
+async function getAccessToken(): Promise<string> {
+  const serviceAccountJson = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON");
+  if (!serviceAccountJson) {
+    throw new Error("Service account credentials not configured");
+  }
+
+  const serviceAccount = JSON.parse(serviceAccountJson);
+  const { client_email, private_key } = serviceAccount;
+
+  if (!client_email || !private_key) {
+    throw new Error("Invalid service account credentials - missing client_email or private_key");
+  }
+
+  // Import the private key
+  const pemHeader = "-----BEGIN PRIVATE KEY-----";
+  const pemFooter = "-----END PRIVATE KEY-----";
+  const pemContents = private_key
+    .replace(pemHeader, "")
+    .replace(pemFooter, "")
+    .replace(/\s/g, "");
+  
+  const binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8",
+    binaryKey,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  // Create JWT
+  const now = Math.floor(Date.now() / 1000);
+  const jwt = await create(
+    { alg: "RS256", typ: "JWT" },
+    {
+      iss: client_email,
+      scope: "https://www.googleapis.com/auth/spreadsheets.readonly",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: now,
+      exp: now + 3600,
+    },
+    cryptoKey
+  );
+
+  // Exchange JWT for access token
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt,
+    }),
+  });
+
+  if (!tokenResponse.ok) {
+    const errorText = await tokenResponse.text();
+    console.error("Token exchange failed:", errorText);
+    throw new Error("Failed to get access token from Google");
+  }
+
+  const tokenData = await tokenResponse.json();
+  return tokenData.access_token;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -38,19 +105,27 @@ Deno.serve(async (req) => {
       );
     }
 
-    const apiKey = Deno.env.get("GOOGLE_SHEETS_API_KEY");
-    if (!apiKey) {
+    // Get access token using service account
+    let accessToken: string;
+    try {
+      accessToken = await getAccessToken();
+      console.log("Successfully obtained access token");
+    } catch (error) {
+      console.error("Auth error:", error);
       return new Response(
-        JSON.stringify({ error: "Google Sheets API key not configured" }),
+        JSON.stringify({ error: error instanceof Error ? error.message : "Authentication failed" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Fetch data from Google Sheets
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(sheetName)}?key=${apiKey}`;
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(sheetName)}`;
     console.log("Fetching from Google Sheets:", sheetId, sheetName);
     
-    const sheetResponse = await fetch(url);
+    const sheetResponse = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    
     if (!sheetResponse.ok) {
       const errorText = await sheetResponse.text();
       console.error("Google Sheets API error:", sheetResponse.status, errorText);
@@ -59,12 +134,8 @@ Deno.serve(async (req) => {
       try {
         const errorJson = JSON.parse(errorText);
         const apiError = errorJson.error?.message || errorJson.error?.status;
-        if (apiError?.includes("API has not been enabled")) {
-          errorMessage = "Google Sheets API not enabled. Enable it at: console.cloud.google.com/apis/library/sheets.googleapis.com";
-        } else if (apiError?.includes("PERMISSION_DENIED") || sheetResponse.status === 403) {
-          errorMessage = "Permission denied. Make sure the sheet is shared as 'Anyone with the link can view'";
-        } else if (sheetResponse.status === 404) {
-          errorMessage = "Sheet not found. Check the URL or Sheet ID";
+        if (sheetResponse.status === 403 || sheetResponse.status === 404) {
+          errorMessage = "Cannot access sheet. Make sure the sheet is shared with the service account email.";
         } else if (apiError) {
           errorMessage = apiError;
         }
