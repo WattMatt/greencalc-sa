@@ -23,12 +23,14 @@ interface ImportResult {
   extracted: number;
   imported: number;
   skipped: number;
+  municipalities: string[];
   errors: string[];
 }
 
 export function AISheetImport() {
   const [open, setOpen] = useState(false);
   const [sheetUrl, setSheetUrl] = useState("");
+  const [province, setProvince] = useState("Western Cape");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
@@ -90,7 +92,7 @@ export function AISheetImport() {
 
     try {
       const { data, error } = await supabase.functions.invoke("ai-import-sheet", {
-        body: { sheetId, action: "extract" },
+        body: { sheetId, action: "extract", province: province.trim() },
       });
 
       if (error) throw error;
@@ -164,7 +166,21 @@ export function AISheetImport() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              The sheet must be publicly shared (Anyone with the link can view)
+              The sheet must be shared with the service account
+            </p>
+          </div>
+
+          {/* Province Input */}
+          <div className="space-y-2">
+            <Label htmlFor="ai-province">Province Name</Label>
+            <Input
+              id="ai-province"
+              value={province}
+              onChange={(e) => setProvince(e.target.value)}
+              placeholder="e.g., Western Cape, Gauteng, KwaZulu-Natal"
+            />
+            <p className="text-xs text-muted-foreground">
+              All municipalities in this sheet will be assigned to this province
             </p>
           </div>
 
@@ -232,13 +248,19 @@ export function AISheetImport() {
               )}
               <AlertDescription>
                 <div className="space-y-2">
-                  <div className="flex gap-4 text-sm font-medium">
+                  <div className="flex flex-wrap gap-4 text-sm font-medium">
                     <span>AI Extracted: {importResult.extracted}</span>
                     <span className="text-green-600">Imported: {importResult.imported}</span>
                     {importResult.skipped > 0 && (
                       <span className="text-yellow-600">Skipped: {importResult.skipped}</span>
                     )}
                   </div>
+                  {importResult.municipalities && importResult.municipalities.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      Municipalities: {importResult.municipalities.slice(0, 5).join(", ")}
+                      {importResult.municipalities.length > 5 && ` +${importResult.municipalities.length - 5} more`}
+                    </div>
+                  )}
                   {importResult.errors.length > 0 && (
                     <div className="text-xs text-muted-foreground">
                       {importResult.errors.slice(0, 3).map((err, i) => (
