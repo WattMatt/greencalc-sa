@@ -201,6 +201,53 @@ export type Database = {
           },
         ]
       }
+      tou_periods: {
+        Row: {
+          created_at: string
+          day_type: Database["public"]["Enums"]["day_type"]
+          demand_charge_per_kva: number | null
+          end_hour: number
+          id: string
+          rate_per_kwh: number
+          season: Database["public"]["Enums"]["season_type"]
+          start_hour: number
+          tariff_id: string
+          time_of_use: Database["public"]["Enums"]["time_of_use_type"]
+        }
+        Insert: {
+          created_at?: string
+          day_type?: Database["public"]["Enums"]["day_type"]
+          demand_charge_per_kva?: number | null
+          end_hour: number
+          id?: string
+          rate_per_kwh: number
+          season?: Database["public"]["Enums"]["season_type"]
+          start_hour: number
+          tariff_id: string
+          time_of_use?: Database["public"]["Enums"]["time_of_use_type"]
+        }
+        Update: {
+          created_at?: string
+          day_type?: Database["public"]["Enums"]["day_type"]
+          demand_charge_per_kva?: number | null
+          end_hour?: number
+          id?: string
+          rate_per_kwh?: number
+          season?: Database["public"]["Enums"]["season_type"]
+          start_hour?: number
+          tariff_id?: string
+          time_of_use?: Database["public"]["Enums"]["time_of_use_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tou_periods_tariff_id_fkey"
+            columns: ["tariff_id"]
+            isOneToOne: false
+            referencedRelation: "tariffs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -209,6 +256,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      day_type: "Weekday" | "Saturday" | "Sunday"
       phase_type: "Single Phase" | "Three Phase"
       season_type: "All Year" | "High/Winter" | "Low/Summer"
       tariff_type: "Fixed" | "IBT" | "TOU"
@@ -340,6 +388,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      day_type: ["Weekday", "Saturday", "Sunday"],
       phase_type: ["Single Phase", "Three Phase"],
       season_type: ["All Year", "High/Winter", "Low/Summer"],
       tariff_type: ["Fixed", "IBT", "TOU"],
