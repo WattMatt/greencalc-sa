@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin } from "lucide-react";
+import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Trash2 } from "lucide-react";
 
 const SOUTH_AFRICAN_PROVINCES = [
   "Eastern Cape",
@@ -235,6 +235,81 @@ export function FileUploadImport() {
       if (municipalities[i].status === "pending") {
         await handleExtractTariffs(i);
       }
+    }
+  };
+
+  const handleReextractTariffs = async (muniIndex: number) => {
+    const muni = municipalities[muniIndex];
+    if (!muni || !uploadedPath || !file) return;
+
+    // Set to extracting state
+    setMunicipalities(prev => prev.map((m, i) => 
+      i === muniIndex ? { ...m, status: "extracting" as const } : m
+    ));
+
+    try {
+      // First, delete existing tariffs for this municipality
+      const { data: muniData } = await supabase
+        .from("municipalities")
+        .select("id")
+        .ilike("name", muni.name)
+        .maybeSingle();
+
+      if (muniData) {
+        // Get tariff IDs for this municipality
+        const { data: existingTariffs } = await supabase
+          .from("tariffs")
+          .select("id")
+          .eq("municipality_id", muniData.id);
+
+        if (existingTariffs && existingTariffs.length > 0) {
+          const tariffIds = existingTariffs.map(t => t.id);
+          
+          // Delete related rates first
+          await supabase.from("tariff_rates").delete().in("tariff_id", tariffIds);
+          await supabase.from("tou_periods").delete().in("tariff_id", tariffIds);
+          
+          // Then delete the tariffs
+          await supabase.from("tariffs").delete().eq("municipality_id", muniData.id);
+          
+          console.log(`Deleted ${existingTariffs.length} tariffs for ${muni.name}`);
+        }
+      }
+
+      // Now extract fresh tariffs
+      const { data, error } = await supabase.functions.invoke("process-tariff-file", {
+        body: { 
+          filePath: uploadedPath, 
+          fileType: getFileType(file.name),
+          province: province,
+          municipality: muni.name,
+          action: "extract-tariffs" 
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      setMunicipalities(prev => prev.map((m, i) => 
+        i === muniIndex ? { ...m, status: "done" as const, tariffCount: data.imported } : m
+      ));
+
+      toast({ 
+        title: `${muni.name} Re-extracted`, 
+        description: `Imported ${data.imported} tariffs (previous data replaced)` 
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+    } catch (err) {
+      console.error("Re-extraction error:", err);
+      setMunicipalities(prev => prev.map((m, i) => 
+        i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m
+      ));
+      toast({
+        title: `${muni.name} Re-extraction Failed`,
+        description: err instanceof Error ? err.message : "Failed to re-extract tariffs",
+        variant: "destructive",
+      });
     }
   };
 
@@ -478,6 +553,19 @@ export function FileUploadImport() {
                             onClick={() => handleExtractTariffs(index)}
                           >
                             Extract
+                          </Button>
+                        )}
+                        
+                        {muni.status === "done" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs shrink-0 gap-1"
+                            onClick={() => handleReextractTariffs(index)}
+                            title="Delete existing tariffs and re-extract"
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Re-extract
                           </Button>
                         )}
                         
