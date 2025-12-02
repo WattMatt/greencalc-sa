@@ -7,6 +7,7 @@ import { TariffList } from "@/components/tariffs/TariffList";
 import { TOUReference } from "@/components/tariffs/TOUReference";
 import { GoogleSheetsImport } from "@/components/tariffs/GoogleSheetsImport";
 import { AISheetImport } from "@/components/tariffs/AISheetImport";
+import { MunicipalityMap } from "@/components/tariffs/MunicipalityMap";
 
 export default function TariffManagement() {
   const [activeTab, setActiveTab] = useState("tariffs");
@@ -46,6 +47,7 @@ export default function TariffManagement() {
         </TabsContent>
 
         <TabsContent value="municipalities" className="space-y-4">
+          <MunicipalityMap />
           <MunicipalityManager />
         </TabsContent>
 
