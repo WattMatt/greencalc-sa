@@ -757,20 +757,21 @@ export function FileUploadImport() {
                         {muni.status === "done" && (
                           <div className="flex items-center gap-1">
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
                               className="h-7 text-xs shrink-0 gap-1"
                               onClick={() => handlePreview(muni.name)}
-                              title="Preview raw document data"
+                              title="Preview and verify extracted data"
                             >
                               <Eye className="h-3 w-3" />
+                              Preview
                             </Button>
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              className="h-7 text-xs shrink-0 gap-1"
+                              className="h-7 text-xs shrink-0 gap-1 text-orange-600 border-orange-300 hover:bg-orange-50 hover:text-orange-700"
                               onClick={() => handleReextractTariffs(index)}
-                              title="Delete existing tariffs and re-extract"
+                              title="Delete existing tariffs and re-extract from source"
                             >
                               <RefreshCw className="h-3 w-3" />
                               Re-extract
