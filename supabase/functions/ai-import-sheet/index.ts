@@ -1,29 +1,22 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.86.0";
-import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.2/mod.ts";
+import { create } from "https://deno.land/x/djwt@v3.0.2/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface SheetMetadata {
-  spreadsheetId: string;
-  properties: { title: string };
-  sheets: Array<{ properties: { sheetId: number; title: string } }>;
-}
-
 interface ExtractedTariff {
-  province: string;
   municipality: string;
   category: string;
   tariff_name: string;
-  tariff_type: string;
+  tariff_type: "Fixed" | "IBT" | "TOU";
   phase_type?: string;
+  amperage_limit?: string;
+  is_prepaid: boolean;
   fixed_monthly_charge?: number;
   demand_charge_per_kva?: number;
-  is_prepaid?: boolean;
-  amperage_limit?: string;
-  rates?: Array<{
+  rates: Array<{
     rate_per_kwh: number;
     block_start_kwh?: number;
     block_end_kwh?: number;
@@ -43,28 +36,20 @@ async function getAccessToken(): Promise<string> {
   const { client_email, private_key } = serviceAccount;
 
   if (!client_email || !private_key) {
-    throw new Error("Invalid service account credentials - missing client_email or private_key");
+    throw new Error("Invalid service account credentials");
   }
 
-  // Import the private key
   const pemHeader = "-----BEGIN PRIVATE KEY-----";
   const pemFooter = "-----END PRIVATE KEY-----";
-  const pemContents = private_key
-    .replace(pemHeader, "")
-    .replace(pemFooter, "")
-    .replace(/\s/g, "");
-  
+  const pemContents = private_key.replace(pemHeader, "").replace(pemFooter, "").replace(/\s/g, "");
   const binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
   
   const cryptoKey = await crypto.subtle.importKey(
-    "pkcs8",
-    binaryKey,
+    "pkcs8", binaryKey,
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"]
+    false, ["sign"]
   );
 
-  // Create JWT
   const now = Math.floor(Date.now() / 1000);
   const jwt = await create(
     { alg: "RS256", typ: "JWT" },
@@ -78,7 +63,6 @@ async function getAccessToken(): Promise<string> {
     cryptoKey
   );
 
-  // Exchange JWT for access token
   const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -89,8 +73,6 @@ async function getAccessToken(): Promise<string> {
   });
 
   if (!tokenResponse.ok) {
-    const errorText = await tokenResponse.text();
-    console.error("Token exchange failed:", errorText);
     throw new Error("Failed to get access token from Google");
   }
 
@@ -104,7 +86,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { sheetId, action = "analyze" } = await req.json();
+    const { sheetId, action = "analyze", province = "Western Cape" } = await req.json();
     
     if (!sheetId) {
       return new Response(
@@ -115,7 +97,6 @@ Deno.serve(async (req) => {
 
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
     
-    // Get access token using service account
     let accessToken: string;
     try {
       accessToken = await getAccessToken();
@@ -128,7 +109,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Step 1: Get sheet metadata (all tabs)
+    // Get sheet metadata
     console.log("Fetching sheet metadata for:", sheetId);
     const metadataUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}`;
     const metadataRes = await fetch(metadataUrl, {
@@ -136,39 +117,21 @@ Deno.serve(async (req) => {
     });
     
     if (!metadataRes.ok) {
-      const errorText = await metadataRes.text();
-      console.error("Sheet metadata error:", metadataRes.status, errorText);
-      
-      let errorMessage = "Failed to access sheet.";
-      try {
-        const errorJson = JSON.parse(errorText);
-        const apiError = errorJson.error?.message || errorJson.error?.status;
-        if (metadataRes.status === 403 || metadataRes.status === 404) {
-          errorMessage = "Cannot access sheet. Make sure the sheet is shared with the service account email.";
-        } else if (apiError) {
-          errorMessage = apiError;
-        }
-      } catch {}
-      
       return new Response(
-        JSON.stringify({ error: errorMessage }),
+        JSON.stringify({ error: "Cannot access sheet. Make sure it's shared with the service account." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const metadata: SheetMetadata = await metadataRes.json();
-    const sheetTabs = metadata.sheets.map(s => s.properties.title);
+    const metadata = await metadataRes.json();
+    const sheetTabs = metadata.sheets?.map((s: any) => s.properties.title) || [];
     console.log("Found tabs:", sheetTabs);
 
-    // Step 2: Fetch data from each tab
+    // Fetch data from all tabs
     const allData: Record<string, string[][]> = {};
-    
     for (const tabName of sheetTabs) {
       const dataUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(tabName)}`;
-      const dataRes = await fetch(dataUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
-      
+      const dataRes = await fetch(dataUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (dataRes.ok) {
         const tabData = await dataRes.json();
         allData[tabName] = tabData.values || [];
@@ -176,24 +139,23 @@ Deno.serve(async (req) => {
       }
     }
 
-    // If just analyzing, return the structure
     if (action === "analyze") {
-      // Use AI to analyze the structure
-      const analysisPrompt = `Analyze this Google Sheet structure and describe what data it contains. The sheet is called "${metadata.properties.title}" and has these tabs: ${sheetTabs.join(", ")}.
+      const analysisPrompt = `Analyze this South African electricity tariff spreadsheet. Title: "${metadata.properties.title}", Tabs: ${sheetTabs.join(", ")}.
 
-Here's a sample of the data from each tab (first 5 rows):
+Sample data from each tab (first 30 rows):
 ${Object.entries(allData).map(([tab, rows]) => `
 ### Tab: ${tab}
-${rows.slice(0, 5).map(r => r.join(" | ")).join("\n")}
+${rows.slice(0, 30).map(r => r.join(" | ")).join("\n")}
 `).join("\n")}
 
 Identify:
-1. Which tabs appear to be provinces or regions
-2. What municipalities are mentioned
-3. What tariff/pricing structures are present
-4. The general organization of the data
+1. How municipalities are organized (separate tabs? sections within tabs?)
+2. What tariff categories exist (Domestic, Commercial, Industrial, etc.)
+3. What tariff types (Fixed rate, IBT/block tariffs, TOU/time-of-use)
+4. Rate structures (basic charges, energy rates, demand charges, block thresholds)
+5. Any seasonal or time-of-use variations
 
-Be concise.`;
+Be specific about the data structure.`;
 
       const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -204,23 +166,11 @@ Be concise.`;
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [
-            { role: "system", content: "You are a data analyst helping to understand spreadsheet structures for electricity tariff data. Be concise and focus on the structure." },
+            { role: "system", content: "You are an expert in South African electricity tariff structures. Analyze spreadsheet data to identify municipalities, tariff categories, and rate structures." },
             { role: "user", content: analysisPrompt }
           ],
         }),
       });
-
-      if (!aiRes.ok) {
-        console.error("AI analysis failed:", await aiRes.text());
-        return new Response(
-          JSON.stringify({ 
-            tabs: sheetTabs, 
-            rowCounts: Object.fromEntries(Object.entries(allData).map(([k, v]) => [k, v.length])),
-            analysis: "AI analysis unavailable - showing raw structure"
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
 
       const aiData = await aiRes.json();
       const analysis = aiData.choices?.[0]?.message?.content || "Unable to analyze";
@@ -231,34 +181,40 @@ Be concise.`;
           tabs: sheetTabs, 
           rowCounts: Object.fromEntries(Object.entries(allData).map(([k, v]) => [k, v.length])),
           analysis,
-          sampleData: Object.fromEntries(
-            Object.entries(allData).map(([k, v]) => [k, v.slice(0, 3)])
-          )
+          sampleData: Object.fromEntries(Object.entries(allData).map(([k, v]) => [k, v.slice(0, 5)]))
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Step 3: AI extraction of tariff data
     if (action === "extract") {
-      const extractPrompt = `Extract electricity tariff data from this spreadsheet. The sheet is "${metadata.properties.title}" with tabs: ${sheetTabs.join(", ")}.
+      // Combine all data for extraction
+      const combinedData = Object.entries(allData).map(([tab, rows]) => 
+        `=== TAB: ${tab} ===\n${rows.slice(0, 100).map(r => r.join(" | ")).join("\n")}`
+      ).join("\n\n");
 
-Data from each tab:
-${Object.entries(allData).map(([tab, rows]) => `
-### Tab: ${tab}
-${rows.slice(0, 50).map(r => r.join(" | ")).join("\n")}
-`).join("\n")}
+      const extractPrompt = `Extract all electricity tariffs from this South African municipality data. Province: ${province}
 
-Extract all tariffs and return them as structured data. For each tariff, identify:
-- Province (from tab name or data)
-- Municipality name
-- Category (Residential, Commercial, Industrial, Agricultural, etc.)
-- Tariff name
-- Tariff type (Fixed, IBT for inclining block, TOU for time-of-use)
-- Fixed monthly charges if any
-- Energy rates (c/kWh or R/kWh - convert all to c/kWh)
-- Block thresholds for IBT tariffs
-- Season and time-of-use periods if applicable`;
+DATA:
+${combinedData}
+
+EXTRACTION RULES:
+1. Each section starting with "Municipality Name - X%" is a separate municipality
+2. Categories: Domestic, Commercial, Industrial, Agricultural, Public Lighting
+3. Tariff types:
+   - "IBT" for block tariffs with Block 1, Block 2, etc. (0-50kWh, 51-350kWh, etc.)
+   - "TOU" for time-of-use tariffs with Peak/Standard/Off-peak and Low/High Season
+   - "Fixed" for simple basic charge + single energy rate
+4. Extract ALL rates found, including:
+   - Basic charge (R/month or R/day converted to R/month)
+   - Energy rates (c/kWh) with block thresholds if IBT
+   - Demand charges (R/kVA) if present
+   - For TOU: extract each season+period combination as separate rate
+5. Phase type: "Single Phase" or "Three Phase" if mentioned
+6. Amperage: extract from descriptions like "15A", "60A", "100A"
+7. Prepaid: true if "Prepaid" mentioned, false otherwise
+
+Return ALL tariffs found. Each municipality may have 10-20+ different tariff structures.`;
 
       const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -269,14 +225,14 @@ Extract all tariffs and return them as structured data. For each tariff, identif
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [
-            { role: "system", content: "You are a data extraction expert for South African electricity tariffs. Extract structured tariff data accurately." },
+            { role: "system", content: "You are a data extraction expert specializing in South African electricity tariffs. Extract structured tariff data accurately and completely." },
             { role: "user", content: extractPrompt }
           ],
           tools: [{
             type: "function",
             function: {
               name: "save_tariffs",
-              description: "Save extracted tariff data to the database",
+              description: "Save extracted tariff data",
               parameters: {
                 type: "object",
                 properties: {
@@ -285,32 +241,31 @@ Extract all tariffs and return them as structured data. For each tariff, identif
                     items: {
                       type: "object",
                       properties: {
-                        province: { type: "string" },
-                        municipality: { type: "string" },
-                        category: { type: "string" },
-                        tariff_name: { type: "string" },
+                        municipality: { type: "string", description: "Municipality name (without percentage)" },
+                        category: { type: "string", description: "Domestic, Commercial, Industrial, Agricultural, or Public Lighting" },
+                        tariff_name: { type: "string", description: "Descriptive name like 'Prepaid Single Phase 60A' or 'Domestic IBT Conventional'" },
                         tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"] },
                         phase_type: { type: "string", enum: ["Single Phase", "Three Phase"] },
-                        fixed_monthly_charge: { type: "number" },
-                        demand_charge_per_kva: { type: "number" },
+                        amperage_limit: { type: "string", description: "e.g., '60A', '15-32A', '100A'" },
                         is_prepaid: { type: "boolean" },
-                        amperage_limit: { type: "string" },
+                        fixed_monthly_charge: { type: "number", description: "Basic/service charge in Rands per month" },
+                        demand_charge_per_kva: { type: "number", description: "Demand charge in R/kVA if applicable" },
                         rates: {
                           type: "array",
                           items: {
                             type: "object",
                             properties: {
-                              rate_per_kwh: { type: "number", description: "Rate in c/kWh" },
-                              block_start_kwh: { type: "number" },
-                              block_end_kwh: { type: "number" },
-                              season: { type: "string" },
-                              time_of_use: { type: "string" }
+                              rate_per_kwh: { type: "number", description: "Energy rate in c/kWh" },
+                              block_start_kwh: { type: "number", description: "Block start (0, 51, 351, etc.)" },
+                              block_end_kwh: { type: "number", description: "Block end (50, 350, 600, null for unlimited)" },
+                              season: { type: "string", enum: ["All Year", "High/Winter", "Low/Summer"] },
+                              time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak"] }
                             },
                             required: ["rate_per_kwh"]
                           }
                         }
                       },
-                      required: ["province", "municipality", "category", "tariff_name", "tariff_type"]
+                      required: ["municipality", "category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
                     }
                   }
                 },
@@ -360,46 +315,45 @@ Extract all tariffs and return them as structured data. For each tariff, identif
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      // Get/create lookup maps
+      // Get/create province
       const { data: provinces } = await supabase.from("provinces").select("id, name");
+      const provinceMap = new Map(provinces?.map(p => [p.name.toLowerCase(), p.id]) || []);
+      
+      let provinceId = provinceMap.get(province.toLowerCase());
+      if (!provinceId) {
+        const { data: newProv } = await supabase.from("provinces").insert({ name: province }).select("id").single();
+        if (newProv) {
+          provinceId = newProv.id;
+          provinceMap.set(province.toLowerCase(), provinceId);
+        }
+      }
+
       const { data: municipalities } = await supabase.from("municipalities").select("id, name, province_id");
       const { data: categories } = await supabase.from("tariff_categories").select("id, name");
 
-      const provinceMap = new Map(provinces?.map(p => [p.name.toLowerCase(), p.id]) || []);
       const municipalityMap = new Map(municipalities?.map(m => [m.name.toLowerCase(), { id: m.id, province_id: m.province_id }]) || []);
       const categoryMap = new Map(categories?.map(c => [c.name.toLowerCase(), c.id]) || []);
 
       let imported = 0;
       let skipped = 0;
       const errors: string[] = [];
+      const municipalitiesImported = new Set<string>();
 
       for (const tariff of extractedTariffs) {
         try {
-          // Get or create province
-          let provinceId = provinceMap.get(tariff.province.toLowerCase());
-          if (!provinceId) {
-            const { data: newProv } = await supabase
-              .from("provinces")
-              .insert({ name: tariff.province })
-              .select("id")
-              .single();
-            if (newProv) {
-              provinceId = newProv.id;
-              provinceMap.set(tariff.province.toLowerCase(), provinceId);
-            }
-          }
-
           // Get or create municipality
-          let muniInfo = municipalityMap.get(tariff.municipality.toLowerCase());
+          const muniName = tariff.municipality.replace(/\s*-\s*\d+\.?\d*%$/, '').trim();
+          let muniInfo = municipalityMap.get(muniName.toLowerCase());
+          
           if (!muniInfo && provinceId) {
             const { data: newMuni } = await supabase
               .from("municipalities")
-              .insert({ name: tariff.municipality, province_id: provinceId })
+              .insert({ name: muniName, province_id: provinceId })
               .select("id, province_id")
               .single();
             if (newMuni) {
               muniInfo = { id: newMuni.id, province_id: newMuni.province_id };
-              municipalityMap.set(tariff.municipality.toLowerCase(), muniInfo);
+              municipalityMap.set(muniName.toLowerCase(), muniInfo);
             }
           }
 
@@ -434,7 +388,7 @@ Extract all tariffs and return them as structured data. For each tariff, identif
               phase_type: tariff.phase_type || "Single Phase",
               fixed_monthly_charge: tariff.fixed_monthly_charge || 0,
               demand_charge_per_kva: tariff.demand_charge_per_kva || 0,
-              is_prepaid: tariff.is_prepaid || false,
+              is_prepaid: tariff.is_prepaid,
               amperage_limit: tariff.amperage_limit || null,
             })
             .select("id")
@@ -460,6 +414,7 @@ Extract all tariffs and return them as structured data. For each tariff, identif
             }
           }
 
+          municipalitiesImported.add(muniName);
           imported++;
         } catch (e) {
           errors.push(`${tariff.tariff_name}: ${e instanceof Error ? e.message : "Unknown error"}`);
@@ -473,7 +428,8 @@ Extract all tariffs and return them as structured data. For each tariff, identif
           extracted: extractedTariffs.length,
           imported,
           skipped,
-          errors: errors.slice(0, 10)
+          municipalities: Array.from(municipalitiesImported),
+          errors: errors.slice(0, 20)
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
