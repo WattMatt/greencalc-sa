@@ -347,16 +347,24 @@ EXTRACTION RULES:
 1. Municipality: "${municipality}"
 2. Categories: Domestic, Commercial, Industrial, Agricultural, Public Lighting
 3. Tariff types:
-   - "IBT" for block tariffs with Block 1, Block 2, etc.
-   - "TOU" for time-of-use with Peak/Standard/Off-peak
-   - "Fixed" for simple single rate
+   - "TOU" for tariffs with High Demand/Low Demand rates OR Peak/Standard/Off-peak rates
+   - "IBT" for block tariffs with Block 1, Block 2, etc. (consumption tiers)
+   - "Fixed" for simple single flat rate
 4. Extract ALL rates:
    - Basic charge (R/month) - convert R/day to R/month by *30
    - Energy rates (c/kWh) with block thresholds if IBT
-   - Demand charges (R/kVA)
-5. Phase: "Single Phase" or "Three Phase"
-6. Amperage: from "15A", "60A", "100A" etc.
-7. Prepaid: true if "Prepaid" mentioned
+   - Demand charges (R/kVA or R/A/m for per-amp charges)
+5. TIME OF USE mapping:
+   - "High Demand Energy Rate" → time_of_use: "High Demand"
+   - "Low Demand Energy Rate" → time_of_use: "Low Demand"
+   - "Peak" → time_of_use: "Peak"
+   - "Standard" → time_of_use: "Standard"
+   - "Off-Peak" → time_of_use: "Off-Peak"
+6. Phase: "Single Phase" or "Three Phase" (look for "1 Phase", "3 Phase", "1 & 3 Phase")
+7. Amperage: from ">20A", "15A", "60A", "100A" etc.
+8. Prepaid: true if "Prepaid" mentioned
+
+IMPORTANT: If a tariff has BOTH "Low Demand Energy Rate" AND "High Demand Energy Rate", create TWO rate entries with different time_of_use values. This is a TOU tariff.
 
 Extract EVERY tariff structure found for this municipality.`;
 
@@ -369,7 +377,7 @@ Extract EVERY tariff structure found for this municipality.`;
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [
-            { role: "system", content: "You are a data extraction expert for South African electricity tariffs. Extract complete and accurate tariff data for the specified municipality." },
+            { role: "system", content: "You are a data extraction expert for South African electricity tariffs. Extract complete and accurate tariff data for the specified municipality. Pay attention to High Demand and Low Demand rate distinctions." },
             { role: "user", content: extractPrompt }
           ],
           tools: [{
@@ -402,7 +410,7 @@ Extract EVERY tariff structure found for this municipality.`;
                               block_start_kwh: { type: "number" },
                               block_end_kwh: { type: "number" },
                               season: { type: "string", enum: ["All Year", "High/Winter", "Low/Summer"] },
-                              time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak"] }
+                              time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"] }
                             },
                             required: ["rate_per_kwh"]
                           }

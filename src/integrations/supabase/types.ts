@@ -260,7 +260,13 @@ export type Database = {
       phase_type: "Single Phase" | "Three Phase"
       season_type: "All Year" | "High/Winter" | "Low/Summer"
       tariff_type: "Fixed" | "IBT" | "TOU"
-      time_of_use_type: "Any" | "Peak" | "Standard" | "Off-Peak"
+      time_of_use_type:
+        | "Any"
+        | "Peak"
+        | "Standard"
+        | "Off-Peak"
+        | "High Demand"
+        | "Low Demand"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -392,7 +398,14 @@ export const Constants = {
       phase_type: ["Single Phase", "Three Phase"],
       season_type: ["All Year", "High/Winter", "Low/Summer"],
       tariff_type: ["Fixed", "IBT", "TOU"],
-      time_of_use_type: ["Any", "Peak", "Standard", "Off-Peak"],
+      time_of_use_type: [
+        "Any",
+        "Peak",
+        "Standard",
+        "Off-Peak",
+        "High Demand",
+        "Low Demand",
+      ],
     },
   },
 } as const
