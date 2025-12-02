@@ -118,9 +118,42 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch data from Google Sheets
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(sheetName)}`;
-    console.log("Fetching from Google Sheets:", sheetId, sheetName);
+    // First, get sheet metadata to find actual tab names
+    console.log("Fetching sheet metadata for:", sheetId);
+    const metadataUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}`;
+    const metadataRes = await fetch(metadataUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    
+    if (!metadataRes.ok) {
+      const errorText = await metadataRes.text();
+      console.error("Sheet metadata error:", metadataRes.status, errorText);
+      return new Response(
+        JSON.stringify({ error: "Cannot access sheet. Make sure the sheet is shared with the service account email." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    const metadata = await metadataRes.json();
+    const availableTabs = metadata.sheets?.map((s: any) => s.properties.title) || [];
+    console.log("Available tabs:", availableTabs);
+    
+    // Use provided sheetName if it exists, otherwise use first tab
+    let targetTab = sheetName;
+    if (!availableTabs.includes(sheetName)) {
+      if (availableTabs.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "No tabs found in the spreadsheet" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      targetTab = availableTabs[0];
+      console.log(`Tab "${sheetName}" not found, using first tab: "${targetTab}"`);
+    }
+    
+    // Fetch data from the target tab
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(targetTab)}`;
+    console.log("Fetching from Google Sheets:", sheetId, targetTab);
     
     const sheetResponse = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` }
