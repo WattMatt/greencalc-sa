@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Trash2, Eye } from "lucide-react";
+import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Trash2, Eye, Pencil, Save } from "lucide-react";
 
 const SOUTH_AFRICAN_PROVINCES = [
   "Eastern Cape",
@@ -48,6 +49,14 @@ interface PreviewData {
   rowCount: number;
 }
 
+interface TariffRate {
+  id?: string;
+  rate_per_kwh: number;
+  time_of_use: string;
+  block_start_kwh: number | null;
+  block_end_kwh: number | null;
+}
+
 interface ExtractedTariffPreview {
   id: string;
   name: string;
@@ -58,12 +67,7 @@ interface ExtractedTariffPreview {
   demand_charge_per_kva: number | null;
   is_prepaid: boolean | null;
   category: { name: string } | null;
-  rates: Array<{
-    rate_per_kwh: number;
-    time_of_use: string;
-    block_start_kwh: number | null;
-    block_end_kwh: number | null;
-  }>;
+  rates: TariffRate[];
 }
 
 export function FileUploadImport() {
@@ -81,6 +85,9 @@ export function FileUploadImport() {
   const [extractedTariffs, setExtractedTariffs] = useState<ExtractedTariffPreview[]>([]);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [editingTariffId, setEditingTariffId] = useState<string | null>(null);
+  const [editedTariff, setEditedTariff] = useState<ExtractedTariffPreview | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -420,7 +427,86 @@ export function FileUploadImport() {
     setPreviewData(null);
     setExtractedTariffs([]);
     setPreviewOpen(false);
+    setEditingTariffId(null);
+    setEditedTariff(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const startEditing = (tariff: ExtractedTariffPreview) => {
+    setEditingTariffId(tariff.id);
+    setEditedTariff({ ...tariff, rates: [...tariff.rates] });
+  };
+
+  const cancelEditing = () => {
+    setEditingTariffId(null);
+    setEditedTariff(null);
+  };
+
+  const updateEditedTariff = (field: keyof ExtractedTariffPreview, value: any) => {
+    if (!editedTariff) return;
+    setEditedTariff({ ...editedTariff, [field]: value });
+  };
+
+  const updateEditedRate = (index: number, field: keyof TariffRate, value: any) => {
+    if (!editedTariff) return;
+    const newRates = [...editedTariff.rates];
+    newRates[index] = { ...newRates[index], [field]: value };
+    setEditedTariff({ ...editedTariff, rates: newRates });
+  };
+
+  const saveEditedTariff = async () => {
+    if (!editedTariff) return;
+    
+    setIsSaving(true);
+    try {
+      // Update tariff main fields
+      const { error: tariffError } = await supabase
+        .from("tariffs")
+        .update({
+          fixed_monthly_charge: editedTariff.fixed_monthly_charge,
+          demand_charge_per_kva: editedTariff.demand_charge_per_kva,
+          phase_type: editedTariff.phase_type as any,
+          amperage_limit: editedTariff.amperage_limit,
+        })
+        .eq("id", editedTariff.id);
+
+      if (tariffError) throw tariffError;
+
+      // Update rates - delete old and insert new
+      await supabase.from("tariff_rates").delete().eq("tariff_id", editedTariff.id);
+      
+      if (editedTariff.rates.length > 0) {
+        const ratesToInsert = editedTariff.rates.map(rate => ({
+          tariff_id: editedTariff.id,
+          rate_per_kwh: rate.rate_per_kwh,
+          time_of_use: rate.time_of_use as any,
+          block_start_kwh: rate.block_start_kwh,
+          block_end_kwh: rate.block_end_kwh,
+        }));
+        
+        const { error: ratesError } = await supabase.from("tariff_rates").insert(ratesToInsert);
+        if (ratesError) throw ratesError;
+      }
+
+      // Update local state
+      setExtractedTariffs(prev => prev.map(t => 
+        t.id === editedTariff.id ? editedTariff : t
+      ));
+
+      toast({ title: "Tariff Updated", description: `${editedTariff.name} has been saved.` });
+      setEditingTariffId(null);
+      setEditedTariff(null);
+      queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+    } catch (err) {
+      console.error("Save error:", err);
+      toast({
+        title: "Save Failed",
+        description: err instanceof Error ? err.message : "Failed to save changes",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const completedCount = municipalities.filter(m => m.status === "done").length;
@@ -827,74 +913,200 @@ export function FileUploadImport() {
                       </div>
                     ) : (
                       <div className="p-2 space-y-2">
-                        {extractedTariffs.map((tariff) => (
-                          <Card key={tariff.id} className="text-xs">
-                            <CardHeader className="py-2 px-3">
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <div className="font-medium text-sm">{tariff.name}</div>
-                                  <div className="text-muted-foreground">{tariff.category?.name || "Uncategorized"}</div>
+                        {extractedTariffs.map((tariff) => {
+                          const isEditing = editingTariffId === tariff.id;
+                          const displayTariff = isEditing && editedTariff ? editedTariff : tariff;
+                          
+                          return (
+                            <Card key={tariff.id} className={`text-xs ${isEditing ? "ring-2 ring-primary" : ""}`}>
+                              <CardHeader className="py-2 px-3">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="font-medium text-sm">{tariff.name}</div>
+                                    <div className="text-muted-foreground">{tariff.category?.name || "Uncategorized"}</div>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Badge variant="outline" className="text-[10px]">{tariff.tariff_type}</Badge>
+                                    {tariff.is_prepaid && <Badge variant="secondary" className="text-[10px]">Prepaid</Badge>}
+                                    {isEditing ? (
+                                      <>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 px-2 text-xs"
+                                          onClick={cancelEditing}
+                                          disabled={isSaving}
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </Button>
+                                        <Button
+                                          variant="default"
+                                          size="sm"
+                                          className="h-6 px-2 text-xs gap-1"
+                                          onClick={saveEditedTariff}
+                                          disabled={isSaving}
+                                        >
+                                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                          Save
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-2 text-xs gap-1"
+                                        onClick={() => startEditing(tariff)}
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                        Edit
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="flex gap-1">
-                                  <Badge variant="outline" className="text-[10px]">{tariff.tariff_type}</Badge>
-                                  {tariff.is_prepaid && <Badge variant="secondary" className="text-[10px]">Prepaid</Badge>}
-                                </div>
-                              </div>
-                            </CardHeader>
-                            <CardContent className="py-2 px-3 border-t space-y-1">
-                              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                {tariff.fixed_monthly_charge !== null && tariff.fixed_monthly_charge > 0 && (
-                                  <div>
-                                    <span className="text-muted-foreground">Basic Charge:</span>{" "}
-                                    <span className="font-medium text-green-600">R{tariff.fixed_monthly_charge.toFixed(2)}/m</span>
-                                  </div>
-                                )}
-                                {tariff.demand_charge_per_kva !== null && tariff.demand_charge_per_kva > 0 && (
-                                  <div>
-                                    <span className="text-muted-foreground">Demand Charge:</span>{" "}
-                                    <span className="font-medium text-green-600">R{tariff.demand_charge_per_kva.toFixed(2)}/kVA</span>
-                                  </div>
-                                )}
-                                {tariff.phase_type && (
-                                  <div>
-                                    <span className="text-muted-foreground">Phase:</span> {tariff.phase_type}
-                                  </div>
-                                )}
-                                {tariff.amperage_limit && (
-                                  <div>
-                                    <span className="text-muted-foreground">Amperage:</span> {tariff.amperage_limit}
-                                  </div>
-                                )}
-                              </div>
-                              {tariff.rates && tariff.rates.length > 0 && (
-                                <div className="mt-2 pt-2 border-t">
-                                  <div className="text-muted-foreground mb-1">Energy Rates:</div>
-                                  <div className="space-y-0.5">
-                                    {tariff.rates.map((rate, idx) => (
-                                      <div key={idx} className="flex items-center justify-between bg-muted/50 px-2 py-0.5 rounded">
-                                        <span className={`font-medium ${
-                                          rate.time_of_use === "High Demand" ? "text-orange-600" :
-                                          rate.time_of_use === "Low Demand" ? "text-blue-600" :
-                                          rate.time_of_use === "Peak" ? "text-red-600" :
-                                          rate.time_of_use === "Off-Peak" ? "text-green-600" :
-                                          "text-foreground"
-                                        }`}>
-                                          {rate.time_of_use}
-                                          {rate.block_start_kwh !== null && rate.block_end_kwh !== null && (
-                                            <span className="text-muted-foreground ml-1">
-                                              ({rate.block_start_kwh}-{rate.block_end_kwh} kWh)
-                                            </span>
-                                          )}
-                                        </span>
-                                        <span className="font-mono">{(rate.rate_per_kwh * 100).toFixed(2)} c/kWh</span>
+                              </CardHeader>
+                              <CardContent className="py-2 px-3 border-t space-y-2">
+                                {isEditing ? (
+                                  <>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground">Basic Charge (R/month)</Label>
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          className="h-7 text-xs"
+                                          value={displayTariff.fixed_monthly_charge || ""}
+                                          onChange={(e) => updateEditedTariff("fixed_monthly_charge", e.target.value ? parseFloat(e.target.value) : null)}
+                                        />
                                       </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        ))}
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground">Demand Charge (R/kVA)</Label>
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          className="h-7 text-xs"
+                                          value={displayTariff.demand_charge_per_kva || ""}
+                                          onChange={(e) => updateEditedTariff("demand_charge_per_kva", e.target.value ? parseFloat(e.target.value) : null)}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground">Phase Type</Label>
+                                        <Select
+                                          value={displayTariff.phase_type || ""}
+                                          onValueChange={(v) => updateEditedTariff("phase_type", v || null)}
+                                        >
+                                          <SelectTrigger className="h-7 text-xs">
+                                            <SelectValue placeholder="Select" />
+                                          </SelectTrigger>
+                                          <SelectContent className="bg-popover">
+                                            <SelectItem value="Single Phase">Single Phase</SelectItem>
+                                            <SelectItem value="Three Phase">Three Phase</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground">Amperage Limit</Label>
+                                        <Input
+                                          type="text"
+                                          className="h-7 text-xs"
+                                          value={displayTariff.amperage_limit || ""}
+                                          onChange={(e) => updateEditedTariff("amperage_limit", e.target.value || null)}
+                                        />
+                                      </div>
+                                    </div>
+                                    {displayTariff.rates && displayTariff.rates.length > 0 && (
+                                      <div className="pt-2 border-t">
+                                        <Label className="text-[10px] text-muted-foreground">Energy Rates (c/kWh)</Label>
+                                        <div className="space-y-1 mt-1">
+                                          {displayTariff.rates.map((rate, idx) => (
+                                            <div key={idx} className="flex items-center gap-2 bg-muted/50 p-1 rounded">
+                                              <Select
+                                                value={rate.time_of_use}
+                                                onValueChange={(v) => updateEditedRate(idx, "time_of_use", v)}
+                                              >
+                                                <SelectTrigger className="h-6 text-xs w-28">
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent className="bg-popover">
+                                                  <SelectItem value="Any">Any</SelectItem>
+                                                  <SelectItem value="High Demand">High Demand</SelectItem>
+                                                  <SelectItem value="Low Demand">Low Demand</SelectItem>
+                                                  <SelectItem value="Peak">Peak</SelectItem>
+                                                  <SelectItem value="Standard">Standard</SelectItem>
+                                                  <SelectItem value="Off-Peak">Off-Peak</SelectItem>
+                                                </SelectContent>
+                                              </Select>
+                                              <Input
+                                                type="number"
+                                                step="0.01"
+                                                className="h-6 text-xs w-20"
+                                                value={(rate.rate_per_kwh * 100).toFixed(2)}
+                                                onChange={(e) => updateEditedRate(idx, "rate_per_kwh", parseFloat(e.target.value) / 100)}
+                                              />
+                                              <span className="text-[10px] text-muted-foreground">c/kWh</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                      {displayTariff.fixed_monthly_charge !== null && displayTariff.fixed_monthly_charge > 0 && (
+                                        <div>
+                                          <span className="text-muted-foreground">Basic Charge:</span>{" "}
+                                          <span className="font-medium text-green-600">R{displayTariff.fixed_monthly_charge.toFixed(2)}/m</span>
+                                        </div>
+                                      )}
+                                      {displayTariff.demand_charge_per_kva !== null && displayTariff.demand_charge_per_kva > 0 && (
+                                        <div>
+                                          <span className="text-muted-foreground">Demand Charge:</span>{" "}
+                                          <span className="font-medium text-green-600">R{displayTariff.demand_charge_per_kva.toFixed(2)}/kVA</span>
+                                        </div>
+                                      )}
+                                      {displayTariff.phase_type && (
+                                        <div>
+                                          <span className="text-muted-foreground">Phase:</span> {displayTariff.phase_type}
+                                        </div>
+                                      )}
+                                      {displayTariff.amperage_limit && (
+                                        <div>
+                                          <span className="text-muted-foreground">Amperage:</span> {displayTariff.amperage_limit}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {displayTariff.rates && displayTariff.rates.length > 0 && (
+                                      <div className="mt-2 pt-2 border-t">
+                                        <div className="text-muted-foreground mb-1">Energy Rates:</div>
+                                        <div className="space-y-0.5">
+                                          {displayTariff.rates.map((rate, idx) => (
+                                            <div key={idx} className="flex items-center justify-between bg-muted/50 px-2 py-0.5 rounded">
+                                              <span className={`font-medium ${
+                                                rate.time_of_use === "High Demand" ? "text-orange-600" :
+                                                rate.time_of_use === "Low Demand" ? "text-blue-600" :
+                                                rate.time_of_use === "Peak" ? "text-red-600" :
+                                                rate.time_of_use === "Off-Peak" ? "text-green-600" :
+                                                "text-foreground"
+                                              }`}>
+                                                {rate.time_of_use}
+                                                {rate.block_start_kwh !== null && rate.block_end_kwh !== null && (
+                                                  <span className="text-muted-foreground ml-1">
+                                                    ({rate.block_start_kwh}-{rate.block_end_kwh} kWh)
+                                                  </span>
+                                                )}
+                                              </span>
+                                              <span className="font-mono">{(rate.rate_per_kwh * 100).toFixed(2)} c/kWh</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
                       </div>
                     )}
                   </ScrollArea>
