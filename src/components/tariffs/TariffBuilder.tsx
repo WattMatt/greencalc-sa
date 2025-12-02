@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, Save } from "lucide-react";
 import { toast } from "sonner";
+import { TOUPeriodBuilder, TOUPeriod } from "./TOUPeriodBuilder";
 import type { Database } from "@/integrations/supabase/types";
 
 type TariffType = Database["public"]["Enums"]["tariff_type"];
@@ -40,6 +41,7 @@ export function TariffBuilder() {
   const [hasSeasonalRates, setHasSeasonalRates] = useState(false);
   const [isPrepaid, setIsPrepaid] = useState(false);
   const [rateRows, setRateRows] = useState<RateRow[]>([]);
+  const [touPeriods, setTouPeriods] = useState<TOUPeriod[]>([]);
 
   const { data: municipalities } = useQuery({
     queryKey: ["municipalities"],
@@ -82,7 +84,24 @@ export function TariffBuilder() {
 
       if (tariffError) throw tariffError;
 
-      // Insert the rate rows
+      // For TOU tariffs with seasonal rates, insert TOU periods
+      if (tariffType === "TOU" && hasSeasonalRates && touPeriods.length > 0) {
+        const periods = touPeriods.map((period) => ({
+          tariff_id: tariff.id,
+          season: period.season,
+          day_type: period.day_type,
+          time_of_use: period.time_of_use,
+          start_hour: period.start_hour,
+          end_hour: period.end_hour,
+          rate_per_kwh: period.rate_per_kwh,
+          demand_charge_per_kva: period.demand_charge_per_kva,
+        }));
+
+        const { error: periodsError } = await supabase.from("tou_periods").insert(periods);
+        if (periodsError) throw periodsError;
+      }
+
+      // Insert the rate rows (for IBT or simple TOU)
       if (rateRows.length > 0) {
         const rates = rateRows.map((row) => ({
           tariff_id: tariff.id,
@@ -123,6 +142,7 @@ export function TariffBuilder() {
     setHasSeasonalRates(false);
     setIsPrepaid(false);
     setRateRows([]);
+    setTouPeriods([]);
   };
 
   const addRateRow = () => {
@@ -151,8 +171,30 @@ export function TariffBuilder() {
       toast.error("Please fill in all required fields");
       return;
     }
+    if (tariffType === "TOU" && hasSeasonalRates && touPeriods.length === 0) {
+      toast.error("Please add at least one TOU period");
+      return;
+    }
     addTariff.mutate();
   };
+
+  // When switching tariff type or seasonal toggle, reset appropriate data
+  const handleTariffTypeChange = (value: TariffType) => {
+    setTariffType(value);
+    setRateRows([]);
+    setTouPeriods([]);
+  };
+
+  const handleSeasonalChange = (checked: boolean) => {
+    setHasSeasonalRates(checked);
+    if (tariffType === "TOU") {
+      setRateRows([]);
+      setTouPeriods([]);
+    }
+  };
+
+  const showTOUPeriodBuilder = tariffType === "TOU" && hasSeasonalRates;
+  const showSimpleRates = tariffType !== "TOU" || !hasSeasonalRates;
 
   return (
     <Card className="bg-card border-border">
@@ -203,7 +245,7 @@ export function TariffBuilder() {
 
             <div className="space-y-2">
               <Label>Tariff Type</Label>
-              <Select value={tariffType} onValueChange={(v) => setTariffType(v as TariffType)}>
+              <Select value={tariffType} onValueChange={handleTariffTypeChange}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -281,9 +323,9 @@ export function TariffBuilder() {
               <Switch
                 id="seasonal"
                 checked={hasSeasonalRates}
-                onCheckedChange={setHasSeasonalRates}
+                onCheckedChange={handleSeasonalChange}
               />
-              <Label htmlFor="seasonal">Seasonal Rates</Label>
+              <Label htmlFor="seasonal">Seasonal Rates (High/Low Demand)</Label>
             </div>
             <div className="flex items-center space-x-2">
               <Switch
@@ -295,125 +337,140 @@ export function TariffBuilder() {
             </div>
           </div>
 
-          {/* Energy Rates */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">Energy Rates (c/kWh)</h3>
-              <Button type="button" variant="outline" size="sm" onClick={addRateRow}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Rate Row
-              </Button>
-            </div>
-
-            {rateRows.length === 0 ? (
+          {/* TOU Period Builder for TOU + Seasonal */}
+          {showTOUPeriodBuilder && (
+            <div className="space-y-4">
+              <h3 className="font-semibold text-foreground">Time of Use Periods</h3>
               <p className="text-sm text-muted-foreground">
-                Click "Add Rate Row" to add energy charge blocks. For IBT tariffs, add multiple rows with different kWh ranges.
+                Define specific time periods for Peak, Standard, and Off-Peak rates for each season and day type.
               </p>
-            ) : (
-              <div className="space-y-3">
-                {rateRows.map((row, index) => (
-                  <div key={row.id} className="flex items-end gap-3 p-4 rounded-lg bg-accent/50">
-                    {hasSeasonalRates && (
-                      <div className="space-y-1 w-32">
-                        <Label className="text-xs">Season</Label>
-                        <Select
-                          value={row.season}
-                          onValueChange={(v) => updateRateRow(row.id, "season", v)}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="All Year">All Year</SelectItem>
-                            <SelectItem value="High/Winter">High/Winter</SelectItem>
-                            <SelectItem value="Low/Summer">Low/Summer</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
+              <TOUPeriodBuilder periods={touPeriods} onChange={setTouPeriods} />
+            </div>
+          )}
 
-                    {tariffType === "TOU" && (
+          {/* Simple Energy Rates (for IBT, Fixed, or non-seasonal TOU) */}
+          {showSimpleRates && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-foreground">Energy Rates (c/kWh)</h3>
+                <Button type="button" variant="outline" size="sm" onClick={addRateRow}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Rate Row
+                </Button>
+              </div>
+
+              {rateRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {tariffType === "IBT" 
+                    ? "Click 'Add Rate Row' to add inclining block tariff ranges (e.g., 0-50kWh, 51-350kWh)."
+                    : "Click 'Add Rate Row' to add energy charge rates."}
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {rateRows.map((row) => (
+                    <div key={row.id} className="flex items-end gap-3 p-4 rounded-lg bg-accent/50">
+                      {hasSeasonalRates && (
+                        <div className="space-y-1 w-32">
+                          <Label className="text-xs">Season</Label>
+                          <Select
+                            value={row.season}
+                            onValueChange={(v) => updateRateRow(row.id, "season", v)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="All Year">All Year</SelectItem>
+                              <SelectItem value="High/Winter">High/Winter</SelectItem>
+                              <SelectItem value="Low/Summer">Low/Summer</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {tariffType === "TOU" && (
+                        <div className="space-y-1 w-28">
+                          <Label className="text-xs">Time of Use</Label>
+                          <Select
+                            value={row.time_of_use}
+                            onValueChange={(v) => updateRateRow(row.id, "time_of_use", v)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Any">Any</SelectItem>
+                              <SelectItem value="Peak">Peak</SelectItem>
+                              <SelectItem value="Standard">Standard</SelectItem>
+                              <SelectItem value="Off-Peak">Off-Peak</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {tariffType === "IBT" && (
+                        <>
+                          <div className="space-y-1 w-24">
+                            <Label className="text-xs">From (kWh)</Label>
+                            <Input
+                              type="number"
+                              className="h-9"
+                              value={row.block_start_kwh}
+                              onChange={(e) => updateRateRow(row.id, "block_start_kwh", parseInt(e.target.value) || 0)}
+                            />
+                          </div>
+                          <div className="space-y-1 w-24">
+                            <Label className="text-xs">To (kWh)</Label>
+                            <Input
+                              type="number"
+                              className="h-9"
+                              value={row.block_end_kwh ?? ""}
+                              onChange={(e) => updateRateRow(row.id, "block_end_kwh", e.target.value ? parseInt(e.target.value) : null)}
+                              placeholder="∞"
+                            />
+                          </div>
+                        </>
+                      )}
+
                       <div className="space-y-1 w-28">
-                        <Label className="text-xs">Time of Use</Label>
-                        <Select
-                          value={row.time_of_use}
-                          onValueChange={(v) => updateRateRow(row.id, "time_of_use", v)}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Any">Any</SelectItem>
-                            <SelectItem value="Peak">Peak</SelectItem>
-                            <SelectItem value="Standard">Standard</SelectItem>
-                            <SelectItem value="Off-Peak">Off-Peak</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                    {tariffType === "IBT" && (
-                      <>
-                        <div className="space-y-1 w-24">
-                          <Label className="text-xs">From (kWh)</Label>
-                          <Input
-                            type="number"
-                            className="h-9"
-                            value={row.block_start_kwh}
-                            onChange={(e) => updateRateRow(row.id, "block_start_kwh", parseInt(e.target.value) || 0)}
-                          />
-                        </div>
-                        <div className="space-y-1 w-24">
-                          <Label className="text-xs">To (kWh)</Label>
-                          <Input
-                            type="number"
-                            className="h-9"
-                            value={row.block_end_kwh ?? ""}
-                            onChange={(e) => updateRateRow(row.id, "block_end_kwh", e.target.value ? parseInt(e.target.value) : null)}
-                            placeholder="∞"
-                          />
-                        </div>
-                      </>
-                    )}
-
-                    <div className="space-y-1 w-28">
-                      <Label className="text-xs">Rate (c/kWh)</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        className="h-9"
-                        value={row.rate_per_kwh}
-                        onChange={(e) => updateRateRow(row.id, "rate_per_kwh", parseFloat(e.target.value) || 0)}
-                      />
-                    </div>
-
-                    {(tariffType === "TOU" && hasSeasonalRates) && (
-                      <div className="space-y-1 w-32">
-                        <Label className="text-xs">Demand (R/kVA)</Label>
+                        <Label className="text-xs">Rate (c/kWh)</Label>
                         <Input
                           type="number"
                           step="0.01"
                           className="h-9"
-                          value={row.demand_charge_per_kva ?? ""}
-                          onChange={(e) => updateRateRow(row.id, "demand_charge_per_kva", e.target.value ? parseFloat(e.target.value) : undefined)}
+                          value={row.rate_per_kwh}
+                          onChange={(e) => updateRateRow(row.id, "rate_per_kwh", parseFloat(e.target.value) || 0)}
                         />
                       </div>
-                    )}
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 shrink-0"
-                      onClick={() => removeRateRow(row.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                      {tariffType === "TOU" && (
+                        <div className="space-y-1 w-32">
+                          <Label className="text-xs">Demand (R/kVA)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            className="h-9"
+                            value={row.demand_charge_per_kva ?? ""}
+                            onChange={(e) => updateRateRow(row.id, "demand_charge_per_kva", e.target.value ? parseFloat(e.target.value) : undefined)}
+                          />
+                        </div>
+                      )}
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 shrink-0"
+                        onClick={() => removeRateRow(row.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-3">
             <Button type="submit" disabled={addTariff.isPending}>
