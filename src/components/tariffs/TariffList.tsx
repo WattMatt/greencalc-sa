@@ -175,17 +175,18 @@ export function TariffList() {
   const bulkDelete = useMutation({
     mutationFn: async (target: DeleteTarget) => {
       if (target.type === "all") {
-        // Get all tariff IDs first
-        const { data: allTariffs } = await supabase.from("tariffs").select("id");
-        if (allTariffs && allTariffs.length > 0) {
-          const tariffIds = allTariffs.map(t => t.id);
-          // Delete all tariff rates first
-          const { error: ratesError } = await supabase.from("tariff_rates").delete().in("tariff_id", tariffIds);
-          if (ratesError) throw ratesError;
-          // Delete all tariffs
-          const { error } = await supabase.from("tariffs").delete().in("id", tariffIds);
-          if (error) throw error;
-        }
+        // Delete all tariff rates first using gte on uuid (matches all)
+        const { error: ratesError } = await supabase
+          .from("tariff_rates")
+          .delete()
+          .gte("id", "00000000-0000-0000-0000-000000000000");
+        if (ratesError) throw ratesError;
+        // Delete all tariffs
+        const { error } = await supabase
+          .from("tariffs")
+          .delete()
+          .gte("id", "00000000-0000-0000-0000-000000000000");
+        if (error) throw error;
       } else if (target.type === "province") {
         // Get all municipality IDs for this province
         const { data: municipalities } = await supabase
