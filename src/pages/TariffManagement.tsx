@@ -5,6 +5,7 @@ import { MunicipalityManager } from "@/components/tariffs/MunicipalityManager";
 import { TariffBuilder } from "@/components/tariffs/TariffBuilder";
 import { TariffList } from "@/components/tariffs/TariffList";
 import { TOUReference } from "@/components/tariffs/TOUReference";
+import { GoogleSheetsImport } from "@/components/tariffs/GoogleSheetsImport";
 
 export default function TariffManagement() {
   const [activeTab, setActiveTab] = useState("tariffs");
@@ -28,6 +29,9 @@ export default function TariffManagement() {
         </TabsList>
 
         <TabsContent value="tariffs" className="space-y-4">
+          <div className="flex justify-end">
+            <GoogleSheetsImport />
+          </div>
           <TariffList />
         </TabsContent>
 
