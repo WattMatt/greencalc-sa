@@ -4,6 +4,7 @@ import { ProvinceManager } from "@/components/tariffs/ProvinceManager";
 import { MunicipalityManager } from "@/components/tariffs/MunicipalityManager";
 import { TariffBuilder } from "@/components/tariffs/TariffBuilder";
 import { TariffList } from "@/components/tariffs/TariffList";
+import { TOUReference } from "@/components/tariffs/TOUReference";
 
 export default function TariffManagement() {
   const [activeTab, setActiveTab] = useState("tariffs");
@@ -21,6 +22,7 @@ export default function TariffManagement() {
         <TabsList className="bg-muted">
           <TabsTrigger value="tariffs">Tariffs</TabsTrigger>
           <TabsTrigger value="builder">Tariff Builder</TabsTrigger>
+          <TabsTrigger value="tou-reference">TOU Reference</TabsTrigger>
           <TabsTrigger value="municipalities">Municipalities</TabsTrigger>
           <TabsTrigger value="provinces">Provinces</TabsTrigger>
         </TabsList>
@@ -31,6 +33,10 @@ export default function TariffManagement() {
 
         <TabsContent value="builder" className="space-y-4">
           <TariffBuilder />
+        </TabsContent>
+
+        <TabsContent value="tou-reference" className="space-y-4">
+          <TOUReference />
         </TabsContent>
 
         <TabsContent value="municipalities" className="space-y-4">
