@@ -713,7 +713,7 @@ export function TariffList() {
                     </div>
                   ) : (
                     <div className="p-2 space-y-2">
-                      {previewMunicipality?.tariffs.map((tariff) => {
+                      {[...(previewMunicipality?.tariffs || [])].sort((a, b) => a.name.localeCompare(b.name)).map((tariff) => {
                         const isEditing = editingTariffId === tariff.id;
                         const displayTariff = isEditing && editedTariff ? editedTariff : tariff;
                         
