@@ -5,6 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const SOUTH_AFRICAN_PROVINCES = [
+  "Eastern Cape",
+  "Free State",
+  "Gauteng",
+  "KwaZulu-Natal",
+  "Limpopo",
+  "Mpumalanga",
+  "Northern Cape",
+  "North West",
+  "Western Cape",
+] as const;
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { FileSpreadsheet, Upload, AlertCircle, CheckCircle2, Info } from "lucide-react";
@@ -20,7 +33,7 @@ interface ImportResult {
 export function GoogleSheetsImport() {
   const [open, setOpen] = useState(false);
   const [sheetUrl, setSheetUrl] = useState("");
-  const [province, setProvince] = useState("South Africa");
+  const [province, setProvince] = useState("Western Cape");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const { toast } = useToast();
@@ -56,7 +69,7 @@ export function GoogleSheetsImport() {
 
     try {
       const { data, error } = await supabase.functions.invoke("import-google-sheet", {
-        body: { sheetId, province: province.trim() || "South Africa" },
+        body: { sheetId, province: province.trim() || "Western Cape" },
       });
 
       if (error) throw error;
@@ -145,12 +158,18 @@ export function GoogleSheetsImport() {
 
           <div className="space-y-2">
             <Label htmlFor="province">Province</Label>
-            <Input
-              id="province"
-              value={province}
-              onChange={(e) => setProvince(e.target.value)}
-              placeholder="South Africa"
-            />
+            <Select value={province} onValueChange={setProvince}>
+              <SelectTrigger id="province" className="bg-background">
+                <SelectValue placeholder="Select a province" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                {SOUTH_AFRICAN_PROVINCES.map((prov) => (
+                  <SelectItem key={prov} value={prov}>
+                    {prov}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground">
               All municipalities will be assigned to this province
             </p>
