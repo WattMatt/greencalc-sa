@@ -4,11 +4,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, ChevronDown, ChevronRight, MapPin, Building2, Zap } from "lucide-react";
+import { Trash2, ChevronDown, ChevronRight, MapPin, Building2, Zap, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -69,6 +70,7 @@ export function TariffList() {
   const queryClient = useQueryClient();
   const [expandedTariffs, setExpandedTariffs] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [selectedProvince, setSelectedProvince] = useState<string>("all");
 
   const { data: provinces } = useQuery({
     queryKey: ["provinces"],
@@ -207,6 +209,18 @@ export function TariffList() {
     return result.sort((a, b) => a.province.name.localeCompare(b.province.name));
   }, [tariffs, provinces]);
 
+  // Filter grouped data by selected province
+  const filteredData = useMemo(() => {
+    if (selectedProvince === "all") return groupedData;
+    return groupedData.filter((data) => data.province.id === selectedProvince);
+  }, [groupedData, selectedProvince]);
+
+  const filteredTariffCount = useMemo(() => {
+    return filteredData.reduce((sum, p) => 
+      sum + p.municipalities.reduce((mSum, m) => mSum + m.tariffs.length, 0), 0
+    );
+  }, [filteredData]);
+
   const toggleExpanded = (id: string) => {
     setExpandedTariffs((prev) => {
       const next = new Set(prev);
@@ -286,31 +300,50 @@ export function TariffList() {
 
       <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <CardTitle className="text-card-foreground flex items-center gap-2">
                 <Zap className="h-5 w-5" />
                 Electricity Tariffs
               </CardTitle>
               <CardDescription>
-                {tariffs.length} tariffs across {groupedData.length} provinces
+                {selectedProvince === "all" 
+                  ? `${tariffs.length} tariffs across ${groupedData.length} provinces`
+                  : `${filteredTariffCount} tariffs in ${filteredData[0]?.province.name || "selected province"}`
+                }
               </CardDescription>
             </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setDeleteTarget({ type: "all" })}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Clear All
-            </Button>
+            <div className="flex items-center gap-2">
+              <Select value={selectedProvince} onValueChange={setSelectedProvince}>
+                <SelectTrigger className="w-[180px] bg-background">
+                  <Filter className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Filter by province" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  <SelectItem value="all">All Provinces</SelectItem>
+                  {groupedData.map((data) => (
+                    <SelectItem key={data.province.id} value={data.province.id}>
+                      {data.province.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setDeleteTarget({ type: "all" })}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear All
+              </Button>
+            </div>
           </div>
         </CardHeader>
       </Card>
 
       {/* Province Level Accordion */}
       <Accordion type="multiple" className="space-y-3">
-        {groupedData.map((provinceData) => (
+        {filteredData.map((provinceData) => (
           <AccordionItem
             key={provinceData.province.id}
             value={provinceData.province.id}
