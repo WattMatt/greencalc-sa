@@ -9,6 +9,16 @@ import { toast } from "sonner";
 import { useState, useMemo } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface TariffRate {
   id: string;
@@ -31,6 +41,7 @@ interface Tariff {
   phase_type: string | null;
   amperage_limit: string | null;
   has_seasonal_rates: boolean | null;
+  municipality_id: string;
   municipality: { name: string; province_id: string } | null;
   category: { name: string } | null;
   rates: TariffRate[];
@@ -49,9 +60,15 @@ interface GroupedData {
   }[];
 }
 
+type DeleteTarget = 
+  | { type: "all" }
+  | { type: "province"; id: string; name: string }
+  | { type: "municipality"; name: string; tariffIds: string[] };
+
 export function TariffList() {
   const queryClient = useQueryClient();
   const [expandedTariffs, setExpandedTariffs] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
   const { data: provinces } = useQuery({
     queryKey: ["provinces"],
@@ -86,10 +103,68 @@ export function TariffList() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
-      toast.success("Tariff deleted successfully");
+      toast.success("Tariff deleted");
     },
     onError: (error) => {
-      toast.error("Failed to delete tariff: " + error.message);
+      toast.error("Failed to delete: " + error.message);
+    },
+  });
+
+  const bulkDelete = useMutation({
+    mutationFn: async (target: DeleteTarget) => {
+      if (target.type === "all") {
+        // Delete all tariff rates first, then tariffs
+        const { error: ratesError } = await supabase.from("tariff_rates").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        if (ratesError) throw ratesError;
+        const { error } = await supabase.from("tariffs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        if (error) throw error;
+      } else if (target.type === "province") {
+        // Get all municipality IDs for this province
+        const { data: municipalities } = await supabase
+          .from("municipalities")
+          .select("id")
+          .eq("province_id", target.id);
+        
+        if (municipalities && municipalities.length > 0) {
+          const municipalityIds = municipalities.map((m) => m.id);
+          // Get tariff IDs
+          const { data: tariffData } = await supabase
+            .from("tariffs")
+            .select("id")
+            .in("municipality_id", municipalityIds);
+          
+          if (tariffData && tariffData.length > 0) {
+            const tariffIds = tariffData.map((t) => t.id);
+            // Delete rates first
+            const { error: ratesError } = await supabase.from("tariff_rates").delete().in("tariff_id", tariffIds);
+            if (ratesError) throw ratesError;
+            // Delete tariffs
+            const { error } = await supabase.from("tariffs").delete().in("municipality_id", municipalityIds);
+            if (error) throw error;
+          }
+        }
+      } else if (target.type === "municipality") {
+        // Delete rates first
+        const { error: ratesError } = await supabase.from("tariff_rates").delete().in("tariff_id", target.tariffIds);
+        if (ratesError) throw ratesError;
+        // Delete tariffs
+        const { error } = await supabase.from("tariffs").delete().in("id", target.tariffIds);
+        if (error) throw error;
+      }
+    },
+    onSuccess: (_, target) => {
+      queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+      const message = target.type === "all" 
+        ? "All tariffs deleted" 
+        : target.type === "province" 
+          ? `Deleted all tariffs in ${target.name}`
+          : `Deleted all tariffs in ${target.name}`;
+      toast.success(message);
+      setDeleteTarget(null);
+    },
+    onError: (error) => {
+      toast.error("Failed to delete: " + error.message);
+      setDeleteTarget(null);
     },
   });
 
@@ -157,6 +232,14 @@ export function TariffList() {
     return data.municipalities.reduce((sum, m) => sum + m.tariffs.length, 0);
   };
 
+  const getDeleteDescription = () => {
+    if (!deleteTarget) return "";
+    if (deleteTarget.type === "all") return `This will permanently delete all ${tariffs?.length || 0} tariffs.`;
+    if (deleteTarget.type === "province") return `This will delete all tariffs in ${deleteTarget.name}.`;
+    if (deleteTarget.type === "municipality") return `This will delete all ${deleteTarget.tariffIds.length} tariffs in ${deleteTarget.name}.`;
+    return "";
+  };
+
   if (isLoading) {
     return (
       <Card className="bg-card border-border">
@@ -181,15 +264,47 @@ export function TariffList() {
 
   return (
     <div className="space-y-4">
+      {/* Confirmation Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+            <AlertDialogDescription>{getDeleteDescription()}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTarget && bulkDelete.mutate(deleteTarget)}
+              disabled={bulkDelete.isPending}
+            >
+              {bulkDelete.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <CardTitle className="text-card-foreground flex items-center gap-2">
-            <Zap className="h-5 w-5" />
-            Electricity Tariffs
-          </CardTitle>
-          <CardDescription>
-            {tariffs.length} tariffs across {groupedData.length} provinces
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-card-foreground flex items-center gap-2">
+                <Zap className="h-5 w-5" />
+                Electricity Tariffs
+              </CardTitle>
+              <CardDescription>
+                {tariffs.length} tariffs across {groupedData.length} provinces
+              </CardDescription>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setDeleteTarget({ type: "all" })}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Clear All
+            </Button>
+          </div>
         </CardHeader>
       </Card>
 
@@ -202,14 +317,27 @@ export function TariffList() {
             className="border rounded-lg bg-card overflow-hidden"
           >
             <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-accent/50">
-              <div className="flex items-center gap-3">
-                <MapPin className="h-5 w-5 text-primary" />
-                <div className="text-left">
-                  <div className="font-semibold text-foreground">{provinceData.province.name}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {provinceData.municipalities.length} municipalities • {getTariffCount(provinceData)} tariffs
+              <div className="flex items-center justify-between w-full pr-4">
+                <div className="flex items-center gap-3">
+                  <MapPin className="h-5 w-5 text-primary" />
+                  <div className="text-left">
+                    <div className="font-semibold text-foreground">{provinceData.province.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {provinceData.municipalities.length} municipalities • {getTariffCount(provinceData)} tariffs
+                    </div>
                   </div>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget({ type: "province", id: provinceData.province.id, name: provinceData.province.name });
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
@@ -222,12 +350,29 @@ export function TariffList() {
                     className="border rounded-md bg-accent/20"
                   >
                     <AccordionTrigger className="px-3 py-2 hover:no-underline hover:bg-accent/40 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">{municipality.name}</span>
-                        <Badge variant="secondary" className="ml-2">
-                          {municipality.tariffs.length} tariffs
-                        </Badge>
+                      <div className="flex items-center justify-between w-full pr-2">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">{municipality.name}</span>
+                          <Badge variant="secondary" className="ml-2">
+                            {municipality.tariffs.length} tariffs
+                          </Badge>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget({
+                              type: "municipality",
+                              name: municipality.name,
+                              tariffIds: municipality.tariffs.map((t) => t.id),
+                            });
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-3 pb-3">
