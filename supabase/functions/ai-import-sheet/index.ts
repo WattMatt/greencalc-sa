@@ -49,6 +49,8 @@ Deno.serve(async (req) => {
     const googleApiKey = Deno.env.get("GOOGLE_SHEETS_API_KEY");
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
     
+    console.log("API key loaded:", googleApiKey ? `Yes (${googleApiKey.length} chars, starts with ${googleApiKey.substring(0, 4)})` : "No");
+    
     if (!googleApiKey) {
       return new Response(
         JSON.stringify({ error: "Google Sheets API key not configured" }),
