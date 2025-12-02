@@ -4,7 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, ChevronDown, ChevronRight, MapPin, Building2, Zap, Filter } from "lucide-react";
+import { Trash2, ChevronDown, ChevronRight, MapPin, Building2, Zap, Filter, Eye, Pencil, Save, X, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -71,6 +75,10 @@ export function TariffList() {
   const [expandedTariffs, setExpandedTariffs] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [selectedProvince, setSelectedProvince] = useState<string>("all");
+  const [previewMunicipality, setPreviewMunicipality] = useState<{ name: string; tariffs: Tariff[] } | null>(null);
+  const [editingTariffId, setEditingTariffId] = useState<string | null>(null);
+  const [editedTariff, setEditedTariff] = useState<Tariff | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const { data: provinces } = useQuery({
     queryKey: ["provinces"],
@@ -391,21 +399,35 @@ export function TariffList() {
                             {municipality.tariffs.length} tariffs
                           </Badge>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteTarget({
-                              type: "municipality",
-                              name: municipality.name,
-                              tariffIds: municipality.tariffs.map((t) => t.id),
-                            });
-                          }}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs gap-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewMunicipality({ name: municipality.name, tariffs: municipality.tariffs });
+                            }}
+                          >
+                            <Eye className="h-3 w-3" />
+                            Preview
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteTarget({
+                                type: "municipality",
+                                name: municipality.name,
+                                tariffIds: municipality.tariffs.map((t) => t.id),
+                              });
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-3 pb-3">
@@ -551,6 +573,214 @@ export function TariffList() {
           </AccordionItem>
         ))}
       </Accordion>
+
+      {/* Preview Dialog */}
+      <Dialog open={!!previewMunicipality} onOpenChange={(open) => !open && setPreviewMunicipality(null)}>
+        <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              {previewMunicipality?.name} - Extracted Tariffs
+            </DialogTitle>
+            <DialogDescription>
+              Review and edit extracted tariffs. Click Edit to modify values.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 max-h-[60vh]">
+            {previewMunicipality?.tariffs.length === 0 ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                No tariffs extracted for this municipality.
+              </div>
+            ) : (
+              <div className="space-y-3 p-1">
+                {previewMunicipality?.tariffs.map((tariff) => {
+                  const isEditing = editingTariffId === tariff.id;
+                  const displayTariff = isEditing && editedTariff ? editedTariff : tariff;
+                  
+                  return (
+                    <Card key={tariff.id} className={`text-sm ${isEditing ? "ring-2 ring-primary" : ""}`}>
+                      <CardHeader className="py-2 px-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-medium">{tariff.name}</div>
+                            <div className="text-xs text-muted-foreground">{tariff.category?.name || "Uncategorized"}</div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline" className="text-xs">{tariff.tariff_type}</Badge>
+                            {tariff.is_prepaid && <Badge variant="secondary" className="text-xs">Prepaid</Badge>}
+                            {isEditing ? (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={() => {
+                                    setEditingTariffId(null);
+                                    setEditedTariff(null);
+                                  }}
+                                  disabled={isSaving}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs gap-1"
+                                  onClick={async () => {
+                                    if (!editedTariff) return;
+                                    setIsSaving(true);
+                                    try {
+                                      const { error } = await supabase
+                                        .from("tariffs")
+                                        .update({
+                                          fixed_monthly_charge: editedTariff.fixed_monthly_charge,
+                                          demand_charge_per_kva: editedTariff.demand_charge_per_kva,
+                                          phase_type: editedTariff.phase_type as any,
+                                          amperage_limit: editedTariff.amperage_limit,
+                                        })
+                                        .eq("id", editedTariff.id);
+                                      if (error) throw error;
+                                      
+                                      toast.success(`${editedTariff.name} updated`);
+                                      queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+                                      setEditingTariffId(null);
+                                      setEditedTariff(null);
+                                    } catch (err) {
+                                      toast.error("Failed to save: " + (err as Error).message);
+                                    } finally {
+                                      setIsSaving(false);
+                                    }
+                                  }}
+                                  disabled={isSaving}
+                                >
+                                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                  Save
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs gap-1"
+                                onClick={() => {
+                                  setEditingTariffId(tariff.id);
+                                  setEditedTariff({ ...tariff, rates: [...tariff.rates] });
+                                }}
+                              >
+                                <Pencil className="h-3 w-3" />
+                                Edit
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="py-2 px-3 border-t">
+                        {isEditing ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Basic Charge (R/month)</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                className="h-7 text-xs"
+                                value={displayTariff.fixed_monthly_charge || ""}
+                                onChange={(e) => setEditedTariff(prev => prev ? { ...prev, fixed_monthly_charge: e.target.value ? parseFloat(e.target.value) : null } : null)}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Demand Charge (R/kVA)</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                className="h-7 text-xs"
+                                value={displayTariff.demand_charge_per_kva || ""}
+                                onChange={(e) => setEditedTariff(prev => prev ? { ...prev, demand_charge_per_kva: e.target.value ? parseFloat(e.target.value) : null } : null)}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Phase Type</Label>
+                              <Select
+                                value={displayTariff.phase_type || ""}
+                                onValueChange={(v) => setEditedTariff(prev => prev ? { ...prev, phase_type: v || null } : null)}
+                              >
+                                <SelectTrigger className="h-7 text-xs">
+                                  <SelectValue placeholder="Select" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-popover">
+                                  <SelectItem value="Single Phase">Single Phase</SelectItem>
+                                  <SelectItem value="Three Phase">Three Phase</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Amperage Limit</Label>
+                              <Input
+                                type="text"
+                                className="h-7 text-xs"
+                                value={displayTariff.amperage_limit || ""}
+                                onChange={(e) => setEditedTariff(prev => prev ? { ...prev, amperage_limit: e.target.value || null } : null)}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                              {displayTariff.fixed_monthly_charge !== null && displayTariff.fixed_monthly_charge > 0 && (
+                                <div>
+                                  <span className="text-muted-foreground">Basic Charge:</span>{" "}
+                                  <span className="font-medium text-primary">R{displayTariff.fixed_monthly_charge.toFixed(2)}/m</span>
+                                </div>
+                              )}
+                              {displayTariff.demand_charge_per_kva !== null && displayTariff.demand_charge_per_kva > 0 && (
+                                <div>
+                                  <span className="text-muted-foreground">Demand Charge:</span>{" "}
+                                  <span className="font-medium text-primary">R{displayTariff.demand_charge_per_kva.toFixed(2)}/kVA</span>
+                                </div>
+                              )}
+                              {displayTariff.phase_type && (
+                                <div>
+                                  <span className="text-muted-foreground">Phase:</span> {displayTariff.phase_type}
+                                </div>
+                              )}
+                              {displayTariff.amperage_limit && (
+                                <div>
+                                  <span className="text-muted-foreground">Amperage:</span> {displayTariff.amperage_limit}
+                                </div>
+                              )}
+                            </div>
+                            {displayTariff.rates && displayTariff.rates.length > 0 && (
+                              <div className="mt-2 pt-2 border-t">
+                                <div className="text-xs text-muted-foreground mb-1">Energy Rates:</div>
+                                <div className="space-y-0.5">
+                                  {displayTariff.rates.map((rate, idx) => (
+                                    <div key={idx} className="flex items-center justify-between text-xs bg-muted/50 px-2 py-0.5 rounded">
+                                      <span className={`font-medium ${
+                                        rate.time_of_use === "High Demand" ? "text-orange-600" :
+                                        rate.time_of_use === "Low Demand" ? "text-blue-600" :
+                                        rate.time_of_use === "Peak" ? "text-red-600" :
+                                        rate.time_of_use === "Off-Peak" ? "text-green-600" :
+                                        "text-foreground"
+                                      }`}>
+                                        {rate.time_of_use}
+                                      </span>
+                                      <span className="font-mono">{(rate.rate_per_kwh * 100).toFixed(2)} c/kWh</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
