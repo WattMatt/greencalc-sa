@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Calculator as CalcIcon, Sun, TrendingUp, Zap, Clock, DollarSign } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { ConsumptionProfile, ProfileType, RESIDENTIAL_PROFILE } from "@/components/calculator/ConsumptionProfile";
+import { TariffComparison } from "@/components/calculator/TariffComparison";
 import { useTOUCalculation } from "@/hooks/useTOUCalculation";
 
 const KWP_TO_KWH_MONTHLY = 140;
@@ -741,6 +742,9 @@ export default function Calculator() {
           )}
         </div>
       </div>
+
+      {/* Tariff Comparison Section */}
+      <TariffComparison />
     </div>
   );
 }
