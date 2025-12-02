@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin } from "lucide-react";
 
 const SOUTH_AFRICAN_PROVINCES = [
   "Eastern Cape",
@@ -17,26 +23,20 @@ const SOUTH_AFRICAN_PROVINCES = [
   "North West",
   "Western Cape",
 ] as const;
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { useToast } from "@/hooks/use-toast";
-import { Upload, FileSpreadsheet, FileText, Search, Download, CheckCircle2, AlertCircle, Loader2, X } from "lucide-react";
+
+interface Municipality {
+  id: string;
+  name: string;
+  status: "pending" | "extracting" | "done" | "error";
+  tariffCount?: number;
+  error?: string;
+}
 
 interface AnalysisResult {
   fileType: string;
   sheets?: string[];
   rowCounts?: Record<string, number>;
   analysis: string;
-  sampleText?: string;
-}
-
-interface ImportResult {
-  extracted: number;
-  imported: number;
-  skipped: number;
-  municipalities: string[];
-  errors: string[];
 }
 
 export function FileUploadImport() {
@@ -46,9 +46,10 @@ export function FileUploadImport() {
   const [province, setProvince] = useState("Western Cape");
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
+  const [isExtractingMunis, setIsExtractingMunis] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
-  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
+  const [phase, setPhase] = useState<1 | 2 | 3>(1); // 1=upload, 2=municipalities, 3=tariffs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -76,10 +77,10 @@ export function FileUploadImport() {
 
     setFile(selectedFile);
     setAnalysis(null);
-    setImportResult(null);
+    setMunicipalities([]);
     setUploadedPath(null);
+    setPhase(1);
 
-    // Upload file to storage
     setIsUploading(true);
     try {
       const timestamp = Date.now();
@@ -125,7 +126,7 @@ export function FileUploadImport() {
       if (data.error) throw new Error(data.error);
 
       setAnalysis(data);
-      toast({ title: "Analysis Complete", description: "Review the structure before importing" });
+      toast({ title: "Analysis Complete", description: "Review the structure, then extract municipalities" });
     } catch (err) {
       console.error("Analysis error:", err);
       toast({
@@ -138,46 +139,102 @@ export function FileUploadImport() {
     }
   };
 
-  const handleImport = async () => {
+  const handleExtractMunicipalities = async () => {
     if (!uploadedPath || !file) return;
 
-    setIsImporting(true);
-    setImportResult(null);
+    setIsExtractingMunis(true);
 
     try {
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
         body: { 
           filePath: uploadedPath, 
           fileType: getFileType(file.name),
-          province: province.trim(),
-          action: "extract" 
+          province: province,
+          action: "extract-municipalities" 
         },
       });
 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      setImportResult(data);
+      const munis: Municipality[] = data.municipalities.map((m: { id: string; name: string }) => ({
+        id: m.id,
+        name: m.name,
+        status: "pending" as const
+      }));
+
+      setMunicipalities(munis);
+      setPhase(2);
       
-      if (data.imported > 0) {
-        toast({ 
-          title: "Import Successful", 
-          description: `Imported ${data.imported} tariffs from ${data.municipalities?.length || 0} municipalities` 
-        });
-        queryClient.invalidateQueries({ queryKey: ["tariffs"] });
-        queryClient.invalidateQueries({ queryKey: ["municipalities"] });
-        queryClient.invalidateQueries({ queryKey: ["provinces"] });
-        queryClient.invalidateQueries({ queryKey: ["tariff-categories"] });
-      }
+      toast({ 
+        title: "Municipalities Extracted", 
+        description: `Found ${munis.length} municipalities in ${province}` 
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ["municipalities"] });
+      queryClient.invalidateQueries({ queryKey: ["provinces"] });
     } catch (err) {
-      console.error("Import error:", err);
+      console.error("Municipality extraction error:", err);
       toast({
-        title: "Import Failed",
-        description: err instanceof Error ? err.message : "Failed to import data",
+        title: "Extraction Failed",
+        description: err instanceof Error ? err.message : "Failed to extract municipalities",
         variant: "destructive",
       });
     } finally {
-      setIsImporting(false);
+      setIsExtractingMunis(false);
+    }
+  };
+
+  const handleExtractTariffs = async (muniIndex: number) => {
+    const muni = municipalities[muniIndex];
+    if (!muni || !uploadedPath || !file) return;
+
+    setMunicipalities(prev => prev.map((m, i) => 
+      i === muniIndex ? { ...m, status: "extracting" as const } : m
+    ));
+
+    try {
+      const { data, error } = await supabase.functions.invoke("process-tariff-file", {
+        body: { 
+          filePath: uploadedPath, 
+          fileType: getFileType(file.name),
+          province: province,
+          municipality: muni.name,
+          action: "extract-tariffs" 
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      setMunicipalities(prev => prev.map((m, i) => 
+        i === muniIndex ? { ...m, status: "done" as const, tariffCount: data.imported } : m
+      ));
+
+      toast({ 
+        title: `${muni.name} Complete`, 
+        description: `Imported ${data.imported} tariffs` 
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+    } catch (err) {
+      console.error("Tariff extraction error:", err);
+      setMunicipalities(prev => prev.map((m, i) => 
+        i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m
+      ));
+      toast({
+        title: `${muni.name} Failed`,
+        description: err instanceof Error ? err.message : "Failed to extract tariffs",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExtractAll = async () => {
+    for (let i = 0; i < municipalities.length; i++) {
+      if (municipalities[i].status === "pending") {
+        await handleExtractTariffs(i);
+      }
     }
   };
 
@@ -185,13 +242,14 @@ export function FileUploadImport() {
     setFile(null);
     setUploadedPath(null);
     setAnalysis(null);
-    setImportResult(null);
+    setMunicipalities([]);
+    setPhase(1);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const clearFile = () => {
-    resetState();
-  };
+  const completedCount = municipalities.filter(m => m.status === "done").length;
+  const pendingCount = municipalities.filter(m => m.status === "pending").length;
+  const totalTariffs = municipalities.reduce((sum, m) => sum + (m.tariffCount || 0), 0);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetState(); }}>
@@ -205,14 +263,23 @@ export function FileUploadImport() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Upload Tariff File
+            Phased Tariff Import
           </DialogTitle>
           <DialogDescription>
-            Upload Excel or PDF files containing tariff data. AI will analyze and extract the tariffs.
+            Phase 1: Extract municipalities → Phase 2: Extract tariffs per municipality
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 py-4">
+          {/* Progress Indicator */}
+          <div className="flex items-center gap-2 text-sm">
+            <Badge variant={phase >= 1 ? "default" : "outline"}>1. Upload</Badge>
+            <span className="text-muted-foreground">→</span>
+            <Badge variant={phase >= 2 ? "default" : "outline"}>2. Municipalities</Badge>
+            <span className="text-muted-foreground">→</span>
+            <Badge variant={phase >= 3 ? "default" : "outline"}>3. Tariffs</Badge>
+          </div>
+
           {/* File Upload */}
           <div className="space-y-2">
             <Label>Select File</Label>
@@ -251,7 +318,7 @@ export function FileUploadImport() {
                 {isUploading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={clearFile}>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={resetState}>
                     <X className="h-4 w-4" />
                   </Button>
                 )}
@@ -262,7 +329,7 @@ export function FileUploadImport() {
           {/* Province Select */}
           <div className="space-y-2">
             <Label htmlFor="file-province">Province</Label>
-            <Select value={province} onValueChange={setProvince}>
+            <Select value={province} onValueChange={setProvince} disabled={phase > 1}>
               <SelectTrigger id="file-province" className="bg-background">
                 <SelectValue placeholder="Select a province" />
               </SelectTrigger>
@@ -274,126 +341,171 @@ export function FileUploadImport() {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              All municipalities in this file will be assigned to this province
-            </p>
           </div>
 
-          {/* Analyze Button */}
-          {uploadedPath && !analysis && (
-            <Button 
-              onClick={handleAnalyze} 
-              disabled={isAnalyzing}
-              variant="secondary"
-              className="w-full gap-2"
-            >
-              {isAnalyzing ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <Search className="h-4 w-4" />
-                  Analyze File Structure
-                </>
-              )}
-            </Button>
-          )}
-
-          {/* Analysis Results */}
-          {analysis && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  {analysis.fileType === 'pdf' ? (
-                    <FileText className="h-4 w-4 text-red-500" />
-                  ) : (
-                    <FileSpreadsheet className="h-4 w-4 text-green-600" />
-                  )}
-                  File Analysis
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {analysis.sheets && analysis.sheets.length > 0 && (
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Sheets Found</Label>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {analysis.sheets.map((sheet) => (
-                        <span key={sheet} className="px-2 py-0.5 bg-muted rounded text-xs">
-                          {sheet} ({analysis.rowCounts?.[sheet] || 0} rows)
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <Label className="text-xs text-muted-foreground">AI Analysis</Label>
-                  <ScrollArea className="h-40 mt-1">
-                    <div className="text-sm whitespace-pre-wrap bg-muted/50 p-3 rounded">
-                      {analysis.analysis}
-                    </div>
-                  </ScrollArea>
-                </div>
-
+          {/* Phase 1: Analysis */}
+          {uploadedPath && phase === 1 && (
+            <div className="space-y-3">
+              {!analysis ? (
                 <Button 
-                  onClick={handleImport} 
-                  disabled={isImporting}
+                  onClick={handleAnalyze} 
+                  disabled={isAnalyzing}
+                  variant="secondary"
                   className="w-full gap-2"
                 >
-                  {isImporting ? (
+                  {isAnalyzing ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Extracting with AI...
+                      Analyzing...
                     </>
                   ) : (
                     <>
-                      <Download className="h-4 w-4" />
-                      Extract & Import Tariffs
+                      <Search className="h-4 w-4" />
+                      Analyze File Structure
                     </>
                   )}
                 </Button>
-              </CardContent>
-            </Card>
+              ) : (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Analysis Result
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {analysis.sheets && analysis.sheets.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Sheets/Municipalities Found</Label>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {analysis.sheets.slice(0, 10).map((sheet) => (
+                            <Badge key={sheet} variant="secondary" className="text-xs">
+                              {sheet}
+                            </Badge>
+                          ))}
+                          {analysis.sheets.length > 10 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{analysis.sheets.length - 10} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <ScrollArea className="h-24">
+                      <div className="text-xs whitespace-pre-wrap text-muted-foreground">
+                        {analysis.analysis}
+                      </div>
+                    </ScrollArea>
+
+                    <Button 
+                      onClick={handleExtractMunicipalities} 
+                      disabled={isExtractingMunis}
+                      className="w-full gap-2"
+                    >
+                      {isExtractingMunis ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Extracting Municipalities...
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="h-4 w-4" />
+                          Extract & Save Municipalities
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           )}
 
-          {/* Import Results */}
-          {importResult && (
-            <Alert className={importResult.imported > 0 ? "border-green-500" : "border-yellow-500"}>
-              {importResult.imported > 0 ? (
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-yellow-500" />
-              )}
-              <AlertDescription>
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-4 text-sm font-medium">
-                    <span>AI Extracted: {importResult.extracted}</span>
-                    <span className="text-green-600">Imported: {importResult.imported}</span>
-                    {importResult.skipped > 0 && (
-                      <span className="text-yellow-600">Skipped: {importResult.skipped}</span>
-                    )}
+          {/* Phase 2: Municipality List */}
+          {phase >= 2 && municipalities.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Municipalities ({municipalities.length})
+                  </CardTitle>
+                  <div className="text-xs text-muted-foreground">
+                    {completedCount}/{municipalities.length} done • {totalTariffs} tariffs
                   </div>
-                  {importResult.municipalities && importResult.municipalities.length > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      Municipalities: {importResult.municipalities.slice(0, 5).join(", ")}
-                      {importResult.municipalities.length > 5 && ` +${importResult.municipalities.length - 5} more`}
-                    </div>
-                  )}
-                  {importResult.errors.length > 0 && (
-                    <div className="text-xs text-muted-foreground mt-2">
-                      {importResult.errors.slice(0, 3).map((err, i) => (
-                        <div key={i}>{err}</div>
-                      ))}
-                      {importResult.errors.length > 3 && (
-                        <div>...and {importResult.errors.length - 3} more issues</div>
-                      )}
-                    </div>
-                  )}
                 </div>
-              </AlertDescription>
-            </Alert>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {pendingCount > 0 && (
+                  <Button 
+                    onClick={handleExtractAll}
+                    variant="default"
+                    size="sm"
+                    className="w-full gap-2"
+                  >
+                    <Zap className="h-4 w-4" />
+                    Extract All Remaining ({pendingCount})
+                  </Button>
+                )}
+
+                <ScrollArea className="h-64">
+                  <div className="space-y-2">
+                    {municipalities.map((muni, index) => (
+                      <div 
+                        key={muni.id} 
+                        className="flex items-center justify-between p-2 rounded border bg-background"
+                      >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          {muni.status === "done" && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
+                          {muni.status === "error" && <AlertCircle className="h-4 w-4 text-destructive shrink-0" />}
+                          {muni.status === "extracting" && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
+                          {muni.status === "pending" && <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />}
+                          
+                          <span className="text-sm truncate">{muni.name}</span>
+                          
+                          {muni.tariffCount !== undefined && (
+                            <Badge variant="secondary" className="text-xs shrink-0">
+                              {muni.tariffCount} tariffs
+                            </Badge>
+                          )}
+                        </div>
+
+                        {muni.status === "pending" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs shrink-0"
+                            onClick={() => handleExtractTariffs(index)}
+                          >
+                            Extract
+                          </Button>
+                        )}
+                        
+                        {muni.status === "error" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs shrink-0"
+                            onClick={() => handleExtractTariffs(index)}
+                          >
+                            Retry
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+
+                {completedCount === municipalities.length && municipalities.length > 0 && (
+                  <Alert className="border-green-500">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <AlertDescription>
+                      All municipalities extracted! {totalTariffs} total tariffs imported.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
           )}
         </div>
       </DialogContent>
