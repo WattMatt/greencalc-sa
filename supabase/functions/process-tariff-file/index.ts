@@ -260,7 +260,7 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
         // Get existing municipalities for this province
         const { data: existingMunis } = await supabase
           .from("municipalities")
-          .select("id, name")
+          .select("id, name, source_file_path")
           .eq("province_id", provinceId);
         
         const existingNames = new Set(existingMunis?.map(m => m.name.toLowerCase()) || []);
@@ -272,18 +272,28 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
           // Check if already exists
           if (existingNames.has(cleanName.toLowerCase())) {
             const existing = existingMunis?.find(m => m.name.toLowerCase() === cleanName.toLowerCase());
-            if (existing) savedMunicipalities.push({ 
-              id: existing.id, 
-              name: existing.name,
-              sheetName: sheetNameToMuni[cleanName] || cleanName
-            });
+            if (existing) {
+              // Update source_file_path if not already set or different
+              if (existing.source_file_path !== filePath) {
+                await supabase
+                  .from("municipalities")
+                  .update({ source_file_path: filePath })
+                  .eq("id", existing.id);
+                console.log("Updated source_file_path for:", cleanName);
+              }
+              savedMunicipalities.push({ 
+                id: existing.id, 
+                name: existing.name,
+                sheetName: sheetNameToMuni[cleanName] || cleanName
+              });
+            }
             continue;
           }
 
-          // Create new municipality
+          // Create new municipality with source_file_path
           const { data: newMuni, error } = await supabase
             .from("municipalities")
-            .insert({ name: cleanName, province_id: provinceId })
+            .insert({ name: cleanName, province_id: provinceId, source_file_path: filePath })
             .select("id, name")
             .single();
           
@@ -294,7 +304,7 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
               sheetName: sheetNameToMuni[cleanName] || cleanName
             });
             existingNames.add(cleanName.toLowerCase());
-            console.log("Created municipality:", cleanName);
+            console.log("Created municipality:", cleanName, "with source:", filePath);
           } else if (error) {
             errors.push(`${cleanName}: ${error.message}`);
           }
