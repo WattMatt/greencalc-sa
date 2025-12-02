@@ -5,6 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const SOUTH_AFRICAN_PROVINCES = [
+  "Eastern Cape",
+  "Free State",
+  "Gauteng",
+  "KwaZulu-Natal",
+  "Limpopo",
+  "Mpumalanga",
+  "Northern Cape",
+  "North West",
+  "Western Cape",
+] as const;
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -170,15 +183,21 @@ export function AISheetImport() {
             </p>
           </div>
 
-          {/* Province Input */}
+          {/* Province Select */}
           <div className="space-y-2">
-            <Label htmlFor="ai-province">Province Name</Label>
-            <Input
-              id="ai-province"
-              value={province}
-              onChange={(e) => setProvince(e.target.value)}
-              placeholder="e.g., Western Cape, Gauteng, KwaZulu-Natal"
-            />
+            <Label htmlFor="ai-province">Province</Label>
+            <Select value={province} onValueChange={setProvince}>
+              <SelectTrigger id="ai-province" className="bg-background">
+                <SelectValue placeholder="Select a province" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                {SOUTH_AFRICAN_PROVINCES.map((prov) => (
+                  <SelectItem key={prov} value={prov}>
+                    {prov}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground">
               All municipalities in this sheet will be assigned to this province
             </p>
