@@ -343,28 +343,48 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
 
 ${municipalityText.slice(0, 12000)}
 
-EXTRACTION RULES:
+CRITICAL DATA MAPPING RULES:
 1. Municipality: "${municipality}"
-2. Categories: Domestic, Commercial, Industrial, Agricultural, Public Lighting
-3. Tariff types:
-   - "TOU" for tariffs with High Demand/Low Demand rates OR Peak/Standard/Off-peak rates
-   - "IBT" for block tariffs with Block 1, Block 2, etc. (consumption tiers)
-   - "Fixed" for simple single flat rate
-4. Extract ALL rates:
-   - Basic charge (R/month) - convert R/day to R/month by *30
-   - Energy rates (c/kWh) with block thresholds if IBT
-   - Demand charges (R/kVA or R/A/m for per-amp charges)
-5. TIME OF USE mapping:
-   - "High Demand Energy Rate" → time_of_use: "High Demand"
-   - "Low Demand Energy Rate" → time_of_use: "Low Demand"
-   - "Peak" → time_of_use: "Peak"
-   - "Standard" → time_of_use: "Standard"
-   - "Off-Peak" → time_of_use: "Off-Peak"
-6. Phase: "Single Phase" or "Three Phase" (look for "1 Phase", "3 Phase", "1 & 3 Phase")
-7. Amperage: from ">20A", "15A", "60A", "100A" etc.
-8. Prepaid: true if "Prepaid" mentioned
+2. Categories: Domestic, Commercial, Industrial, Agricultural, Public Lighting, Other
 
-IMPORTANT: If a tariff has BOTH "Low Demand Energy Rate" AND "High Demand Energy Rate", create TWO rate entries with different time_of_use values. This is a TOU tariff.
+3. FIXED CHARGES (NOT rates):
+   - "Basic Charge per month (R/month)" → fixed_monthly_charge (number in Rands)
+   - "Service Charge" or "Admin Charge" → fixed_monthly_charge
+   - DO NOT put these in the rates array!
+
+4. DEMAND/CAPACITY CHARGES (NOT rates):
+   - "Per 5 Amp or Part (min 30A) (R/A/m)" → demand_charge_per_kva (number in Rands)
+   - "Per kVA" charges → demand_charge_per_kva
+   - "Capacity Charge" → demand_charge_per_kva
+   - DO NOT put these in the rates array!
+
+5. ENERGY RATES ONLY (put in rates array):
+   - ONLY values measured in c/kWh go in the rates array
+   - "Low Demand Energy Rate (c/kWh)" → rate with time_of_use: "Low Demand"
+   - "High Demand Energy Rate (c/kWh)" → rate with time_of_use: "High Demand"
+   - "Energy Rate (c/kWh)" with no demand distinction → time_of_use: "Any"
+   - Block rates for IBT → include block_start_kwh and block_end_kwh
+
+6. TARIFF TYPE DETERMINATION:
+   - If has "High Demand" AND "Low Demand" energy rates → tariff_type: "TOU"
+   - If has "Peak/Standard/Off-Peak" periods → tariff_type: "TOU"
+   - If has Block 1, Block 2 etc. (consumption tiers) → tariff_type: "IBT"
+   - If single flat energy rate → tariff_type: "Fixed"
+
+7. Phase: "Single Phase" or "Three Phase" (from "1 Phase", "3 Phase", "1 & 3 Phase")
+8. Amperage: from ">20A", "15A", "60A", "100A" etc.
+9. Prepaid: true if "Prepaid" mentioned in name
+
+EXAMPLE for "Domestic - Credit 1 & 3 Phase >20A":
+- fixed_monthly_charge: 296.95 (from "Basic Charge per month")
+- demand_charge_per_kva: 68.89 (from "Per 5 Amp or Part")
+- rates: [
+    { rate_per_kwh: 2.1093, time_of_use: "Low Demand" },
+    { rate_per_kwh: 3.053, time_of_use: "High Demand" }
+  ]
+- tariff_type: "TOU" (has High/Low Demand distinction)
+
+NOTE: Convert c/kWh to R/kWh by dividing by 100 (e.g., 210.93 c/kWh = 2.1093 R/kWh)
 
 Extract EVERY tariff structure found for this municipality.`;
 
@@ -377,14 +397,14 @@ Extract EVERY tariff structure found for this municipality.`;
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [
-            { role: "system", content: "You are a data extraction expert for South African electricity tariffs. Extract complete and accurate tariff data for the specified municipality. Pay attention to High Demand and Low Demand rate distinctions." },
+            { role: "system", content: "You are a data extraction expert for South African electricity tariffs. You must correctly separate fixed charges (R/month), demand charges (R/A/m or R/kVA), and energy rates (c/kWh). ONLY energy rates go in the rates array. Fixed and demand charges are separate fields." },
             { role: "user", content: extractPrompt }
           ],
           tools: [{
             type: "function",
             function: {
               name: "save_tariffs",
-              description: "Save extracted tariff data",
+              description: "Save extracted tariff data. IMPORTANT: Only energy rates (c/kWh values) go in the rates array. Basic charges go in fixed_monthly_charge, per-amp charges go in demand_charge_per_kva.",
               parameters: {
                 type: "object",
                 properties: {
@@ -393,24 +413,25 @@ Extract EVERY tariff structure found for this municipality.`;
                     items: {
                       type: "object",
                       properties: {
-                        category: { type: "string" },
-                        tariff_name: { type: "string" },
-                        tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"] },
+                        category: { type: "string", description: "Domestic, Commercial, Industrial, Agricultural, Public Lighting, or Other" },
+                        tariff_name: { type: "string", description: "Full tariff name from document" },
+                        tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"], description: "TOU if High/Low Demand rates, IBT if block rates, Fixed otherwise" },
                         phase_type: { type: "string", enum: ["Single Phase", "Three Phase"] },
-                        amperage_limit: { type: "string" },
+                        amperage_limit: { type: "string", description: "e.g., >20A, 60A, 100A" },
                         is_prepaid: { type: "boolean" },
-                        fixed_monthly_charge: { type: "number" },
-                        demand_charge_per_kva: { type: "number" },
+                        fixed_monthly_charge: { type: "number", description: "Basic Charge per month in Rands (R/month). NOT an energy rate!" },
+                        demand_charge_per_kva: { type: "number", description: "Per-amp or per-kVA charges in Rands (R/A/m or R/kVA). NOT an energy rate!" },
                         rates: {
                           type: "array",
+                          description: "ONLY energy rates in R/kWh. Convert c/kWh to R/kWh by dividing by 100.",
                           items: {
                             type: "object",
                             properties: {
-                              rate_per_kwh: { type: "number" },
-                              block_start_kwh: { type: "number" },
-                              block_end_kwh: { type: "number" },
+                              rate_per_kwh: { type: "number", description: "Energy rate in R/kWh (convert from c/kWh by dividing by 100)" },
+                              block_start_kwh: { type: "number", description: "For IBT tariffs only" },
+                              block_end_kwh: { type: "number", description: "For IBT tariffs only" },
                               season: { type: "string", enum: ["All Year", "High/Winter", "Low/Summer"] },
-                              time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"] }
+                              time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"], description: "High Demand or Low Demand for demand-based TOU tariffs" }
                             },
                             required: ["rate_per_kwh"]
                           }
