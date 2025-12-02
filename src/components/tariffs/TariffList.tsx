@@ -441,8 +441,8 @@ export function TariffList() {
                     value={municipality.name}
                     className="border rounded-md bg-accent/20"
                   >
-                    <AccordionTrigger className="px-3 py-2 hover:no-underline hover:bg-accent/40 text-sm">
-                      <div className="flex items-center justify-between w-full pr-2">
+                    <div className="flex items-center justify-between px-3 py-2 hover:bg-accent/40">
+                      <AccordionTrigger className="hover:no-underline text-sm flex-1 py-0 [&>svg]:ml-2">
                         <div className="flex items-center gap-2">
                           <Building2 className="h-4 w-4 text-muted-foreground" />
                           <span className="font-medium">{municipality.name}</span>
@@ -450,37 +450,37 @@ export function TariffList() {
                             {municipality.tariffs.length} tariffs
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs gap-1"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenPreview(municipality.name, municipality.tariffs);
-                            }}
-                          >
-                            <Eye className="h-3 w-3" />
-                            Preview
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteTarget({
-                                type: "municipality",
-                                name: municipality.name,
-                                tariffIds: municipality.tariffs.map((t) => t.id),
-                              });
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
+                      </AccordionTrigger>
+                      <div className="flex items-center gap-1 ml-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenPreview(municipality.name, municipality.tariffs);
+                          }}
+                        >
+                          <Eye className="h-3 w-3" />
+                          Preview
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget({
+                              type: "municipality",
+                              name: municipality.name,
+                              tariffIds: municipality.tariffs.map((t) => t.id),
+                            });
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </div>
-                    </AccordionTrigger>
+                    </div>
                     <AccordionContent className="px-3 pb-3">
                       {/* Tariffs within Municipality */}
                       <div className="space-y-2 mt-2">
