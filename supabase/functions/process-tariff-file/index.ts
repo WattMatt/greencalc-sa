@@ -601,6 +601,21 @@ Extract EVERY tariff structure found for this municipality.`;
         );
       }
 
+      // Delete existing tariffs for this municipality to avoid duplicates
+      const { data: existingTariffs } = await supabase
+        .from("tariffs")
+        .select("id")
+        .eq("municipality_id", muniData.id);
+      
+      if (existingTariffs && existingTariffs.length > 0) {
+        const existingIds = existingTariffs.map(t => t.id);
+        // Delete rates first (foreign key constraint)
+        await supabase.from("tariff_rates").delete().in("tariff_id", existingIds);
+        // Delete tariffs
+        await supabase.from("tariffs").delete().in("id", existingIds);
+        console.log(`Deleted ${existingIds.length} existing tariffs for ${municipality}`);
+      }
+
       const { data: categories } = await supabase.from("tariff_categories").select("id, name");
       const categoryMap = new Map(categories?.map(c => [c.name.toLowerCase(), c.id]) || []);
 
