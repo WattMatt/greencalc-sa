@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.ai-import-sheet]
 verify_jwt = false
+
+[functions.get-mapbox-token]
+verify_jwt = false
