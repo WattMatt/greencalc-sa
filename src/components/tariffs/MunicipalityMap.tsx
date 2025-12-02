@@ -1,49 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin, Loader2 } from "lucide-react";
 
-// South African province centers with colors
-const SA_PROVINCES: Record<string, { center: [number, number]; color: string }> = {
-  "Gauteng": { center: [28.0473, -26.2041], color: "#ef4444" },
-  "Western Cape": { center: [19.0, -33.9], color: "#f97316" },
-  "KwaZulu-Natal": { center: [30.5, -29.0], color: "#eab308" },
-  "Eastern Cape": { center: [26.5, -32.0], color: "#22c55e" },
-  "Mpumalanga": { center: [30.0, -25.5], color: "#14b8a6" },
-  "Limpopo": { center: [29.5, -23.5], color: "#3b82f6" },
-  "North West": { center: [25.5, -26.0], color: "#8b5cf6" },
-  "Free State": { center: [26.5, -29.0], color: "#ec4899" },
-  "Northern Cape": { center: [21.0, -29.0], color: "#6b7280" },
-  "South Africa": { center: [25.0, -29.0], color: "#64748b" },
-};
-
-// Known municipality coordinates (can be expanded)
-const MUNICIPALITY_COORDS: Record<string, [number, number]> = {
-  "City of Johannesburg": [28.0473, -26.2041],
-  "City of Cape Town": [18.4241, -33.9249],
-  "eThekwini": [31.0218, -29.8587],
-  "City of Tshwane": [28.1881, -25.7461],
-  "Ekurhuleni": [28.4018, -26.1496],
-  "Nelson Mandela Bay": [25.8915, -33.9608],
-  "Buffalo City": [27.9116, -32.9872],
-  "Mangaung": [26.2041, -29.1214],
-  "Msunduzi": [30.3789, -29.6168],
-  "Polokwane": [29.4486, -23.9045],
-  "Mbombela": [31.0292, -25.4753],
-  "Rustenburg": [27.2428, -25.6653],
-  "Emfuleni": [27.8437, -26.6783],
-  "Madibeng": [27.8, -25.65],
-  "Mogale City": [27.5, -26.08],
-  "Steve Tshwete": [29.2, -25.77],
-  "Matjhabeng": [26.82, -27.97],
-  "Sol Plaatje": [24.77, -28.74],
-  "Drakenstein": [19.0, -33.73],
-  "Stellenbosch": [18.86, -33.93],
-  "George": [22.46, -33.96],
-  "Mossel Bay": [22.13, -34.18],
-  "Knysna": [23.05, -34.04],
+// South African province colors
+const PROVINCE_COLORS: Record<string, string> = {
+  "Gauteng": "#ef4444",
+  "Western Cape": "#f97316",
+  "KwaZulu-Natal": "#eab308",
+  "Eastern Cape": "#22c55e",
+  "Mpumalanga": "#14b8a6",
+  "Limpopo": "#3b82f6",
+  "North West": "#8b5cf6",
+  "Free State": "#ec4899",
+  "Northern Cape": "#6b7280",
 };
 
 interface Municipality {
@@ -52,12 +24,22 @@ interface Municipality {
   province: { name: string };
 }
 
+interface GeocodedMunicipality extends Municipality {
+  coordinates: [number, number] | null;
+}
+
+// Cache for geocoded coordinates
+const geocodeCache: Record<string, [number, number] | null> = {};
+
 export function MunicipalityMap() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
+  const [geocodedMunicipalities, setGeocodedMunicipalities] = useState<GeocodedMunicipality[]>([]);
   const [loading, setLoading] = useState(true);
+  const [geocoding, setGeocoding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Fetch Mapbox token
@@ -98,6 +80,92 @@ export function MunicipalityMap() {
     fetchMunicipalities();
   }, []);
 
+  // Geocode a municipality name using Mapbox Geocoding API
+  const geocodeMunicipality = useCallback(async (name: string, province: string, token: string): Promise<[number, number] | null> => {
+    const cacheKey = `${name}-${province}`;
+    
+    if (geocodeCache[cacheKey] !== undefined) {
+      return geocodeCache[cacheKey];
+    }
+
+    try {
+      // Search for municipality in South Africa with province context
+      const searchQuery = encodeURIComponent(`${name}, ${province}, South Africa`);
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${searchQuery}.json?access_token=${token}&country=ZA&types=place,locality,district&limit=1`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Geocoding failed');
+      }
+
+      const data = await response.json();
+      
+      if (data.features && data.features.length > 0) {
+        const [lng, lat] = data.features[0].center;
+        const coords: [number, number] = [lng, lat];
+        geocodeCache[cacheKey] = coords;
+        return coords;
+      }
+      
+      // Try without province if no results
+      const fallbackQuery = encodeURIComponent(`${name} Municipality, South Africa`);
+      const fallbackResponse = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${fallbackQuery}.json?access_token=${token}&country=ZA&types=place,locality,district&limit=1`
+      );
+      
+      if (fallbackResponse.ok) {
+        const fallbackData = await fallbackResponse.json();
+        if (fallbackData.features && fallbackData.features.length > 0) {
+          const [lng, lat] = fallbackData.features[0].center;
+          const coords: [number, number] = [lng, lat];
+          geocodeCache[cacheKey] = coords;
+          return coords;
+        }
+      }
+
+      geocodeCache[cacheKey] = null;
+      return null;
+    } catch (err) {
+      console.error(`Failed to geocode ${name}:`, err);
+      geocodeCache[cacheKey] = null;
+      return null;
+    }
+  }, []);
+
+  // Geocode all municipalities
+  useEffect(() => {
+    if (!mapboxToken || municipalities.length === 0) return;
+
+    async function geocodeAll() {
+      setGeocoding(true);
+      
+      const geocoded: GeocodedMunicipality[] = [];
+      
+      // Process in batches to avoid rate limiting
+      for (let i = 0; i < municipalities.length; i++) {
+        const muni = municipalities[i];
+        const provinceName = muni.province?.name || "South Africa";
+        const coords = await geocodeMunicipality(muni.name, provinceName, mapboxToken!);
+        
+        geocoded.push({
+          ...muni,
+          coordinates: coords,
+        });
+
+        // Small delay between requests to avoid rate limiting
+        if (i < municipalities.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      setGeocodedMunicipalities(geocoded);
+      setGeocoding(false);
+    }
+
+    geocodeAll();
+  }, [municipalities, mapboxToken, geocodeMunicipality]);
+
   // Initialize map
   useEffect(() => {
     if (!mapContainer.current || !mapboxToken || map.current) return;
@@ -114,6 +182,8 @@ export function MunicipalityMap() {
     map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
 
     return () => {
+      markersRef.current.forEach(marker => marker.remove());
+      markersRef.current = [];
       map.current?.remove();
       map.current = null;
     };
@@ -121,32 +191,24 @@ export function MunicipalityMap() {
 
   // Add municipality markers
   useEffect(() => {
-    if (!map.current || municipalities.length === 0) return;
+    if (!map.current || geocodedMunicipalities.length === 0) return;
 
-    // Wait for map to load
     const addMarkers = () => {
       // Clear existing markers
-      const existingMarkers = document.querySelectorAll(".municipality-marker");
-      existingMarkers.forEach((m) => m.remove());
+      markersRef.current.forEach(marker => marker.remove());
+      markersRef.current = [];
 
-      municipalities.forEach((muni) => {
+      geocodedMunicipalities.forEach((muni) => {
+        if (!muni.coordinates) return; // Skip municipalities that couldn't be geocoded
+
         const provinceName = muni.province?.name || "South Africa";
-        const provinceData = SA_PROVINCES[provinceName] || SA_PROVINCES["South Africa"];
-        
-        // Try to get specific coordinates, otherwise estimate based on province
-        let coords = MUNICIPALITY_COORDS[muni.name];
-        if (!coords) {
-          // Add some randomness around province center for unknown municipalities
-          const [lng, lat] = provinceData.center;
-          const offset = () => (Math.random() - 0.5) * 2;
-          coords = [lng + offset(), lat + offset()];
-        }
+        const color = PROVINCE_COLORS[provinceName] || "#64748b";
 
         const el = document.createElement("div");
         el.className = "municipality-marker";
         el.style.width = "12px";
         el.style.height = "12px";
-        el.style.backgroundColor = provinceData.color;
+        el.style.backgroundColor = color;
         el.style.borderRadius = "50%";
         el.style.border = "2px solid white";
         el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
@@ -156,14 +218,16 @@ export function MunicipalityMap() {
           <div style="padding: 8px;">
             <strong>${muni.name}</strong>
             <br />
-            <span style="color: ${provinceData.color}; font-size: 12px;">${provinceName}</span>
+            <span style="color: ${color}; font-size: 12px;">${provinceName}</span>
           </div>
         `);
 
-        new mapboxgl.Marker(el)
-          .setLngLat(coords)
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat(muni.coordinates)
           .setPopup(popup)
           .addTo(map.current!);
+
+        markersRef.current.push(marker);
       });
     };
 
@@ -172,7 +236,7 @@ export function MunicipalityMap() {
     } else {
       map.current.on("load", addMarkers);
     }
-  }, [municipalities, mapboxToken]);
+  }, [geocodedMunicipalities]);
 
   if (error) {
     return (
@@ -190,24 +254,32 @@ export function MunicipalityMap() {
     );
   }
 
+  const geocodedCount = geocodedMunicipalities.filter(m => m.coordinates).length;
+  const totalCount = municipalities.length;
+
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
           <MapPin className="h-5 w-5" />
           Municipality Map
-          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {(loading || geocoding) && <Loader2 className="h-4 w-4 animate-spin" />}
+          {!loading && !geocoding && totalCount > 0 && (
+            <span className="text-xs font-normal text-muted-foreground ml-2">
+              ({geocodedCount}/{totalCount} plotted)
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <div ref={mapContainer} className="h-[400px] rounded-b-lg" />
         {municipalities.length > 0 && (
           <div className="p-3 border-t flex flex-wrap gap-3 text-xs">
-            {Object.entries(SA_PROVINCES).slice(0, 9).map(([name, data]) => (
+            {Object.entries(PROVINCE_COLORS).map(([name, color]) => (
               <div key={name} className="flex items-center gap-1">
                 <div
                   className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: data.color }}
+                  style={{ backgroundColor: color }}
                 />
                 <span>{name}</span>
               </div>
