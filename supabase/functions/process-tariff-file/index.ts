@@ -432,32 +432,77 @@ Extract EVERY tariff structure found for this municipality.`;
         const errText = await aiRes.text();
         console.error("AI extraction failed:", errText);
         return new Response(
-          JSON.stringify({ error: "AI extraction failed" }),
+          JSON.stringify({ error: "AI extraction failed", details: errText }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       const aiData = await aiRes.json();
+      console.log("AI response structure:", JSON.stringify({
+        hasChoices: !!aiData.choices,
+        choiceCount: aiData.choices?.length,
+        hasToolCalls: !!aiData.choices?.[0]?.message?.tool_calls,
+        toolCallCount: aiData.choices?.[0]?.message?.tool_calls?.length,
+        hasContent: !!aiData.choices?.[0]?.message?.content
+      }));
+      
       const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
       
-      if (!toolCall) {
-        return new Response(
-          JSON.stringify({ error: "AI did not return structured data" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       let extractedTariffs: Omit<ExtractedTariff, 'municipality'>[];
-      try {
-        const args = JSON.parse(toolCall.function.arguments);
-        extractedTariffs = args.tariffs;
-        console.log(`AI extracted ${extractedTariffs.length} tariffs for ${municipality}`);
-      } catch (e) {
+      
+      if (toolCall) {
+        try {
+          const args = JSON.parse(toolCall.function.arguments);
+          extractedTariffs = args.tariffs;
+        } catch (parseErr) {
+          console.error("Failed to parse tool call arguments:", parseErr);
+          return new Response(
+            JSON.stringify({ error: "Failed to parse AI response", details: toolCall.function.arguments?.slice(0, 500) }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } else {
+        // Fallback: try to extract from content if AI didn't use the tool
+        const content = aiData.choices?.[0]?.message?.content;
+        console.log("No tool call, checking content. Content length:", content?.length || 0);
+        
+        if (content) {
+          // Try to find JSON in the content
+          const jsonMatch = content.match(/\{[\s\S]*"tariffs"[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              const parsed = JSON.parse(jsonMatch[0]);
+              extractedTariffs = parsed.tariffs;
+              console.log("Extracted tariffs from content:", extractedTariffs?.length || 0);
+            } catch {
+              console.error("Failed to parse JSON from content");
+              return new Response(
+                JSON.stringify({ error: "AI did not return structured data", aiContent: content.slice(0, 1000) }),
+                { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+          } else {
+            return new Response(
+              JSON.stringify({ error: "AI did not return structured data", aiContent: content.slice(0, 1000) }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } else {
+          return new Response(
+            JSON.stringify({ error: "AI returned empty response" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+      
+      if (!extractedTariffs || extractedTariffs.length === 0) {
         return new Response(
-          JSON.stringify({ error: "Failed to parse extracted data" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "No tariffs extracted", municipality }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      
+      console.log(`AI extracted ${extractedTariffs.length} tariffs for ${municipality}`);
 
       // Save to database
       const { data: muniData } = await supabase
