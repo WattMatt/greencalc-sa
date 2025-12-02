@@ -81,6 +81,7 @@ export function TariffList() {
   const [isSaving, setIsSaving] = useState(false);
   const [previewRawData, setPreviewRawData] = useState<{ data: string[][]; rowCount: number; sheetTitle: string } | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [highlightedTariffName, setHighlightedTariffName] = useState<string | null>(null);
 
   const { data: provinces } = useQuery({
     queryKey: ["provinces"],
@@ -626,7 +627,7 @@ export function TariffList() {
       </Accordion>
 
       {/* Preview Dialog - Side by Side Comparison */}
-      <Dialog open={!!previewMunicipality} onOpenChange={(open) => !open && setPreviewMunicipality(null)}>
+      <Dialog open={!!previewMunicipality} onOpenChange={(open) => { if (!open) { setPreviewMunicipality(null); setHighlightedTariffName(null); } }}>
         <DialogContent className="sm:max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -670,18 +671,25 @@ export function TariffList() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {previewRawData.data.slice(0, 60).map((row, rowIdx) => (
-                            <TableRow key={rowIdx} className={rowIdx % 2 === 0 ? "bg-muted/30" : ""}>
-                              <TableCell className="text-xs text-muted-foreground font-mono sticky left-0 bg-background">
-                                {rowIdx + 1}
-                              </TableCell>
-                              {row.slice(0, 8).map((cell, cellIdx) => (
-                                <TableCell key={cellIdx} className="text-xs whitespace-nowrap p-1">
-                                  {cell !== null && cell !== undefined && cell !== "" ? String(cell).slice(0, 30) : "-"}
+                          {previewRawData.data.slice(0, 60).map((row, rowIdx) => {
+                            const rowText = row.join(' ').toLowerCase();
+                            const isHighlighted = highlightedTariffName && rowText.includes(highlightedTariffName.toLowerCase());
+                            return (
+                              <TableRow 
+                                key={rowIdx} 
+                                className={`${isHighlighted ? "bg-primary/20 ring-1 ring-primary" : rowIdx % 2 === 0 ? "bg-muted/30" : ""}`}
+                              >
+                                <TableCell className={`text-xs font-mono sticky left-0 ${isHighlighted ? "bg-primary/20 text-primary font-bold" : "bg-background text-muted-foreground"}`}>
+                                  {rowIdx + 1}
                                 </TableCell>
-                              ))}
-                            </TableRow>
-                          ))}
+                                {row.slice(0, 8).map((cell, cellIdx) => (
+                                  <TableCell key={cellIdx} className={`text-xs whitespace-nowrap p-1 ${isHighlighted ? "font-medium" : ""}`}>
+                                    {cell !== null && cell !== undefined && cell !== "" ? String(cell).slice(0, 30) : "-"}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     </div>
@@ -718,7 +726,11 @@ export function TariffList() {
                         const displayTariff = isEditing && editedTariff ? editedTariff : tariff;
                         
                         return (
-                          <Card key={tariff.id} className={`text-xs ${isEditing ? "ring-2 ring-primary" : ""}`}>
+                          <Card 
+                            key={tariff.id} 
+                            className={`text-xs cursor-pointer transition-all ${isEditing ? "ring-2 ring-primary" : highlightedTariffName === tariff.name ? "ring-2 ring-primary bg-primary/5" : "hover:bg-accent/50"}`}
+                            onClick={() => setHighlightedTariffName(highlightedTariffName === tariff.name ? null : tariff.name)}
+                          >
                             <CardHeader className="py-2 px-3">
                               <div className="flex items-start justify-between gap-2">
                                 <div>
