@@ -7,6 +7,7 @@ import { TariffList } from "@/components/tariffs/TariffList";
 import { TOUReference } from "@/components/tariffs/TOUReference";
 import { GoogleSheetsImport } from "@/components/tariffs/GoogleSheetsImport";
 import { AISheetImport } from "@/components/tariffs/AISheetImport";
+import { FileUploadImport } from "@/components/tariffs/FileUploadImport";
 import { MunicipalityMap } from "@/components/tariffs/MunicipalityMap";
 
 export default function TariffManagement() {
@@ -31,7 +32,8 @@ export default function TariffManagement() {
         </TabsList>
 
         <TabsContent value="tariffs" className="space-y-4">
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 flex-wrap">
+            <FileUploadImport />
             <GoogleSheetsImport />
             <AISheetImport />
           </div>
