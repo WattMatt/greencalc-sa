@@ -9,8 +9,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Trash2 } from "lucide-react";
+import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Trash2, Eye } from "lucide-react";
 
 const SOUTH_AFRICAN_PROVINCES = [
   "Eastern Cape",
@@ -27,6 +28,7 @@ const SOUTH_AFRICAN_PROVINCES = [
 interface Municipality {
   id: string;
   name: string;
+  sheetName?: string;
   status: "pending" | "extracting" | "done" | "error";
   tariffCount?: number;
   error?: string;
@@ -37,6 +39,13 @@ interface AnalysisResult {
   sheets?: string[];
   rowCounts?: Record<string, number>;
   analysis: string;
+}
+
+interface PreviewData {
+  municipality: string;
+  sheetTitle: string;
+  data: string[][];
+  rowCount: number;
 }
 
 export function FileUploadImport() {
@@ -50,6 +59,9 @@ export function FileUploadImport() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [phase, setPhase] = useState<1 | 2 | 3>(1); // 1=upload, 2=municipalities, 3=tariffs
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -157,9 +169,10 @@ export function FileUploadImport() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      const munis: Municipality[] = data.municipalities.map((m: { id: string; name: string }) => ({
+      const munis: Municipality[] = data.municipalities.map((m: { id: string; name: string; sheetName?: string }) => ({
         id: m.id,
         name: m.name,
+        sheetName: m.sheetName,
         status: "pending" as const
       }));
 
@@ -313,12 +326,48 @@ export function FileUploadImport() {
     }
   };
 
+  const handlePreview = async (muniName: string) => {
+    if (!uploadedPath || !file) return;
+    
+    setIsLoadingPreview(true);
+    setPreviewData(null);
+    setPreviewOpen(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("process-tariff-file", {
+        body: { 
+          filePath: uploadedPath, 
+          fileType: getFileType(file.name),
+          municipality: muniName,
+          action: "preview" 
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      setPreviewData(data);
+    } catch (err) {
+      console.error("Preview error:", err);
+      toast({
+        title: "Preview Failed",
+        description: err instanceof Error ? err.message : "Failed to load preview",
+        variant: "destructive",
+      });
+      setPreviewOpen(false);
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
   const resetState = () => {
     setFile(null);
     setUploadedPath(null);
     setAnalysis(null);
     setMunicipalities([]);
     setPhase(1);
+    setPreviewData(null);
+    setPreviewOpen(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -546,37 +595,82 @@ export function FileUploadImport() {
                         </div>
 
                         {muni.status === "pending" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs shrink-0"
-                            onClick={() => handleExtractTariffs(index)}
-                          >
-                            Extract
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs shrink-0 gap-1"
+                              onClick={() => handlePreview(muni.name)}
+                              title="Preview raw document data"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs shrink-0"
+                              onClick={() => handleExtractTariffs(index)}
+                            >
+                              Extract
+                            </Button>
+                          </div>
                         )}
                         
                         {muni.status === "done" && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs shrink-0 gap-1"
+                              onClick={() => handlePreview(muni.name)}
+                              title="Preview raw document data"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs shrink-0 gap-1"
+                              onClick={() => handleReextractTariffs(index)}
+                              title="Delete existing tariffs and re-extract"
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              Re-extract
+                            </Button>
+                          </div>
+                        )}
+                        
+                        {muni.status === "error" && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs shrink-0 gap-1"
+                              onClick={() => handlePreview(muni.name)}
+                              title="Preview raw document data"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs shrink-0"
+                              onClick={() => handleExtractTariffs(index)}
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        )}
+                        
+                        {muni.status === "extracting" && (
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-7 text-xs shrink-0 gap-1"
-                            onClick={() => handleReextractTariffs(index)}
-                            title="Delete existing tariffs and re-extract"
+                            onClick={() => handlePreview(muni.name)}
+                            title="Preview raw document data"
                           >
-                            <RefreshCw className="h-3 w-3" />
-                            Re-extract
-                          </Button>
-                        )}
-                        
-                        {muni.status === "error" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs shrink-0"
-                            onClick={() => handleExtractTariffs(index)}
-                          >
-                            Retry
+                            <Eye className="h-3 w-3" />
                           </Button>
                         )}
                       </div>
@@ -597,6 +691,65 @@ export function FileUploadImport() {
           )}
         </div>
       </DialogContent>
+
+      {/* Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5" />
+              Document Preview: {previewData?.sheetTitle || "Loading..."}
+            </DialogTitle>
+            <DialogDescription>
+              Raw data from the document for verification. Compare this against extracted tariffs.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {isLoadingPreview ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : previewData ? (
+            <ScrollArea className="flex-1 max-h-[60vh]">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10 text-xs">#</TableHead>
+                      {previewData.data[0]?.map((_, colIdx) => (
+                        <TableHead key={colIdx} className="text-xs min-w-[100px]">
+                          Col {colIdx + 1}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {previewData.data.map((row, rowIdx) => (
+                      <TableRow key={rowIdx} className={rowIdx % 2 === 0 ? "bg-muted/30" : ""}>
+                        <TableCell className="text-xs text-muted-foreground font-mono">
+                          {rowIdx + 1}
+                        </TableCell>
+                        {row.map((cell, cellIdx) => (
+                          <TableCell key={cellIdx} className="text-xs whitespace-nowrap">
+                            {cell !== null && cell !== undefined && cell !== "" ? String(cell) : "-"}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="text-xs text-muted-foreground mt-2 px-2">
+                Showing {previewData.rowCount} rows from "{previewData.sheetTitle}"
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              No preview data available
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

@@ -174,12 +174,17 @@ Be specific and concise.`;
       
       // For Excel files, sheet names are often municipality names
       let municipalityNames: string[] = [];
+      const sheetNameToMuni: Record<string, string> = {};
       
       if (fileType === "xlsx" || fileType === "xls") {
         // Use sheet names as municipality names (common pattern)
-        municipalityNames = sheetNames.map(name => 
-          name.replace(/\s*-\s*\d+\.?\d*%$/, '').trim()
-        ).filter(name => name.length > 0);
+        for (const sheetName of sheetNames) {
+          const cleanName = sheetName.replace(/\s*-\s*\d+\.?\d*%$/, '').trim();
+          if (cleanName.length > 0) {
+            municipalityNames.push(cleanName);
+            sheetNameToMuni[cleanName] = sheetName; // Map clean name to original sheet name
+          }
+        }
         console.log("Found municipalities from sheets:", municipalityNames);
       } else {
         // For PDF, use AI to extract municipality names
@@ -248,7 +253,7 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
         console.log("Created new province:", province, provinceId);
       }
 
-      const savedMunicipalities: Array<{ id: string; name: string }> = [];
+      const savedMunicipalities: Array<{ id: string; name: string; sheetName?: string }> = [];
       const errors: string[] = [];
 
       if (provinceId) {
@@ -267,7 +272,11 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
           // Check if already exists
           if (existingNames.has(cleanName.toLowerCase())) {
             const existing = existingMunis?.find(m => m.name.toLowerCase() === cleanName.toLowerCase());
-            if (existing) savedMunicipalities.push({ id: existing.id, name: existing.name });
+            if (existing) savedMunicipalities.push({ 
+              id: existing.id, 
+              name: existing.name,
+              sheetName: sheetNameToMuni[cleanName] || cleanName
+            });
             continue;
           }
 
@@ -279,7 +288,11 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
             .single();
           
           if (newMuni) {
-            savedMunicipalities.push({ id: newMuni.id, name: newMuni.name });
+            savedMunicipalities.push({ 
+              id: newMuni.id, 
+              name: newMuni.name,
+              sheetName: sheetNameToMuni[cleanName] || cleanName
+            });
             existingNames.add(cleanName.toLowerCase());
             console.log("Created municipality:", cleanName);
           } else if (error) {
@@ -296,6 +309,45 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
           municipalities: savedMunicipalities,
           total: savedMunicipalities.length,
           errors
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // PHASE 2.5: Preview raw sheet data for a municipality
+    if (action === "preview") {
+      if (!municipality) {
+        return new Response(
+          JSON.stringify({ error: "Municipality name is required for preview" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log("Previewing data for municipality:", municipality);
+
+      let previewData: string[][] = [];
+      let sheetTitle = municipality;
+
+      if (fileType === "xlsx" || fileType === "xls") {
+        // Find the sheet matching this municipality
+        const matchingSheet = sheetNames.find(name => 
+          name.toLowerCase().includes(municipality.toLowerCase()) ||
+          municipality.toLowerCase().includes(name.replace(/\s*-\s*\d+\.?\d*%$/, '').toLowerCase())
+        );
+        
+        if (matchingSheet && sheetData[matchingSheet]) {
+          sheetTitle = matchingSheet;
+          previewData = sheetData[matchingSheet].slice(0, 100); // First 100 rows
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          municipality,
+          sheetTitle,
+          data: previewData,
+          rowCount: previewData.length
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
