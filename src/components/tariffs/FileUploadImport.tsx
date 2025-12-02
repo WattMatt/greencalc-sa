@@ -48,6 +48,24 @@ interface PreviewData {
   rowCount: number;
 }
 
+interface ExtractedTariffPreview {
+  id: string;
+  name: string;
+  tariff_type: string;
+  phase_type: string | null;
+  amperage_limit: string | null;
+  fixed_monthly_charge: number | null;
+  demand_charge_per_kva: number | null;
+  is_prepaid: boolean | null;
+  category: { name: string } | null;
+  rates: Array<{
+    rate_per_kwh: number;
+    time_of_use: string;
+    block_start_kwh: number | null;
+    block_end_kwh: number | null;
+  }>;
+}
+
 export function FileUploadImport() {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -60,6 +78,7 @@ export function FileUploadImport() {
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [phase, setPhase] = useState<1 | 2 | 3>(1); // 1=upload, 2=municipalities, 3=tariffs
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [extractedTariffs, setExtractedTariffs] = useState<ExtractedTariffPreview[]>([]);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -331,9 +350,11 @@ export function FileUploadImport() {
     
     setIsLoadingPreview(true);
     setPreviewData(null);
+    setExtractedTariffs([]);
     setPreviewOpen(true);
 
     try {
+      // Fetch raw document data
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
         body: { 
           filePath: uploadedPath, 
@@ -347,6 +368,36 @@ export function FileUploadImport() {
       if (data.error) throw new Error(data.error);
 
       setPreviewData(data);
+
+      // Also fetch extracted tariffs from database
+      const { data: muniData } = await supabase
+        .from("municipalities")
+        .select("id")
+        .ilike("name", muniName)
+        .maybeSingle();
+
+      if (muniData) {
+        const { data: tariffs } = await supabase
+          .from("tariffs")
+          .select(`
+            id,
+            name,
+            tariff_type,
+            phase_type,
+            amperage_limit,
+            fixed_monthly_charge,
+            demand_charge_per_kva,
+            is_prepaid,
+            category:tariff_categories(name),
+            rates:tariff_rates(rate_per_kwh, time_of_use, block_start_kwh, block_end_kwh)
+          `)
+          .eq("municipality_id", muniData.id)
+          .order("name");
+
+        if (tariffs) {
+          setExtractedTariffs(tariffs as unknown as ExtractedTariffPreview[]);
+        }
+      }
     } catch (err) {
       console.error("Preview error:", err);
       toast({
@@ -367,6 +418,7 @@ export function FileUploadImport() {
     setMunicipalities([]);
     setPhase(1);
     setPreviewData(null);
+    setExtractedTariffs([]);
     setPreviewOpen(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -692,16 +744,16 @@ export function FileUploadImport() {
         </div>
       </DialogContent>
 
-      {/* Preview Dialog */}
+      {/* Side-by-Side Comparison Dialog */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="sm:max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5" />
-              Document Preview: {previewData?.sheetTitle || "Loading..."}
+              Comparison: {previewData?.sheetTitle || "Loading..."}
             </DialogTitle>
             <DialogDescription>
-              Raw data from the document for verification. Compare this against extracted tariffs.
+              Side-by-side comparison of raw document data and extracted tariffs for verification.
             </DialogDescription>
           </DialogHeader>
           
@@ -710,39 +762,145 @@ export function FileUploadImport() {
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : previewData ? (
-            <ScrollArea className="flex-1 max-h-[60vh]">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10 text-xs">#</TableHead>
-                      {previewData.data[0]?.map((_, colIdx) => (
-                        <TableHead key={colIdx} className="text-xs min-w-[100px]">
-                          Col {colIdx + 1}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {previewData.data.map((row, rowIdx) => (
-                      <TableRow key={rowIdx} className={rowIdx % 2 === 0 ? "bg-muted/30" : ""}>
-                        <TableCell className="text-xs text-muted-foreground font-mono">
-                          {rowIdx + 1}
-                        </TableCell>
-                        {row.map((cell, cellIdx) => (
-                          <TableCell key={cellIdx} className="text-xs whitespace-nowrap">
-                            {cell !== null && cell !== undefined && cell !== "" ? String(cell) : "-"}
-                          </TableCell>
+            <div className="grid grid-cols-2 gap-4 flex-1 overflow-hidden">
+              {/* Left: Raw Document Data */}
+              <Card className="flex flex-col overflow-hidden">
+                <CardHeader className="py-2 px-3 border-b bg-muted/50">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                    Raw Document Data
+                    <Badge variant="secondary" className="text-xs">{previewData.rowCount} rows</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 flex-1 overflow-hidden">
+                  <ScrollArea className="h-[55vh]">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-8 text-xs sticky left-0 bg-background">#</TableHead>
+                            {previewData.data[0]?.slice(0, 8).map((_, colIdx) => (
+                              <TableHead key={colIdx} className="text-xs min-w-[80px]">
+                                {colIdx + 1}
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {previewData.data.slice(0, 60).map((row, rowIdx) => (
+                            <TableRow key={rowIdx} className={rowIdx % 2 === 0 ? "bg-muted/30" : ""}>
+                              <TableCell className="text-xs text-muted-foreground font-mono sticky left-0 bg-background">
+                                {rowIdx + 1}
+                              </TableCell>
+                              {row.slice(0, 8).map((cell, cellIdx) => (
+                                <TableCell key={cellIdx} className="text-xs whitespace-nowrap p-1">
+                                  {cell !== null && cell !== undefined && cell !== "" ? String(cell).slice(0, 30) : "-"}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              {/* Right: Extracted Tariffs */}
+              <Card className="flex flex-col overflow-hidden">
+                <CardHeader className="py-2 px-3 border-b bg-muted/50">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-primary" />
+                    Extracted Tariffs
+                    <Badge variant="secondary" className="text-xs">{extractedTariffs.length} tariffs</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 flex-1 overflow-hidden">
+                  <ScrollArea className="h-[55vh]">
+                    {extractedTariffs.length === 0 ? (
+                      <div className="flex items-center justify-center h-full text-muted-foreground text-sm p-4">
+                        <div className="text-center">
+                          <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p>No tariffs extracted yet.</p>
+                          <p className="text-xs">Click "Extract" to import tariffs.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2 space-y-2">
+                        {extractedTariffs.map((tariff) => (
+                          <Card key={tariff.id} className="text-xs">
+                            <CardHeader className="py-2 px-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="font-medium text-sm">{tariff.name}</div>
+                                  <div className="text-muted-foreground">{tariff.category?.name || "Uncategorized"}</div>
+                                </div>
+                                <div className="flex gap-1">
+                                  <Badge variant="outline" className="text-[10px]">{tariff.tariff_type}</Badge>
+                                  {tariff.is_prepaid && <Badge variant="secondary" className="text-[10px]">Prepaid</Badge>}
+                                </div>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="py-2 px-3 border-t space-y-1">
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                {tariff.fixed_monthly_charge !== null && tariff.fixed_monthly_charge > 0 && (
+                                  <div>
+                                    <span className="text-muted-foreground">Basic Charge:</span>{" "}
+                                    <span className="font-medium text-green-600">R{tariff.fixed_monthly_charge.toFixed(2)}/m</span>
+                                  </div>
+                                )}
+                                {tariff.demand_charge_per_kva !== null && tariff.demand_charge_per_kva > 0 && (
+                                  <div>
+                                    <span className="text-muted-foreground">Demand Charge:</span>{" "}
+                                    <span className="font-medium text-green-600">R{tariff.demand_charge_per_kva.toFixed(2)}/kVA</span>
+                                  </div>
+                                )}
+                                {tariff.phase_type && (
+                                  <div>
+                                    <span className="text-muted-foreground">Phase:</span> {tariff.phase_type}
+                                  </div>
+                                )}
+                                {tariff.amperage_limit && (
+                                  <div>
+                                    <span className="text-muted-foreground">Amperage:</span> {tariff.amperage_limit}
+                                  </div>
+                                )}
+                              </div>
+                              {tariff.rates && tariff.rates.length > 0 && (
+                                <div className="mt-2 pt-2 border-t">
+                                  <div className="text-muted-foreground mb-1">Energy Rates:</div>
+                                  <div className="space-y-0.5">
+                                    {tariff.rates.map((rate, idx) => (
+                                      <div key={idx} className="flex items-center justify-between bg-muted/50 px-2 py-0.5 rounded">
+                                        <span className={`font-medium ${
+                                          rate.time_of_use === "High Demand" ? "text-orange-600" :
+                                          rate.time_of_use === "Low Demand" ? "text-blue-600" :
+                                          rate.time_of_use === "Peak" ? "text-red-600" :
+                                          rate.time_of_use === "Off-Peak" ? "text-green-600" :
+                                          "text-foreground"
+                                        }`}>
+                                          {rate.time_of_use}
+                                          {rate.block_start_kwh !== null && rate.block_end_kwh !== null && (
+                                            <span className="text-muted-foreground ml-1">
+                                              ({rate.block_start_kwh}-{rate.block_end_kwh} kWh)
+                                            </span>
+                                          )}
+                                        </span>
+                                        <span className="font-mono">{(rate.rate_per_kwh * 100).toFixed(2)} c/kWh</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
                         ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <div className="text-xs text-muted-foreground mt-2 px-2">
-                Showing {previewData.rowCount} rows from "{previewData.sheetTitle}"
-              </div>
-            </ScrollArea>
+                      </div>
+                    )}
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               No preview data available
