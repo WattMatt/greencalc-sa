@@ -9,17 +9,24 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { FileSpreadsheet, Upload, AlertCircle, CheckCircle2, Info } from "lucide-react";
 
+interface ImportResult {
+  imported: number;
+  skipped: number;
+  tabsProcessed: number;
+  tabs: string[];
+  errors: string[];
+}
+
 export function GoogleSheetsImport() {
   const [open, setOpen] = useState(false);
   const [sheetUrl, setSheetUrl] = useState("");
-  const [sheetName, setSheetName] = useState("Sheet1");
+  const [province, setProvince] = useState("South Africa");
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
+  const [result, setResult] = useState<ImportResult | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const extractSheetId = (url: string): string | null => {
-    // Extract sheet ID from various Google Sheets URL formats
     const patterns = [
       /\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/,
       /^([a-zA-Z0-9-_]+)$/,
@@ -49,7 +56,7 @@ export function GoogleSheetsImport() {
 
     try {
       const { data, error } = await supabase.functions.invoke("import-google-sheet", {
-        body: { sheetId, sheetName: sheetName.trim() || "Sheet1" },
+        body: { sheetId, province: province.trim() || "South Africa" },
       });
 
       if (error) throw error;
@@ -64,17 +71,20 @@ export function GoogleSheetsImport() {
         setResult({
           imported: data.imported,
           skipped: data.skipped,
+          tabsProcessed: data.tabsProcessed || 0,
+          tabs: data.tabs || [],
           errors: data.errors || [],
         });
         
         if (data.imported > 0) {
           toast({
             title: "Import Successful",
-            description: `Imported ${data.imported} tariffs`,
+            description: `Imported ${data.imported} tariffs from ${data.tabsProcessed} municipalities`,
           });
           queryClient.invalidateQueries({ queryKey: ["tariffs"] });
           queryClient.invalidateQueries({ queryKey: ["municipalities"] });
           queryClient.invalidateQueries({ queryKey: ["tariff-categories"] });
+          queryClient.invalidateQueries({ queryKey: ["provinces"] });
         }
       }
     } catch (err) {
@@ -104,7 +114,7 @@ export function GoogleSheetsImport() {
             Import Tariffs from Google Sheets
           </DialogTitle>
           <DialogDescription>
-            Import tariff data from a publicly shared Google Sheet
+            Import tariff data from a Google Sheet shared with the service account
           </DialogDescription>
         </DialogHeader>
 
@@ -112,9 +122,11 @@ export function GoogleSheetsImport() {
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              <strong>Required columns:</strong> province, municipality, category, tariff_name, tariff_type
+              <strong>Each tab = one municipality.</strong> Tab names become municipality names.
               <br />
-              <strong>Optional:</strong> phase_type, fixed_monthly_charge, demand_charge_per_kva, is_prepaid, amperage_limit, rate_per_kwh, block_start_kwh, block_end_kwh, season, time_of_use
+              <strong>Required columns:</strong> category, tariff_name (or name), tariff_type
+              <br />
+              <strong>Optional:</strong> phase_type, fixed_monthly_charge, rate_per_kwh, block_start_kwh, block_end_kwh, season, time_of_use
             </AlertDescription>
           </Alert>
 
@@ -127,26 +139,32 @@ export function GoogleSheetsImport() {
               placeholder="https://docs.google.com/spreadsheets/d/..."
             />
             <p className="text-xs text-muted-foreground">
-              The sheet must be shared publicly (Anyone with the link can view)
+              The sheet must be shared with the service account email
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="sheet-name">Sheet Name</Label>
+            <Label htmlFor="province">Province</Label>
             <Input
-              id="sheet-name"
-              value={sheetName}
-              onChange={(e) => setSheetName(e.target.value)}
-              placeholder="Sheet1"
+              id="province"
+              value={province}
+              onChange={(e) => setProvince(e.target.value)}
+              placeholder="South Africa"
             />
+            <p className="text-xs text-muted-foreground">
+              All municipalities will be assigned to this province
+            </p>
           </div>
 
           {result && (
             <div className="space-y-2">
-              <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-4 text-sm flex-wrap">
                 <span className="flex items-center gap-1 text-green-600">
                   <CheckCircle2 className="h-4 w-4" />
-                  {result.imported} imported
+                  {result.imported} tariffs imported
+                </span>
+                <span className="text-muted-foreground">
+                  from {result.tabsProcessed} municipalities
                 </span>
                 {result.skipped > 0 && (
                   <span className="flex items-center gap-1 text-yellow-600">
@@ -155,6 +173,12 @@ export function GoogleSheetsImport() {
                   </span>
                 )}
               </div>
+              {result.tabs.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Municipalities: {result.tabs.slice(0, 5).join(", ")}
+                  {result.tabs.length > 5 && ` +${result.tabs.length - 5} more`}
+                </p>
+              )}
               {result.errors.length > 0 && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -181,7 +205,7 @@ export function GoogleSheetsImport() {
             ) : (
               <>
                 <Upload className="h-4 w-4" />
-                Import Data
+                Import All Tabs
               </>
             )}
           </Button>
