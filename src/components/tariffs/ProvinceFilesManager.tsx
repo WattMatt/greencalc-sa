@@ -64,6 +64,9 @@ interface ProvinceStats {
   municipalityCount: number;
   tariffCount: number;
   isCustom: boolean;
+  extractedCount: number;
+  pendingCount: number;
+  errorCount: number;
 }
 
 export function ProvinceFilesManager() {
@@ -163,6 +166,19 @@ export function ProvinceFilesManager() {
       ) || [];
 
       const municipalityIds = provinceMunicipalities.map(m => m.id);
+      
+      // Calculate extraction status per municipality
+      let extractedCount = 0;
+      let pendingCount = 0;
+      provinceMunicipalities.forEach(muni => {
+        const hasTariffs = provincesData?.tariffs?.some(t => t.municipality_id === muni.id);
+        if (hasTariffs) {
+          extractedCount++;
+        } else {
+          pendingCount++;
+        }
+      });
+      
       const tariffCount = provincesData?.tariffs?.filter(
         t => municipalityIds.includes(t.municipality_id)
       ).length || 0;
@@ -188,6 +204,9 @@ export function ProvinceFilesManager() {
         municipalityCount: provinceMunicipalities.length,
         tariffCount,
         isCustom: false,
+        extractedCount,
+        pendingCount,
+        errorCount: 0, // Errors are tracked in-session only
       });
     });
 
@@ -199,6 +218,19 @@ export function ProvinceFilesManager() {
         ) || [];
 
         const municipalityIds = provinceMunicipalities.map(m => m.id);
+        
+        // Calculate extraction status per municipality
+        let extractedCount = 0;
+        let pendingCount = 0;
+        provinceMunicipalities.forEach(muni => {
+          const hasTariffs = provincesData?.tariffs?.some(t => t.municipality_id === muni.id);
+          if (hasTariffs) {
+            extractedCount++;
+          } else {
+            pendingCount++;
+          }
+        });
+        
         const tariffCount = provincesData?.tariffs?.filter(
           t => municipalityIds.includes(t.municipality_id)
         ).length || 0;
@@ -224,6 +256,9 @@ export function ProvinceFilesManager() {
           municipalityCount: provinceMunicipalities.length,
           tariffCount,
           isCustom: true,
+          extractedCount,
+          pendingCount,
+          errorCount: 0,
         });
       }
     });
@@ -657,9 +692,23 @@ export function ProvinceFilesManager() {
                 </TableCell>
                 <TableCell>
                   {stats.municipalityCount > 0 ? (
-                    <div className="flex items-center gap-1 text-sm">
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      {stats.municipalityCount}
+                    <div className="flex items-center gap-2 text-sm">
+                      <div className="flex items-center gap-1">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{stats.municipalityCount}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="flex items-center gap-0.5 text-green-600">
+                          <CheckCircle2 className="h-3 w-3" />
+                          {stats.extractedCount}
+                        </span>
+                        {stats.pendingCount > 0 && (
+                          <span className="flex items-center gap-0.5 text-amber-600">
+                            <Clock className="h-3 w-3" />
+                            {stats.pendingCount}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <span className="text-muted-foreground text-sm">—</span>
