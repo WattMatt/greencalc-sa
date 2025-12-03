@@ -32,6 +32,9 @@ interface CalculationParams {
   customProfile: number[];
   weekdayPercentage: number;
   isHighDemandSeason: boolean;
+  // Optional Critical Peak parameters
+  criticalPeakRate?: number;
+  criticalPeakHours?: number;
 }
 
 // Get the TOU type for a specific hour and day type
@@ -51,13 +54,16 @@ function getTOUForHour(
 }
 
 // Calculate weighted average rate for a consumption profile using TOU periods
+// Now includes demand charge calculation based on Peak/Standard max demand (NERSA compliant)
 function calculateTOUBill(
   consumption: number,
   touPeriods: TOUPeriod[],
   hourlyProfile: number[],
   weekdayPercentage: number,
-  season: string
-): { energyCost: number; breakdown: Record<string, number> } {
+  season: string,
+  maxDemand: number,
+  baseDemandCharge: number
+): { energyCost: number; demandCost: number; breakdown: Record<string, number>; peakDemand: number } {
   const weekdayHours = 5; // Mon-Fri
   const saturdayHours = 1;
   const sundayHours = 1;
@@ -69,6 +75,10 @@ function calculateTOUBill(
 
   let totalCost = 0;
   const breakdown: Record<string, number> = { Peak: 0, Standard: 0, "Off-Peak": 0 };
+  
+  // Track maximum demand during Peak and Standard periods for NERSA-compliant billing
+  let peakStandardMaxDemand = 0;
+  let peakPeriodDemandCharge = baseDemandCharge;
 
   // Normalize profile to sum to 1
   const profileSum = hourlyProfile.reduce((a, b) => a + b, 0);
@@ -76,6 +86,8 @@ function calculateTOUBill(
 
   for (let hour = 0; hour < 24; hour++) {
     const hourlyConsumption = consumption * normalizedProfile[hour];
+    // Estimate hourly demand as a fraction of max demand weighted by profile
+    const hourlyDemand = maxDemand * normalizedProfile[hour] * 24;
 
     // Weekday consumption
     const weekdayPeriod = getTOUForHour(hour, "Weekday", season, touPeriods);
@@ -84,6 +96,15 @@ function calculateTOUBill(
       totalCost += cost;
       breakdown[weekdayPeriod.time_of_use] = (breakdown[weekdayPeriod.time_of_use] || 0) + 
         hourlyConsumption * weekdayWeight;
+      
+      // Track peak/standard demand for demand charge calculation
+      if (weekdayPeriod.time_of_use === "Peak" || weekdayPeriod.time_of_use === "Standard") {
+        peakStandardMaxDemand = Math.max(peakStandardMaxDemand, hourlyDemand);
+        // Use period-specific demand charge if available
+        if (weekdayPeriod.demand_charge_per_kva) {
+          peakPeriodDemandCharge = Math.max(peakPeriodDemandCharge, weekdayPeriod.demand_charge_per_kva);
+        }
+      }
     }
 
     // Saturday consumption
@@ -105,7 +126,11 @@ function calculateTOUBill(
     }
   }
 
-  return { energyCost: totalCost, breakdown };
+  // NERSA-compliant demand charge: based on max demand during Peak/Standard periods
+  const effectiveDemand = peakStandardMaxDemand > 0 ? peakStandardMaxDemand : maxDemand;
+  const demandCost = effectiveDemand * peakPeriodDemandCharge;
+
+  return { energyCost: totalCost, demandCost, breakdown, peakDemand: effectiveDemand };
 }
 
 // Calculate IBT (Inclining Block Tariff) bill
@@ -141,6 +166,8 @@ export function useTOUCalculation(params: CalculationParams) {
       customProfile,
       weekdayPercentage,
       isHighDemandSeason,
+      criticalPeakRate,
+      criticalPeakHours,
     } = params;
 
     if (monthlyConsumption === 0) return null;
@@ -149,28 +176,43 @@ export function useTOUCalculation(params: CalculationParams) {
     const season = isHighDemandSeason ? "High Demand" : "Low Demand";
 
     let energyCost = 0;
+    let demandCost = 0;
     let breakdown: Record<string, number> = {};
+    let peakDemand = maxDemand;
 
     if (tariffType === "TOU" && touPeriods.length > 0) {
-      // Use granular TOU calculation
+      // Use NERSA-compliant TOU calculation with Peak/Standard max demand
       const result = calculateTOUBill(
         monthlyConsumption,
         touPeriods,
         profile,
         weekdayPercentage,
-        season
+        season,
+        maxDemand,
+        demandChargePerKva
       );
       energyCost = result.energyCost;
+      demandCost = result.demandCost;
       breakdown = result.breakdown;
+      peakDemand = result.peakDemand;
+      
+      // Add Critical Peak Pricing if applicable
+      if (criticalPeakRate && criticalPeakHours && criticalPeakHours > 0) {
+        const criticalPeakConsumption = (monthlyConsumption / 720) * criticalPeakHours; // Avg hourly * CPP hours
+        const criticalPeakCost = criticalPeakConsumption * (criticalPeakRate / 100);
+        energyCost += criticalPeakCost;
+        breakdown["Critical Peak"] = criticalPeakConsumption;
+      }
     } else if (tariffType === "IBT" && rates.length > 0) {
       energyCost = calculateIBTBill(monthlyConsumption, rates);
+      demandCost = maxDemand * (demandChargePerKva || 0);
     } else if (rates.length > 0) {
       // Fixed rate
       energyCost = monthlyConsumption * (rates[0].rate_per_kwh / 100);
+      demandCost = maxDemand * (demandChargePerKva || 0);
     }
 
     const fixedCost = fixedMonthlyCharge || 0;
-    const demandCost = maxDemand * (demandChargePerKva || 0);
     const totalBill = fixedCost + demandCost + energyCost;
 
     return {
@@ -180,6 +222,7 @@ export function useTOUCalculation(params: CalculationParams) {
       totalBill,
       breakdown,
       season,
+      peakDemand,
     };
   }, [params]);
 }
