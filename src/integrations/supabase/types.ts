@@ -102,6 +102,7 @@ export type Database = {
           demand_charge_per_kva: number | null
           id: string
           rate_per_kwh: number
+          reactive_energy_charge: number | null
           season: Database["public"]["Enums"]["season_type"]
           tariff_id: string
           time_of_use: Database["public"]["Enums"]["time_of_use_type"]
@@ -113,6 +114,7 @@ export type Database = {
           demand_charge_per_kva?: number | null
           id?: string
           rate_per_kwh: number
+          reactive_energy_charge?: number | null
           season?: Database["public"]["Enums"]["season_type"]
           tariff_id: string
           time_of_use?: Database["public"]["Enums"]["time_of_use_type"]
@@ -124,6 +126,7 @@ export type Database = {
           demand_charge_per_kva?: number | null
           id?: string
           rate_per_kwh?: number
+          reactive_energy_charge?: number | null
           season?: Database["public"]["Enums"]["season_type"]
           tariff_id?: string
           time_of_use?: Database["public"]["Enums"]["time_of_use_type"]
@@ -141,8 +144,10 @@ export type Database = {
       tariffs: {
         Row: {
           amperage_limit: string | null
+          capacity_kva: number | null
           category_id: string
           created_at: string
+          customer_category: string | null
           demand_charge_per_kva: number | null
           fixed_monthly_charge: number | null
           has_seasonal_rates: boolean | null
@@ -152,13 +157,17 @@ export type Database = {
           name: string
           network_access_charge: number | null
           phase_type: Database["public"]["Enums"]["phase_type"] | null
+          reactive_energy_charge: number | null
           tariff_type: Database["public"]["Enums"]["tariff_type"]
           updated_at: string
+          voltage_level: Database["public"]["Enums"]["voltage_level"] | null
         }
         Insert: {
           amperage_limit?: string | null
+          capacity_kva?: number | null
           category_id: string
           created_at?: string
+          customer_category?: string | null
           demand_charge_per_kva?: number | null
           fixed_monthly_charge?: number | null
           has_seasonal_rates?: boolean | null
@@ -168,13 +177,17 @@ export type Database = {
           name: string
           network_access_charge?: number | null
           phase_type?: Database["public"]["Enums"]["phase_type"] | null
+          reactive_energy_charge?: number | null
           tariff_type?: Database["public"]["Enums"]["tariff_type"]
           updated_at?: string
+          voltage_level?: Database["public"]["Enums"]["voltage_level"] | null
         }
         Update: {
           amperage_limit?: string | null
+          capacity_kva?: number | null
           category_id?: string
           created_at?: string
+          customer_category?: string | null
           demand_charge_per_kva?: number | null
           fixed_monthly_charge?: number | null
           has_seasonal_rates?: boolean | null
@@ -184,8 +197,10 @@ export type Database = {
           name?: string
           network_access_charge?: number | null
           phase_type?: Database["public"]["Enums"]["phase_type"] | null
+          reactive_energy_charge?: number | null
           tariff_type?: Database["public"]["Enums"]["tariff_type"]
           updated_at?: string
+          voltage_level?: Database["public"]["Enums"]["voltage_level"] | null
         }
         Relationships: [
           {
@@ -270,6 +285,7 @@ export type Database = {
         | "Off-Peak"
         | "High Demand"
         | "Low Demand"
+      voltage_level: "LV" | "MV" | "HV"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -409,6 +425,7 @@ export const Constants = {
         "High Demand",
         "Low Demand",
       ],
+      voltage_level: ["LV", "MV", "HV"],
     },
   },
 } as const
