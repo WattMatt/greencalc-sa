@@ -16,12 +16,18 @@ interface ExtractedTariff {
   is_prepaid: boolean;
   fixed_monthly_charge?: number;
   demand_charge_per_kva?: number;
+  // NERSA-compliant fields
+  voltage_level?: "LV" | "MV" | "HV";
+  reactive_energy_charge?: number;
+  capacity_kva?: number;
+  customer_category?: string;
   rates: Array<{
     rate_per_kwh: number;
     block_start_kwh?: number;
     block_end_kwh?: number;
     season?: string;
     time_of_use?: string;
+    reactive_energy_charge?: number;
   }>;
 }
 
@@ -405,46 +411,75 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
 
 ${municipalityText.slice(0, 12000)}
 
-CRITICAL DATA MAPPING RULES:
-1. Municipality: "${municipality}"
-2. Categories: Domestic, Commercial, Industrial, Agricultural, Public Lighting, Other
+CRITICAL DATA MAPPING RULES (NERSA-COMPLIANT):
 
-3. FIXED CHARGES (NOT rates):
+1. Municipality: "${municipality}"
+
+2. CUSTOMER CATEGORY (NERSA classification):
+   - "Domestic" / "Residential" → customer_category: "Domestic"
+   - "Commercial" / "Business" → customer_category: "Commercial"
+   - "Industrial" / "Manufacturing" / "LPU" / "Large Power" → customer_category: "Industrial"
+   - "Agriculture" / "Farm" → customer_category: "Agriculture"
+   - "Street Lighting" / "Public Lighting" → customer_category: "Street Lighting"
+
+3. VOLTAGE LEVEL (NERSA requirement):
+   - "LV" / "Low Voltage" / "≤400V" / most domestic/small commercial → voltage_level: "LV"
+   - "MV" / "Medium Voltage" / "11kV" / "22kV" → voltage_level: "MV"
+   - "HV" / "High Voltage" / "66kV" / "132kV" → voltage_level: "HV"
+   - Default to "LV" if not specified
+
+4. CAPACITY (kVA):
+   - "50kVA", "100kVA", "1MVA" → capacity_kva (number)
+   - Small Power Users (SPU) typically <50kVA
+   - Large Power Users (LPU) typically ≥80kVA
+
+5. FIXED CHARGES (NOT rates):
    - "Basic Charge per month (R/month)" → fixed_monthly_charge (number in Rands)
    - "Service Charge" or "Admin Charge" → fixed_monthly_charge
    - DO NOT put these in the rates array!
 
-4. DEMAND/CAPACITY CHARGES (NOT rates):
+6. DEMAND/CAPACITY CHARGES (NOT rates):
    - "Per 5 Amp or Part (min 30A) (R/A/m)" → demand_charge_per_kva (number in Rands)
    - "Per kVA" charges → demand_charge_per_kva
    - "Capacity Charge" → demand_charge_per_kva
    - DO NOT put these in the rates array!
 
-5. ENERGY RATES ONLY (put in rates array):
+7. REACTIVE ENERGY CHARGE (NERSA requirement):
+   - "Reactive Energy" / "kVArh" / "Power Factor" charges → reactive_energy_charge (R/kVArh)
+   - This compensates for poor power factor
+   - Can be at tariff level OR per rate period for TOU
+
+8. ENERGY RATES ONLY (put in rates array):
    - ONLY values measured in c/kWh go in the rates array
    - "Low Demand Energy Rate (c/kWh)" → rate with time_of_use: "Low Demand"
    - "High Demand Energy Rate (c/kWh)" → rate with time_of_use: "High Demand"
    - "Energy Rate (c/kWh)" with no demand distinction → time_of_use: "Any"
    - Block rates for IBT → include block_start_kwh and block_end_kwh
+   - Include reactive_energy_charge per rate if varies by TOU period
 
-6. TARIFF TYPE DETERMINATION:
+9. TARIFF TYPE DETERMINATION:
    - If has "High Demand" AND "Low Demand" energy rates → tariff_type: "TOU"
    - If has "Peak/Standard/Off-Peak" periods → tariff_type: "TOU"
    - If has Block 1, Block 2 etc. (consumption tiers) → tariff_type: "IBT"
    - If single flat energy rate → tariff_type: "Fixed"
+   - TOU is MANDATORY for MV/HV customers per NERSA guidelines
 
-7. Phase: "Single Phase" or "Three Phase" (from "1 Phase", "3 Phase", "1 & 3 Phase")
-8. Amperage: from ">20A", "15A", "60A", "100A" etc.
-9. Prepaid: true if "Prepaid" mentioned in name
+10. Phase: "Single Phase" or "Three Phase" (from "1 Phase", "3 Phase", "1 & 3 Phase")
+11. Amperage: from ">20A", "15A", "60A", "100A" etc.
+12. Prepaid: true if "Prepaid" mentioned in name
 
-EXAMPLE for "Domestic - Credit 1 & 3 Phase >20A":
-- fixed_monthly_charge: 296.95 (from "Basic Charge per month")
-- demand_charge_per_kva: 68.89 (from "Per 5 Amp or Part")
+EXAMPLE for "Commercial TOU 11kV >100kVA":
+- customer_category: "Commercial"
+- voltage_level: "MV"
+- capacity_kva: 100
+- fixed_monthly_charge: 1500.00
+- demand_charge_per_kva: 250.00
+- reactive_energy_charge: 0.45
 - rates: [
-    { rate_per_kwh: 2.1093, time_of_use: "Low Demand" },
-    { rate_per_kwh: 3.053, time_of_use: "High Demand" }
+    { rate_per_kwh: 1.85, time_of_use: "Peak", season: "High/Winter" },
+    { rate_per_kwh: 0.95, time_of_use: "Off-Peak", season: "High/Winter" }
   ]
-- tariff_type: "TOU" (has High/Low Demand distinction)
+- tariff_type: "TOU"
 
 NOTE: Convert c/kWh to R/kWh by dividing by 100 (e.g., 210.93 c/kWh = 2.1093 R/kWh)
 
@@ -459,14 +494,14 @@ Extract EVERY tariff structure found for this municipality.`;
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [
-            { role: "system", content: "You are a data extraction expert for South African electricity tariffs. You must correctly separate fixed charges (R/month), demand charges (R/A/m or R/kVA), and energy rates (c/kWh). ONLY energy rates go in the rates array. Fixed and demand charges are separate fields." },
+            { role: "system", content: "You are a NERSA-compliant data extraction expert for South African electricity tariffs. You must correctly: 1) Separate fixed charges (R/month), demand charges (R/A/m or R/kVA), reactive energy charges (R/kVArh), and energy rates (c/kWh). 2) Identify voltage level (LV/MV/HV), capacity (kVA), and customer category per NERSA guidelines. 3) ONLY energy rates go in the rates array. Fixed, demand, and reactive charges are separate fields." },
             { role: "user", content: extractPrompt }
           ],
           tools: [{
             type: "function",
             function: {
               name: "save_tariffs",
-              description: "Save extracted tariff data. IMPORTANT: Only energy rates (c/kWh values) go in the rates array. Basic charges go in fixed_monthly_charge, per-amp charges go in demand_charge_per_kva.",
+              description: "Save NERSA-compliant tariff data. Include voltage_level, reactive_energy_charge, capacity_kva, and customer_category per NERSA guidelines.",
               parameters: {
                 type: "object",
                 properties: {
@@ -476,13 +511,17 @@ Extract EVERY tariff structure found for this municipality.`;
                       type: "object",
                       properties: {
                         category: { type: "string", description: "Domestic, Commercial, Industrial, Agricultural, Public Lighting, or Other" },
+                        customer_category: { type: "string", enum: ["Domestic", "Commercial", "Industrial", "Agriculture", "Street Lighting"], description: "NERSA customer classification" },
                         tariff_name: { type: "string", description: "Full tariff name from document" },
-                        tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"], description: "TOU if High/Low Demand rates, IBT if block rates, Fixed otherwise" },
+                        tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"], description: "TOU if High/Low Demand rates or MV/HV supply, IBT if block rates, Fixed otherwise" },
+                        voltage_level: { type: "string", enum: ["LV", "MV", "HV"], description: "LV=≤400V, MV=11kV/22kV, HV=≥44kV. Default LV for domestic" },
+                        capacity_kva: { type: "number", description: "Connection capacity in kVA (e.g., 50, 100, 1000)" },
                         phase_type: { type: "string", enum: ["Single Phase", "Three Phase"] },
                         amperage_limit: { type: "string", description: "e.g., >20A, 60A, 100A" },
                         is_prepaid: { type: "boolean" },
                         fixed_monthly_charge: { type: "number", description: "Basic Charge per month in Rands (R/month). NOT an energy rate!" },
                         demand_charge_per_kva: { type: "number", description: "Per-amp or per-kVA charges in Rands (R/A/m or R/kVA). NOT an energy rate!" },
+                        reactive_energy_charge: { type: "number", description: "Reactive energy charge in R/kVArh for power factor compensation" },
                         rates: {
                           type: "array",
                           description: "ONLY energy rates in R/kWh. Convert c/kWh to R/kWh by dividing by 100.",
@@ -493,7 +532,8 @@ Extract EVERY tariff structure found for this municipality.`;
                               block_start_kwh: { type: "number", description: "For IBT tariffs only" },
                               block_end_kwh: { type: "number", description: "For IBT tariffs only" },
                               season: { type: "string", enum: ["All Year", "High/Winter", "Low/Summer"] },
-                              time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"], description: "High Demand or Low Demand for demand-based TOU tariffs" }
+                              time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"], description: "High Demand or Low Demand for demand-based TOU tariffs" },
+                              reactive_energy_charge: { type: "number", description: "Reactive energy charge for this TOU period if varies" }
                             },
                             required: ["rate_per_kwh"]
                           }
@@ -656,6 +696,11 @@ Extract EVERY tariff structure found for this municipality.`;
               demand_charge_per_kva: tariff.demand_charge_per_kva || 0,
               is_prepaid: tariff.is_prepaid,
               amperage_limit: tariff.amperage_limit || null,
+              // NERSA-compliant fields
+              voltage_level: tariff.voltage_level || "LV",
+              reactive_energy_charge: tariff.reactive_energy_charge || 0,
+              capacity_kva: tariff.capacity_kva || null,
+              customer_category: tariff.customer_category || tariff.category,
             })
             .select("id")
             .single();
@@ -675,6 +720,7 @@ Extract EVERY tariff structure found for this municipality.`;
                 block_end_kwh: rate.block_end_kwh || null,
                 season: rate.season || "All Year",
                 time_of_use: rate.time_of_use || "Any",
+                reactive_energy_charge: rate.reactive_energy_charge || null,
               });
             }
           }
