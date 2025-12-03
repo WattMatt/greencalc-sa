@@ -10,6 +10,7 @@ import { GoogleSheetsImport } from "@/components/tariffs/GoogleSheetsImport";
 import { AISheetImport } from "@/components/tariffs/AISheetImport";
 import { FileUploadImport } from "@/components/tariffs/FileUploadImport";
 import { MunicipalityMap } from "@/components/tariffs/MunicipalityMap";
+import { ProvinceFilesManager } from "@/components/tariffs/ProvinceFilesManager";
 export default function TariffManagement() {
   const [activeTab, setActiveTab] = useState("tariffs");
 
@@ -25,6 +26,7 @@ export default function TariffManagement() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="bg-muted">
           <TabsTrigger value="tariffs">Tariffs</TabsTrigger>
+          <TabsTrigger value="province-files">Province Files</TabsTrigger>
           <TabsTrigger value="builder">Tariff Builder</TabsTrigger>
           <TabsTrigger value="tou-reference">TOU Reference</TabsTrigger>
           <TabsTrigger value="nersa-guidelines">NERSA Guidelines</TabsTrigger>
@@ -39,6 +41,10 @@ export default function TariffManagement() {
             <AISheetImport />
           </div>
           <TariffList />
+        </TabsContent>
+
+        <TabsContent value="province-files" className="space-y-4">
+          <ProvinceFilesManager />
         </TabsContent>
 
         <TabsContent value="builder" className="space-y-4">
