@@ -521,6 +521,22 @@ export function ProvinceFilesManager() {
     setExtractionPhase("ready");
   };
 
+  const handleRetryAllFailed = async () => {
+    setExtractionPhase("extracting");
+    for (let i = 0; i < municipalities.length; i++) {
+      if (municipalities[i].status === "error") {
+        // Reset status to pending before retry
+        setMunicipalities(prev => prev.map((m, idx) => 
+          idx === i ? { ...m, status: "pending" as const, error: undefined } : m
+        ));
+        await handleExtractTariffs(i);
+      }
+    }
+    setExtractionPhase("ready");
+  };
+
+  const failedCount = municipalities.filter(m => m.status === "error").length;
+
   const getExtractionProgress = () => {
     if (municipalities.length === 0) return 0;
     const done = municipalities.filter(m => m.status === "done").length;
@@ -915,17 +931,34 @@ export function ProvinceFilesManager() {
                         {municipalities.filter(m => m.status === "done").length} of {municipalities.length} complete
                       </p>
                     </div>
-                    <Button
-                      onClick={handleExtractAll}
-                      disabled={extractionPhase === "extracting" || municipalities.every(m => m.status === "done")}
-                    >
-                      {extractionPhase === "extracting" ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                      ) : (
-                        <Zap className="h-4 w-4 mr-1" />
+                    <div className="flex gap-2">
+                      {failedCount > 0 && (
+                        <Button
+                          onClick={handleRetryAllFailed}
+                          disabled={extractionPhase === "extracting"}
+                          variant="outline"
+                          className="border-destructive/50 text-destructive hover:bg-destructive/10"
+                        >
+                          {extractionPhase === "extracting" ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4 mr-1" />
+                          )}
+                          Retry All Failed ({failedCount})
+                        </Button>
                       )}
-                      Extract All Tariffs
-                    </Button>
+                      <Button
+                        onClick={handleExtractAll}
+                        disabled={extractionPhase === "extracting" || municipalities.every(m => m.status === "done" || m.status === "error")}
+                      >
+                        {extractionPhase === "extracting" ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        ) : (
+                          <Zap className="h-4 w-4 mr-1" />
+                        )}
+                        Extract All Tariffs
+                      </Button>
+                    </div>
                   </div>
 
                   <Progress value={getExtractionProgress()} className="h-2" />
