@@ -16,6 +16,9 @@ type TariffType = Database["public"]["Enums"]["tariff_type"];
 type PhaseType = Database["public"]["Enums"]["phase_type"];
 type SeasonType = Database["public"]["Enums"]["season_type"];
 type TimeOfUseType = Database["public"]["Enums"]["time_of_use_type"];
+type VoltageLevel = "LV" | "MV" | "HV";
+
+const CUSTOMER_CATEGORIES = ["Domestic", "Commercial", "Industrial", "Agriculture", "Street Lighting"] as const;
 
 interface RateRow {
   id: string;
@@ -42,6 +45,11 @@ export function TariffBuilder() {
   const [isPrepaid, setIsPrepaid] = useState(false);
   const [rateRows, setRateRows] = useState<RateRow[]>([]);
   const [touPeriods, setTouPeriods] = useState<TOUPeriod[]>([]);
+  // NERSA-compliant fields
+  const [voltageLevel, setVoltageLevel] = useState<VoltageLevel>("LV");
+  const [reactiveEnergyCharge, setReactiveEnergyCharge] = useState("");
+  const [capacityKva, setCapacityKva] = useState("");
+  const [customerCategory, setCustomerCategory] = useState("");
 
   const { data: municipalities } = useQuery({
     queryKey: ["municipalities"],
@@ -78,6 +86,11 @@ export function TariffBuilder() {
           network_access_charge: networkCharge ? parseFloat(networkCharge) : 0,
           has_seasonal_rates: hasSeasonalRates,
           is_prepaid: isPrepaid,
+          // NERSA-compliant fields
+          voltage_level: voltageLevel,
+          reactive_energy_charge: reactiveEnergyCharge ? parseFloat(reactiveEnergyCharge) : 0,
+          capacity_kva: capacityKva ? parseFloat(capacityKva) : null,
+          customer_category: customerCategory || null,
         })
         .select()
         .single();
@@ -143,6 +156,11 @@ export function TariffBuilder() {
     setIsPrepaid(false);
     setRateRows([]);
     setTouPeriods([]);
+    // Reset NERSA fields
+    setVoltageLevel("LV");
+    setReactiveEnergyCharge("");
+    setCapacityKva("");
+    setCustomerCategory("");
   };
 
   const addRateRow = () => {
@@ -278,12 +296,52 @@ export function TariffBuilder() {
                 placeholder="e.g., 60A"
               />
             </div>
+
+            {/* NERSA Fields */}
+            <div className="space-y-2">
+              <Label>Voltage Level (NERSA)</Label>
+              <Select value={voltageLevel} onValueChange={(v) => setVoltageLevel(v as VoltageLevel)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="LV">LV (Low Voltage ≤400V)</SelectItem>
+                  <SelectItem value="MV">MV (Medium Voltage 11kV/22kV)</SelectItem>
+                  <SelectItem value="HV">HV (High Voltage ≥44kV)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Customer Category (NERSA)</Label>
+              <Select value={customerCategory} onValueChange={setCustomerCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CUSTOMER_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Capacity (kVA)</Label>
+              <Input
+                type="number"
+                step="0.1"
+                value={capacityKva}
+                onChange={(e) => setCapacityKva(e.target.value)}
+                placeholder="e.g., 100"
+              />
+            </div>
           </div>
 
           {/* Fixed Charges */}
           <div className="space-y-4">
             <h3 className="font-semibold text-foreground">Fixed Charges</h3>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
               <div className="space-y-2">
                 <Label>Basic Charge (R/month)</Label>
                 <Input
@@ -311,6 +369,16 @@ export function TariffBuilder() {
                   step="0.01"
                   value={networkCharge}
                   onChange={(e) => setNetworkCharge(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Reactive Energy (R/kVArh)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={reactiveEnergyCharge}
+                  onChange={(e) => setReactiveEnergyCharge(e.target.value)}
                   placeholder="0.00"
                 />
               </div>
