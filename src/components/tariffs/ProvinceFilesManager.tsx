@@ -724,6 +724,12 @@ export function ProvinceFilesManager() {
                             {stats.pendingCount}
                           </span>
                         )}
+                        {stats.errorCount > 0 && (
+                          <span className="flex items-center gap-0.5 text-destructive">
+                            <AlertCircle className="h-3 w-3" />
+                            {stats.errorCount}
+                          </span>
+                        )}
                       </div>
                     </div>
                   ) : (
