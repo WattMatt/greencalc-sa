@@ -5,11 +5,11 @@ import { MunicipalityManager } from "@/components/tariffs/MunicipalityManager";
 import { TariffBuilder } from "@/components/tariffs/TariffBuilder";
 import { TariffList } from "@/components/tariffs/TariffList";
 import { TOUReference } from "@/components/tariffs/TOUReference";
+import { NERSAGuidelines } from "@/components/tariffs/NERSAGuidelines";
 import { GoogleSheetsImport } from "@/components/tariffs/GoogleSheetsImport";
 import { AISheetImport } from "@/components/tariffs/AISheetImport";
 import { FileUploadImport } from "@/components/tariffs/FileUploadImport";
 import { MunicipalityMap } from "@/components/tariffs/MunicipalityMap";
-
 export default function TariffManagement() {
   const [activeTab, setActiveTab] = useState("tariffs");
 
@@ -27,6 +27,7 @@ export default function TariffManagement() {
           <TabsTrigger value="tariffs">Tariffs</TabsTrigger>
           <TabsTrigger value="builder">Tariff Builder</TabsTrigger>
           <TabsTrigger value="tou-reference">TOU Reference</TabsTrigger>
+          <TabsTrigger value="nersa-guidelines">NERSA Guidelines</TabsTrigger>
           <TabsTrigger value="municipalities">Municipalities</TabsTrigger>
           <TabsTrigger value="provinces">Provinces</TabsTrigger>
         </TabsList>
@@ -46,6 +47,10 @@ export default function TariffManagement() {
 
         <TabsContent value="tou-reference" className="space-y-4">
           <TOUReference />
+        </TabsContent>
+
+        <TabsContent value="nersa-guidelines" className="space-y-4">
+          <NERSAGuidelines />
         </TabsContent>
 
         <TabsContent value="municipalities" className="space-y-4">
