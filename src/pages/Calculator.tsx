@@ -14,6 +14,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { ConsumptionProfile, ProfileType, RESIDENTIAL_PROFILE } from "@/components/calculator/ConsumptionProfile";
 import { TariffComparison } from "@/components/calculator/TariffComparison";
 import { useTOUCalculation } from "@/hooks/useTOUCalculation";
+import { TOUClockDiagram, TOUClockLegend } from "@/components/tariffs/TOUClockDiagram";
 
 const KWP_TO_KWH_MONTHLY = 140;
 
@@ -386,6 +387,39 @@ export default function Calculator() {
                       checked={isHighDemandSeason}
                       onCheckedChange={setIsHighDemandSeason}
                     />
+                  </div>
+                )}
+
+                {/* TOU Clock Diagram */}
+                {selectedTariff?.tariff_type === "TOU" && touPeriods && touPeriods.length > 0 && (
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <TOUClockDiagram
+                        title="High Demand (Jun-Aug)"
+                        periods={touPeriods
+                          .filter(p => p.season === "High/Winter")
+                          .map(p => ({
+                            day_type: p.day_type as "Weekday" | "Saturday" | "Sunday",
+                            time_of_use: p.time_of_use as "Peak" | "Standard" | "Off-Peak",
+                            start_hour: p.start_hour,
+                            end_hour: p.end_hour,
+                          }))}
+                        size={200}
+                      />
+                      <TOUClockDiagram
+                        title="Low Demand (Sep-May)"
+                        periods={touPeriods
+                          .filter(p => p.season === "Low/Summer")
+                          .map(p => ({
+                            day_type: p.day_type as "Weekday" | "Saturday" | "Sunday",
+                            time_of_use: p.time_of_use as "Peak" | "Standard" | "Off-Peak",
+                            start_hour: p.start_hour,
+                            end_hour: p.end_hour,
+                          }))}
+                        size={200}
+                      />
+                    </div>
+                    <TOUClockLegend />
                   </div>
                 )}
               </div>
