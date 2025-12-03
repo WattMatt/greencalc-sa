@@ -17,6 +17,8 @@ export type Database = {
       municipalities: {
         Row: {
           created_at: string
+          extraction_error: string | null
+          extraction_status: string | null
           id: string
           increase_percentage: number | null
           name: string
@@ -26,6 +28,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          extraction_error?: string | null
+          extraction_status?: string | null
           id?: string
           increase_percentage?: number | null
           name: string
@@ -35,6 +39,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          extraction_error?: string | null
+          extraction_status?: string | null
           id?: string
           increase_percentage?: number | null
           name?: string

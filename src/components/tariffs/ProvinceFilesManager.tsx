@@ -96,7 +96,7 @@ export function ProvinceFilesManager() {
 
       const { data: municipalities } = await supabase
         .from("municipalities")
-        .select("id, name, province_id, source_file_path");
+        .select("id, name, province_id, source_file_path, extraction_status, extraction_error");
 
       const { data: tariffs } = await supabase
         .from("tariffs")
@@ -167,13 +167,16 @@ export function ProvinceFilesManager() {
 
       const municipalityIds = provinceMunicipalities.map(m => m.id);
       
-      // Calculate extraction status per municipality
+      // Calculate extraction status per municipality using DB status
       let extractedCount = 0;
       let pendingCount = 0;
+      let errorCount = 0;
       provinceMunicipalities.forEach(muni => {
-        const hasTariffs = provincesData?.tariffs?.some(t => t.municipality_id === muni.id);
-        if (hasTariffs) {
+        const status = (muni as any).extraction_status || 'pending';
+        if (status === 'done') {
           extractedCount++;
+        } else if (status === 'error') {
+          errorCount++;
         } else {
           pendingCount++;
         }
@@ -206,7 +209,7 @@ export function ProvinceFilesManager() {
         isCustom: false,
         extractedCount,
         pendingCount,
-        errorCount: 0, // Errors are tracked in-session only
+        errorCount,
       });
     });
 
@@ -219,13 +222,16 @@ export function ProvinceFilesManager() {
 
         const municipalityIds = provinceMunicipalities.map(m => m.id);
         
-        // Calculate extraction status per municipality
+        // Calculate extraction status per municipality using DB status
         let extractedCount = 0;
         let pendingCount = 0;
+        let errorCount = 0;
         provinceMunicipalities.forEach(muni => {
-          const hasTariffs = provincesData?.tariffs?.some(t => t.municipality_id === muni.id);
-          if (hasTariffs) {
+          const status = (muni as any).extraction_status || 'pending';
+          if (status === 'done') {
             extractedCount++;
+          } else if (status === 'error') {
+            errorCount++;
           } else {
             pendingCount++;
           }
@@ -258,7 +264,7 @@ export function ProvinceFilesManager() {
           isCustom: true,
           extractedCount,
           pendingCount,
-          errorCount: 0,
+          errorCount,
         });
       }
     });
@@ -364,16 +370,20 @@ export function ProvinceFilesManager() {
       ) || [];
 
       if (existingMunis.length > 0) {
-        // Load existing municipalities with their tariff counts
+        // Load existing municipalities with their persisted status
         const muniWithStatus: Municipality[] = existingMunis.map(m => {
           const tariffCount = provincesData?.tariffs?.filter(
             t => t.municipality_id === m.id
           ).length || 0;
+          const dbStatus = (m as any).extraction_status || 'pending';
+          const dbError = (m as any).extraction_error;
+          
           return {
             id: m.id,
             name: m.name,
-            status: tariffCount > 0 ? "done" as const : "pending" as const,
-            tariffCount
+            status: dbStatus as "pending" | "done" | "error",
+            tariffCount,
+            error: dbError || undefined
           };
         });
         
@@ -481,6 +491,12 @@ export function ProvinceFilesManager() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
+      // Persist success status to database
+      await supabase
+        .from("municipalities")
+        .update({ extraction_status: "done", extraction_error: null })
+        .eq("id", muni.id);
+
       setMunicipalities(prev => prev.map((m, i) => {
         if (i !== muniIndex) return m;
         const totalChanged = (data.inserted || 0) + (data.updated || 0);
@@ -500,14 +516,24 @@ export function ProvinceFilesManager() {
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
       queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed";
+      
+      // Persist error status to database
+      await supabase
+        .from("municipalities")
+        .update({ extraction_status: "error", extraction_error: errorMessage })
+        .eq("id", muni.id);
+
       setMunicipalities(prev => prev.map((m, i) =>
-        i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m
+        i === muniIndex ? { ...m, status: "error" as const, error: errorMessage } : m
       ));
       toast({
         title: `${muni.name} Failed`,
-        description: err instanceof Error ? err.message : "Failed to extract tariffs",
+        description: errorMessage,
         variant: "destructive",
       });
+      
+      queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
     }
   };
 
