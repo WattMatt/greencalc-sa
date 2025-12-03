@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";
 import { 
   Upload, 
   FileSpreadsheet, 
@@ -24,7 +25,8 @@ import {
   RefreshCw,
   Loader2,
   AlertCircle,
-  Zap
+  Zap,
+  Plus
 } from "lucide-react";
 
 interface Municipality {
@@ -61,6 +63,7 @@ interface ProvinceStats {
   files: ProvinceFile[];
   municipalityCount: number;
   tariffCount: number;
+  isCustom: boolean;
 }
 
 export function ProvinceFilesManager() {
@@ -68,6 +71,7 @@ export function ProvinceFilesManager() {
   const [isUploading, setIsUploading] = useState(false);
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
   const [extractionOpen, setExtractionOpen] = useState(false);
+  const [newProvince, setNewProvince] = useState("");
   
   // Extraction workflow state
   const [selectedFile, setSelectedFile] = useState<ProvinceFile | null>(null);
@@ -99,6 +103,39 @@ export function ProvinceFilesManager() {
     },
   });
 
+  // Add province mutation
+  const addProvince = useMutation({
+    mutationFn: async (name: string) => {
+      const { error } = await supabase.from("provinces").insert({ name });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["provinces"] });
+      setNewProvince("");
+      sonnerToast.success("Province added successfully");
+    },
+    onError: (error) => {
+      sonnerToast.error("Failed to add province: " + error.message);
+    },
+  });
+
+  // Delete province mutation
+  const deleteProvince = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("provinces").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["provinces"] });
+      sonnerToast.success("Province deleted successfully");
+    },
+    onError: (error) => {
+      sonnerToast.error("Failed to delete province: " + error.message);
+    },
+  });
+
   // Fetch uploaded files from storage
   const { data: storageFiles, isLoading: loadingFiles, refetch: refetchFiles } = useQuery({
     queryKey: ["tariff-storage-files"],
@@ -112,43 +149,96 @@ export function ProvinceFilesManager() {
     },
   });
 
-  // Build province stats
-  const provinceStats: ProvinceStats[] = SOUTH_AFRICAN_PROVINCES.map((provinceName) => {
-    const provinceRecord = provincesData?.provinces?.find(p => p.name === provinceName);
-    const provinceId = provinceRecord?.id || null;
+  // Build province stats - include predefined + custom provinces
+  const buildProvinceStats = (): ProvinceStats[] => {
+    const stats: ProvinceStats[] = [];
     
-    const provinceMunicipalities = provincesData?.municipalities?.filter(
-      m => m.province_id === provinceId
-    ) || [];
+    // Add predefined provinces
+    SOUTH_AFRICAN_PROVINCES.forEach((provinceName) => {
+      const provinceRecord = provincesData?.provinces?.find(p => p.name === provinceName);
+      const provinceId = provinceRecord?.id || null;
+      
+      const provinceMunicipalities = provincesData?.municipalities?.filter(
+        m => m.province_id === provinceId
+      ) || [];
 
-    const municipalityIds = provinceMunicipalities.map(m => m.id);
-    const tariffCount = provincesData?.tariffs?.filter(
-      t => municipalityIds.includes(t.municipality_id)
-    ).length || 0;
+      const municipalityIds = provinceMunicipalities.map(m => m.id);
+      const tariffCount = provincesData?.tariffs?.filter(
+        t => municipalityIds.includes(t.municipality_id)
+      ).length || 0;
 
-    // Find files for this province (by naming convention)
-    const provinceFiles: ProvinceFile[] = (storageFiles || [])
-      .filter(f => {
-        const normalizedName = f.name.toLowerCase().replace(/[^a-z]/g, '');
-        const normalizedProvince = provinceName.toLowerCase().replace(/[^a-z]/g, '');
-        return normalizedName.includes(normalizedProvince);
-      })
-      .map(f => ({
-        name: f.name,
-        path: f.name,
+      const provinceFiles: ProvinceFile[] = (storageFiles || [])
+        .filter(f => {
+          const normalizedName = f.name.toLowerCase().replace(/[^a-z]/g, '');
+          const normalizedProvince = provinceName.toLowerCase().replace(/[^a-z]/g, '');
+          return normalizedName.includes(normalizedProvince);
+        })
+        .map(f => ({
+          name: f.name,
+          path: f.name,
+          province: provinceName,
+          uploadedAt: new Date(f.created_at || Date.now()),
+          size: f.metadata?.size || 0,
+        }));
+
+      stats.push({
         province: provinceName,
-        uploadedAt: new Date(f.created_at || Date.now()),
-        size: f.metadata?.size || 0,
-      }));
+        provinceId,
+        files: provinceFiles,
+        municipalityCount: provinceMunicipalities.length,
+        tariffCount,
+        isCustom: false,
+      });
+    });
 
-    return {
-      province: provinceName,
-      provinceId,
-      files: provinceFiles,
-      municipalityCount: provinceMunicipalities.length,
-      tariffCount,
-    };
-  });
+    // Add custom provinces (not in predefined list)
+    provincesData?.provinces?.forEach(p => {
+      if (!SOUTH_AFRICAN_PROVINCES.includes(p.name as typeof SOUTH_AFRICAN_PROVINCES[number])) {
+        const provinceMunicipalities = provincesData?.municipalities?.filter(
+          m => m.province_id === p.id
+        ) || [];
+
+        const municipalityIds = provinceMunicipalities.map(m => m.id);
+        const tariffCount = provincesData?.tariffs?.filter(
+          t => municipalityIds.includes(t.municipality_id)
+        ).length || 0;
+
+        const provinceFiles: ProvinceFile[] = (storageFiles || [])
+          .filter(f => {
+            const normalizedName = f.name.toLowerCase().replace(/[^a-z]/g, '');
+            const normalizedProvince = p.name.toLowerCase().replace(/[^a-z]/g, '');
+            return normalizedName.includes(normalizedProvince);
+          })
+          .map(f => ({
+            name: f.name,
+            path: f.name,
+            province: p.name,
+            uploadedAt: new Date(f.created_at || Date.now()),
+            size: f.metadata?.size || 0,
+          }));
+
+        stats.push({
+          province: p.name,
+          provinceId: p.id,
+          files: provinceFiles,
+          municipalityCount: provinceMunicipalities.length,
+          tariffCount,
+          isCustom: true,
+        });
+      }
+    });
+
+    return stats;
+  };
+
+  const provinceStats = buildProvinceStats();
+
+  const handleAddProvince = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newProvince.trim()) {
+      addProvince.mutate(newProvince.trim());
+    }
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, province: string) => {
     const file = e.target.files?.[0];
@@ -406,24 +496,53 @@ export function ProvinceFilesManager() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <FolderOpen className="h-5 w-5" />
-              Province Tariff Files
-            </CardTitle>
-            <CardDescription>
-              Upload and manage tariff files for each South African province
-            </CardDescription>
+    <div className="space-y-6">
+      {/* Add Province Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Plus className="h-5 w-5" />
+            Add Province
+          </CardTitle>
+          <CardDescription>
+            Add a custom province to the system (the 9 SA provinces are predefined)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleAddProvince} className="flex gap-3">
+            <Input
+              value={newProvince}
+              onChange={(e) => setNewProvince(e.target.value)}
+              placeholder="e.g., Custom Region"
+              className="max-w-xs"
+            />
+            <Button type="submit" disabled={addProvince.isPending}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Province
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Province Files Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <FolderOpen className="h-5 w-5" />
+                Provinces & Tariff Files
+              </CardTitle>
+              <CardDescription>
+                Manage provinces and upload tariff files for extraction
+              </CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => refetchFiles()}>
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh
+            </Button>
           </div>
-          <Button variant="outline" size="sm" onClick={() => refetchFiles()}>
-            <RefreshCw className="h-4 w-4 mr-1" />
-            Refresh
-          </Button>
-        </div>
-      </CardHeader>
+        </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
@@ -553,6 +672,17 @@ export function ProvinceFilesManager() {
                       className="hidden"
                       onChange={(e) => handleFileUpload(e, stats.province)}
                     />
+                    {stats.isCustom && stats.provinceId && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => deleteProvince.mutate(stats.provinceId!)}
+                        disabled={deleteProvince.isPending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -714,5 +844,6 @@ export function ProvinceFilesManager() {
         </Dialog>
       </CardContent>
     </Card>
+    </div>
   );
 }
