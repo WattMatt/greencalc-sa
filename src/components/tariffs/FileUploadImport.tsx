@@ -246,13 +246,19 @@ export function FileUploadImport() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
+      const totalChanged = (data.inserted || 0) + (data.updated || 0);
       setMunicipalities(prev => prev.map((m, i) => 
-        i === muniIndex ? { ...m, status: "done" as const, tariffCount: data.imported } : m
+        i === muniIndex ? { ...m, status: "done" as const, tariffCount: totalChanged } : m
       ));
 
+      const parts = [];
+      if (data.inserted > 0) parts.push(`${data.inserted} new`);
+      if (data.updated > 0) parts.push(`${data.updated} updated`);
+      if (data.skipped > 0) parts.push(`${data.skipped} skipped`);
+      
       toast({ 
         title: `${muni.name} Complete`, 
-        description: `Imported ${data.imported} tariffs` 
+        description: parts.length > 0 ? parts.join(", ") : "No changes needed"
       });
       
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
@@ -329,13 +335,14 @@ export function FileUploadImport() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
+      const totalChanged = (data.inserted || 0) + (data.updated || 0);
       setMunicipalities(prev => prev.map((m, i) => 
-        i === muniIndex ? { ...m, status: "done" as const, tariffCount: data.imported } : m
+        i === muniIndex ? { ...m, status: "done" as const, tariffCount: totalChanged } : m
       ));
 
       toast({ 
         title: `${muni.name} Re-extracted`, 
-        description: `Imported ${data.imported} tariffs (previous data replaced)` 
+        description: `Imported ${totalChanged} tariffs (previous data replaced)` 
       });
       
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });

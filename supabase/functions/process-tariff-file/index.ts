@@ -380,6 +380,48 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
 
       console.log("Extracting tariffs for municipality:", municipality);
 
+      // Get municipality ID and existing tariffs first
+      const { data: muniData } = await supabase
+        .from("municipalities")
+        .select("id")
+        .ilike("name", municipality)
+        .single();
+
+      if (!muniData) {
+        return new Response(
+          JSON.stringify({ error: `Municipality "${municipality}" not found in database` }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Fetch existing tariffs with their rates for comparison
+      const { data: existingTariffs } = await supabase
+        .from("tariffs")
+        .select(`
+          id, name, tariff_type, phase_type, amperage_limit, is_prepaid,
+          fixed_monthly_charge, demand_charge_per_kva, voltage_level,
+          reactive_energy_charge, capacity_kva, customer_category,
+          category:tariff_categories(name),
+          tariff_rates(rate_per_kwh, block_start_kwh, block_end_kwh, season, time_of_use)
+        `)
+        .eq("municipality_id", muniData.id);
+
+      // Build summary of existing tariffs for AI context
+      const existingTariffSummary = existingTariffs?.map(t => ({
+        name: t.name,
+        category: (t.category as any)?.name || "Unknown",
+        tariff_type: t.tariff_type,
+        fixed_monthly_charge: t.fixed_monthly_charge,
+        demand_charge_per_kva: t.demand_charge_per_kva,
+        rates: t.tariff_rates?.map(r => ({
+          rate_per_kwh: r.rate_per_kwh,
+          time_of_use: r.time_of_use,
+          season: r.season
+        }))
+      })) || [];
+
+      console.log(`Found ${existingTariffSummary.length} existing tariffs for ${municipality}`);
+
       // Get data for this specific municipality
       let municipalityText = "";
       if (fileType === "xlsx" || fileType === "xls") {
@@ -407,7 +449,23 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
         );
       }
 
-      const extractPrompt = `Extract ALL electricity tariffs for "${municipality}" municipality from this data:
+      // Build context about existing tariffs
+      const existingContext = existingTariffSummary.length > 0 
+        ? `\n\nEXISTING TARIFFS IN DATABASE (${existingTariffSummary.length} total):
+${JSON.stringify(existingTariffSummary, null, 2)}
+
+INCREMENTAL EXTRACTION RULES:
+- Compare the source document against the existing tariffs above
+- ONLY return tariffs that are:
+  1. NEW: Not in the existing list (different name/category combination)
+  2. UPDATED: Exist but have different values (rates, charges changed)
+- For UPDATED tariffs, include ALL current values from the document (we'll replace them)
+- Mark each tariff with "action": "new" or "action": "update"
+- If a tariff exists with IDENTICAL values, DO NOT include it
+- Focus on finding MISSING tariffs that weren't extracted before`
+        : "";
+
+      const extractPrompt = `Extract electricity tariffs for "${municipality}" municipality from this data:
 
 ${municipalityText.slice(0, 12000)}
 
@@ -627,39 +685,19 @@ Extract EVERY tariff structure found for this municipality.`;
       
       console.log(`AI extracted ${extractedTariffs.length} tariffs for ${municipality}`);
 
-      // Save to database
-      const { data: muniData } = await supabase
-        .from("municipalities")
-        .select("id")
-        .ilike("name", municipality)
-        .single();
-
-      if (!muniData) {
-        return new Response(
-          JSON.stringify({ error: `Municipality "${municipality}" not found in database` }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Delete existing tariffs for this municipality to avoid duplicates
-      const { data: existingTariffs } = await supabase
-        .from("tariffs")
-        .select("id")
-        .eq("municipality_id", muniData.id);
-      
-      if (existingTariffs && existingTariffs.length > 0) {
-        const existingIds = existingTariffs.map(t => t.id);
-        // Delete rates first (foreign key constraint)
-        await supabase.from("tariff_rates").delete().in("tariff_id", existingIds);
-        // Delete tariffs
-        await supabase.from("tariffs").delete().in("id", existingIds);
-        console.log(`Deleted ${existingIds.length} existing tariffs for ${municipality}`);
-      }
+      // Build map of existing tariffs for incremental updates
+      const existingTariffMap = new Map(
+        existingTariffs?.map(t => [
+          `${t.name.toLowerCase()}|${((t.category as any)?.name || '').toLowerCase()}`,
+          t
+        ]) || []
+      );
 
       const { data: categories } = await supabase.from("tariff_categories").select("id, name");
       const categoryMap = new Map(categories?.map(c => [c.name.toLowerCase(), c.id]) || []);
 
-      let imported = 0;
+      let inserted = 0;
+      let updated = 0;
       let skipped = 0;
       const errors: string[] = [];
 
@@ -684,37 +722,71 @@ Extract EVERY tariff structure found for this municipality.`;
             continue;
           }
 
-          const { data: newTariff, error: tariffErr } = await supabase
-            .from("tariffs")
-            .insert({
-              name: tariff.tariff_name,
-              municipality_id: muniData.id,
-              category_id: categoryId,
-              tariff_type: tariff.tariff_type,
-              phase_type: tariff.phase_type || "Single Phase",
-              fixed_monthly_charge: tariff.fixed_monthly_charge || 0,
-              demand_charge_per_kva: tariff.demand_charge_per_kva || 0,
-              is_prepaid: tariff.is_prepaid,
-              amperage_limit: tariff.amperage_limit || null,
-              // NERSA-compliant fields
-              voltage_level: tariff.voltage_level || "LV",
-              reactive_energy_charge: tariff.reactive_energy_charge || 0,
-              capacity_kva: tariff.capacity_kva || null,
-              customer_category: tariff.customer_category || tariff.category,
-            })
-            .select("id")
-            .single();
+          // Check if tariff already exists
+          const tariffKey = `${tariff.tariff_name.toLowerCase()}|${tariff.category.toLowerCase()}`;
+          const existingTariff = existingTariffMap.get(tariffKey);
 
-          if (tariffErr) {
-            errors.push(`${tariff.tariff_name}: ${tariffErr.message}`);
-            skipped++;
-            continue;
+          const tariffData = {
+            name: tariff.tariff_name,
+            municipality_id: muniData.id,
+            category_id: categoryId,
+            tariff_type: tariff.tariff_type,
+            phase_type: tariff.phase_type || "Single Phase",
+            fixed_monthly_charge: tariff.fixed_monthly_charge || 0,
+            demand_charge_per_kva: tariff.demand_charge_per_kva || 0,
+            is_prepaid: tariff.is_prepaid,
+            amperage_limit: tariff.amperage_limit || null,
+            voltage_level: tariff.voltage_level || "LV",
+            reactive_energy_charge: tariff.reactive_energy_charge || 0,
+            capacity_kva: tariff.capacity_kva || null,
+            customer_category: tariff.customer_category || tariff.category,
+          };
+
+          let tariffId: string;
+
+          if (existingTariff) {
+            // Update existing tariff
+            const { error: updateErr } = await supabase
+              .from("tariffs")
+              .update(tariffData)
+              .eq("id", existingTariff.id);
+
+            if (updateErr) {
+              errors.push(`${tariff.tariff_name}: Update failed - ${updateErr.message}`);
+              skipped++;
+              continue;
+            }
+
+            tariffId = existingTariff.id;
+
+            // Delete existing rates and re-insert (simpler than diffing rates)
+            await supabase.from("tariff_rates").delete().eq("tariff_id", tariffId);
+            updated++;
+            console.log(`Updated existing tariff: ${tariff.tariff_name}`);
+          } else {
+            // Insert new tariff
+            const { data: newTariff, error: tariffErr } = await supabase
+              .from("tariffs")
+              .insert(tariffData)
+              .select("id")
+              .single();
+
+            if (tariffErr || !newTariff) {
+              errors.push(`${tariff.tariff_name}: ${tariffErr?.message || "Insert failed"}`);
+              skipped++;
+              continue;
+            }
+
+            tariffId = newTariff.id;
+            inserted++;
+            console.log(`Inserted new tariff: ${tariff.tariff_name}`);
           }
 
-          if (tariff.rates && newTariff) {
+          // Insert rates
+          if (tariff.rates && tariffId) {
             for (const rate of tariff.rates) {
               await supabase.from("tariff_rates").insert({
-                tariff_id: newTariff.id,
+                tariff_id: tariffId,
                 rate_per_kwh: rate.rate_per_kwh,
                 block_start_kwh: rate.block_start_kwh || 0,
                 block_end_kwh: rate.block_end_kwh || null,
@@ -724,8 +796,6 @@ Extract EVERY tariff structure found for this municipality.`;
               });
             }
           }
-
-          imported++;
         } catch (e) {
           errors.push(`${tariff.tariff_name}: ${e instanceof Error ? e.message : "Unknown error"}`);
           skipped++;
@@ -737,8 +807,10 @@ Extract EVERY tariff structure found for this municipality.`;
           success: true,
           municipality,
           extracted: extractedTariffs.length,
-          imported,
+          inserted,
+          updated,
           skipped,
+          existingCount: existingTariffSummary.length,
           errors: errors.slice(0, 20)
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
