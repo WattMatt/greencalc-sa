@@ -821,18 +821,38 @@ export function ProvinceFilesManager() {
                 </>
               )}
 
-              {/* Show info when municipalities were already loaded */}
-              {extractionPhase === "ready" && municipalities.length > 0 && (
-                <div className="p-4 border rounded-lg bg-muted/30 space-y-2">
+              {/* Municipality Extraction Status Summary */}
+              {municipalities.length > 0 && (
+                <div className="p-4 border rounded-lg bg-muted/30 space-y-3">
                   <div className="flex items-center gap-2 text-sm">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <span>
-                      <strong>{municipalities.length}</strong> municipalities already extracted for {selectedProvince}
+                    <Building2 className="h-4 w-4 text-primary" />
+                    <span className="font-medium">
+                      {municipalities.length} municipalities in {selectedProvince}
                     </span>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {municipalities.filter(m => m.status === "done").length} with tariffs, {municipalities.filter(m => m.status === "pending").length} pending
-                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="flex items-center gap-2 p-2 rounded bg-green-500/10 border border-green-500/20">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <div className="text-sm">
+                        <div className="font-semibold text-green-700">{municipalities.filter(m => m.status === "done").length}</div>
+                        <div className="text-xs text-muted-foreground">Extracted</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                      <Clock className="h-4 w-4 text-amber-600" />
+                      <div className="text-sm">
+                        <div className="font-semibold text-amber-700">{municipalities.filter(m => m.status === "pending" || m.status === "extracting").length}</div>
+                        <div className="text-xs text-muted-foreground">Pending</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-2 rounded bg-destructive/10 border border-destructive/20">
+                      <AlertCircle className="h-4 w-4 text-destructive" />
+                      <div className="text-sm">
+                        <div className="font-semibold text-destructive">{municipalities.filter(m => m.status === "error").length}</div>
+                        <div className="text-xs text-muted-foreground">Errors</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
