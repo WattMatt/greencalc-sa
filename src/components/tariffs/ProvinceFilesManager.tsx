@@ -886,27 +886,36 @@ export function ProvinceFilesManager() {
                       {municipalities.map((muni, index) => (
                         <div
                           key={muni.id}
-                          className="flex items-center justify-between py-2 px-3 rounded hover:bg-muted/50"
+                          className={`flex items-center justify-between py-2 px-3 rounded hover:bg-muted/50 ${muni.status === "error" ? "bg-destructive/5 border border-destructive/20" : ""}`}
                         >
-                          <div className="flex items-center gap-2">
-                            {muni.status === "done" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-                            {muni.status === "extracting" && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                            {muni.status === "error" && <AlertCircle className="h-4 w-4 text-destructive" />}
-                            {muni.status === "pending" && <Clock className="h-4 w-4 text-muted-foreground" />}
-                            <span className={muni.status === "done" ? "text-foreground" : "text-muted-foreground"}>
-                              {muni.name}
-                            </span>
-                            {muni.tariffCount !== undefined && (
-                              <Badge variant="secondary" className="ml-2">{muni.tariffCount} tariffs</Badge>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              {muni.status === "done" && <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />}
+                              {muni.status === "extracting" && <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />}
+                              {muni.status === "error" && <AlertCircle className="h-4 w-4 text-destructive shrink-0" />}
+                              {muni.status === "pending" && <Clock className="h-4 w-4 text-muted-foreground shrink-0" />}
+                              <span className={muni.status === "done" ? "text-foreground" : muni.status === "error" ? "text-destructive" : "text-muted-foreground"}>
+                                {muni.name}
+                              </span>
+                              {muni.tariffCount !== undefined && muni.status === "done" && (
+                                <Badge variant="secondary" className="ml-2">{muni.tariffCount} tariffs</Badge>
+                              )}
+                            </div>
+                            {muni.status === "error" && muni.error && (
+                              <p className="text-xs text-destructive/80 mt-1 ml-6 truncate" title={muni.error}>
+                                {muni.error}
+                              </p>
                             )}
                           </div>
-                          {muni.status === "pending" && (
+                          {(muni.status === "pending" || muni.status === "error") && (
                             <Button
                               size="sm"
-                              variant="ghost"
+                              variant={muni.status === "error" ? "outline" : "ghost"}
                               onClick={() => handleExtractTariffs(index)}
+                              className={muni.status === "error" ? "border-destructive/50 text-destructive hover:bg-destructive/10" : ""}
                             >
-                              <Play className="h-3 w-3" />
+                              <RefreshCw className={`h-3 w-3 ${muni.status === "error" ? "mr-1" : ""}`} />
+                              {muni.status === "error" && "Retry"}
                             </Button>
                           )}
                         </div>
