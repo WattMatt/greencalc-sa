@@ -315,13 +315,42 @@ export function ProvinceFilesManager() {
     return 'unknown';
   };
 
-  const startExtraction = (file: ProvinceFile, province: string) => {
+  const startExtraction = async (file: ProvinceFile, province: string) => {
     setSelectedFile(file);
     setSelectedProvince(province);
-    setExtractionPhase("idle");
-    setMunicipalities([]);
     setAnalysisInfo(null);
     setExtractionOpen(true);
+
+    // Check if municipalities already exist for this province
+    const provinceData = provincesData?.provinces?.find(p => p.name === province);
+    if (provinceData) {
+      const existingMunis = provincesData?.municipalities?.filter(
+        m => m.province_id === provinceData.id
+      ) || [];
+
+      if (existingMunis.length > 0) {
+        // Load existing municipalities with their tariff counts
+        const muniWithStatus: Municipality[] = existingMunis.map(m => {
+          const tariffCount = provincesData?.tariffs?.filter(
+            t => t.municipality_id === m.id
+          ).length || 0;
+          return {
+            id: m.id,
+            name: m.name,
+            status: tariffCount > 0 ? "done" as const : "pending" as const,
+            tariffCount
+          };
+        });
+        
+        setMunicipalities(muniWithStatus);
+        setExtractionPhase("ready"); // Skip directly to tariff extraction
+        return;
+      }
+    }
+
+    // No existing municipalities, start fresh
+    setMunicipalities([]);
+    setExtractionPhase("idle");
   };
 
   const handleAnalyzeFile = async () => {
@@ -417,13 +446,20 @@ export function ProvinceFilesManager() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      setMunicipalities(prev => prev.map((m, i) =>
-        i === muniIndex ? { ...m, status: "done" as const, tariffCount: data.imported } : m
-      ));
+      setMunicipalities(prev => prev.map((m, i) => {
+        if (i !== muniIndex) return m;
+        const totalChanged = (data.inserted || 0) + (data.updated || 0);
+        return { ...m, status: "done" as const, tariffCount: totalChanged };
+      }));
+
+      const parts = [];
+      if (data.inserted > 0) parts.push(`${data.inserted} new`);
+      if (data.updated > 0) parts.push(`${data.updated} updated`);
+      if (data.skipped > 0) parts.push(`${data.skipped} skipped`);
 
       toast({
         title: `${muni.name} Complete`,
-        description: `Imported ${data.imported} tariffs`
+        description: parts.length > 0 ? parts.join(", ") : "No changes needed"
       });
 
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
@@ -728,57 +764,77 @@ export function ProvinceFilesManager() {
             </DialogHeader>
 
             <div className="flex-1 overflow-auto space-y-4">
-              {/* Step 1: Analyze */}
-              <div className="p-4 border rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium">Step 1: Analyze File</h4>
-                    <p className="text-sm text-muted-foreground">Review the file structure before extracting</p>
-                  </div>
-                  <Button
-                    onClick={handleAnalyzeFile}
-                    disabled={extractionPhase === "analyzing"}
-                    variant="outline"
-                  >
-                    {extractionPhase === "analyzing" ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                    ) : (
-                      <Play className="h-4 w-4 mr-1" />
+              {/* Step 1 & 2: Only show if no municipalities loaded */}
+              {extractionPhase !== "ready" && municipalities.length === 0 && (
+                <>
+                  {/* Step 1: Analyze */}
+                  <div className="p-4 border rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium">Step 1: Analyze File</h4>
+                        <p className="text-sm text-muted-foreground">Review the file structure before extracting</p>
+                      </div>
+                      <Button
+                        onClick={handleAnalyzeFile}
+                        disabled={extractionPhase === "analyzing"}
+                        variant="outline"
+                      >
+                        {extractionPhase === "analyzing" ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        ) : (
+                          <Play className="h-4 w-4 mr-1" />
+                        )}
+                        Analyze
+                      </Button>
+                    </div>
+                    {analysisInfo?.sheets && (
+                      <div className="text-sm bg-muted/50 p-3 rounded">
+                        <strong>Sheets found:</strong> {analysisInfo.sheets.length}
+                        <div className="mt-1 text-muted-foreground">
+                          {analysisInfo.sheets.slice(0, 10).join(", ")}
+                          {analysisInfo.sheets.length > 10 && "..."}
+                        </div>
+                      </div>
                     )}
-                    Analyze
-                  </Button>
-                </div>
-                {analysisInfo?.sheets && (
-                  <div className="text-sm bg-muted/50 p-3 rounded">
-                    <strong>Sheets found:</strong> {analysisInfo.sheets.length}
-                    <div className="mt-1 text-muted-foreground">
-                      {analysisInfo.sheets.slice(0, 10).join(", ")}
-                      {analysisInfo.sheets.length > 10 && "..."}
+                  </div>
+
+                  {/* Step 2: Extract Municipalities */}
+                  <div className="p-4 border rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium">Step 2: Extract Municipalities</h4>
+                        <p className="text-sm text-muted-foreground">Identify and save municipalities from the file</p>
+                      </div>
+                      <Button
+                        onClick={handleExtractMunicipalities}
+                        disabled={extractionPhase === "extracting-munis"}
+                      >
+                        {extractionPhase === "extracting-munis" ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        ) : (
+                          <Building2 className="h-4 w-4 mr-1" />
+                        )}
+                        Extract Municipalities
+                      </Button>
                     </div>
                   </div>
-                )}
-              </div>
+                </>
+              )}
 
-              {/* Step 2: Extract Municipalities */}
-              <div className="p-4 border rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium">Step 2: Extract Municipalities</h4>
-                    <p className="text-sm text-muted-foreground">Identify and save municipalities from the file</p>
+              {/* Show info when municipalities were already loaded */}
+              {extractionPhase === "ready" && municipalities.length > 0 && (
+                <div className="p-4 border rounded-lg bg-muted/30 space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <span>
+                      <strong>{municipalities.length}</strong> municipalities already extracted for {selectedProvince}
+                    </span>
                   </div>
-                  <Button
-                    onClick={handleExtractMunicipalities}
-                    disabled={extractionPhase === "extracting-munis"}
-                  >
-                    {extractionPhase === "extracting-munis" ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                    ) : (
-                      <Building2 className="h-4 w-4 mr-1" />
-                    )}
-                    Extract Municipalities
-                  </Button>
+                  <p className="text-sm text-muted-foreground">
+                    {municipalities.filter(m => m.status === "done").length} with tariffs, {municipalities.filter(m => m.status === "pending").length} pending
+                  </p>
                 </div>
-              </div>
+              )}
 
               {/* Step 3: Extract Tariffs */}
               {municipalities.length > 0 && (
