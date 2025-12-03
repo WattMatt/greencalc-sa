@@ -160,6 +160,8 @@ export default function Calculator() {
     customProfile,
     weekdayPercentage,
     isHighDemandSeason,
+    criticalPeakRate: selectedTariff?.critical_peak_rate ?? undefined,
+    criticalPeakHours: selectedTariff?.critical_peak_hours_per_month ?? undefined,
   });
 
   const solarProduction = (parseFloat(solarSize) || 0) * KWP_TO_KWH_MONTHLY;
@@ -177,6 +179,8 @@ export default function Calculator() {
     customProfile,
     weekdayPercentage,
     isHighDemandSeason,
+    criticalPeakRate: selectedTariff?.critical_peak_rate ?? undefined,
+    criticalPeakHours: selectedTariff?.critical_peak_hours_per_month ?? undefined,
   });
 
   // Use demand-based calculation if applicable, otherwise use TOU calculation
