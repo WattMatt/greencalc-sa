@@ -173,7 +173,8 @@ export function useTOUCalculation(params: CalculationParams) {
     if (monthlyConsumption === 0) return null;
 
     const profile = getProfileData(profileType, customProfile);
-    const season = isHighDemandSeason ? "High Demand" : "Low Demand";
+    // Map boolean to database season values: High/Winter (June-August) or Low/Summer (Sept-May)
+    const season = isHighDemandSeason ? "High/Winter" : "Low/Summer";
 
     let energyCost = 0;
     let demandCost = 0;
