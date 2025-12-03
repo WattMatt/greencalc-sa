@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Upload, 
@@ -21,8 +22,18 @@ import {
   Clock,
   FolderOpen,
   RefreshCw,
-  Loader2
+  Loader2,
+  AlertCircle,
+  Zap
 } from "lucide-react";
+
+interface Municipality {
+  id: string;
+  name: string;
+  status: "pending" | "extracting" | "done" | "error";
+  tariffCount?: number;
+  error?: string;
+}
 
 const SOUTH_AFRICAN_PROVINCES = [
   "Eastern Cape",
@@ -57,6 +68,13 @@ export function ProvinceFilesManager() {
   const [isUploading, setIsUploading] = useState(false);
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
   const [extractionOpen, setExtractionOpen] = useState(false);
+  
+  // Extraction workflow state
+  const [selectedFile, setSelectedFile] = useState<ProvinceFile | null>(null);
+  const [extractionPhase, setExtractionPhase] = useState<"idle" | "analyzing" | "extracting-munis" | "ready" | "extracting">("idle");
+  const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
+  const [analysisInfo, setAnalysisInfo] = useState<{ sheets?: string[]; analysis?: string } | null>(null);
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -198,6 +216,154 @@ export function ProvinceFilesManager() {
         variant: "destructive",
       });
     }
+  };
+
+  const getFileType = (filename: string): string => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    if (ext === 'xlsx' || ext === 'xls') return 'xlsx';
+    if (ext === 'pdf') return 'pdf';
+    return 'unknown';
+  };
+
+  const startExtraction = (file: ProvinceFile, province: string) => {
+    setSelectedFile(file);
+    setSelectedProvince(province);
+    setExtractionPhase("idle");
+    setMunicipalities([]);
+    setAnalysisInfo(null);
+    setExtractionOpen(true);
+  };
+
+  const handleAnalyzeFile = async () => {
+    if (!selectedFile) return;
+    setExtractionPhase("analyzing");
+
+    try {
+      const { data, error } = await supabase.functions.invoke("process-tariff-file", {
+        body: {
+          filePath: selectedFile.path,
+          fileType: getFileType(selectedFile.name),
+          action: "analyze"
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      setAnalysisInfo({ sheets: data.sheets, analysis: data.analysis });
+      toast({ title: "Analysis Complete", description: "Ready to extract municipalities" });
+    } catch (err) {
+      toast({
+        title: "Analysis Failed",
+        description: err instanceof Error ? err.message : "Failed to analyze file",
+        variant: "destructive",
+      });
+    } finally {
+      setExtractionPhase("idle");
+    }
+  };
+
+  const handleExtractMunicipalities = async () => {
+    if (!selectedFile || !selectedProvince) return;
+    setExtractionPhase("extracting-munis");
+
+    try {
+      const { data, error } = await supabase.functions.invoke("process-tariff-file", {
+        body: {
+          filePath: selectedFile.path,
+          fileType: getFileType(selectedFile.name),
+          province: selectedProvince,
+          action: "extract-municipalities"
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      const munis: Municipality[] = data.municipalities.map((m: { id: string; name: string }) => ({
+        id: m.id,
+        name: m.name,
+        status: "pending" as const
+      }));
+
+      setMunicipalities(munis);
+      setExtractionPhase("ready");
+      toast({
+        title: "Municipalities Extracted",
+        description: `Found ${munis.length} municipalities in ${selectedProvince}`
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["municipalities"] });
+      queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+    } catch (err) {
+      toast({
+        title: "Extraction Failed",
+        description: err instanceof Error ? err.message : "Failed to extract municipalities",
+        variant: "destructive",
+      });
+      setExtractionPhase("idle");
+    }
+  };
+
+  const handleExtractTariffs = async (muniIndex: number) => {
+    const muni = municipalities[muniIndex];
+    if (!muni || !selectedFile || !selectedProvince) return;
+
+    setMunicipalities(prev => prev.map((m, i) =>
+      i === muniIndex ? { ...m, status: "extracting" as const } : m
+    ));
+
+    try {
+      const { data, error } = await supabase.functions.invoke("process-tariff-file", {
+        body: {
+          filePath: selectedFile.path,
+          fileType: getFileType(selectedFile.name),
+          province: selectedProvince,
+          municipality: muni.name,
+          action: "extract-tariffs"
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      setMunicipalities(prev => prev.map((m, i) =>
+        i === muniIndex ? { ...m, status: "done" as const, tariffCount: data.imported } : m
+      ));
+
+      toast({
+        title: `${muni.name} Complete`,
+        description: `Imported ${data.imported} tariffs`
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+      queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+    } catch (err) {
+      setMunicipalities(prev => prev.map((m, i) =>
+        i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m
+      ));
+      toast({
+        title: `${muni.name} Failed`,
+        description: err instanceof Error ? err.message : "Failed to extract tariffs",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExtractAll = async () => {
+    setExtractionPhase("extracting");
+    for (let i = 0; i < municipalities.length; i++) {
+      if (municipalities[i].status === "pending") {
+        await handleExtractTariffs(i);
+      }
+    }
+    setExtractionPhase("ready");
+  };
+
+  const getExtractionProgress = () => {
+    if (municipalities.length === 0) return 0;
+    const done = municipalities.filter(m => m.status === "done").length;
+    return Math.round((done / municipalities.length) * 100);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -346,6 +512,17 @@ export function ProvinceFilesManager() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
+                    {stats.files.length > 0 && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => startExtraction(stats.files[0], stats.province)}
+                      >
+                        <Zap className="h-4 w-4 mr-1" />
+                        Extract
+                      </Button>
+                    )}
                     <Label
                       htmlFor={`upload-${stats.province}`}
                       className="cursor-pointer"
@@ -406,6 +583,135 @@ export function ProvinceFilesManager() {
             </span>
           </div>
         </div>
+
+        {/* Extraction Dialog */}
+        <Dialog open={extractionOpen} onOpenChange={setExtractionOpen}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Zap className="h-5 w-5" />
+                Extract Tariffs - {selectedProvince}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedFile?.name}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-auto space-y-4">
+              {/* Step 1: Analyze */}
+              <div className="p-4 border rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium">Step 1: Analyze File</h4>
+                    <p className="text-sm text-muted-foreground">Review the file structure before extracting</p>
+                  </div>
+                  <Button
+                    onClick={handleAnalyzeFile}
+                    disabled={extractionPhase === "analyzing"}
+                    variant="outline"
+                  >
+                    {extractionPhase === "analyzing" ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <Play className="h-4 w-4 mr-1" />
+                    )}
+                    Analyze
+                  </Button>
+                </div>
+                {analysisInfo?.sheets && (
+                  <div className="text-sm bg-muted/50 p-3 rounded">
+                    <strong>Sheets found:</strong> {analysisInfo.sheets.length}
+                    <div className="mt-1 text-muted-foreground">
+                      {analysisInfo.sheets.slice(0, 10).join(", ")}
+                      {analysisInfo.sheets.length > 10 && "..."}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Step 2: Extract Municipalities */}
+              <div className="p-4 border rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium">Step 2: Extract Municipalities</h4>
+                    <p className="text-sm text-muted-foreground">Identify and save municipalities from the file</p>
+                  </div>
+                  <Button
+                    onClick={handleExtractMunicipalities}
+                    disabled={extractionPhase === "extracting-munis"}
+                  >
+                    {extractionPhase === "extracting-munis" ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <Building2 className="h-4 w-4 mr-1" />
+                    )}
+                    Extract Municipalities
+                  </Button>
+                </div>
+              </div>
+
+              {/* Step 3: Extract Tariffs */}
+              {municipalities.length > 0 && (
+                <div className="p-4 border rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium">Step 3: Extract Tariffs</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {municipalities.filter(m => m.status === "done").length} of {municipalities.length} complete
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleExtractAll}
+                      disabled={extractionPhase === "extracting" || municipalities.every(m => m.status === "done")}
+                    >
+                      {extractionPhase === "extracting" ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                      ) : (
+                        <Zap className="h-4 w-4 mr-1" />
+                      )}
+                      Extract All Tariffs
+                    </Button>
+                  </div>
+
+                  <Progress value={getExtractionProgress()} className="h-2" />
+
+                  <ScrollArea className="h-[200px]">
+                    <div className="space-y-1">
+                      {municipalities.map((muni, index) => (
+                        <div
+                          key={muni.id}
+                          className="flex items-center justify-between py-2 px-3 rounded hover:bg-muted/50"
+                        >
+                          <div className="flex items-center gap-2">
+                            {muni.status === "done" && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                            {muni.status === "extracting" && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                            {muni.status === "error" && <AlertCircle className="h-4 w-4 text-destructive" />}
+                            {muni.status === "pending" && <Clock className="h-4 w-4 text-muted-foreground" />}
+                            <span className={muni.status === "done" ? "text-foreground" : "text-muted-foreground"}>
+                              {muni.name}
+                            </span>
+                            {muni.tariffCount !== undefined && (
+                              <Badge variant="secondary" className="ml-2">{muni.tariffCount} tariffs</Badge>
+                            )}
+                          </div>
+                          {muni.status === "pending" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleExtractTariffs(index)}
+                            >
+                              <Play className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
