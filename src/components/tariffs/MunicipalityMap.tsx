@@ -80,6 +80,52 @@ export function MunicipalityMap() {
     fetchMunicipalities();
   }, []);
 
+  // Validate that geocoding result is in the expected province
+  const isValidProvinceMatch = (feature: any, expectedProvince: string): boolean => {
+    // Check relevance score - reject low confidence matches
+    if (feature.relevance < 0.8) {
+      return false;
+    }
+    
+    // Check if the result is in the expected province
+    const context = feature.context || [];
+    const regionContext = context.find((c: any) => c.id?.startsWith('region.'));
+    
+    if (regionContext) {
+      const returnedProvince = regionContext.text?.toLowerCase() || '';
+      const expected = expectedProvince.toLowerCase();
+      
+      // Check for exact match or close match
+      if (returnedProvince.includes(expected) || expected.includes(returnedProvince)) {
+        return true;
+      }
+      
+      // Handle province name variations
+      const provinceAliases: Record<string, string[]> = {
+        'kwazulu-natal': ['kwazulu natal', 'kzn'],
+        'north west': ['northwest'],
+        'northern cape': ['northern'],
+        'western cape': ['western'],
+        'eastern cape': ['eastern'],
+        'free state': ['freestate'],
+      };
+      
+      for (const [key, aliases] of Object.entries(provinceAliases)) {
+        if (expected.includes(key) || aliases.some(a => expected.includes(a))) {
+          if (returnedProvince.includes(key) || aliases.some(a => returnedProvince.includes(a))) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    }
+    
+    // If no region context, check the place_name for province
+    const placeName = feature.place_name?.toLowerCase() || '';
+    return placeName.includes(expectedProvince.toLowerCase());
+  };
+
   // Geocode a municipality name using Mapbox Geocoding API
   const geocodeMunicipality = useCallback(async (name: string, province: string, token: string): Promise<[number, number] | null> => {
     const cacheKey = `${name}-${province}`;
@@ -92,7 +138,7 @@ export function MunicipalityMap() {
       // Search for municipality in South Africa with province context
       const searchQuery = encodeURIComponent(`${name}, ${province}, South Africa`);
       const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${searchQuery}.json?access_token=${token}&country=ZA&types=place,locality,district&limit=1`
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${searchQuery}.json?access_token=${token}&country=ZA&types=place,locality,district&limit=3`
       );
       
       if (!response.ok) {
@@ -101,29 +147,42 @@ export function MunicipalityMap() {
 
       const data = await response.json();
       
+      // Find a valid result that matches the expected province
       if (data.features && data.features.length > 0) {
-        const [lng, lat] = data.features[0].center;
-        const coords: [number, number] = [lng, lat];
-        geocodeCache[cacheKey] = coords;
-        return coords;
+        for (const feature of data.features) {
+          if (isValidProvinceMatch(feature, province)) {
+            const [lng, lat] = feature.center;
+            const coords: [number, number] = [lng, lat];
+            geocodeCache[cacheKey] = coords;
+            console.log(`✓ Geocoded ${name} (${province}) at [${lng}, ${lat}]`);
+            return coords;
+          }
+        }
       }
       
-      // Try without province if no results
-      const fallbackQuery = encodeURIComponent(`${name} Municipality, South Africa`);
-      const fallbackResponse = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${fallbackQuery}.json?access_token=${token}&country=ZA&types=place,locality,district&limit=1`
+      // Try alternative search with "Local Municipality" suffix
+      const altQuery = encodeURIComponent(`${name} Local Municipality, ${province}, South Africa`);
+      const altResponse = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${altQuery}.json?access_token=${token}&country=ZA&types=place,locality,district&limit=3`
       );
       
-      if (fallbackResponse.ok) {
-        const fallbackData = await fallbackResponse.json();
-        if (fallbackData.features && fallbackData.features.length > 0) {
-          const [lng, lat] = fallbackData.features[0].center;
-          const coords: [number, number] = [lng, lat];
-          geocodeCache[cacheKey] = coords;
-          return coords;
+      if (altResponse.ok) {
+        const altData = await altResponse.json();
+        if (altData.features && altData.features.length > 0) {
+          for (const feature of altData.features) {
+            if (isValidProvinceMatch(feature, province)) {
+              const [lng, lat] = feature.center;
+              const coords: [number, number] = [lng, lat];
+              geocodeCache[cacheKey] = coords;
+              console.log(`✓ Geocoded ${name} (${province}) via alt search at [${lng}, ${lat}]`);
+              return coords;
+            }
+          }
         }
       }
 
+      // No valid match found - don't plot incorrect location
+      console.warn(`✗ Could not geocode ${name} (${province}) - no valid match in correct province`);
       geocodeCache[cacheKey] = null;
       return null;
     } catch (err) {
