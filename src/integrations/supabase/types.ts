@@ -147,6 +147,8 @@ export type Database = {
           capacity_kva: number | null
           category_id: string
           created_at: string
+          critical_peak_hours_per_month: number | null
+          critical_peak_rate: number | null
           customer_category: string | null
           demand_charge_per_kva: number | null
           fixed_monthly_charge: number | null
@@ -167,6 +169,8 @@ export type Database = {
           capacity_kva?: number | null
           category_id: string
           created_at?: string
+          critical_peak_hours_per_month?: number | null
+          critical_peak_rate?: number | null
           customer_category?: string | null
           demand_charge_per_kva?: number | null
           fixed_monthly_charge?: number | null
@@ -187,6 +191,8 @@ export type Database = {
           capacity_kva?: number | null
           category_id?: string
           created_at?: string
+          critical_peak_hours_per_month?: number | null
+          critical_peak_rate?: number | null
           customer_category?: string | null
           demand_charge_per_kva?: number | null
           fixed_monthly_charge?: number | null
@@ -285,6 +291,7 @@ export type Database = {
         | "Off-Peak"
         | "High Demand"
         | "Low Demand"
+        | "Critical Peak"
       voltage_level: "LV" | "MV" | "HV"
     }
     CompositeTypes: {
@@ -424,6 +431,7 @@ export const Constants = {
         "Off-Peak",
         "High Demand",
         "Low Demand",
+        "Critical Peak",
       ],
       voltage_level: ["LV", "MV", "HV"],
     },

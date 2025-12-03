@@ -50,6 +50,9 @@ export function TariffBuilder() {
   const [reactiveEnergyCharge, setReactiveEnergyCharge] = useState("");
   const [capacityKva, setCapacityKva] = useState("");
   const [customerCategory, setCustomerCategory] = useState("");
+  // Critical Peak Pricing
+  const [criticalPeakRate, setCriticalPeakRate] = useState("");
+  const [criticalPeakHours, setCriticalPeakHours] = useState("");
 
   const { data: municipalities } = useQuery({
     queryKey: ["municipalities"],
@@ -91,6 +94,9 @@ export function TariffBuilder() {
           reactive_energy_charge: reactiveEnergyCharge ? parseFloat(reactiveEnergyCharge) : 0,
           capacity_kva: capacityKva ? parseFloat(capacityKva) : null,
           customer_category: customerCategory || null,
+          // Critical Peak Pricing
+          critical_peak_rate: criticalPeakRate ? parseFloat(criticalPeakRate) : null,
+          critical_peak_hours_per_month: criticalPeakHours ? parseInt(criticalPeakHours) : 0,
         })
         .select()
         .single();
@@ -161,6 +167,9 @@ export function TariffBuilder() {
     setReactiveEnergyCharge("");
     setCapacityKva("");
     setCustomerCategory("");
+    // Reset Critical Peak fields
+    setCriticalPeakRate("");
+    setCriticalPeakHours("");
   };
 
   const addRateRow = () => {
@@ -404,6 +413,40 @@ export function TariffBuilder() {
               <Label htmlFor="prepaid">Prepaid Tariff</Label>
             </div>
           </div>
+
+          {/* Critical Peak Pricing (TOU only) */}
+          {tariffType === "TOU" && (
+            <div className="space-y-4">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                Critical Peak Pricing (CPP)
+                <span className="text-xs font-normal text-muted-foreground">Optional - for grid emergencies</span>
+              </h3>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Critical Peak Rate (c/kWh)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={criticalPeakRate}
+                    onChange={(e) => setCriticalPeakRate(e.target.value)}
+                    placeholder="e.g., 1500 (during load shedding)"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Expected CPP Hours/Month</Label>
+                  <Input
+                    type="number"
+                    value={criticalPeakHours}
+                    onChange={(e) => setCriticalPeakHours(e.target.value)}
+                    placeholder="e.g., 20"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Critical Peak Pricing applies during system emergencies or load shedding. Rates are typically 5-10x higher than normal Peak rates.
+              </p>
+            </div>
+          )}
 
           {/* TOU Period Builder for TOU + Seasonal */}
           {showTOUPeriodBuilder && (

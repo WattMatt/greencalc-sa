@@ -46,6 +46,7 @@ const TIME_OF_USE_COLORS: Record<TimeOfUseType, string> = {
   Any: "bg-gray-100 border-gray-300 text-gray-800",
   "High Demand": "bg-red-100 border-red-300 text-red-800",
   "Low Demand": "bg-green-100 border-green-300 text-green-800",
+  "Critical Peak": "bg-purple-100 border-purple-300 text-purple-800",
 };
 
 export function TOUPeriodBuilder({ periods, onChange }: TOUPeriodBuilderProps) {
