@@ -512,8 +512,15 @@ CRITICAL DATA MAPPING RULES (NERSA-COMPLIANT):
    - "Low Demand Energy Rate (c/kWh)" → rate with time_of_use: "Low Demand"
    - "High Demand Energy Rate (c/kWh)" → rate with time_of_use: "High Demand"
    - "Energy Rate (c/kWh)" with no demand distinction → time_of_use: "Any"
-   - Block rates for IBT → include block_start_kwh and block_end_kwh
    - Include reactive_energy_charge per rate if varies by TOU period
+   
+   CRITICAL - BLOCK TARIFF PARSING (IBT):
+   - "<500kWh" or "≤500kWh" means: block_start_kwh: 0, block_end_kwh: 500
+   - ">500kWh" or "≥500kWh" means: block_start_kwh: 500, block_end_kwh: null (unlimited)
+   - "0-50kWh" or "Block 1 (0-50)" means: block_start_kwh: 0, block_end_kwh: 50
+   - "51-350kWh" or "Block 2 (51-350)" means: block_start_kwh: 51, block_end_kwh: 350
+   - If you see different rates for different consumption levels, this is ALWAYS tariff_type: "IBT"
+   - Each block rate MUST have block_start_kwh and block_end_kwh populated
 
 9. TARIFF TYPE DETERMINATION:
    - If has "High Demand" AND "Low Demand" energy rates → tariff_type: "TOU"
@@ -587,10 +594,10 @@ Extract EVERY tariff structure found for this municipality.`;
                             type: "object",
                             properties: {
                               rate_per_kwh: { type: "number", description: "Energy rate in R/kWh (convert from c/kWh by dividing by 100)" },
-                              block_start_kwh: { type: "number", description: "For IBT tariffs only" },
-                              block_end_kwh: { type: "number", description: "For IBT tariffs only" },
+                              block_start_kwh: { type: "number", description: "For IBT: start of block. <500kWh→0, >500kWh→500, 0-50kWh→0" },
+                              block_end_kwh: { type: ["number", "null"], description: "For IBT: end of block. <500kWh→500, >500kWh→null, 0-50kWh→50" },
                               season: { type: "string", enum: ["All Year", "High/Winter", "Low/Summer"] },
-                              time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"], description: "High Demand or Low Demand for demand-based TOU tariffs" },
+                              time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"], description: "For IBT with blocks, use 'Any'" },
                               reactive_energy_charge: { type: "number", description: "Reactive energy charge for this TOU period if varies" }
                             },
                             required: ["rate_per_kwh"]
