@@ -14,38 +14,121 @@ export type Database = {
   }
   public: {
     Tables: {
+      extraction_runs: {
+        Row: {
+          ai_analysis: string | null
+          ai_confidence: number | null
+          completed_at: string | null
+          corrections_made: number | null
+          created_at: string
+          error_message: string | null
+          id: string
+          municipality_id: string
+          run_type: string
+          started_at: string
+          status: string
+          tariffs_found: number | null
+          tariffs_inserted: number | null
+          tariffs_skipped: number | null
+          tariffs_updated: number | null
+        }
+        Insert: {
+          ai_analysis?: string | null
+          ai_confidence?: number | null
+          completed_at?: string | null
+          corrections_made?: number | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          municipality_id: string
+          run_type: string
+          started_at?: string
+          status?: string
+          tariffs_found?: number | null
+          tariffs_inserted?: number | null
+          tariffs_skipped?: number | null
+          tariffs_updated?: number | null
+        }
+        Update: {
+          ai_analysis?: string | null
+          ai_confidence?: number | null
+          completed_at?: string | null
+          corrections_made?: number | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          municipality_id?: string
+          run_type?: string
+          started_at?: string
+          status?: string
+          tariffs_found?: number | null
+          tariffs_inserted?: number | null
+          tariffs_skipped?: number | null
+          tariffs_updated?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extraction_runs_municipality_id_fkey"
+            columns: ["municipality_id"]
+            isOneToOne: false
+            referencedRelation: "municipalities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       municipalities: {
         Row: {
+          ai_confidence: number | null
           created_at: string
           extraction_error: string | null
+          extraction_score: number | null
           extraction_status: string | null
           id: string
           increase_percentage: number | null
+          last_extraction_at: string | null
+          last_reprise_at: string | null
           name: string
           province_id: string
+          reprise_count: number | null
           source_file_path: string | null
+          total_corrections: number | null
+          total_tariffs: number | null
           updated_at: string
         }
         Insert: {
+          ai_confidence?: number | null
           created_at?: string
           extraction_error?: string | null
+          extraction_score?: number | null
           extraction_status?: string | null
           id?: string
           increase_percentage?: number | null
+          last_extraction_at?: string | null
+          last_reprise_at?: string | null
           name: string
           province_id: string
+          reprise_count?: number | null
           source_file_path?: string | null
+          total_corrections?: number | null
+          total_tariffs?: number | null
           updated_at?: string
         }
         Update: {
+          ai_confidence?: number | null
           created_at?: string
           extraction_error?: string | null
+          extraction_score?: number | null
           extraction_status?: string | null
           id?: string
           increase_percentage?: number | null
+          last_extraction_at?: string | null
+          last_reprise_at?: string | null
           name?: string
           province_id?: string
+          reprise_count?: number | null
           source_file_path?: string | null
+          total_corrections?: number | null
+          total_tariffs?: number | null
           updated_at?: string
         }
         Relationships: [

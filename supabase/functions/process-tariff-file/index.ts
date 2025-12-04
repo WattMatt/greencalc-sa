@@ -565,10 +565,16 @@ Be meticulous. Every piece of data in the source must be captured accurately.` }
             type: "function",
             function: {
               name: "save_tariffs",
-              description: "Save NERSA-compliant tariff data. Include voltage_level, reactive_energy_charge, capacity_kva, and customer_category per NERSA guidelines.",
+              description: "Save NERSA-compliant tariff data with confidence score.",
               parameters: {
                 type: "object",
                 properties: {
+                  confidence_score: { 
+                    type: "integer", 
+                    minimum: 0, 
+                    maximum: 100,
+                    description: "Your confidence in the extraction accuracy (0-100). 100 = completely certain all tariffs captured correctly, 50 = moderate uncertainty, 0 = very uncertain" 
+                  },
                   tariffs: {
                     type: "array",
                     items: {
@@ -607,7 +613,7 @@ Be meticulous. Every piece of data in the source must be captured accurately.` }
                     }
                   }
                 },
-                required: ["tariffs"]
+                required: ["confidence_score", "tariffs"]
               }
             }
           }],
@@ -636,11 +642,14 @@ Be meticulous. Every piece of data in the source must be captured accurately.` }
       const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
       
       let extractedTariffs: Omit<ExtractedTariff, 'municipality'>[];
+      let confidenceScore: number | null = null;
       
       if (toolCall) {
         try {
           const args = JSON.parse(toolCall.function.arguments);
           extractedTariffs = args.tariffs;
+          confidenceScore = args.confidence_score ?? null;
+          console.log(`AI confidence score: ${confidenceScore}`);
         } catch (parseErr) {
           console.error("Failed to parse tool call arguments:", parseErr);
           return new Response(
@@ -808,6 +817,39 @@ Be meticulous. Every piece of data in the source must be captured accurately.` }
         }
       }
 
+      // Create extraction run record
+      const { data: runRecord } = await supabase
+        .from("extraction_runs")
+        .insert({
+          municipality_id: muniData.id,
+          run_type: "extraction",
+          tariffs_found: extractedTariffs.length,
+          tariffs_inserted: inserted,
+          tariffs_updated: updated,
+          tariffs_skipped: skipped,
+          ai_confidence: confidenceScore,
+          status: "completed",
+          completed_at: new Date().toISOString()
+        })
+        .select("id")
+        .single();
+
+      // Update municipality summary stats
+      const { count: totalTariffs } = await supabase
+        .from("tariffs")
+        .select("*", { count: "exact", head: true })
+        .eq("municipality_id", muniData.id);
+
+      await supabase
+        .from("municipalities")
+        .update({
+          extraction_score: Math.round((inserted + updated) / Math.max(extractedTariffs.length, 1) * 100),
+          ai_confidence: confidenceScore,
+          total_tariffs: totalTariffs || 0,
+          last_extraction_at: new Date().toISOString()
+        })
+        .eq("id", muniData.id);
+
       return new Response(
         JSON.stringify({ 
           success: true,
@@ -817,6 +859,8 @@ Be meticulous. Every piece of data in the source must be captured accurately.` }
           updated,
           skipped,
           existingCount: existingTariffSummary.length,
+          confidence: confidenceScore,
+          runId: runRecord?.id,
           errors: errors.slice(0, 20)
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -947,6 +991,12 @@ Only report issues - if everything is correct, return empty tariffs array.` },
                 type: "object",
                 properties: {
                   analysis: { type: "string", description: "Brief summary of issues found (or 'No issues found')" },
+                  confidence_score: { 
+                    type: "integer", 
+                    minimum: 0, 
+                    maximum: 100,
+                    description: "Your confidence in the accuracy of the CURRENT extraction after review (0-100). 100 = fully accurate, 0 = many issues" 
+                  },
                   tariffs: {
                     type: "array",
                     description: "Tariffs to add or update. Empty if extraction is accurate.",
@@ -984,7 +1034,7 @@ Only report issues - if everything is correct, return empty tariffs array.` },
                     }
                   }
                 },
-                required: ["analysis", "tariffs"]
+                required: ["analysis", "confidence_score", "tariffs"]
               }
             }
           }],
@@ -1011,16 +1061,36 @@ Only report issues - if everything is correct, return empty tariffs array.` },
         );
       }
 
-      const { analysis, tariffs: corrections } = JSON.parse(toolCall.function.arguments);
+      const { analysis, confidence_score: repriseConfidence, tariffs: corrections } = JSON.parse(toolCall.function.arguments);
       console.log(`Reprise analysis: ${analysis}`);
+      console.log(`Reprise confidence: ${repriseConfidence}`);
       console.log(`Found ${corrections?.length || 0} corrections needed`);
 
       if (!corrections || corrections.length === 0) {
+        // Create run record for successful verification
+        await supabase.from("extraction_runs").insert({
+          municipality_id: muniData.id,
+          run_type: "reprise",
+          corrections_made: 0,
+          ai_confidence: repriseConfidence,
+          ai_analysis: analysis,
+          status: "completed",
+          completed_at: new Date().toISOString()
+        });
+
+        // Update municipality stats
+        await supabase.from("municipalities").update({
+          ai_confidence: repriseConfidence,
+          last_reprise_at: new Date().toISOString(),
+          reprise_count: (await supabase.from("municipalities").select("reprise_count").eq("id", muniData.id).single()).data?.reprise_count + 1 || 1
+        }).eq("id", muniData.id);
+
         return new Response(
           JSON.stringify({ 
             success: true,
             municipality,
             analysis,
+            confidence: repriseConfidence,
             corrections: 0,
             message: "No corrections needed - extraction verified as accurate"
           }),
@@ -1128,11 +1198,45 @@ Only report issues - if everything is correct, return empty tariffs array.` },
         }
       }
 
+      // Create reprise run record
+      await supabase.from("extraction_runs").insert({
+        municipality_id: muniData.id,
+        run_type: "reprise",
+        tariffs_inserted: added,
+        tariffs_updated: updated,
+        corrections_made: corrections.length,
+        ai_confidence: repriseConfidence,
+        ai_analysis: analysis,
+        status: "completed",
+        completed_at: new Date().toISOString()
+      });
+
+      // Update municipality stats
+      const { data: currentMuni } = await supabase
+        .from("municipalities")
+        .select("reprise_count, total_corrections")
+        .eq("id", muniData.id)
+        .single();
+
+      const { count: totalTariffs } = await supabase
+        .from("tariffs")
+        .select("*", { count: "exact", head: true })
+        .eq("municipality_id", muniData.id);
+
+      await supabase.from("municipalities").update({
+        ai_confidence: repriseConfidence,
+        total_tariffs: totalTariffs || 0,
+        last_reprise_at: new Date().toISOString(),
+        reprise_count: (currentMuni?.reprise_count || 0) + 1,
+        total_corrections: (currentMuni?.total_corrections || 0) + corrections.length
+      }).eq("id", muniData.id);
+
       return new Response(
         JSON.stringify({ 
           success: true,
           municipality,
           analysis,
+          confidence: repriseConfidence,
           corrections: corrections.length,
           added,
           updated,
