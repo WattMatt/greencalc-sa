@@ -891,20 +891,41 @@ export function TariffList() {
                                     <div className="pt-2 border-t">
                                       <div className="text-muted-foreground mb-1">Energy Rates:</div>
                                       <div className="space-y-0.5">
-                                        {displayTariff.rates.map((rate, idx) => (
+                                        {displayTariff.rates.map((rate, idx) => {
+                                          // For IBT tariffs, show block range instead of "Any"
+                                          const isIBT = displayTariff.tariff_type === "IBT";
+                                          const hasBlockRange = rate.block_start_kwh !== null || rate.block_end_kwh !== null;
+                                          
+                                          let displayLabel = rate.time_of_use;
+                                          if (isIBT && hasBlockRange) {
+                                            const start = rate.block_start_kwh ?? 0;
+                                            const end = rate.block_end_kwh;
+                                            displayLabel = end !== null ? `${start}-${end} kWh` : `>${start} kWh`;
+                                          } else if (rate.time_of_use === "Any" && rate.season !== "All Year") {
+                                            displayLabel = rate.season;
+                                          }
+                                          
+                                          // Add season indicator for TOU
+                                          const seasonSuffix = displayTariff.tariff_type === "TOU" && rate.season !== "All Year" 
+                                            ? ` (${rate.season === "High/Winter" ? "Winter" : "Summer"})` 
+                                            : "";
+                                          
+                                          return (
                                           <div key={idx} className="flex items-center justify-between bg-muted/50 px-2 py-0.5 rounded">
                                             <span className={`font-medium ${
                                               rate.time_of_use === "High Demand" ? "text-orange-600" :
                                               rate.time_of_use === "Low Demand" ? "text-blue-600" :
                                               rate.time_of_use === "Peak" ? "text-red-600" :
                                               rate.time_of_use === "Off-Peak" ? "text-green-600" :
+                                              isIBT ? "text-purple-600" :
                                               "text-foreground"
                                             }`}>
-                                              {rate.time_of_use}
+                                              {displayLabel}{seasonSuffix}
                                             </span>
                                             <span className="font-mono">{(rate.rate_per_kwh * 100).toFixed(2)} c/kWh</span>
                                           </div>
-                                        ))}
+                                          );
+                                        })}
                                       </div>
                                     </div>
                                   )}
