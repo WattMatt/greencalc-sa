@@ -594,126 +594,137 @@ If source says 3.9275, extract 3.9275 (not 3.93)
 
 Extract ALL tariffs found. Be thorough and accurate.`;
 
-      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          messages: [
-            { role: "system", content: `You are an expert electricity tariff data extractor for South African municipalities. 
-
-CRITICAL EXTRACTION RULES FROM LEARNED PATTERNS:
-
-1. IBT BLOCK EXTRACTION:
-   - "Block N (X - Y)kWh" → block_start_kwh: X, block_end_kwh: Y
-   - "Block 4 (>600)kWh" → block_start_kwh: 600, block_end_kwh: null
-   - EVERY IBT rate MUST have block_start_kwh and block_end_kwh!
-
-2. TOU TARIFF COMPLETENESS (MOST COMMON ISSUE):
-   - TOU tariffs MUST have rates for Peak/Standard/Off-Peak
-   - MUST have rates for BOTH High/Winter AND Low/Summer seasons
-   - That's 6 rate entries minimum! If you only have 1-2, you're missing rates!
-
-3. VOLTAGE LEVEL (COMMONLY MISSED):
-   - "Medium Voltage", "MV", Scale 40T/40R → voltage_level: "MV"
-   - "High Voltage", "HV", "132kV" → voltage_level: "HV"
-   - Bulk >100kVA typically "MV"
-
-4. PHASE TYPE:
-   - Bulk supply = "Three Phase"
-   - >50kVA = "Three Phase"
-   - Domestic ≤60A = "Single Phase"
-
-5. SEPARATE CHARGES:
-   - Extract "Wheeling" as separate tariffs
-   - "Capacity Charge" per kVA → demand_charge_per_kva
-
-6. PRECISION: Keep exact values (3.9275 not 3.93)
-7. CONVERT c/kWh to R/kWh (divide by 100)
-
-If your TOU tariff has empty or minimal rates, YOUR EXTRACTION IS WRONG.` },
-            { role: "user", content: extractPrompt }
-          ],
-          tools: [{
-            type: "function",
-            function: {
-              name: "save_tariffs",
-              description: "Save NERSA-compliant tariff data with confidence score.",
-              parameters: {
-                type: "object",
-                properties: {
-                  confidence_score: { 
-                    type: "integer", 
-                    minimum: 0, 
-                    maximum: 100,
-                    description: "Your confidence in the extraction accuracy (0-100). 100 = completely certain all tariffs captured correctly, 50 = moderate uncertainty, 0 = very uncertain" 
-                  },
-                  tariffs: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        category: { type: "string", description: "Domestic, Commercial, Industrial, Agricultural, Public Lighting, or Other" },
-                        customer_category: { type: "string", enum: ["Domestic", "Commercial", "Industrial", "Agriculture", "Street Lighting"], description: "NERSA customer classification" },
-                        tariff_name: { type: "string", description: "Full tariff name from document" },
-                        tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"], description: "TOU if High/Low Demand rates or MV/HV supply, IBT if block rates, Fixed otherwise" },
-                        voltage_level: { type: "string", enum: ["LV", "MV", "HV"], description: "LV=≤400V, MV=11kV/22kV, HV=≥44kV. Default LV for domestic" },
-                        capacity_kva: { type: "number", description: "Connection capacity in kVA (e.g., 50, 100, 1000)" },
-                        phase_type: { type: "string", enum: ["Single Phase", "Three Phase"] },
-                        amperage_limit: { type: "string", description: "e.g., >20A, 60A, 100A" },
-                        is_prepaid: { type: "boolean" },
-                        fixed_monthly_charge: { type: "number", description: "Basic Charge per month in Rands (R/month). NOT an energy rate!" },
-                        demand_charge_per_kva: { type: "number", description: "Per-amp or per-kVA charges in Rands (R/A/m or R/kVA). NOT an energy rate!" },
-                        reactive_energy_charge: { type: "number", description: "Reactive energy charge in R/kVArh for power factor compensation" },
-                        rates: {
-                          type: "array",
-                          description: "ONLY energy rates in R/kWh. Convert c/kWh to R/kWh by dividing by 100.",
-                          items: {
-                            type: "object",
-                            properties: {
-                              rate_per_kwh: { type: "number", description: "Energy rate in R/kWh (convert from c/kWh by dividing by 100)" },
-                              block_start_kwh: { type: "number", description: "For IBT: start of block. <500kWh→0, >500kWh→500, 0-50kWh→0" },
-                              block_end_kwh: { type: ["number", "null"], description: "For IBT: end of block. <500kWh→500, >500kWh→null, 0-50kWh→50" },
-                              season: { type: "string", enum: ["All Year", "High/Winter", "Low/Summer"] },
-                              time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"], description: "For IBT with blocks, use 'Any'" },
-                              reactive_energy_charge: { type: "number", description: "Reactive energy charge for this TOU period if varies" }
-                            },
-                            required: ["rate_per_kwh"]
-                          }
-                        }
+      // Retry logic for AI call - handles connection timeouts and empty responses
+      const MAX_RETRIES = 3;
+      let aiData = null;
+      let lastError = null;
+      
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          console.log(`Extract AI call attempt ${attempt}/${MAX_RETRIES}`);
+          
+          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${lovableApiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-pro",
+              messages: [
+                { role: "system", content: "You are an expert at extracting South African electricity tariff data from documents. Focus on accuracy." },
+                { role: "user", content: extractPrompt }
+              ],
+              tools: [{
+                type: "function",
+                function: {
+                  name: "save_tariffs",
+                  description: "Save extracted tariffs. Mark each with action: 'new' or 'update'",
+                  parameters: {
+                    type: "object",
+                    properties: {
+                      confidence_score: { 
+                        type: "integer", 
+                        minimum: 0, 
+                        maximum: 100,
+                        description: "Your confidence in the extraction accuracy (0-100). 100 = completely certain all tariffs captured correctly, 50 = moderate uncertainty, 0 = very uncertain" 
                       },
-                      required: ["category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
-                    }
+                      tariffs: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            category: { type: "string", description: "Domestic, Commercial, Industrial, Agricultural, Public Lighting, or Other" },
+                            customer_category: { type: "string", enum: ["Domestic", "Commercial", "Industrial", "Agriculture", "Street Lighting"], description: "NERSA customer classification" },
+                            tariff_name: { type: "string", description: "Full tariff name from document" },
+                            tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"], description: "TOU if High/Low Demand rates or MV/HV supply, IBT if block rates, Fixed otherwise" },
+                            voltage_level: { type: "string", enum: ["LV", "MV", "HV"], description: "LV=≤400V, MV=11kV/22kV, HV=≥44kV. Default LV for domestic" },
+                            capacity_kva: { type: "number", description: "Connection capacity in kVA (e.g., 50, 100, 1000)" },
+                            phase_type: { type: "string", enum: ["Single Phase", "Three Phase"] },
+                            amperage_limit: { type: "string", description: "e.g., >20A, 60A, 100A" },
+                            is_prepaid: { type: "boolean" },
+                            fixed_monthly_charge: { type: "number", description: "Basic Charge per month in Rands (R/month). NOT an energy rate!" },
+                            demand_charge_per_kva: { type: "number", description: "Per-amp or per-kVA charges in Rands (R/A/m or R/kVA). NOT an energy rate!" },
+                            reactive_energy_charge: { type: "number", description: "Reactive energy charge in R/kVArh for power factor compensation" },
+                            rates: {
+                              type: "array",
+                              description: "ONLY energy rates in R/kWh. Convert c/kWh to R/kWh by dividing by 100.",
+                              items: {
+                                type: "object",
+                                properties: {
+                                  rate_per_kwh: { type: "number", description: "Energy rate in R/kWh (convert from c/kWh by dividing by 100)" },
+                                  block_start_kwh: { type: "number", description: "For IBT: start of block. <500kWh→0, >500kWh→500, 0-50kWh→0" },
+                                  block_end_kwh: { type: ["number", "null"], description: "For IBT: end of block. <500kWh→500, >500kWh→null, 0-50kWh→50" },
+                                  season: { type: "string", enum: ["All Year", "High/Winter", "Low/Summer"] },
+                                  time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"], description: "For IBT with blocks, use 'Any'" },
+                                  reactive_energy_charge: { type: "number", description: "Reactive energy charge for this TOU period if varies" }
+                                },
+                                required: ["rate_per_kwh"]
+                              }
+                            }
+                          },
+                          required: ["category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
+                        }
+                      }
+                    },
+                    required: ["confidence_score", "tariffs"]
                   }
-                },
-                required: ["confidence_score", "tariffs"]
-              }
-            }
-          }],
-          tool_choice: { type: "function", function: { name: "save_tariffs" } }
-        }),
-      });
+                }
+              }],
+              tool_choice: { type: "function", function: { name: "save_tariffs" } }
+            }),
+          });
 
-      if (!aiRes.ok) {
-        const errText = await aiRes.text();
-        console.error("AI extraction failed:", errText);
+          if (!aiRes.ok) {
+            const errText = await aiRes.text();
+            throw new Error(`AI returned ${aiRes.status}: ${errText}`);
+          }
+
+          const responseData = await aiRes.json();
+          console.log("AI response structure:", JSON.stringify({
+            hasChoices: !!responseData.choices,
+            choiceCount: responseData.choices?.length,
+            hasToolCalls: !!responseData.choices?.[0]?.message?.tool_calls,
+            toolCallCount: responseData.choices?.[0]?.message?.tool_calls?.length,
+            hasContent: !!responseData.choices?.[0]?.message?.content
+          }));
+          
+          // Check if we got a valid tool call response
+          const toolCall = responseData.choices?.[0]?.message?.tool_calls?.[0];
+          const content = responseData.choices?.[0]?.message?.content;
+          
+          if (!toolCall && !content) {
+            // Empty response - retry
+            throw new Error("AI returned empty response (no tool call, no content)");
+          }
+          
+          aiData = responseData;
+          console.log(`Extract AI call succeeded on attempt ${attempt}`);
+          break; // Success - exit retry loop
+          
+        } catch (error) {
+          lastError = error;
+          console.error(`Extract AI attempt ${attempt} failed:`, error);
+          
+          if (attempt < MAX_RETRIES) {
+            // Wait before retrying (exponential backoff: 2s, 4s)
+            const waitMs = 2000 * attempt;
+            console.log(`Waiting ${waitMs}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, waitMs));
+          }
+        }
+      }
+      
+      if (!aiData) {
+        console.error("All extract AI attempts failed:", lastError);
         return new Response(
-          JSON.stringify({ error: "AI extraction failed", details: errText }),
+          JSON.stringify({ 
+            error: "AI extraction failed after 3 attempts - please retry.",
+            details: lastError instanceof Error ? lastError.message : "Connection timeout"
+          }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
-      const aiData = await aiRes.json();
-      console.log("AI response structure:", JSON.stringify({
-        hasChoices: !!aiData.choices,
-        choiceCount: aiData.choices?.length,
-        hasToolCalls: !!aiData.choices?.[0]?.message?.tool_calls,
-        toolCallCount: aiData.choices?.[0]?.message?.tool_calls?.length,
-        hasContent: !!aiData.choices?.[0]?.message?.content
-      }));
       
       const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
       
@@ -761,7 +772,7 @@ If your TOU tariff has empty or minimal rates, YOUR EXTRACTION IS WRONG.` },
           }
         } else {
           return new Response(
-            JSON.stringify({ error: "AI returned empty response" }),
+            JSON.stringify({ error: "AI returned empty response after retries" }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -1142,7 +1153,17 @@ Only report issues - if everything is correct, return empty tariffs array.` },
             throw new Error(`AI returned ${aiRes.status}: ${errText}`);
           }
 
-          aiData = await aiRes.json();
+          const responseData = await aiRes.json();
+          
+          // Check if we got a valid tool call response
+          const toolCall = responseData.choices?.[0]?.message?.tool_calls?.[0];
+          
+          if (!toolCall) {
+            // Empty response - retry
+            throw new Error("AI returned empty response (no tool call)");
+          }
+          
+          aiData = responseData;
           console.log(`Reprise AI call succeeded on attempt ${attempt}`);
           break; // Success - exit retry loop
           
@@ -1171,13 +1192,6 @@ Only report issues - if everything is correct, return empty tariffs array.` },
       }
 
       const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-      
-      if (!toolCall) {
-        return new Response(
-          JSON.stringify({ error: "AI did not return structured response" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
 
       let analysis, repriseConfidence, corrections;
       try {
