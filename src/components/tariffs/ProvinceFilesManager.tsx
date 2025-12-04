@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
 import { 
@@ -82,6 +83,7 @@ export function ProvinceFilesManager() {
   const [extractionPhase, setExtractionPhase] = useState<"idle" | "analyzing" | "extracting-munis" | "ready" | "extracting">("idle");
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [analysisInfo, setAnalysisInfo] = useState<{ sheets?: string[]; analysis?: string } | null>(null);
+  const [autoReprise, setAutoReprise] = useState(true);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -474,7 +476,7 @@ export function ProvinceFilesManager() {
     }
   };
 
-  const handleExtractTariffs = async (muniIndex: number) => {
+  const handleExtractTariffs = async (muniIndex: number, skipAutoReprise = false) => {
     const muni = municipalities[muniIndex];
     if (!muni || !selectedFile || !selectedProvince) return;
 
@@ -520,6 +522,12 @@ export function ProvinceFilesManager() {
 
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
       queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+
+      // Auto-reprise if enabled
+      if (autoReprise && !skipAutoReprise) {
+        sonnerToast.info(`Running reprise for ${muni.name}...`, { duration: 2000 });
+        await handleRepriseInternal(muniIndex);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed";
       
@@ -542,13 +550,9 @@ export function ProvinceFilesManager() {
     }
   };
 
-  const handleReprise = async (muniIndex: number) => {
+  const handleRepriseInternal = async (muniIndex: number, showFullToast = false) => {
     const muni = municipalities[muniIndex];
     if (!muni || !selectedFile || !selectedProvince) return;
-
-    setMunicipalities(prev => prev.map((m, i) =>
-      i === muniIndex ? { ...m, status: "extracting" as const } : m
-    ));
 
     try {
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
@@ -564,22 +568,24 @@ export function ProvinceFilesManager() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      setMunicipalities(prev => prev.map((m, i) =>
-        i === muniIndex ? { ...m, status: "done" as const } : m
-      ));
-
       const parts = [];
       if (data.added > 0) parts.push(`${data.added} added`);
       if (data.updated > 0) parts.push(`${data.updated} corrected`);
 
-      toast({
-        title: `${muni.name} Reprise Complete`,
-        description: data.corrections === 0 
-          ? "Extraction verified - no corrections needed" 
-          : parts.join(", ")
-      });
+      if (showFullToast) {
+        toast({
+          title: `${muni.name} Reprise Complete`,
+          description: data.corrections === 0 
+            ? "Extraction verified - no corrections needed" 
+            : parts.join(", ")
+        });
+      } else if (data.corrections > 0) {
+        sonnerToast.success(`Reprise: ${parts.join(", ")}`, { duration: 3000 });
+      } else {
+        sonnerToast.success(`Reprise verified ✓`, { duration: 2000 });
+      }
 
-      if (data.analysis) {
+      if (data.analysis && showFullToast) {
         sonnerToast.info(data.analysis, { duration: 5000 });
       }
 
@@ -588,16 +594,31 @@ export function ProvinceFilesManager() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Reprise failed";
       
-      setMunicipalities(prev => prev.map((m, i) =>
-        i === muniIndex ? { ...m, status: "done" as const } : m
-      ));
-      
-      toast({
-        title: `${muni.name} Reprise Failed`,
-        description: errorMessage,
-        variant: "destructive",
-      });
+      if (showFullToast) {
+        toast({
+          title: `${muni.name} Reprise Failed`,
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } else {
+        sonnerToast.error(`Reprise failed: ${errorMessage}`, { duration: 3000 });
+      }
     }
+  };
+
+  const handleReprise = async (muniIndex: number) => {
+    const muni = municipalities[muniIndex];
+    if (!muni || !selectedFile || !selectedProvince) return;
+
+    setMunicipalities(prev => prev.map((m, i) =>
+      i === muniIndex ? { ...m, status: "extracting" as const } : m
+    ));
+
+    await handleRepriseInternal(muniIndex, true);
+
+    setMunicipalities(prev => prev.map((m, i) =>
+      i === muniIndex ? { ...m, status: "done" as const } : m
+    ));
   };
 
   const handleExtractAll = async () => {
@@ -1026,7 +1047,18 @@ export function ProvinceFilesManager() {
                         {municipalities.filter(m => m.status === "done").length} of {municipalities.length} complete
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="auto-reprise"
+                          checked={autoReprise}
+                          onCheckedChange={setAutoReprise}
+                        />
+                        <Label htmlFor="auto-reprise" className="text-sm flex items-center gap-1 cursor-pointer">
+                          <Sparkles className="h-3 w-3" />
+                          Auto-reprise
+                        </Label>
+                      </div>
                       {failedCount > 0 && (
                         <Button
                           onClick={handleRetryAllFailed}
