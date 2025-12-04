@@ -768,9 +768,19 @@ If your TOU tariff has empty or minimal rates, YOUR EXTRACTION IS WRONG.` },
       }
       
       if (!extractedTariffs || extractedTariffs.length === 0) {
+        console.log(`No tariffs found in source data for ${municipality}`);
+        // Return success with zero tariffs - this is a valid outcome for some sheets
         return new Response(
-          JSON.stringify({ error: "No tariffs extracted", municipality }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ 
+            success: true,
+            municipality,
+            inserted: 0, 
+            updated: 0, 
+            skipped: 0, 
+            total: 0,
+            message: "No tariffs found in source data - sheet may be empty or contain non-tariff data"
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
