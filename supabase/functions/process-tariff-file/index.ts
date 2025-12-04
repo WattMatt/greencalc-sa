@@ -1064,7 +1064,21 @@ Only report issues - if everything is correct, return empty tariffs array.` },
         );
       }
 
-      const aiData = await aiRes.json();
+      // Parse AI response with error handling for connection issues
+      let aiData;
+      try {
+        aiData = await aiRes.json();
+      } catch (parseError) {
+        console.error("Failed to parse AI response:", parseError);
+        return new Response(
+          JSON.stringify({ 
+            error: "AI response parsing failed - connection may have timed out. Please retry.",
+            details: parseError instanceof Error ? parseError.message : "Unknown parse error"
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
       
       if (!toolCall) {
@@ -1074,7 +1088,19 @@ Only report issues - if everything is correct, return empty tariffs array.` },
         );
       }
 
-      const { analysis, confidence_score: repriseConfidence, tariffs: corrections } = JSON.parse(toolCall.function.arguments);
+      let analysis, repriseConfidence, corrections;
+      try {
+        const parsed = JSON.parse(toolCall.function.arguments);
+        analysis = parsed.analysis;
+        repriseConfidence = parsed.confidence_score;
+        corrections = parsed.tariffs;
+      } catch (argParseError) {
+        console.error("Failed to parse tool arguments:", argParseError);
+        return new Response(
+          JSON.stringify({ error: "AI response format invalid", details: toolCall.function.arguments }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       console.log(`Reprise analysis: ${analysis}`);
       console.log(`Reprise confidence: ${repriseConfidence}`);
       console.log(`Found ${corrections?.length || 0} corrections needed`);
