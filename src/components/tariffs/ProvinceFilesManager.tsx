@@ -559,10 +559,35 @@ export function ProvinceFilesManager() {
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
       queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
 
-      // Auto-reprise if enabled
+      // Auto-reprise if enabled - loop until 100% confidence
       if (autoReprise && !skipAutoReprise) {
-        sonnerToast.info(`Running reprise for ${muni.name}...`, { duration: 2000 });
-        await handleRepriseInternal(muniIndex);
+        let repriseAttempt = 0;
+        const maxRepriseAttempts = 5; // Safety limit
+        let currentConfidence = 0;
+        
+        while (currentConfidence < 100 && repriseAttempt < maxRepriseAttempts) {
+          repriseAttempt++;
+          sonnerToast.info(`Running reprise ${repriseAttempt} for ${muni.name}...`, { duration: 2000 });
+          
+          const repriseResult = await handleRepriseInternalWithResult(muniIndex);
+          currentConfidence = repriseResult?.confidence ?? 100;
+          
+          // If no corrections were made and confidence is 100, we're done
+          if (repriseResult?.corrections === 0 && currentConfidence >= 100) {
+            break;
+          }
+          
+          // Small delay between reprise attempts
+          if (currentConfidence < 100 && repriseAttempt < maxRepriseAttempts) {
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        }
+        
+        if (currentConfidence >= 100) {
+          sonnerToast.success(`${muni.name} reached 100% confidence after ${repriseAttempt} reprise(s)`, { duration: 3000 });
+        } else {
+          sonnerToast.warning(`${muni.name} at ${currentConfidence}% after ${repriseAttempt} reprises (max reached)`, { duration: 4000 });
+        }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed";
@@ -583,6 +608,57 @@ export function ProvinceFilesManager() {
       });
       
       queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+    }
+  };
+
+  // Returns the reprise result for looping logic
+  const handleRepriseInternalWithResult = async (muniIndex: number): Promise<{ confidence: number; corrections: number } | null> => {
+    const muni = municipalities[muniIndex];
+    if (!muni || !selectedFile || !selectedProvince) return null;
+
+    try {
+      const { data, error } = await supabase.functions.invoke("process-tariff-file", {
+        body: {
+          filePath: selectedFile.path,
+          fileType: getFileType(selectedFile.name),
+          province: selectedProvince,
+          municipality: muni.name,
+          action: "reprise"
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      // Update municipality state with new confidence
+      setMunicipalities(prev => prev.map((m, i) => {
+        if (i !== muniIndex) return m;
+        return { 
+          ...m, 
+          confidence: data.confidence ?? m.confidence,
+          repriseCount: (m.repriseCount || 0) + 1
+        };
+      }));
+
+      const parts = [];
+      if (data.added > 0) parts.push(`${data.added} added`);
+      if (data.updated > 0) parts.push(`${data.updated} corrected`);
+      if (data.confidence) parts.push(`${data.confidence}% confidence`);
+
+      if (data.corrections > 0) {
+        sonnerToast.success(`Reprise: ${parts.join(", ")}`, { duration: 3000 });
+      } else {
+        sonnerToast.success(`Reprise verified ✓ (${data.confidence}%)`, { duration: 2000 });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+      queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+
+      return { confidence: data.confidence ?? 100, corrections: data.corrections ?? 0 };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Reprise failed";
+      sonnerToast.error(`Reprise failed: ${errorMessage}`, { duration: 3000 });
+      return null;
     }
   };
 
