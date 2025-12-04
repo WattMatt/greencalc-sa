@@ -26,7 +26,8 @@ import {
   Loader2,
   AlertCircle,
   Zap,
-  Plus
+  Plus,
+  Sparkles
 } from "lucide-react";
 
 interface Municipality {
@@ -541,6 +542,64 @@ export function ProvinceFilesManager() {
     }
   };
 
+  const handleReprise = async (muniIndex: number) => {
+    const muni = municipalities[muniIndex];
+    if (!muni || !selectedFile || !selectedProvince) return;
+
+    setMunicipalities(prev => prev.map((m, i) =>
+      i === muniIndex ? { ...m, status: "extracting" as const } : m
+    ));
+
+    try {
+      const { data, error } = await supabase.functions.invoke("process-tariff-file", {
+        body: {
+          filePath: selectedFile.path,
+          fileType: getFileType(selectedFile.name),
+          province: selectedProvince,
+          municipality: muni.name,
+          action: "reprise"
+        },
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      setMunicipalities(prev => prev.map((m, i) =>
+        i === muniIndex ? { ...m, status: "done" as const } : m
+      ));
+
+      const parts = [];
+      if (data.added > 0) parts.push(`${data.added} added`);
+      if (data.updated > 0) parts.push(`${data.updated} corrected`);
+
+      toast({
+        title: `${muni.name} Reprise Complete`,
+        description: data.corrections === 0 
+          ? "Extraction verified - no corrections needed" 
+          : parts.join(", ")
+      });
+
+      if (data.analysis) {
+        sonnerToast.info(data.analysis, { duration: 5000 });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+      queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Reprise failed";
+      
+      setMunicipalities(prev => prev.map((m, i) =>
+        i === muniIndex ? { ...m, status: "done" as const } : m
+      ));
+      
+      toast({
+        title: `${muni.name} Reprise Failed`,
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleExtractAll = async () => {
     setExtractionPhase("extracting");
     for (let i = 0; i < municipalities.length; i++) {
@@ -1025,17 +1084,30 @@ export function ProvinceFilesManager() {
                               </p>
                             )}
                           </div>
-                          {(muni.status === "pending" || muni.status === "error") && (
-                            <Button
-                              size="sm"
-                              variant={muni.status === "error" ? "outline" : "ghost"}
-                              onClick={() => handleExtractTariffs(index)}
-                              className={muni.status === "error" ? "border-destructive/50 text-destructive hover:bg-destructive/10" : ""}
-                            >
-                              <RefreshCw className={`h-3 w-3 ${muni.status === "error" ? "mr-1" : ""}`} />
-                              {muni.status === "error" && "Retry"}
-                            </Button>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {muni.status === "done" && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleReprise(index)}
+                                title="Run second AI pass to catch nuances"
+                              >
+                                <Sparkles className="h-3 w-3 mr-1" />
+                                Reprise
+                              </Button>
+                            )}
+                            {(muni.status === "pending" || muni.status === "error") && (
+                              <Button
+                                size="sm"
+                                variant={muni.status === "error" ? "outline" : "ghost"}
+                                onClick={() => handleExtractTariffs(index)}
+                                className={muni.status === "error" ? "border-destructive/50 text-destructive hover:bg-destructive/10" : ""}
+                              >
+                                <RefreshCw className={`h-3 w-3 ${muni.status === "error" ? "mr-1" : ""}`} />
+                                {muni.status === "error" && "Retry"}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
