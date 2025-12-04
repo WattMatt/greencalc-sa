@@ -483,15 +483,23 @@ ${municipalityText.slice(0, 15000)}
    - TOU (Time of Use): When you see "High Demand" AND "Low Demand" rates, OR "Peak/Standard/Off-Peak"
    - Fixed: Single flat energy rate with no blocks or time variations
 
-3. IBT BLOCK PARSING (VERY IMPORTANT):
-   When the source shows consumption-based rates like:
+3. IBT BLOCK PARSING (CRITICAL - DO NOT USE "Any" WITHOUT BLOCK RANGES):
+   Parse ALL consumption-based rate patterns:
+   
+   FORMAT A: "Block N (X - Y)kWh" or "Block N (X-Y)kWh"
+   - "Block 1 (0 - 50)kWh" → block_start_kwh: 0, block_end_kwh: 50
+   - "Block 2 (51 - 350)kWh" → block_start_kwh: 51, block_end_kwh: 350
+   - "Block 3 (351 - 600)kWh" → block_start_kwh: 351, block_end_kwh: 600
+   - "Block 4 (>600)kWh" or "Block 4 (600+)kWh" → block_start_kwh: 600, block_end_kwh: null
+   
+   FORMAT B: Range notation
    - "<500kWh" or "≤500kWh" → block_start_kwh: 0, block_end_kwh: 500
-   - ">500kWh" or "≥500kWh" or "500kWh+" → block_start_kwh: 500, block_end_kwh: null
+   - ">500kWh" or "≥500kWh" → block_start_kwh: 500, block_end_kwh: null
    - "0-50kWh" → block_start_kwh: 0, block_end_kwh: 50
    - "51-350kWh" → block_start_kwh: 51, block_end_kwh: 350
-   - "351+" or ">350kWh" → block_start_kwh: 351, block_end_kwh: null
    
-   EACH BLOCK = ONE RATE ENTRY with block_start_kwh and block_end_kwh populated!
+   MANDATORY: For IBT tariffs, EVERY rate MUST have block_start_kwh and block_end_kwh!
+   DO NOT extract IBT rates without block ranges - that's incorrect extraction!
 
 4. CHARGE TYPE SEPARATION:
    - "Basic Charge (R/month)" or "Service Charge" → fixed_monthly_charge (NOT in rates array)
@@ -516,25 +524,28 @@ ${municipalityText.slice(0, 15000)}
 8. PREPAID:
    - is_prepaid: true if "Prepaid" appears in tariff name
 
-=== EXAMPLE IBT EXTRACTION ===
+=== EXAMPLE IBT EXTRACTION (4 BLOCKS) ===
 Source data:
-  "Agricultural Conventional Low"
-  "Basic Charge (R/month): 2507.73"
-  "Energy Charge (c/kWh):"
-  "<500kWh: 336.38"
-  ">500kWh: 298.88"
+  "Domestic Conventional 20A & 60A"
+  "Block 1 (0 - 50)kWh: 172.40"
+  "Block 2 (51 - 350)kWh: 221.44"
+  "Block 3 (351 - 600)kWh: 311.35"
+  "Block 4 (>600)kWh: 367.37"
+  "Basic Charge (R/month): 500.29"
 
 Correct extraction:
 {
-  "category": "Agricultural",
-  "tariff_name": "Agricultural Conventional Low Users Three Phase",
+  "category": "Domestic",
+  "tariff_name": "Domestic Conventional 20A & 60A",
   "tariff_type": "IBT",
-  "phase_type": "Three Phase",
+  "phase_type": "Single Phase",
   "is_prepaid": false,
-  "fixed_monthly_charge": 2507.73,
+  "fixed_monthly_charge": 500.29,
   "rates": [
-    { "rate_per_kwh": 3.3638, "block_start_kwh": 0, "block_end_kwh": 500, "time_of_use": "Any", "season": "All Year" },
-    { "rate_per_kwh": 2.9888, "block_start_kwh": 500, "block_end_kwh": null, "time_of_use": "Any", "season": "All Year" }
+    { "rate_per_kwh": 1.7240, "block_start_kwh": 0, "block_end_kwh": 50, "time_of_use": "Any", "season": "All Year" },
+    { "rate_per_kwh": 2.2144, "block_start_kwh": 51, "block_end_kwh": 350, "time_of_use": "Any", "season": "All Year" },
+    { "rate_per_kwh": 3.1135, "block_start_kwh": 351, "block_end_kwh": 600, "time_of_use": "Any", "season": "All Year" },
+    { "rate_per_kwh": 3.6737, "block_start_kwh": 600, "block_end_kwh": null, "time_of_use": "Any", "season": "All Year" }
   ]
 }
 
@@ -551,14 +562,16 @@ Extract ALL tariffs found. Be thorough and accurate.`;
           messages: [
             { role: "system", content: `You are an expert electricity tariff data extractor for South African municipalities. 
 
-CRITICAL ACCURACY RULES:
-1. For IBT (block) tariffs: ALWAYS populate block_start_kwh and block_end_kwh for each rate
-2. "<500kWh" = block 0-500, ">500kWh" = block 500-null
-3. Never use time_of_use "Any" for IBT blocks - use "Any" but MUST have block ranges
+CRITICAL IBT BLOCK EXTRACTION RULES - FOLLOW EXACTLY:
+1. "Block N (X - Y)kWh" format: Extract X as block_start_kwh, Y as block_end_kwh
+   - "Block 1 (0 - 50)kWh" → block_start_kwh: 0, block_end_kwh: 50
+   - "Block 4 (>600)kWh" → block_start_kwh: 600, block_end_kwh: null
+2. For IBT tariffs: EVERY rate entry MUST have block_start_kwh and block_end_kwh populated
+3. If you extract IBT rates without block ranges, YOUR EXTRACTION IS WRONG - fix it!
 4. Convert c/kWh to R/kWh (divide by 100)
-5. Separate fixed charges from energy rates - fixed_monthly_charge is NOT a rate
+5. fixed_monthly_charge is NOT an energy rate - keep it separate
 
-Be meticulous. Every piece of data in the source must be captured accurately.` },
+Be meticulous. Every block range in the source MUST appear in your extraction.` },
             { role: "user", content: extractPrompt }
           ],
           tools: [{
