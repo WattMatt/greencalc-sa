@@ -560,7 +560,9 @@ export function ProvinceFilesManager() {
       queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
 
       // Auto-reprise if enabled - loop until 100% confidence
-      if (autoReprise && !skipAutoReprise) {
+      // Skip auto-reprise if no tariffs were extracted (nothing to reprise)
+      const totalExtracted = (data.inserted || 0) + (data.updated || 0);
+      if (autoReprise && !skipAutoReprise && totalExtracted > 0) {
         let repriseAttempt = 0;
         const maxRepriseAttempts = 5; // Safety limit
         let currentConfidence = 0;
@@ -588,6 +590,8 @@ export function ProvinceFilesManager() {
         } else {
           sonnerToast.warning(`${muni.name} at ${currentConfidence}% after ${repriseAttempt} reprises (max reached)`, { duration: 4000 });
         }
+      } else if (totalExtracted === 0) {
+        sonnerToast.warning(`${muni.name}: No tariff data found in source sheet`, { duration: 3000 });
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed";
