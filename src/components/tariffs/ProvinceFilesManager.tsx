@@ -645,7 +645,25 @@ export function ProvinceFilesManager() {
     setExtractionPhase("ready");
   };
 
+  const handleRepriseAll = async () => {
+    const doneCount = municipalities.filter(m => m.status === "done").length;
+    if (doneCount === 0) return;
+
+    setExtractionPhase("extracting");
+    sonnerToast.info(`Running reprise on ${doneCount} municipalities...`);
+    
+    for (let i = 0; i < municipalities.length; i++) {
+      if (municipalities[i].status === "done") {
+        await handleRepriseInternal(i, false);
+      }
+    }
+    
+    setExtractionPhase("ready");
+    toast({ title: "Reprise All Complete", description: `Verified ${doneCount} municipalities` });
+  };
+
   const failedCount = municipalities.filter(m => m.status === "error").length;
+  const doneCount = municipalities.filter(m => m.status === "done").length;
 
   const getExtractionProgress = () => {
     if (municipalities.length === 0) return 0;
@@ -1085,6 +1103,20 @@ export function ProvinceFilesManager() {
                         )}
                         Extract All Tariffs
                       </Button>
+                      {doneCount > 0 && (
+                        <Button
+                          onClick={handleRepriseAll}
+                          disabled={extractionPhase === "extracting"}
+                          variant="outline"
+                        >
+                          {extractionPhase === "extracting" ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                          ) : (
+                            <Sparkles className="h-4 w-4 mr-1" />
+                          )}
+                          Reprise All ({doneCount})
+                        </Button>
+                      )}
                     </div>
                   </div>
 
