@@ -823,6 +823,325 @@ Be meticulous. Every piece of data in the source must be captured accurately.` }
       );
     }
 
+    // PHASE 4: Reprise - second AI pass to catch nuances
+    if (action === "reprise") {
+      if (!municipality) {
+        return new Response(
+          JSON.stringify({ error: "Municipality name is required for reprise" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log("Running reprise pass for municipality:", municipality);
+
+      // Get municipality ID and existing tariffs
+      const { data: muniData } = await supabase
+        .from("municipalities")
+        .select("id")
+        .ilike("name", municipality)
+        .single();
+
+      if (!muniData) {
+        return new Response(
+          JSON.stringify({ error: `Municipality "${municipality}" not found in database` }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Fetch all current tariffs with rates
+      const { data: currentTariffs } = await supabase
+        .from("tariffs")
+        .select(`
+          id, name, tariff_type, phase_type, amperage_limit, is_prepaid,
+          fixed_monthly_charge, demand_charge_per_kva, voltage_level,
+          reactive_energy_charge, capacity_kva, customer_category,
+          category:tariff_categories(name),
+          tariff_rates(rate_per_kwh, block_start_kwh, block_end_kwh, season, time_of_use)
+        `)
+        .eq("municipality_id", muniData.id);
+
+      // Get raw source data
+      let municipalityText = "";
+      if (fileType === "xlsx" || fileType === "xls") {
+        const matchingSheet = sheetNames.find(name => 
+          name.toLowerCase().includes(municipality.toLowerCase()) ||
+          municipality.toLowerCase().includes(name.replace(/\s*-\s*\d+\.?\d*%$/, '').toLowerCase())
+        );
+        
+        if (matchingSheet && sheetData[matchingSheet]) {
+          municipalityText = `=== ${matchingSheet} ===\n` + 
+            sheetData[matchingSheet].slice(0, 250).map(row => 
+              row.filter(cell => cell != null && cell !== "").join(" | ")
+            ).filter(row => row.trim()).join("\n");
+        }
+      } else {
+        municipalityText = extractedText;
+      }
+
+      // Build current extraction summary
+      const currentSummary = currentTariffs?.map(t => ({
+        name: t.name,
+        category: (t.category as any)?.name || "Unknown",
+        tariff_type: t.tariff_type,
+        phase_type: t.phase_type,
+        amperage_limit: t.amperage_limit,
+        is_prepaid: t.is_prepaid,
+        fixed_monthly_charge: t.fixed_monthly_charge,
+        demand_charge_per_kva: t.demand_charge_per_kva,
+        rates: t.tariff_rates
+      })) || [];
+
+      const reprisePrompt = `REPRISE EXTRACTION: Review and refine the tariff extraction for "${municipality}".
+
+=== ORIGINAL SOURCE DATA ===
+${municipalityText.slice(0, 12000)}
+
+=== CURRENT EXTRACTION (from first pass) ===
+${JSON.stringify(currentSummary, null, 2)}
+
+=== YOUR TASK ===
+Compare the source data CAREFULLY against the current extraction and identify:
+
+1. MISSED TARIFFS: Any tariffs in the source that are completely missing from the extraction
+2. INCORRECT VALUES: Any rates, charges, or values that don't match the source
+3. MISSING BLOCKS: IBT tariffs that should have multiple blocks but don't
+4. WRONG TARIFF TYPE: Tariffs misclassified (e.g., IBT classified as Fixed)
+5. MISSING DETAILS: Phase type, amperage limits, prepaid status that should be set
+
+For each issue found, provide the CORRECTED tariff data. Only return tariffs that need to be ADDED or CORRECTED.
+
+If the extraction is accurate and complete, return an empty tariffs array.
+
+CRITICAL: Check block ranges for IBT tariffs especially carefully. 
+- "<500kWh" should be block 0-500
+- ">500kWh" should be block 500-null
+- Each block needs its own rate entry`;
+
+      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${lovableApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-pro",
+          messages: [
+            { role: "system", content: `You are an expert electricity tariff auditor for South African municipalities. 
+Your job is to VERIFY extractions against source data and find discrepancies.
+
+Be meticulous. Check:
+- Every rate value matches the source (remember c/kWh → R/kWh conversion: divide by 100)
+- Block ranges are correct for IBT tariffs  
+- Fixed charges (R/month) are separated from energy rates (R/kWh)
+- No tariffs are missing from the extraction
+
+Only report issues - if everything is correct, return empty tariffs array.` },
+            { role: "user", content: reprisePrompt }
+          ],
+          tools: [{
+            type: "function",
+            function: {
+              name: "report_corrections",
+              description: "Report tariffs that need to be added or corrected",
+              parameters: {
+                type: "object",
+                properties: {
+                  analysis: { type: "string", description: "Brief summary of issues found (or 'No issues found')" },
+                  tariffs: {
+                    type: "array",
+                    description: "Tariffs to add or update. Empty if extraction is accurate.",
+                    items: {
+                      type: "object",
+                      properties: {
+                        action: { type: "string", enum: ["add", "update"], description: "Whether to add new or update existing" },
+                        existing_name: { type: "string", description: "For updates: the name of the existing tariff to update" },
+                        category: { type: "string" },
+                        tariff_name: { type: "string" },
+                        tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"] },
+                        phase_type: { type: "string", enum: ["Single Phase", "Three Phase"] },
+                        amperage_limit: { type: "string" },
+                        is_prepaid: { type: "boolean" },
+                        fixed_monthly_charge: { type: "number" },
+                        demand_charge_per_kva: { type: "number" },
+                        voltage_level: { type: "string", enum: ["LV", "MV", "HV"] },
+                        customer_category: { type: "string" },
+                        rates: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              rate_per_kwh: { type: "number" },
+                              block_start_kwh: { type: "number" },
+                              block_end_kwh: { type: ["number", "null"] },
+                              season: { type: "string" },
+                              time_of_use: { type: "string" }
+                            },
+                            required: ["rate_per_kwh"]
+                          }
+                        }
+                      },
+                      required: ["action", "category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
+                    }
+                  }
+                },
+                required: ["analysis", "tariffs"]
+              }
+            }
+          }],
+          tool_choice: { type: "function", function: { name: "report_corrections" } }
+        }),
+      });
+
+      if (!aiRes.ok) {
+        const errText = await aiRes.text();
+        console.error("Reprise AI failed:", errText);
+        return new Response(
+          JSON.stringify({ error: "Reprise analysis failed", details: errText }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const aiData = await aiRes.json();
+      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      
+      if (!toolCall) {
+        return new Response(
+          JSON.stringify({ error: "AI did not return structured response" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { analysis, tariffs: corrections } = JSON.parse(toolCall.function.arguments);
+      console.log(`Reprise analysis: ${analysis}`);
+      console.log(`Found ${corrections?.length || 0} corrections needed`);
+
+      if (!corrections || corrections.length === 0) {
+        return new Response(
+          JSON.stringify({ 
+            success: true,
+            municipality,
+            analysis,
+            corrections: 0,
+            message: "No corrections needed - extraction verified as accurate"
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Apply corrections
+      const { data: categories } = await supabase.from("tariff_categories").select("id, name");
+      const categoryMap = new Map(categories?.map(c => [c.name.toLowerCase(), c.id]) || []);
+
+      let added = 0;
+      let updated = 0;
+      const errors: string[] = [];
+
+      for (const correction of corrections) {
+        try {
+          let categoryId = categoryMap.get(correction.category.toLowerCase());
+          if (!categoryId) {
+            const { data: newCat } = await supabase
+              .from("tariff_categories")
+              .insert({ name: correction.category })
+              .select("id")
+              .single();
+            if (newCat) {
+              categoryId = newCat.id;
+              categoryMap.set(correction.category.toLowerCase(), categoryId);
+            }
+          }
+
+          if (!categoryId) {
+            errors.push(`${correction.tariff_name}: Missing category`);
+            continue;
+          }
+
+          const tariffData = {
+            name: correction.tariff_name,
+            municipality_id: muniData.id,
+            category_id: categoryId,
+            tariff_type: correction.tariff_type,
+            phase_type: correction.phase_type || "Single Phase",
+            fixed_monthly_charge: correction.fixed_monthly_charge || 0,
+            demand_charge_per_kva: correction.demand_charge_per_kva || 0,
+            is_prepaid: correction.is_prepaid,
+            amperage_limit: correction.amperage_limit || null,
+            voltage_level: correction.voltage_level || "LV",
+            customer_category: correction.customer_category || correction.category,
+          };
+
+          if (correction.action === "update" && correction.existing_name) {
+            // Find and update existing tariff
+            const existing = currentTariffs?.find(t => 
+              t.name.toLowerCase() === correction.existing_name.toLowerCase()
+            );
+            
+            if (existing) {
+              await supabase.from("tariffs").update(tariffData).eq("id", existing.id);
+              await supabase.from("tariff_rates").delete().eq("tariff_id", existing.id);
+              
+              if (correction.rates) {
+                for (const rate of correction.rates) {
+                  await supabase.from("tariff_rates").insert({
+                    tariff_id: existing.id,
+                    rate_per_kwh: rate.rate_per_kwh,
+                    block_start_kwh: rate.block_start_kwh || 0,
+                    block_end_kwh: rate.block_end_kwh || null,
+                    season: rate.season || "All Year",
+                    time_of_use: rate.time_of_use || "Any",
+                  });
+                }
+              }
+              updated++;
+              console.log(`Reprise updated: ${correction.tariff_name}`);
+            }
+          } else {
+            // Add new tariff
+            const { data: newTariff, error: tariffErr } = await supabase
+              .from("tariffs")
+              .insert(tariffData)
+              .select("id")
+              .single();
+
+            if (tariffErr || !newTariff) {
+              errors.push(`${correction.tariff_name}: ${tariffErr?.message || "Insert failed"}`);
+              continue;
+            }
+
+            if (correction.rates) {
+              for (const rate of correction.rates) {
+                await supabase.from("tariff_rates").insert({
+                  tariff_id: newTariff.id,
+                  rate_per_kwh: rate.rate_per_kwh,
+                  block_start_kwh: rate.block_start_kwh || 0,
+                  block_end_kwh: rate.block_end_kwh || null,
+                  season: rate.season || "All Year",
+                  time_of_use: rate.time_of_use || "Any",
+                });
+              }
+            }
+            added++;
+            console.log(`Reprise added: ${correction.tariff_name}`);
+          }
+        } catch (e) {
+          errors.push(`${correction.tariff_name}: ${e instanceof Error ? e.message : "Unknown error"}`);
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          municipality,
+          analysis,
+          corrections: corrections.length,
+          added,
+          updated,
+          errors: errors.slice(0, 10)
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ error: "Invalid action" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
