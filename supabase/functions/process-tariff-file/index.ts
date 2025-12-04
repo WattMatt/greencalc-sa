@@ -974,16 +974,25 @@ CRITICAL: Check block ranges for IBT tariffs especially carefully.
 - ">500kWh" should be block 500-null
 - Each block needs its own rate entry`;
 
-      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
-          messages: [
-            { role: "system", content: `You are an expert electricity tariff auditor for South African municipalities. 
+      // Retry logic for AI call - handles connection timeouts
+      const MAX_RETRIES = 3;
+      let aiData = null;
+      let lastError = null;
+      
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          console.log(`Reprise AI call attempt ${attempt}/${MAX_RETRIES}`);
+          
+          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${lovableApiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-pro",
+              messages: [
+                { role: "system", content: `You are an expert electricity tariff auditor for South African municipalities. 
 Your job is to VERIFY extractions against source data and find discrepancies.
 
 Be meticulous. Check:
@@ -993,87 +1002,96 @@ Be meticulous. Check:
 - No tariffs are missing from the extraction
 
 Only report issues - if everything is correct, return empty tariffs array.` },
-            { role: "user", content: reprisePrompt }
-          ],
-          tools: [{
-            type: "function",
-            function: {
-              name: "report_corrections",
-              description: "Report tariffs that need to be added or corrected",
-              parameters: {
-                type: "object",
-                properties: {
-                  analysis: { type: "string", description: "Brief summary of issues found (or 'No issues found')" },
-                  confidence_score: { 
-                    type: "integer", 
-                    minimum: 0, 
-                    maximum: 100,
-                    description: "Your confidence in the accuracy of the CURRENT extraction after review (0-100). 100 = fully accurate, 0 = many issues" 
-                  },
-                  tariffs: {
-                    type: "array",
-                    description: "Tariffs to add or update. Empty if extraction is accurate.",
-                    items: {
-                      type: "object",
-                      properties: {
-                        action: { type: "string", enum: ["add", "update"], description: "Whether to add new or update existing" },
-                        existing_name: { type: "string", description: "For updates: the name of the existing tariff to update" },
-                        category: { type: "string" },
-                        tariff_name: { type: "string" },
-                        tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"] },
-                        phase_type: { type: "string", enum: ["Single Phase", "Three Phase"] },
-                        amperage_limit: { type: "string" },
-                        is_prepaid: { type: "boolean" },
-                        fixed_monthly_charge: { type: "number" },
-                        demand_charge_per_kva: { type: "number" },
-                        voltage_level: { type: "string", enum: ["LV", "MV", "HV"] },
-                        customer_category: { type: "string" },
-                        rates: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: {
-                              rate_per_kwh: { type: "number" },
-                              block_start_kwh: { type: "number" },
-                              block_end_kwh: { type: ["number", "null"] },
-                              season: { type: "string" },
-                              time_of_use: { type: "string" }
-                            },
-                            required: ["rate_per_kwh"]
-                          }
-                        }
+                { role: "user", content: reprisePrompt }
+              ],
+              tools: [{
+                type: "function",
+                function: {
+                  name: "report_corrections",
+                  description: "Report tariffs that need to be added or corrected",
+                  parameters: {
+                    type: "object",
+                    properties: {
+                      analysis: { type: "string", description: "Brief summary of issues found (or 'No issues found')" },
+                      confidence_score: { 
+                        type: "integer", 
+                        minimum: 0, 
+                        maximum: 100,
+                        description: "Your confidence in the accuracy of the CURRENT extraction after review (0-100). 100 = fully accurate, 0 = many issues" 
                       },
-                      required: ["action", "category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
-                    }
+                      tariffs: {
+                        type: "array",
+                        description: "Tariffs to add or update. Empty if extraction is accurate.",
+                        items: {
+                          type: "object",
+                          properties: {
+                            action: { type: "string", enum: ["add", "update"], description: "Whether to add new or update existing" },
+                            existing_name: { type: "string", description: "For updates: the name of the existing tariff to update" },
+                            category: { type: "string" },
+                            tariff_name: { type: "string" },
+                            tariff_type: { type: "string", enum: ["Fixed", "IBT", "TOU"] },
+                            phase_type: { type: "string", enum: ["Single Phase", "Three Phase"] },
+                            amperage_limit: { type: "string" },
+                            is_prepaid: { type: "boolean" },
+                            fixed_monthly_charge: { type: "number" },
+                            demand_charge_per_kva: { type: "number" },
+                            voltage_level: { type: "string", enum: ["LV", "MV", "HV"] },
+                            customer_category: { type: "string" },
+                            rates: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                properties: {
+                                  rate_per_kwh: { type: "number" },
+                                  block_start_kwh: { type: "number" },
+                                  block_end_kwh: { type: ["number", "null"] },
+                                  season: { type: "string" },
+                                  time_of_use: { type: "string" }
+                                },
+                                required: ["rate_per_kwh"]
+                              }
+                            }
+                          },
+                          required: ["action", "category", "tariff_name", "tariff_type", "is_prepaid", "rates"]
+                        }
+                      }
+                    },
+                    required: ["analysis", "confidence_score", "tariffs"]
                   }
-                },
-                required: ["analysis", "confidence_score", "tariffs"]
-              }
-            }
-          }],
-          tool_choice: { type: "function", function: { name: "report_corrections" } }
-        }),
-      });
+                }
+              }],
+              tool_choice: { type: "function", function: { name: "report_corrections" } }
+            }),
+          });
 
-      if (!aiRes.ok) {
-        const errText = await aiRes.text();
-        console.error("Reprise AI failed:", errText);
-        return new Response(
-          JSON.stringify({ error: "Reprise analysis failed", details: errText }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+          if (!aiRes.ok) {
+            const errText = await aiRes.text();
+            throw new Error(`AI returned ${aiRes.status}: ${errText}`);
+          }
+
+          aiData = await aiRes.json();
+          console.log(`Reprise AI call succeeded on attempt ${attempt}`);
+          break; // Success - exit retry loop
+          
+        } catch (error) {
+          lastError = error;
+          console.error(`Reprise AI attempt ${attempt} failed:`, error);
+          
+          if (attempt < MAX_RETRIES) {
+            // Wait before retrying (exponential backoff: 2s, 4s)
+            const waitMs = 2000 * attempt;
+            console.log(`Waiting ${waitMs}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, waitMs));
+          }
+        }
       }
-
-      // Parse AI response with error handling for connection issues
-      let aiData;
-      try {
-        aiData = await aiRes.json();
-      } catch (parseError) {
-        console.error("Failed to parse AI response:", parseError);
+      
+      if (!aiData) {
+        console.error("All reprise AI attempts failed:", lastError);
         return new Response(
           JSON.stringify({ 
-            error: "AI response parsing failed - connection may have timed out. Please retry.",
-            details: parseError instanceof Error ? parseError.message : "Unknown parse error"
+            error: "AI response failed after 3 attempts - please retry.",
+            details: lastError instanceof Error ? lastError.message : "Connection timeout"
           }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
