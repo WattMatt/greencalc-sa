@@ -485,6 +485,32 @@ export function ProvinceFilesManager() {
     ));
 
     try {
+      // Check if municipality already has tariffs - if so, switch to reprise mode
+      const { count: existingCount } = await supabase
+        .from("tariffs")
+        .select("*", { count: "exact", head: true })
+        .eq("municipality_id", muni.id);
+
+      if (existingCount && existingCount > 0) {
+        sonnerToast.info(`${muni.name} has ${existingCount} existing tariffs - switching to reprise mode`, { duration: 3000 });
+        await handleRepriseInternal(muniIndex, true);
+        
+        // Update status to done
+        await supabase
+          .from("municipalities")
+          .update({ extraction_status: "done", extraction_error: null })
+          .eq("id", muni.id);
+        
+        setMunicipalities(prev => prev.map((m, i) =>
+          i === muniIndex ? { ...m, status: "done" as const, tariffCount: existingCount } : m
+        ));
+        
+        queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+        queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+        return;
+      }
+
+      // No existing tariffs - proceed with full extraction
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
         body: {
           filePath: selectedFile.path,
