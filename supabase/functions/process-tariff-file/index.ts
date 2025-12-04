@@ -465,90 +465,80 @@ INCREMENTAL EXTRACTION RULES:
 - Focus on finding MISSING tariffs that weren't extracted before`
         : "";
 
-      const extractPrompt = `Extract electricity tariffs for "${municipality}" municipality from this data:
+      const extractPrompt = `TASK: Extract electricity tariffs for "${municipality}" municipality.
 
-${municipalityText.slice(0, 12000)}
+SOURCE DATA:
+${municipalityText.slice(0, 15000)}
 
-CRITICAL DATA MAPPING RULES (NERSA-COMPLIANT):
+=== EXTRACTION RULES ===
 
-1. Municipality: "${municipality}"
+1. TARIFF IDENTIFICATION:
+   Look for section headers like "Domestic", "Commercial", "Industrial", "Agricultural", "Prepaid"
+   Each distinct tariff structure = one tariff entry
 
-2. CUSTOMER CATEGORY (NERSA classification):
-   - "Domestic" / "Residential" → customer_category: "Domestic"
-   - "Commercial" / "Business" → customer_category: "Commercial"
-   - "Industrial" / "Manufacturing" / "LPU" / "Large Power" → customer_category: "Industrial"
-   - "Agriculture" / "Farm" → customer_category: "Agriculture"
-   - "Street Lighting" / "Public Lighting" → customer_category: "Street Lighting"
+2. TARIFF TYPE DETECTION (CRITICAL):
+   - IBT (Incremental Block Tariff): When you see DIFFERENT rates for different kWh consumption levels
+     Examples: "<500kWh: 303.02" and ">500kWh: 268.04" = IBT with 2 blocks
+     Examples: "0-50kWh", "51-350kWh", "351-600kWh" = IBT with 3 blocks
+   - TOU (Time of Use): When you see "High Demand" AND "Low Demand" rates, OR "Peak/Standard/Off-Peak"
+   - Fixed: Single flat energy rate with no blocks or time variations
 
-3. VOLTAGE LEVEL (NERSA requirement):
-   - "LV" / "Low Voltage" / "≤400V" / most domestic/small commercial → voltage_level: "LV"
-   - "MV" / "Medium Voltage" / "11kV" / "22kV" → voltage_level: "MV"
-   - "HV" / "High Voltage" / "66kV" / "132kV" → voltage_level: "HV"
-   - Default to "LV" if not specified
-
-4. CAPACITY (kVA):
-   - "50kVA", "100kVA", "1MVA" → capacity_kva (number)
-   - Small Power Users (SPU) typically <50kVA
-   - Large Power Users (LPU) typically ≥80kVA
-
-5. FIXED CHARGES (NOT rates):
-   - "Basic Charge per month (R/month)" → fixed_monthly_charge (number in Rands)
-   - "Service Charge" or "Admin Charge" → fixed_monthly_charge
-   - DO NOT put these in the rates array!
-
-6. DEMAND/CAPACITY CHARGES (NOT rates):
-   - "Per 5 Amp or Part (min 30A) (R/A/m)" → demand_charge_per_kva (number in Rands)
-   - "Per kVA" charges → demand_charge_per_kva
-   - "Capacity Charge" → demand_charge_per_kva
-   - DO NOT put these in the rates array!
-
-7. REACTIVE ENERGY CHARGE (NERSA requirement):
-   - "Reactive Energy" / "kVArh" / "Power Factor" charges → reactive_energy_charge (R/kVArh)
-   - This compensates for poor power factor
-   - Can be at tariff level OR per rate period for TOU
-
-8. ENERGY RATES ONLY (put in rates array):
-   - ONLY values measured in c/kWh go in the rates array
-   - "Low Demand Energy Rate (c/kWh)" → rate with time_of_use: "Low Demand"
-   - "High Demand Energy Rate (c/kWh)" → rate with time_of_use: "High Demand"
-   - "Energy Rate (c/kWh)" with no demand distinction → time_of_use: "Any"
-   - Include reactive_energy_charge per rate if varies by TOU period
+3. IBT BLOCK PARSING (VERY IMPORTANT):
+   When the source shows consumption-based rates like:
+   - "<500kWh" or "≤500kWh" → block_start_kwh: 0, block_end_kwh: 500
+   - ">500kWh" or "≥500kWh" or "500kWh+" → block_start_kwh: 500, block_end_kwh: null
+   - "0-50kWh" → block_start_kwh: 0, block_end_kwh: 50
+   - "51-350kWh" → block_start_kwh: 51, block_end_kwh: 350
+   - "351+" or ">350kWh" → block_start_kwh: 351, block_end_kwh: null
    
-   CRITICAL - BLOCK TARIFF PARSING (IBT):
-   - "<500kWh" or "≤500kWh" means: block_start_kwh: 0, block_end_kwh: 500
-   - ">500kWh" or "≥500kWh" means: block_start_kwh: 500, block_end_kwh: null (unlimited)
-   - "0-50kWh" or "Block 1 (0-50)" means: block_start_kwh: 0, block_end_kwh: 50
-   - "51-350kWh" or "Block 2 (51-350)" means: block_start_kwh: 51, block_end_kwh: 350
-   - If you see different rates for different consumption levels, this is ALWAYS tariff_type: "IBT"
-   - Each block rate MUST have block_start_kwh and block_end_kwh populated
+   EACH BLOCK = ONE RATE ENTRY with block_start_kwh and block_end_kwh populated!
 
-9. TARIFF TYPE DETERMINATION:
-   - If has "High Demand" AND "Low Demand" energy rates → tariff_type: "TOU"
-   - If has "Peak/Standard/Off-Peak" periods → tariff_type: "TOU"
-   - If has Block 1, Block 2 etc. (consumption tiers) → tariff_type: "IBT"
-   - If single flat energy rate → tariff_type: "Fixed"
-   - TOU is MANDATORY for MV/HV customers per NERSA guidelines
+4. CHARGE TYPE SEPARATION:
+   - "Basic Charge (R/month)" or "Service Charge" → fixed_monthly_charge (NOT in rates array)
+   - "Per Amp" or "Per kVA" charges → demand_charge_per_kva (NOT in rates array)
+   - "Energy Charge (c/kWh)" → rates array with rate_per_kwh
+   
+5. RATE CONVERSION:
+   - If rate is in c/kWh (like 303.02), convert to R/kWh by dividing by 100 → 3.0302
+   - If rate is already in R/kWh (like 3.03), use as-is
 
-10. Phase: "Single Phase" or "Three Phase" (from "1 Phase", "3 Phase", "1 & 3 Phase")
-11. Amperage: from ">20A", "15A", "60A", "100A" etc.
-12. Prepaid: true if "Prepaid" mentioned in name
+6. CUSTOMER CATEGORIES:
+   - Domestic/Residential → "Domestic"
+   - Commercial/Business → "Commercial"  
+   - Industrial/LPU/Large Power → "Industrial"
+   - Agriculture/Farm → "Agriculture"
 
-EXAMPLE for "Commercial TOU 11kV >100kVA":
-- customer_category: "Commercial"
-- voltage_level: "MV"
-- capacity_kva: 100
-- fixed_monthly_charge: 1500.00
-- demand_charge_per_kva: 250.00
-- reactive_energy_charge: 0.45
-- rates: [
-    { rate_per_kwh: 1.85, time_of_use: "Peak", season: "High/Winter" },
-    { rate_per_kwh: 0.95, time_of_use: "Off-Peak", season: "High/Winter" }
+7. PHASE & AMPERAGE:
+   - "Single Phase" or "1 Phase" → phase_type: "Single Phase"
+   - "Three Phase" or "3 Phase" → phase_type: "Three Phase"
+   - Extract amperage limits like ">20A", "60A", "100A"
+
+8. PREPAID:
+   - is_prepaid: true if "Prepaid" appears in tariff name
+
+=== EXAMPLE IBT EXTRACTION ===
+Source data:
+  "Agricultural Conventional Low"
+  "Basic Charge (R/month): 2507.73"
+  "Energy Charge (c/kWh):"
+  "<500kWh: 336.38"
+  ">500kWh: 298.88"
+
+Correct extraction:
+{
+  "category": "Agricultural",
+  "tariff_name": "Agricultural Conventional Low Users Three Phase",
+  "tariff_type": "IBT",
+  "phase_type": "Three Phase",
+  "is_prepaid": false,
+  "fixed_monthly_charge": 2507.73,
+  "rates": [
+    { "rate_per_kwh": 3.3638, "block_start_kwh": 0, "block_end_kwh": 500, "time_of_use": "Any", "season": "All Year" },
+    { "rate_per_kwh": 2.9888, "block_start_kwh": 500, "block_end_kwh": null, "time_of_use": "Any", "season": "All Year" }
   ]
-- tariff_type: "TOU"
+}
 
-NOTE: Convert c/kWh to R/kWh by dividing by 100 (e.g., 210.93 c/kWh = 2.1093 R/kWh)
-
-Extract EVERY tariff structure found for this municipality.`;
+Extract ALL tariffs found. Be thorough and accurate.`;
 
       const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -557,9 +547,18 @@ Extract EVERY tariff structure found for this municipality.`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "google/gemini-2.5-pro",
           messages: [
-            { role: "system", content: "You are a NERSA-compliant data extraction expert for South African electricity tariffs. You must correctly: 1) Separate fixed charges (R/month), demand charges (R/A/m or R/kVA), reactive energy charges (R/kVArh), and energy rates (c/kWh). 2) Identify voltage level (LV/MV/HV), capacity (kVA), and customer category per NERSA guidelines. 3) ONLY energy rates go in the rates array. Fixed, demand, and reactive charges are separate fields." },
+            { role: "system", content: `You are an expert electricity tariff data extractor for South African municipalities. 
+
+CRITICAL ACCURACY RULES:
+1. For IBT (block) tariffs: ALWAYS populate block_start_kwh and block_end_kwh for each rate
+2. "<500kWh" = block 0-500, ">500kWh" = block 500-null
+3. Never use time_of_use "Any" for IBT blocks - use "Any" but MUST have block ranges
+4. Convert c/kWh to R/kWh (divide by 100)
+5. Separate fixed charges from energy rates - fixed_monthly_charge is NOT a rate
+
+Be meticulous. Every piece of data in the source must be captured accurately.` },
             { role: "user", content: extractPrompt }
           ],
           tools: [{
