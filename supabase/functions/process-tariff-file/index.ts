@@ -1105,23 +1105,39 @@ Only report issues - if everything is correct, return empty tariffs array.` },
       console.log(`Reprise confidence: ${repriseConfidence}`);
       console.log(`Found ${corrections?.length || 0} corrections needed`);
 
+      // Get current stored confidence to ensure we NEVER go backwards
+      const { data: currentMuniState } = await supabase
+        .from("municipalities")
+        .select("ai_confidence, reprise_count")
+        .eq("id", muniData.id)
+        .single();
+      const currentStoredConfidence = currentMuniState?.ai_confidence || 0;
+
       if (!corrections || corrections.length === 0) {
+        // AI verified extraction - no corrections needed
+        // If AI says 100% confident, we're verified. Otherwise, keep existing confidence or bump slightly
+        const verifiedConfidence = repriseConfidence === 100 
+          ? 100  // AI verified as perfect
+          : Math.max(currentStoredConfidence, Math.min(100, currentStoredConfidence + 5)); // Bump slightly for verification pass
+        
+        console.log(`No corrections: Current ${currentStoredConfidence}%, AI says ${repriseConfidence}%, Setting to ${verifiedConfidence}%`);
+        
         // Create run record for successful verification
         await supabase.from("extraction_runs").insert({
           municipality_id: muniData.id,
           run_type: "reprise",
           corrections_made: 0,
-          ai_confidence: repriseConfidence,
+          ai_confidence: verifiedConfidence,
           ai_analysis: analysis,
           status: "completed",
           completed_at: new Date().toISOString()
         });
 
-        // Update municipality stats
+        // Update municipality stats - never decrease confidence
         await supabase.from("municipalities").update({
-          ai_confidence: repriseConfidence,
+          ai_confidence: verifiedConfidence,
           last_reprise_at: new Date().toISOString(),
-          reprise_count: (await supabase.from("municipalities").select("reprise_count").eq("id", muniData.id).single()).data?.reprise_count + 1 || 1
+          reprise_count: (currentMuniState?.reprise_count || 0) + 1
         }).eq("id", muniData.id);
 
         return new Response(
@@ -1129,9 +1145,11 @@ Only report issues - if everything is correct, return empty tariffs array.` },
             success: true,
             municipality,
             analysis,
-            confidence: repriseConfidence,
+            confidence: verifiedConfidence,
             corrections: 0,
-            message: "No corrections needed - extraction verified as accurate"
+            message: repriseConfidence === 100 
+              ? "Verified as 100% accurate - no corrections needed"
+              : "No corrections needed - confidence maintained"
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -1237,16 +1255,20 @@ Only report issues - if everything is correct, return empty tariffs array.` },
         }
       }
 
-      // Calculate POST-CORRECTION confidence: confidence should INCREASE after successful fixes
+      // Calculate POST-CORRECTION confidence: must NEVER go backwards
       const successfulCorrections = added + updated;
       const correctionSuccessRate = successfulCorrections / Math.max(corrections.length, 1);
-      // Boost confidence based on how many issues were fixed
-      // Pre-correction confidence + improvement based on successful fixes
+      
+      // Start from the HIGHER of current stored confidence or AI's assessment
+      const baseConfidence = Math.max(currentStoredConfidence, repriseConfidence);
+      
+      // Boost confidence aggressively toward 100% based on successful fixes
+      // Each successful fix closes 70% of the remaining gap to 100%
       const postCorrectionConfidence = Math.min(100, Math.round(
-        repriseConfidence + (100 - repriseConfidence) * correctionSuccessRate * 0.8
+        baseConfidence + (100 - baseConfidence) * correctionSuccessRate * 0.7
       ));
       
-      console.log(`Pre-correction confidence: ${repriseConfidence}, Post-correction: ${postCorrectionConfidence}`);
+      console.log(`Current stored: ${currentStoredConfidence}%, AI pre-fix: ${repriseConfidence}%, Post-correction: ${postCorrectionConfidence}%`);
 
       // Create reprise run record
       await supabase.from("extraction_runs").insert({
