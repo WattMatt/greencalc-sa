@@ -98,11 +98,15 @@ export function ProvinceFilesManager() {
         .from("municipalities")
         .select("id, name, province_id, source_file_path, extraction_status, extraction_error");
 
-      const { data: tariffs } = await supabase
+      const { count: tariffCount } = await supabase
         .from("tariffs")
-        .select("id, municipality_id");
+        .select("*", { count: "exact", head: true });
 
-      return { provinces, municipalities, tariffs };
+      const { data: tariffsByMuni } = await supabase
+        .from("tariffs")
+        .select("municipality_id");
+
+      return { provinces, municipalities, tariffsByMuni, tariffCount: tariffCount || 0 };
     },
   });
 
@@ -182,7 +186,7 @@ export function ProvinceFilesManager() {
         }
       });
       
-      const tariffCount = provincesData?.tariffs?.filter(
+      const tariffCount = provincesData?.tariffsByMuni?.filter(
         t => municipalityIds.includes(t.municipality_id)
       ).length || 0;
 
@@ -237,7 +241,7 @@ export function ProvinceFilesManager() {
           }
         });
         
-        const tariffCount = provincesData?.tariffs?.filter(
+        const tariffCount = provincesData?.tariffsByMuni?.filter(
           t => municipalityIds.includes(t.municipality_id)
         ).length || 0;
 
@@ -372,7 +376,7 @@ export function ProvinceFilesManager() {
       if (existingMunis.length > 0) {
         // Load existing municipalities with their persisted status
         const muniWithStatus: Municipality[] = existingMunis.map(m => {
-          const tariffCount = provincesData?.tariffs?.filter(
+          const tariffCount = provincesData?.tariffsByMuni?.filter(
             t => t.municipality_id === m.id
           ).length || 0;
           const dbStatus = (m as any).extraction_status || 'pending';
@@ -840,7 +844,7 @@ export function ProvinceFilesManager() {
             </span>
             <span>
               <strong className="text-foreground">
-                {provincesData?.tariffs?.length || 0}
+                {provincesData?.tariffCount || 0}
               </strong>{" "}
               tariffs
             </span>
