@@ -3,7 +3,9 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MapPin, Loader2 } from "lucide-react";
+import { MapPin, Loader2, Filter } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 // South African province colors (using province codes from ArcGIS)
 const PROVINCE_COLORS: Record<string, string> = {
@@ -50,6 +52,8 @@ const STATUS_COLORS = {
   none: "#94a3b8",     // Gray - not in database
 };
 
+type FilterType = "all" | "database" | "done" | "pending" | "error";
+
 interface DbMunicipality {
   id: string;
   name: string;
@@ -71,6 +75,7 @@ export function MunicipalityMap() {
   const [loading, setLoading] = useState(true);
   const [loadingBoundaries, setLoadingBoundaries] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterType>("all");
 
   // Fetch Mapbox token
   useEffect(() => {
@@ -192,6 +197,22 @@ export function MunicipalityMap() {
       map.current = null;
     };
   }, [mapboxToken]);
+
+  // Get filter expression for map layers
+  const getFilterExpression = useCallback((filterType: FilterType): any => {
+    switch (filterType) {
+      case "database":
+        return ["==", ["get", "inDatabase"], true];
+      case "done":
+        return ["all", ["==", ["get", "inDatabase"], true], ["==", ["get", "extractionStatus"], "done"]];
+      case "pending":
+        return ["all", ["==", ["get", "inDatabase"], true], ["==", ["get", "extractionStatus"], "pending"]];
+      case "error":
+        return ["all", ["==", ["get", "inDatabase"], true], ["==", ["get", "extractionStatus"], "error"]];
+      default:
+        return null; // Show all
+    }
+  }, []);
 
   // Add boundary layers when data is ready
   useEffect(() => {
@@ -353,6 +374,14 @@ export function MunicipalityMap() {
           `)
           .addTo(map.current!);
       });
+
+      // Apply initial filter
+      const filterExpr = getFilterExpression(filter);
+      if (filterExpr) {
+        map.current!.setFilter("municipality-boundaries-fill", filterExpr);
+        map.current!.setFilter("municipality-boundaries-line", filterExpr);
+        map.current!.setFilter("municipality-boundaries-highlight", filterExpr);
+      }
     };
 
     if (map.current.loaded()) {
@@ -360,7 +389,25 @@ export function MunicipalityMap() {
     } else {
       map.current.on("load", addBoundaryLayers);
     }
-  }, [boundaryGeoJSON, dbMunicipalities, findDbMunicipality]);
+  }, [boundaryGeoJSON, dbMunicipalities, findDbMunicipality, filter, getFilterExpression]);
+
+  // Update filter when changed
+  useEffect(() => {
+    if (!map.current || !map.current.getLayer("municipality-boundaries-fill")) return;
+
+    const filterExpr = getFilterExpression(filter);
+    
+    if (filterExpr) {
+      map.current.setFilter("municipality-boundaries-fill", filterExpr);
+      map.current.setFilter("municipality-boundaries-line", filterExpr);
+      map.current.setFilter("municipality-boundaries-highlight", filterExpr);
+    } else {
+      // Remove filters to show all
+      map.current.setFilter("municipality-boundaries-fill", null);
+      map.current.setFilter("municipality-boundaries-line", null);
+      map.current.setFilter("municipality-boundaries-highlight", ["==", ["get", "inDatabase"], true]);
+    }
+  }, [filter, getFilterExpression]);
 
   if (error) {
     return (
@@ -379,20 +426,51 @@ export function MunicipalityMap() {
   }
 
   const dbCount = dbMunicipalities.length;
-  const extractedCount = dbMunicipalities.filter(m => m.extraction_status === "done").length;
+  const doneCount = dbMunicipalities.filter(m => m.extraction_status === "done").length;
+  const pendingCount = dbMunicipalities.filter(m => m.extraction_status === "pending" || !m.extraction_status).length;
+  const errorCount = dbMunicipalities.filter(m => m.extraction_status === "error").length;
   const boundaryCount = boundaryGeoJSON?.features?.length || 0;
+
+  const filterOptions: { value: FilterType; label: string; count?: number }[] = [
+    { value: "all", label: "All", count: boundaryCount },
+    { value: "database", label: "In DB", count: dbCount },
+    { value: "done", label: "Done", count: doneCount },
+    { value: "pending", label: "Pending", count: pendingCount },
+    { value: "error", label: "Error", count: errorCount },
+  ];
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <MapPin className="h-5 w-5" />
-          Municipality Boundaries
-          {(loading || loadingBoundaries) && <Loader2 className="h-4 w-4 animate-spin" />}
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <MapPin className="h-5 w-5" />
+            Municipality Boundaries
+            {(loading || loadingBoundaries) && <Loader2 className="h-4 w-4 animate-spin" />}
+          </CardTitle>
+          <div className="flex items-center gap-1">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            {filterOptions.map((opt) => (
+              <Button
+                key={opt.value}
+                variant={filter === opt.value ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs px-2"
+                onClick={() => setFilter(opt.value)}
+              >
+                {opt.label}
+                {opt.count !== undefined && (
+                  <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                    {opt.count}
+                  </Badge>
+                )}
+              </Button>
+            ))}
+          </div>
+        </div>
         {!loading && !loadingBoundaries && (
           <div className="text-xs text-muted-foreground">
-            {boundaryCount} boundaries • {dbCount} in database • {extractedCount} extracted
+            {boundaryCount} boundaries • {dbCount} in database • {doneCount} extracted
           </div>
         )}
       </CardHeader>
