@@ -36,6 +36,8 @@ interface Municipality {
   name: string;
   status: "pending" | "extracting" | "done" | "error";
   tariffCount?: number;
+  confidence?: number;
+  repriseCount?: number;
   error?: string;
 }
 
@@ -390,6 +392,8 @@ export function ProvinceFilesManager() {
             name: m.name,
             status: dbStatus as "pending" | "done" | "error",
             tariffCount,
+            confidence: (m as any).ai_confidence || undefined,
+            repriseCount: (m as any).reprise_count || undefined,
             error: dbError || undefined
           };
         });
@@ -533,13 +537,19 @@ export function ProvinceFilesManager() {
       setMunicipalities(prev => prev.map((m, i) => {
         if (i !== muniIndex) return m;
         const totalChanged = (data.inserted || 0) + (data.updated || 0);
-        return { ...m, status: "done" as const, tariffCount: totalChanged };
+        return { 
+          ...m, 
+          status: "done" as const, 
+          tariffCount: totalChanged,
+          confidence: data.confidence ?? m.confidence
+        };
       }));
 
       const parts = [];
       if (data.inserted > 0) parts.push(`${data.inserted} new`);
       if (data.updated > 0) parts.push(`${data.updated} updated`);
       if (data.skipped > 0) parts.push(`${data.skipped} skipped`);
+      if (data.confidence) parts.push(`${data.confidence}% confidence`);
 
       toast({
         title: `${muni.name} Complete`,
@@ -594,21 +604,32 @@ export function ProvinceFilesManager() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
+      // Update municipality state with new confidence
+      setMunicipalities(prev => prev.map((m, i) => {
+        if (i !== muniIndex) return m;
+        return { 
+          ...m, 
+          confidence: data.confidence ?? m.confidence,
+          repriseCount: (m.repriseCount || 0) + 1
+        };
+      }));
+
       const parts = [];
       if (data.added > 0) parts.push(`${data.added} added`);
       if (data.updated > 0) parts.push(`${data.updated} corrected`);
+      if (data.confidence) parts.push(`${data.confidence}% confidence`);
 
       if (showFullToast) {
         toast({
           title: `${muni.name} Reprise Complete`,
           description: data.corrections === 0 
-            ? "Extraction verified - no corrections needed" 
+            ? `Verified accurate (${data.confidence || '?'}% confidence)` 
             : parts.join(", ")
         });
       } else if (data.corrections > 0) {
         sonnerToast.success(`Reprise: ${parts.join(", ")}`, { duration: 3000 });
       } else {
-        sonnerToast.success(`Reprise verified ✓`, { duration: 2000 });
+        sonnerToast.success(`Reprise verified ✓ (${data.confidence}%)`, { duration: 2000 });
       }
 
       if (data.analysis && showFullToast) {
@@ -1166,6 +1187,19 @@ export function ProvinceFilesManager() {
                               </span>
                               {muni.tariffCount !== undefined && muni.status === "done" && (
                                 <Badge variant="secondary" className="ml-2">{muni.tariffCount} tariffs</Badge>
+                              )}
+                              {muni.confidence !== undefined && muni.status === "done" && (
+                                <Badge 
+                                  variant="outline" 
+                                  className={`ml-1 ${muni.confidence >= 80 ? 'border-green-500 text-green-600' : muni.confidence >= 50 ? 'border-amber-500 text-amber-600' : 'border-red-500 text-red-600'}`}
+                                >
+                                  {muni.confidence}% conf
+                                </Badge>
+                              )}
+                              {muni.repriseCount !== undefined && muni.repriseCount > 0 && (
+                                <Badge variant="outline" className="ml-1 text-xs">
+                                  {muni.repriseCount}x reprised
+                                </Badge>
                               )}
                             </div>
                             {muni.status === "error" && muni.error && (
