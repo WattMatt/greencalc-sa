@@ -5,41 +5,71 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin, Loader2 } from "lucide-react";
 
-// South African province colors
+// South African province colors (using province codes from ArcGIS)
 const PROVINCE_COLORS: Record<string, string> = {
-  "Gauteng": "#ef4444",
-  "Western Cape": "#f97316",
-  "KwaZulu-Natal": "#eab308",
-  "Eastern Cape": "#22c55e",
-  "Mpumalanga": "#14b8a6",
-  "Limpopo": "#3b82f6",
-  "North West": "#8b5cf6",
-  "Free State": "#ec4899",
-  "Northern Cape": "#6b7280",
+  "GT": "#ef4444",  // Gauteng
+  "WC": "#f97316",  // Western Cape
+  "KZN": "#eab308", // KwaZulu-Natal
+  "EC": "#22c55e",  // Eastern Cape
+  "MP": "#14b8a6",  // Mpumalanga
+  "LIM": "#3b82f6", // Limpopo
+  "NW": "#8b5cf6",  // North West
+  "FS": "#ec4899",  // Free State
+  "NC": "#6b7280",  // Northern Cape
 };
 
-interface Municipality {
+const PROVINCE_CODE_TO_NAME: Record<string, string> = {
+  "GT": "Gauteng",
+  "WC": "Western Cape",
+  "KZN": "KwaZulu-Natal",
+  "EC": "Eastern Cape",
+  "MP": "Mpumalanga",
+  "LIM": "Limpopo",
+  "NW": "North West",
+  "FS": "Free State",
+  "NC": "Northern Cape",
+};
+
+const PROVINCE_NAME_TO_CODE: Record<string, string> = {
+  "Gauteng": "GT",
+  "Western Cape": "WC",
+  "KwaZulu-Natal": "KZN",
+  "Eastern Cape": "EC",
+  "Mpumalanga": "MP",
+  "Limpopo": "LIM",
+  "North West": "NW",
+  "Free State": "FS",
+  "Northern Cape": "NC",
+};
+
+// Extraction status colors
+const STATUS_COLORS = {
+  done: "#22c55e",     // Green - completed
+  error: "#ef4444",    // Red - error
+  pending: "#f59e0b",  // Amber - pending
+  none: "#94a3b8",     // Gray - not in database
+};
+
+interface DbMunicipality {
   id: string;
   name: string;
+  extraction_status: string | null;
+  ai_confidence: number | null;
+  total_tariffs: number | null;
   province: { name: string };
 }
 
-interface GeocodedMunicipality extends Municipality {
-  coordinates: [number, number] | null;
-}
-
-// Cache for geocoded coordinates
-const geocodeCache: Record<string, [number, number] | null> = {};
+// ArcGIS Feature Service URL for SA Local Municipality Boundaries
+const ARCGIS_BOUNDARY_URL = "https://services7.arcgis.com/vhM1EF9boZaqDxYt/arcgis/rest/services/SA_Local_Municipal_Boundary/FeatureServer/0/query";
 
 export function MunicipalityMap() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<mapboxgl.Marker[]>([]);
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
-  const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
-  const [geocodedMunicipalities, setGeocodedMunicipalities] = useState<GeocodedMunicipality[]>([]);
+  const [dbMunicipalities, setDbMunicipalities] = useState<DbMunicipality[]>([]);
+  const [boundaryGeoJSON, setBoundaryGeoJSON] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [geocoding, setGeocoding] = useState(false);
+  const [loadingBoundaries, setLoadingBoundaries] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Fetch Mapbox token
@@ -61,16 +91,16 @@ export function MunicipalityMap() {
     fetchToken();
   }, []);
 
-  // Fetch municipalities
+  // Fetch municipalities from database
   useEffect(() => {
     async function fetchMunicipalities() {
       try {
         const { data, error } = await supabase
           .from("municipalities")
-          .select("id, name, province:provinces(name)");
+          .select("id, name, extraction_status, ai_confidence, total_tariffs, province:provinces(name)");
         
         if (error) throw error;
-        setMunicipalities(data || []);
+        setDbMunicipalities(data || []);
       } catch (err) {
         console.error("Failed to fetch municipalities:", err);
       } finally {
@@ -80,152 +110,69 @@ export function MunicipalityMap() {
     fetchMunicipalities();
   }, []);
 
-  // Validate that geocoding result is in the expected province
-  const isValidProvinceMatch = (feature: any, expectedProvince: string): boolean => {
-    // Check relevance score - reject low confidence matches
-    if (feature.relevance < 0.8) {
-      return false;
+  // Fetch boundary GeoJSON from ArcGIS
+  useEffect(() => {
+    async function fetchBoundaries() {
+      setLoadingBoundaries(true);
+      try {
+        const params = new URLSearchParams({
+          where: "1=1",
+          outFields: "MUNICNAME,PROVINCE,CAT_B,DISTRICT",
+          f: "geojson",
+          outSR: "4326",
+        });
+
+        const response = await fetch(`${ARCGIS_BOUNDARY_URL}?${params}`);
+        if (!response.ok) throw new Error("Failed to fetch boundaries");
+        
+        const geojson = await response.json();
+        console.log(`Loaded ${geojson.features?.length || 0} municipality boundaries`);
+        setBoundaryGeoJSON(geojson);
+      } catch (err) {
+        console.error("Failed to fetch boundary data:", err);
+      } finally {
+        setLoadingBoundaries(false);
+      }
     }
+    fetchBoundaries();
+  }, []);
+
+  // Helper to normalize municipality names for matching
+  const normalizeName = useCallback((name: string): string => {
+    return name
+      .toUpperCase()
+      .replace(/\s+LOCAL\s+MUNICIPALITY/gi, "")
+      .replace(/\s+MUNICIPALITY/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }, []);
+
+  // Find database municipality matching boundary
+  const findDbMunicipality = useCallback((boundaryName: string, provinceCode: string): DbMunicipality | null => {
+    const normalizedBoundary = normalizeName(boundaryName);
+    const provinceName = PROVINCE_CODE_TO_NAME[provinceCode];
     
-    // Check if the result is in the expected province
-    const context = feature.context || [];
-    const regionContext = context.find((c: any) => c.id?.startsWith('region.'));
-    
-    if (regionContext) {
-      const returnedProvince = regionContext.text?.toLowerCase() || '';
-      const expected = expectedProvince.toLowerCase();
+    return dbMunicipalities.find(m => {
+      const normalizedDb = normalizeName(m.name);
+      const dbProvinceCode = PROVINCE_NAME_TO_CODE[m.province?.name];
       
-      // Check for exact match or close match
-      if (returnedProvince.includes(expected) || expected.includes(returnedProvince)) {
+      // Match by name and province
+      if (normalizedDb === normalizedBoundary && dbProvinceCode === provinceCode) {
         return true;
       }
       
-      // Handle province name variations
-      const provinceAliases: Record<string, string[]> = {
-        'kwazulu-natal': ['kwazulu natal', 'kzn'],
-        'north west': ['northwest'],
-        'northern cape': ['northern'],
-        'western cape': ['western'],
-        'eastern cape': ['eastern'],
-        'free state': ['freestate'],
-      };
-      
-      for (const [key, aliases] of Object.entries(provinceAliases)) {
-        if (expected.includes(key) || aliases.some(a => expected.includes(a))) {
-          if (returnedProvince.includes(key) || aliases.some(a => returnedProvince.includes(a))) {
-            return true;
-          }
+      // Partial match for names that contain each other
+      if (dbProvinceCode === provinceCode) {
+        if (normalizedDb.includes(normalizedBoundary) || normalizedBoundary.includes(normalizedDb)) {
+          return true;
         }
       }
       
       return false;
-    }
-    
-    // If no region context, check the place_name for province
-    const placeName = feature.place_name?.toLowerCase() || '';
-    return placeName.includes(expectedProvince.toLowerCase());
-  };
+    }) || null;
+  }, [dbMunicipalities, normalizeName]);
 
-  // Geocode a municipality name using Mapbox Geocoding API
-  const geocodeMunicipality = useCallback(async (name: string, province: string, token: string): Promise<[number, number] | null> => {
-    const cacheKey = `${name}-${province}`;
-    
-    if (geocodeCache[cacheKey] !== undefined) {
-      return geocodeCache[cacheKey];
-    }
-
-    try {
-      // Search for municipality in South Africa with province context
-      const searchQuery = encodeURIComponent(`${name}, ${province}, South Africa`);
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${searchQuery}.json?access_token=${token}&country=ZA&types=place,locality,district&limit=3`
-      );
-      
-      if (!response.ok) {
-        throw new Error('Geocoding failed');
-      }
-
-      const data = await response.json();
-      
-      // Find a valid result that matches the expected province
-      if (data.features && data.features.length > 0) {
-        for (const feature of data.features) {
-          if (isValidProvinceMatch(feature, province)) {
-            const [lng, lat] = feature.center;
-            const coords: [number, number] = [lng, lat];
-            geocodeCache[cacheKey] = coords;
-            console.log(`✓ Geocoded ${name} (${province}) at [${lng}, ${lat}]`);
-            return coords;
-          }
-        }
-      }
-      
-      // Try alternative search with "Local Municipality" suffix
-      const altQuery = encodeURIComponent(`${name} Local Municipality, ${province}, South Africa`);
-      const altResponse = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${altQuery}.json?access_token=${token}&country=ZA&types=place,locality,district&limit=3`
-      );
-      
-      if (altResponse.ok) {
-        const altData = await altResponse.json();
-        if (altData.features && altData.features.length > 0) {
-          for (const feature of altData.features) {
-            if (isValidProvinceMatch(feature, province)) {
-              const [lng, lat] = feature.center;
-              const coords: [number, number] = [lng, lat];
-              geocodeCache[cacheKey] = coords;
-              console.log(`✓ Geocoded ${name} (${province}) via alt search at [${lng}, ${lat}]`);
-              return coords;
-            }
-          }
-        }
-      }
-
-      // No valid match found - don't plot incorrect location
-      console.warn(`✗ Could not geocode ${name} (${province}) - no valid match in correct province`);
-      geocodeCache[cacheKey] = null;
-      return null;
-    } catch (err) {
-      console.error(`Failed to geocode ${name}:`, err);
-      geocodeCache[cacheKey] = null;
-      return null;
-    }
-  }, []);
-
-  // Geocode all municipalities
-  useEffect(() => {
-    if (!mapboxToken || municipalities.length === 0) return;
-
-    async function geocodeAll() {
-      setGeocoding(true);
-      
-      const geocoded: GeocodedMunicipality[] = [];
-      
-      // Process in batches to avoid rate limiting
-      for (let i = 0; i < municipalities.length; i++) {
-        const muni = municipalities[i];
-        const provinceName = muni.province?.name || "South Africa";
-        const coords = await geocodeMunicipality(muni.name, provinceName, mapboxToken!);
-        
-        geocoded.push({
-          ...muni,
-          coordinates: coords,
-        });
-
-        // Small delay between requests to avoid rate limiting
-        if (i < municipalities.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-
-      setGeocodedMunicipalities(geocoded);
-      setGeocoding(false);
-    }
-
-    geocodeAll();
-  }, [municipalities, mapboxToken, geocodeMunicipality]);
-
-  // Initialize map
+  // Initialize map and add boundaries
   useEffect(() => {
     if (!mapContainer.current || !mapboxToken || map.current) return;
 
@@ -234,68 +181,186 @@ export function MunicipalityMap() {
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: "mapbox://styles/mapbox/light-v11",
-      center: [25.0, -29.0], // South Africa center
+      center: [25.0, -29.0],
       zoom: 5,
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
 
     return () => {
-      markersRef.current.forEach(marker => marker.remove());
-      markersRef.current = [];
       map.current?.remove();
       map.current = null;
     };
   }, [mapboxToken]);
 
-  // Add municipality markers
+  // Add boundary layers when data is ready
   useEffect(() => {
-    if (!map.current || geocodedMunicipalities.length === 0) return;
+    if (!map.current || !boundaryGeoJSON) return;
 
-    const addMarkers = () => {
-      // Clear existing markers
-      markersRef.current.forEach(marker => marker.remove());
-      markersRef.current = [];
+    const addBoundaryLayers = () => {
+      // Remove existing layers and source if they exist
+      if (map.current?.getLayer("municipality-boundaries-fill")) {
+        map.current.removeLayer("municipality-boundaries-fill");
+      }
+      if (map.current?.getLayer("municipality-boundaries-line")) {
+        map.current.removeLayer("municipality-boundaries-line");
+      }
+      if (map.current?.getLayer("municipality-boundaries-highlight")) {
+        map.current.removeLayer("municipality-boundaries-highlight");
+      }
+      if (map.current?.getSource("municipality-boundaries")) {
+        map.current.removeSource("municipality-boundaries");
+      }
 
-      geocodedMunicipalities.forEach((muni) => {
-        if (!muni.coordinates) return; // Skip municipalities that couldn't be geocoded
+      // Enhance GeoJSON with database status
+      const enhancedFeatures = boundaryGeoJSON.features.map((feature: any) => {
+        const municName = feature.properties?.MUNICNAME || "";
+        const provinceCode = feature.properties?.PROVINCE || "";
+        const dbMuni = findDbMunicipality(municName, provinceCode);
+        
+        return {
+          ...feature,
+          properties: {
+            ...feature.properties,
+            inDatabase: !!dbMuni,
+            extractionStatus: dbMuni?.extraction_status || "none",
+            aiConfidence: dbMuni?.ai_confidence || 0,
+            totalTariffs: dbMuni?.total_tariffs || 0,
+            dbName: dbMuni?.name || null,
+          }
+        };
+      });
 
-        const provinceName = muni.province?.name || "South Africa";
-        const color = PROVINCE_COLORS[provinceName] || "#64748b";
+      const enhancedGeoJSON = {
+        ...boundaryGeoJSON,
+        features: enhancedFeatures,
+      };
 
-        const el = document.createElement("div");
-        el.className = "municipality-marker";
-        el.style.width = "12px";
-        el.style.height = "12px";
-        el.style.backgroundColor = color;
-        el.style.borderRadius = "50%";
-        el.style.border = "2px solid white";
-        el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
-        el.style.cursor = "pointer";
+      // Add source
+      map.current!.addSource("municipality-boundaries", {
+        type: "geojson",
+        data: enhancedGeoJSON,
+      });
 
-        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-          <div style="padding: 8px;">
-            <strong>${muni.name}</strong>
-            <br />
-            <span style="color: ${color}; font-size: 12px;">${provinceName}</span>
-          </div>
-        `);
+      // Create color expression for provinces
+      const provinceColorExpression: any = ["match", ["get", "PROVINCE"]];
+      Object.entries(PROVINCE_COLORS).forEach(([code, color]) => {
+        provinceColorExpression.push(code, color);
+      });
+      provinceColorExpression.push("#94a3b8"); // Default color
 
-        const marker = new mapboxgl.Marker(el)
-          .setLngLat(muni.coordinates)
-          .setPopup(popup)
+      // Add fill layer (all municipalities with province colors)
+      map.current!.addLayer({
+        id: "municipality-boundaries-fill",
+        type: "fill",
+        source: "municipality-boundaries",
+        paint: {
+          "fill-color": provinceColorExpression,
+          "fill-opacity": [
+            "case",
+            ["get", "inDatabase"], 0.4,
+            0.15
+          ],
+        },
+      });
+
+      // Add highlight layer for municipalities in database
+      map.current!.addLayer({
+        id: "municipality-boundaries-highlight",
+        type: "line",
+        source: "municipality-boundaries",
+        filter: ["==", ["get", "inDatabase"], true],
+        paint: {
+          "line-color": [
+            "match",
+            ["get", "extractionStatus"],
+            "done", STATUS_COLORS.done,
+            "error", STATUS_COLORS.error,
+            "pending", STATUS_COLORS.pending,
+            STATUS_COLORS.none
+          ],
+          "line-width": 3,
+        },
+      });
+
+      // Add outline layer
+      map.current!.addLayer({
+        id: "municipality-boundaries-line",
+        type: "line",
+        source: "municipality-boundaries",
+        paint: {
+          "line-color": "#475569",
+          "line-width": 0.5,
+          "line-opacity": 0.5,
+        },
+      });
+
+      // Add hover effect
+      map.current!.on("mousemove", "municipality-boundaries-fill", (e) => {
+        if (!map.current) return;
+        map.current.getCanvas().style.cursor = "pointer";
+      });
+
+      map.current!.on("mouseleave", "municipality-boundaries-fill", () => {
+        if (!map.current) return;
+        map.current.getCanvas().style.cursor = "";
+      });
+
+      // Add click popup
+      map.current!.on("click", "municipality-boundaries-fill", (e) => {
+        if (!e.features || e.features.length === 0) return;
+        
+        const feature = e.features[0];
+        const props = feature.properties;
+        const provinceName = PROVINCE_CODE_TO_NAME[props?.PROVINCE] || props?.PROVINCE;
+        const inDb = props?.inDatabase;
+        const status = props?.extractionStatus;
+        const confidence = props?.aiConfidence;
+        const tariffs = props?.totalTariffs;
+        
+        let statusBadge = "";
+        if (inDb) {
+          const statusColor = STATUS_COLORS[status as keyof typeof STATUS_COLORS] || STATUS_COLORS.none;
+          statusBadge = `
+            <div style="margin-top: 8px; padding: 4px 8px; background: ${statusColor}20; border-left: 3px solid ${statusColor}; font-size: 11px;">
+              <strong>In Database</strong><br/>
+              Status: ${status || "pending"}<br/>
+              ${confidence ? `Confidence: ${confidence}%<br/>` : ""}
+              Tariffs: ${tariffs || 0}
+            </div>
+          `;
+        } else {
+          statusBadge = `
+            <div style="margin-top: 8px; padding: 4px 8px; background: #f1f5f9; font-size: 11px; color: #64748b;">
+              Not in database
+            </div>
+          `;
+        }
+
+        new mapboxgl.Popup()
+          .setLngLat(e.lngLat)
+          .setHTML(`
+            <div style="padding: 8px; min-width: 180px;">
+              <strong style="font-size: 14px;">${props?.MUNICNAME}</strong>
+              <div style="color: ${PROVINCE_COLORS[props?.PROVINCE] || "#64748b"}; font-size: 12px; margin-top: 2px;">
+                ${provinceName}
+              </div>
+              <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">
+                Code: ${props?.CAT_B || "N/A"}
+              </div>
+              ${statusBadge}
+            </div>
+          `)
           .addTo(map.current!);
-
-        markersRef.current.push(marker);
       });
     };
 
     if (map.current.loaded()) {
-      addMarkers();
+      addBoundaryLayers();
     } else {
-      map.current.on("load", addMarkers);
+      map.current.on("load", addBoundaryLayers);
     }
-  }, [geocodedMunicipalities]);
+  }, [boundaryGeoJSON, dbMunicipalities, findDbMunicipality]);
 
   if (error) {
     return (
@@ -313,38 +378,60 @@ export function MunicipalityMap() {
     );
   }
 
-  const geocodedCount = geocodedMunicipalities.filter(m => m.coordinates).length;
-  const totalCount = municipalities.length;
+  const dbCount = dbMunicipalities.length;
+  const extractedCount = dbMunicipalities.filter(m => m.extraction_status === "done").length;
+  const boundaryCount = boundaryGeoJSON?.features?.length || 0;
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
           <MapPin className="h-5 w-5" />
-          Municipality Map
-          {(loading || geocoding) && <Loader2 className="h-4 w-4 animate-spin" />}
-          {!loading && !geocoding && totalCount > 0 && (
-            <span className="text-xs font-normal text-muted-foreground ml-2">
-              ({geocodedCount}/{totalCount} plotted)
-            </span>
-          )}
+          Municipality Boundaries
+          {(loading || loadingBoundaries) && <Loader2 className="h-4 w-4 animate-spin" />}
         </CardTitle>
+        {!loading && !loadingBoundaries && (
+          <div className="text-xs text-muted-foreground">
+            {boundaryCount} boundaries • {dbCount} in database • {extractedCount} extracted
+          </div>
+        )}
       </CardHeader>
       <CardContent className="p-0">
-        <div ref={mapContainer} className="h-[400px] rounded-b-lg" />
-        {municipalities.length > 0 && (
-          <div className="p-3 border-t flex flex-wrap gap-3 text-xs">
-            {Object.entries(PROVINCE_COLORS).map(([name, color]) => (
-              <div key={name} className="flex items-center gap-1">
+        <div ref={mapContainer} className="h-[500px] rounded-b-lg" />
+        <div className="p-3 border-t space-y-2">
+          {/* Province legend */}
+          <div className="flex flex-wrap gap-3 text-xs">
+            {Object.entries(PROVINCE_CODE_TO_NAME).map(([code, name]) => (
+              <div key={code} className="flex items-center gap-1">
                 <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: color }}
+                  className="w-3 h-3 rounded-sm"
+                  style={{ backgroundColor: PROVINCE_COLORS[code], opacity: 0.6 }}
                 />
                 <span>{name}</span>
               </div>
             ))}
           </div>
-        )}
+          {/* Status legend */}
+          <div className="flex flex-wrap gap-4 text-xs pt-2 border-t">
+            <span className="text-muted-foreground font-medium">Extraction Status:</span>
+            <div className="flex items-center gap-1">
+              <div className="w-4 h-1 rounded" style={{ backgroundColor: STATUS_COLORS.done }} />
+              <span>Done</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-4 h-1 rounded" style={{ backgroundColor: STATUS_COLORS.pending }} />
+              <span>Pending</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-4 h-1 rounded" style={{ backgroundColor: STATUS_COLORS.error }} />
+              <span>Error</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-4 h-1 rounded" style={{ backgroundColor: STATUS_COLORS.none }} />
+              <span>Not in DB</span>
+            </div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
