@@ -1211,6 +1211,17 @@ Only report issues - if everything is correct, return empty tariffs array.` },
         }
       }
 
+      // Calculate POST-CORRECTION confidence: confidence should INCREASE after successful fixes
+      const successfulCorrections = added + updated;
+      const correctionSuccessRate = successfulCorrections / Math.max(corrections.length, 1);
+      // Boost confidence based on how many issues were fixed
+      // Pre-correction confidence + improvement based on successful fixes
+      const postCorrectionConfidence = Math.min(100, Math.round(
+        repriseConfidence + (100 - repriseConfidence) * correctionSuccessRate * 0.8
+      ));
+      
+      console.log(`Pre-correction confidence: ${repriseConfidence}, Post-correction: ${postCorrectionConfidence}`);
+
       // Create reprise run record
       await supabase.from("extraction_runs").insert({
         municipality_id: muniData.id,
@@ -1218,8 +1229,8 @@ Only report issues - if everything is correct, return empty tariffs array.` },
         tariffs_inserted: added,
         tariffs_updated: updated,
         corrections_made: corrections.length,
-        ai_confidence: repriseConfidence,
-        ai_analysis: analysis,
+        ai_confidence: postCorrectionConfidence, // Store post-correction confidence
+        ai_analysis: `${analysis} | Applied ${successfulCorrections}/${corrections.length} corrections successfully.`,
         status: "completed",
         completed_at: new Date().toISOString()
       });
@@ -1237,7 +1248,7 @@ Only report issues - if everything is correct, return empty tariffs array.` },
         .eq("municipality_id", muniData.id);
 
       await supabase.from("municipalities").update({
-        ai_confidence: repriseConfidence,
+        ai_confidence: postCorrectionConfidence, // Store improved confidence
         total_tariffs: totalTariffs || 0,
         last_reprise_at: new Date().toISOString(),
         reprise_count: (currentMuni?.reprise_count || 0) + 1,
@@ -1249,7 +1260,8 @@ Only report issues - if everything is correct, return empty tariffs array.` },
           success: true,
           municipality,
           analysis,
-          confidence: repriseConfidence,
+          preConfidence: repriseConfidence,
+          confidence: postCorrectionConfidence, // Return improved confidence
           corrections: corrections.length,
           added,
           updated,
