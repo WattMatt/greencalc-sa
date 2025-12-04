@@ -891,7 +891,15 @@ export function TariffList() {
                                     <div className="pt-2 border-t">
                                       <div className="text-muted-foreground mb-1">Energy Rates:</div>
                                       <div className="space-y-0.5">
-                                        {displayTariff.rates.map((rate, idx) => {
+                                        {[...displayTariff.rates]
+                                          .sort((a, b) => {
+                                            // Sort IBT rates by block_start_kwh
+                                            if (displayTariff.tariff_type === "IBT") {
+                                              return (a.block_start_kwh ?? 0) - (b.block_start_kwh ?? 0);
+                                            }
+                                            return 0;
+                                          })
+                                          .map((rate, idx) => {
                                           // For IBT tariffs, show block range instead of "Any"
                                           const isIBT = displayTariff.tariff_type === "IBT";
                                           const hasBlockRange = rate.block_start_kwh !== null || rate.block_end_kwh !== null;
