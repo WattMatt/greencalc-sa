@@ -549,6 +549,49 @@ Correct extraction:
   ]
 }
 
+=== TOU TARIFF EXTRACTION (CRITICAL - MOST COMMONLY MISSED) ===
+
+TOU tariffs MUST have energy rates for EACH combination:
+- Seasons: "High/Winter" (June-Aug) AND "Low/Summer" (Sep-May)
+- Periods: "Peak", "Standard", "Off-Peak"
+
+That's 6 rate entries minimum for a complete TOU tariff!
+
+Example TOU rates array:
+[
+  { "rate_per_kwh": 3.50, "season": "High/Winter", "time_of_use": "Peak" },
+  { "rate_per_kwh": 1.80, "season": "High/Winter", "time_of_use": "Standard" },
+  { "rate_per_kwh": 0.95, "season": "High/Winter", "time_of_use": "Off-Peak" },
+  { "rate_per_kwh": 2.10, "season": "Low/Summer", "time_of_use": "Peak" },
+  { "rate_per_kwh": 1.20, "season": "Low/Summer", "time_of_use": "Standard" },
+  { "rate_per_kwh": 0.75, "season": "Low/Summer", "time_of_use": "Off-Peak" }
+]
+
+=== VOLTAGE LEVEL DETECTION (OFTEN MISSED) ===
+- "Medium Voltage" or "MV" or "11kV/22kV" → voltage_level: "MV"
+- "High Voltage" or "HV" or "132kV/66kV" → voltage_level: "HV"  
+- "Low Voltage" or "LV" or domestic/small business → voltage_level: "LV"
+- Scale 40T/40R/40X tariffs are typically "MV"
+- Bulk supply >100kVA is typically "MV" or "HV"
+
+=== PHASE TYPE RULES (OFTEN INCORRECT) ===
+- Bulk supply tariffs → phase_type: "Three Phase"
+- >50kVA tariffs → phase_type: "Three Phase"
+- "Three Phase" in name → phase_type: "Three Phase"
+- Domestic ≤60A → phase_type: "Single Phase"
+
+=== WHEELING CHARGES (OFTEN MISSED) ===
+If you see "Wheeling" tariffs/charges, extract them as SEPARATE tariffs.
+
+=== DEMAND CHARGE HANDLING ===
+- "R/kVA" charges → demand_charge_per_kva
+- "R/A/month" (per-Amp) → Calculate for the stated amperage OR leave as demand_charge_per_kva
+- "Capacity Charge" → demand_charge_per_kva if it's per-kVA
+
+=== PRECISION RULE ===
+Preserve EXACT values from source - do NOT round! 
+If source says 3.9275, extract 3.9275 (not 3.93)
+
 Extract ALL tariffs found. Be thorough and accurate.`;
 
       const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -562,16 +605,36 @@ Extract ALL tariffs found. Be thorough and accurate.`;
           messages: [
             { role: "system", content: `You are an expert electricity tariff data extractor for South African municipalities. 
 
-CRITICAL IBT BLOCK EXTRACTION RULES - FOLLOW EXACTLY:
-1. "Block N (X - Y)kWh" format: Extract X as block_start_kwh, Y as block_end_kwh
-   - "Block 1 (0 - 50)kWh" → block_start_kwh: 0, block_end_kwh: 50
-   - "Block 4 (>600)kWh" → block_start_kwh: 600, block_end_kwh: null
-2. For IBT tariffs: EVERY rate entry MUST have block_start_kwh and block_end_kwh populated
-3. If you extract IBT rates without block ranges, YOUR EXTRACTION IS WRONG - fix it!
-4. Convert c/kWh to R/kWh (divide by 100)
-5. fixed_monthly_charge is NOT an energy rate - keep it separate
+CRITICAL EXTRACTION RULES FROM LEARNED PATTERNS:
 
-Be meticulous. Every block range in the source MUST appear in your extraction.` },
+1. IBT BLOCK EXTRACTION:
+   - "Block N (X - Y)kWh" → block_start_kwh: X, block_end_kwh: Y
+   - "Block 4 (>600)kWh" → block_start_kwh: 600, block_end_kwh: null
+   - EVERY IBT rate MUST have block_start_kwh and block_end_kwh!
+
+2. TOU TARIFF COMPLETENESS (MOST COMMON ISSUE):
+   - TOU tariffs MUST have rates for Peak/Standard/Off-Peak
+   - MUST have rates for BOTH High/Winter AND Low/Summer seasons
+   - That's 6 rate entries minimum! If you only have 1-2, you're missing rates!
+
+3. VOLTAGE LEVEL (COMMONLY MISSED):
+   - "Medium Voltage", "MV", Scale 40T/40R → voltage_level: "MV"
+   - "High Voltage", "HV", "132kV" → voltage_level: "HV"
+   - Bulk >100kVA typically "MV"
+
+4. PHASE TYPE:
+   - Bulk supply = "Three Phase"
+   - >50kVA = "Three Phase"
+   - Domestic ≤60A = "Single Phase"
+
+5. SEPARATE CHARGES:
+   - Extract "Wheeling" as separate tariffs
+   - "Capacity Charge" per kVA → demand_charge_per_kva
+
+6. PRECISION: Keep exact values (3.9275 not 3.93)
+7. CONVERT c/kWh to R/kWh (divide by 100)
+
+If your TOU tariff has empty or minimal rates, YOUR EXTRACTION IS WRONG.` },
             { role: "user", content: extractPrompt }
           ],
           tools: [{
