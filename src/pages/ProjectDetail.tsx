@@ -6,7 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { TenantManager } from "@/components/projects/TenantManager";
-import { ShopTypesManager } from "@/components/projects/ShopTypesManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
 import { SimulationPanel } from "@/components/projects/SimulationPanel";
@@ -110,7 +109,6 @@ export default function ProjectDetail() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="tenants">Tenant Schedule</TabsTrigger>
-          <TabsTrigger value="shop-types">Shop Types</TabsTrigger>
           <TabsTrigger value="load-profile">Load Profile</TabsTrigger>
           <TabsTrigger value="tariff">Tariff</TabsTrigger>
           <TabsTrigger value="simulation">Simulation</TabsTrigger>
@@ -122,10 +120,6 @@ export default function ProjectDetail() {
             tenants={tenants || []}
             shopTypes={shopTypes || []}
           />
-        </TabsContent>
-
-        <TabsContent value="shop-types" className="mt-6">
-          <ShopTypesManager shopTypes={shopTypes || []} />
         </TabsContent>
 
         <TabsContent value="load-profile" className="mt-6">

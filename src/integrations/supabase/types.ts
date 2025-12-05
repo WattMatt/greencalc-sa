@@ -319,8 +319,33 @@ export type Database = {
         }
         Relationships: []
       }
+      shop_type_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
       shop_types: {
         Row: {
+          category_id: string | null
           created_at: string
           description: string | null
           id: string
@@ -331,6 +356,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          category_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -341,6 +367,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          category_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -350,7 +377,15 @@ export type Database = {
           name?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "shop_types_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "shop_type_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tariff_categories: {
         Row: {

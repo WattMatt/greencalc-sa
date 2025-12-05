@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import TariffManagement from "./pages/TariffManagement";
+import LoadProfiles from "./pages/LoadProfiles";
 import Calculator from "./pages/Calculator";
 import Settings from "./pages/Settings";
 import Projects from "./pages/Projects";
@@ -24,6 +25,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/tariffs" element={<TariffManagement />} />
+            <Route path="/load-profiles" element={<LoadProfiles />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/calculator" element={<Calculator />} />
