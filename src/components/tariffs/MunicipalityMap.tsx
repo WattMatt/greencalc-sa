@@ -60,6 +60,7 @@ interface DbMunicipality {
   extraction_status: string | null;
   ai_confidence: number | null;
   total_tariffs: number | null;
+  tariff_count: number;
   province: { name: string };
 }
 
@@ -96,16 +97,38 @@ export function MunicipalityMap() {
     fetchToken();
   }, []);
 
-  // Fetch municipalities from database
+  // Fetch municipalities from database with actual tariff counts
   useEffect(() => {
     async function fetchMunicipalities() {
       try {
-        const { data, error } = await supabase
+        // Fetch municipalities
+        const { data: muniData, error: muniError } = await supabase
           .from("municipalities")
           .select("id, name, extraction_status, ai_confidence, total_tariffs, province:provinces(name)");
         
-        if (error) throw error;
-        setDbMunicipalities(data || []);
+        if (muniError) throw muniError;
+        
+        // Fetch actual tariff counts per municipality
+        const { data: tariffCounts, error: tariffError } = await supabase
+          .from("tariffs")
+          .select("municipality_id");
+        
+        if (tariffError) throw tariffError;
+        
+        // Count tariffs per municipality
+        const countMap = new Map<string, number>();
+        tariffCounts?.forEach((t) => {
+          const count = countMap.get(t.municipality_id) || 0;
+          countMap.set(t.municipality_id, count + 1);
+        });
+        
+        // Merge counts with municipality data
+        const enrichedData = (muniData || []).map((m) => ({
+          ...m,
+          tariff_count: countMap.get(m.id) || 0,
+        }));
+        
+        setDbMunicipalities(enrichedData as DbMunicipality[]);
       } catch (err) {
         console.error("Failed to fetch municipalities:", err);
       } finally {
@@ -246,7 +269,7 @@ export function MunicipalityMap() {
             inDatabase: !!dbMuni,
             extractionStatus: dbMuni?.extraction_status || "none",
             aiConfidence: dbMuni?.ai_confidence || 0,
-            totalTariffs: dbMuni?.total_tariffs || 0,
+            totalTariffs: dbMuni?.tariff_count || 0, // Use actual tariff count
             dbName: dbMuni?.name || null,
           }
         };
@@ -429,6 +452,7 @@ export function MunicipalityMap() {
   const doneCount = dbMunicipalities.filter(m => m.extraction_status === "done").length;
   const pendingCount = dbMunicipalities.filter(m => m.extraction_status === "pending" || !m.extraction_status).length;
   const errorCount = dbMunicipalities.filter(m => m.extraction_status === "error").length;
+  const totalTariffs = dbMunicipalities.reduce((sum, m) => sum + (m.tariff_count || 0), 0);
   const boundaryCount = boundaryGeoJSON?.features?.length || 0;
 
   const filterOptions: { value: FilterType; label: string; count?: number }[] = [
@@ -470,7 +494,7 @@ export function MunicipalityMap() {
         </div>
         {!loading && !loadingBoundaries && (
           <div className="text-xs text-muted-foreground">
-            {boundaryCount} boundaries • {dbCount} in database • {doneCount} extracted
+            {boundaryCount} boundaries • {dbCount} in database • {doneCount} extracted • {totalTariffs} tariffs
           </div>
         )}
       </CardHeader>
