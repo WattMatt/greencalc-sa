@@ -8,6 +8,8 @@ import Dashboard from "./pages/Dashboard";
 import TariffManagement from "./pages/TariffManagement";
 import Calculator from "./pages/Calculator";
 import Settings from "./pages/Settings";
+import Projects from "./pages/Projects";
+import ProjectDetail from "./pages/ProjectDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +24,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/tariffs" element={<TariffManagement />} />
+            <Route path="/projects" element={<Projects />} />
+            <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/calculator" element={<Calculator />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />

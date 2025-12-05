@@ -1,4 +1,4 @@
-import { LayoutDashboard, Settings, Calculator, Database, Zap, Menu } from "lucide-react";
+import { LayoutDashboard, Settings, Calculator, Database, Zap, Building2 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -10,13 +10,13 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Tariff Management", url: "/tariffs", icon: Database },
+  { title: "Projects", url: "/projects", icon: Building2 },
   { title: "Calculator", url: "/calculator", icon: Calculator },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
