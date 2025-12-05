@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Upload, Trash2, Edit2, Download, Activity, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { GoogleSheetsImport } from "@/components/loadprofiles/GoogleSheetsImport";
+import { LoadProfileEditor } from "@/components/loadprofiles/LoadProfileEditor";
 
 interface ShopType {
   id: string;
@@ -32,6 +33,8 @@ interface Category {
   sort_order: number;
 }
 
+const DEFAULT_PROFILE = Array(24).fill(100 / 24);
+
 export default function LoadProfiles() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -43,6 +46,8 @@ export default function LoadProfiles() {
     kwh_per_sqm_month: "50",
     category_id: "",
   });
+  const [weekdayProfile, setWeekdayProfile] = useState<number[]>([...DEFAULT_PROFILE]);
+  const [weekendProfile, setWeekendProfile] = useState<number[]>([...DEFAULT_PROFILE]);
 
   const { data: categories } = useQuery({
     queryKey: ["shop-type-categories"],
@@ -70,6 +75,8 @@ export default function LoadProfiles() {
 
   const resetForm = () => {
     setFormData({ name: "", description: "", kwh_per_sqm_month: "50", category_id: "" });
+    setWeekdayProfile([...DEFAULT_PROFILE]);
+    setWeekendProfile([...DEFAULT_PROFILE]);
     setEditingType(null);
   };
 
@@ -79,6 +86,8 @@ export default function LoadProfiles() {
       description: string; 
       kwh_per_sqm_month: number;
       category_id: string | null;
+      load_profile_weekday: number[];
+      load_profile_weekend: number[];
     }) => {
       if (editingType) {
         const { error } = await supabase
@@ -228,6 +237,8 @@ Cinema,Entertainment,90,Movie theater,1,1,1,1,1,1,2,3,4,5,6,8,10,12,12,10,10,12,
       kwh_per_sqm_month: String(shopType.kwh_per_sqm_month),
       category_id: shopType.category_id || "",
     });
+    setWeekdayProfile(shopType.load_profile_weekday?.length === 24 ? [...shopType.load_profile_weekday] : [...DEFAULT_PROFILE]);
+    setWeekendProfile(shopType.load_profile_weekend?.length === 24 ? [...shopType.load_profile_weekend] : [...DEFAULT_PROFILE]);
     setDialogOpen(true);
   };
 
@@ -278,7 +289,7 @@ Cinema,Entertainment,90,Movie theater,1,1,1,1,1,1,2,3,4,5,6,8,10,12,12,10,10,12,
                 Add Profile
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingType ? "Edit" : "Add"} Load Profile</DialogTitle>
                 <DialogDescription>
@@ -286,51 +297,63 @@ Cinema,Entertainment,90,Movie theater,1,1,1,1,1,1,2,3,4,5,6,8,10,12,12,10,10,12,
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Profile Name</Label>
-                  <Input
-                    placeholder="e.g., Fine Dining Restaurant"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Profile Name</Label>
+                    <Input
+                      placeholder="e.g., Fine Dining Restaurant"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Category</Label>
+                    <Select
+                      value={formData.category_id}
+                      onValueChange={(v) => setFormData({ ...formData, category_id: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories?.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Category</Label>
-                  <Select
-                    value={formData.category_id}
-                    onValueChange={(v) => setFormData({ ...formData, category_id: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories?.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>kWh per m² per month</Label>
+                    <Input
+                      type="number"
+                      placeholder="e.g., 50"
+                      value={formData.kwh_per_sqm_month}
+                      onChange={(e) =>
+                        setFormData({ ...formData, kwh_per_sqm_month: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Description (optional)</Label>
+                    <Input
+                      placeholder="Brief description"
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>kWh per m² per month</Label>
-                  <Input
-                    type="number"
-                    placeholder="e.g., 50"
-                    value={formData.kwh_per_sqm_month}
-                    onChange={(e) =>
-                      setFormData({ ...formData, kwh_per_sqm_month: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Description (optional)</Label>
-                  <Input
-                    placeholder="Brief description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  />
-                </div>
+                
+                <LoadProfileEditor
+                  weekdayProfile={weekdayProfile}
+                  weekendProfile={weekendProfile}
+                  onWeekdayChange={setWeekdayProfile}
+                  onWeekendChange={setWeekendProfile}
+                />
+                
                 <Button
                   className="w-full"
                   onClick={() =>
@@ -339,6 +362,8 @@ Cinema,Entertainment,90,Movie theater,1,1,1,1,1,1,2,3,4,5,6,8,10,12,12,10,10,12,
                       description: formData.description,
                       kwh_per_sqm_month: parseFloat(formData.kwh_per_sqm_month) || 50,
                       category_id: formData.category_id || null,
+                      load_profile_weekday: weekdayProfile,
+                      load_profile_weekend: weekendProfile,
                     })
                   }
                   disabled={!formData.name}

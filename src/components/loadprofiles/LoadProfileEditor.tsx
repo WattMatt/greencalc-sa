@@ -1,0 +1,292 @@
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { RotateCcw } from "lucide-react";
+
+interface LoadProfileEditorProps {
+  weekdayProfile: number[];
+  weekendProfile: number[];
+  onWeekdayChange: (profile: number[]) => void;
+  onWeekendChange: (profile: number[]) => void;
+}
+
+const DEFAULT_PROFILE = Array(24).fill(100 / 24);
+
+export function LoadProfileEditor({
+  weekdayProfile,
+  weekendProfile,
+  onWeekdayChange,
+  onWeekendChange,
+}: LoadProfileEditorProps) {
+  const [activeTab, setActiveTab] = useState<"weekday" | "weekend">("weekday");
+  
+  const currentProfile = activeTab === "weekday" ? weekdayProfile : weekendProfile;
+  const setCurrentProfile = activeTab === "weekday" ? onWeekdayChange : onWeekendChange;
+
+  const normalizeProfile = (profile: number[]): number[] => {
+    const sum = profile.reduce((a, b) => a + b, 0);
+    if (sum === 0) return DEFAULT_PROFILE;
+    return profile.map((v) => (v / sum) * 100);
+  };
+
+  const handleReset = () => {
+    setCurrentProfile([...DEFAULT_PROFILE]);
+  };
+
+  const handleCopyToOther = () => {
+    if (activeTab === "weekday") {
+      onWeekendChange([...currentProfile]);
+    } else {
+      onWeekdayChange([...currentProfile]);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium">24-Hour Load Profile</CardTitle>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={handleReset}>
+              <RotateCcw className="h-3 w-3 mr-1" />
+              Reset
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleCopyToOther}>
+              Copy to {activeTab === "weekday" ? "Weekend" : "Weekday"}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "weekday" | "weekend")}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="weekday">Weekday</TabsTrigger>
+            <TabsTrigger value="weekend">Weekend</TabsTrigger>
+          </TabsList>
+          <TabsContent value="weekday" className="mt-4">
+            <InteractiveChart
+              profile={normalizeProfile(weekdayProfile)}
+              onChange={onWeekdayChange}
+            />
+          </TabsContent>
+          <TabsContent value="weekend" className="mt-4">
+            <InteractiveChart
+              profile={normalizeProfile(weekendProfile)}
+              onChange={onWeekendChange}
+            />
+          </TabsContent>
+        </Tabs>
+        
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>Total: {Math.round(currentProfile.reduce((a, b) => a + b, 0))}%</span>
+          <span>Peak Hour: {currentProfile.indexOf(Math.max(...currentProfile))}:00 ({Math.round(Math.max(...currentProfile))}%)</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface InteractiveChartProps {
+  profile: number[];
+  onChange: (profile: number[]) => void;
+}
+
+function InteractiveChart({ profile, onChange }: InteractiveChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  const maxValue = Math.max(...profile, 10);
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+
+  const calculateValueFromY = useCallback((clientY: number, rect: DOMRect): number => {
+    const chartHeight = rect.height - 24; // Account for labels
+    const relativeY = clientY - rect.top;
+    const percentage = Math.max(0, Math.min(100, ((chartHeight - relativeY) / chartHeight) * 100));
+    return Math.round(percentage * 10) / 10;
+  }, []);
+
+  const getBarIndexFromX = useCallback((clientX: number, rect: DOMRect): number => {
+    const barWidth = rect.width / 24;
+    const relativeX = clientX - rect.left;
+    return Math.max(0, Math.min(23, Math.floor(relativeX / barWidth)));
+  }, []);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const index = getBarIndexFromX(e.clientX, rect);
+    const value = calculateValueFromY(e.clientY, rect);
+    
+    const newProfile = [...profile];
+    newProfile[index] = value;
+    onChange(newProfile);
+    
+    setIsDragging(true);
+    setDragIndex(index);
+  }, [profile, onChange, getBarIndexFromX, calculateValueFromY]);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging || !containerRef.current) return;
+    
+    const rect = containerRef.current.getBoundingClientRect();
+    const index = getBarIndexFromX(e.clientX, rect);
+    const value = calculateValueFromY(e.clientY, rect);
+    
+    const newProfile = [...profile];
+    
+    // Fill in gaps if dragging quickly
+    if (dragIndex !== null && index !== dragIndex) {
+      const start = Math.min(dragIndex, index);
+      const end = Math.max(dragIndex, index);
+      for (let i = start; i <= end; i++) {
+        newProfile[i] = value;
+      }
+    } else {
+      newProfile[index] = value;
+    }
+    
+    onChange(newProfile);
+    setDragIndex(index);
+  }, [isDragging, dragIndex, profile, onChange, getBarIndexFromX, calculateValueFromY]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    setDragIndex(null);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+      return () => {
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      };
+    }
+  }, [isDragging, handleMouseMove, handleMouseUp]);
+
+  // Touch support
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!containerRef.current) return;
+    const touch = e.touches[0];
+    const rect = containerRef.current.getBoundingClientRect();
+    const index = getBarIndexFromX(touch.clientX, rect);
+    const value = calculateValueFromY(touch.clientY, rect);
+    
+    const newProfile = [...profile];
+    newProfile[index] = value;
+    onChange(newProfile);
+    
+    setIsDragging(true);
+    setDragIndex(index);
+  }, [profile, onChange, getBarIndexFromX, calculateValueFromY]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging || !containerRef.current) return;
+    e.preventDefault();
+    
+    const touch = e.touches[0];
+    const rect = containerRef.current.getBoundingClientRect();
+    const index = getBarIndexFromX(touch.clientX, rect);
+    const value = calculateValueFromY(touch.clientY, rect);
+    
+    const newProfile = [...profile];
+    newProfile[index] = value;
+    onChange(newProfile);
+    setDragIndex(index);
+  }, [isDragging, profile, onChange, getBarIndexFromX, calculateValueFromY]);
+
+  const handleTouchEnd = useCallback(() => {
+    setIsDragging(false);
+    setDragIndex(null);
+  }, []);
+
+  const getBarColor = (hour: number): string => {
+    // Peak hours: 7-10, 18-20
+    if ((hour >= 7 && hour <= 10) || (hour >= 18 && hour <= 20)) {
+      return "bg-destructive";
+    }
+    // Standard hours: 6-7, 10-18, 20-22
+    if ((hour >= 6 && hour < 7) || (hour > 10 && hour < 18) || (hour > 20 && hour <= 22)) {
+      return "bg-primary";
+    }
+    // Off-peak: 22-6
+    return "bg-muted-foreground/50";
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2 text-xs">
+        <Badge variant="outline" className="bg-destructive/10 border-destructive/30">
+          <span className="w-2 h-2 rounded-full bg-destructive mr-1"></span>
+          Peak
+        </Badge>
+        <Badge variant="outline" className="bg-primary/10 border-primary/30">
+          <span className="w-2 h-2 rounded-full bg-primary mr-1"></span>
+          Standard
+        </Badge>
+        <Badge variant="outline" className="bg-muted">
+          <span className="w-2 h-2 rounded-full bg-muted-foreground/50 mr-1"></span>
+          Off-Peak
+        </Badge>
+      </div>
+      
+      <div
+        ref={containerRef}
+        className="relative h-48 bg-muted/30 rounded-lg cursor-crosshair select-none touch-none"
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Grid lines */}
+        <div className="absolute inset-0 flex flex-col justify-between pointer-events-none py-2">
+          {[0, 25, 50, 75, 100].reverse().map((val) => (
+            <div key={val} className="flex items-center">
+              <span className="text-[10px] text-muted-foreground w-6 text-right pr-1">{val}%</span>
+              <div className="flex-1 border-t border-border/30" />
+            </div>
+          ))}
+        </div>
+        
+        {/* Bars */}
+        <div className="absolute left-7 right-1 top-2 bottom-6 flex items-end gap-[2px]">
+          {hours.map((hour) => {
+            const heightPct = Math.min(100, (profile[hour] / 100) * 100);
+            return (
+              <div
+                key={hour}
+                className="flex-1 flex flex-col items-center justify-end h-full"
+              >
+                <div
+                  className={`w-full rounded-t transition-all duration-75 ${getBarColor(hour)} ${
+                    dragIndex === hour ? "ring-2 ring-primary ring-offset-1" : ""
+                  }`}
+                  style={{ height: `${heightPct}%` }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        
+        {/* Hour labels */}
+        <div className="absolute left-7 right-1 bottom-0 flex">
+          {hours.map((hour) => (
+            <div key={hour} className="flex-1 text-center">
+              {hour % 3 === 0 && (
+                <span className="text-[9px] text-muted-foreground">{hour}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      <p className="text-xs text-muted-foreground text-center">
+        Click and drag to adjust hourly consumption percentages
+      </p>
+    </div>
+  );
+}
