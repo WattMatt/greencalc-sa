@@ -70,7 +70,13 @@ type DeleteTarget =
   | { type: "province"; id: string; name: string }
   | { type: "municipality"; name: string; tariffIds: string[] };
 
-export function TariffList() {
+interface TariffListProps {
+  filterMunicipalityId?: string | null;
+  filterMunicipalityName?: string | null;
+  onClearFilter?: () => void;
+}
+
+export function TariffList({ filterMunicipalityId, filterMunicipalityName, onClearFilter }: TariffListProps) {
   const queryClient = useQueryClient();
   const [expandedTariffs, setExpandedTariffs] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -276,11 +282,27 @@ export function TariffList() {
     return result.sort((a, b) => a.province.name.localeCompare(b.province.name));
   }, [tariffs, provinces]);
 
-  // Filter grouped data by selected province
+  // Filter grouped data by selected province and municipality
   const filteredData = useMemo(() => {
-    if (selectedProvince === "all") return groupedData;
-    return groupedData.filter((data) => data.province.id === selectedProvince);
-  }, [groupedData, selectedProvince]);
+    let data = groupedData;
+    
+    // Filter by province
+    if (selectedProvince !== "all") {
+      data = data.filter((d) => d.province.id === selectedProvince);
+    }
+    
+    // Filter by municipality if one is selected from map
+    if (filterMunicipalityId) {
+      data = data.map((provinceGroup) => ({
+        ...provinceGroup,
+        municipalities: provinceGroup.municipalities.filter((m) => 
+          m.tariffs.some((t) => t.municipality_id === filterMunicipalityId)
+        ),
+      })).filter((d) => d.municipalities.length > 0);
+    }
+    
+    return data;
+  }, [groupedData, selectedProvince, filterMunicipalityId]);
 
   const filteredTariffCount = useMemo(() => {
     return filteredData.reduce((sum, p) => 
@@ -374,13 +396,32 @@ export function TariffList() {
                 Electricity Tariffs
               </CardTitle>
               <CardDescription>
-                {selectedProvince === "all" 
-                  ? `${tariffs.length} tariffs across ${groupedData.length} provinces`
-                  : `${filteredTariffCount} tariffs in ${filteredData[0]?.province.name || "selected province"}`
+                {filterMunicipalityName 
+                  ? `Showing tariffs for ${filterMunicipalityName}`
+                  : selectedProvince === "all" 
+                    ? `${tariffs.length} tariffs across ${groupedData.length} provinces`
+                    : `${filteredTariffCount} tariffs in ${filteredData[0]?.province.name || "selected province"}`
                 }
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {filterMunicipalityName && onClearFilter && (
+                <Badge 
+                  variant="secondary" 
+                  className="flex items-center gap-1 pr-1 bg-primary/10 text-primary border-primary/20"
+                >
+                  <MapPin className="h-3 w-3" />
+                  {filterMunicipalityName}
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-4 w-4 p-0 ml-1 hover:bg-primary/20 rounded-full"
+                    onClick={onClearFilter}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </Badge>
+              )}
               <Select value={selectedProvince} onValueChange={setSelectedProvince}>
                 <SelectTrigger className="w-[180px] bg-background">
                   <Filter className="h-4 w-4 mr-2" />

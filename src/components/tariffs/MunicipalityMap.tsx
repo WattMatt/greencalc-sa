@@ -64,10 +64,14 @@ interface DbMunicipality {
   province: { name: string };
 }
 
+interface MunicipalityMapProps {
+  onMunicipalityClick?: (municipalityId: string, municipalityName: string) => void;
+}
+
 // ArcGIS Feature Service URL for SA Local Municipality Boundaries
 const ARCGIS_BOUNDARY_URL = "https://services7.arcgis.com/vhM1EF9boZaqDxYt/arcgis/rest/services/SA_Local_Municipal_Boundary/FeatureServer/0/query";
 
-export function MunicipalityMap() {
+export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
@@ -361,8 +365,14 @@ export function MunicipalityMap() {
         const status = props?.extractionStatus;
         const confidence = props?.aiConfidence;
         const tariffs = props?.totalTariffs;
+        const dbName = props?.dbName;
+        
+        // Find the municipality ID from our data
+        const dbMuni = dbMunicipalities.find(m => m.name === dbName);
+        const municipalityId = dbMuni?.id;
         
         let statusBadge = "";
+        let viewButton = "";
         if (inDb) {
           const statusColor = STATUS_COLORS[status as keyof typeof STATUS_COLORS] || STATUS_COLORS.none;
           statusBadge = `
@@ -373,6 +383,18 @@ export function MunicipalityMap() {
               Tariffs: ${tariffs || 0}
             </div>
           `;
+          if (tariffs > 0 && municipalityId) {
+            viewButton = `
+              <button 
+                data-municipality-id="${municipalityId}"
+                data-municipality-name="${dbName}"
+                class="view-tariffs-btn"
+                style="margin-top: 8px; width: 100%; padding: 6px 12px; background: hsl(142.1 76.2% 36.3%); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;"
+              >
+                View ${tariffs} Tariff${tariffs > 1 ? 's' : ''} →
+              </button>
+            `;
+          }
         } else {
           statusBadge = `
             <div style="margin-top: 8px; padding: 4px 8px; background: #f1f5f9; font-size: 11px; color: #64748b;">
@@ -381,7 +403,7 @@ export function MunicipalityMap() {
           `;
         }
 
-        new mapboxgl.Popup()
+        const popup = new mapboxgl.Popup()
           .setLngLat(e.lngLat)
           .setHTML(`
             <div style="padding: 8px; min-width: 180px;">
@@ -393,9 +415,26 @@ export function MunicipalityMap() {
                 Code: ${props?.CAT_B || "N/A"}
               </div>
               ${statusBadge}
+              ${viewButton}
             </div>
           `)
           .addTo(map.current!);
+
+        // Add click handler for the view tariffs button
+        setTimeout(() => {
+          const btn = document.querySelector('.view-tariffs-btn');
+          if (btn) {
+            btn.addEventListener('click', (evt) => {
+              const target = evt.target as HTMLButtonElement;
+              const muniId = target.getAttribute('data-municipality-id');
+              const muniName = target.getAttribute('data-municipality-name');
+              if (muniId && muniName && onMunicipalityClick) {
+                popup.remove();
+                onMunicipalityClick(muniId, muniName);
+              }
+            });
+          }
+        }, 10);
       });
 
       // Apply initial filter
