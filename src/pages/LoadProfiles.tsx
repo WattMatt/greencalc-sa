@@ -10,8 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Upload, Trash2, Edit2, Download, Activity } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Upload, Trash2, Edit2, Download, Activity, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
+import { GoogleSheetsImport } from "@/components/loadprofiles/GoogleSheetsImport";
 
 interface ShopType {
   id: string;
@@ -384,23 +386,36 @@ Cinema,Entertainment,90,Movie theater,1,1,1,1,1,1,2,3,4,5,6,8,10,12,12,10,10,12,
         </Card>
       </div>
 
-      {/* Categorized Profiles */}
-      {totalProfiles === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Activity className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium">No load profiles yet</h3>
-            <p className="text-muted-foreground text-center max-w-sm mt-1">
-              Import a CSV with shop types and their hourly consumption patterns, or add them manually.
-            </p>
-            <Button className="mt-4" onClick={() => fileInputRef.current?.click()}>
-              <Upload className="h-4 w-4 mr-2" />
-              Import Profiles
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <Accordion type="multiple" defaultValue={categories?.map((c) => c.id) || []} className="space-y-2">
+      <Tabs defaultValue="library" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="library">
+            <Activity className="h-4 w-4 mr-2" />
+            Profile Library
+          </TabsTrigger>
+          <TabsTrigger value="import">
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Google Sheets Import
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="library" className="space-y-4">
+          {/* Categorized Profiles */}
+          {totalProfiles === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Activity className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium">No load profiles yet</h3>
+                <p className="text-muted-foreground text-center max-w-sm mt-1">
+                  Import from Google Sheets or add profiles manually.
+                </p>
+                <Button className="mt-4" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import CSV
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Accordion type="multiple" defaultValue={categories?.map((c) => c.id) || []} className="space-y-2">
           {profilesByCategory.map((cat) => (
             cat.profiles.length > 0 && (
               <AccordionItem key={cat.id} value={cat.id} className="border rounded-lg px-4">
@@ -538,8 +553,14 @@ Cinema,Entertainment,90,Movie theater,1,1,1,1,1,1,2,3,4,5,6,8,10,12,12,10,10,12,
               </AccordionContent>
             </AccordionItem>
           )}
-        </Accordion>
-      )}
+            </Accordion>
+          )}
+        </TabsContent>
+
+        <TabsContent value="import">
+          <GoogleSheetsImport categories={categories || []} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
