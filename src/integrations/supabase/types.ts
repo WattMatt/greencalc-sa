@@ -141,6 +141,163 @@ export type Database = {
           },
         ]
       }
+      project_simulations: {
+        Row: {
+          annual_battery_savings: number | null
+          annual_grid_cost: number | null
+          annual_solar_savings: number | null
+          battery_capacity_kwh: number | null
+          battery_power_kw: number | null
+          created_at: string
+          id: string
+          name: string
+          payback_years: number | null
+          project_id: string
+          results_json: Json | null
+          roi_percentage: number | null
+          simulation_type: string
+          solar_capacity_kwp: number | null
+          solar_orientation: string | null
+          solar_tilt_degrees: number | null
+          updated_at: string
+        }
+        Insert: {
+          annual_battery_savings?: number | null
+          annual_grid_cost?: number | null
+          annual_solar_savings?: number | null
+          battery_capacity_kwh?: number | null
+          battery_power_kw?: number | null
+          created_at?: string
+          id?: string
+          name: string
+          payback_years?: number | null
+          project_id: string
+          results_json?: Json | null
+          roi_percentage?: number | null
+          simulation_type?: string
+          solar_capacity_kwp?: number | null
+          solar_orientation?: string | null
+          solar_tilt_degrees?: number | null
+          updated_at?: string
+        }
+        Update: {
+          annual_battery_savings?: number | null
+          annual_grid_cost?: number | null
+          annual_solar_savings?: number | null
+          battery_capacity_kwh?: number | null
+          battery_power_kw?: number | null
+          created_at?: string
+          id?: string
+          name?: string
+          payback_years?: number | null
+          project_id?: string
+          results_json?: Json | null
+          roi_percentage?: number | null
+          simulation_type?: string
+          solar_capacity_kwp?: number | null
+          solar_orientation?: string | null
+          solar_tilt_degrees?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_simulations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_tenants: {
+        Row: {
+          area_sqm: number
+          created_at: string
+          id: string
+          monthly_kwh_override: number | null
+          name: string
+          project_id: string
+          shop_type_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          area_sqm: number
+          created_at?: string
+          id?: string
+          monthly_kwh_override?: number | null
+          name: string
+          project_id: string
+          shop_type_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          area_sqm?: number
+          created_at?: string
+          id?: string
+          monthly_kwh_override?: number | null
+          name?: string
+          project_id?: string
+          shop_type_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_tenants_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_tenants_shop_type_id_fkey"
+            columns: ["shop_type_id"]
+            isOneToOne: false
+            referencedRelation: "shop_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          location: string | null
+          name: string
+          tariff_id: string | null
+          total_area_sqm: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          name: string
+          tariff_id?: string | null
+          total_area_sqm?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          name?: string
+          tariff_id?: string | null
+          total_area_sqm?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_tariff_id_fkey"
+            columns: ["tariff_id"]
+            isOneToOne: false
+            referencedRelation: "tariffs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       provinces: {
         Row: {
           created_at: string
@@ -157,6 +314,39 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      shop_types: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          kwh_per_sqm_month: number
+          load_profile_weekday: number[]
+          load_profile_weekend: number[]
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          kwh_per_sqm_month?: number
+          load_profile_weekday?: number[]
+          load_profile_weekend?: number[]
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          kwh_per_sqm_month?: number
+          load_profile_weekday?: number[]
+          load_profile_weekend?: number[]
           name?: string
           updated_at?: string
         }
