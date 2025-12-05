@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { RotateCcw } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RotateCcw, Sparkles } from "lucide-react";
 
 interface LoadProfileEditorProps {
   weekdayProfile: number[];
@@ -13,6 +14,76 @@ interface LoadProfileEditorProps {
 }
 
 const DEFAULT_PROFILE = Array(24).fill(100 / 24);
+
+// Preset templates with realistic 24-hour consumption patterns (values are percentages that sum to 100)
+const PROFILE_PRESETS = {
+  flat: {
+    name: "Flat (Equal)",
+    weekday: Array(24).fill(100 / 24),
+    weekend: Array(24).fill(100 / 24),
+  },
+  restaurant: {
+    name: "Restaurant",
+    // Low overnight, ramp up for lunch (11-14), dinner peak (18-21)
+    weekday: [1, 0.5, 0.5, 0.5, 0.5, 1, 2, 3, 4, 5, 6, 8, 10, 8, 5, 4, 5, 7, 10, 10, 8, 6, 4, 2],
+    weekend: [1, 0.5, 0.5, 0.5, 0.5, 1, 1.5, 2, 3, 5, 7, 10, 12, 10, 6, 5, 5, 7, 10, 10, 8, 6, 4, 2],
+  },
+  retail: {
+    name: "Retail Store",
+    // Opens ~9am, steady through day, closes ~21:00
+    weekday: [1, 1, 1, 1, 1, 1, 2, 3, 5, 7, 8, 8, 8, 8, 7, 6, 6, 7, 7, 6, 5, 3, 2, 1],
+    weekend: [1, 1, 1, 1, 1, 1, 1, 2, 4, 7, 9, 10, 10, 9, 8, 7, 6, 6, 5, 4, 3, 2, 2, 1],
+  },
+  office: {
+    name: "Office",
+    // 8am-18:00 with lunch dip, minimal evenings/nights
+    weekday: [1, 1, 1, 1, 1, 2, 3, 6, 9, 10, 10, 9, 7, 9, 10, 9, 7, 4, 2, 1, 1, 1, 1, 1],
+    weekend: [2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2],
+  },
+  supermarket: {
+    name: "Supermarket",
+    // Refrigeration baseline + shopping hours
+    weekday: [3, 3, 3, 3, 3, 3, 4, 5, 6, 7, 7, 7, 7, 6, 6, 5, 5, 6, 6, 5, 4, 4, 3, 3],
+    weekend: [3, 3, 3, 3, 3, 3, 3, 4, 6, 8, 9, 9, 8, 7, 6, 5, 5, 5, 4, 4, 3, 3, 3, 3],
+  },
+  gym: {
+    name: "Gym / Fitness",
+    // Early morning + evening peaks
+    weekday: [2, 1, 1, 1, 1, 3, 7, 9, 6, 4, 3, 4, 5, 4, 3, 4, 6, 9, 10, 8, 5, 3, 2, 2],
+    weekend: [2, 1, 1, 1, 1, 2, 3, 5, 8, 10, 10, 9, 7, 6, 5, 5, 5, 5, 4, 3, 3, 2, 2, 2],
+  },
+  cafe: {
+    name: "Café / Coffee Shop",
+    // Morning rush, lunch, afternoon tapering
+    weekday: [1, 0.5, 0.5, 0.5, 1, 3, 7, 10, 10, 8, 7, 8, 9, 7, 6, 5, 4, 4, 3, 2, 1, 1, 1, 1],
+    weekend: [1, 0.5, 0.5, 0.5, 0.5, 1, 3, 6, 9, 11, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1, 1],
+  },
+  cinema: {
+    name: "Cinema / Entertainment",
+    // Afternoon and evening heavy
+    weekday: [1, 1, 1, 1, 1, 1, 2, 3, 3, 4, 5, 6, 8, 10, 10, 8, 8, 10, 12, 10, 7, 4, 2, 1],
+    weekend: [1, 1, 1, 1, 1, 1, 1, 2, 3, 5, 7, 9, 10, 11, 11, 10, 10, 11, 12, 10, 7, 4, 2, 1],
+  },
+  hotel: {
+    name: "Hotel / Accommodation",
+    // Morning peak (breakfast, checkout), evening peak (check-in, dinner)
+    weekday: [3, 2, 2, 2, 2, 3, 5, 8, 9, 7, 5, 4, 4, 4, 4, 5, 6, 8, 8, 7, 5, 4, 3, 3],
+    weekend: [3, 2, 2, 2, 2, 3, 4, 7, 9, 8, 6, 5, 5, 5, 5, 5, 6, 8, 8, 7, 5, 4, 3, 3],
+  },
+  warehouse: {
+    name: "Warehouse / Industrial",
+    // Daytime operations only
+    weekday: [2, 2, 2, 2, 2, 3, 6, 9, 10, 10, 10, 9, 8, 9, 10, 9, 7, 4, 2, 2, 2, 2, 2, 2],
+    weekend: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+  },
+};
+
+// Normalize a profile to sum to 100%
+const normalizeToPercent = (profile: number[]): number[] => {
+  const sum = profile.reduce((a, b) => a + b, 0);
+  if (sum === 0) return DEFAULT_PROFILE;
+  return profile.map((v) => (v / sum) * 100);
+};
 
 export function LoadProfileEditor({
   weekdayProfile,
@@ -43,12 +114,33 @@ export function LoadProfileEditor({
     }
   };
 
+  const handleApplyPreset = (presetKey: string) => {
+    const preset = PROFILE_PRESETS[presetKey as keyof typeof PROFILE_PRESETS];
+    if (preset) {
+      onWeekdayChange(normalizeToPercent(preset.weekday));
+      onWeekendChange(normalizeToPercent(preset.weekend));
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-sm font-medium">24-Hour Load Profile</CardTitle>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Select onValueChange={handleApplyPreset}>
+              <SelectTrigger className="w-[160px] h-8 text-xs">
+                <Sparkles className="h-3 w-3 mr-1" />
+                <SelectValue placeholder="Apply preset..." />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(PROFILE_PRESETS).map(([key, preset]) => (
+                  <SelectItem key={key} value={key} className="text-xs">
+                    {preset.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button variant="ghost" size="sm" onClick={handleReset}>
               <RotateCcw className="h-3 w-3 mr-1" />
               Reset
