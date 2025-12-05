@@ -13,6 +13,19 @@ import { ProvinceFilesManager } from "@/components/tariffs/ProvinceFilesManager"
 
 export default function TariffManagement() {
   const [activeTab, setActiveTab] = useState("tariffs");
+  const [selectedMunicipalityId, setSelectedMunicipalityId] = useState<string | null>(null);
+  const [selectedMunicipalityName, setSelectedMunicipalityName] = useState<string | null>(null);
+
+  const handleMunicipalityClick = (municipalityId: string, municipalityName: string) => {
+    setSelectedMunicipalityId(municipalityId);
+    setSelectedMunicipalityName(municipalityName);
+    setActiveTab("tariffs");
+  };
+
+  const clearMunicipalityFilter = () => {
+    setSelectedMunicipalityId(null);
+    setSelectedMunicipalityName(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -39,7 +52,11 @@ export default function TariffManagement() {
             <GoogleSheetsImport />
             <AISheetImport />
           </div>
-          <TariffList />
+          <TariffList 
+            filterMunicipalityId={selectedMunicipalityId}
+            filterMunicipalityName={selectedMunicipalityName}
+            onClearFilter={clearMunicipalityFilter}
+          />
         </TabsContent>
 
         <TabsContent value="provinces" className="space-y-4">
@@ -47,7 +64,7 @@ export default function TariffManagement() {
         </TabsContent>
 
         <TabsContent value="municipalities" className="space-y-4">
-          <MunicipalityMap />
+          <MunicipalityMap onMunicipalityClick={handleMunicipalityClick} />
           <MunicipalityManager />
         </TabsContent>
 
