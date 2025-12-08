@@ -55,9 +55,11 @@ export function ScadaImport({ categories }: ScadaImportProps) {
   const [analysis, setAnalysis] = useState<ColumnAnalysis | null>(null);
   const [processedProfile, setProcessedProfile] = useState<ProcessedProfile | null>(null);
   
-  const [profileName, setProfileName] = useState("");
+  // Form fields for the SCADA import
+  const [siteName, setSiteName] = useState("");
+  const [shopNumber, setShopNumber] = useState("");
+  const [shopName, setShopName] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [kwhPerSqm, setKwhPerSqm] = useState("50");
   const [weekdayProfile, setWeekdayProfile] = useState<number[]>([]);
   const [weekendProfile, setWeekendProfile] = useState<number[]>([]);
 
@@ -127,9 +129,9 @@ export function ScadaImport({ categories }: ScadaImportProps) {
       setWeekdayProfile(data.weekdayProfile);
       setWeekendProfile(data.weekendProfile);
       
-      // Suggest profile name from filename
+      // Suggest site name from filename
       const suggestedName = fileName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
-      setProfileName(suggestedName);
+      setSiteName(suggestedName);
       
       toast.success("Load profile generated successfully");
     } catch (error) {
@@ -140,46 +142,89 @@ export function ScadaImport({ categories }: ScadaImportProps) {
   };
 
   const handleSave = async () => {
-    if (!profileName || weekdayProfile.length !== 24 || weekendProfile.length !== 24) {
-      toast.error("Please provide a profile name and ensure the profile is valid");
+    if (!siteName || weekdayProfile.length !== 24 || weekendProfile.length !== 24) {
+      toast.error("Please provide a site name and ensure the profile is valid");
       return;
     }
 
     setIsSaving(true);
 
     try {
-      const { error } = await supabase.from("shop_types").insert({
-        name: profileName,
-        description: processedProfile 
-          ? `Generated from SCADA data: ${processedProfile.dateRange.start} to ${processedProfile.dateRange.end} (${processedProfile.dataPoints} readings)` 
-          : null,
-        kwh_per_sqm_month: parseFloat(kwhPerSqm) || 50,
-        category_id: categoryId || null,
+      // Save to scada_imports table with raw data and generated profile
+      const { error } = await supabase.from("scada_imports").insert({
+        site_name: siteName,
+        shop_number: shopNumber || null,
+        shop_name: shopName || null,
+        file_name: fileName,
+        raw_data: csvContent ? parseRawData(csvContent, analysis) : null,
         load_profile_weekday: weekdayProfile,
         load_profile_weekend: weekendProfile,
+        data_points: processedProfile?.dataPoints || 0,
+        date_range_start: processedProfile?.dateRange.start || null,
+        date_range_end: processedProfile?.dateRange.end || null,
+        weekday_days: processedProfile?.weekdayDays || 0,
+        weekend_days: processedProfile?.weekendDays || 0,
+        category_id: categoryId || null,
       });
 
       if (error) throw error;
 
-      queryClient.invalidateQueries({ queryKey: ["shop-types-all"] });
-      queryClient.invalidateQueries({ queryKey: ["shop-types"] });
+      queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
       
-      toast.success("Load profile saved successfully");
+      toast.success("SCADA import saved successfully");
       
       // Reset state
-      setCsvContent(null);
-      setFileName("");
-      setAnalysis(null);
-      setProcessedProfile(null);
-      setProfileName("");
-      setCategoryId("");
-      setKwhPerSqm("50");
-      setWeekdayProfile([]);
-      setWeekendProfile([]);
+      reset();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save profile");
+      toast.error(error instanceof Error ? error.message : "Failed to save import");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Helper to parse raw data for storage
+  const parseRawData = (content: string, columnAnalysis: ColumnAnalysis | null): Array<{ timestamp: string; value: number }> | null => {
+    if (!columnAnalysis?.timestampColumn || !columnAnalysis?.powerColumn) return null;
+    
+    try {
+      const lines = content.split('\n').filter((l: string) => {
+        const trimmed = l.trim();
+        return trimmed && !trimmed.toLowerCase().startsWith('sep=');
+      });
+      
+      // Find header line
+      let headerLineIdx = 0;
+      for (let i = 0; i < Math.min(5, lines.length); i++) {
+        const cols = lines[i].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+        const lowerCols = cols.map(c => c.toLowerCase());
+        const hasHeaderKeywords = lowerCols.some(c => 
+          c.includes('time') || c === 'date' || c.includes('kwh') || 
+          c.includes('kw') || /^p\d+$/.test(c)
+        );
+        if (cols.length >= 2 && hasHeaderKeywords) {
+          headerLineIdx = i;
+          break;
+        }
+      }
+      
+      const headers = lines[headerLineIdx].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+      const timestampIdx = headers.indexOf(columnAnalysis.timestampColumn);
+      const powerIdx = headers.indexOf(columnAnalysis.powerColumn);
+      
+      if (timestampIdx === -1 || powerIdx === -1) return null;
+      
+      const data: Array<{ timestamp: string; value: number }> = [];
+      for (let i = headerLineIdx + 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+        const timestamp = cols[timestampIdx];
+        const value = parseFloat(cols[powerIdx]);
+        if (timestamp && !isNaN(value)) {
+          data.push({ timestamp, value });
+        }
+      }
+      return data;
+    } catch {
+      return null;
     }
   };
 
@@ -188,7 +233,9 @@ export function ScadaImport({ categories }: ScadaImportProps) {
     setFileName("");
     setAnalysis(null);
     setProcessedProfile(null);
-    setProfileName("");
+    setSiteName("");
+    setShopNumber("");
+    setShopName("");
     setCategoryId("");
     setWeekdayProfile([]);
     setWeekendProfile([]);
@@ -348,41 +395,47 @@ export function ScadaImport({ categories }: ScadaImportProps) {
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Profile Name</Label>
+                <Label>Site Name *</Label>
                 <Input
-                  placeholder="e.g., Shopping Centre Main Meter"
-                  value={profileName}
-                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="e.g., Clearwater Mall"
+                  value={siteName}
+                  onChange={(e) => setSiteName(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Category</Label>
-                <Select value={categoryId} onValueChange={setCategoryId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Shop Number</Label>
+                <Input
+                  placeholder="e.g., G12"
+                  value={shopNumber}
+                  onChange={(e) => setShopNumber(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Shop Name</Label>
+                <Input
+                  placeholder="e.g., Woolworths"
+                  value={shopName}
+                  onChange={(e) => setShopName(e.target.value)}
+                />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>kWh per m² per month (optional)</Label>
-              <Input
-                type="number"
-                placeholder="50"
-                value={kwhPerSqm}
-                onChange={(e) => setKwhPerSqm(e.target.value)}
-                className="w-32"
-              />
+              <Label>Category (helps with classification)</Label>
+              <Select value={categoryId} onValueChange={setCategoryId}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Select category..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <LoadProfileEditor
@@ -393,7 +446,7 @@ export function ScadaImport({ categories }: ScadaImportProps) {
             />
 
             <div className="flex gap-2">
-              <Button onClick={handleSave} disabled={isSaving || !profileName} className="flex-1">
+              <Button onClick={handleSave} disabled={isSaving || !siteName} className="flex-1">
                 {isSaving ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

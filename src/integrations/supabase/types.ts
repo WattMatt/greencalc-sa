@@ -319,6 +319,71 @@ export type Database = {
         }
         Relationships: []
       }
+      scada_imports: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          data_points: number | null
+          date_range_end: string | null
+          date_range_start: string | null
+          file_name: string | null
+          id: string
+          load_profile_weekday: number[] | null
+          load_profile_weekend: number[] | null
+          raw_data: Json | null
+          shop_name: string | null
+          shop_number: string | null
+          site_name: string
+          updated_at: string
+          weekday_days: number | null
+          weekend_days: number | null
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          data_points?: number | null
+          date_range_end?: string | null
+          date_range_start?: string | null
+          file_name?: string | null
+          id?: string
+          load_profile_weekday?: number[] | null
+          load_profile_weekend?: number[] | null
+          raw_data?: Json | null
+          shop_name?: string | null
+          shop_number?: string | null
+          site_name: string
+          updated_at?: string
+          weekday_days?: number | null
+          weekend_days?: number | null
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          data_points?: number | null
+          date_range_end?: string | null
+          date_range_start?: string | null
+          file_name?: string | null
+          id?: string
+          load_profile_weekday?: number[] | null
+          load_profile_weekend?: number[] | null
+          raw_data?: Json | null
+          shop_name?: string | null
+          shop_number?: string | null
+          site_name?: string
+          updated_at?: string
+          weekday_days?: number | null
+          weekend_days?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scada_imports_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "shop_type_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shop_type_categories: {
         Row: {
           created_at: string
