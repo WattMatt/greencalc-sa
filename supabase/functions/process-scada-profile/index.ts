@@ -39,27 +39,33 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const lines = csvContent.split('\n').filter((l: string) => l.trim());
+    // Filter out empty lines and Excel separator hints (sep=,)
+    const lines = csvContent.split('\n').filter((l: string) => {
+      const trimmed = l.trim();
+      return trimmed && !trimmed.toLowerCase().startsWith('sep=');
+    });
+    
     if (lines.length < 2) {
       throw new Error("CSV must have a header and at least one data row");
     }
 
     // Detect and skip metadata rows (e.g., "pnpscada.com,33883284")
-    // Header row should have multiple columns and look like column names
+    // Header row should contain typical header keywords
     let headerLineIdx = 0;
     for (let i = 0; i < Math.min(5, lines.length); i++) {
       const cols = lines[i].split(',').map((h: string) => h.trim().replace(/^["']|["']$/g, ''));
-      // Check if this looks like a header row:
-      // - Has multiple columns (>2)
-      // - Contains typical header keywords OR doesn't look like pure data
       const lowerCols = cols.map((c: string) => c.toLowerCase());
+      
+      // Check for header keywords - include 'p' prefix patterns like p1, p14, etc.
       const hasHeaderKeywords = lowerCols.some((c: string) => 
-        c.includes('time') || c.includes('date') || c.includes('kwh') || 
+        c.includes('time') || c === 'date' || c.includes('kwh') || 
         c.includes('kw') || c.includes('power') || c.includes('energy') ||
-        c.includes('status') || c.includes('kva') || c.includes('kvar')
+        c.includes('status') || c.includes('kva') || c.includes('kvar') ||
+        /^p\d+$/.test(c) // matches p1, p14, etc.
       );
       
-      if (cols.length > 2 && hasHeaderKeywords) {
+      // Accept headers with 2+ columns (for simple date,value format) or more complex ones
+      if (cols.length >= 2 && hasHeaderKeywords) {
         headerLineIdx = i;
         break;
       }
@@ -90,8 +96,11 @@ serve(async (req) => {
               content: `You are analyzing a SCADA/meter data CSV to identify columns for energy consumption analysis.
 Identify:
 1. The timestamp/datetime column (look for: Time, Date, Timestamp, DateTime, or columns with date patterns)
-2. The active power/energy consumption column (look for: kWh, P1, Active Power, Energy, Wh - prefer kWh over kVArh/reactive)
-3. Which columns should be ignored (reactive power kVArh, apparent power kVA, status codes, etc.)
+2. The active power/energy consumption column. Look for:
+   - Columns containing "kWh", "kW", "Power", "Energy", "Wh"
+   - Columns named "P1", "P2", "P14", or similar P+number patterns (these are common meter channel names)
+   - Prefer active power (P, kWh) over reactive power (Q, kVArh) or apparent power (S, kVA)
+3. Which columns should be ignored (reactive power kVArh, apparent power kVA, status codes, Q columns, etc.)
 
 Return a JSON object with:
 {
