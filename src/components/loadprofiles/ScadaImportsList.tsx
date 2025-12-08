@@ -1,0 +1,331 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { 
+  Trash2, Eye, Database, Calendar, MapPin, Store, Hash, 
+  ChevronDown, ChevronUp, BarChart3 
+} from "lucide-react";
+import { toast } from "sonner";
+import { LoadProfileEditor } from "./LoadProfileEditor";
+
+interface ScadaImport {
+  id: string;
+  site_name: string;
+  shop_number: string | null;
+  shop_name: string | null;
+  file_name: string | null;
+  load_profile_weekday: number[];
+  load_profile_weekend: number[];
+  data_points: number;
+  date_range_start: string | null;
+  date_range_end: string | null;
+  weekday_days: number;
+  weekend_days: number;
+  category_id: string | null;
+  created_at: string;
+  shop_type_categories?: { name: string } | null;
+}
+
+export function ScadaImportsList() {
+  const queryClient = useQueryClient();
+  const [selectedImport, setSelectedImport] = useState<ScadaImport | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const { data: imports, isLoading } = useQuery({
+    queryKey: ["scada-imports"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("scada_imports")
+        .select("*, shop_type_categories(name)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as ScadaImport[];
+    },
+  });
+
+  const deleteImport = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("scada_imports").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
+      toast.success("Import deleted");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const toggleRowExpanded = (id: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "-";
+    return new Date(dateStr).toLocaleDateString();
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <div className="animate-pulse text-muted-foreground">Loading imports...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!imports || imports.length === 0) {
+    return (
+      <Card className="border-dashed">
+        <CardContent className="flex flex-col items-center justify-center py-12">
+          <Database className="h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium">No SCADA imports yet</h3>
+          <p className="text-muted-foreground text-center max-w-sm mt-1">
+            Use the SCADA Import tab to upload meter data files.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Saved SCADA Imports
+          </CardTitle>
+          <CardDescription>
+            {imports.length} import{imports.length !== 1 ? 's' : ''} in the global reference library
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-8"></TableHead>
+                <TableHead>Site Name</TableHead>
+                <TableHead>Shop</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Data Range</TableHead>
+                <TableHead>Readings</TableHead>
+                <TableHead>Imported</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {imports.map((imp) => (
+                <>
+                  <TableRow key={imp.id} className="cursor-pointer hover:bg-muted/50">
+                    <TableCell onClick={() => toggleRowExpanded(imp.id)}>
+                      {expandedRows.has(imp.id) ? (
+                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </TableCell>
+                    <TableCell onClick={() => toggleRowExpanded(imp.id)}>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{imp.site_name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell onClick={() => toggleRowExpanded(imp.id)}>
+                      {imp.shop_number || imp.shop_name ? (
+                        <div className="flex flex-col gap-0.5">
+                          {imp.shop_number && (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Hash className="h-3 w-3" />
+                              {imp.shop_number}
+                            </div>
+                          )}
+                          {imp.shop_name && (
+                            <div className="flex items-center gap-1">
+                              <Store className="h-3 w-3 text-muted-foreground" />
+                              {imp.shop_name}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell onClick={() => toggleRowExpanded(imp.id)}>
+                      {imp.shop_type_categories?.name ? (
+                        <Badge variant="secondary">{imp.shop_type_categories.name}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell onClick={() => toggleRowExpanded(imp.id)}>
+                      <div className="flex items-center gap-1 text-sm">
+                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                        {formatDate(imp.date_range_start)} — {formatDate(imp.date_range_end)}
+                      </div>
+                    </TableCell>
+                    <TableCell onClick={() => toggleRowExpanded(imp.id)}>
+                      <div className="text-sm">
+                        {imp.data_points.toLocaleString()}
+                        <span className="text-muted-foreground text-xs ml-1">
+                          ({imp.weekday_days}wd/{imp.weekend_days}we)
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell onClick={() => toggleRowExpanded(imp.id)}>
+                      <span className="text-sm text-muted-foreground">
+                        {new Date(imp.created_at).toLocaleDateString()}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setSelectedImport(imp)}
+                          title="View profile"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (confirm("Delete this import?")) {
+                              deleteImport.mutate(imp.id);
+                            }
+                          }}
+                          title="Delete"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  
+                  {/* Expanded row with mini profile chart */}
+                  {expandedRows.has(imp.id) && (
+                    <TableRow key={`${imp.id}-expanded`}>
+                      <TableCell colSpan={8} className="bg-muted/30 p-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                              <BarChart3 className="h-4 w-4" />
+                              Weekday Profile
+                            </h4>
+                            <div className="h-24 flex items-end gap-0.5">
+                              {imp.load_profile_weekday?.map((val, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex-1 bg-primary/60 rounded-t"
+                                  style={{ height: `${Math.max(val, 1)}%` }}
+                                  title={`${idx}:00 - ${val.toFixed(1)}%`}
+                                />
+                              ))}
+                            </div>
+                            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                              <span>0h</span>
+                              <span>12h</span>
+                              <span>24h</span>
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                              <BarChart3 className="h-4 w-4" />
+                              Weekend Profile
+                            </h4>
+                            <div className="h-24 flex items-end gap-0.5">
+                              {imp.load_profile_weekend?.map((val, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex-1 bg-secondary/60 rounded-t"
+                                  style={{ height: `${Math.max(val, 1)}%` }}
+                                  title={`${idx}:00 - ${val.toFixed(1)}%`}
+                                />
+                              ))}
+                            </div>
+                            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                              <span>0h</span>
+                              <span>12h</span>
+                              <span>24h</span>
+                            </div>
+                          </div>
+                        </div>
+                        {imp.file_name && (
+                          <p className="text-xs text-muted-foreground mt-3">
+                            Source file: {imp.file_name}
+                          </p>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Detail Dialog */}
+      <Dialog open={!!selectedImport} onOpenChange={(open) => !open && setSelectedImport(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedImport?.site_name}</DialogTitle>
+            <DialogDescription>
+              {selectedImport?.shop_number && `#${selectedImport.shop_number}`}
+              {selectedImport?.shop_number && selectedImport?.shop_name && " - "}
+              {selectedImport?.shop_name}
+              {!selectedImport?.shop_number && !selectedImport?.shop_name && "SCADA Import Details"}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedImport && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <div className="text-muted-foreground text-xs">Date Range</div>
+                  <div className="font-medium">
+                    {formatDate(selectedImport.date_range_start)} — {formatDate(selectedImport.date_range_end)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Total Readings</div>
+                  <div className="font-medium">{selectedImport.data_points.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Weekdays</div>
+                  <div className="font-medium">{selectedImport.weekday_days} days</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Weekends</div>
+                  <div className="font-medium">{selectedImport.weekend_days} days</div>
+                </div>
+              </div>
+
+              <LoadProfileEditor
+                weekdayProfile={selectedImport.load_profile_weekday || []}
+                weekendProfile={selectedImport.load_profile_weekend || []}
+                onWeekdayChange={() => {}}
+                onWeekendChange={() => {}}
+                readOnly
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
