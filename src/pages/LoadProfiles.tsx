@@ -11,11 +11,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Upload, Trash2, Edit2, Download, Activity, FileSpreadsheet, Zap } from "lucide-react";
+import { Plus, Upload, Trash2, Edit2, Download, Activity, FileSpreadsheet, Zap, Database } from "lucide-react";
 import { toast } from "sonner";
 import { GoogleSheetsImport } from "@/components/loadprofiles/GoogleSheetsImport";
 import { LoadProfileEditor } from "@/components/loadprofiles/LoadProfileEditor";
 import { ScadaImport } from "@/components/loadprofiles/ScadaImport";
+import { ScadaImportsList } from "@/components/loadprofiles/ScadaImportsList";
 
 interface ShopType {
   id: string;
@@ -418,13 +419,17 @@ Cinema,Entertainment,90,Movie theater,1,1,1,1,1,1,2,3,4,5,6,8,10,12,12,10,10,12,
             <Activity className="h-4 w-4 mr-2" />
             Profile Library
           </TabsTrigger>
+          <TabsTrigger value="scada-imports">
+            <Database className="h-4 w-4 mr-2" />
+            SCADA Imports
+          </TabsTrigger>
           <TabsTrigger value="import">
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Google Sheets Import
           </TabsTrigger>
           <TabsTrigger value="scada">
             <Zap className="h-4 w-4 mr-2" />
-            SCADA Import
+            New SCADA Import
           </TabsTrigger>
         </TabsList>
 
@@ -585,6 +590,10 @@ Cinema,Entertainment,90,Movie theater,1,1,1,1,1,1,2,3,4,5,6,8,10,12,12,10,10,12,
           )}
             </Accordion>
           )}
+        </TabsContent>
+
+        <TabsContent value="scada-imports">
+          <ScadaImportsList />
         </TabsContent>
 
         <TabsContent value="import">

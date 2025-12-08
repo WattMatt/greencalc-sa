@@ -11,6 +11,7 @@ interface LoadProfileEditorProps {
   weekendProfile: number[];
   onWeekdayChange: (profile: number[]) => void;
   onWeekendChange: (profile: number[]) => void;
+  readOnly?: boolean;
 }
 
 const DEFAULT_PROFILE = Array(24).fill(100 / 24);
@@ -90,6 +91,7 @@ export function LoadProfileEditor({
   weekendProfile,
   onWeekdayChange,
   onWeekendChange,
+  readOnly = false,
 }: LoadProfileEditorProps) {
   const [activeTab, setActiveTab] = useState<"weekday" | "weekend">("weekday");
   
@@ -127,28 +129,30 @@ export function LoadProfileEditor({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-sm font-medium">24-Hour Load Profile</CardTitle>
-          <div className="flex gap-2 flex-wrap">
-            <Select onValueChange={handleApplyPreset}>
-              <SelectTrigger className="w-[160px] h-8 text-xs">
-                <Sparkles className="h-3 w-3 mr-1" />
-                <SelectValue placeholder="Apply preset..." />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(PROFILE_PRESETS).map(([key, preset]) => (
-                  <SelectItem key={key} value={key} className="text-xs">
-                    {preset.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button variant="ghost" size="sm" onClick={handleReset}>
-              <RotateCcw className="h-3 w-3 mr-1" />
-              Reset
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleCopyToOther}>
-              Copy to {activeTab === "weekday" ? "Weekend" : "Weekday"}
-            </Button>
-          </div>
+          {!readOnly && (
+            <div className="flex gap-2 flex-wrap">
+              <Select onValueChange={handleApplyPreset}>
+                <SelectTrigger className="w-[160px] h-8 text-xs">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  <SelectValue placeholder="Apply preset..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PROFILE_PRESETS).map(([key, preset]) => (
+                    <SelectItem key={key} value={key} className="text-xs">
+                      {preset.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="ghost" size="sm" onClick={handleReset}>
+                <RotateCcw className="h-3 w-3 mr-1" />
+                Reset
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleCopyToOther}>
+                Copy to {activeTab === "weekday" ? "Weekend" : "Weekday"}
+              </Button>
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -161,12 +165,14 @@ export function LoadProfileEditor({
             <InteractiveChart
               profile={normalizeProfile(weekdayProfile)}
               onChange={onWeekdayChange}
+              readOnly={readOnly}
             />
           </TabsContent>
           <TabsContent value="weekend" className="mt-4">
             <InteractiveChart
               profile={normalizeProfile(weekendProfile)}
               onChange={onWeekendChange}
+              readOnly={readOnly}
             />
           </TabsContent>
         </Tabs>
@@ -183,9 +189,10 @@ export function LoadProfileEditor({
 interface InteractiveChartProps {
   profile: number[];
   onChange: (profile: number[]) => void;
+  readOnly?: boolean;
 }
 
-function InteractiveChart({ profile, onChange }: InteractiveChartProps) {
+function InteractiveChart({ profile, onChange, readOnly = false }: InteractiveChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -207,7 +214,7 @@ function InteractiveChart({ profile, onChange }: InteractiveChartProps) {
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!containerRef.current) return;
+    if (readOnly || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const index = getBarIndexFromX(e.clientX, rect);
     const value = calculateValueFromY(e.clientY, rect);
@@ -218,7 +225,7 @@ function InteractiveChart({ profile, onChange }: InteractiveChartProps) {
     
     setIsDragging(true);
     setDragIndex(index);
-  }, [profile, onChange, getBarIndexFromX, calculateValueFromY]);
+  }, [profile, onChange, getBarIndexFromX, calculateValueFromY, readOnly]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isDragging || !containerRef.current) return;
