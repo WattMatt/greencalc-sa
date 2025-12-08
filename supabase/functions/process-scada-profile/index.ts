@@ -44,12 +44,35 @@ serve(async (req) => {
       throw new Error("CSV must have a header and at least one data row");
     }
 
-    const headers = lines[0].split(',').map((h: string) => h.trim().replace(/^["']|["']$/g, ''));
-    console.log("CSV Headers:", headers);
+    // Detect and skip metadata rows (e.g., "pnpscada.com,33883284")
+    // Header row should have multiple columns and look like column names
+    let headerLineIdx = 0;
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const cols = lines[i].split(',').map((h: string) => h.trim().replace(/^["']|["']$/g, ''));
+      // Check if this looks like a header row:
+      // - Has multiple columns (>2)
+      // - Contains typical header keywords OR doesn't look like pure data
+      const lowerCols = cols.map((c: string) => c.toLowerCase());
+      const hasHeaderKeywords = lowerCols.some((c: string) => 
+        c.includes('time') || c.includes('date') || c.includes('kwh') || 
+        c.includes('kw') || c.includes('power') || c.includes('energy') ||
+        c.includes('status') || c.includes('kva') || c.includes('kvar')
+      );
+      
+      if (cols.length > 2 && hasHeaderKeywords) {
+        headerLineIdx = i;
+        break;
+      }
+    }
+
+    const headers = lines[headerLineIdx].split(',').map((h: string) => h.trim().replace(/^["']|["']$/g, ''));
+    const dataStartIdx = headerLineIdx + 1;
+    console.log(`CSV Headers (line ${headerLineIdx + 1}):`, headers);
+    console.log(`Data starts at line ${dataStartIdx + 1}`);
 
     if (action === "analyze") {
-      // Use AI to analyze columns
-      const sampleRows = lines.slice(1, 6).map((line: string) => 
+      // Use AI to analyze columns - sample from data rows (after header)
+      const sampleRows = lines.slice(dataStartIdx, dataStartIdx + 5).map((line: string) => 
         line.split(',').map((c: string) => c.trim().replace(/^["']|["']$/g, ''))
       ) as string[][];
 
@@ -125,7 +148,7 @@ Return a JSON object with:
       return new Response(JSON.stringify({
         success: true,
         headers,
-        rowCount: lines.length - 1,
+        rowCount: lines.length - dataStartIdx,
         analysis
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -157,7 +180,7 @@ Return a JSON object with:
       let weekendDays = 0;
       const seenDates: Record<string, boolean> = {};
 
-      for (let i = 1; i < lines.length; i++) {
+      for (let i = dataStartIdx; i < lines.length; i++) {
         const cols = lines[i].split(',').map((c: string) => c.trim().replace(/^["']|["']$/g, ''));
         const timestampStr = cols[timestampIdx];
         const powerStr = cols[powerIdx];
@@ -226,7 +249,7 @@ Return a JSON object with:
       const result: ProcessedProfile = {
         weekdayProfile: normalize(weekdayAvg),
         weekendProfile: normalize(weekendAvg),
-        dataPoints: lines.length - 1,
+        dataPoints: lines.length - dataStartIdx,
         dateRange: {
           start: sortedDates[0] || '',
           end: sortedDates[sortedDates.length - 1] || ''
