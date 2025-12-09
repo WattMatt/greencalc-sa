@@ -105,18 +105,14 @@ export function ScadaImportsList() {
     },
   });
 
-  // Check if any imports need profile recalculation
-  const importsNeedingRecalc = imports?.filter(imp => {
-    if (!imp.load_profile_weekday || !imp.load_profile_weekend) return true;
-    // Check if all values are the same (default 4.17)
-    const allSameWeekday = imp.load_profile_weekday.every(v => v === imp.load_profile_weekday[0]);
-    const allSameWeekend = imp.load_profile_weekend.every(v => v === imp.load_profile_weekend[0]);
-    return allSameWeekday && allSameWeekend;
-  }) || [];
+  // Check if any imports have raw data for recalculation
+  const importsWithRawData = imports?.filter(imp => 
+    imp.raw_data && Array.isArray(imp.raw_data) && imp.raw_data.length > 0
+  ) || [];
 
-  const recalculateAllProfiles = async () => {
-    if (importsNeedingRecalc.length === 0) {
-      toast.info("All imports already have calculated profiles");
+  const forceRecalculateAllProfiles = async () => {
+    if (importsWithRawData.length === 0) {
+      toast.info("No imports with raw data to recalculate");
       return;
     }
 
@@ -124,12 +120,7 @@ export function ScadaImportsList() {
     let updated = 0;
     let failed = 0;
 
-    for (const imp of importsNeedingRecalc) {
-      if (!imp.raw_data || !Array.isArray(imp.raw_data) || imp.raw_data.length === 0) {
-        failed++;
-        continue;
-      }
-
+    for (const imp of importsWithRawData) {
       try {
         const { weekday, weekend } = calculateProfilesFromRawData(imp.raw_data as RawDataPoint[]);
         
@@ -150,7 +141,7 @@ export function ScadaImportsList() {
     }
 
     queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
-    toast.success(`Recalculated ${updated} profiles${failed > 0 ? `, ${failed} failed` : ""}`);
+    toast.success(`Recalculated ${updated} profiles to actual kWh values${failed > 0 ? `, ${failed} failed` : ""}`);
     setIsRecalculating(false);
   };
 
@@ -221,11 +212,11 @@ export function ScadaImportsList() {
                 {imports.length} import{imports.length !== 1 ? 's' : ''} in the global reference library
               </CardDescription>
             </div>
-            {importsNeedingRecalc.length > 0 && (
+            {importsWithRawData.length > 0 && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={recalculateAllProfiles}
+                onClick={forceRecalculateAllProfiles}
                 disabled={isRecalculating}
               >
                 {isRecalculating ? (
@@ -233,7 +224,7 @@ export function ScadaImportsList() {
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                Recalculate {importsNeedingRecalc.length} Profile{importsNeedingRecalc.length !== 1 ? 's' : ''}
+                Recalculate All to kWh
               </Button>
             )}
           </div>
