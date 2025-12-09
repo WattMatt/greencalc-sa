@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,11 +12,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
+  AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, Legend 
 } from "recharts";
-import { Layers, Download, Calendar as CalendarIcon, Save, FolderOpen, Trash2 } from "lucide-react";
-import { format, isWeekend } from "date-fns";
+import { Layers, Download, Calendar as CalendarIcon, Save, FolderOpen, Trash2, ChevronLeft, ChevronRight, BarChart3 } from "lucide-react";
+import { format, isWeekend, addDays, addWeeks, addMonths, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subWeeks, subMonths } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -49,6 +49,8 @@ interface StackedProfile {
 
 type DayFilter = "all" | "weekday" | "weekend";
 type AggregationType = "sum" | "average";
+type ViewMode = "hourly" | "timeseries";
+type TimePeriod = "day" | "week" | "month" | "custom";
 
 const DEFAULT_COLORS = [
   "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6",
@@ -69,6 +71,11 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
   const [showChart, setShowChart] = useState(false);
   const [isDateFromOpen, setIsDateFromOpen] = useState(false);
   const [isDateToOpen, setIsDateToOpen] = useState(false);
+
+  // View mode and time navigation
+  const [viewMode, setViewMode] = useState<ViewMode>("hourly");
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>("day");
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
   // Save configuration state
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -205,9 +212,166 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
     });
   };
 
-  // Generate stacked data by hour
+  // Time navigation handlers
+  const getTimeRange = useCallback((date: Date, period: TimePeriod): { start: Date; end: Date } => {
+    switch (period) {
+      case "day":
+        return { start: startOfDay(date), end: endOfDay(date) };
+      case "week":
+        return { start: startOfWeek(date, { weekStartsOn: 1 }), end: endOfWeek(date, { weekStartsOn: 1 }) };
+      case "month":
+        return { start: startOfMonth(date), end: endOfMonth(date) };
+      case "custom":
+        return { start: dateFrom || startOfDay(date), end: dateTo || endOfDay(date) };
+    }
+  }, [dateFrom, dateTo]);
+
+  const handlePrevPeriod = () => {
+    switch (timePeriod) {
+      case "day":
+        setCurrentDate(prev => subDays(prev, 1));
+        break;
+      case "week":
+        setCurrentDate(prev => subWeeks(prev, 1));
+        break;
+      case "month":
+        setCurrentDate(prev => subMonths(prev, 1));
+        break;
+    }
+  };
+
+  const handleNextPeriod = () => {
+    switch (timePeriod) {
+      case "day":
+        setCurrentDate(prev => addDays(prev, 1));
+        break;
+      case "week":
+        setCurrentDate(prev => addWeeks(prev, 1));
+        break;
+      case "month":
+        setCurrentDate(prev => addMonths(prev, 1));
+        break;
+    }
+  };
+
+  const getPeriodLabel = (): string => {
+    const { start, end } = getTimeRange(currentDate, timePeriod);
+    switch (timePeriod) {
+      case "day":
+        return format(currentDate, "EEEE, MMM d, yyyy");
+      case "week":
+        return `${format(start, "MMM d")} - ${format(end, "MMM d, yyyy")}`;
+      case "month":
+        return format(currentDate, "MMMM yyyy");
+      case "custom":
+        if (dateFrom && dateTo) {
+          return `${format(dateFrom, "MMM d")} - ${format(dateTo, "MMM d, yyyy")}`;
+        }
+        return "Select custom range";
+    }
+  };
+
+  // Generate time-series data for navigation view
+  const timeSeriesData = useMemo(() => {
+    if (!showChart || selectedMeters.size === 0 || viewMode !== "timeseries") return [];
+
+    const selectedMetersList = metersWithData.filter(m => selectedMeters.has(m.id));
+    const { start, end } = getTimeRange(currentDate, timePeriod);
+
+    // Collect all data points within the range
+    const dataMap: Map<string, Record<string, number>> = new Map();
+
+    selectedMetersList.forEach(meter => {
+      if (!meter.raw_data) return;
+
+      meter.raw_data.forEach(point => {
+        try {
+          const date = new Date(point.timestamp);
+          
+          if (date < start || date > end) return;
+          
+          const weekend = isWeekend(date);
+          if (dayFilter === "weekday" && weekend) return;
+          if (dayFilter === "weekend" && !weekend) return;
+
+          // Use appropriate grouping based on period
+          let key: string;
+          if (timePeriod === "day") {
+            key = format(date, "HH:mm");
+          } else if (timePeriod === "week") {
+            key = format(date, "EEE HH:00");
+          } else {
+            key = format(date, "MMM d");
+          }
+
+          if (!dataMap.has(key)) {
+            dataMap.set(key, { _count: 0 });
+          }
+
+          const values = point.values;
+          const primaryKey = Object.keys(values).find(k => k.includes("P1") || k.includes("kWh")) || Object.keys(values)[0];
+          const value = values[primaryKey];
+
+          if (typeof value === "number" && !isNaN(value)) {
+            const entry = dataMap.get(key)!;
+            const currentMeterValue = entry[meter.id] || 0;
+            const currentMeterCount = entry[`${meter.id}_count`] || 0;
+            
+            if (aggregationType === "sum") {
+              entry[meter.id] = currentMeterValue + value;
+            } else {
+              entry[meter.id] = currentMeterValue + value;
+              entry[`${meter.id}_count`] = currentMeterCount + 1;
+            }
+          }
+        } catch (e) {
+          // Skip invalid dates
+        }
+      });
+    });
+
+    // Convert map to array and calculate totals
+    const result = Array.from(dataMap.entries())
+      .map(([label, data]) => {
+        const point: Record<string, any> = { label };
+        let total = 0;
+
+        selectedMetersList.forEach(meter => {
+          let value = data[meter.id] || 0;
+          
+          if (aggregationType === "average" && data[`${meter.id}_count`]) {
+            value = value / data[`${meter.id}_count`];
+          }
+          
+          point[meter.id] = Math.round(value * 100) / 100;
+          total += point[meter.id];
+        });
+
+        point.total = Math.round(total * 100) / 100;
+        return point;
+      })
+      .sort((a, b) => {
+        // Sort by time for proper ordering
+        if (timePeriod === "day") {
+          return a.label.localeCompare(b.label);
+        } else if (timePeriod === "week") {
+          const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+          const [dayA] = a.label.split(" ");
+          const [dayB] = b.label.split(" ");
+          const dayIdxA = days.indexOf(dayA);
+          const dayIdxB = days.indexOf(dayB);
+          if (dayIdxA !== dayIdxB) return dayIdxA - dayIdxB;
+          return a.label.localeCompare(b.label);
+        }
+        return 0;
+      });
+
+    return result;
+  }, [showChart, selectedMeters, metersWithData, viewMode, currentDate, timePeriod, getTimeRange, dayFilter, aggregationType]);
+
+  // Generate stacked data by hour (for hourly view)
   const stackedData = useMemo(() => {
-    if (!showChart || selectedMeters.size === 0) return [];
+    if (!showChart || selectedMeters.size === 0 || viewMode !== "hourly") return [];
 
     const selectedMetersList = metersWithData.filter(m => selectedMeters.has(m.id));
     
@@ -228,9 +392,9 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
           
           if (dateFrom && date < dateFrom) return;
           if (dateTo) {
-            const endOfDay = new Date(dateTo);
-            endOfDay.setHours(23, 59, 59, 999);
-            if (date > endOfDay) return;
+            const dayEnd = new Date(dateTo);
+            dayEnd.setHours(23, 59, 59, 999);
+            if (date > dayEnd) return;
           }
           
           const weekend = isWeekend(date);
@@ -278,24 +442,27 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
       point.total = Math.round(total * 100) / 100;
       return point;
     });
-  }, [showChart, selectedMeters, metersWithData, dateFrom, dateTo, dayFilter, aggregationType]);
+  }, [showChart, selectedMeters, metersWithData, dateFrom, dateTo, dayFilter, aggregationType, viewMode]);
+
+  // Current chart data based on view mode
+  const currentChartData = viewMode === "timeseries" ? timeSeriesData : stackedData;
 
   const summaryStats = useMemo(() => {
-    if (stackedData.length === 0) return null;
+    if (currentChartData.length === 0) return null;
     
-    const totals = stackedData.map(d => d.total);
+    const totals = currentChartData.map(d => d.total);
     const dailyTotal = totals.reduce((a, b) => a + b, 0);
-    const peakHour = stackedData.reduce((max, d) => d.total > max.total ? d : max, stackedData[0]);
-    const minHour = stackedData.reduce((min, d) => d.total < min.total ? d : min, stackedData[0]);
+    const peakPoint = currentChartData.reduce((max, d) => d.total > max.total ? d : max, currentChartData[0]);
+    const minPoint = currentChartData.reduce((min, d) => d.total < min.total ? d : min, currentChartData[0]);
     
     return {
       dailyTotal: Math.round(dailyTotal),
-      peakHour: peakHour.hour,
-      peakValue: Math.round(peakHour.total * 100) / 100,
-      minHour: minHour.hour,
-      minValue: Math.round(minHour.total * 100) / 100,
+      peakLabel: peakPoint.label || peakPoint.hour?.toString() || "N/A",
+      peakValue: Math.round(peakPoint.total * 100) / 100,
+      minLabel: minPoint.label || minPoint.hour?.toString() || "N/A",
+      minValue: Math.round(minPoint.total * 100) / 100,
     };
-  }, [stackedData]);
+  }, [currentChartData]);
 
   const handleGenerateStack = () => {
     if (selectedMeters.size === 0) {
@@ -307,15 +474,15 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
   };
 
   const handleExportCSV = () => {
-    if (stackedData.length === 0) {
+    if (currentChartData.length === 0) {
       toast.error("No data to export");
       return;
     }
 
     const selectedMetersList = metersWithData.filter(m => selectedMeters.has(m.id));
-    const headers = ["Hour", ...selectedMetersList.map(getMeterDisplayName), "Total"];
+    const headers = [viewMode === "timeseries" ? "Period" : "Hour", ...selectedMetersList.map(getMeterDisplayName), "Total"];
     
-    const rows = stackedData.map(d => {
+    const rows = currentChartData.map(d => {
       return [
         d.label,
         ...selectedMetersList.map(m => d[m.id] || 0),
@@ -328,7 +495,7 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `stacked-profile-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.download = `stacked-profile-${viewMode}-${format(new Date(), "yyyy-MM-dd")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success("CSV exported");
@@ -527,87 +694,233 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label>From Date</Label>
-              <Popover open={isDateFromOpen} onOpenChange={setIsDateFromOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateFrom ? format(dateFrom, "MMM d, yyyy") : "All dates"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={dateFrom}
-                    onSelect={(date) => {
-                      setDateFrom(date);
-                      setIsDateFromOpen(false);
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="space-y-2">
-              <Label>To Date</Label>
-              <Popover open={isDateToOpen} onOpenChange={setIsDateToOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn("w-full justify-start text-left font-normal", !dateTo && "text-muted-foreground")}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateTo ? format(dateTo, "MMM d, yyyy") : "All dates"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={dateTo}
-                    onSelect={(date) => {
-                      setDateTo(date);
-                      setIsDateToOpen(false);
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Day Type</Label>
-              <Select value={dayFilter} onValueChange={(v) => setDayFilter(v as DayFilter)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Days</SelectItem>
-                  <SelectItem value="weekday">Weekdays Only</SelectItem>
-                  <SelectItem value="weekend">Weekends Only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Aggregation</Label>
-              <Select value={aggregationType} onValueChange={(v) => setAggregationType(v as AggregationType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="sum">Sum (Total)</SelectItem>
-                  <SelectItem value="average">Average</SelectItem>
-                </SelectContent>
-              </Select>
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Label className="text-muted-foreground">View:</Label>
+              <div className="flex border rounded-md">
+                <Button
+                  variant={viewMode === "hourly" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("hourly")}
+                  className="rounded-r-none"
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  24-Hour Profile
+                </Button>
+                <Button
+                  variant={viewMode === "timeseries" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("timeseries")}
+                  className="rounded-l-none"
+                >
+                  <CalendarIcon className="h-4 w-4 mr-2" />
+                  Time Series
+                </Button>
+              </div>
             </div>
           </div>
+
+          {/* Filters - different based on view mode */}
+          {viewMode === "hourly" ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label>From Date</Label>
+                <Popover open={isDateFromOpen} onOpenChange={setIsDateFromOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn("w-full justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateFrom ? format(dateFrom, "MMM d, yyyy") : "All dates"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={dateFrom}
+                      onSelect={(date) => {
+                        setDateFrom(date);
+                        setIsDateFromOpen(false);
+                      }}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label>To Date</Label>
+                <Popover open={isDateToOpen} onOpenChange={setIsDateToOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn("w-full justify-start text-left font-normal", !dateTo && "text-muted-foreground")}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateTo ? format(dateTo, "MMM d, yyyy") : "All dates"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={dateTo}
+                      onSelect={(date) => {
+                        setDateTo(date);
+                        setIsDateToOpen(false);
+                      }}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Day Type</Label>
+                <Select value={dayFilter} onValueChange={(v) => setDayFilter(v as DayFilter)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Days</SelectItem>
+                    <SelectItem value="weekday">Weekdays Only</SelectItem>
+                    <SelectItem value="weekend">Weekends Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Aggregation</Label>
+                <Select value={aggregationType} onValueChange={(v) => setAggregationType(v as AggregationType)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sum">Sum (Total)</SelectItem>
+                    <SelectItem value="average">Average</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Time Period Selector and Navigation */}
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label className="text-muted-foreground">Period:</Label>
+                  <Select value={timePeriod} onValueChange={(v) => setTimePeriod(v as TimePeriod)}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="day">Day</SelectItem>
+                      <SelectItem value="week">Week</SelectItem>
+                      <SelectItem value="month">Month</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Navigation Controls */}
+                {timePeriod !== "custom" && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="icon" onClick={handlePrevPeriod}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="min-w-48 text-center font-medium">
+                      {getPeriodLabel()}
+                    </div>
+                    <Button variant="outline" size="icon" onClick={handleNextPeriod}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+
+                {/* Custom Date Range */}
+                {timePeriod === "custom" && (
+                  <div className="flex items-center gap-2">
+                    <Popover open={isDateFromOpen} onOpenChange={setIsDateFromOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn("justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {dateFrom ? format(dateFrom, "MMM d, yyyy") : "From"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={dateFrom}
+                          onSelect={(date) => {
+                            setDateFrom(date);
+                            setIsDateFromOpen(false);
+                          }}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <span className="text-muted-foreground">to</span>
+                    <Popover open={isDateToOpen} onOpenChange={setIsDateToOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn("justify-start text-left font-normal", !dateTo && "text-muted-foreground")}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {dateTo ? format(dateTo, "MMM d, yyyy") : "To"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={dateTo}
+                          onSelect={(date) => {
+                            setDateTo(date);
+                            setIsDateToOpen(false);
+                          }}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <Label className="text-muted-foreground">Day Type:</Label>
+                  <Select value={dayFilter} onValueChange={(v) => setDayFilter(v as DayFilter)}>
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Days</SelectItem>
+                      <SelectItem value="weekday">Weekdays</SelectItem>
+                      <SelectItem value="weekend">Weekends</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Label className="text-muted-foreground">Aggregation:</Label>
+                  <Select value={aggregationType} onValueChange={(v) => setAggregationType(v as AggregationType)}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sum">Sum</SelectItem>
+                      <SelectItem value="average">Average</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-2">
@@ -615,7 +928,7 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
               <Layers className="h-4 w-4 mr-2" />
               Generate Stack ({selectedMeters.size})
             </Button>
-            {showChart && stackedData.length > 0 && (
+            {showChart && currentChartData.length > 0 && (
               <Button variant="outline" onClick={handleExportCSV}>
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
@@ -626,8 +939,29 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
       </Card>
 
       {/* Chart and Stats */}
-      {showChart && stackedData.length > 0 && (
+      {showChart && currentChartData.length > 0 && (
         <>
+          {/* Time Navigation (shown in time-series mode) */}
+          {viewMode === "timeseries" && timePeriod !== "custom" && (
+            <Card>
+              <CardContent className="py-3">
+                <div className="flex items-center justify-center gap-4">
+                  <Button variant="outline" onClick={handlePrevPeriod}>
+                    <ChevronLeft className="h-4 w-4 mr-2" />
+                    Previous {timePeriod}
+                  </Button>
+                  <div className="text-lg font-medium px-4">
+                    {getPeriodLabel()}
+                  </div>
+                  <Button variant="outline" onClick={handleNextPeriod}>
+                    Next {timePeriod}
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Summary Stats */}
           {summaryStats && (
             <div className="grid gap-4 md:grid-cols-4">
@@ -639,8 +973,8 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
               </Card>
               <Card>
                 <CardHeader className="pb-2">
-                  <CardDescription>Peak Hour</CardDescription>
-                  <CardTitle className="text-2xl">{summaryStats.peakHour}:00</CardTitle>
+                  <CardDescription>Peak Period</CardDescription>
+                  <CardTitle className="text-2xl">{summaryStats.peakLabel}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-muted-foreground">{summaryStats.peakValue} kWh</p>
@@ -648,8 +982,8 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
               </Card>
               <Card>
                 <CardHeader className="pb-2">
-                  <CardDescription>Min Hour</CardDescription>
-                  <CardTitle className="text-2xl">{summaryStats.minHour}:00</CardTitle>
+                  <CardDescription>Min Period</CardDescription>
+                  <CardTitle className="text-2xl">{summaryStats.minLabel}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-muted-foreground">{summaryStats.minValue} kWh</p>
@@ -664,40 +998,83 @@ export function ProjectMeterStacking({ projectId }: ProjectMeterStackingProps) {
             </div>
           )}
 
-          {/* Stacked Area Chart */}
+          {/* Chart */}
           <Card>
             <CardHeader>
-              <CardTitle>Stacked Load Profile</CardTitle>
-              <CardDescription>Combined 24-hour consumption pattern</CardDescription>
+              <CardTitle>
+                {viewMode === "timeseries" ? "Time Series Load Profile" : "Stacked Load Profile"}
+              </CardTitle>
+              <CardDescription>
+                {viewMode === "timeseries" 
+                  ? `Consumption over ${timePeriod === "custom" ? "custom range" : timePeriod}`
+                  : "Combined 24-hour consumption pattern"
+                }
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-96">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={stackedData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    {selectedMetersList.map((meter, idx) => (
-                      <Area
-                        key={meter.id}
-                        type="monotone"
-                        dataKey={meter.id}
-                        name={getMeterDisplayName(meter)}
-                        stackId="1"
-                        fill={getMeterColor(meter, idx)}
-                        stroke={getMeterColor(meter, idx)}
-                        fillOpacity={0.6}
+                  {viewMode === "timeseries" ? (
+                    <LineChart data={currentChartData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--background))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                        }}
                       />
-                    ))}
-                  </AreaChart>
+                      <Legend />
+                      {selectedMetersList.map((meter, idx) => (
+                        <Line
+                          key={meter.id}
+                          type="monotone"
+                          dataKey={meter.id}
+                          name={getMeterDisplayName(meter)}
+                          stroke={getMeterColor(meter, idx)}
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      ))}
+                      <Line
+                        type="monotone"
+                        dataKey="total"
+                        name="Total"
+                        stroke="hsl(var(--foreground))"
+                        strokeWidth={3}
+                        strokeDasharray="5 5"
+                        dot={false}
+                      />
+                    </LineChart>
+                  ) : (
+                    <AreaChart data={currentChartData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--background))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                        }}
+                      />
+                      <Legend />
+                      {selectedMetersList.map((meter, idx) => (
+                        <Area
+                          key={meter.id}
+                          type="monotone"
+                          dataKey={meter.id}
+                          name={getMeterDisplayName(meter)}
+                          stackId="1"
+                          fill={getMeterColor(meter, idx)}
+                          stroke={getMeterColor(meter, idx)}
+                          fillOpacity={0.6}
+                        />
+                      ))}
+                    </AreaChart>
+                  )}
                 </ResponsiveContainer>
               </div>
             </CardContent>
