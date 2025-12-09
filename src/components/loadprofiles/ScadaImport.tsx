@@ -64,8 +64,8 @@ export function ScadaImport({ categories }: ScadaImportProps) {
   
   // Form fields for the SCADA import
   const [siteName, setSiteName] = useState("");
-  const [shopNumber, setShopNumber] = useState("");
   const [shopName, setShopName] = useState("");
+  const [area, setArea] = useState("");
   const [categoryId, setCategoryId] = useState("");
 
   // Manual column mapping state
@@ -203,8 +203,8 @@ export function ScadaImport({ categories }: ScadaImportProps) {
       const { error } = await supabase.from("scada_imports").insert([
         {
           site_name: siteName,
-          shop_number: shopNumber || null,
           shop_name: shopName || null,
+          area_sqm: area ? parseFloat(area) : null,
           file_name: fileName,
           raw_data: JSON.parse(JSON.stringify(processedData.rawData)),
           data_points: processedData.dataPoints,
@@ -288,8 +288,8 @@ export function ScadaImport({ categories }: ScadaImportProps) {
     setAnalysis(null);
     setProcessedData(null);
     setSiteName("");
-    setShopNumber("");
     setShopName("");
+    setArea("");
     setCategoryId("");
   };
 
@@ -365,19 +365,20 @@ export function ScadaImport({ categories }: ScadaImportProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Shop Number</Label>
-                <Input
-                  placeholder="e.g., G12"
-                  value={shopNumber}
-                  onChange={(e) => setShopNumber(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
                 <Label>Shop Name</Label>
                 <Input
                   placeholder="e.g., Woolworths"
                   value={shopName}
                   onChange={(e) => setShopName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Area (m²)</Label>
+                <Input
+                  type="number"
+                  placeholder="e.g., 250"
+                  value={area}
+                  onChange={(e) => setArea(e.target.value)}
                 />
               </div>
             </div>
