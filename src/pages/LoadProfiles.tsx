@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Upload, Trash2, Edit2, Activity, FileSpreadsheet, Zap, Database } from "lucide-react";
+import { Plus, Upload, Trash2, Edit2, Database } from "lucide-react";
 import { toast } from "sonner";
 import { GoogleSheetsImport } from "@/components/loadprofiles/GoogleSheetsImport";
 import { LoadProfileEditor } from "@/components/loadprofiles/LoadProfileEditor";
@@ -405,23 +405,11 @@ export default function LoadProfiles() {
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="meter-library">
             <Database className="h-4 w-4 mr-2" />
-            Meter Analysis
-          </TabsTrigger>
-          <TabsTrigger value="scada">
-            <Zap className="h-4 w-4 mr-2" />
-            Import Meter Data
-          </TabsTrigger>
-          <TabsTrigger value="scada-imports">
-            <Database className="h-4 w-4 mr-2" />
-            Import History
-          </TabsTrigger>
-          <TabsTrigger value="library">
-            <Activity className="h-4 w-4 mr-2" />
-            Profile Templates
+            Meter Library
           </TabsTrigger>
           <TabsTrigger value="import">
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Google Sheets
+            <Upload className="h-4 w-4 mr-2" />
+            Import
           </TabsTrigger>
         </TabsList>
 
@@ -429,175 +417,12 @@ export default function LoadProfiles() {
           <MeterLibrary />
         </TabsContent>
 
-        <TabsContent value="library" className="space-y-4">
-          {/* Categorized Profiles */}
-          {totalProfiles === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Activity className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium">No load profiles yet</h3>
-                <p className="text-muted-foreground text-center max-w-sm mt-1">
-                  Import from Google Sheets or add profiles manually.
-                </p>
-                <Button className="mt-4" onClick={() => fileInputRef.current?.click()}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Import CSV
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <Accordion type="multiple" defaultValue={categories?.map((c) => c.id) || []} className="space-y-2">
-          {profilesByCategory.map((cat) => (
-            cat.profiles.length > 0 && (
-              <AccordionItem key={cat.id} value={cat.id} className="border rounded-lg px-4">
-                <AccordionTrigger className="hover:no-underline">
-                  <div className="flex items-center gap-3">
-                    <span className="font-semibold">{cat.name}</span>
-                    <Badge variant="secondary">{cat.profiles.length}</Badge>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Profile Name</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead className="text-right">kWh/m²/month</TableHead>
-                        <TableHead>Load Profile</TableHead>
-                        <TableHead className="w-[80px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {cat.profiles.map((st) => (
-                        <TableRow key={st.id}>
-                          <TableCell className="font-medium">{st.name}</TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {st.description || "-"}
-                          </TableCell>
-                          <TableCell className="text-right">{st.kwh_per_sqm_month}</TableCell>
-                          <TableCell>
-                            <div className="flex items-end gap-[1px] h-6 w-32">
-                              {(st.load_profile_weekday || []).map((val, i) => {
-                                const max = Math.max(...(st.load_profile_weekday || [1]));
-                                return (
-                                  <div
-                                    key={i}
-                                    className="flex-1 bg-primary/60 rounded-sm"
-                                    style={{ height: `${(Number(val) / max) * 100}%` }}
-                                  />
-                                );
-                              })}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openEditDialog(st)}
-                              >
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => deleteShopType.mutate(st.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </AccordionContent>
-              </AccordionItem>
-            )
-          ))}
-
-          {uncategorizedProfiles.length > 0 && (
-            <AccordionItem value="uncategorized" className="border rounded-lg px-4">
-              <AccordionTrigger className="hover:no-underline">
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold text-muted-foreground">Uncategorized</span>
-                  <Badge variant="outline">{uncategorizedProfiles.length}</Badge>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Profile Name</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="text-right">kWh/m²/month</TableHead>
-                      <TableHead>Load Profile</TableHead>
-                      <TableHead className="w-[80px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {uncategorizedProfiles.map((st) => (
-                      <TableRow key={st.id}>
-                        <TableCell className="font-medium">{st.name}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {st.description || "-"}
-                        </TableCell>
-                        <TableCell className="text-right">{st.kwh_per_sqm_month}</TableCell>
-                        <TableCell>
-                          <div className="flex items-end gap-[1px] h-6 w-32">
-                            {(st.load_profile_weekday || []).map((val, i) => {
-                              const max = Math.max(...(st.load_profile_weekday || [1]));
-                              return (
-                                <div
-                                  key={i}
-                                  className="flex-1 bg-primary/60 rounded-sm"
-                                  style={{ height: `${(Number(val) / max) * 100}%` }}
-                                />
-                              );
-                            })}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => openEditDialog(st)}
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => deleteShopType.mutate(st.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </AccordionContent>
-            </AccordionItem>
-          )}
-            </Accordion>
-          )}
-        </TabsContent>
-
-        <TabsContent value="scada-imports">
+        <TabsContent value="import" className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <ScadaImport categories={categories || []} />
+            <GoogleSheetsImport categories={categories || []} />
+          </div>
           <ScadaImportsList />
-        </TabsContent>
-
-        <TabsContent value="import">
-          <GoogleSheetsImport categories={categories || []} />
-        </TabsContent>
-
-        <TabsContent value="scada">
-          <ScadaImport categories={categories || []} />
         </TabsContent>
       </Tabs>
     </div>
