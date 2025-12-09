@@ -333,6 +333,10 @@ Return JSON with:
         throw new Error("No valid data points could be parsed from the file");
       }
 
+      // Log readings per hour for debugging
+      console.log("Weekday readings per hour:", hourlyData.weekday.map(arr => arr.length));
+      console.log("Weekend readings per hour:", hourlyData.weekend.map(arr => arr.length));
+
       // Calculate averages for each hour
       const weekdayAvg = hourlyData.weekday.map(arr => 
         arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
@@ -341,6 +345,9 @@ Return JSON with:
         arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
       );
 
+      console.log("Weekday hourly averages (kWh):", weekdayAvg.map(v => v.toFixed(3)));
+      console.log("Weekend hourly averages (kWh):", weekendAvg.map(v => v.toFixed(3)));
+
       // Normalize to percentages summing to 100
       const normalize = (arr: number[]): number[] => {
         const sum = arr.reduce((a, b) => a + b, 0);
@@ -348,11 +355,17 @@ Return JSON with:
         return arr.map(v => Math.round((v / sum) * 100 * 100) / 100);
       };
 
+      const weekdayProfile = normalize(weekdayAvg);
+      const weekendProfile = normalize(weekendAvg);
+      
+      console.log("Normalized weekday profile (%):", weekdayProfile);
+      console.log("Normalized weekend profile (%):", weekendProfile);
+
       const sortedDates = Array.from(dates).sort();
 
       const result: ProcessedProfile = {
-        weekdayProfile: normalize(weekdayAvg),
-        weekendProfile: normalize(weekendAvg),
+        weekdayProfile,
+        weekendProfile,
         dataPoints: parsedCount,
         dateRange: {
           start: sortedDates[0] || '',
