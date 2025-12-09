@@ -4,11 +4,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Database, Layers } from "lucide-react";
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
 import { SimulationPanel } from "@/components/projects/SimulationPanel";
+import { ProjectMeterLibrary } from "@/components/projects/ProjectMeterLibrary";
+import { ProjectMeterStacking } from "@/components/projects/ProjectMeterStacking";
 import { toast } from "sonner";
 
 export default function ProjectDetail() {
@@ -107,11 +109,31 @@ export default function ProjectDetail() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="tenants">Tenant Schedule</TabsTrigger>
-          <TabsTrigger value="load-profile">Load Profile</TabsTrigger>
-          <TabsTrigger value="tariff">Tariff</TabsTrigger>
-          <TabsTrigger value="simulation">Simulation</TabsTrigger>
+        <TabsList className="flex-wrap h-auto gap-1">
+          <TabsTrigger value="tenants">
+            <Users className="h-4 w-4 mr-2" />
+            Tenants
+          </TabsTrigger>
+          <TabsTrigger value="meters">
+            <Database className="h-4 w-4 mr-2" />
+            Meter Library
+          </TabsTrigger>
+          <TabsTrigger value="stacking">
+            <Layers className="h-4 w-4 mr-2" />
+            Profile Stacking
+          </TabsTrigger>
+          <TabsTrigger value="load-profile">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Load Profile
+          </TabsTrigger>
+          <TabsTrigger value="tariff">
+            <DollarSign className="h-4 w-4 mr-2" />
+            Tariff
+          </TabsTrigger>
+          <TabsTrigger value="simulation">
+            <Zap className="h-4 w-4 mr-2" />
+            Simulation
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="tenants" className="mt-6">
@@ -120,6 +142,14 @@ export default function ProjectDetail() {
             tenants={tenants || []}
             shopTypes={shopTypes || []}
           />
+        </TabsContent>
+
+        <TabsContent value="meters" className="mt-6">
+          <ProjectMeterLibrary projectId={id!} />
+        </TabsContent>
+
+        <TabsContent value="stacking" className="mt-6">
+          <ProjectMeterStacking projectId={id!} />
         </TabsContent>
 
         <TabsContent value="load-profile" className="mt-6">
