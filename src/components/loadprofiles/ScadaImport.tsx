@@ -29,6 +29,11 @@ interface ColumnAnalysis {
   explanation: string;
 }
 
+interface RawDataPoint {
+  timestamp: string;
+  values: Record<string, number>;
+}
+
 interface ProcessedProfile {
   weekdayProfile: number[];
   weekendProfile: number[];
@@ -36,6 +41,7 @@ interface ProcessedProfile {
   dateRange: { start: string; end: string };
   weekdayDays: number;
   weekendDays: number;
+  rawData: RawDataPoint[];
 }
 
 interface ScadaImportProps {
@@ -161,26 +167,29 @@ export function ScadaImport({ categories }: ScadaImportProps) {
     setIsSaving(true);
 
     try {
-      // Save to scada_imports table with raw data and generated profile
-      const { error } = await supabase.from("scada_imports").insert({
-        site_name: siteName,
-        shop_number: shopNumber || null,
-        shop_name: shopName || null,
-        file_name: fileName,
-        raw_data: csvContent ? parseRawData(csvContent, analysis) : null,
-        load_profile_weekday: weekdayProfile,
-        load_profile_weekend: weekendProfile,
-        data_points: processedProfile?.dataPoints || 0,
-        date_range_start: processedProfile?.dateRange.start || null,
-        date_range_end: processedProfile?.dateRange.end || null,
-        weekday_days: processedProfile?.weekdayDays || 0,
-        weekend_days: processedProfile?.weekendDays || 0,
-        category_id: categoryId || null,
-      });
+      // Save to scada_imports table with raw data from edge function response
+      const { error } = await supabase.from("scada_imports").insert([
+        {
+          site_name: siteName,
+          shop_number: shopNumber || null,
+          shop_name: shopName || null,
+          file_name: fileName,
+          raw_data: JSON.parse(JSON.stringify(processedProfile?.rawData || null)),
+          load_profile_weekday: weekdayProfile,
+          load_profile_weekend: weekendProfile,
+          data_points: processedProfile?.dataPoints || 0,
+          date_range_start: processedProfile?.dateRange.start || null,
+          date_range_end: processedProfile?.dateRange.end || null,
+          weekday_days: processedProfile?.weekdayDays || 0,
+          weekend_days: processedProfile?.weekendDays || 0,
+          category_id: categoryId || null,
+        }
+      ]);
 
       if (error) throw error;
 
       queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
+      queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });
       
       toast.success("SCADA import saved successfully");
       
