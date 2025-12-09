@@ -10,9 +10,14 @@ interface ColumnAnalysis {
   timestampColumn: string | null;
   dateColumn?: string | null;
   timeColumn?: string | null;
-  powerColumn: string | null;
+  powerColumns: string[];
   ignoredColumns: string[];
   confidence: number;
+}
+
+interface RawDataPoint {
+  timestamp: string;
+  values: Record<string, number>;
 }
 
 interface ProcessedProfile {
@@ -22,6 +27,7 @@ interface ProcessedProfile {
   dateRange: { start: string; end: string };
   weekdayDays: number;
   weekendDays: number;
+  rawData: RawDataPoint[];
 }
 
 // Detect delimiter (comma, tab, semicolon)
@@ -39,6 +45,21 @@ function detectDelimiter(content: string): string {
 // Parse a line with the detected delimiter
 function parseLine(line: string, delimiter: string): string[] {
   return line.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''));
+}
+
+// Identify power-related columns
+function isPowerColumn(header: string): boolean {
+  const h = header.toLowerCase();
+  return (
+    h.includes('kwh') || 
+    h.includes('kvarh') || 
+    h.includes('kvah') || 
+    h.includes('kva') ||
+    /^p\d+$/.test(h) || 
+    /^q\d+$/.test(h) ||
+    /^s$/.test(h) ||
+    (h.includes('(kwh)') || h.includes('(kvarh)') || h.includes('(kvah)') || h.includes('(kva)'))
+  );
 }
 
 serve(async (req) => {
@@ -103,10 +124,9 @@ serve(async (req) => {
         parseLine(line, delimiter)
       );
 
-      // Check if date and time might be in separate columns
-      const hasSeparateDateTimeColumns = headers.some(h => 
-        h.toLowerCase() === 'time' || h.toLowerCase() === 'date'
-      );
+      // Identify all power columns automatically
+      const powerColumns = headers.filter(h => isPowerColumn(h));
+      console.log("Detected power columns:", powerColumns);
 
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -128,18 +148,21 @@ Identify:
 1. Timestamp handling - either:
    - A single timestampColumn with combined datetime
    - OR separate dateColumn and timeColumn if date and time are in different columns
-2. The active power/energy column. Look for:
-   - Columns with "kWh" in header or values around 0.1-100 kWh range
-   - Columns named "P1", "P2" (these are active power channels)
-   - Prefer active power (P, kWh) over reactive (Q, kVArh) or apparent (S, kVA)
-3. Columns to ignore (Q columns, S columns, Status, etc.)
+2. ALL power/energy columns that should be captured for analysis:
+   - P1, P2 (active power in kWh)
+   - Q1, Q2, Q3, Q4 (reactive power in kvarh)
+   - S (apparent power in kVAh or kVA)
+   - Include all columns with (kWh), (kvarh), (kVAh), (kVA) in the name
+3. The PRIMARY power column for load profile calculation (usually P1 or first kWh column)
+4. Columns to ignore (Status, etc.)
 
 Return JSON with:
 {
   "timestampColumn": "column name if combined datetime, null if separate",
   "dateColumn": "column name with dates (if separate), null otherwise",
   "timeColumn": "column name with times (if separate), null otherwise",
-  "powerColumn": "column name for active power/kWh",
+  "powerColumns": ["list of ALL power/energy columns to capture"],
+  "primaryPowerColumn": "main kWh column for profile calculation",
   "ignoredColumns": ["list of ignored columns"],
   "confidence": 0-100,
   "explanation": "Brief explanation"
@@ -161,12 +184,13 @@ Return JSON with:
                   timestampColumn: { type: "string", nullable: true },
                   dateColumn: { type: "string", nullable: true },
                   timeColumn: { type: "string", nullable: true },
-                  powerColumn: { type: "string", nullable: true },
+                  powerColumns: { type: "array", items: { type: "string" } },
+                  primaryPowerColumn: { type: "string", nullable: true },
                   ignoredColumns: { type: "array", items: { type: "string" } },
                   confidence: { type: "number" },
                   explanation: { type: "string" }
                 },
-                required: ["powerColumn", "ignoredColumns", "confidence", "explanation"]
+                required: ["powerColumns", "primaryPowerColumn", "ignoredColumns", "confidence", "explanation"]
               }
             }
           }],
@@ -189,6 +213,9 @@ Return JSON with:
 
       const analysis = JSON.parse(toolCall.function.arguments);
       console.log("Column analysis:", analysis);
+
+      // Backwards compatibility - set powerColumn to primaryPowerColumn
+      analysis.powerColumn = analysis.primaryPowerColumn;
 
       return new Response(JSON.stringify({
         success: true,
@@ -230,7 +257,15 @@ Return JSON with:
         throw new Error(`Could not find power column: ${powerColumn}`);
       }
 
+      // Find ALL power column indices for raw data capture
+      const allPowerColumns: { name: string; idx: number }[] = [];
+      headers.forEach((h, idx) => {
+        if (isPowerColumn(h)) {
+          allPowerColumns.push({ name: h, idx });
+        }
+      });
       console.log(`Processing with: timestamp=${timestampIdx}, date=${dateIdx}, time=${timeIdx}, power=${powerIdx}`);
+      console.log(`Capturing all power columns:`, allPowerColumns.map(c => c.name));
 
       // Parse all data rows
       const hourlyData: { weekday: number[][]; weekend: number[][] } = {
@@ -238,6 +273,7 @@ Return JSON with:
         weekend: Array.from({ length: 24 }, () => []),
       };
 
+      const rawData: RawDataPoint[] = [];
       const dates = new Set<string>();
       let weekdayDays = 0;
       let weekendDays = 0;
@@ -325,9 +361,24 @@ Return JSON with:
         } else {
           hourlyData.weekday[hour].push(power);
         }
+
+        // Capture ALL power column values for raw data
+        const values: Record<string, number> = {};
+        allPowerColumns.forEach(({ name, idx }) => {
+          const val = parseFloat(cols[idx]);
+          if (!isNaN(val)) {
+            values[name] = val;
+          }
+        });
+
+        rawData.push({
+          timestamp: date.toISOString(),
+          values
+        });
       }
 
       console.log(`Parsed ${parsedCount} readings, skipped ${skippedCount}`);
+      console.log(`Raw data captured: ${rawData.length} points with ${allPowerColumns.length} columns each`);
 
       if (parsedCount === 0) {
         throw new Error("No valid data points could be parsed from the file");
@@ -372,14 +423,16 @@ Return JSON with:
           end: sortedDates[sortedDates.length - 1] || ''
         },
         weekdayDays,
-        weekendDays
+        weekendDays,
+        rawData
       };
 
       console.log("Processed profile:", {
         dataPoints: result.dataPoints,
         dateRange: result.dateRange,
         weekdayDays: result.weekdayDays,
-        weekendDays: result.weekendDays
+        weekendDays: result.weekendDays,
+        rawDataPoints: result.rawData.length
       });
 
       return new Response(JSON.stringify({
