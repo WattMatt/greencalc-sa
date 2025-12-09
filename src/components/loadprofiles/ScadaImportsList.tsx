@@ -36,7 +36,7 @@ interface RawDataPoint {
   values: Record<string, number>;
 }
 
-// Calculate profiles from raw data
+// Calculate profiles from raw data - returns average kWh per hour
 function calculateProfilesFromRawData(rawData: RawDataPoint[]): { weekday: number[]; weekend: number[] } {
   const weekdayHours: number[][] = Array.from({ length: 24 }, () => []);
   const weekendHours: number[][] = Array.from({ length: 24 }, () => []);
@@ -57,16 +57,13 @@ function calculateProfilesFromRawData(rawData: RawDataPoint[]): { weekday: numbe
     }
   }
 
-  // Calculate averages for each hour
-  const weekdayAvgs = weekdayHours.map(vals => vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0);
-  const weekendAvgs = weekendHours.map(vals => vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0);
-
-  // Convert to percentages (sum to 100)
-  const weekdayTotal = weekdayAvgs.reduce((a, b) => a + b, 0) || 1;
-  const weekendTotal = weekendAvgs.reduce((a, b) => a + b, 0) || 1;
-
-  const weekdayProfile = weekdayAvgs.map(v => Math.round((v / weekdayTotal) * 100 * 100) / 100);
-  const weekendProfile = weekendAvgs.map(v => Math.round((v / weekendTotal) * 100 * 100) / 100);
+  // Calculate averages for each hour - keep as actual kWh values
+  const weekdayProfile = weekdayHours.map(vals => 
+    vals.length > 0 ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100 : 0
+  );
+  const weekendProfile = weekendHours.map(vals => 
+    vals.length > 0 ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100 : 0
+  );
 
   return { weekday: weekdayProfile, weekend: weekendProfile };
 }
@@ -354,6 +351,9 @@ export function ScadaImportsList() {
                               <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                                 <BarChart3 className="h-4 w-4" />
                                 Weekday Profile
+                                <span className="text-xs font-normal text-muted-foreground ml-auto">
+                                  Daily: {imp.load_profile_weekday?.reduce((a, b) => a + b, 0).toFixed(1)} kWh
+                                </span>
                               </h4>
                               {(() => {
                                 const maxVal = Math.max(...(imp.load_profile_weekday || [1]));
@@ -371,7 +371,7 @@ export function ScadaImportsList() {
                                           </TooltipTrigger>
                                           <TooltipContent side="top" className="text-xs">
                                             <div className="font-medium">{idx}:00 - {idx + 1}:00</div>
-                                            <div>{val.toFixed(2)}% of daily load</div>
+                                            <div className="text-lg font-bold">{val.toFixed(2)} kWh</div>
                                             <div className="text-muted-foreground">{tou.name} period</div>
                                           </TooltipContent>
                                         </Tooltip>
@@ -390,6 +390,9 @@ export function ScadaImportsList() {
                               <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                                 <BarChart3 className="h-4 w-4" />
                                 Weekend Profile
+                                <span className="text-xs font-normal text-muted-foreground ml-auto">
+                                  Daily: {imp.load_profile_weekend?.reduce((a, b) => a + b, 0).toFixed(1)} kWh
+                                </span>
                               </h4>
                               {(() => {
                                 const maxVal = Math.max(...(imp.load_profile_weekend || [1]));
@@ -407,7 +410,7 @@ export function ScadaImportsList() {
                                           </TooltipTrigger>
                                           <TooltipContent side="top" className="text-xs">
                                             <div className="font-medium">{idx}:00 - {idx + 1}:00</div>
-                                            <div>{val.toFixed(2)}% of daily load</div>
+                                            <div className="text-lg font-bold">{val.toFixed(2)} kWh</div>
                                             <div className="text-muted-foreground">{tou.name} period</div>
                                           </TooltipContent>
                                         </Tooltip>
