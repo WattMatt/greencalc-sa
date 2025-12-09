@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Upload, Trash2, Edit2, Database } from "lucide-react";
 import { toast } from "sonner";
-import { GoogleSheetsImport } from "@/components/loadprofiles/GoogleSheetsImport";
+
 import { LoadProfileEditor } from "@/components/loadprofiles/LoadProfileEditor";
 import { ScadaImport } from "@/components/loadprofiles/ScadaImport";
 import { ScadaImportsList } from "@/components/loadprofiles/ScadaImportsList";
@@ -418,10 +418,7 @@ export default function LoadProfiles() {
         </TabsContent>
 
         <TabsContent value="import" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
-            <ScadaImport categories={categories || []} />
-            <GoogleSheetsImport categories={categories || []} />
-          </div>
+          <ScadaImport categories={categories || []} />
           <ScadaImportsList />
         </TabsContent>
       </Tabs>
