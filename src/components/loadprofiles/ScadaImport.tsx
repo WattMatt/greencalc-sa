@@ -300,6 +300,54 @@ export function ScadaImport({ categories }: ScadaImportProps) {
           )}
         </div>
 
+        {/* Metadata fields - available immediately after upload */}
+        {csvContent && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Site Name *</Label>
+                <Input
+                  placeholder="e.g., Clearwater Mall"
+                  value={siteName}
+                  onChange={(e) => setSiteName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Shop Number</Label>
+                <Input
+                  placeholder="e.g., G12"
+                  value={shopNumber}
+                  onChange={(e) => setShopNumber(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Shop Name</Label>
+                <Input
+                  placeholder="e.g., Woolworths"
+                  value={shopName}
+                  onChange={(e) => setShopName(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Category (helps with classification)</Label>
+              <Select value={categoryId} onValueChange={setCategoryId}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Select category..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
         {/* Step 2: Column Analysis */}
         {analysis && (
           <Card className="bg-muted/50">
@@ -394,49 +442,6 @@ export function ScadaImport({ categories }: ScadaImportProps) {
                 </div>
               </CardContent>
             </Card>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Site Name *</Label>
-                <Input
-                  placeholder="e.g., Clearwater Mall"
-                  value={siteName}
-                  onChange={(e) => setSiteName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Shop Number</Label>
-                <Input
-                  placeholder="e.g., G12"
-                  value={shopNumber}
-                  onChange={(e) => setShopNumber(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Shop Name</Label>
-                <Input
-                  placeholder="e.g., Woolworths"
-                  value={shopName}
-                  onChange={(e) => setShopName(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Category (helps with classification)</Label>
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger className="w-64">
-                  <SelectValue placeholder="Select category..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
             <LoadProfileEditor
               weekdayProfile={weekdayProfile}
