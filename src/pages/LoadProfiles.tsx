@@ -401,27 +401,27 @@ export default function LoadProfiles() {
         </Card>
       </div>
 
-      <Tabs defaultValue="library" className="space-y-4">
+      <Tabs defaultValue="meter-library" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="library">
-            <Activity className="h-4 w-4 mr-2" />
-            Profile Library
-          </TabsTrigger>
           <TabsTrigger value="meter-library">
             <Database className="h-4 w-4 mr-2" />
-            Meter Library
+            Meter Analysis
+          </TabsTrigger>
+          <TabsTrigger value="scada">
+            <Zap className="h-4 w-4 mr-2" />
+            Import Meter Data
           </TabsTrigger>
           <TabsTrigger value="scada-imports">
             <Database className="h-4 w-4 mr-2" />
-            SCADA Imports
+            Import History
+          </TabsTrigger>
+          <TabsTrigger value="library">
+            <Activity className="h-4 w-4 mr-2" />
+            Profile Templates
           </TabsTrigger>
           <TabsTrigger value="import">
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Google Sheets
-          </TabsTrigger>
-          <TabsTrigger value="scada">
-            <Zap className="h-4 w-4 mr-2" />
-            New Import
           </TabsTrigger>
         </TabsList>
 
