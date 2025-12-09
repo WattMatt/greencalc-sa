@@ -36,7 +36,7 @@ function detectDelimiter(content: string): string {
   const tabCount = (firstLines.match(/\t/g) || []).length;
   const commaCount = (firstLines.match(/,/g) || []).length;
   const semicolonCount = (firstLines.match(/;/g) || []).length;
-  
+
   if (tabCount > commaCount && tabCount > semicolonCount) return '\t';
   if (semicolonCount > commaCount) return ';';
   return ',';
@@ -51,11 +51,11 @@ function parseLine(line: string, delimiter: string): string[] {
 function isPowerColumn(header: string): boolean {
   const h = header.toLowerCase();
   return (
-    h.includes('kwh') || 
-    h.includes('kvarh') || 
-    h.includes('kvah') || 
+    h.includes('kwh') ||
+    h.includes('kvarh') ||
+    h.includes('kvah') ||
     h.includes('kva') ||
-    /^p\d+$/.test(h) || 
+    /^p\d+$/.test(h) ||
     /^q\d+$/.test(h) ||
     /^s$/.test(h) ||
     (h.includes('(kwh)') || h.includes('(kvarh)') || h.includes('(kvah)') || h.includes('(kva)'))
@@ -88,7 +88,7 @@ serve(async (req) => {
       const trimmed = l.trim();
       return trimmed && !trimmed.toLowerCase().startsWith('sep=');
     });
-    
+
     if (lines.length < 2) {
       throw new Error("CSV must have a header and at least one data row");
     }
@@ -98,15 +98,15 @@ serve(async (req) => {
     for (let i = 0; i < Math.min(5, lines.length); i++) {
       const cols = parseLine(lines[i], delimiter);
       const lowerCols = cols.map((c: string) => c.toLowerCase());
-      
+
       // Check for header keywords
-      const hasHeaderKeywords = lowerCols.some((c: string) => 
-        c.includes('time') || c === 'date' || c.includes('kwh') || 
+      const hasHeaderKeywords = lowerCols.some((c: string) =>
+        c.includes('time') || c === 'date' || c.includes('kwh') ||
         c.includes('kw') || c.includes('power') || c.includes('energy') ||
         c.includes('status') || c.includes('kva') || c.includes('kvar') ||
         /^p\d+$/.test(c) || /^q\d+$/.test(c) // matches p1, q1, etc.
       );
-      
+
       if (cols.length >= 2 && hasHeaderKeywords) {
         headerLineIdx = i;
         break;
@@ -120,7 +120,7 @@ serve(async (req) => {
 
     if (action === "analyze") {
       // Sample data rows
-      const sampleRows = lines.slice(dataStartIdx, dataStartIdx + 10).map((line: string) => 
+      const sampleRows = lines.slice(dataStartIdx, dataStartIdx + 10).map((line: string) =>
         parseLine(line, delimiter)
       );
 
@@ -206,7 +206,7 @@ Return JSON with:
 
       const aiData = await aiResponse.json();
       const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-      
+
       if (!toolCall) {
         throw new Error("AI did not return column analysis");
       }
@@ -231,7 +231,7 @@ Return JSON with:
     if (action === "process") {
       // Determine how to get timestamp
       const usesSeparateDateTime = dateColumn && timeColumn;
-      
+
       let timestampIdx = -1;
       let dateIdx = -1;
       let timeIdx = -1;
@@ -283,7 +283,7 @@ Return JSON with:
 
       for (let i = dataStartIdx; i < lines.length; i++) {
         const cols = parseLine(lines[i], delimiter);
-        
+
         let timestampStr: string;
         if (usesSeparateDateTime) {
           const dateStr = cols[dateIdx];
@@ -297,7 +297,7 @@ Return JSON with:
         } else {
           timestampStr = cols[timestampIdx];
         }
-        
+
         const powerStr = cols[powerIdx];
 
         if (!timestampStr || !powerStr) {
@@ -307,10 +307,10 @@ Return JSON with:
 
         // Parse timestamp - try various formats
         let date: Date | null = null;
-        
+
         // Try ISO format first
         date = new Date(timestampStr);
-        
+
         // If invalid, try common formats
         if (isNaN(date.getTime())) {
           // Try YYYY/MM/DD HH:mm:ss or YYYY-MM-DD HH:mm:ss
@@ -320,7 +320,7 @@ Return JSON with:
             date = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:${second}`);
           }
         }
-        
+
         if (isNaN(date?.getTime() || NaN)) {
           // Try DD/MM/YYYY HH:mm or similar
           const ddmmMatch = timestampStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
@@ -328,6 +328,23 @@ Return JSON with:
             const [, day, month, year, hour, minute, second = '00'] = ddmmMatch;
             const fullYear = year.length === 2 ? `20${year}` : year;
             date = new Date(`${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:${second}`);
+          }
+        }
+
+        if (isNaN(date?.getTime() || NaN)) {
+          // Try DD-MMM-YY HH:mm (e.g. 01-Jan-24 00:00)
+          const ddMmmyyMatch = timestampStr.match(/(\d{1,2})[\/\-]([A-Za-z]{3})[\/\-](\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+          if (ddMmmyyMatch) {
+            const months: Record<string, string> = {
+              jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+              jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+            };
+            const [, day, monthStr, year, hour, minute, second = '00'] = ddMmmyyMatch;
+            const month = months[monthStr.toLowerCase()];
+            if (month) {
+              const fullYear = year.length === 2 ? `20${year}` : year;
+              date = new Date(`${fullYear}-${month}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:${second}`);
+            }
           }
         }
 
@@ -349,7 +366,7 @@ Return JSON with:
         const dateKey = date.toISOString().split('T')[0];
 
         dates.add(dateKey);
-        
+
         if (!seenDates[dateKey]) {
           seenDates[dateKey] = true;
           if (isWeekend) weekendDays++;
@@ -389,10 +406,10 @@ Return JSON with:
       console.log("Weekend readings per hour:", hourlyData.weekend.map(arr => arr.length));
 
       // Calculate averages for each hour
-      const weekdayAvg = hourlyData.weekday.map(arr => 
+      const weekdayAvg = hourlyData.weekday.map(arr =>
         arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
       );
-      const weekendAvg = hourlyData.weekend.map(arr => 
+      const weekendAvg = hourlyData.weekend.map(arr =>
         arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
       );
 
@@ -408,7 +425,7 @@ Return JSON with:
 
       const weekdayProfile = normalize(weekdayAvg);
       const weekendProfile = normalize(weekendAvg);
-      
+
       console.log("Normalized weekday profile (%):", weekdayProfile);
       console.log("Normalized weekend profile (%):", weekendProfile);
 
@@ -446,9 +463,9 @@ Return JSON with:
     throw new Error("Invalid action. Use 'analyze' or 'process'");
   } catch (error) {
     console.error("process-scada-profile error:", error);
-    return new Response(JSON.stringify({ 
-      success: false, 
-      error: error instanceof Error ? error.message : "Unknown error" 
+    return new Response(JSON.stringify({
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error"
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

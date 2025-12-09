@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Upload, Trash2, Download } from "lucide-react";
 import { toast } from "sonner";
 
+import { TenantProfileMatcher } from "./TenantProfileMatcher";
+
 interface Tenant {
   id: string;
   name: string;
@@ -86,10 +88,10 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       const text = await file.text();
       const lines = text.split("\n").filter((l) => l.trim());
       const headers = lines[0].toLowerCase().split(",").map((h) => h.trim());
-      
+
       const nameIdx = headers.findIndex((h) => h.includes("name") || h.includes("tenant") || h.includes("shop"));
       const areaIdx = headers.findIndex((h) => h.includes("area") || h.includes("sqm") || h.includes("size"));
-      
+
       if (nameIdx === -1 || areaIdx === -1) {
         throw new Error("CSV must have 'name' and 'area' columns");
       }
@@ -336,6 +338,10 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {tenants.length > 0 && (
+        <TenantProfileMatcher projectId={projectId} tenants={tenants} />
       )}
     </div>
   );

@@ -66,6 +66,12 @@ export function ScadaImport({ categories }: ScadaImportProps) {
   const [shopName, setShopName] = useState("");
   const [categoryId, setCategoryId] = useState("");
 
+  // Manual column mapping state
+  const [selectedTimestampCol, setSelectedTimestampCol] = useState<string>("none");
+  const [selectedDateCol, setSelectedDateCol] = useState<string>("none");
+  const [selectedTimeCol, setSelectedTimeCol] = useState<string>("none");
+  const [selectedPowerCol, setSelectedPowerCol] = useState<string>("");
+
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -110,6 +116,25 @@ export function ScadaImport({ categories }: ScadaImportProps) {
       }
       
       toast.success("CSV analyzed successfully");
+      
+      // Pre-select columns based on analysis
+      if (data.analysis) {
+        if (data.analysis.timestampColumn) {
+          setSelectedTimestampCol(data.analysis.timestampColumn);
+          setSelectedDateCol("none");
+          setSelectedTimeCol("none");
+        } else if (data.analysis.dateColumn && data.analysis.timeColumn) {
+          setSelectedTimestampCol("none");
+          setSelectedDateCol(data.analysis.dateColumn);
+          setSelectedTimeCol(data.analysis.timeColumn);
+        }
+        
+        if (data.analysis.powerColumn) {
+          setSelectedPowerCol(data.analysis.powerColumn);
+        } else if (data.analysis.powerColumns && data.analysis.powerColumns.length > 0) {
+           setSelectedPowerCol(data.analysis.powerColumns[0]);
+        }
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to analyze CSV");
     } finally {
@@ -119,11 +144,11 @@ export function ScadaImport({ categories }: ScadaImportProps) {
 
   const handleProcess = async () => {
     // Check we have either timestampColumn or both dateColumn+timeColumn
-    const hasTimestamp = analysis?.timestampColumn;
-    const hasSeparateDateTime = analysis?.dateColumn && analysis?.timeColumn;
+    const hasTimestamp = selectedTimestampCol !== "none";
+    const hasSeparateDateTime = selectedDateCol !== "none" && selectedTimeCol !== "none";
     
-    if (!csvContent || !analysis?.powerColumn || (!hasTimestamp && !hasSeparateDateTime)) {
-      toast.error("Missing required column information");
+    if (!csvContent || !selectedPowerCol || (!hasTimestamp && !hasSeparateDateTime)) {
+      toast.error("Please ensure Timestamp (or Date+Time) and Power columns are selected");
       return;
     }
 
@@ -134,10 +159,10 @@ export function ScadaImport({ categories }: ScadaImportProps) {
         body: { 
           csvContent, 
           action: "process",
-          timestampColumn: analysis.timestampColumn,
-          dateColumn: analysis.dateColumn,
-          timeColumn: analysis.timeColumn,
-          powerColumn: analysis.powerColumn
+          timestampColumn: selectedTimestampCol !== "none" ? selectedTimestampCol : null,
+          dateColumn: selectedDateCol !== "none" ? selectedDateCol : null,
+          timeColumn: selectedTimeCol !== "none" ? selectedTimeCol : null,
+          powerColumn: selectedPowerCol
         },
       });
 
@@ -369,63 +394,119 @@ export function ScadaImport({ categories }: ScadaImportProps) {
           </div>
         )}
 
-        {/* Step 2: Column Analysis */}
         {analysis && (
           <Card className="bg-muted/50">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center justify-between">
-                <span>Column Detection</span>
+                <span>Column Mapping</span>
                 <Badge variant={analysis.confidence >= 80 ? "default" : "secondary"}>
                   {analysis.confidence}% Confidence
                 </Badge>
               </CardTitle>
+              <CardDescription>
+                Verify or change the column mappings below before processing.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                {/* Show either combined timestamp OR separate date+time */}
-                {analysis.timestampColumn ? (
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    <span className="text-muted-foreground">Timestamp:</span>
-                    <Badge variant="outline">{analysis.timestampColumn}</Badge>
-                  </div>
-                ) : analysis.dateColumn && analysis.timeColumn ? (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    <span className="text-muted-foreground">Date/Time:</span>
-                    <Badge variant="outline">{analysis.dateColumn}</Badge>
-                    <span className="text-muted-foreground">+</span>
-                    <Badge variant="outline">{analysis.timeColumn}</Badge>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Timestamp Selection */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Timestamp Format</Label>
+                  <Select 
+                    value={selectedTimestampCol !== "none" ? "combined" : "separate"} 
+                    onValueChange={(v) => {
+                      if (v === "combined") {
+                        setSelectedDateCol("none");
+                        setSelectedTimeCol("none");
+                        // Try to find a good default if switching back
+                        if (analysis.timestampColumn) setSelectedTimestampCol(analysis.timestampColumn);
+                        else setSelectedTimestampCol(headers[0] || "");
+                      } else {
+                        setSelectedTimestampCol("none");
+                        if (analysis.dateColumn) setSelectedDateCol(analysis.dateColumn);
+                        if (analysis.timeColumn) setSelectedTimeCol(analysis.timeColumn);
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="combined">Single Timestamp Column</SelectItem>
+                      <SelectItem value="separate">Separate Date & Time Columns</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Power Column Selection */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Power Column (kWh)</Label>
+                  <Select value={selectedPowerCol} onValueChange={setSelectedPowerCol}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select power column" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {headers.map((h) => (
+                        <SelectItem key={h} value={h}>{h}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Detailed Column Selectors */}
+                {selectedTimestampCol !== "none" ? (
+                  <div className="space-y-2">
+                    <Label className="text-xs">Select Timestamp Column</Label>
+                    <Select value={selectedTimestampCol} onValueChange={setSelectedTimestampCol}>
+                      <SelectTrigger className="border-green-200 bg-green-50/50">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {headers.map((h) => (
+                          <SelectItem key={h} value={h}>{h}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <XCircle className="h-4 w-4 text-destructive" />
-                    <span className="text-muted-foreground">Timestamp:</span>
-                    <Badge variant="outline">Not found</Badge>
-                  </div>
+                  <>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Select Date Column</Label>
+                      <Select value={selectedDateCol} onValueChange={setSelectedDateCol}>
+                        <SelectTrigger className="border-blue-200 bg-blue-50/50">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">-- Select Date --</SelectItem>
+                          {headers.map((h) => (
+                            <SelectItem key={h} value={h}>{h}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Select Time Column</Label>
+                      <Select value={selectedTimeCol} onValueChange={setSelectedTimeCol}>
+                        <SelectTrigger className="border-blue-200 bg-blue-50/50">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">-- Select Time --</SelectItem>
+                          {headers.map((h) => (
+                            <SelectItem key={h} value={h}>{h}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
                 )}
-                <div className="flex items-center gap-2">
-                  {analysis.powerColumn ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <XCircle className="h-4 w-4 text-destructive" />
-                  )}
-                  <span className="text-muted-foreground">Power (kWh):</span>
-                  <Badge variant="outline">{analysis.powerColumn || "Not found"}</Badge>
-                </div>
               </div>
               
-              {analysis.ignoredColumns.length > 0 && (
-                <div className="text-xs text-muted-foreground">
-                  <span className="font-medium">Ignored:</span>{" "}
-                  {analysis.ignoredColumns.join(", ")}
-                </div>
-              )}
-              
-              <p className="text-xs text-muted-foreground">{analysis.explanation}</p>
+              <div className="text-xs text-muted-foreground mt-2">
+                <span className="font-semibold">Detected Information:</span> {analysis.explanation}
+              </div>
 
-              {/* Show process button if we have valid column setup */}
-              {((analysis.timestampColumn || (analysis.dateColumn && analysis.timeColumn)) && analysis.powerColumn && !processedData) && (
+              {((selectedTimestampCol !== "none" || (selectedDateCol !== "none" && selectedTimeCol !== "none")) && selectedPowerCol && !processedData) && (
                 <Button onClick={handleProcess} disabled={isProcessing} className="w-full">
                   {isProcessing ? (
                     <>

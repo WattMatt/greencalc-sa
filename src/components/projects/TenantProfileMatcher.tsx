@@ -1,0 +1,201 @@
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Zap, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+
+interface Tenant {
+    id: string;
+    name: string;
+    area_sqm: number;
+    shop_type_id: string | null;
+    shop_types?: { name: string } | null;
+}
+
+interface ScadaImport {
+    id: string;
+    site_name: string;
+    shop_name: string | null;
+    shop_number: string | null;
+    meter_label: string | null;
+    category_id: string | null;
+    weekday_days: number;
+    weekend_days: number;
+}
+
+interface TenantProfileMatcherProps {
+    projectId: string;
+    tenants: Tenant[];
+}
+
+export function TenantProfileMatcher({ projectId, tenants }: TenantProfileMatcherProps) {
+    const [showMatcher, setShowMatcher] = useState(false);
+
+    // Fetch available meter profiles
+    const { data: meters, isLoading: isLoadingMeters } = useQuery({
+        queryKey: ["meter-library-all"],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from("scada_imports")
+                .select("id, site_name, shop_name, shop_number, meter_label, category_id, weekday_days, weekend_days")
+                .gt("data_points", 0); // Only valid profiles
+
+            if (error) throw error;
+            return data as ScadaImport[];
+        },
+        enabled: showMatcher
+    });
+
+    // Calculate matches
+    const tenantMatches = useMemo(() => {
+        if (!tenants || !meters) return [];
+
+        return tenants.map(tenant => {
+            // 1. Try to find explicit match if we had that stored (future)
+
+            // 2. Fuzzy match on name
+            const exactNameMatch = meters.find(m =>
+                (m.shop_name && m.shop_name.toLowerCase() === tenant.name.toLowerCase()) ||
+                (m.meter_label && m.meter_label.toLowerCase() === tenant.name.toLowerCase())
+            );
+
+            if (exactNameMatch) return { tenant, match: exactNameMatch, type: "exact" };
+
+            const containsNameMatch = meters.find(m => {
+                const tName = tenant.name.toLowerCase();
+                const mName = m.shop_name?.toLowerCase();
+                const mLabel = m.meter_label?.toLowerCase();
+
+                return (
+                    (mName && (tName.includes(mName) || mName.includes(tName))) ||
+                    (mLabel && (tName.includes(mLabel) || mLabel.includes(tName)))
+                );
+            });
+
+            if (containsNameMatch) return { tenant, match: containsNameMatch, type: "fuzzy" };
+
+            // 3. Match by category/type if available (simplified for now as we'd need to map category names)
+
+            return { tenant, match: null, type: "none" };
+        });
+    }, [tenants, meters]);
+
+    if (!showMatcher) {
+        return (
+            <Button variant="outline" onClick={() => setShowMatcher(true)} className="w-full mt-4">
+                <Zap className="h-4 w-4 mr-2" />
+                Analyze Tenant Load Profiles
+            </Button>
+        );
+    }
+
+    if (isLoadingMeters) {
+        return (
+            <div className="flex justify-center p-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    return (
+        <Card className="mt-6 border-primary/20">
+            <CardHeader>
+                <CardTitle className="text-lg flex items-center justify-between">
+                    <span>Tenant Load Profile Analysis</span>
+                    <Button variant="ghost" size="sm" onClick={() => setShowMatcher(false)}>Close</Button>
+                </CardTitle>
+                <CardDescription>
+                    Matches tenants to real-world meter data to generate accurate load profiles.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                    <Card className="bg-green-50/50 border-green-100">
+                        <CardContent className="p-4 flex items-center gap-3">
+                            <CheckCircle2 className="h-8 w-8 text-green-500" />
+                            <div>
+                                <p className="text-sm font-medium text-green-900">With Profiles</p>
+                                <p className="text-2xl font-bold text-green-700">
+                                    {tenantMatches.filter(m => m.match).length} / {tenants.length}
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <Card className="bg-amber-50/50 border-amber-100">
+                        <CardContent className="p-4 flex items-center gap-3">
+                            <AlertCircle className="h-8 w-8 text-amber-500" />
+                            <div>
+                                <p className="text-sm font-medium text-amber-900">Average Confidence</p>
+                                <p className="text-2xl font-bold text-amber-700">
+                                    {tenantMatches.filter(m => m.match).length > 0 ? "High" : "Low"}
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                <ScrollArea className="h-[400px] pr-4">
+                    <div className="space-y-3">
+                        {tenantMatches.map(({ tenant, match, type }) => (
+                            <div key={tenant.id} className="flex items-center gap-4 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <p className="font-medium truncate">{tenant.name}</p>
+                                        {tenant.shop_types && (
+                                            <Badge variant="outline" className="text-xs">
+                                                {tenant.shop_types.name}
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {Number(tenant.area_sqm).toLocaleString()} m²
+                                    </p>
+                                </div>
+
+                                <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+
+                                <div className="flex-1 min-w-0">
+                                    {match ? (
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-medium text-green-700 truncate">
+                                                    {match.shop_name || match.meter_label || match.site_name}
+                                                </p>
+                                                <Badge variant={type === "exact" ? "default" : "secondary"} className="text-[10px] h-5">
+                                                    {type === "exact" ? "Exact" : "Similar"}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground mt-1 truncate">
+                                                {match.site_name} • {match.weekday_days}d history
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm text-muted-foreground italic">No profile matched</p>
+                                            <Select>
+                                                <SelectTrigger className="h-8 w-[140px]">
+                                                    <SelectValue placeholder="Assign..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {meters?.map(m => (
+                                                        <SelectItem key={m.id} value={m.id}>
+                                                            {m.shop_name || m.meter_label || m.site_name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </ScrollArea>
+            </CardContent>
+        </Card>
+    );
+}
