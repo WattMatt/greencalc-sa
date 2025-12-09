@@ -39,6 +39,8 @@ interface ProcessedData {
   weekdayDays: number;
   weekendDays: number;
   rawData: RawDataPoint[];
+  weekdayProfile: number[];
+  weekendProfile: number[];
 }
 
 interface ScadaImportProps {
@@ -176,6 +178,8 @@ export function ScadaImport({ categories }: ScadaImportProps) {
         weekdayDays: data.weekdayDays,
         weekendDays: data.weekendDays,
         rawData: data.rawData,
+        weekdayProfile: data.weekdayProfile,
+        weekendProfile: data.weekendProfile,
       });
       
       toast.success(`Processed ${data.dataPoints.toLocaleString()} readings`);
@@ -195,7 +199,7 @@ export function ScadaImport({ categories }: ScadaImportProps) {
     setIsSaving(true);
 
     try {
-      // Save raw kWh data directly - no percentage conversion
+      // Save raw kWh data directly with computed profiles
       const { error } = await supabase.from("scada_imports").insert([
         {
           site_name: siteName,
@@ -209,6 +213,8 @@ export function ScadaImport({ categories }: ScadaImportProps) {
           weekday_days: processedData.weekdayDays,
           weekend_days: processedData.weekendDays,
           category_id: categoryId || null,
+          load_profile_weekday: processedData.weekdayProfile,
+          load_profile_weekend: processedData.weekendProfile,
         }
       ]);
 
