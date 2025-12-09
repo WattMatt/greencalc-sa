@@ -214,22 +214,6 @@ export default function LoadProfiles() {
     e.target.value = "";
   };
 
-  const downloadTemplate = () => {
-    const csv = `name,category,kwh_per_sqm_month,description,h0,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11,h12,h13,h14,h15,h16,h17,h18,h19,h20,h21,h22,h23
-Fine Dining Restaurant,Food & Beverage,150,Full service restaurant,1,0.5,0.5,0.5,0.5,1,2,3,4,5,6,8,10,8,6,5,5,6,8,10,10,8,5,2
-Fast Food Outlet,Food & Beverage,120,Quick service restaurant,2,1,1,1,1,2,4,6,8,8,8,10,12,10,8,6,6,8,10,10,8,6,4,2
-Fashion Retail,Retail - Fashion,45,Clothing store,1,1,1,1,1,1,2,4,6,7,8,9,9,9,8,7,6,6,7,6,4,3,2,1
-Supermarket,Grocery & Supermarket,80,Large format grocery,3,2,2,2,2,3,5,7,8,8,8,8,8,8,7,6,6,7,7,6,5,4,3,3
-Bank Branch,Services,55,Financial services,1,1,1,1,1,1,3,6,8,9,9,9,9,9,9,8,6,4,2,1,1,1,1,1
-Cinema,Entertainment,90,Movie theater,1,1,1,1,1,1,2,3,4,5,6,8,10,12,12,10,10,12,12,10,8,6,4,2`;
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "load_profiles_template.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   const openEditDialog = (shopType: ShopType) => {
     setEditingType(shopType);
@@ -263,10 +247,6 @@ Cinema,Entertainment,90,Movie theater,1,1,1,1,1,1,2,3,4,5,6,8,10,12,12,10,10,12,
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={downloadTemplate}>
-            <Download className="h-4 w-4 mr-2" />
-            CSV Template
-          </Button>
           <input
             type="file"
             accept=".csv"
