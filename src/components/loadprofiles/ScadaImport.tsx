@@ -8,11 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  Upload, Loader2, Check, AlertCircle, FileUp, Calendar, Database, 
+  Upload, Loader2, Check, FileUp, Calendar, Database, 
   CheckCircle2, XCircle, Zap 
 } from "lucide-react";
 import { toast } from "sonner";
-import { LoadProfileEditor } from "./LoadProfileEditor";
 
 interface Category {
   id: string;
@@ -34,9 +33,7 @@ interface RawDataPoint {
   values: Record<string, number>;
 }
 
-interface ProcessedProfile {
-  weekdayProfile: number[];
-  weekendProfile: number[];
+interface ProcessedData {
   dataPoints: number;
   dateRange: { start: string; end: string };
   weekdayDays: number;
@@ -61,15 +58,13 @@ export function ScadaImport({ categories }: ScadaImportProps) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rowCount, setRowCount] = useState(0);
   const [analysis, setAnalysis] = useState<ColumnAnalysis | null>(null);
-  const [processedProfile, setProcessedProfile] = useState<ProcessedProfile | null>(null);
+  const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
   
   // Form fields for the SCADA import
   const [siteName, setSiteName] = useState("");
   const [shopNumber, setShopNumber] = useState("");
   const [shopName, setShopName] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  const [weekdayProfile, setWeekdayProfile] = useState<number[]>([]);
-  const [weekendProfile, setWeekendProfile] = useState<number[]>([]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -82,7 +77,7 @@ export function ScadaImport({ categories }: ScadaImportProps) {
       const content = event.target?.result as string;
       setCsvContent(content);
       setAnalysis(null);
-      setProcessedProfile(null);
+      setProcessedData(null);
       toast.success(`Loaded ${file.name}`);
     };
     reader.readAsText(file);
@@ -107,6 +102,13 @@ export function ScadaImport({ categories }: ScadaImportProps) {
       setHeaders(data.headers);
       setRowCount(data.rowCount);
       setAnalysis(data.analysis);
+      
+      // Auto-set defaults after analysis
+      if (!siteName) {
+        const suggestedName = fileName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+        setSiteName(suggestedName);
+      }
+      
       toast.success("CSV analyzed successfully");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to analyze CSV");
@@ -142,15 +144,16 @@ export function ScadaImport({ categories }: ScadaImportProps) {
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
 
-      setProcessedProfile(data);
-      setWeekdayProfile(data.weekdayProfile);
-      setWeekendProfile(data.weekendProfile);
+      // Store processed data (raw kWh values, no percentage conversion)
+      setProcessedData({
+        dataPoints: data.dataPoints,
+        dateRange: data.dateRange,
+        weekdayDays: data.weekdayDays,
+        weekendDays: data.weekendDays,
+        rawData: data.rawData,
+      });
       
-      // Suggest site name from filename
-      const suggestedName = fileName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
-      if (!siteName) setSiteName(suggestedName);
-      
-      toast.success("Load profile generated successfully");
+      toast.success(`Processed ${data.dataPoints.toLocaleString()} readings`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to process CSV");
     } finally {
@@ -159,29 +162,27 @@ export function ScadaImport({ categories }: ScadaImportProps) {
   };
 
   const handleSave = async () => {
-    if (!siteName || weekdayProfile.length !== 24 || weekendProfile.length !== 24) {
-      toast.error("Please provide a site name and ensure the profile is valid");
+    if (!siteName || !processedData?.rawData?.length) {
+      toast.error("Please provide a site name and process the CSV first");
       return;
     }
 
     setIsSaving(true);
 
     try {
-      // Save to scada_imports table with raw data from edge function response
+      // Save raw kWh data directly - no percentage conversion
       const { error } = await supabase.from("scada_imports").insert([
         {
           site_name: siteName,
           shop_number: shopNumber || null,
           shop_name: shopName || null,
           file_name: fileName,
-          raw_data: JSON.parse(JSON.stringify(processedProfile?.rawData || null)),
-          load_profile_weekday: weekdayProfile,
-          load_profile_weekend: weekendProfile,
-          data_points: processedProfile?.dataPoints || 0,
-          date_range_start: processedProfile?.dateRange.start || null,
-          date_range_end: processedProfile?.dateRange.end || null,
-          weekday_days: processedProfile?.weekdayDays || 0,
-          weekend_days: processedProfile?.weekendDays || 0,
+          raw_data: JSON.parse(JSON.stringify(processedData.rawData)),
+          data_points: processedData.dataPoints,
+          date_range_start: processedData.dateRange.start,
+          date_range_end: processedData.dateRange.end,
+          weekday_days: processedData.weekdayDays,
+          weekend_days: processedData.weekendDays,
           category_id: categoryId || null,
         }
       ]);
@@ -191,7 +192,7 @@ export function ScadaImport({ categories }: ScadaImportProps) {
       queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
       queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });
       
-      toast.success("SCADA import saved successfully");
+      toast.success("Meter data imported - view in Meter Library to analyze");
       
       // Reset state
       reset();
@@ -251,14 +252,14 @@ export function ScadaImport({ categories }: ScadaImportProps) {
   const reset = () => {
     setCsvContent(null);
     setFileName("");
+    setHeaders([]);
+    setRowCount(0);
     setAnalysis(null);
-    setProcessedProfile(null);
+    setProcessedData(null);
     setSiteName("");
     setShopNumber("");
     setShopName("");
     setCategoryId("");
-    setWeekdayProfile([]);
-    setWeekendProfile([]);
   };
 
   return (
@@ -423,8 +424,8 @@ export function ScadaImport({ categories }: ScadaImportProps) {
               
               <p className="text-xs text-muted-foreground">{analysis.explanation}</p>
 
-              {/* Show generate button if we have valid column setup */}
-              {((analysis.timestampColumn || (analysis.dateColumn && analysis.timeColumn)) && analysis.powerColumn && !processedProfile) && (
+              {/* Show process button if we have valid column setup */}
+              {((analysis.timestampColumn || (analysis.dateColumn && analysis.timeColumn)) && analysis.powerColumn && !processedData) && (
                 <Button onClick={handleProcess} disabled={isProcessing} className="w-full">
                   {isProcessing ? (
                     <>
@@ -434,7 +435,7 @@ export function ScadaImport({ categories }: ScadaImportProps) {
                   ) : (
                     <>
                       <Database className="h-4 w-4 mr-2" />
-                      Generate Load Profile
+                      Process Meter Data
                     </>
                   )}
                 </Button>
@@ -443,8 +444,8 @@ export function ScadaImport({ categories }: ScadaImportProps) {
           </Card>
         )}
 
-        {/* Step 3: Generated Profile */}
-        {processedProfile && weekdayProfile.length === 24 && (
+        {/* Step 3: Data Summary - no percentage editor, just raw data preview */}
+        {processedData && (
           <div className="space-y-4">
             <Card className="bg-muted/50">
               <CardHeader className="pb-2">
@@ -457,32 +458,25 @@ export function ScadaImport({ categories }: ScadaImportProps) {
                     <div>
                       <div className="text-muted-foreground text-xs">Date Range</div>
                       <div className="font-medium">
-                        {processedProfile.dateRange.start} — {processedProfile.dateRange.end}
+                        {processedData.dateRange.start} — {processedData.dateRange.end}
                       </div>
                     </div>
                   </div>
                   <div>
                     <div className="text-muted-foreground text-xs">Readings</div>
-                    <div className="font-medium">{processedProfile.dataPoints.toLocaleString()}</div>
+                    <div className="font-medium">{processedData.dataPoints.toLocaleString()}</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground text-xs">Weekdays</div>
-                    <div className="font-medium">{processedProfile.weekdayDays} days</div>
+                    <div className="font-medium">{processedData.weekdayDays} days</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground text-xs">Weekends</div>
-                    <div className="font-medium">{processedProfile.weekendDays} days</div>
+                    <div className="font-medium">{processedData.weekendDays} days</div>
                   </div>
                 </div>
               </CardContent>
             </Card>
-
-            <LoadProfileEditor
-              weekdayProfile={weekdayProfile}
-              weekendProfile={weekendProfile}
-              onWeekdayChange={setWeekdayProfile}
-              onWeekendChange={setWeekendProfile}
-            />
 
             <div className="flex gap-2">
               <Button onClick={handleSave} disabled={isSaving || !siteName} className="flex-1">
@@ -494,7 +488,7 @@ export function ScadaImport({ categories }: ScadaImportProps) {
                 ) : (
                   <>
                     <Check className="h-4 w-4 mr-2" />
-                    Save Load Profile
+                    Save Meter Data
                   </>
                 )}
               </Button>
@@ -502,6 +496,10 @@ export function ScadaImport({ categories }: ScadaImportProps) {
                 Reset
               </Button>
             </div>
+            
+            <p className="text-xs text-muted-foreground text-center">
+              After saving, view and analyze actual kWh data in the Meter Library tab
+            </p>
           </div>
         )}
       </CardContent>
