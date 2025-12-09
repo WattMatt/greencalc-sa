@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Database, Edit2, Trash2, Tag, Palette, Link, Hash, Store } from "lucide-react";
+import { Database, Edit2, Trash2, Tag, Palette, Link, Hash, Store, Ruler } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -19,6 +19,7 @@ interface ScadaImport {
   site_name: string;
   shop_number: string | null;
   shop_name: string | null;
+  area_sqm: number | null;
   meter_label: string | null;
   meter_color: string | null;
   project_id: string | null;
@@ -47,6 +48,7 @@ export function MeterLibrary() {
   const [editProjectId, setEditProjectId] = useState<string>("");
   const [editShopNumber, setEditShopNumber] = useState("");
   const [editShopName, setEditShopName] = useState("");
+  const [editArea, setEditArea] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const { data: meters, isLoading } = useQuery({
@@ -54,7 +56,7 @@ export function MeterLibrary() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, site_name, shop_number, shop_name, meter_label, meter_color, project_id, date_range_start, date_range_end, data_points, created_at")
+        .select("id, site_name, shop_number, shop_name, area_sqm, meter_label, meter_color, project_id, date_range_start, date_range_end, data_points, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as ScadaImport[];
@@ -74,7 +76,7 @@ export function MeterLibrary() {
   });
 
   const updateMeter = useMutation({
-    mutationFn: async (params: { id: string; meter_label: string; meter_color: string; project_id: string | null; shop_number: string | null; shop_name: string | null }) => {
+    mutationFn: async (params: { id: string; meter_label: string; meter_color: string; project_id: string | null; shop_number: string | null; shop_name: string | null; area_sqm: number | null }) => {
       const { error } = await supabase
         .from("scada_imports")
         .update({
@@ -83,6 +85,7 @@ export function MeterLibrary() {
           project_id: params.project_id || null,
           shop_number: params.shop_number || null,
           shop_name: params.shop_name || null,
+          area_sqm: params.area_sqm,
         })
         .eq("id", params.id);
       if (error) throw error;
@@ -136,6 +139,7 @@ export function MeterLibrary() {
     setEditProjectId(meter.project_id || "");
     setEditShopNumber(meter.shop_number || "");
     setEditShopName(meter.shop_name || "");
+    setEditArea(meter.area_sqm?.toString() || "");
     setDialogOpen(true);
   };
 
@@ -227,6 +231,7 @@ export function MeterLibrary() {
                   </TableHead>
                   <TableHead className="w-8">Color</TableHead>
                   <TableHead>Meter / Label</TableHead>
+                  <TableHead>Area (m²)</TableHead>
                   <TableHead>Project</TableHead>
                   <TableHead>Date Range</TableHead>
                   <TableHead>Data Points</TableHead>
@@ -257,6 +262,13 @@ export function MeterLibrary() {
                           </div>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {meter.area_sqm ? (
+                        <span className="text-sm">{meter.area_sqm.toLocaleString()} m²</span>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {meter.project_id ? (
@@ -346,6 +358,19 @@ export function MeterLibrary() {
 
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
+                <Ruler className="h-4 w-4" />
+                Area (m²)
+              </Label>
+              <Input
+                type="number"
+                placeholder="e.g., 250"
+                value={editArea}
+                onChange={(e) => setEditArea(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
                 <Tag className="h-4 w-4" />
                 Custom Label
               </Label>
@@ -404,6 +429,7 @@ export function MeterLibrary() {
                     project_id: editProjectId || null,
                     shop_number: editShopNumber || null,
                     shop_name: editShopName || null,
+                    area_sqm: editArea ? parseFloat(editArea) : null,
                   });
                 }
               }}
