@@ -338,12 +338,25 @@ export function ScadaImportsList() {
                             </h4>
                             {(() => {
                               const maxVal = Math.max(...(imp.load_profile_weekday || [1]));
+                              // TOU periods for weekdays (typical SA high-demand season)
+                              const getTOUColor = (hour: number) => {
+                                // Peak: 7-10am, 6-8pm
+                                if ((hour >= 7 && hour < 10) || (hour >= 18 && hour < 20)) {
+                                  return "bg-red-500/70";
+                                }
+                                // Standard: 6-7am, 10am-6pm, 8-10pm
+                                if ((hour >= 6 && hour < 7) || (hour >= 10 && hour < 18) || (hour >= 20 && hour < 22)) {
+                                  return "bg-yellow-500/70";
+                                }
+                                // Off-peak: 10pm-6am
+                                return "bg-green-500/70";
+                              };
                               return (
                                 <div className="h-24 flex items-end gap-0.5">
                                   {imp.load_profile_weekday?.map((val, idx) => (
                                     <div
                                       key={idx}
-                                      className="flex-1 bg-primary/60 rounded-t"
+                                      className={`flex-1 rounded-t ${getTOUColor(idx)}`}
                                       style={{ height: `${(val / maxVal) * 100}%` }}
                                       title={`${idx}:00 - ${val.toFixed(1)}%`}
                                     />
@@ -364,12 +377,13 @@ export function ScadaImportsList() {
                             </h4>
                             {(() => {
                               const maxVal = Math.max(...(imp.load_profile_weekend || [1]));
+                              // Weekends are typically off-peak all day
                               return (
                                 <div className="h-24 flex items-end gap-0.5">
                                   {imp.load_profile_weekend?.map((val, idx) => (
                                     <div
                                       key={idx}
-                                      className="flex-1 bg-secondary/60 rounded-t"
+                                      className="flex-1 bg-green-500/70 rounded-t"
                                       style={{ height: `${(val / maxVal) * 100}%` }}
                                       title={`${idx}:00 - ${val.toFixed(1)}%`}
                                     />
@@ -384,8 +398,23 @@ export function ScadaImportsList() {
                             </div>
                           </div>
                         </div>
+                        {/* TOU Legend */}
+                        <div className="flex gap-4 mt-3 text-xs">
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded bg-red-500/70" />
+                            <span className="text-muted-foreground">Peak</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded bg-yellow-500/70" />
+                            <span className="text-muted-foreground">Standard</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded bg-green-500/70" />
+                            <span className="text-muted-foreground">Off-Peak</span>
+                          </div>
+                        </div>
                         {imp.file_name && (
-                          <p className="text-xs text-muted-foreground mt-3">
+                          <p className="text-xs text-muted-foreground mt-2">
                             Source file: {imp.file_name}
                           </p>
                         )}
