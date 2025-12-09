@@ -39,6 +39,7 @@ export function MeterLibrary() {
   const [editShopNumber, setEditShopNumber] = useState("");
   const [editShopName, setEditShopName] = useState("");
   const [editArea, setEditArea] = useState("");
+  const [editSiteName, setEditSiteName] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const { data: meters, isLoading } = useQuery({
@@ -54,7 +55,7 @@ export function MeterLibrary() {
   });
 
   const updateMeter = useMutation({
-    mutationFn: async (params: { id: string; meter_label: string; meter_color: string; shop_number: string | null; shop_name: string | null; area_sqm: number | null }) => {
+    mutationFn: async (params: { id: string; meter_label: string; meter_color: string; shop_number: string | null; shop_name: string | null; area_sqm: number | null; site_name: string }) => {
       const { error } = await supabase
         .from("scada_imports")
         .update({
@@ -63,6 +64,7 @@ export function MeterLibrary() {
           shop_number: params.shop_number || null,
           shop_name: params.shop_name || null,
           area_sqm: params.area_sqm,
+          site_name: params.site_name,
         })
         .eq("id", params.id);
       if (error) throw error;
@@ -99,6 +101,7 @@ export function MeterLibrary() {
     setEditShopNumber(meter.shop_number || "");
     setEditShopName(meter.shop_name || "");
     setEditArea(meter.area_sqm?.toString() || "");
+    setEditSiteName(meter.site_name || "");
     setDialogOpen(true);
   };
 
@@ -228,6 +231,18 @@ export function MeterLibrary() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Site Name
+              </Label>
+              <Input
+                placeholder="e.g., Mall of Africa, Sandton City"
+                value={editSiteName}
+                onChange={(e) => setEditSiteName(e.target.value)}
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
@@ -300,7 +315,7 @@ export function MeterLibrary() {
             <Button
               className="w-full"
               onClick={() => {
-                if (editingMeter) {
+                if (editingMeter && editSiteName.trim()) {
                   updateMeter.mutate({
                     id: editingMeter.id,
                     meter_label: editLabel,
@@ -308,9 +323,11 @@ export function MeterLibrary() {
                     shop_number: editShopNumber || null,
                     shop_name: editShopName || null,
                     area_sqm: editArea ? parseFloat(editArea) : null,
+                    site_name: editSiteName.trim(),
                   });
                 }
               }}
+              disabled={!editSiteName.trim()}
             >
               Save Changes
             </Button>
