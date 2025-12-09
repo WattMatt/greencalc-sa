@@ -193,12 +193,12 @@ export function MeterLibrary() {
             {selectedMeters.size > 0 && (
               <div className="flex items-center gap-2">
                 <Badge variant="secondary">{selectedMeters.size} selected</Badge>
-                <Select onValueChange={(value) => bulkAssignProject.mutate(value)}>
+                <Select onValueChange={(value) => bulkAssignProject.mutate(value === "none" ? "" : value)}>
                   <SelectTrigger className="w-48">
                     <SelectValue placeholder="Assign to project..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No project</SelectItem>
+                    <SelectItem value="none">No project</SelectItem>
                     {projects?.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
@@ -380,12 +380,12 @@ export function MeterLibrary() {
                 <Link className="h-4 w-4" />
                 Link to Project
               </Label>
-              <Select value={editProjectId} onValueChange={setEditProjectId}>
+              <Select value={editProjectId || "none"} onValueChange={(value) => setEditProjectId(value === "none" ? "" : value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select project..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No project</SelectItem>
+                  <SelectItem value="none">No project</SelectItem>
                   {projects?.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
