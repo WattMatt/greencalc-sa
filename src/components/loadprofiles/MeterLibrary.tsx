@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Database, Edit2, Trash2, Tag, Palette, Link } from "lucide-react";
+import { Database, Edit2, Trash2, Tag, Palette, Link, Hash, Store } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -45,6 +45,8 @@ export function MeterLibrary() {
   const [editLabel, setEditLabel] = useState("");
   const [editColor, setEditColor] = useState("#3b82f6");
   const [editProjectId, setEditProjectId] = useState<string>("");
+  const [editShopNumber, setEditShopNumber] = useState("");
+  const [editShopName, setEditShopName] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const { data: meters, isLoading } = useQuery({
@@ -72,13 +74,15 @@ export function MeterLibrary() {
   });
 
   const updateMeter = useMutation({
-    mutationFn: async (params: { id: string; meter_label: string; meter_color: string; project_id: string | null }) => {
+    mutationFn: async (params: { id: string; meter_label: string; meter_color: string; project_id: string | null; shop_number: string | null; shop_name: string | null }) => {
       const { error } = await supabase
         .from("scada_imports")
         .update({
           meter_label: params.meter_label || null,
           meter_color: params.meter_color,
           project_id: params.project_id || null,
+          shop_number: params.shop_number || null,
+          shop_name: params.shop_name || null,
         })
         .eq("id", params.id);
       if (error) throw error;
@@ -130,6 +134,8 @@ export function MeterLibrary() {
     setEditLabel(meter.meter_label || "");
     setEditColor(meter.meter_color || "#3b82f6");
     setEditProjectId(meter.project_id || "");
+    setEditShopNumber(meter.shop_number || "");
+    setEditShopName(meter.shop_name || "");
     setDialogOpen(true);
   };
 
@@ -313,6 +319,31 @@ export function MeterLibrary() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Hash className="h-4 w-4" />
+                  Shop Number
+                </Label>
+                <Input
+                  placeholder="e.g., 101, A12"
+                  value={editShopNumber}
+                  onChange={(e) => setEditShopNumber(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Store className="h-4 w-4" />
+                  Shop Name
+                </Label>
+                <Input
+                  placeholder="e.g., Pick n Pay, Woolworths"
+                  value={editShopName}
+                  onChange={(e) => setEditShopName(e.target.value)}
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <Tag className="h-4 w-4" />
@@ -330,7 +361,7 @@ export function MeterLibrary() {
                 <Palette className="h-4 w-4" />
                 Chart Color
               </Label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {METER_COLORS.map(color => (
                   <button
                     key={color}
@@ -371,6 +402,8 @@ export function MeterLibrary() {
                     meter_label: editLabel,
                     meter_color: editColor,
                     project_id: editProjectId || null,
+                    shop_number: editShopNumber || null,
+                    shop_name: editShopName || null,
                   });
                 }
               }}
