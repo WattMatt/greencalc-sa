@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Input } from "@/components/ui/input";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, Download, Calendar, Database } from "lucide-react";
+import { TrendingUp, Download, Database, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
+import { format, addDays, addWeeks, addMonths, subDays, subWeeks, subMonths, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface RawDataPoint {
   timestamp: string;
@@ -39,6 +43,7 @@ interface ScadaImport {
 
 type AggregationPeriod = "raw" | "hourly" | "daily";
 type AggregationOperation = "sum" | "average" | "max" | "min";
+type ViewPeriod = "day" | "week" | "month" | "custom";
 
 const QUANTITY_COLORS: Record<string, string> = {
   "P1 (kWh)": "hsl(var(--primary))",
@@ -54,10 +59,13 @@ const QUANTITY_COLORS: Record<string, string> = {
 export function MeterAnalysis() {
   const [selectedMeter, setSelectedMeter] = useState<string>("");
   const [selectedQuantity, setSelectedQuantity] = useState<string>("P1 (kWh)");
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [dateTo, setDateTo] = useState<string>("");
-  const [aggregationPeriod, setAggregationPeriod] = useState<AggregationPeriod>("daily");
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+  const [timeFrom, setTimeFrom] = useState<string>("00:00");
+  const [timeTo, setTimeTo] = useState<string>("23:59");
+  const [aggregationPeriod, setAggregationPeriod] = useState<AggregationPeriod>("hourly");
   const [aggregationOperation, setAggregationOperation] = useState<AggregationOperation>("sum");
+  const [viewPeriod, setViewPeriod] = useState<ViewPeriod>("day");
 
   // Fetch all SCADA imports with raw data
   const { data: imports, isLoading } = useQuery({
@@ -68,7 +76,6 @@ export function MeterAnalysis() {
         .select("id, site_name, shop_number, shop_name, date_range_start, date_range_end, data_points, raw_data")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      // Transform raw rows to typed ScadaImport
       return (data as ScadaImportRow[]).map(row => ({
         ...row,
         data_points: row.data_points ?? 0,
@@ -89,25 +96,95 @@ export function MeterAnalysis() {
     return Object.keys(firstPoint.values || {});
   }, [selectedImport]);
 
+  // Apply view period to dates
+  const applyViewPeriod = useCallback((period: ViewPeriod, baseDate?: Date) => {
+    const base = baseDate || dateFrom || new Date();
+    
+    switch (period) {
+      case "day":
+        setDateFrom(startOfDay(base));
+        setDateTo(endOfDay(base));
+        setAggregationPeriod("hourly");
+        break;
+      case "week":
+        setDateFrom(startOfWeek(base, { weekStartsOn: 1 }));
+        setDateTo(endOfWeek(base, { weekStartsOn: 1 }));
+        setAggregationPeriod("hourly");
+        break;
+      case "month":
+        setDateFrom(startOfMonth(base));
+        setDateTo(endOfMonth(base));
+        setAggregationPeriod("daily");
+        break;
+      case "custom":
+        // Keep current dates
+        break;
+    }
+    setViewPeriod(period);
+  }, [dateFrom]);
+
+  // Navigate to previous/next period
+  const navigatePeriod = useCallback((direction: "prev" | "next") => {
+    if (!dateFrom) return;
+    
+    let newBase: Date;
+    switch (viewPeriod) {
+      case "day":
+        newBase = direction === "prev" ? subDays(dateFrom, 1) : addDays(dateFrom, 1);
+        break;
+      case "week":
+        newBase = direction === "prev" ? subWeeks(dateFrom, 1) : addWeeks(dateFrom, 1);
+        break;
+      case "month":
+        newBase = direction === "prev" ? subMonths(dateFrom, 1) : addMonths(dateFrom, 1);
+        break;
+      default:
+        return;
+    }
+    applyViewPeriod(viewPeriod, newBase);
+  }, [dateFrom, viewPeriod, applyViewPeriod]);
+
+  // Format the current period label
+  const periodLabel = useMemo(() => {
+    if (!dateFrom) return "";
+    
+    switch (viewPeriod) {
+      case "day":
+        return format(dateFrom, "EEEE, MMMM d, yyyy");
+      case "week":
+        return `${format(dateFrom, "MMM d")} - ${dateTo ? format(dateTo, "MMM d, yyyy") : ""}`;
+      case "month":
+        return format(dateFrom, "MMMM yyyy");
+      default:
+        return `${format(dateFrom, "MMM d")} - ${dateTo ? format(dateTo, "MMM d, yyyy") : ""}`;
+    }
+  }, [dateFrom, dateTo, viewPeriod]);
+
   // Process and filter data for the chart
   const chartData = useMemo(() => {
     if (!selectedImport?.raw_data?.length) return [];
 
     let data = selectedImport.raw_data;
 
-    // Filter by date range
+    // Filter by date range with time
     if (dateFrom) {
-      data = data.filter(d => new Date(d.timestamp) >= new Date(dateFrom));
+      const [fromHour, fromMin] = timeFrom.split(":").map(Number);
+      const fromDateTime = new Date(dateFrom);
+      fromDateTime.setHours(fromHour, fromMin, 0, 0);
+      data = data.filter(d => new Date(d.timestamp) >= fromDateTime);
     }
     if (dateTo) {
-      data = data.filter(d => new Date(d.timestamp) <= new Date(dateTo + "T23:59:59"));
+      const [toHour, toMin] = timeTo.split(":").map(Number);
+      const toDateTime = new Date(dateTo);
+      toDateTime.setHours(toHour, toMin, 59, 999);
+      data = data.filter(d => new Date(d.timestamp) <= toDateTime);
     }
 
     // Apply aggregation
     if (aggregationPeriod === "raw") {
       return data.map(d => ({
         timestamp: d.timestamp,
-        label: new Date(d.timestamp).toLocaleString(),
+        label: format(new Date(d.timestamp), "MMM d HH:mm"),
         value: d.values[selectedQuantity] ?? 0,
       }));
     }
@@ -120,9 +197,9 @@ export function MeterAnalysis() {
       let key: string;
       
       if (aggregationPeriod === "hourly") {
-        key = `${date.toISOString().split('T')[0]} ${date.getHours().toString().padStart(2, '0')}:00`;
+        key = format(date, "MMM d HH:00");
       } else {
-        key = date.toISOString().split('T')[0];
+        key = format(date, "MMM d");
       }
       
       if (!groups[key]) groups[key] = [];
@@ -159,15 +236,20 @@ export function MeterAnalysis() {
           value: Math.round(value * 1000) / 1000,
         };
       });
-  }, [selectedImport, dateFrom, dateTo, selectedQuantity, aggregationPeriod, aggregationOperation]);
+  }, [selectedImport, dateFrom, dateTo, timeFrom, timeTo, selectedQuantity, aggregationPeriod, aggregationOperation]);
 
   // Set date range when meter is selected
   const handleMeterChange = (meterId: string) => {
     setSelectedMeter(meterId);
     const imp = imports?.find(i => i.id === meterId);
     if (imp) {
-      if (imp.date_range_start) setDateFrom(imp.date_range_start);
-      if (imp.date_range_end) setDateTo(imp.date_range_end);
+      // Default to showing the last day of data
+      const endDate = imp.date_range_end ? new Date(imp.date_range_end) : new Date();
+      setDateFrom(startOfDay(endDate));
+      setDateTo(endOfDay(endDate));
+      setViewPeriod("day");
+      setAggregationPeriod("hourly");
+      
       // Set first available quantity
       if (imp.raw_data?.length) {
         const quantities = Object.keys(imp.raw_data[0].values || {});
@@ -215,7 +297,6 @@ export function MeterAnalysis() {
           <h3 className="text-lg font-medium">No meter data available</h3>
           <p className="text-muted-foreground text-center max-w-sm mt-1">
             Import SCADA data using the "New SCADA Import" tab to enable meter analysis.
-            Make sure to import files with complete raw data.
           </p>
         </CardContent>
       </Card>
@@ -231,18 +312,18 @@ export function MeterAnalysis() {
             Load Profiles
           </CardTitle>
           <CardDescription>
-            Analyze meter load patterns using kVA data over selected time periods with precise date and time selection
+            Analyze meter load patterns using kVA data over selected time periods
           </CardDescription>
           {selectedImport && (
             <div className="text-xs text-muted-foreground">
-              Earliest: {selectedImport.date_range_start ? new Date(selectedImport.date_range_start).toLocaleString() : 'N/A'} | 
-              Latest: {selectedImport.date_range_end ? new Date(selectedImport.date_range_end).toLocaleString() : 'N/A'}
+              Data range: {selectedImport.date_range_start ? format(new Date(selectedImport.date_range_start), "PPP p") : 'N/A'} — 
+              {selectedImport.date_range_end ? format(new Date(selectedImport.date_range_end), "PPP p") : 'N/A'}
             </div>
           )}
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Controls Row */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Meter Selection & Period Controls */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Select Meter */}
             <div className="space-y-2">
               <Label>Select Meter</Label>
@@ -260,54 +341,161 @@ export function MeterAnalysis() {
               </Select>
             </div>
 
-            {/* Date Range */}
+            {/* View Period Selector */}
             <div className="space-y-2">
-              <Label>Date & Time From</Label>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <Input 
-                  type="date" 
-                  value={dateFrom}
-                  onChange={e => setDateFrom(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Date & Time To</Label>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <Input 
-                  type="date" 
-                  value={dateTo}
-                  onChange={e => setDateTo(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="space-y-2">
-              <Label>&nbsp;</Label>
-              <div className="flex gap-2">
-                <Button 
-                  onClick={() => {/* Data updates reactively */}}
-                  disabled={!selectedMeter}
+              <Label>View Period</Label>
+              <div className="flex gap-1">
+                <Button
+                  variant={viewPeriod === "day" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => applyViewPeriod("day")}
                   className="flex-1"
                 >
-                  Load Data
+                  Day
                 </Button>
+                <Button
+                  variant={viewPeriod === "week" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => applyViewPeriod("week")}
+                  className="flex-1"
+                >
+                  Week
+                </Button>
+                <Button
+                  variant={viewPeriod === "month" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => applyViewPeriod("month")}
+                  className="flex-1"
+                >
+                  Month
+                </Button>
+                <Button
+                  variant={viewPeriod === "custom" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setViewPeriod("custom")}
+                  className="flex-1"
+                >
+                  Custom
+                </Button>
+              </div>
+            </div>
+
+            {/* Navigation & Current Period */}
+            <div className="space-y-2 lg:col-span-2">
+              <Label>Navigate</Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => navigatePeriod("prev")}
+                  disabled={!dateFrom || viewPeriod === "custom"}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                
+                <div className="flex-1 text-center font-medium text-sm px-3 py-2 bg-muted rounded-md">
+                  {periodLabel || "Select a meter"}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => navigatePeriod("next")}
+                  disabled={!dateFrom || viewPeriod === "custom"}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                
                 <Button 
                   variant="outline" 
                   onClick={handleDownloadCSV}
                   disabled={!chartData.length}
                 >
-                  <Download className="h-4 w-4" />
+                  <Download className="h-4 w-4 mr-2" />
+                  CSV
                 </Button>
               </div>
             </div>
           </div>
 
-          {/* Second Row - Quantities and Manipulation */}
+          {/* Custom Date Range (shown when custom is selected) */}
+          {viewPeriod === "custom" && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+              <div className="space-y-2">
+                <Label>From Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !dateFrom && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateFrom ? format(dateFrom, "PPP") : "Pick date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={dateFrom}
+                      onSelect={setDateFrom}
+                      initialFocus
+                      className="p-3 pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label>From Time</Label>
+                <Input 
+                  type="time"
+                  value={timeFrom}
+                  onChange={e => setTimeFrom(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>To Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !dateTo && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {dateTo ? format(dateTo, "PPP") : "Pick date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={dateTo}
+                      onSelect={setDateTo}
+                      initialFocus
+                      className="p-3 pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label>To Time</Label>
+                <Input 
+                  type="time"
+                  value={timeTo}
+                  onChange={e => setTimeTo(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Quantities and Data Manipulation */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Quantities to Plot */}
             <div className="space-y-2">
@@ -315,7 +503,7 @@ export function MeterAnalysis() {
               <RadioGroup 
                 value={selectedQuantity} 
                 onValueChange={setSelectedQuantity}
-                className="space-y-1"
+                className="space-y-1 max-h-40 overflow-y-auto"
               >
                 {availableQuantities.length > 0 ? (
                   availableQuantities.map(q => (
@@ -325,37 +513,12 @@ export function MeterAnalysis() {
                     </div>
                   ))
                 ) : (
-                  <>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="P1 (kWh)" id="p1" />
-                      <Label htmlFor="p1" className="font-normal cursor-pointer">P1 (kWh)</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="Q1 (kvarh)" id="q1" />
-                      <Label htmlFor="q1" className="font-normal cursor-pointer">Q1 (kvarh)</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="S (kVAh)" id="s-kvah" />
-                      <Label htmlFor="s-kvah" className="font-normal cursor-pointer">S (kVAh)</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="S (kVA)" id="s-kva" />
-                      <Label htmlFor="s-kva" className="font-normal cursor-pointer">S (kVA)</Label>
-                    </div>
-                  </>
+                  <p className="text-sm text-muted-foreground">Select a meter first</p>
                 )}
               </RadioGroup>
             </div>
 
-            {/* Y-Axis Settings */}
-            <div className="space-y-2">
-              <Label>Y-Axis Min</Label>
-              <Input placeholder="Auto" className="mb-2" disabled />
-              <Label>Y-Axis Max</Label>
-              <Input placeholder="Auto" disabled />
-            </div>
-
-            {/* Data Manipulation */}
+            {/* Aggregation Settings */}
             <div className="space-y-3">
               <div className="space-y-2">
                 <Label>Operation</Label>
@@ -372,7 +535,7 @@ export function MeterAnalysis() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Period</Label>
+                <Label>Aggregation Period</Label>
                 <Select value={aggregationPeriod} onValueChange={(v) => setAggregationPeriod(v as AggregationPeriod)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -380,11 +543,42 @@ export function MeterAnalysis() {
                   <SelectContent>
                     <SelectItem value="raw">Raw (All readings)</SelectItem>
                     <SelectItem value="hourly">Hourly</SelectItem>
-                    <SelectItem value="daily">Daily (1 day)</SelectItem>
+                    <SelectItem value="daily">Daily</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
+
+            {/* Stats Summary */}
+            {chartData.length > 0 && (
+              <div className="space-y-2">
+                <Label>Summary</Label>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="bg-muted p-2 rounded">
+                    <div className="text-muted-foreground text-xs">Data Points</div>
+                    <div className="font-medium">{chartData.length}</div>
+                  </div>
+                  <div className="bg-muted p-2 rounded">
+                    <div className="text-muted-foreground text-xs">Total</div>
+                    <div className="font-medium">
+                      {chartData.reduce((sum, d) => sum + d.value, 0).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="bg-muted p-2 rounded">
+                    <div className="text-muted-foreground text-xs">Peak</div>
+                    <div className="font-medium">
+                      {Math.max(...chartData.map(d => d.value)).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="bg-muted p-2 rounded">
+                    <div className="text-muted-foreground text-xs">Average</div>
+                    <div className="font-medium">
+                      {(chartData.reduce((sum, d) => sum + d.value, 0) / chartData.length).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Chart */}
@@ -399,6 +593,7 @@ export function MeterAnalysis() {
                     angle={-45}
                     textAnchor="end"
                     height={60}
+                    interval="preserveStartEnd"
                     className="text-muted-foreground"
                   />
                   <YAxis className="text-muted-foreground" />
@@ -427,7 +622,7 @@ export function MeterAnalysis() {
 
           {selectedMeter && chartData.length === 0 && (
             <div className="h-80 flex items-center justify-center border rounded-lg border-dashed">
-              <p className="text-muted-foreground">No data available for the selected filters</p>
+              <p className="text-muted-foreground">No data available for the selected time range</p>
             </div>
           )}
 
