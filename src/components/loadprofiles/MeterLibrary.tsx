@@ -6,11 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Database, Edit2, Trash2, Tag, Palette, Link, Hash, Store, Ruler } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -22,16 +20,10 @@ interface ScadaImport {
   area_sqm: number | null;
   meter_label: string | null;
   meter_color: string | null;
-  project_id: string | null;
   date_range_start: string | null;
   date_range_end: string | null;
   data_points: number | null;
   created_at: string;
-}
-
-interface Project {
-  id: string;
-  name: string;
 }
 
 const METER_COLORS = [
@@ -41,11 +33,9 @@ const METER_COLORS = [
 
 export function MeterLibrary() {
   const queryClient = useQueryClient();
-  const [selectedMeters, setSelectedMeters] = useState<Set<string>>(new Set());
   const [editingMeter, setEditingMeter] = useState<ScadaImport | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [editColor, setEditColor] = useState("#3b82f6");
-  const [editProjectId, setEditProjectId] = useState<string>("");
   const [editShopNumber, setEditShopNumber] = useState("");
   const [editShopName, setEditShopName] = useState("");
   const [editArea, setEditArea] = useState("");
@@ -56,33 +46,20 @@ export function MeterLibrary() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, site_name, shop_number, shop_name, area_sqm, meter_label, meter_color, project_id, date_range_start, date_range_end, data_points, created_at")
+        .select("id, site_name, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as ScadaImport[];
     },
   });
 
-  const { data: projects } = useQuery({
-    queryKey: ["projects-list"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("id, name")
-        .order("name");
-      if (error) throw error;
-      return data as Project[];
-    },
-  });
-
   const updateMeter = useMutation({
-    mutationFn: async (params: { id: string; meter_label: string; meter_color: string; project_id: string | null; shop_number: string | null; shop_name: string | null; area_sqm: number | null }) => {
+    mutationFn: async (params: { id: string; meter_label: string; meter_color: string; shop_number: string | null; shop_name: string | null; area_sqm: number | null }) => {
       const { error } = await supabase
         .from("scada_imports")
         .update({
           meter_label: params.meter_label || null,
           meter_color: params.meter_color,
-          project_id: params.project_id || null,
           shop_number: params.shop_number || null,
           shop_name: params.shop_name || null,
           area_sqm: params.area_sqm,
@@ -115,52 +92,14 @@ export function MeterLibrary() {
     onError: (error) => toast.error(error.message),
   });
 
-  const bulkAssignProject = useMutation({
-    mutationFn: async (projectId: string) => {
-      const meterIds = Array.from(selectedMeters);
-      const { error } = await supabase
-        .from("scada_imports")
-        .update({ project_id: projectId || null })
-        .in("id", meterIds);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
-      toast.success("Meters assigned to project");
-      setSelectedMeters(new Set());
-    },
-    onError: (error) => toast.error(error.message),
-  });
-
   const openEditDialog = (meter: ScadaImport) => {
     setEditingMeter(meter);
     setEditLabel(meter.meter_label || "");
     setEditColor(meter.meter_color || "#3b82f6");
-    setEditProjectId(meter.project_id || "");
     setEditShopNumber(meter.shop_number || "");
     setEditShopName(meter.shop_name || "");
     setEditArea(meter.area_sqm?.toString() || "");
     setDialogOpen(true);
-  };
-
-  const handleSelectMeter = (meterId: string, checked: boolean) => {
-    setSelectedMeters(prev => {
-      const newSet = new Set(prev);
-      if (checked) {
-        newSet.add(meterId);
-      } else {
-        newSet.delete(meterId);
-      }
-      return newSet;
-    });
-  };
-
-  const handleSelectAll = (checked: boolean) => {
-    if (checked && meters) {
-      setSelectedMeters(new Set(meters.map(m => m.id)));
-    } else {
-      setSelectedMeters(new Set());
-    }
   };
 
   const getMeterDisplayName = (meter: ScadaImport) => {
@@ -184,33 +123,13 @@ export function MeterLibrary() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Database className="h-5 w-5" />
-                Meter Library
-              </CardTitle>
-              <CardDescription>
-                Manage your imported meters - assign labels, colors, and link to projects
-              </CardDescription>
-            </div>
-            {selectedMeters.size > 0 && (
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary">{selectedMeters.size} selected</Badge>
-                <Select onValueChange={(value) => bulkAssignProject.mutate(value === "none" ? "" : value)}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Assign to project..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No project</SelectItem>
-                    {projects?.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Meter Library
+          </CardTitle>
+          <CardDescription>
+            Global reference meters - used to build project load profiles
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {!meters?.length ? (
@@ -223,16 +142,9 @@ export function MeterLibrary() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={selectedMeters.size === meters.length}
-                      onCheckedChange={handleSelectAll}
-                    />
-                  </TableHead>
                   <TableHead className="w-8">Color</TableHead>
                   <TableHead>Meter / Label</TableHead>
                   <TableHead>Area (m²)</TableHead>
-                  <TableHead>Project</TableHead>
                   <TableHead>Date Range</TableHead>
                   <TableHead>Data Points</TableHead>
                   <TableHead className="w-24">Actions</TableHead>
@@ -241,12 +153,6 @@ export function MeterLibrary() {
               <TableBody>
                 {meters.map(meter => (
                   <TableRow key={meter.id}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedMeters.has(meter.id)}
-                        onCheckedChange={(checked) => handleSelectMeter(meter.id, !!checked)}
-                      />
-                    </TableCell>
                     <TableCell>
                       <div
                         className="w-4 h-4 rounded-full border"
@@ -266,15 +172,6 @@ export function MeterLibrary() {
                     <TableCell>
                       {meter.area_sqm ? (
                         <span className="text-sm">{meter.area_sqm.toLocaleString()} m²</span>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {meter.project_id ? (
-                        <Badge variant="outline">
-                          {projects?.find(p => p.id === meter.project_id)?.name || "Unknown"}
-                        </Badge>
                       ) : (
                         <span className="text-muted-foreground text-sm">-</span>
                       )}
@@ -327,7 +224,7 @@ export function MeterLibrary() {
           <DialogHeader>
             <DialogTitle>Edit Meter</DialogTitle>
             <DialogDescription>
-              Customize the meter label, color, and project assignment
+              Update meter details for the reference library
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -400,24 +297,6 @@ export function MeterLibrary() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Link className="h-4 w-4" />
-                Link to Project
-              </Label>
-              <Select value={editProjectId || "none"} onValueChange={(value) => setEditProjectId(value === "none" ? "" : value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select project..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No project</SelectItem>
-                  {projects?.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             <Button
               className="w-full"
               onClick={() => {
@@ -426,7 +305,6 @@ export function MeterLibrary() {
                     id: editingMeter.id,
                     meter_label: editLabel,
                     meter_color: editColor,
-                    project_id: editProjectId || null,
                     shop_number: editShopNumber || null,
                     shop_name: editShopName || null,
                     area_sqm: editArea ? parseFloat(editArea) : null,
