@@ -8,6 +8,8 @@ const corsHeaders = {
 
 interface ColumnAnalysis {
   timestampColumn: string | null;
+  dateColumn?: string | null;
+  timeColumn?: string | null;
   powerColumn: string | null;
   ignoredColumns: string[];
   confidence: number;
@@ -22,13 +24,30 @@ interface ProcessedProfile {
   weekendDays: number;
 }
 
+// Detect delimiter (comma, tab, semicolon)
+function detectDelimiter(content: string): string {
+  const firstLines = content.split('\n').slice(0, 5).join('\n');
+  const tabCount = (firstLines.match(/\t/g) || []).length;
+  const commaCount = (firstLines.match(/,/g) || []).length;
+  const semicolonCount = (firstLines.match(/;/g) || []).length;
+  
+  if (tabCount > commaCount && tabCount > semicolonCount) return '\t';
+  if (semicolonCount > commaCount) return ';';
+  return ',';
+}
+
+// Parse a line with the detected delimiter
+function parseLine(line: string, delimiter: string): string[] {
+  return line.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { csvContent, action } = await req.json();
+    const { csvContent, action, timestampColumn, powerColumn, dateColumn, timeColumn } = await req.json();
 
     if (!csvContent) {
       throw new Error("CSV content is required");
@@ -39,7 +58,11 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Filter out empty lines and Excel separator hints (sep=,)
+    // Detect delimiter
+    const delimiter = detectDelimiter(csvContent);
+    console.log(`Detected delimiter: ${delimiter === '\t' ? 'TAB' : delimiter}`);
+
+    // Filter out empty lines
     const lines = csvContent.split('\n').filter((l: string) => {
       const trimmed = l.trim();
       return trimmed && !trimmed.toLowerCase().startsWith('sep=');
@@ -49,38 +72,41 @@ serve(async (req) => {
       throw new Error("CSV must have a header and at least one data row");
     }
 
-    // Detect and skip metadata rows (e.g., "pnpscada.com,33883284")
-    // Header row should contain typical header keywords
+    // Detect and skip metadata rows (e.g., "pnpscada.com  34978407")
     let headerLineIdx = 0;
     for (let i = 0; i < Math.min(5, lines.length); i++) {
-      const cols = lines[i].split(',').map((h: string) => h.trim().replace(/^["']|["']$/g, ''));
+      const cols = parseLine(lines[i], delimiter);
       const lowerCols = cols.map((c: string) => c.toLowerCase());
       
-      // Check for header keywords - include 'p' prefix patterns like p1, p14, etc.
+      // Check for header keywords
       const hasHeaderKeywords = lowerCols.some((c: string) => 
         c.includes('time') || c === 'date' || c.includes('kwh') || 
         c.includes('kw') || c.includes('power') || c.includes('energy') ||
         c.includes('status') || c.includes('kva') || c.includes('kvar') ||
-        /^p\d+$/.test(c) // matches p1, p14, etc.
+        /^p\d+$/.test(c) || /^q\d+$/.test(c) // matches p1, q1, etc.
       );
       
-      // Accept headers with 2+ columns (for simple date,value format) or more complex ones
       if (cols.length >= 2 && hasHeaderKeywords) {
         headerLineIdx = i;
         break;
       }
     }
 
-    const headers = lines[headerLineIdx].split(',').map((h: string) => h.trim().replace(/^["']|["']$/g, ''));
+    const headers = parseLine(lines[headerLineIdx], delimiter);
     const dataStartIdx = headerLineIdx + 1;
     console.log(`CSV Headers (line ${headerLineIdx + 1}):`, headers);
-    console.log(`Data starts at line ${dataStartIdx + 1}`);
+    console.log(`Data starts at line ${dataStartIdx + 1}, total lines: ${lines.length}`);
 
     if (action === "analyze") {
-      // Use AI to analyze columns - sample from data rows (after header)
-      const sampleRows = lines.slice(dataStartIdx, dataStartIdx + 5).map((line: string) => 
-        line.split(',').map((c: string) => c.trim().replace(/^["']|["']$/g, ''))
-      ) as string[][];
+      // Sample data rows
+      const sampleRows = lines.slice(dataStartIdx, dataStartIdx + 10).map((line: string) => 
+        parseLine(line, delimiter)
+      );
+
+      // Check if date and time might be in separate columns
+      const hasSeparateDateTimeColumns = headers.some(h => 
+        h.toLowerCase() === 'time' || h.toLowerCase() === 'date'
+      );
 
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -93,22 +119,30 @@ serve(async (req) => {
           messages: [
             {
               role: "system",
-              content: `You are analyzing a SCADA/meter data CSV to identify columns for energy consumption analysis.
-Identify:
-1. The timestamp/datetime column (look for: Time, Date, Timestamp, DateTime, or columns with date patterns)
-2. The active power/energy consumption column. Look for:
-   - Columns containing "kWh", "kW", "Power", "Energy", "Wh"
-   - Columns named "P1", "P2", "P14", or similar P+number patterns (these are common meter channel names)
-   - Prefer active power (P, kWh) over reactive power (Q, kVArh) or apparent power (S, kVA)
-3. Which columns should be ignored (reactive power kVArh, apparent power kVA, status codes, Q columns, etc.)
+              content: `You are analyzing a SCADA/meter data file to identify columns for energy consumption analysis.
 
-Return a JSON object with:
+IMPORTANT: The data may have separate Date and Time columns (e.g., "Time" column with dates like "2025/03/01" and values like "00:30:00").
+In PNPSCADA exports, "Time" column often contains DATES (like 2025/03/01) and the next column contains the actual time (like 00:30:00).
+
+Identify:
+1. Timestamp handling - either:
+   - A single timestampColumn with combined datetime
+   - OR separate dateColumn and timeColumn if date and time are in different columns
+2. The active power/energy column. Look for:
+   - Columns with "kWh" in header or values around 0.1-100 kWh range
+   - Columns named "P1", "P2" (these are active power channels)
+   - Prefer active power (P, kWh) over reactive (Q, kVArh) or apparent (S, kVA)
+3. Columns to ignore (Q columns, S columns, Status, etc.)
+
+Return JSON with:
 {
-  "timestampColumn": "column name or null",
-  "powerColumn": "column name or null", 
-  "ignoredColumns": ["list", "of", "ignored", "columns"],
+  "timestampColumn": "column name if combined datetime, null if separate",
+  "dateColumn": "column name with dates (if separate), null otherwise",
+  "timeColumn": "column name with times (if separate), null otherwise",
+  "powerColumn": "column name for active power/kWh",
+  "ignoredColumns": ["list of ignored columns"],
   "confidence": 0-100,
-  "explanation": "Brief explanation of your analysis"
+  "explanation": "Brief explanation"
 }`
             },
             {
@@ -125,12 +159,14 @@ Return a JSON object with:
                 type: "object",
                 properties: {
                   timestampColumn: { type: "string", nullable: true },
+                  dateColumn: { type: "string", nullable: true },
+                  timeColumn: { type: "string", nullable: true },
                   powerColumn: { type: "string", nullable: true },
                   ignoredColumns: { type: "array", items: { type: "string" } },
                   confidence: { type: "number" },
                   explanation: { type: "string" }
                 },
-                required: ["timestampColumn", "powerColumn", "ignoredColumns", "confidence", "explanation"]
+                required: ["powerColumn", "ignoredColumns", "confidence", "explanation"]
               }
             }
           }],
@@ -158,6 +194,7 @@ Return a JSON object with:
         success: true,
         headers,
         rowCount: lines.length - dataStartIdx,
+        delimiter: delimiter === '\t' ? 'tab' : delimiter,
         analysis
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -165,18 +202,35 @@ Return a JSON object with:
     }
 
     if (action === "process") {
-      const { timestampColumn, powerColumn } = await req.json();
+      // Determine how to get timestamp
+      const usesSeparateDateTime = dateColumn && timeColumn;
+      
+      let timestampIdx = -1;
+      let dateIdx = -1;
+      let timeIdx = -1;
+      let powerIdx = -1;
 
-      if (!timestampColumn || !powerColumn) {
-        throw new Error("Timestamp and power columns are required for processing");
+      if (usesSeparateDateTime) {
+        dateIdx = headers.findIndex(h => h.toLowerCase() === dateColumn.toLowerCase());
+        timeIdx = headers.findIndex(h => h.toLowerCase() === timeColumn.toLowerCase());
+        if (dateIdx === -1 || timeIdx === -1) {
+          throw new Error(`Could not find date/time columns: ${dateColumn}, ${timeColumn}`);
+        }
+      } else if (timestampColumn) {
+        timestampIdx = headers.findIndex(h => h.toLowerCase() === timestampColumn.toLowerCase());
+        if (timestampIdx === -1) {
+          throw new Error(`Could not find timestamp column: ${timestampColumn}`);
+        }
+      } else {
+        throw new Error("Timestamp or date/time columns are required for processing");
       }
 
-      const timestampIdx = headers.indexOf(timestampColumn);
-      const powerIdx = headers.indexOf(powerColumn);
-
-      if (timestampIdx === -1 || powerIdx === -1) {
-        throw new Error("Could not find specified columns in CSV");
+      powerIdx = headers.findIndex(h => h.toLowerCase() === powerColumn.toLowerCase());
+      if (powerIdx === -1) {
+        throw new Error(`Could not find power column: ${powerColumn}`);
       }
+
+      console.log(`Processing with: timestamp=${timestampIdx}, date=${dateIdx}, time=${timeIdx}, power=${powerIdx}`);
 
       // Parse all data rows
       const hourlyData: { weekday: number[][]; weekend: number[][] } = {
@@ -188,13 +242,32 @@ Return a JSON object with:
       let weekdayDays = 0;
       let weekendDays = 0;
       const seenDates: Record<string, boolean> = {};
+      let parsedCount = 0;
+      let skippedCount = 0;
 
       for (let i = dataStartIdx; i < lines.length; i++) {
-        const cols = lines[i].split(',').map((c: string) => c.trim().replace(/^["']|["']$/g, ''));
-        const timestampStr = cols[timestampIdx];
+        const cols = parseLine(lines[i], delimiter);
+        
+        let timestampStr: string;
+        if (usesSeparateDateTime) {
+          const dateStr = cols[dateIdx];
+          const timeStr = cols[timeIdx];
+          if (!dateStr || !timeStr) {
+            skippedCount++;
+            continue;
+          }
+          // Combine date and time - handle various formats
+          timestampStr = `${dateStr} ${timeStr}`;
+        } else {
+          timestampStr = cols[timestampIdx];
+        }
+        
         const powerStr = cols[powerIdx];
 
-        if (!timestampStr || !powerStr) continue;
+        if (!timestampStr || !powerStr) {
+          skippedCount++;
+          continue;
+        }
 
         // Parse timestamp - try various formats
         let date: Date | null = null;
@@ -204,20 +277,36 @@ Return a JSON object with:
         
         // If invalid, try common formats
         if (isNaN(date.getTime())) {
+          // Try YYYY/MM/DD HH:mm:ss or YYYY-MM-DD HH:mm:ss
+          const isoishMatch = timestampStr.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+          if (isoishMatch) {
+            const [, year, month, day, hour, minute, second = '00'] = isoishMatch;
+            date = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:${second}`);
+          }
+        }
+        
+        if (isNaN(date?.getTime() || NaN)) {
           // Try DD/MM/YYYY HH:mm or similar
-          const parts = timestampStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-          if (parts) {
-            const [, day, month, year, hour, minute] = parts;
+          const ddmmMatch = timestampStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+          if (ddmmMatch) {
+            const [, day, month, year, hour, minute, second = '00'] = ddmmMatch;
             const fullYear = year.length === 2 ? `20${year}` : year;
-            date = new Date(`${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:00`);
+            date = new Date(`${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:${second}`);
           }
         }
 
-        if (!date || isNaN(date.getTime())) continue;
+        if (!date || isNaN(date.getTime())) {
+          skippedCount++;
+          continue;
+        }
 
         const power = parseFloat(powerStr);
-        if (isNaN(power)) continue;
+        if (isNaN(power)) {
+          skippedCount++;
+          continue;
+        }
 
+        parsedCount++;
         const hour = date.getHours();
         const dayOfWeek = date.getDay();
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
@@ -236,6 +325,12 @@ Return a JSON object with:
         } else {
           hourlyData.weekday[hour].push(power);
         }
+      }
+
+      console.log(`Parsed ${parsedCount} readings, skipped ${skippedCount}`);
+
+      if (parsedCount === 0) {
+        throw new Error("No valid data points could be parsed from the file");
       }
 
       // Calculate averages for each hour
@@ -258,7 +353,7 @@ Return a JSON object with:
       const result: ProcessedProfile = {
         weekdayProfile: normalize(weekdayAvg),
         weekendProfile: normalize(weekendAvg),
-        dataPoints: lines.length - dataStartIdx,
+        dataPoints: parsedCount,
         dateRange: {
           start: sortedDates[0] || '',
           end: sortedDates[sortedDates.length - 1] || ''

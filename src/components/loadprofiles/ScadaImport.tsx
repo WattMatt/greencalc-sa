@@ -21,6 +21,8 @@ interface Category {
 
 interface ColumnAnalysis {
   timestampColumn: string | null;
+  dateColumn?: string | null;
+  timeColumn?: string | null;
   powerColumn: string | null;
   ignoredColumns: string[];
   confidence: number;
@@ -108,7 +110,14 @@ export function ScadaImport({ categories }: ScadaImportProps) {
   };
 
   const handleProcess = async () => {
-    if (!csvContent || !analysis?.timestampColumn || !analysis?.powerColumn) return;
+    // Check we have either timestampColumn or both dateColumn+timeColumn
+    const hasTimestamp = analysis?.timestampColumn;
+    const hasSeparateDateTime = analysis?.dateColumn && analysis?.timeColumn;
+    
+    if (!csvContent || !analysis?.powerColumn || (!hasTimestamp && !hasSeparateDateTime)) {
+      toast.error("Missing required column information");
+      return;
+    }
 
     setIsProcessing(true);
 
@@ -118,6 +127,8 @@ export function ScadaImport({ categories }: ScadaImportProps) {
           csvContent, 
           action: "process",
           timestampColumn: analysis.timestampColumn,
+          dateColumn: analysis.dateColumn,
+          timeColumn: analysis.timeColumn,
           powerColumn: analysis.powerColumn
         },
       });
@@ -131,7 +142,7 @@ export function ScadaImport({ categories }: ScadaImportProps) {
       
       // Suggest site name from filename
       const suggestedName = fileName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
-      setSiteName(suggestedName);
+      if (!siteName) setSiteName(suggestedName);
       
       toast.success("Load profile generated successfully");
     } catch (error) {
@@ -361,15 +372,28 @@ export function ScadaImport({ categories }: ScadaImportProps) {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="flex items-center gap-2">
-                  {analysis.timestampColumn ? (
+                {/* Show either combined timestamp OR separate date+time */}
+                {analysis.timestampColumn ? (
+                  <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
+                    <span className="text-muted-foreground">Timestamp:</span>
+                    <Badge variant="outline">{analysis.timestampColumn}</Badge>
+                  </div>
+                ) : analysis.dateColumn && analysis.timeColumn ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span className="text-muted-foreground">Date/Time:</span>
+                    <Badge variant="outline">{analysis.dateColumn}</Badge>
+                    <span className="text-muted-foreground">+</span>
+                    <Badge variant="outline">{analysis.timeColumn}</Badge>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
                     <XCircle className="h-4 w-4 text-destructive" />
-                  )}
-                  <span className="text-muted-foreground">Timestamp:</span>
-                  <Badge variant="outline">{analysis.timestampColumn || "Not found"}</Badge>
-                </div>
+                    <span className="text-muted-foreground">Timestamp:</span>
+                    <Badge variant="outline">Not found</Badge>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   {analysis.powerColumn ? (
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -390,7 +414,8 @@ export function ScadaImport({ categories }: ScadaImportProps) {
               
               <p className="text-xs text-muted-foreground">{analysis.explanation}</p>
 
-              {analysis.timestampColumn && analysis.powerColumn && !processedProfile && (
+              {/* Show generate button if we have valid column setup */}
+              {((analysis.timestampColumn || (analysis.dateColumn && analysis.timeColumn)) && analysis.powerColumn && !processedProfile) && (
                 <Button onClick={handleProcess} disabled={isProcessing} className="w-full">
                   {isProcessing ? (
                     <>
