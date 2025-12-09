@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,12 +10,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, Legend 
 } from "recharts";
-import { Layers, Download, Calendar as CalendarIcon, Filter } from "lucide-react";
-import { format, isWeekend, parseISO, isWithinInterval } from "date-fns";
+import { Layers, Download, Calendar as CalendarIcon, Save, FolderOpen, Trash2, Plus } from "lucide-react";
+import { format, isWeekend } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -37,6 +38,20 @@ interface ScadaImport {
   raw_data: RawDataPoint[] | null;
 }
 
+interface Project {
+  id: string;
+  name: string;
+}
+
+interface StackedProfile {
+  id: string;
+  project_id: string | null;
+  name: string;
+  description: string | null;
+  meter_ids: string[];
+  created_at: string;
+}
+
 type DayFilter = "all" | "weekday" | "weekend";
 type AggregationType = "sum" | "average";
 
@@ -46,6 +61,7 @@ const DEFAULT_COLORS = [
 ];
 
 export function ProfileStacking() {
+  const queryClient = useQueryClient();
   const [selectedMeters, setSelectedMeters] = useState<Set<string>>(new Set());
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
@@ -54,6 +70,13 @@ export function ProfileStacking() {
   const [showChart, setShowChart] = useState(false);
   const [isDateFromOpen, setIsDateFromOpen] = useState(false);
   const [isDateToOpen, setIsDateToOpen] = useState(false);
+
+  // Save configuration state
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [configName, setConfigName] = useState("");
+  const [configDescription, setConfigDescription] = useState("");
+  const [loadDialogOpen, setLoadDialogOpen] = useState(false);
 
   const { data: meters, isLoading } = useQuery({
     queryKey: ["scada-imports-stacking"],
@@ -69,6 +92,102 @@ export function ProfileStacking() {
       })) as ScadaImport[];
     },
   });
+
+  const { data: projects } = useQuery({
+    queryKey: ["projects-list"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, name")
+        .order("name");
+      if (error) throw error;
+      return data as Project[];
+    },
+  });
+
+  const { data: savedConfigs, refetch: refetchConfigs } = useQuery({
+    queryKey: ["stacked-profiles", selectedProjectId],
+    queryFn: async () => {
+      let query = supabase
+        .from("stacked_profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
+      
+      if (selectedProjectId) {
+        query = query.eq("project_id", selectedProjectId);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as StackedProfile[];
+    },
+    enabled: true,
+  });
+
+  const saveConfig = useMutation({
+    mutationFn: async (params: { name: string; description: string; project_id: string | null; meter_ids: string[] }) => {
+      const { error } = await supabase.from("stacked_profiles").insert({
+        name: params.name,
+        description: params.description || null,
+        project_id: params.project_id || null,
+        meter_ids: params.meter_ids,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stacked-profiles"] });
+      toast.success("Configuration saved");
+      setSaveDialogOpen(false);
+      setConfigName("");
+      setConfigDescription("");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const deleteConfig = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("stacked_profiles").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stacked-profiles"] });
+      toast.success("Configuration deleted");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const handleLoadConfig = (config: StackedProfile) => {
+    // Set selected meters from the saved config
+    const validMeterIds = config.meter_ids.filter(id => 
+      metersWithData.some(m => m.id === id)
+    );
+    setSelectedMeters(new Set(validMeterIds));
+    setLoadDialogOpen(false);
+    setShowChart(false);
+    
+    if (validMeterIds.length < config.meter_ids.length) {
+      toast.info(`Loaded ${validMeterIds.length} of ${config.meter_ids.length} meters (some no longer exist)`);
+    } else {
+      toast.success(`Loaded "${config.name}" with ${validMeterIds.length} meters`);
+    }
+  };
+
+  const handleSaveConfig = () => {
+    if (!configName.trim()) {
+      toast.error("Please enter a configuration name");
+      return;
+    }
+    if (selectedMeters.size === 0) {
+      toast.error("Please select at least one meter to save");
+      return;
+    }
+    saveConfig.mutate({
+      name: configName,
+      description: configDescription,
+      project_id: selectedProjectId || null,
+      meter_ids: Array.from(selectedMeters),
+    });
+  };
 
   const metersWithData = useMemo(() => {
     return meters?.filter(m => m.raw_data && m.raw_data.length > 0) || [];
@@ -270,13 +389,146 @@ export function ProfileStacking() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Layers className="h-5 w-5" />
-            Profile Stacking
-          </CardTitle>
-          <CardDescription>
-            Select multiple meters to generate a combined stacked load profile
-          </CardDescription>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Layers className="h-5 w-5" />
+                Profile Stacking
+              </CardTitle>
+              <CardDescription>
+                Select multiple meters to generate a combined stacked load profile
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Project Filter for Saved Configs */}
+              <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="All projects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All projects</SelectItem>
+                  {projects?.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {/* Load Config Button */}
+              <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <FolderOpen className="h-4 w-4 mr-2" />
+                    Load
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>Load Saved Configuration</DialogTitle>
+                    <DialogDescription>
+                      Select a saved meter configuration to load
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {!savedConfigs?.length ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No saved configurations{selectedProjectId ? " for this project" : ""}
+                      </div>
+                    ) : (
+                      savedConfigs.map(config => (
+                        <div
+                          key={config.id}
+                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 cursor-pointer transition-colors"
+                          onClick={() => handleLoadConfig(config)}
+                        >
+                          <div>
+                            <div className="font-medium">{config.name}</div>
+                            {config.description && (
+                              <div className="text-sm text-muted-foreground">{config.description}</div>
+                            )}
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="secondary">{config.meter_ids.length} meters</Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(config.created_at), "MMM d, yyyy")}
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm("Delete this configuration?")) {
+                                deleteConfig.mutate(config.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {/* Save Config Button */}
+              <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={selectedMeters.size === 0}>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Save Configuration</DialogTitle>
+                    <DialogDescription>
+                      Save the current meter selection for reuse
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label>Configuration Name *</Label>
+                      <Input
+                        placeholder="e.g., Main Centre Load"
+                        value={configName}
+                        onChange={(e) => setConfigName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description (optional)</Label>
+                      <Input
+                        placeholder="e.g., All ground floor meters"
+                        value={configDescription}
+                        onChange={(e) => setConfigDescription(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Assign to Project</Label>
+                      <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select project..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">No project</SelectItem>
+                          {projects?.map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {selectedMeters.size} meter(s) will be saved
+                    </div>
+                    <Button className="w-full" onClick={handleSaveConfig} disabled={!configName.trim()}>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Configuration
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Meter Selection */}
