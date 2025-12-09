@@ -321,6 +321,7 @@ export type Database = {
       }
       scada_imports: {
         Row: {
+          area_sqm: number | null
           category_id: string | null
           created_at: string
           data_points: number | null
@@ -342,6 +343,7 @@ export type Database = {
           weekend_days: number | null
         }
         Insert: {
+          area_sqm?: number | null
           category_id?: string | null
           created_at?: string
           data_points?: number | null
@@ -363,6 +365,7 @@ export type Database = {
           weekend_days?: number | null
         }
         Update: {
+          area_sqm?: number | null
           category_id?: string | null
           created_at?: string
           data_points?: number | null
