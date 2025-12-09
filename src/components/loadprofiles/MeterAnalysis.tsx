@@ -5,14 +5,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingUp, Download, Database, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
-import { format, addDays, addWeeks, addMonths, subDays, subWeeks, subMonths, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { TrendingUp, Download, Database, Calendar as CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface RawDataPoint {
   timestamp: string;
@@ -43,29 +44,40 @@ interface ScadaImport {
 
 type AggregationPeriod = "raw" | "hourly" | "daily";
 type AggregationOperation = "sum" | "average" | "max" | "min";
-type ViewPeriod = "day" | "week" | "month" | "custom";
 
 const QUANTITY_COLORS: Record<string, string> = {
-  "P1 (kWh)": "hsl(var(--primary))",
-  "Q1 (kvarh)": "hsl(var(--secondary))",
-  "S (kVAh)": "hsl(142, 76%, 36%)",
-  "P2 (kWh)": "hsl(38, 92%, 50%)",
-  "Q2 (kvarh)": "hsl(280, 65%, 60%)",
-  "Q3 (kvarh)": "hsl(199, 89%, 48%)",
-  "Q4 (kvarh)": "hsl(340, 82%, 52%)",
-  "S (kVA)": "hsl(262, 83%, 58%)",
+  "P1 (kWh)": "#2563eb",
+  "Q1 (kvarh)": "#16a34a",
+  "S (kVAh)": "#eab308",
+  "P2 (kWh)": "#f97316",
+  "Q2 (kvarh)": "#8b5cf6",
+  "Q3 (kvarh)": "#06b6d4",
+  "Q4 (kvarh)": "#ec4899",
+  "S (kVA)": "#3b82f6",
+  "Status": "#ef4444",
+};
+
+const getQuantityColor = (quantity: string, index: number): string => {
+  if (QUANTITY_COLORS[quantity]) return QUANTITY_COLORS[quantity];
+  const fallbackColors = ["#2563eb", "#16a34a", "#eab308", "#f97316", "#8b5cf6", "#06b6d4", "#ec4899", "#3b82f6"];
+  return fallbackColors[index % fallbackColors.length];
 };
 
 export function MeterAnalysis() {
   const [selectedMeter, setSelectedMeter] = useState<string>("");
-  const [selectedQuantity, setSelectedQuantity] = useState<string>("P1 (kWh)");
+  const [selectedQuantities, setSelectedQuantities] = useState<Set<string>>(new Set());
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [timeFrom, setTimeFrom] = useState<string>("00:00");
   const [timeTo, setTimeTo] = useState<string>("23:59");
-  const [aggregationPeriod, setAggregationPeriod] = useState<AggregationPeriod>("hourly");
+  const [aggregationPeriod, setAggregationPeriod] = useState<AggregationPeriod>("daily");
   const [aggregationOperation, setAggregationOperation] = useState<AggregationOperation>("sum");
-  const [viewPeriod, setViewPeriod] = useState<ViewPeriod>("day");
+  const [yAxisMin, setYAxisMin] = useState<string>("");
+  const [yAxisMax, setYAxisMax] = useState<string>("");
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [showGraph, setShowGraph] = useState(false);
+  const [isDateFromOpen, setIsDateFromOpen] = useState(false);
+  const [isDateToOpen, setIsDateToOpen] = useState(false);
 
   // Fetch all SCADA imports with raw data
   const { data: imports, isLoading } = useQuery({
@@ -96,73 +108,9 @@ export function MeterAnalysis() {
     return Object.keys(firstPoint.values || {});
   }, [selectedImport]);
 
-  // Apply view period to dates
-  const applyViewPeriod = useCallback((period: ViewPeriod, baseDate?: Date) => {
-    const base = baseDate || dateFrom || new Date();
-    
-    switch (period) {
-      case "day":
-        setDateFrom(startOfDay(base));
-        setDateTo(endOfDay(base));
-        setAggregationPeriod("hourly");
-        break;
-      case "week":
-        setDateFrom(startOfWeek(base, { weekStartsOn: 1 }));
-        setDateTo(endOfWeek(base, { weekStartsOn: 1 }));
-        setAggregationPeriod("hourly");
-        break;
-      case "month":
-        setDateFrom(startOfMonth(base));
-        setDateTo(endOfMonth(base));
-        setAggregationPeriod("daily");
-        break;
-      case "custom":
-        // Keep current dates
-        break;
-    }
-    setViewPeriod(period);
-  }, [dateFrom]);
-
-  // Navigate to previous/next period
-  const navigatePeriod = useCallback((direction: "prev" | "next") => {
-    if (!dateFrom) return;
-    
-    let newBase: Date;
-    switch (viewPeriod) {
-      case "day":
-        newBase = direction === "prev" ? subDays(dateFrom, 1) : addDays(dateFrom, 1);
-        break;
-      case "week":
-        newBase = direction === "prev" ? subWeeks(dateFrom, 1) : addWeeks(dateFrom, 1);
-        break;
-      case "month":
-        newBase = direction === "prev" ? subMonths(dateFrom, 1) : addMonths(dateFrom, 1);
-        break;
-      default:
-        return;
-    }
-    applyViewPeriod(viewPeriod, newBase);
-  }, [dateFrom, viewPeriod, applyViewPeriod]);
-
-  // Format the current period label
-  const periodLabel = useMemo(() => {
-    if (!dateFrom) return "";
-    
-    switch (viewPeriod) {
-      case "day":
-        return format(dateFrom, "EEEE, MMMM d, yyyy");
-      case "week":
-        return `${format(dateFrom, "MMM d")} - ${dateTo ? format(dateTo, "MMM d, yyyy") : ""}`;
-      case "month":
-        return format(dateFrom, "MMMM yyyy");
-      default:
-        return `${format(dateFrom, "MMM d")} - ${dateTo ? format(dateTo, "MMM d, yyyy") : ""}`;
-    }
-  }, [dateFrom, dateTo, viewPeriod]);
-
   // Process and filter data for the chart
   const chartData = useMemo(() => {
-    if (!selectedImport?.raw_data?.length) return [];
+    if (!selectedImport?.raw_data?.length || !showGraph || selectedQuantities.size === 0) return [];
 
     let data = selectedImport.raw_data;
 
@@ -180,17 +128,22 @@ export function MeterAnalysis() {
       data = data.filter(d => new Date(d.timestamp) <= toDateTime);
     }
 
-    // Apply aggregation
+    // If no aggregation (raw data)
     if (aggregationPeriod === "raw") {
-      return data.map(d => ({
-        timestamp: d.timestamp,
-        label: format(new Date(d.timestamp), "MMM d HH:mm"),
-        value: d.values[selectedQuantity] ?? 0,
-      }));
+      return data.map(d => {
+        const point: Record<string, any> = {
+          timestamp: d.timestamp,
+          label: format(new Date(d.timestamp), "MMM d HH:mm"),
+        };
+        selectedQuantities.forEach(q => {
+          point[q] = d.values[q] ?? 0;
+        });
+        return point;
+      });
     }
 
     // Group by period
-    const groups: Record<string, number[]> = {};
+    const groups: Record<string, Record<string, number[]>> = {};
     
     data.forEach(d => {
       const date = new Date(d.timestamp);
@@ -199,83 +152,161 @@ export function MeterAnalysis() {
       if (aggregationPeriod === "hourly") {
         key = format(date, "MMM d HH:00");
       } else {
-        key = format(date, "MMM d");
+        key = format(date, "d");
       }
       
-      if (!groups[key]) groups[key] = [];
-      const val = d.values[selectedQuantity];
-      if (typeof val === "number" && !isNaN(val)) {
-        groups[key].push(val);
+      if (!groups[key]) {
+        groups[key] = {};
+        selectedQuantities.forEach(q => { groups[key][q] = []; });
       }
+      
+      selectedQuantities.forEach(q => {
+        const val = d.values[q];
+        if (typeof val === "number" && !isNaN(val)) {
+          if (!groups[key][q]) groups[key][q] = [];
+          groups[key][q].push(val);
+        }
+      });
     });
 
     // Apply aggregation operation
     return Object.entries(groups)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([key, values]) => {
-        let value: number;
-        switch (aggregationOperation) {
-          case "sum":
-            value = values.reduce((a, b) => a + b, 0);
-            break;
-          case "average":
-            value = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-            break;
-          case "max":
-            value = Math.max(...values);
-            break;
-          case "min":
-            value = Math.min(...values);
-            break;
-          default:
-            value = values.reduce((a, b) => a + b, 0);
-        }
-        return {
-          timestamp: key,
+      .sort((a, b) => {
+        const numA = parseInt(a[0]);
+        const numB = parseInt(b[0]);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a[0].localeCompare(b[0]);
+      })
+      .map(([key, quantityValues]) => {
+        const point: Record<string, any> = {
           label: key,
-          value: Math.round(value * 1000) / 1000,
         };
+        
+        selectedQuantities.forEach(q => {
+          const values = quantityValues[q] || [];
+          let value: number;
+          
+          if (values.length === 0) {
+            value = 0;
+          } else {
+            switch (aggregationOperation) {
+              case "sum":
+                value = values.reduce((a, b) => a + b, 0);
+                break;
+              case "average":
+                value = values.reduce((a, b) => a + b, 0) / values.length;
+                break;
+              case "max":
+                value = Math.max(...values);
+                break;
+              case "min":
+                value = Math.min(...values);
+                break;
+              default:
+                value = values.reduce((a, b) => a + b, 0);
+            }
+          }
+          point[q] = Math.round(value * 100) / 100;
+        });
+        
+        return point;
       });
-  }, [selectedImport, dateFrom, dateTo, timeFrom, timeTo, selectedQuantity, aggregationPeriod, aggregationOperation]);
+  }, [selectedImport, dateFrom, dateTo, timeFrom, timeTo, selectedQuantities, aggregationPeriod, aggregationOperation, showGraph]);
 
-  // Set date range when meter is selected
-  const handleMeterChange = (meterId: string) => {
+  // Handle meter selection
+  const handleMeterChange = useCallback((meterId: string) => {
     setSelectedMeter(meterId);
+    setSelectedQuantities(new Set());
+    setShowGraph(false);
+    setDataLoaded(false);
+    
     const imp = imports?.find(i => i.id === meterId);
     if (imp) {
-      // Default to showing the last day of data
-      const endDate = imp.date_range_end ? new Date(imp.date_range_end) : new Date();
-      setDateFrom(startOfDay(endDate));
-      setDateTo(endOfDay(endDate));
-      setViewPeriod("day");
-      setAggregationPeriod("hourly");
-      
-      // Set first available quantity
-      if (imp.raw_data?.length) {
-        const quantities = Object.keys(imp.raw_data[0].values || {});
-        if (quantities.length > 0 && !quantities.includes(selectedQuantity)) {
-          setSelectedQuantity(quantities[0]);
-        }
+      // Default dates from the import's range
+      if (imp.date_range_start) setDateFrom(new Date(imp.date_range_start));
+      if (imp.date_range_end) setDateTo(new Date(imp.date_range_end));
+    }
+  }, [imports]);
+
+  // Handle quantity toggle
+  const handleQuantityToggle = (quantity: string, checked: boolean) => {
+    setSelectedQuantities(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(quantity);
+      } else {
+        newSet.delete(quantity);
       }
+      return newSet;
+    });
+  };
+
+  // Load data handler
+  const handleLoadData = () => {
+    if (!selectedMeter || !dateFrom || !dateTo) {
+      toast.error("Please select meter and date range");
+      return;
+    }
+    setDataLoaded(true);
+    // Auto-select all quantities if none selected
+    if (selectedQuantities.size === 0 && availableQuantities.length > 0) {
+      setSelectedQuantities(new Set(availableQuantities));
     }
   };
 
+  // Graph button handler
+  const handleGraph = () => {
+    if (selectedQuantities.size === 0) {
+      toast.error("Please select at least one quantity to plot");
+      return;
+    }
+    setShowGraph(true);
+  };
+
+  // Apply manipulation handler
+  const handleApplyManipulation = () => {
+    if (!dataLoaded) {
+      toast.error("Please load data first");
+      return;
+    }
+    if (selectedQuantities.size === 0) {
+      toast.error("Please select quantities to plot");
+      return;
+    }
+    setShowGraph(true);
+    toast.success(`Applied ${aggregationOperation} operation with ${aggregationPeriod} aggregation`);
+  };
+
+  // Download CSV handler
   const handleDownloadCSV = () => {
-    if (!chartData.length) return;
+    if (!chartData.length) {
+      toast.error("No data to download");
+      return;
+    }
     
-    const csv = [
-      ["Timestamp", selectedQuantity].join(","),
-      ...chartData.map(d => [d.timestamp, d.value].join(","))
-    ].join("\n");
+    const headers = ["Timestamp", ...Array.from(selectedQuantities)].join(",");
+    const rows = chartData.map(d => {
+      const vals = [d.label, ...Array.from(selectedQuantities).map(q => d[q] ?? 0)];
+      return vals.join(",");
+    }).join("\n");
     
+    const csv = `${headers}\n${rows}`;
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `meter-data-${selectedQuantity.replace(/[^a-zA-Z0-9]/g, "_")}.csv`;
+    a.download = `meter-data-${selectedImport?.site_name || 'export'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    toast.success("CSV downloaded");
   };
+
+  // Y-axis domain
+  const yAxisDomain = useMemo((): [number | "auto", number | "auto"] => {
+    const min = yAxisMin && !isNaN(parseFloat(yAxisMin)) ? parseFloat(yAxisMin) : "auto";
+    const max = yAxisMax && !isNaN(parseFloat(yAxisMax)) ? parseFloat(yAxisMax) : "auto";
+    return [min, max];
+  }, [yAxisMin, yAxisMax]);
 
   const importsWithRawData = imports?.filter(imp => imp.raw_data && (imp.raw_data as RawDataPoint[]).length > 0) || [];
 
@@ -307,24 +338,31 @@ export function MeterAnalysis() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            Load Profiles
-          </CardTitle>
-          <CardDescription>
-            Analyze meter load patterns using kVA data over selected time periods
-          </CardDescription>
-          {selectedImport && (
-            <div className="text-xs text-muted-foreground">
-              Data range: {selectedImport.date_range_start ? format(new Date(selectedImport.date_range_start), "PPP p") : 'N/A'} — 
-              {selectedImport.date_range_end ? format(new Date(selectedImport.date_range_end), "PPP p") : 'N/A'}
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Load Profiles
+              </CardTitle>
+              <CardDescription>
+                Analyze meter load patterns using kVA data over selected time periods with precise date and time selection
+              </CardDescription>
             </div>
-          )}
+            {selectedImport && (
+              <div className="text-right text-sm text-muted-foreground space-y-0.5">
+                {selectedImport.date_range_start && (
+                  <div>Earliest: {format(new Date(selectedImport.date_range_start), "MMM d, yyyy")} at {format(new Date(selectedImport.date_range_start), "HH:mm")}</div>
+                )}
+                {selectedImport.date_range_end && (
+                  <div>Latest: {format(new Date(selectedImport.date_range_end), "MMM d, yyyy")} at {format(new Date(selectedImport.date_range_end), "HH:mm")}</div>
+                )}
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Meter Selection & Period Controls */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Select Meter */}
+          {/* Top Row: Meter, Date From, Date To, Load Data, Download CSV */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Select Meter</Label>
               <Select value={selectedMeter} onValueChange={handleMeterChange}>
@@ -334,269 +372,237 @@ export function MeterAnalysis() {
                 <SelectContent>
                   {importsWithRawData.map(imp => (
                     <SelectItem key={imp.id} value={imp.id}>
-                      {imp.site_name} {imp.shop_name ? `- ${imp.shop_name}` : ""}
+                      {imp.shop_name || imp.shop_number || imp.site_name} - {imp.site_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* View Period Selector */}
             <div className="space-y-2">
-              <Label>View Period</Label>
-              <div className="flex gap-1">
-                <Button
-                  variant={viewPeriod === "day" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => applyViewPeriod("day")}
-                  className="flex-1"
-                >
-                  Day
-                </Button>
-                <Button
-                  variant={viewPeriod === "week" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => applyViewPeriod("week")}
-                  className="flex-1"
-                >
-                  Week
-                </Button>
-                <Button
-                  variant={viewPeriod === "month" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => applyViewPeriod("month")}
-                  className="flex-1"
-                >
-                  Month
-                </Button>
-                <Button
-                  variant={viewPeriod === "custom" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setViewPeriod("custom")}
-                  className="flex-1"
-                >
-                  Custom
-                </Button>
-              </div>
-            </div>
-
-            {/* Navigation & Current Period */}
-            <div className="space-y-2 lg:col-span-2">
-              <Label>Navigate</Label>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => navigatePeriod("prev")}
-                  disabled={!dateFrom || viewPeriod === "custom"}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                
-                <div className="flex-1 text-center font-medium text-sm px-3 py-2 bg-muted rounded-md">
-                  {periodLabel || "Select a meter"}
-                </div>
-                
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => navigatePeriod("next")}
-                  disabled={!dateFrom || viewPeriod === "custom"}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-                
-                <Button 
-                  variant="outline" 
-                  onClick={handleDownloadCSV}
-                  disabled={!chartData.length}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  CSV
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Custom Date Range (shown when custom is selected) */}
-          {viewPeriod === "custom" && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
-              <div className="space-y-2">
-                <Label>From Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !dateFrom && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateFrom ? format(dateFrom, "PPP") : "Pick date"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
+              <Label>Date & Time From</Label>
+              <Popover open={isDateFromOpen} onOpenChange={setIsDateFromOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !dateFrom && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateFrom ? (
+                      <span>{format(dateFrom, "MMM d, yyyy")} at {timeFrom}</span>
+                    ) : (
+                      <span>Pick start date & time</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="pointer-events-auto">
                     <Calendar
                       mode="single"
                       selected={dateFrom}
-                      onSelect={setDateFrom}
+                      onSelect={(date) => {
+                        setDateFrom(date);
+                        setIsDateFromOpen(false);
+                      }}
                       initialFocus
-                      className="p-3 pointer-events-auto"
+                      className="p-3"
                     />
-                  </PopoverContent>
-                </Popover>
-              </div>
+                    <div className="border-t px-3 py-3">
+                      <Input
+                        type="time"
+                        value={timeFrom}
+                        onChange={(e) => setTimeFrom(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
 
-              <div className="space-y-2">
-                <Label>From Time</Label>
-                <Input 
-                  type="time"
-                  value={timeFrom}
-                  onChange={e => setTimeFrom(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>To Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !dateTo && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateTo ? format(dateTo, "PPP") : "Pick date"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
+            <div className="space-y-2">
+              <Label>Date & Time To</Label>
+              <Popover open={isDateToOpen} onOpenChange={setIsDateToOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !dateTo && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateTo ? (
+                      <span>{format(dateTo, "MMM d, yyyy")} at {timeTo}</span>
+                    ) : (
+                      <span>Pick end date & time</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="pointer-events-auto">
                     <Calendar
                       mode="single"
                       selected={dateTo}
-                      onSelect={setDateTo}
+                      onSelect={(date) => {
+                        setDateTo(date);
+                        setIsDateToOpen(false);
+                      }}
                       initialFocus
-                      className="p-3 pointer-events-auto"
+                      className="p-3"
                     />
-                  </PopoverContent>
-                </Popover>
+                    <div className="border-t px-3 py-3">
+                      <Input
+                        type="time"
+                        value={timeTo}
+                        onChange={(e) => setTimeTo(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+
+          {/* Buttons Row */}
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="default"
+              onClick={handleLoadData}
+              disabled={!selectedMeter || !dateFrom || !dateTo}
+            >
+              Load Data
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDownloadCSV}
+              disabled={!dataLoaded || chartData.length === 0}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download CSV
+            </Button>
+          </div>
+
+          {/* Second Row: Quantities, Y-Axis, Data Manipulation */}
+          {dataLoaded && availableQuantities.length > 0 && (
+            <div className="flex gap-6 items-start">
+              {/* Quantities to Plot */}
+              <div className="w-48 space-y-3">
+                <Label className="font-semibold">Quantities to Plot</Label>
+                <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-2 border rounded-md p-3 bg-muted/20">
+                  {availableQuantities.map((column) => (
+                    <div key={column} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`show-${column}`}
+                        checked={selectedQuantities.has(column)}
+                        onCheckedChange={(checked) => handleQuantityToggle(column, checked === true)}
+                      />
+                      <label
+                        htmlFor={`show-${column}`}
+                        className="text-sm font-medium leading-none cursor-pointer"
+                      >
+                        {column}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  variant="default"
+                  onClick={handleGraph}
+                  className="w-full"
+                >
+                  Graph
+                </Button>
               </div>
 
-              <div className="space-y-2">
-                <Label>To Time</Label>
-                <Input 
-                  type="time"
-                  value={timeTo}
-                  onChange={e => setTimeTo(e.target.value)}
-                />
+              {/* Y-Axis Controls */}
+              <div className="w-36 space-y-3">
+                <div className="space-y-2">
+                  <Label className="font-semibold">Y-Axis Min</Label>
+                  <Input
+                    type="text"
+                    placeholder="Auto"
+                    value={yAxisMin}
+                    onChange={(e) => setYAxisMin(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-semibold">Y-Axis Max</Label>
+                  <Input
+                    type="text"
+                    placeholder="Auto"
+                    value={yAxisMax}
+                    onChange={(e) => setYAxisMax(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Data Manipulation */}
+              <div className="flex-1 space-y-3 border-l pl-6">
+                <Label className="font-semibold">Data Manipulation</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Operation</Label>
+                    <Select value={aggregationOperation} onValueChange={(v) => setAggregationOperation(v as AggregationOperation)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sum">Sum</SelectItem>
+                        <SelectItem value="average">Average</SelectItem>
+                        <SelectItem value="max">Max</SelectItem>
+                        <SelectItem value="min">Min</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Period</Label>
+                    <Select value={aggregationPeriod} onValueChange={(v) => setAggregationPeriod(v as AggregationPeriod)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="raw">Raw (All readings)</SelectItem>
+                        <SelectItem value="hourly">Hourly</SelectItem>
+                        <SelectItem value="daily">Daily (1 day)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Button
+                  onClick={handleApplyManipulation}
+                  className="w-full"
+                >
+                  Apply Manipulation
+                </Button>
               </div>
             </div>
           )}
 
-          {/* Quantities and Data Manipulation */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Quantities to Plot */}
-            <div className="space-y-2">
-              <Label>Quantities to Plot</Label>
-              <RadioGroup 
-                value={selectedQuantity} 
-                onValueChange={setSelectedQuantity}
-                className="space-y-1 max-h-40 overflow-y-auto"
-              >
-                {availableQuantities.length > 0 ? (
-                  availableQuantities.map(q => (
-                    <div key={q} className="flex items-center space-x-2">
-                      <RadioGroupItem value={q} id={q} />
-                      <Label htmlFor={q} className="font-normal cursor-pointer">{q}</Label>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">Select a meter first</p>
-                )}
-              </RadioGroup>
-            </div>
-
-            {/* Aggregation Settings */}
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label>Operation</Label>
-                <Select value={aggregationOperation} onValueChange={(v) => setAggregationOperation(v as AggregationOperation)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sum">Sum</SelectItem>
-                    <SelectItem value="average">Average</SelectItem>
-                    <SelectItem value="max">Max</SelectItem>
-                    <SelectItem value="min">Min</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Aggregation Period</Label>
-                <Select value={aggregationPeriod} onValueChange={(v) => setAggregationPeriod(v as AggregationPeriod)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="raw">Raw (All readings)</SelectItem>
-                    <SelectItem value="hourly">Hourly</SelectItem>
-                    <SelectItem value="daily">Daily</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Stats Summary */}
-            {chartData.length > 0 && (
-              <div className="space-y-2">
-                <Label>Summary</Label>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="bg-muted p-2 rounded">
-                    <div className="text-muted-foreground text-xs">Data Points</div>
-                    <div className="font-medium">{chartData.length}</div>
-                  </div>
-                  <div className="bg-muted p-2 rounded">
-                    <div className="text-muted-foreground text-xs">Total</div>
-                    <div className="font-medium">
-                      {chartData.reduce((sum, d) => sum + d.value, 0).toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="bg-muted p-2 rounded">
-                    <div className="text-muted-foreground text-xs">Peak</div>
-                    <div className="font-medium">
-                      {Math.max(...chartData.map(d => d.value)).toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="bg-muted p-2 rounded">
-                    <div className="text-muted-foreground text-xs">Average</div>
-                    <div className="font-medium">
-                      {(chartData.reduce((sum, d) => sum + d.value, 0) / chartData.length).toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Chart */}
-          {selectedMeter && chartData.length > 0 && (
-            <div className="h-80 mt-6">
+          {showGraph && chartData.length > 0 && (
+            <div className="h-96 mt-6">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis 
                     dataKey="label" 
-                    tick={{ fontSize: 10 }}
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
+                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                    angle={0}
+                    textAnchor="middle"
+                    height={40}
                     interval="preserveStartEnd"
-                    className="text-muted-foreground"
+                    axisLine={{ stroke: 'hsl(var(--border))' }}
+                    tickLine={{ stroke: 'hsl(var(--border))' }}
                   />
-                  <YAxis className="text-muted-foreground" />
+                  <YAxis 
+                    domain={yAxisDomain}
+                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                    axisLine={{ stroke: 'hsl(var(--border))' }}
+                    tickLine={{ stroke: 'hsl(var(--border))' }}
+                  />
                   <Tooltip 
                     contentStyle={{ 
                       backgroundColor: 'hsl(var(--background))', 
@@ -605,24 +611,43 @@ export function MeterAnalysis() {
                     }}
                     labelStyle={{ color: 'hsl(var(--foreground))' }}
                   />
-                  <Legend />
-                  <Line 
-                    type="monotone" 
-                    dataKey="value" 
-                    name={selectedQuantity}
-                    stroke={QUANTITY_COLORS[selectedQuantity] || "hsl(var(--primary))"}
-                    strokeWidth={1.5}
-                    dot={false}
-                    activeDot={{ r: 4 }}
+                  <Legend 
+                    verticalAlign="top" 
+                    height={36}
+                    wrapperStyle={{ paddingBottom: '10px' }}
                   />
+                  {Array.from(selectedQuantities).map((quantity, index) => (
+                    <Line 
+                      key={quantity}
+                      type="monotone" 
+                      dataKey={quantity} 
+                      name={quantity}
+                      stroke={getQuantityColor(quantity, index)}
+                      strokeWidth={1.5}
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                    />
+                  ))}
                 </LineChart>
               </ResponsiveContainer>
             </div>
           )}
 
-          {selectedMeter && chartData.length === 0 && (
+          {showGraph && chartData.length === 0 && (
             <div className="h-80 flex items-center justify-center border rounded-lg border-dashed">
-              <p className="text-muted-foreground">No data available for the selected time range</p>
+              <p className="text-muted-foreground">No data available for the selected time range and quantities</p>
+            </div>
+          )}
+
+          {dataLoaded && !showGraph && (
+            <div className="h-80 flex items-center justify-center border rounded-lg border-dashed">
+              <p className="text-muted-foreground">Select quantities and click "Graph" to visualize data</p>
+            </div>
+          )}
+
+          {!dataLoaded && selectedMeter && (
+            <div className="h-80 flex items-center justify-center border rounded-lg border-dashed">
+              <p className="text-muted-foreground">Click "Load Data" to load meter readings</p>
             </div>
           )}
 
