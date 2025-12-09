@@ -18,6 +18,7 @@ import { LoadProfileEditor } from "@/components/loadprofiles/LoadProfileEditor";
 import { ScadaImport } from "@/components/loadprofiles/ScadaImport";
 import { ScadaImportsList } from "@/components/loadprofiles/ScadaImportsList";
 import { MeterLibrary } from "@/components/loadprofiles/MeterLibrary";
+import { MeterAnalysis } from "@/components/loadprofiles/MeterAnalysis";
 interface ShopType {
   id: string;
   name: string;
@@ -413,7 +414,8 @@ export default function LoadProfiles() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="meter-library">
+        <TabsContent value="meter-library" className="space-y-6">
+          <MeterAnalysis />
           <MeterLibrary />
         </TabsContent>
 
