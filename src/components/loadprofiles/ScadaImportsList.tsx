@@ -336,16 +336,21 @@ export function ScadaImportsList() {
                               <BarChart3 className="h-4 w-4" />
                               Weekday Profile
                             </h4>
-                            <div className="h-24 flex items-end gap-0.5">
-                              {imp.load_profile_weekday?.map((val, idx) => (
-                                <div
-                                  key={idx}
-                                  className="flex-1 bg-primary/60 rounded-t"
-                                  style={{ height: `${Math.max(val, 1)}%` }}
-                                  title={`${idx}:00 - ${val.toFixed(1)}%`}
-                                />
-                              ))}
-                            </div>
+                            {(() => {
+                              const maxVal = Math.max(...(imp.load_profile_weekday || [1]));
+                              return (
+                                <div className="h-24 flex items-end gap-0.5">
+                                  {imp.load_profile_weekday?.map((val, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="flex-1 bg-primary/60 rounded-t"
+                                      style={{ height: `${(val / maxVal) * 100}%` }}
+                                      title={`${idx}:00 - ${val.toFixed(1)}%`}
+                                    />
+                                  ))}
+                                </div>
+                              );
+                            })()}
                             <div className="flex justify-between text-xs text-muted-foreground mt-1">
                               <span>0h</span>
                               <span>12h</span>
@@ -357,16 +362,21 @@ export function ScadaImportsList() {
                               <BarChart3 className="h-4 w-4" />
                               Weekend Profile
                             </h4>
-                            <div className="h-24 flex items-end gap-0.5">
-                              {imp.load_profile_weekend?.map((val, idx) => (
-                                <div
-                                  key={idx}
-                                  className="flex-1 bg-secondary/60 rounded-t"
-                                  style={{ height: `${Math.max(val, 1)}%` }}
-                                  title={`${idx}:00 - ${val.toFixed(1)}%`}
-                                />
-                              ))}
-                            </div>
+                            {(() => {
+                              const maxVal = Math.max(...(imp.load_profile_weekend || [1]));
+                              return (
+                                <div className="h-24 flex items-end gap-0.5">
+                                  {imp.load_profile_weekend?.map((val, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="flex-1 bg-secondary/60 rounded-t"
+                                      style={{ height: `${(val / maxVal) * 100}%` }}
+                                      title={`${idx}:00 - ${val.toFixed(1)}%`}
+                                    />
+                                  ))}
+                                </div>
+                              );
+                            })()}
                             <div className="flex justify-between text-xs text-muted-foreground mt-1">
                               <span>0h</span>
                               <span>12h</span>
