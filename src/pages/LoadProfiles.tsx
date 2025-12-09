@@ -131,28 +131,36 @@ export default function LoadProfiles() {
       const lines = text.split("\n").filter((l) => l.trim());
       const headers = lines[0].toLowerCase().split(",").map((h) => h.trim());
       
-      const nameIdx = headers.findIndex((h) => h.includes("name") || h.includes("type"));
-      const kwhIdx = headers.findIndex((h) => h.includes("kwh") || h.includes("consumption"));
-      const descIdx = headers.findIndex((h) => h.includes("desc"));
-      const categoryIdx = headers.findIndex((h) => h.includes("category") || h.includes("sector"));
+      // Flexible column detection - adapt to various CSV formats
+      const nameIdx = headers.findIndex((h) => 
+        h.includes("name") || h.includes("type") || h.includes("tenant") || 
+        h.includes("shop") || h.includes("store") || h.includes("unit") || h.includes("profile")
+      );
+      const kwhIdx = headers.findIndex((h) => 
+        h.includes("kwh") || h.includes("consumption") || h.includes("energy") || h.includes("load")
+      );
+      const descIdx = headers.findIndex((h) => h.includes("desc") || h.includes("note"));
+      const categoryIdx = headers.findIndex((h) => 
+        h.includes("category") || h.includes("sector") || h.includes("group") || h.includes("class")
+      );
       
-      // Check for hourly profile columns
+      // Check for hourly profile columns (multiple formats)
       const hourlyIdxs: number[] = [];
       for (let h = 0; h < 24; h++) {
         const idx = headers.findIndex(
-          (hdr) => hdr === `h${h}` || hdr === `${h.toString().padStart(2, "0")}:00` || hdr === `hour${h}`
+          (hdr) => hdr === `h${h}` || hdr === `${h.toString().padStart(2, "0")}:00` || 
+                   hdr === `hour${h}` || hdr === `${h}:00` || hdr === String(h)
         );
         if (idx !== -1) hourlyIdxs.push(idx);
       }
 
-      if (nameIdx === -1) {
-        throw new Error("CSV must have a 'name' column");
-      }
+      // Fallback: use first text column if no name column found
+      const effectiveNameIdx = nameIdx !== -1 ? nameIdx : 0;
 
       const profilesToInsert = [];
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(",").map((c) => c.trim().replace(/^["']|["']$/g, ""));
-        const name = cols[nameIdx];
+        const name = cols[effectiveNameIdx];
         if (!name) continue;
 
         const kwh = kwhIdx !== -1 ? parseFloat(cols[kwhIdx]) || 50 : 50;
