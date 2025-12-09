@@ -252,10 +252,24 @@ Return JSON with:
         throw new Error("Timestamp or date/time columns are required for processing");
       }
 
+      // Try exact match first
       powerIdx = headers.findIndex(h => h.toLowerCase() === powerColumn.toLowerCase());
+      
+      // If no exact match, try partial match (e.g., "p14" matches "p14 (kWh)" or vice versa)
       if (powerIdx === -1) {
-        throw new Error(`Could not find power column: ${powerColumn}`);
+        const powerColLower = powerColumn.toLowerCase().replace(/\s*\([^)]*\)\s*/g, '').trim();
+        powerIdx = headers.findIndex(h => {
+          const headerLower = h.toLowerCase().replace(/\s*\([^)]*\)\s*/g, '').trim();
+          return headerLower === powerColLower || headerLower.includes(powerColLower) || powerColLower.includes(headerLower);
+        });
       }
+      
+      if (powerIdx === -1) {
+        console.error(`Available headers:`, headers);
+        console.error(`Looking for power column:`, powerColumn);
+        throw new Error(`Could not find power column: ${powerColumn}. Available headers: ${headers.join(', ')}`);
+      }
+      console.log(`Found power column "${powerColumn}" at index ${powerIdx} (header: "${headers[powerIdx]}")`)
 
       // Find ALL power column indices for raw data capture
       const allPowerColumns: { name: string; idx: number }[] = [];
