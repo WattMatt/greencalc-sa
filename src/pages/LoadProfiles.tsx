@@ -11,13 +11,17 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Upload, Trash2, Edit2, Download, Activity, FileSpreadsheet, Zap, Database, TrendingUp } from "lucide-react";
+import { Plus, Upload, Trash2, Edit2, Download, Activity, FileSpreadsheet, Zap, Database, TrendingUp, Layers, GitCompare, TableIcon } from "lucide-react";
 import { toast } from "sonner";
 import { GoogleSheetsImport } from "@/components/loadprofiles/GoogleSheetsImport";
 import { LoadProfileEditor } from "@/components/loadprofiles/LoadProfileEditor";
 import { ScadaImport } from "@/components/loadprofiles/ScadaImport";
 import { ScadaImportsList } from "@/components/loadprofiles/ScadaImportsList";
 import { MeterAnalysis } from "@/components/loadprofiles/MeterAnalysis";
+import { MeterLibrary } from "@/components/loadprofiles/MeterLibrary";
+import { ProfileStacking } from "@/components/loadprofiles/ProfileStacking";
+import { MeterComparison } from "@/components/loadprofiles/MeterComparison";
+import { PivotTable } from "@/components/loadprofiles/PivotTable";
 
 interface ShopType {
   id: string;
@@ -403,10 +407,26 @@ export default function LoadProfiles() {
       </div>
 
       <Tabs defaultValue="meter-analysis" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="meter-analysis">
             <TrendingUp className="h-4 w-4 mr-2" />
             Meter Analysis
+          </TabsTrigger>
+          <TabsTrigger value="stacking">
+            <Layers className="h-4 w-4 mr-2" />
+            Profile Stacking
+          </TabsTrigger>
+          <TabsTrigger value="comparison">
+            <GitCompare className="h-4 w-4 mr-2" />
+            Comparison
+          </TabsTrigger>
+          <TabsTrigger value="pivot">
+            <TableIcon className="h-4 w-4 mr-2" />
+            Pivot Table
+          </TabsTrigger>
+          <TabsTrigger value="meter-library">
+            <Database className="h-4 w-4 mr-2" />
+            Meter Library
           </TabsTrigger>
           <TabsTrigger value="library">
             <Activity className="h-4 w-4 mr-2" />
@@ -418,16 +438,32 @@ export default function LoadProfiles() {
           </TabsTrigger>
           <TabsTrigger value="import">
             <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Google Sheets Import
+            Google Sheets
           </TabsTrigger>
           <TabsTrigger value="scada">
             <Zap className="h-4 w-4 mr-2" />
-            New SCADA Import
+            New Import
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="meter-analysis">
           <MeterAnalysis />
+        </TabsContent>
+
+        <TabsContent value="stacking">
+          <ProfileStacking />
+        </TabsContent>
+
+        <TabsContent value="comparison">
+          <MeterComparison />
+        </TabsContent>
+
+        <TabsContent value="pivot">
+          <PivotTable />
+        </TabsContent>
+
+        <TabsContent value="meter-library">
+          <MeterLibrary />
         </TabsContent>
 
         <TabsContent value="library" className="space-y-4">

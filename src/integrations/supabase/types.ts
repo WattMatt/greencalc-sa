@@ -330,6 +330,9 @@ export type Database = {
           id: string
           load_profile_weekday: number[] | null
           load_profile_weekend: number[] | null
+          meter_color: string | null
+          meter_label: string | null
+          project_id: string | null
           raw_data: Json | null
           shop_name: string | null
           shop_number: string | null
@@ -348,6 +351,9 @@ export type Database = {
           id?: string
           load_profile_weekday?: number[] | null
           load_profile_weekend?: number[] | null
+          meter_color?: string | null
+          meter_label?: string | null
+          project_id?: string | null
           raw_data?: Json | null
           shop_name?: string | null
           shop_number?: string | null
@@ -366,6 +372,9 @@ export type Database = {
           id?: string
           load_profile_weekday?: number[] | null
           load_profile_weekend?: number[] | null
+          meter_color?: string | null
+          meter_label?: string | null
+          project_id?: string | null
           raw_data?: Json | null
           shop_name?: string | null
           shop_number?: string | null
@@ -380,6 +389,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "shop_type_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scada_imports_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -448,6 +464,44 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "shop_type_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stacked_profiles: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          meter_ids: string[]
+          name: string
+          project_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          meter_ids?: string[]
+          name: string
+          project_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          meter_ids?: string[]
+          name?: string
+          project_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stacked_profiles_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
