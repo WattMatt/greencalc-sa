@@ -6,12 +6,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Trash2, Eye, Database, Calendar, MapPin, Store, Hash, 
   ChevronDown, ChevronUp, BarChart3, RefreshCw, Loader2 
 } from "lucide-react";
 import { toast } from "sonner";
 import { LoadProfileEditor } from "./LoadProfileEditor";
+
+// TOU period helpers
+const getTOUPeriod = (hour: number, isWeekend: boolean): { name: string; color: string } => {
+  if (isWeekend) {
+    return { name: "Off-Peak", color: "bg-green-500/70" };
+  }
+  // Peak: 7-10am, 6-8pm
+  if ((hour >= 7 && hour < 10) || (hour >= 18 && hour < 20)) {
+    return { name: "Peak", color: "bg-red-500/70" };
+  }
+  // Standard: 6-7am, 10am-6pm, 8-10pm
+  if ((hour >= 6 && hour < 7) || (hour >= 10 && hour < 18) || (hour >= 20 && hour < 22)) {
+    return { name: "Standard", color: "bg-yellow-500/70" };
+  }
+  // Off-peak: 10pm-6am
+  return { name: "Off-Peak", color: "bg-green-500/70" };
+};
 
 interface RawDataPoint {
   timestamp: string;
@@ -330,74 +348,82 @@ export function ScadaImportsList() {
                   {expandedRows.has(imp.id) && (
                     <TableRow key={`${imp.id}-expanded`}>
                       <TableCell colSpan={8} className="bg-muted/30 p-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                              <BarChart3 className="h-4 w-4" />
-                              Weekday Profile
-                            </h4>
-                            {(() => {
-                              const maxVal = Math.max(...(imp.load_profile_weekday || [1]));
-                              // TOU periods for weekdays (typical SA high-demand season)
-                              const getTOUColor = (hour: number) => {
-                                // Peak: 7-10am, 6-8pm
-                                if ((hour >= 7 && hour < 10) || (hour >= 18 && hour < 20)) {
-                                  return "bg-red-500/70";
-                                }
-                                // Standard: 6-7am, 10am-6pm, 8-10pm
-                                if ((hour >= 6 && hour < 7) || (hour >= 10 && hour < 18) || (hour >= 20 && hour < 22)) {
-                                  return "bg-yellow-500/70";
-                                }
-                                // Off-peak: 10pm-6am
-                                return "bg-green-500/70";
-                              };
-                              return (
-                                <div className="h-24 flex items-end gap-0.5">
-                                  {imp.load_profile_weekday?.map((val, idx) => (
-                                    <div
-                                      key={idx}
-                                      className={`flex-1 rounded-t ${getTOUColor(idx)}`}
-                                      style={{ height: `${(val / maxVal) * 100}%` }}
-                                      title={`${idx}:00 - ${val.toFixed(1)}%`}
-                                    />
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                            <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                              <span>0h</span>
-                              <span>12h</span>
-                              <span>24h</span>
+                        <TooltipProvider delayDuration={0}>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                                <BarChart3 className="h-4 w-4" />
+                                Weekday Profile
+                              </h4>
+                              {(() => {
+                                const maxVal = Math.max(...(imp.load_profile_weekday || [1]));
+                                return (
+                                  <div className="h-24 flex items-end gap-0.5">
+                                    {imp.load_profile_weekday?.map((val, idx) => {
+                                      const tou = getTOUPeriod(idx, false);
+                                      return (
+                                        <Tooltip key={idx}>
+                                          <TooltipTrigger asChild>
+                                            <div
+                                              className={`flex-1 rounded-t cursor-pointer hover:opacity-80 transition-opacity ${tou.color}`}
+                                              style={{ height: `${(val / maxVal) * 100}%` }}
+                                            />
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="text-xs">
+                                            <div className="font-medium">{idx}:00 - {idx + 1}:00</div>
+                                            <div>{val.toFixed(2)}% of daily load</div>
+                                            <div className="text-muted-foreground">{tou.name} period</div>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })()}
+                              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                                <span>0h</span>
+                                <span>12h</span>
+                                <span>24h</span>
+                              </div>
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                                <BarChart3 className="h-4 w-4" />
+                                Weekend Profile
+                              </h4>
+                              {(() => {
+                                const maxVal = Math.max(...(imp.load_profile_weekend || [1]));
+                                return (
+                                  <div className="h-24 flex items-end gap-0.5">
+                                    {imp.load_profile_weekend?.map((val, idx) => {
+                                      const tou = getTOUPeriod(idx, true);
+                                      return (
+                                        <Tooltip key={idx}>
+                                          <TooltipTrigger asChild>
+                                            <div
+                                              className={`flex-1 rounded-t cursor-pointer hover:opacity-80 transition-opacity ${tou.color}`}
+                                              style={{ height: `${(val / maxVal) * 100}%` }}
+                                            />
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="text-xs">
+                                            <div className="font-medium">{idx}:00 - {idx + 1}:00</div>
+                                            <div>{val.toFixed(2)}% of daily load</div>
+                                            <div className="text-muted-foreground">{tou.name} period</div>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })()}
+                              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                                <span>0h</span>
+                                <span>12h</span>
+                                <span>24h</span>
+                              </div>
                             </div>
                           </div>
-                          <div>
-                            <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                              <BarChart3 className="h-4 w-4" />
-                              Weekend Profile
-                            </h4>
-                            {(() => {
-                              const maxVal = Math.max(...(imp.load_profile_weekend || [1]));
-                              // Weekends are typically off-peak all day
-                              return (
-                                <div className="h-24 flex items-end gap-0.5">
-                                  {imp.load_profile_weekend?.map((val, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="flex-1 bg-green-500/70 rounded-t"
-                                      style={{ height: `${(val / maxVal) * 100}%` }}
-                                      title={`${idx}:00 - ${val.toFixed(1)}%`}
-                                    />
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                            <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                              <span>0h</span>
-                              <span>12h</span>
-                              <span>24h</span>
-                            </div>
-                          </div>
-                        </div>
+                        </TooltipProvider>
                         {/* TOU Legend */}
                         <div className="flex gap-4 mt-3 text-xs">
                           <div className="flex items-center gap-1">
