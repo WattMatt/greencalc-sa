@@ -567,19 +567,21 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                   </linearGradient>
                 </defs>
                 
-                {/* TOU Period Full-Height Background Bands */}
-                {showTOU && touRanges.map((range, i) => (
-                  <ReferenceArea
-                    key={i}
-                    x1={`${range.start.toString().padStart(2, "0")}:00`}
-                    x2={`${range.end.toString().padStart(2, "0")}:00`}
-                    fill={TOU_COLORS[range.period].fill}
-                    fillOpacity={0.12}
-                    stroke={TOU_COLORS[range.period].fill}
-                    strokeOpacity={0.3}
-                    strokeWidth={1}
-                  />
-                ))}
+                {/* TOU Period Full-Height Background Bands - per hour for seamless look */}
+                {showTOU && Array.from({ length: 24 }, (_, h) => {
+                  const period = getTOUPeriod(h, isWeekend);
+                  const nextHour = h === 23 ? 23 : h + 1;
+                  return (
+                    <ReferenceArea
+                      key={h}
+                      x1={`${h.toString().padStart(2, "0")}:00`}
+                      x2={`${nextHour.toString().padStart(2, "0")}:00`}
+                      fill={TOU_COLORS[period].fill}
+                      fillOpacity={0.15}
+                      stroke="none"
+                    />
+                  );
+                })}
                 
                 <CartesianGrid
                   strokeDasharray="3 3" 
