@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Building2, Trash2, ArrowRight } from "lucide-react";
+import { Plus, Building2, Trash2, ArrowRight, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -14,7 +14,29 @@ export default function Projects() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [newProject, setNewProject] = useState({ name: "", description: "", location: "" });
+
+  const handleSyncExternal = async () => {
+    setIsSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-external-projects");
+      
+      if (error) throw error;
+      
+      if (data?.error) throw new Error(data.error);
+      
+      toast.success(
+        `Synced: ${data.projects.inserted} new projects, ${data.projects.updated} updated, ${data.tenants.inserted} new tenants, ${data.tenants.updated} updated`
+      );
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    } catch (error) {
+      console.error("Sync error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to sync");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const { data: projects, isLoading } = useQuery({
     queryKey: ["projects"],
@@ -67,13 +89,18 @@ export default function Projects() {
           <h1 className="text-2xl font-bold text-foreground">Projects</h1>
           <p className="text-muted-foreground">Create and manage energy modeling projects</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              New Project
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleSyncExternal} disabled={isSyncing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? "Syncing..." : "Sync External"}
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                New Project
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create New Project</DialogTitle>
@@ -116,6 +143,7 @@ export default function Projects() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {isLoading ? (
