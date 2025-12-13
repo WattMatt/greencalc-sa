@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -557,32 +557,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          {/* TOU Timeline Strip - Above chart */}
-          {showTOU && (
-            <div className="mb-2">
-              <div className="flex h-6 rounded-md overflow-hidden border border-border">
-                {Array.from({ length: 24 }, (_, h) => {
-                  const period = getTOUPeriod(h, isWeekend);
-                  return (
-                    <div
-                      key={h}
-                      className="flex-1 flex items-center justify-center text-[9px] font-medium transition-all hover:opacity-80"
-                      style={{ 
-                        backgroundColor: TOU_COLORS[period].fill,
-                        color: 'white',
-                        textShadow: '0 1px 2px rgba(0,0,0,0.3)'
-                      }}
-                      title={`${h.toString().padStart(2, '0')}:00 - ${TOU_COLORS[period].label}`}
-                    >
-                      {h % 3 === 0 ? h : ''}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="h-[320px]">
+          <div className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
@@ -590,7 +565,39 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                     <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4}/>
                     <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
                   </linearGradient>
+                  {/* TOU period gradients - subtle fade from bottom */}
+                  <linearGradient id="peakGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={TOU_COLORS["peak"].fill} stopOpacity={0}/>
+                    <stop offset="70%" stopColor={TOU_COLORS["peak"].fill} stopOpacity={0.08}/>
+                    <stop offset="100%" stopColor={TOU_COLORS["peak"].fill} stopOpacity={0.25}/>
+                  </linearGradient>
+                  <linearGradient id="standardGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={TOU_COLORS["standard"].fill} stopOpacity={0}/>
+                    <stop offset="70%" stopColor={TOU_COLORS["standard"].fill} stopOpacity={0.08}/>
+                    <stop offset="100%" stopColor={TOU_COLORS["standard"].fill} stopOpacity={0.25}/>
+                  </linearGradient>
+                  <linearGradient id="offpeakGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={TOU_COLORS["off-peak"].fill} stopOpacity={0}/>
+                    <stop offset="70%" stopColor={TOU_COLORS["off-peak"].fill} stopOpacity={0.08}/>
+                    <stop offset="100%" stopColor={TOU_COLORS["off-peak"].fill} stopOpacity={0.25}/>
+                  </linearGradient>
                 </defs>
+                
+                {/* TOU Period Background Bands - subtle gradient from bottom */}
+                {showTOU && touRanges.map((range, i) => {
+                  const gradientId = range.period === "peak" ? "peakGradient" 
+                    : range.period === "standard" ? "standardGradient" 
+                    : "offpeakGradient";
+                  return (
+                    <ReferenceArea
+                      key={i}
+                      x1={`${range.start.toString().padStart(2, "0")}:00`}
+                      x2={`${range.end.toString().padStart(2, "0")}:00`}
+                      fill={`url(#${gradientId})`}
+                      stroke="none"
+                    />
+                  );
+                })}
                 
                 <CartesianGrid 
                   strokeDasharray="3 3" 
