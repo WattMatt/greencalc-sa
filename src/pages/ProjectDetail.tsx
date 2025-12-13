@@ -4,13 +4,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Database, Layers } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap } from "lucide-react";
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
 import { SimulationPanel } from "@/components/projects/SimulationPanel";
-import { ProjectMeterLibrary } from "@/components/projects/ProjectMeterLibrary";
-import { ProjectMeterStacking } from "@/components/projects/ProjectMeterStacking";
 import { toast } from "sonner";
 
 export default function ProjectDetail() {
@@ -94,6 +92,9 @@ export default function ProjectDetail() {
   // Calculate total area from tenants
   const totalArea = tenants?.reduce((sum, t) => sum + Number(t.area_sqm || 0), 0) || 0;
 
+  // Count tenants with assigned SCADA profiles
+  const assignedCount = tenants?.filter(t => t.scada_import_id).length || 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -103,7 +104,7 @@ export default function ProjectDetail() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
           <p className="text-muted-foreground">
-            {project.location || "No location set"} • {tenants?.length || 0} tenants • {totalArea.toLocaleString()} m²
+            {project.location || "No location set"} • {tenants?.length || 0} tenants ({assignedCount} with profiles) • {totalArea.toLocaleString()} m²
           </p>
         </div>
       </div>
@@ -112,15 +113,7 @@ export default function ProjectDetail() {
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="tenants">
             <Users className="h-4 w-4 mr-2" />
-            Tenants
-          </TabsTrigger>
-          <TabsTrigger value="meters">
-            <Database className="h-4 w-4 mr-2" />
-            Meter Library
-          </TabsTrigger>
-          <TabsTrigger value="stacking">
-            <Layers className="h-4 w-4 mr-2" />
-            Profile Stacking
+            Tenants & Profiles
           </TabsTrigger>
           <TabsTrigger value="load-profile">
             <BarChart3 className="h-4 w-4 mr-2" />
@@ -142,14 +135,6 @@ export default function ProjectDetail() {
             tenants={tenants || []}
             shopTypes={shopTypes || []}
           />
-        </TabsContent>
-
-        <TabsContent value="meters" className="mt-6">
-          <ProjectMeterLibrary projectId={id!} />
-        </TabsContent>
-
-        <TabsContent value="stacking" className="mt-6">
-          <ProjectMeterStacking projectId={id!} />
         </TabsContent>
 
         <TabsContent value="load-profile" className="mt-6">
