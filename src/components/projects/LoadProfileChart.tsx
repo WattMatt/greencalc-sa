@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Sun, ChevronLeft, ChevronRight } from "lucide-react";
+import { Sun, ChevronLeft, ChevronRight, Battery } from "lucide-react";
 
 interface Tenant {
   id: string;
@@ -117,6 +117,9 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Monday");
   const [showTOU, setShowTOU] = useState(true);
   const [showPVProfile, setShowPVProfile] = useState(false);
+  const [showBattery, setShowBattery] = useState(false);
+  const [batteryCapacity, setBatteryCapacity] = useState(500); // kWh
+  const [batteryPower, setBatteryPower] = useState(250); // kW max charge/discharge rate
 
   // Max PV size is 70% of connection size
   const maxPvKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
@@ -280,9 +283,10 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
     };
   }, [tenants, shopTypes]);
 
-  // Convert to display unit (kWh or kVA) and add PV profile
+  // Convert to display unit (kWh or kVA) and add PV profile + battery simulation
   const chartData = useMemo(() => {
-    return baseChartData.map((hourData, index) => {
+    // First pass: calculate base data with PV
+    const baseData = baseChartData.map((hourData, index) => {
       const result: { 
         hour: string; 
         total: number; 
@@ -290,6 +294,11 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
         netLoad?: number;
         gridImport?: number;
         gridExport?: number;
+        batteryCharge?: number;
+        batteryDischarge?: number;
+        batterySoC?: number;
+        gridImportWithBattery?: number;
+        gridExportWithBattery?: number;
         [key: string]: number | string | undefined;
       } = {
         hour: hourData.hour,
@@ -319,7 +328,54 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
 
       return result;
     });
-  }, [baseChartData, displayUnit, powerFactor, showPVProfile, maxPvKva]);
+
+    // Second pass: simulate battery if enabled
+    if (showBattery && showPVProfile && maxPvKva) {
+      let soc = batteryCapacity * 0.2; // Start at 20% SoC
+      const minSoC = batteryCapacity * 0.1; // 10% minimum
+      const maxSoC = batteryCapacity * 0.95; // 95% maximum
+
+      baseData.forEach((hourData, index) => {
+        const hour = index;
+        const period = getTOUPeriod(hour, isWeekend);
+        const netLoad = hourData.netLoad || 0;
+        const excessPV = hourData.gridExport || 0;
+        const gridNeed = hourData.gridImport || 0;
+
+        let charge = 0;
+        let discharge = 0;
+
+        // Battery strategy:
+        // 1. Charge from excess PV (when gridExport > 0)
+        // 2. Discharge during peak periods to reduce grid import
+        // 3. Also discharge during standard if grid import needed
+
+        if (excessPV > 0) {
+          // Charge battery from excess PV
+          const availableCapacity = maxSoC - soc;
+          const maxCharge = Math.min(batteryPower, excessPV, availableCapacity);
+          charge = maxCharge;
+          soc += charge;
+        } else if (gridNeed > 0 && (period === "peak" || period === "standard")) {
+          // Discharge to offset grid import during peak/standard
+          const availableEnergy = soc - minSoC;
+          const maxDischarge = Math.min(batteryPower, gridNeed, availableEnergy);
+          discharge = maxDischarge;
+          soc -= discharge;
+        }
+
+        hourData.batteryCharge = charge;
+        hourData.batteryDischarge = discharge;
+        hourData.batterySoC = soc;
+        
+        // Recalculate grid import/export with battery
+        hourData.gridImportWithBattery = Math.max(0, gridNeed - discharge);
+        hourData.gridExportWithBattery = Math.max(0, excessPV - charge);
+      });
+    }
+
+    return baseData;
+  }, [baseChartData, displayUnit, powerFactor, showPVProfile, maxPvKva, showBattery, batteryCapacity, batteryPower, isWeekend]);
 
   // Get unique tenant names for stacked areas
   const tenantKeys = useMemo(() => {
@@ -371,6 +427,40 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
       solarCoverage,
     };
   }, [chartData, showPVProfile, maxPvKva, totalDaily]);
+
+  // Calculate battery stats when enabled
+  const batteryStats = useMemo(() => {
+    if (!showBattery || !showPVProfile || !maxPvKva) return null;
+    
+    const totalCharged = chartData.reduce((sum, d) => sum + (d.batteryCharge || 0), 0);
+    const totalDischarged = chartData.reduce((sum, d) => sum + (d.batteryDischarge || 0), 0);
+    const gridImportWithBattery = chartData.reduce((sum, d) => sum + (d.gridImportWithBattery || 0), 0);
+    const gridExportWithBattery = chartData.reduce((sum, d) => sum + (d.gridExportWithBattery || 0), 0);
+    const gridImportWithoutBattery = chartData.reduce((sum, d) => sum + (d.gridImport || 0), 0);
+    const gridExportWithoutBattery = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
+    
+    const importReduction = gridImportWithoutBattery - gridImportWithBattery;
+    const exportReduction = gridExportWithoutBattery - gridExportWithBattery;
+    const importReductionPercent = gridImportWithoutBattery > 0 ? (importReduction / gridImportWithoutBattery) * 100 : 0;
+    
+    // Find min/max SoC
+    const socValues = chartData.map(d => d.batterySoC || 0);
+    const minSoC = Math.min(...socValues);
+    const maxSoC = Math.max(...socValues);
+    
+    return {
+      totalCharged,
+      totalDischarged,
+      gridImportWithBattery,
+      gridExportWithBattery,
+      importReduction,
+      exportReduction,
+      importReductionPercent,
+      minSoC,
+      maxSoC,
+      cycles: totalDischarged / batteryCapacity,
+    };
+  }, [chartData, showBattery, showPVProfile, maxPvKva, batteryCapacity]);
 
   const unit = displayUnit === "kwh" ? "kWh" : "kVA";
 
@@ -460,7 +550,48 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   PV Profile ({maxPvKva.toFixed(0)} kVA max)
                 </Label>
               )}
+              {showPVProfile && maxPvKva && (
+                <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Switch checked={showBattery} onCheckedChange={setShowBattery} />
+                  <Battery className="h-3.5 w-3.5 text-green-500" />
+                  Battery Storage
+                </Label>
+              )}
             </div>
+
+            {/* Battery Configuration */}
+            {showBattery && showPVProfile && (
+              <div className="flex flex-wrap gap-4">
+                <div className="flex-1 min-w-[150px] max-w-[200px] space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">Capacity</Label>
+                    <span className="text-xs font-medium">{batteryCapacity} kWh</span>
+                  </div>
+                  <Slider
+                    value={[batteryCapacity]}
+                    onValueChange={([v]) => setBatteryCapacity(v)}
+                    min={100}
+                    max={2000}
+                    step={50}
+                    className="w-full"
+                  />
+                </div>
+                <div className="flex-1 min-w-[150px] max-w-[200px] space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">Power Rating</Label>
+                    <span className="text-xs font-medium">{batteryPower} kW</span>
+                  </div>
+                  <Slider
+                    value={[batteryPower]}
+                    onValueChange={([v]) => setBatteryPower(v)}
+                    min={50}
+                    max={1000}
+                    step={25}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-2 ml-auto">
               {tenantsWithScada > 0 && (
@@ -641,6 +772,52 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
         </Card>
       )}
 
+      {/* Battery Stats Summary - shown when battery enabled */}
+      {batteryStats && (
+        <Card className="bg-green-500/5 border-green-500/20">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Battery className="h-4 w-4 text-green-500" />
+              <CardTitle className="text-lg">Battery Storage Analysis</CardTitle>
+            </div>
+            <CardDescription>{batteryCapacity} kWh capacity / {batteryPower} kW power rating</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-6">
+              <div>
+                <p className="text-xs text-muted-foreground">Energy Charged</p>
+                <p className="text-lg font-semibold text-green-600">{Math.round(batteryStats.totalCharged).toLocaleString()} {unit}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Energy Discharged</p>
+                <p className="text-lg font-semibold text-orange-500">{Math.round(batteryStats.totalDischarged).toLocaleString()} {unit}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Grid Import (w/ Battery)</p>
+                <p className="text-lg font-semibold text-red-500">{Math.round(batteryStats.gridImportWithBattery).toLocaleString()} {unit}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Import Reduction</p>
+                <p className="text-lg font-semibold text-emerald-600">
+                  {Math.round(batteryStats.importReduction).toLocaleString()} {unit}
+                  <span className="text-xs ml-1">({batteryStats.importReductionPercent.toFixed(0)}%)</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">SoC Range</p>
+                <p className="text-lg font-semibold">
+                  {((batteryStats.minSoC / batteryCapacity) * 100).toFixed(0)}% - {((batteryStats.maxSoC / batteryCapacity) * 100).toFixed(0)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Daily Cycles</p>
+                <p className="text-lg font-semibold">{batteryStats.cycles.toFixed(2)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Chart */}
       <Card>
         <CardHeader className="pb-2">
@@ -680,6 +857,14 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   <linearGradient id="gridExportGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="hsl(210 100% 50%)" stopOpacity={0.5}/>
                     <stop offset="95%" stopColor="hsl(210 100% 50%)" stopOpacity={0.1}/>
+                  </linearGradient>
+                  <linearGradient id="batteryChargeGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(142 76% 36%)" stopOpacity={0.6}/>
+                    <stop offset="95%" stopColor="hsl(142 76% 36%)" stopOpacity={0.1}/>
+                  </linearGradient>
+                  <linearGradient id="batteryDischargeGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(25 95% 53%)" stopOpacity={0.6}/>
+                    <stop offset="95%" stopColor="hsl(25 95% 53%)" stopOpacity={0.1}/>
                   </linearGradient>
                 </defs>
                 
@@ -752,8 +937,14 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                     if (!active || !payload?.length) return null;
                     const loadEntry = payload.find(p => p.dataKey === "total");
                     const pvEntry = payload.find(p => p.dataKey === "pvGeneration");
+                    const chargeEntry = payload.find(p => p.dataKey === "batteryCharge");
+                    const dischargeEntry = payload.find(p => p.dataKey === "batteryDischarge");
+                    const socEntry = payload.find(p => p.dataKey === "batterySoC");
                     const loadValue = Number(loadEntry?.value) || 0;
                     const pvValue = Number(pvEntry?.value) || 0;
+                    const chargeValue = Number(chargeEntry?.value) || 0;
+                    const dischargeValue = Number(dischargeEntry?.value) || 0;
+                    const socValue = Number(socEntry?.value) || 0;
                     const hourNum = parseInt(label?.toString() || "0");
                     const period = getTOUPeriod(hourNum, isWeekend);
                     const netLoad = loadValue - pvValue;
@@ -785,6 +976,19 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                             </div>
                             <p className="text-xs font-medium" style={{ color: netLoad > 0 ? 'inherit' : 'hsl(160 84% 39%)' }}>
                               Net Load: {netLoad.toFixed(1)} {unit}
+                            </p>
+                          </div>
+                        )}
+                        {showBattery && (chargeValue > 0 || dischargeValue > 0) && (
+                          <div className="mt-2 pt-2 border-t border-border space-y-1">
+                            <div className="flex items-center gap-2">
+                              <Battery className="h-3 w-3 text-green-500" />
+                              <span className="text-xs">
+                                {chargeValue > 0 ? `Charging: ${chargeValue.toFixed(1)} ${unit}` : `Discharging: ${dischargeValue.toFixed(1)} ${unit}`}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              SoC: {((socValue / batteryCapacity) * 100).toFixed(0)}% ({socValue.toFixed(0)} kWh)
                             </p>
                           </div>
                         )}
@@ -837,13 +1041,47 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   />
                 )}
                 {/* Grid Export area (PV exceeds load) */}
-                {showPVProfile && maxPvKva && (
+                {showPVProfile && maxPvKva && !showBattery && (
                   <Area
                     type="monotone"
                     dataKey="gridExport"
                     stroke="hsl(210 100% 50%)"
                     strokeWidth={1.5}
                     fill="url(#gridExportGradient)"
+                    dot={false}
+                  />
+                )}
+                {/* Battery Charge area */}
+                {showBattery && showPVProfile && (
+                  <Area
+                    type="monotone"
+                    dataKey="batteryCharge"
+                    stroke="hsl(142 76% 36%)"
+                    strokeWidth={2}
+                    fill="url(#batteryChargeGradient)"
+                    dot={false}
+                  />
+                )}
+                {/* Battery Discharge area */}
+                {showBattery && showPVProfile && (
+                  <Area
+                    type="monotone"
+                    dataKey="batteryDischarge"
+                    stroke="hsl(25 95% 53%)"
+                    strokeWidth={2}
+                    fill="url(#batteryDischargeGradient)"
+                    dot={false}
+                  />
+                )}
+                {/* Grid Import with Battery (replaces base grid import when battery enabled) */}
+                {showBattery && showPVProfile && (
+                  <Area
+                    type="monotone"
+                    dataKey="gridImportWithBattery"
+                    stroke="hsl(0 72% 51%)"
+                    strokeWidth={1.5}
+                    strokeDasharray="3 3"
+                    fill="none"
                     dot={false}
                   />
                 )}
@@ -876,7 +1114,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
           )}
 
           {/* PV Legend */}
-          {showPVProfile && maxPvKva && (
+          {showPVProfile && maxPvKva && !showBattery && (
             <div className="mt-4 pt-4 border-t border-border">
               <p className="text-xs text-muted-foreground mb-2">Solar PV & Grid Flow</p>
               <div className="flex flex-wrap gap-6">
@@ -897,6 +1135,39 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(210 100% 50%)', opacity: 0.5 }} />
                   <span className="text-xs font-medium text-blue-500">Grid Export</span>
                   <span className="text-xs text-muted-foreground">(PV &gt; load)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Battery + PV Legend */}
+          {showBattery && showPVProfile && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <p className="text-xs text-muted-foreground mb-2">Solar PV + Battery Storage</p>
+              <div className="flex flex-wrap gap-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(var(--primary))', opacity: 0.6 }} />
+                  <span className="text-xs font-medium">Total Load</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-1 rounded-sm" style={{ backgroundColor: 'hsl(38 92% 50%)', borderTop: '2px dashed hsl(38 92% 50%)' }} />
+                  <span className="text-xs font-medium">PV Generation</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(142 76% 36%)', opacity: 0.6 }} />
+                  <span className="text-xs font-medium text-green-600">Battery Charge</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(25 95% 53%)', opacity: 0.6 }} />
+                  <span className="text-xs font-medium text-orange-500">Battery Discharge</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(0 72% 51%)', opacity: 0.5 }} />
+                  <span className="text-xs font-medium text-red-500">Grid Import</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-1 rounded-sm" style={{ borderTop: '2px dashed hsl(0 72% 51%)' }} />
+                  <span className="text-xs font-medium text-red-400">Import (w/ Battery)</span>
                 </div>
               </div>
             </div>
