@@ -6,11 +6,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun } from "lucide-react";
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
 import { SimulationPanel } from "@/components/projects/SimulationPanel";
+import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -169,6 +170,10 @@ export default function ProjectDetail() {
             <Zap className="h-4 w-4 mr-2" />
             Simulation
           </TabsTrigger>
+          <TabsTrigger value="pv-layout">
+            <Sun className="h-4 w-4 mr-2" />
+            PV Layout
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="tenants" className="mt-6">
@@ -202,6 +207,10 @@ export default function ProjectDetail() {
             tenants={tenants || []}
             shopTypes={shopTypes || []}
           />
+        </TabsContent>
+
+        <TabsContent value="pv-layout" className="mt-6">
+          <FloorPlanMarkup projectId={id!} />
         </TabsContent>
       </Tabs>
     </div>
