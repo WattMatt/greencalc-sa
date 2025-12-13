@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -557,7 +557,32 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="h-[350px]">
+          {/* TOU Timeline Strip - Above chart */}
+          {showTOU && (
+            <div className="mb-2">
+              <div className="flex h-6 rounded-md overflow-hidden border border-border">
+                {Array.from({ length: 24 }, (_, h) => {
+                  const period = getTOUPeriod(h, isWeekend);
+                  return (
+                    <div
+                      key={h}
+                      className="flex-1 flex items-center justify-center text-[9px] font-medium transition-all hover:opacity-80"
+                      style={{ 
+                        backgroundColor: TOU_COLORS[period].fill,
+                        color: 'white',
+                        textShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                      }}
+                      title={`${h.toString().padStart(2, '0')}:00 - ${TOU_COLORS[period].label}`}
+                    >
+                      {h % 3 === 0 ? h : ''}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
@@ -566,19 +591,6 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                     <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
                   </linearGradient>
                 </defs>
-                
-                {/* TOU Period Background Bands */}
-                {showTOU && touRanges.map((range, i) => (
-                  <ReferenceArea
-                    key={i}
-                    x1={`${range.start.toString().padStart(2, "0")}:00`}
-                    x2={`${range.end.toString().padStart(2, "0")}:00`}
-                    fill={TOU_COLORS[range.period].fill}
-                    fillOpacity={TOU_BG_OPACITY}
-                    stroke={TOU_COLORS[range.period].stroke}
-                    strokeOpacity={0.3}
-                  />
-                ))}
                 
                 <CartesianGrid 
                   strokeDasharray="3 3" 
@@ -630,7 +642,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                     );
                   }}
                 />
-                {/* Single smooth area for total - much cleaner than stacked */}
+                {/* Single smooth area for total */}
                 <Area
                   type="monotone"
                   dataKey="total"
