@@ -1,7 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Tenant {
   id: string;
@@ -36,10 +39,15 @@ interface LoadProfileChartProps {
   shopTypes: ShopType[];
 }
 
-// Default flat profile if none defined (kWh per hour for 100kWh/day)
+type DisplayUnit = "kwh" | "kva";
+
+// Default flat profile if none defined (percentage per hour for 100% daily)
 const DEFAULT_PROFILE_PERCENT = Array(24).fill(4.17);
 
 export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) {
+  const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kwh");
+  const [powerFactor, setPowerFactor] = useState(0.9);
+
   // Count tenants with actual SCADA data vs estimated
   const { tenantsWithScada, tenantsEstimated } = useMemo(() => {
     let scadaCount = 0;
@@ -54,7 +62,8 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
     return { tenantsWithScada: scadaCount, tenantsEstimated: estimatedCount };
   }, [tenants]);
 
-  const chartData = useMemo(() => {
+  // Calculate base kWh data
+  const baseChartData = useMemo(() => {
     const hourlyData: { hour: string; total: number; [key: string]: number | string }[] = [];
 
     for (let h = 0; h < 24; h++) {
@@ -79,15 +88,12 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
           ? shopTypes.find((st) => st.id === tenant.shop_type_id)
           : null;
 
-        // Monthly kWh for this tenant
         const monthlyKwh =
           tenant.monthly_kwh_override ||
           (shopType?.kwh_per_sqm_month || 50) * Number(tenant.area_sqm);
 
-        // Daily kWh (assuming 30 days)
         const dailyKwh = monthlyKwh / 30;
 
-        // Get hourly percentage from profile
         const profile = shopType?.load_profile_weekday?.length === 24
           ? shopType.load_profile_weekday.map(Number)
           : DEFAULT_PROFILE_PERCENT;
@@ -105,6 +111,26 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
 
     return hourlyData;
   }, [tenants, shopTypes]);
+
+  // Convert to display unit (kWh or kVA)
+  const chartData = useMemo(() => {
+    if (displayUnit === "kwh") return baseChartData;
+
+    // Convert kWh to kVA: kVA = kW / PF (and kW = kWh for hourly data)
+    return baseChartData.map(hourData => {
+      const converted: typeof hourData = { hour: hourData.hour, total: 0 };
+      Object.keys(hourData).forEach(key => {
+        if (key === "hour") return;
+        const kwhValue = hourData[key] as number;
+        const kvaValue = kwhValue / powerFactor;
+        converted[key] = kvaValue;
+        if (key === "total") {
+          converted.total = kvaValue;
+        }
+      });
+      return converted;
+    });
+  }, [baseChartData, displayUnit, powerFactor]);
 
   // Get unique tenant names for stacked areas
   const tenantKeys = useMemo(() => {
@@ -128,12 +154,15 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
   ];
 
   // Summary stats
-  const totalDailyKwh = chartData.reduce((sum, d) => sum + d.total, 0);
+  const totalDaily = chartData.reduce((sum, d) => sum + d.total, 0);
   const peakHour = chartData.reduce(
     (max, d, i) => (d.total > max.val ? { val: d.total, hour: i } : max),
     { val: 0, hour: 0 }
   );
-  const avgHourlyKw = totalDailyKwh / 24;
+  const avgHourly = totalDaily / 24;
+
+  const unit = displayUnit === "kwh" ? "kWh" : "kVA";
+  const demandUnit = displayUnit === "kwh" ? "kW" : "kVA";
 
   if (tenants.length === 0) {
     return (
@@ -149,45 +178,38 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Est. Daily Consumption</CardDescription>
-            <CardTitle className="text-2xl">{Math.round(totalDailyKwh).toLocaleString()} kWh</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Peak Hour</CardDescription>
-            <CardTitle className="text-2xl">
-              {peakHour.hour.toString().padStart(2, "0")}:00 ({Math.round(peakHour.val)} kWh)
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Avg. Hourly Demand</CardDescription>
-            <CardTitle className="text-2xl">{avgHourlyKw.toFixed(1)} kW</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Peak Demand</CardDescription>
-            <CardTitle className="text-2xl">{peakHour.val.toFixed(1)} kW</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
-
+      {/* Controls */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Combined Load Profile (Weekday)</CardTitle>
-              <CardDescription>
-                Stacked hourly consumption by tenant
-              </CardDescription>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap items-center gap-6">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Display Unit</Label>
+              <Tabs value={displayUnit} onValueChange={(v) => setDisplayUnit(v as DisplayUnit)}>
+                <TabsList>
+                  <TabsTrigger value="kwh">kWh</TabsTrigger>
+                  <TabsTrigger value="kva">kVA</TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
-            <div className="flex gap-2">
+            
+            {displayUnit === "kva" && (
+              <div className="flex-1 min-w-[200px] max-w-[300px] space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Power Factor</Label>
+                  <span className="text-sm font-medium">{powerFactor.toFixed(2)}</span>
+                </div>
+                <Slider
+                  value={[powerFactor]}
+                  onValueChange={([v]) => setPowerFactor(v)}
+                  min={0.7}
+                  max={1.0}
+                  step={0.01}
+                  className="w-full"
+                />
+              </div>
+            )}
+
+            <div className="flex gap-2 ml-auto">
               {tenantsWithScada > 0 && (
                 <Badge variant="default">{tenantsWithScada} actual profiles</Badge>
               )}
@@ -196,6 +218,47 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
               )}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Est. Daily Consumption</CardDescription>
+            <CardTitle className="text-2xl">{Math.round(totalDaily).toLocaleString()} {unit}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Peak Hour</CardDescription>
+            <CardTitle className="text-2xl">
+              {peakHour.hour.toString().padStart(2, "0")}:00 ({Math.round(peakHour.val)} {unit})
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Avg. Hourly Demand</CardDescription>
+            <CardTitle className="text-2xl">{avgHourly.toFixed(1)} {demandUnit}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Peak Demand</CardDescription>
+            <CardTitle className="text-2xl">{peakHour.val.toFixed(1)} {demandUnit}</CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+
+      {/* Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Combined Load Profile (Weekday) - {displayUnit.toUpperCase()}</CardTitle>
+          <CardDescription>
+            Stacked hourly {displayUnit === "kwh" ? "energy consumption" : "apparent power"} by tenant
+            {displayUnit === "kva" && ` (PF: ${powerFactor.toFixed(2)})`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-[400px]">
@@ -211,7 +274,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                 <YAxis
                   tick={{ fontSize: 12 }}
                   tickLine={false}
-                  tickFormatter={(v) => `${v} kWh`}
+                  tickFormatter={(v) => `${v} ${unit}`}
                   className="text-muted-foreground"
                 />
                 <Tooltip
@@ -220,7 +283,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                     border: "1px solid hsl(var(--border))",
                     borderRadius: "8px",
                   }}
-                  formatter={(value: number) => [`${value.toFixed(1)} kWh`, ""]}
+                  formatter={(value: number) => [`${value.toFixed(1)} ${unit}`, ""]}
                 />
                 <Legend />
                 {tenantKeys.map((key, i) => (
