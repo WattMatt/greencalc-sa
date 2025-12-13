@@ -47,6 +47,18 @@ type DisplayUnit = "kwh" | "kva";
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 type DayOfWeek = typeof DAYS_OF_WEEK[number];
 
+// Realistic day-of-week multipliers to simulate natural shopping centre variation
+// Based on typical retail patterns: Monday slow, Friday busy, Saturday peak, Sunday quieter
+const DAY_MULTIPLIERS: Record<DayOfWeek, number> = {
+  Monday: 0.92,    // Post-weekend, slower start
+  Tuesday: 0.96,   // Building up
+  Wednesday: 1.00, // Baseline weekday
+  Thursday: 1.04,  // Pre-weekend pickup
+  Friday: 1.08,    // Payday, pre-weekend peak
+  Saturday: 1.05,  // Weekend peak (applied to weekend profile)
+  Sunday: 0.88,    // Quieter weekend day (applied to weekend profile)
+};
+
 // Default flat profile if none defined (percentage per hour for 100% daily)
 const DEFAULT_PROFILE_PERCENT = Array(24).fill(4.17);
 
@@ -82,6 +94,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
   // Calculate base kWh data based on selected day
   const baseChartData = useMemo(() => {
     const isWeekendDay = selectedDay === "Saturday" || selectedDay === "Sunday";
+    const dayMultiplier = DAY_MULTIPLIERS[selectedDay];
     const hourlyData: { hour: string; total: number; [key: string]: number | string }[] = [];
 
     for (let h = 0; h < 24; h++) {
@@ -104,7 +117,8 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
           const areaScaleFactor = scadaArea > 0 ? tenantArea / scadaArea : 1;
           
           const baseHourlyKwh = scadaProfile[h] || 0;
-          const scaledHourlyKwh = baseHourlyKwh * areaScaleFactor;
+          // Apply both area scaling and day-of-week multiplier
+          const scaledHourlyKwh = baseHourlyKwh * areaScaleFactor * dayMultiplier;
           
           const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
           hourData[key] = (hourData[key] as number || 0) + scaledHourlyKwh;
@@ -132,7 +146,8 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
           : DEFAULT_PROFILE_PERCENT;
         
         const hourlyPercent = profile[h] / 100;
-        const hourlyKwh = dailyKwh * hourlyPercent;
+        // Apply day-of-week multiplier
+        const hourlyKwh = dailyKwh * hourlyPercent * dayMultiplier;
 
         const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
         hourData[key] = (hourData[key] as number || 0) + hourlyKwh;
