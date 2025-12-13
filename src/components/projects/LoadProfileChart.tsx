@@ -81,6 +81,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
 
   // Calculate base kWh data based on selected day
   const baseChartData = useMemo(() => {
+    const isWeekendDay = selectedDay === "Saturday" || selectedDay === "Sunday";
     const hourlyData: { hour: string; total: number; [key: string]: number | string }[] = [];
 
     for (let h = 0; h < 24; h++) {
@@ -96,7 +97,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
         // Priority 1: Use assigned SCADA profile with area scaling
         const scadaWeekday = tenant.scada_imports?.load_profile_weekday;
         const scadaWeekend = tenant.scada_imports?.load_profile_weekend;
-        const scadaProfile = isWeekend ? (scadaWeekend || scadaWeekday) : scadaWeekday;
+        const scadaProfile = isWeekendDay ? (scadaWeekend || scadaWeekday) : scadaWeekday;
         
         if (scadaProfile?.length === 24) {
           const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
@@ -122,7 +123,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
 
         const dailyKwh = monthlyKwh / 30;
 
-        const shopTypeProfile = isWeekend 
+        const shopTypeProfile = isWeekendDay 
           ? (shopType?.load_profile_weekend || shopType?.load_profile_weekday)
           : shopType?.load_profile_weekday;
         
@@ -142,7 +143,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
     }
 
     return hourlyData;
-  }, [tenants, shopTypes, isWeekend]);
+  }, [tenants, shopTypes, selectedDay]);
 
   // Calculate weekly totals (need both weekday and weekend data)
   const weeklyStats = useMemo(() => {
