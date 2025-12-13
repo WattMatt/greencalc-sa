@@ -167,9 +167,10 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
     { val: 0, hour: 0 }
   );
   const avgHourly = totalDaily / 24;
+  const monthlyEstimate = totalDaily * 30;
+  const loadFactor = peakHour.val > 0 ? (avgHourly / peakHour.val) * 100 : 0;
 
   const unit = displayUnit === "kwh" ? "kWh" : "kVA";
-  const demandUnit = displayUnit === "kwh" ? "kW" : "kVA";
 
   if (tenants.length === 0) {
     return (
@@ -228,35 +229,66 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
         </CardContent>
       </Card>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Est. Daily Consumption</CardDescription>
-            <CardTitle className="text-2xl">{Math.round(totalDaily).toLocaleString()} {unit}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Peak Hour</CardDescription>
-            <CardTitle className="text-2xl">
-              {peakHour.hour.toString().padStart(2, "0")}:00 ({Math.round(peakHour.val)} {unit})
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Avg. Hourly Demand</CardDescription>
-            <CardTitle className="text-2xl">{avgHourly.toFixed(1)} {demandUnit}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Peak Demand</CardDescription>
-            <CardTitle className="text-2xl">{peakHour.val.toFixed(1)} {demandUnit}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      {/* Stats - contextual based on display unit */}
+      {displayUnit === "kwh" ? (
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Est. Daily Consumption</CardDescription>
+              <CardTitle className="text-2xl">{Math.round(totalDaily).toLocaleString()} kWh</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Est. Monthly Consumption</CardDescription>
+              <CardTitle className="text-2xl">{Math.round(monthlyEstimate).toLocaleString()} kWh</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Peak Hour</CardDescription>
+              <CardTitle className="text-2xl">
+                {peakHour.hour.toString().padStart(2, "0")}:00 ({Math.round(peakHour.val)} kWh)
+              </CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Avg. Hourly Consumption</CardDescription>
+              <CardTitle className="text-2xl">{avgHourly.toFixed(1)} kWh</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Peak Demand</CardDescription>
+              <CardTitle className="text-2xl">{peakHour.val.toFixed(1)} kVA</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Avg. Demand</CardDescription>
+              <CardTitle className="text-2xl">{avgHourly.toFixed(1)} kVA</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Peak Hour</CardDescription>
+              <CardTitle className="text-2xl">
+                {peakHour.hour.toString().padStart(2, "0")}:00
+              </CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Load Factor</CardDescription>
+              <CardTitle className="text-2xl">{loadFactor.toFixed(1)}%</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+      )}
 
       {/* Chart */}
       <Card>
