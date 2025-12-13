@@ -91,7 +91,7 @@ export function ProvinceFilesManager() {
   const queryClient = useQueryClient();
 
   // Fetch provinces and their stats
-  const { data: provincesData, isLoading: loadingProvinces } = useQuery({
+  const { data: provincesData, isLoading: loadingProvinces, refetch: refetchProvincesData } = useQuery({
     queryKey: ["provinces-with-stats"],
     queryFn: async () => {
       const { data: provinces } = await supabase
@@ -407,6 +407,47 @@ export function ProvinceFilesManager() {
     // No existing municipalities, start fresh
     setMunicipalities([]);
     setExtractionPhase("idle");
+  };
+
+  // Refresh extraction dialog data from database
+  const handleRefreshExtractionData = async () => {
+    if (!selectedProvince) return;
+    
+    // Refetch the main data
+    const result = await refetchProvincesData();
+    const freshData = result.data;
+    
+    // Find province and rebuild municipalities list
+    const provinceData = freshData?.provinces?.find(p => p.name === selectedProvince);
+    if (provinceData) {
+      const existingMunis = freshData?.municipalities?.filter(
+        m => m.province_id === provinceData.id
+      ) || [];
+
+      if (existingMunis.length > 0) {
+        const muniWithStatus: Municipality[] = existingMunis.map(m => {
+          const tariffCount = freshData?.tariffsByMuni?.filter(
+            t => t.municipality_id === m.id
+          ).length || 0;
+          const dbStatus = (m as any).extraction_status || 'pending';
+          const dbError = (m as any).extraction_error;
+          
+          return {
+            id: m.id,
+            name: m.name,
+            status: dbStatus as "pending" | "done" | "error",
+            tariffCount,
+            confidence: (m as any).ai_confidence || undefined,
+            repriseCount: (m as any).reprise_count || undefined,
+            error: dbError || undefined
+          };
+        });
+        
+        setMunicipalities(muniWithStatus);
+      }
+    }
+    
+    sonnerToast.success("Data refreshed");
   };
 
   const handleAnalyzeFile = async () => {
@@ -879,7 +920,7 @@ export function ProvinceFilesManager() {
                 Manage provinces and upload tariff files for extraction
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={() => refetchFiles()}>
+            <Button variant="outline" size="sm" onClick={async () => { await refetchProvincesData(); await refetchFiles(); sonnerToast.success("Data refreshed"); }}>
               <RefreshCw className="h-4 w-4 mr-1" />
               Refresh
             </Button>
@@ -1079,14 +1120,22 @@ export function ProvinceFilesManager() {
         {/* Extraction Dialog */}
         <Dialog open={extractionOpen} onOpenChange={setExtractionOpen}>
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5" />
-                Extract Tariffs - {selectedProvince}
-              </DialogTitle>
-              <DialogDescription>
-                {selectedFile?.name}
-              </DialogDescription>
+            <DialogHeader className="flex flex-row items-start justify-between">
+              <div>
+                <DialogTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5" />
+                  Extract Tariffs - {selectedProvince}
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedFile?.name}
+                </DialogDescription>
+              </div>
+              {municipalities.length > 0 && (
+                <Button variant="outline" size="sm" onClick={handleRefreshExtractionData}>
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Refresh
+                </Button>
+              )}
             </DialogHeader>
 
             <div className="flex-1 overflow-auto space-y-4">
