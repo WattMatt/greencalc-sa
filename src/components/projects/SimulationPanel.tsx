@@ -7,9 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from "recharts";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { 
+  PVSystemConfig, 
+  PVSystemConfigData, 
+  getDefaultPVConfig, 
+  generateSolarProfile,
+  SA_SOLAR_LOCATIONS,
+  calculateSystemEfficiency
+} from "./PVSystemConfig";
 
 interface Tenant {
   id: string;
@@ -40,14 +49,13 @@ interface SimulationPanelProps {
 
 const DEFAULT_PROFILE = Array(24).fill(4.17);
 
-// Simple solar profile (peak at noon, zero at night)
-const SOLAR_PROFILE = [0, 0, 0, 0, 0, 2, 8, 20, 40, 60, 80, 95, 100, 95, 80, 60, 40, 20, 8, 2, 0, 0, 0, 0];
-
 export function SimulationPanel({ projectId, project, tenants, shopTypes }: SimulationPanelProps) {
   const queryClient = useQueryClient();
   const [solarCapacity, setSolarCapacity] = useState(100);
   const [batteryCapacity, setBatteryCapacity] = useState(50);
   const [batteryPower, setBatteryPower] = useState(25);
+  const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const { data: tariffRates } = useQuery({
     queryKey: ["tariff-rates", project.tariff_id],
@@ -98,10 +106,15 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
     return profile;
   }, [tenants, shopTypes]);
 
+  // Generate solar profile using PVWatts-style calculation
+  const solarProfile = useMemo(() => {
+    return generateSolarProfile(pvConfig, solarCapacity);
+  }, [pvConfig, solarCapacity]);
+
   // Simulation calculations
   const simulation = useMemo(() => {
-    // Solar generation per hour (kWh)
-    const solarGeneration = SOLAR_PROFILE.map((p) => (solarCapacity * (p / 100) * 0.8)); // 80% system efficiency
+    // Solar generation now comes from PVWatts-style calculation
+    const solarGeneration = solarProfile;
     
     // Calculate hourly metrics
     const hourlyData = [];
@@ -209,7 +222,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
       roi,
       avgRate,
     };
-  }, [loadProfile, solarCapacity, batteryCapacity, batteryPower, tariffRates, tariff]);
+  }, [loadProfile, solarProfile, solarCapacity, batteryCapacity, batteryPower, tariffRates, tariff]);
 
   if (tenants.length === 0) {
     return (
@@ -242,13 +255,18 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const maxSolarKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
   const solarExceedsLimit = maxSolarKva && solarCapacity > maxSolarKva;
 
+  const location = SA_SOLAR_LOCATIONS[pvConfig.location];
+  const systemEfficiency = calculateSystemEfficiency(pvConfig);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">Energy Simulation</h2>
-        <p className="text-sm text-muted-foreground">
-          Model solar and battery systems to optimize costs
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Energy Simulation</h2>
+          <p className="text-sm text-muted-foreground">
+            Model solar and battery systems to optimize costs • {location.name} ({location.ghi} kWh/m²/day)
+          </p>
+        </div>
       </div>
 
       {/* Connection Size Warning */}
@@ -274,6 +292,30 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           </CardContent>
         </Card>
       )}
+
+      {/* Advanced PV Configuration (Collapsible) */}
+      <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" className="w-full justify-between">
+            <span className="flex items-center gap-2">
+              <Sun className="h-4 w-4" />
+              Advanced PV Configuration (PVWatts-style)
+              <span className="text-xs text-muted-foreground ml-2">
+                {location.name} • {(systemEfficiency * 100).toFixed(1)}% efficiency
+              </span>
+            </span>
+            {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-4">
+          <PVSystemConfig 
+            config={pvConfig}
+            onChange={setPvConfig}
+            maxSolarKva={maxSolarKva}
+            solarCapacity={solarCapacity}
+          />
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* System Configuration */}
       <div className="grid gap-6 md:grid-cols-3">
@@ -312,6 +354,19 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                   <span>{Math.round(maxSolarKva * 1.5)} kWp</span>
                 </div>
               )}
+            </div>
+            {/* Location-based output estimate */}
+            <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
+              <div className="flex justify-between">
+                <span>Expected daily output</span>
+                <span className="text-foreground">{solarProfile.reduce((a, b) => a + b, 0).toFixed(0)} kWh</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Specific yield</span>
+                <span className="text-foreground">
+                  {((solarProfile.reduce((a, b) => a + b, 0) * 365) / solarCapacity).toFixed(0)} kWh/kWp/yr
+                </span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -382,11 +437,19 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
       </div>
 
       {/* Results Summary */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Daily Load</CardDescription>
             <CardTitle className="text-2xl">{Math.round(simulation.totalDailyLoad)} kWh</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Solar Generated</CardDescription>
+            <CardTitle className="text-2xl text-amber-500">
+              {Math.round(solarProfile.reduce((a, b) => a + b, 0))} kWh
+            </CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -397,8 +460,10 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Solar Used</CardDescription>
-            <CardTitle className="text-2xl text-green-600">{Math.round(simulation.totalSolarUsed)} kWh</CardTitle>
+            <CardDescription>Solar Self-Use</CardDescription>
+            <CardTitle className="text-2xl text-green-600">
+              {Math.round((simulation.totalSolarUsed / solarProfile.reduce((a, b) => a + b, 0)) * 100)}%
+            </CardTitle>
           </CardHeader>
         </Card>
         <Card>
