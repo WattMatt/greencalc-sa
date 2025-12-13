@@ -120,9 +120,12 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
   const [showBattery, setShowBattery] = useState(false);
   const [batteryCapacity, setBatteryCapacity] = useState(500); // kWh
   const [batteryPower, setBatteryPower] = useState(250); // kW max charge/discharge rate
+  const [dcAcRatio, setDcAcRatio] = useState(1.3); // DC/AC ratio (1.0 = no oversize, 1.3 = 130% DC)
 
-  // Max PV size is 70% of connection size
-  const maxPvKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
+  // Max AC PV size is 70% of connection size
+  const maxPvAcKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
+  // DC capacity can be oversized based on DC/AC ratio
+  const dcCapacityKwp = maxPvAcKva ? maxPvAcKva * dcAcRatio : null;
 
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
   const isWeekend = selectedDay === "Saturday" || selectedDay === "Sunday";
@@ -290,7 +293,9 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
       const result: { 
         hour: string; 
         total: number; 
-        pvGeneration?: number; 
+        pvGeneration?: number;
+        pvClipping?: number;
+        pvDcOutput?: number;
         netLoad?: number;
         gridImport?: number;
         gridExport?: number;
@@ -316,9 +321,15 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
       });
 
       // Add PV generation profile if enabled and connection size is set
-      if (showPVProfile && maxPvKva) {
-        const pvValue = PV_PROFILE_NORMALIZED[index] * maxPvKva;
+      if (showPVProfile && maxPvAcKva && dcCapacityKwp) {
+        // Calculate DC output based on oversized DC capacity
+        const dcOutput = PV_PROFILE_NORMALIZED[index] * dcCapacityKwp;
+        // Clip at AC inverter limit (maxPvAcKva)
+        const pvValue = Math.min(dcOutput, maxPvAcKva);
+        // Track clipping for visualization
         result.pvGeneration = pvValue;
+        result.pvClipping = dcOutput > maxPvAcKva ? dcOutput - maxPvAcKva : 0;
+        result.pvDcOutput = dcOutput;
         const netLoad = result.total - pvValue;
         result.netLoad = netLoad;
         // Split into grid import (positive) and export (negative, stored as positive for chart)
@@ -330,7 +341,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
     });
 
     // Second pass: simulate battery if enabled
-    if (showBattery && showPVProfile && maxPvKva) {
+    if (showBattery && showPVProfile && maxPvAcKva) {
       let soc = batteryCapacity * 0.2; // Start at 20% SoC
       const minSoC = batteryCapacity * 0.1; // 10% minimum
       const maxSoC = batteryCapacity * 0.95; // 95% maximum
@@ -375,7 +386,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
     }
 
     return baseData;
-  }, [baseChartData, displayUnit, powerFactor, showPVProfile, maxPvKva, showBattery, batteryCapacity, batteryPower, isWeekend]);
+  }, [baseChartData, displayUnit, powerFactor, showPVProfile, maxPvAcKva, dcCapacityKwp, showBattery, batteryCapacity, batteryPower, isWeekend]);
 
   // Get unique tenant names for stacked areas
   const tenantKeys = useMemo(() => {
@@ -409,28 +420,34 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
 
   // Calculate daily PV stats when enabled
   const pvStats = useMemo(() => {
-    if (!showPVProfile || !maxPvKva) return null;
+    if (!showPVProfile || !maxPvAcKva) return null;
     
     const totalGeneration = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);
+    const totalClipping = chartData.reduce((sum, d) => sum + (d.pvClipping || 0), 0);
+    const totalDcOutput = chartData.reduce((sum, d) => sum + (d.pvDcOutput || 0), 0);
     const totalImport = chartData.reduce((sum, d) => sum + (d.gridImport || 0), 0);
     const totalExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
     const selfConsumption = totalGeneration - totalExport;
     const selfConsumptionRate = totalGeneration > 0 ? (selfConsumption / totalGeneration) * 100 : 0;
     const solarCoverage = totalDaily > 0 ? (selfConsumption / totalDaily) * 100 : 0;
+    const clippingLoss = totalDcOutput > 0 ? (totalClipping / totalDcOutput) * 100 : 0;
     
     return {
       totalGeneration,
+      totalClipping,
+      totalDcOutput,
       totalImport,
       totalExport,
       selfConsumption,
       selfConsumptionRate,
       solarCoverage,
+      clippingLoss,
     };
-  }, [chartData, showPVProfile, maxPvKva, totalDaily]);
+  }, [chartData, showPVProfile, maxPvAcKva, totalDaily]);
 
   // Calculate battery stats when enabled
   const batteryStats = useMemo(() => {
-    if (!showBattery || !showPVProfile || !maxPvKva) return null;
+    if (!showBattery || !showPVProfile || !maxPvAcKva) return null;
     
     const totalCharged = chartData.reduce((sum, d) => sum + (d.batteryCharge || 0), 0);
     const totalDischarged = chartData.reduce((sum, d) => sum + (d.batteryDischarge || 0), 0);
@@ -460,7 +477,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
       maxSoC,
       cycles: totalDischarged / batteryCapacity,
     };
-  }, [chartData, showBattery, showPVProfile, maxPvKva, batteryCapacity]);
+  }, [chartData, showBattery, showPVProfile, maxPvAcKva, batteryCapacity]);
 
   const unit = displayUnit === "kwh" ? "kWh" : "kVA";
 
@@ -543,14 +560,14 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                 <Switch checked={showTOU} onCheckedChange={setShowTOU} />
                 TOU Periods
               </Label>
-              {maxPvKva && (
+              {maxPvAcKva && (
                 <Label className="text-xs text-muted-foreground flex items-center gap-2">
                   <Switch checked={showPVProfile} onCheckedChange={setShowPVProfile} />
                   <Sun className="h-3.5 w-3.5 text-amber-500" />
-                  PV Profile ({maxPvKva.toFixed(0)} kVA max)
+                  PV Profile ({maxPvAcKva.toFixed(0)} kVA AC)
                 </Label>
               )}
-              {showPVProfile && maxPvKva && (
+              {showPVProfile && maxPvAcKva && (
                 <Label className="text-xs text-muted-foreground flex items-center gap-2">
                   <Switch checked={showBattery} onCheckedChange={setShowBattery} />
                   <Battery className="h-3.5 w-3.5 text-green-500" />
@@ -558,6 +575,29 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                 </Label>
               )}
             </div>
+
+            {/* PV Configuration - DC/AC Ratio */}
+            {showPVProfile && maxPvAcKva && (
+              <div className="flex flex-wrap gap-4">
+                <div className="flex-1 min-w-[150px] max-w-[200px] space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">DC/AC Ratio</Label>
+                    <span className="text-xs font-medium">{(dcAcRatio * 100).toFixed(0)}%</span>
+                  </div>
+                  <Slider
+                    value={[dcAcRatio]}
+                    onValueChange={([v]) => setDcAcRatio(v)}
+                    min={1.0}
+                    max={1.5}
+                    step={0.05}
+                    className="w-full"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    DC: {dcCapacityKwp?.toFixed(0)} kWp → AC: {maxPvAcKva.toFixed(0)} kVA
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Battery Configuration */}
             {showBattery && showPVProfile && (
@@ -739,13 +779,20 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
               <Sun className="h-4 w-4 text-amber-500" />
               <CardTitle className="text-lg">Solar PV Analysis</CardTitle>
             </div>
-            <CardDescription>Based on {maxPvKva?.toFixed(0)} kVA max PV capacity (70% of connection size)</CardDescription>
+            <CardDescription>DC: {dcCapacityKwp?.toFixed(0)} kWp ({(dcAcRatio * 100).toFixed(0)}% DC/AC) • AC: {maxPvAcKva?.toFixed(0)} kVA max (70% of connection)</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-6">
+            <div className="grid gap-4 md:grid-cols-7">
               <div>
-                <p className="text-xs text-muted-foreground">PV Generation</p>
+                <p className="text-xs text-muted-foreground">DC Output</p>
+                <p className="text-lg font-semibold text-amber-500">{Math.round(pvStats.totalDcOutput).toLocaleString()} {unit}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">AC Generation</p>
                 <p className="text-lg font-semibold text-amber-600">{Math.round(pvStats.totalGeneration).toLocaleString()} {unit}</p>
+                {pvStats.totalClipping > 0 && (
+                  <p className="text-[10px] text-orange-500">-{Math.round(pvStats.totalClipping)} clipped</p>
+                )}
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Self-Consumed</p>
@@ -760,12 +807,14 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                 <p className="text-lg font-semibold text-blue-500">{Math.round(pvStats.totalExport).toLocaleString()} {unit}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Self-Consumption Rate</p>
+                <p className="text-xs text-muted-foreground">Self-Consumption</p>
                 <p className="text-lg font-semibold">{pvStats.selfConsumptionRate.toFixed(1)}%</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Solar Coverage</p>
-                <p className="text-lg font-semibold">{pvStats.solarCoverage.toFixed(1)}%</p>
+                <p className="text-xs text-muted-foreground">Clipping Loss</p>
+                <p className="text-lg font-semibold" style={{ color: pvStats.clippingLoss > 5 ? 'hsl(25 95% 53%)' : 'inherit' }}>
+                  {pvStats.clippingLoss.toFixed(1)}%
+                </p>
               </div>
             </div>
           </CardContent>
@@ -1012,7 +1061,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   }}
                 />
                 {/* PV Generation area */}
-                {showPVProfile && maxPvKva && (
+                {showPVProfile && maxPvAcKva && (
                   <Area
                     type="monotone"
                     dataKey="pvGeneration"
@@ -1030,7 +1079,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   />
                 )}
                 {/* Grid Import area (load exceeds PV) */}
-                {showPVProfile && maxPvKva && (
+                {showPVProfile && maxPvAcKva && (
                   <Area
                     type="monotone"
                     dataKey="gridImport"
@@ -1041,7 +1090,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   />
                 )}
                 {/* Grid Export area (PV exceeds load) */}
-                {showPVProfile && maxPvKva && !showBattery && (
+                {showPVProfile && maxPvAcKva && !showBattery && (
                   <Area
                     type="monotone"
                     dataKey="gridExport"
@@ -1114,7 +1163,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
           )}
 
           {/* PV Legend */}
-          {showPVProfile && maxPvKva && !showBattery && (
+          {showPVProfile && maxPvAcKva && !showBattery && (
             <div className="mt-4 pt-4 border-t border-border">
               <p className="text-xs text-muted-foreground mb-2">Solar PV & Grid Flow</p>
               <div className="flex flex-wrap gap-6">
