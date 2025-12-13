@@ -290,7 +290,16 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                     border: "1px solid hsl(var(--border))",
                     borderRadius: "8px",
                   }}
-                  formatter={(value: number) => [`${value.toFixed(1)} ${unit}`, ""]}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const total = payload.reduce((sum, entry) => sum + (Number(entry.value) || 0), 0);
+                    return (
+                      <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-md">
+                        <p className="text-sm font-medium">{label}</p>
+                        <p className="text-lg font-bold">{total.toFixed(1)} {unit}</p>
+                      </div>
+                    );
+                  }}
                 />
                 <Legend />
                 {tenantKeys.map((key, i) => (
