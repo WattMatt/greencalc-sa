@@ -101,17 +101,13 @@ export function ProvinceFilesManager() {
 
       const { data: municipalities } = await supabase
         .from("municipalities")
-        .select("id, name, province_id, source_file_path, extraction_status, extraction_error");
+        .select("id, name, province_id, source_file_path, extraction_status, extraction_error, total_tariffs, ai_confidence, reprise_count");
 
       const { count: tariffCount } = await supabase
         .from("tariffs")
         .select("*", { count: "exact", head: true });
 
-      const { data: tariffsByMuni } = await supabase
-        .from("tariffs")
-        .select("municipality_id");
-
-      return { provinces, municipalities, tariffsByMuni, tariffCount: tariffCount || 0 };
+      return { provinces, municipalities, tariffCount: tariffCount || 0 };
     },
   });
 
@@ -191,9 +187,9 @@ export function ProvinceFilesManager() {
         }
       });
       
-      const tariffCount = provincesData?.tariffsByMuni?.filter(
-        t => municipalityIds.includes(t.municipality_id)
-      ).length || 0;
+      const tariffCount = provinceMunicipalities.reduce(
+        (sum, m) => sum + ((m as any).total_tariffs || 0), 0
+      );
 
       const provinceFiles: ProvinceFile[] = (storageFiles || [])
         .filter(f => {
@@ -246,9 +242,9 @@ export function ProvinceFilesManager() {
           }
         });
         
-        const tariffCount = provincesData?.tariffsByMuni?.filter(
-          t => municipalityIds.includes(t.municipality_id)
-        ).length || 0;
+        const tariffCount = provinceMunicipalities.reduce(
+          (sum, m) => sum + ((m as any).total_tariffs || 0), 0
+        );
 
         const provinceFiles: ProvinceFile[] = (storageFiles || [])
           .filter(f => {
@@ -381,9 +377,7 @@ export function ProvinceFilesManager() {
       if (existingMunis.length > 0) {
         // Load existing municipalities with their persisted status
         const muniWithStatus: Municipality[] = existingMunis.map(m => {
-          const tariffCount = provincesData?.tariffsByMuni?.filter(
-            t => t.municipality_id === m.id
-          ).length || 0;
+          const tariffCount = (m as any).total_tariffs || 0;
           const dbStatus = (m as any).extraction_status || 'pending';
           const dbError = (m as any).extraction_error;
           
@@ -426,9 +420,7 @@ export function ProvinceFilesManager() {
 
       if (existingMunis.length > 0) {
         const muniWithStatus: Municipality[] = existingMunis.map(m => {
-          const tariffCount = freshData?.tariffsByMuni?.filter(
-            t => t.municipality_id === m.id
-          ).length || 0;
+          const tariffCount = (m as any).total_tariffs || 0;
           const dbStatus = (m as any).extraction_status || 'pending';
           const dbError = (m as any).extraction_error;
           
