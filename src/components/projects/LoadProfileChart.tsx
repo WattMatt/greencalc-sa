@@ -298,6 +298,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
         pvClipping?: number;
         pvDcOutput?: number;
         pvBaseline?: number; // 1:1 ratio output for comparison
+        pvOverpanelGain?: number; // Extra energy gained from over-paneling
         netLoad?: number;
         gridImport?: number;
         gridExport?: number;
@@ -324,18 +325,29 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
 
       // Add PV generation profile if enabled and connection size is set
       if (showPVProfile && maxPvAcKva && dcCapacityKwp) {
+        // OVER-PANELING LOGIC:
+        // With DC/AC ratio > 1.0, the DC array is larger than the inverter capacity
+        // This produces MORE energy during morning/evening (fatter profile)
+        // but clips during peak solar hours when DC output exceeds AC inverter limit
+        
         // Calculate DC output based on oversized DC capacity
         const dcOutput = PV_PROFILE_NORMALIZED[index] * dcCapacityKwp;
-        // Clip at AC inverter limit (maxPvAcKva)
+        // Clip at AC inverter limit (maxPvAcKva) - this is what actually goes to the grid/load
         const pvValue = Math.min(dcOutput, maxPvAcKva);
-        // Track clipping for visualization
-        result.pvGeneration = pvValue;
-        result.pvClipping = dcOutput > maxPvAcKva ? dcOutput - maxPvAcKva : 0;
-        result.pvDcOutput = dcOutput;
         
-        // Calculate 1:1 baseline for comparison (DC = AC, no clipping possible)
+        // Track values for visualization:
+        result.pvGeneration = pvValue; // Actual AC output after clipping
+        result.pvDcOutput = dcOutput;  // Theoretical DC output before clipping (the "fatter" profile)
+        result.pvClipping = dcOutput > maxPvAcKva ? dcOutput - maxPvAcKva : 0; // Energy lost to clipping
+        
+        // Calculate 1:1 baseline for comparison (DC = AC, no oversizing)
+        // This is the SMALLER profile - what you'd get without over-paneling
         const baselineDcOutput = PV_PROFILE_NORMALIZED[index] * maxPvAcKva;
         result.pvBaseline = baselineDcOutput;
+        
+        // Calculate the extra energy gained from over-paneling at this hour
+        // (positive during shoulder hours, zero/negative during peak when clipping occurs)
+        result.pvOverpanelGain = pvValue - baselineDcOutput;
         
         const netLoad = result.total - pvValue;
         result.netLoad = netLoad;
@@ -614,7 +626,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                 {dcAcRatio > 1 && (
                   <Label className="text-xs text-muted-foreground flex items-center gap-2 pb-4">
                     <Switch checked={showBaselineComparison} onCheckedChange={setShowBaselineComparison} />
-                    Compare to 1:1 Ratio
+                    Show Overpanel Benefit vs 1:1
                   </Label>
                 )}
               </div>
@@ -945,6 +957,10 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                     <stop offset="5%" stopColor="hsl(25 95% 53%)" stopOpacity={0.6}/>
                     <stop offset="95%" stopColor="hsl(25 95% 53%)" stopOpacity={0.1}/>
                   </linearGradient>
+                  <linearGradient id="overpanelGainGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(142 76% 36%)" stopOpacity={0.5}/>
+                    <stop offset="95%" stopColor="hsl(142 76% 36%)" stopOpacity={0.1}/>
+                  </linearGradient>
                 </defs>
                 
                 {/* TOU Period Full-Height Background Bands - per hour for seamless look */}
@@ -1056,20 +1072,38 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                             {(() => {
                               const dcEntry = payload.find(p => p.dataKey === "pvDcOutput");
                               const clippingEntry = payload.find(p => p.dataKey === "pvClipping");
+                              const baselineEntry = payload.find(p => p.dataKey === "pvBaseline");
                               const dcValue = Number(dcEntry?.value) || 0;
                               const clippingValue = Number(clippingEntry?.value) || 0;
-                              return dcAcRatio > 1 && dcValue > pvValue ? (
+                              const baselineValue = Number(baselineEntry?.value) || 0;
+                              const overpanelGain = pvValue - baselineValue;
+                              
+                              return (
                                 <>
-                                  <p className="text-xs text-orange-500">
-                                    DC Output: {dcValue.toFixed(1)} {unit}
-                                  </p>
-                                  {clippingValue > 0 && (
-                                    <p className="text-xs text-red-400">
-                                      Clipped: {clippingValue.toFixed(1)} {unit}
-                                    </p>
+                                  {dcAcRatio > 1 && (
+                                    <>
+                                      <p className="text-xs text-orange-500">
+                                        DC Output: {dcValue.toFixed(1)} {unit}
+                                      </p>
+                                      {clippingValue > 0 && (
+                                        <p className="text-xs text-red-400">
+                                          Clipped: {clippingValue.toFixed(1)} {unit}
+                                        </p>
+                                      )}
+                                      {showBaselineComparison && baselineValue > 0 && (
+                                        <>
+                                          <p className="text-xs text-muted-foreground">
+                                            1:1 Baseline: {baselineValue.toFixed(1)} {unit}
+                                          </p>
+                                          <p className="text-xs font-medium" style={{ color: overpanelGain > 0 ? 'hsl(142 76% 36%)' : 'hsl(0 72% 51%)' }}>
+                                            {overpanelGain > 0 ? '+' : ''}{overpanelGain.toFixed(1)} {unit} from overpanel
+                                          </p>
+                                        </>
+                                      )}
+                                    </>
                                   )}
                                 </>
-                              ) : null;
+                              );
                             })()}
                             <p className="text-xs font-medium" style={{ color: netLoad > 0 ? 'inherit' : 'hsl(160 84% 39%)' }}>
                               Net Load: {netLoad.toFixed(1)} {unit}
@@ -1144,20 +1178,33 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                 )}
                 {/* 1:1 DC/AC Baseline - dotted line for comparison */}
                 {showPVProfile && maxPvAcKva && showBaselineComparison && dcAcRatio > 1 && (
-                  <Line
-                    type="monotone"
-                    dataKey="pvBaseline"
-                    stroke="hsl(var(--muted-foreground))"
-                    strokeWidth={2}
-                    strokeDasharray="3 3"
-                    dot={false}
-                    activeDot={{ 
-                      r: 4, 
-                      stroke: "hsl(var(--muted-foreground))", 
-                      strokeWidth: 2,
-                      fill: "hsl(var(--background))"
-                    }}
-                  />
+                  <>
+                    {/* Baseline area fill (what 1:1 would produce) */}
+                    <Area
+                      type="monotone"
+                      dataKey="pvBaseline"
+                      stroke="none"
+                      fill="hsl(var(--muted-foreground))"
+                      fillOpacity={0.15}
+                      dot={false}
+                    />
+                    {/* Baseline line */}
+                    <Line
+                      type="monotone"
+                      dataKey="pvBaseline"
+                      stroke="hsl(var(--muted-foreground))"
+                      strokeWidth={2}
+                      strokeDasharray="3 3"
+                      dot={false}
+                      activeDot={{ 
+                        r: 4, 
+                        stroke: "hsl(var(--muted-foreground))", 
+                        strokeWidth: 2,
+                        fill: "hsl(var(--background))"
+                      }}
+                      name="1:1 Baseline"
+                    />
+                  </>
                 )}
                 {/* Grid Import area (load exceeds PV) */}
                 {showPVProfile && maxPvAcKva && (
@@ -1259,13 +1306,14 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                 {dcAcRatio > 1 && (
                   <div className="flex items-center gap-2">
                     <div className="w-5 h-0 border-t-2 border-dashed" style={{ borderColor: 'hsl(25 95% 53%)' }} />
-                    <span className="text-xs font-medium text-orange-500">DC Output (Clipping)</span>
+                    <span className="text-xs font-medium text-orange-500">DC Output ({(dcAcRatio * 100).toFixed(0)}%)</span>
                   </div>
                 )}
                 {showBaselineComparison && dcAcRatio > 1 && (
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-0 border-t-2 border-dotted" style={{ borderColor: 'hsl(var(--muted-foreground))' }} />
-                    <span className="text-xs font-medium text-muted-foreground">1:1 Baseline</span>
+                    <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(var(--muted-foreground))', opacity: 0.15 }} />
+                    <div className="w-5 h-0 border-t-2 border-dotted -ml-5" style={{ borderColor: 'hsl(var(--muted-foreground))' }} />
+                    <span className="text-xs font-medium text-muted-foreground">1:1 Baseline (no overpanel)</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
@@ -1298,13 +1346,14 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                 {dcAcRatio > 1 && (
                   <div className="flex items-center gap-2">
                     <div className="w-5 h-0 border-t-2 border-dashed" style={{ borderColor: 'hsl(25 95% 53%)' }} />
-                    <span className="text-xs font-medium text-orange-500">DC Output (Clipping)</span>
+                    <span className="text-xs font-medium text-orange-500">DC Output ({(dcAcRatio * 100).toFixed(0)}%)</span>
                   </div>
                 )}
                 {showBaselineComparison && dcAcRatio > 1 && (
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-0 border-t-2 border-dotted" style={{ borderColor: 'hsl(var(--muted-foreground))' }} />
-                    <span className="text-xs font-medium text-muted-foreground">1:1 Baseline</span>
+                    <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(var(--muted-foreground))', opacity: 0.15 }} />
+                    <div className="w-5 h-0 border-t-2 border-dotted -ml-5" style={{ borderColor: 'hsl(var(--muted-foreground))' }} />
+                    <span className="text-xs font-medium text-muted-foreground">1:1 Baseline (no overpanel)</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
