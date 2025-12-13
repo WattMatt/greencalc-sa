@@ -557,47 +557,15 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="h-[350px]">
+          <div className="h-[350px] relative">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: showTOU ? 24 : 0 }}>
                 <defs>
                   <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4}/>
                     <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
                   </linearGradient>
-                  {/* TOU period gradients - subtle fade from bottom */}
-                  <linearGradient id="peakGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={TOU_COLORS["peak"].fill} stopOpacity={0}/>
-                    <stop offset="70%" stopColor={TOU_COLORS["peak"].fill} stopOpacity={0.08}/>
-                    <stop offset="100%" stopColor={TOU_COLORS["peak"].fill} stopOpacity={0.25}/>
-                  </linearGradient>
-                  <linearGradient id="standardGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={TOU_COLORS["standard"].fill} stopOpacity={0}/>
-                    <stop offset="70%" stopColor={TOU_COLORS["standard"].fill} stopOpacity={0.08}/>
-                    <stop offset="100%" stopColor={TOU_COLORS["standard"].fill} stopOpacity={0.25}/>
-                  </linearGradient>
-                  <linearGradient id="offpeakGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={TOU_COLORS["off-peak"].fill} stopOpacity={0}/>
-                    <stop offset="70%" stopColor={TOU_COLORS["off-peak"].fill} stopOpacity={0.08}/>
-                    <stop offset="100%" stopColor={TOU_COLORS["off-peak"].fill} stopOpacity={0.25}/>
-                  </linearGradient>
                 </defs>
-                
-                {/* TOU Period Background Bands - subtle gradient from bottom */}
-                {showTOU && touRanges.map((range, i) => {
-                  const gradientId = range.period === "peak" ? "peakGradient" 
-                    : range.period === "standard" ? "standardGradient" 
-                    : "offpeakGradient";
-                  return (
-                    <ReferenceArea
-                      key={i}
-                      x1={`${range.start.toString().padStart(2, "0")}:00`}
-                      x2={`${range.end.toString().padStart(2, "0")}:00`}
-                      fill={`url(#${gradientId})`}
-                      stroke="none"
-                    />
-                  );
-                })}
                 
                 <CartesianGrid 
                   strokeDasharray="3 3" 
@@ -607,10 +575,38 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                 />
                 <XAxis
                   dataKey="hour"
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  tick={({ x, y, payload }) => {
+                    const hour = parseInt(payload.value);
+                    const period = getTOUPeriod(hour, isWeekend);
+                    return (
+                      <g transform={`translate(${x},${y})`}>
+                        <text
+                          x={0}
+                          y={0}
+                          dy={12}
+                          textAnchor="middle"
+                          fill="hsl(var(--muted-foreground))"
+                          fontSize={11}
+                        >
+                          {payload.value}
+                        </text>
+                        {showTOU && (
+                          <rect
+                            x={-16}
+                            y={18}
+                            width={32}
+                            height={6}
+                            rx={1}
+                            fill={TOU_COLORS[period].fill}
+                          />
+                        )}
+                      </g>
+                    );
+                  }}
                   tickLine={false}
                   axisLine={{ stroke: "hsl(var(--border))" }}
-                  interval={2}
+                  interval={0}
+                  height={showTOU ? 30 : 20}
                 />
                 <YAxis
                   tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
