@@ -437,7 +437,8 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     <TableCell>{Number(tenant.area_sqm).toLocaleString()}</TableCell>
                     <TableCell>
                       <Select
-                        value={tenant.scada_import_id || ""}
+                        key={tenant.id}
+                        value={tenant.scada_import_id ?? undefined}
                         onValueChange={(v) =>
                           updateTenantProfile.mutate({
                             tenantId: tenant.id,
@@ -446,9 +447,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                         }
                       >
                         <SelectTrigger className="w-[220px]">
-                          <SelectValue placeholder="Unassigned">
-                            {assignedProfile ? formatProfileOption(assignedProfile) : "Unassigned"}
-                          </SelectValue>
+                          <SelectValue placeholder="Unassigned" />
                         </SelectTrigger>
                         <SelectContent>
                           {sortedProfiles.map((meter) => (
