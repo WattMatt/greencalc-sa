@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, Line, ComposedChart } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Sun, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Tenant {
   id: string;
@@ -41,7 +41,17 @@ interface ShopType {
 interface LoadProfileChartProps {
   tenants: Tenant[];
   shopTypes: ShopType[];
+  connectionSizeKva?: number | null;
 }
+
+// Typical PV generation profile (normalized to peak = 1.0)
+// Bell curve centered around midday (solar noon ~12:00-13:00)
+const PV_PROFILE_NORMALIZED = [
+  0.00, 0.00, 0.00, 0.00, 0.00, 0.02,  // 00:00 - 05:00
+  0.08, 0.20, 0.38, 0.58, 0.78, 0.92,  // 06:00 - 11:00
+  1.00, 0.98, 0.90, 0.75, 0.55, 0.32,  // 12:00 - 17:00
+  0.12, 0.02, 0.00, 0.00, 0.00, 0.00,  // 18:00 - 23:00
+];
 
 type DisplayUnit = "kwh" | "kva";
 
@@ -101,11 +111,15 @@ const TOU_COLORS: Record<TOUPeriod, { fill: string; stroke: string; label: strin
 
 const TOU_BG_OPACITY = 0.25; // Increased opacity for better visibility
 
-export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) {
+export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: LoadProfileChartProps) {
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kwh");
   const [powerFactor, setPowerFactor] = useState(0.9);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Monday");
   const [showTOU, setShowTOU] = useState(true);
+  const [showPVProfile, setShowPVProfile] = useState(false);
+
+  // Max PV size is 70% of connection size
+  const maxPvKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
 
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
   const isWeekend = selectedDay === "Saturday" || selectedDay === "Sunday";
@@ -266,25 +280,32 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
     };
   }, [tenants, shopTypes]);
 
-  // Convert to display unit (kWh or kVA)
+  // Convert to display unit (kWh or kVA) and add PV profile
   const chartData = useMemo(() => {
-    if (displayUnit === "kwh") return baseChartData;
+    return baseChartData.map((hourData, index) => {
+      const result: { hour: string; total: number; pvGeneration?: number; [key: string]: number | string | undefined } = {
+        hour: hourData.hour,
+        total: 0,
+      };
 
-    // Convert kWh to kVA: kVA = kW / PF (and kW = kWh for hourly data)
-    return baseChartData.map(hourData => {
-      const converted: typeof hourData = { hour: hourData.hour, total: 0 };
       Object.keys(hourData).forEach(key => {
         if (key === "hour") return;
         const kwhValue = hourData[key] as number;
-        const kvaValue = kwhValue / powerFactor;
-        converted[key] = kvaValue;
+        const value = displayUnit === "kwh" ? kwhValue : kwhValue / powerFactor;
+        result[key] = value;
         if (key === "total") {
-          converted.total = kvaValue;
+          result.total = value;
         }
       });
-      return converted;
+
+      // Add PV generation profile if enabled and connection size is set
+      if (showPVProfile && maxPvKva) {
+        result.pvGeneration = PV_PROFILE_NORMALIZED[index] * maxPvKva;
+      }
+
+      return result;
     });
-  }, [baseChartData, displayUnit, powerFactor]);
+  }, [baseChartData, displayUnit, powerFactor, showPVProfile, maxPvKva]);
 
   // Get unique tenant names for stacked areas
   const tenantKeys = useMemo(() => {
@@ -397,6 +418,13 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                 <Switch checked={showTOU} onCheckedChange={setShowTOU} />
                 TOU Periods
               </Label>
+              {maxPvKva && (
+                <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Switch checked={showPVProfile} onCheckedChange={setShowPVProfile} />
+                  <Sun className="h-3.5 w-3.5 text-amber-500" />
+                  PV Profile ({maxPvKva.toFixed(0)} kVA max)
+                </Label>
+              )}
             </div>
 
             <div className="flex gap-2 ml-auto">
@@ -559,11 +587,15 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
         <CardContent className="pt-0">
           <div className="h-[350px] relative">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: showTOU ? 24 : 0 }}>
+              <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: showTOU ? 24 : 0 }}>
                 <defs>
                   <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4}/>
                     <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
+                  </linearGradient>
+                  <linearGradient id="pvGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(38 92% 50%)" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="hsl(38 92% 50%)" stopOpacity={0.05}/>
                   </linearGradient>
                 </defs>
                 
@@ -634,9 +666,13 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
-                    const total = payload.reduce((sum, entry) => sum + (Number(entry.value) || 0), 0);
+                    const loadEntry = payload.find(p => p.dataKey === "total");
+                    const pvEntry = payload.find(p => p.dataKey === "pvGeneration");
+                    const loadValue = Number(loadEntry?.value) || 0;
+                    const pvValue = Number(pvEntry?.value) || 0;
                     const hourNum = parseInt(label?.toString() || "0");
                     const period = getTOUPeriod(hourNum, isWeekend);
+                    const netLoad = loadValue - pvValue;
                     return (
                       <div className="bg-popover border border-border rounded-lg px-4 py-3 shadow-lg">
                         <div className="flex items-center gap-2 mb-1">
@@ -653,15 +689,26 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                             {TOU_COLORS[period].label}
                           </Badge>
                         </div>
-                        <p className="text-xl font-bold">{total.toFixed(1)} {unit}</p>
+                        <p className="text-xl font-bold">{loadValue.toFixed(1)} {unit}</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {((total / peakHour.val) * 100).toFixed(0)}% of peak
+                          {((loadValue / peakHour.val) * 100).toFixed(0)}% of peak
                         </p>
+                        {showPVProfile && pvValue > 0 && (
+                          <div className="mt-2 pt-2 border-t border-border space-y-1">
+                            <div className="flex items-center gap-2">
+                              <Sun className="h-3 w-3 text-amber-500" />
+                              <span className="text-xs">PV Generation: {pvValue.toFixed(1)} {unit}</span>
+                            </div>
+                            <p className="text-xs font-medium" style={{ color: netLoad > 0 ? 'inherit' : 'hsl(160 84% 39%)' }}>
+                              Net Load: {netLoad.toFixed(1)} {unit}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     );
                   }}
                 />
-                {/* Single smooth area for total */}
+                {/* Single smooth area for total load */}
                 <Area
                   type="monotone"
                   dataKey="total"
@@ -676,7 +723,25 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                     fill: "hsl(var(--background))"
                   }}
                 />
-              </AreaChart>
+                {/* PV Generation line */}
+                {showPVProfile && maxPvKva && (
+                  <Area
+                    type="monotone"
+                    dataKey="pvGeneration"
+                    stroke="hsl(38 92% 50%)"
+                    strokeWidth={2}
+                    strokeDasharray="5 3"
+                    fill="url(#pvGradient)"
+                    dot={false}
+                    activeDot={{ 
+                      r: 5, 
+                      stroke: "hsl(38 92% 50%)", 
+                      strokeWidth: 2,
+                      fill: "hsl(var(--background))"
+                    }}
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
           

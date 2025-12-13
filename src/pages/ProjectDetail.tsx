@@ -180,7 +180,11 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="load-profile" className="mt-6">
-          <LoadProfileChart tenants={tenants || []} shopTypes={shopTypes || []} />
+          <LoadProfileChart 
+            tenants={tenants || []} 
+            shopTypes={shopTypes || []} 
+            connectionSizeKva={project.connection_size_kva}
+          />
         </TabsContent>
 
         <TabsContent value="tariff" className="mt-6">
