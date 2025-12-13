@@ -414,27 +414,39 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                 <TableHead>Tenant Name</TableHead>
                 <TableHead>Area (m²)</TableHead>
                 <TableHead>Load Profile</TableHead>
+                <TableHead className="text-center">Scale</TableHead>
                 <TableHead className="text-right">Est. kWh/month</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tenants.map((tenant) => {
-                // Calculate kWh from SCADA profile or fallback
+                const tenantArea = Number(tenant.area_sqm) || 0;
+                const scadaArea = tenant.scada_imports?.area_sqm || null;
+                
+                // Calculate scale factor
+                let scaleFactor: number | null = null;
+                if (tenant.scada_import_id && scadaArea && scadaArea > 0) {
+                  scaleFactor = tenantArea / scadaArea;
+                }
+
+                // Calculate kWh from SCADA profile (with scaling) or fallback
                 let calculatedKwh: number;
                 if (tenant.scada_imports?.load_profile_weekday) {
-                  calculatedKwh = calculateDailyKwh(tenant.scada_imports.load_profile_weekday) * 30;
+                  const dailyKwh = calculateDailyKwh(tenant.scada_imports.load_profile_weekday);
+                  const scaled = scaleFactor ? dailyKwh * scaleFactor : dailyKwh;
+                  calculatedKwh = scaled * 30;
                 } else {
-                  calculatedKwh = (tenant.shop_types?.kwh_per_sqm_month || 50) * Number(tenant.area_sqm);
+                  calculatedKwh = (tenant.shop_types?.kwh_per_sqm_month || 50) * tenantArea;
                 }
 
                 const assignedProfile = scadaImports?.find(m => m.id === tenant.scada_import_id);
-                const sortedProfiles = getSortedProfiles(Number(tenant.area_sqm));
+                const sortedProfiles = getSortedProfiles(tenantArea);
 
                 return (
                   <TableRow key={tenant.id}>
                     <TableCell className="font-medium">{tenant.name}</TableCell>
-                    <TableCell>{Number(tenant.area_sqm).toLocaleString()}</TableCell>
+                    <TableCell>{tenantArea.toLocaleString()}</TableCell>
                     <TableCell>
                       <Select
                         key={tenant.id}
@@ -457,6 +469,22 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                           ))}
                         </SelectContent>
                       </Select>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {scaleFactor !== null ? (
+                        <span 
+                          className={`text-sm font-mono ${
+                            scaleFactor > 1.5 || scaleFactor < 0.5 
+                              ? "text-amber-600" 
+                              : "text-muted-foreground"
+                          }`}
+                          title={`Tenant: ${tenantArea}m² / Profile: ${scadaArea}m²`}
+                        >
+                          ×{scaleFactor.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <KwhOverrideCell
