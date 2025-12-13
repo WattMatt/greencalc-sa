@@ -14,49 +14,29 @@ serve(async (req) => {
   try {
     console.log("Starting external projects sync...");
 
-    // External Supabase connection
-    const externalUrl = Deno.env.get("EXTERNAL_SUPABASE_URL");
-    const externalKey = Deno.env.get("EXTERNAL_SUPABASE_ANON_KEY");
+    // External API endpoint
+    const externalApiUrl = "https://rsdisaisxdglmdmzmkyw.supabase.co/functions/v1/fetch-tenant-schedule";
 
-    if (!externalUrl || !externalKey) {
-      throw new Error("External Supabase credentials not configured");
+    // Fetch data from external API
+    console.log("Fetching from external API:", externalApiUrl);
+    const externalResponse = await fetch(externalApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!externalResponse.ok) {
+      const errorText = await externalResponse.text();
+      console.error("External API error response:", errorText);
+      throw new Error(`External API error: ${externalResponse.status} ${externalResponse.statusText}`);
     }
 
-    const externalSupabase = createClient(externalUrl, externalKey);
+    const externalData = await externalResponse.json();
+    console.log(`Fetched ${externalData.total_projects} projects with ${externalData.total_tenants} tenants from external API`);
 
     // Local Supabase connection
     const localUrl = Deno.env.get("SUPABASE_URL")!;
     const localKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const localSupabase = createClient(localUrl, localKey);
-
-    // Fetch projects from external DB
-    console.log("Fetching projects from external database...");
-    const { data: externalProjects, error: projectsError } = await externalSupabase
-      .from("projects")
-      .select("*");
-
-    if (projectsError) {
-      console.error("Error fetching external projects:", projectsError);
-      throw new Error(`Failed to fetch external projects: ${projectsError.message}`);
-    }
-
-    console.log(`Found ${externalProjects?.length || 0} projects in external DB`);
-
-    // Fetch project_tenants from external DB (optional - table may not exist)
-    console.log("Fetching tenants from external database...");
-    let externalTenants: any[] = [];
-    const { data: tenantData, error: tenantsError } = await externalSupabase
-      .from("project_tenants")
-      .select("*");
-
-    if (tenantsError) {
-      // Table might not exist in external DB - log warning but continue
-      console.warn("Could not fetch external tenants (table may not exist):", tenantsError.message);
-    } else {
-      externalTenants = tenantData || [];
-    }
-
-    console.log(`Found ${externalTenants.length} tenants in external DB`);
 
     let projectsInserted = 0;
     let projectsUpdated = 0;
@@ -64,7 +44,18 @@ serve(async (req) => {
     let tenantsUpdated = 0;
 
     // Sync projects
-    for (const project of externalProjects || []) {
+    for (const project of externalData.projects || []) {
+      // Map external project to local schema
+      const projectData = {
+        id: project.id,
+        name: project.name,
+        description: project.client_name || null,
+        location: project.city && project.province 
+          ? `${project.city}, ${project.province}` 
+          : project.city || project.province || null,
+        updated_at: new Date().toISOString(),
+      };
+
       // Check if project exists locally
       const { data: existingProject } = await localSupabase
         .from("projects")
@@ -72,99 +63,84 @@ serve(async (req) => {
         .eq("id", project.id)
         .maybeSingle();
 
-      if (existingProject) {
-        // Update if external is newer
-        if (new Date(project.updated_at) > new Date(existingProject.updated_at)) {
-          const { error: updateError } = await localSupabase
-            .from("projects")
-            .update({
-              name: project.name,
-              description: project.description,
-              location: project.location,
-              total_area_sqm: project.total_area_sqm,
-              tariff_id: project.tariff_id,
-              updated_at: project.updated_at,
-            })
-            .eq("id", project.id);
-
-          if (updateError) {
-            console.error(`Error updating project ${project.id}:`, updateError);
-          } else {
-            projectsUpdated++;
-          }
-        }
-      } else {
+      if (!existingProject) {
         // Insert new project
         const { error: insertError } = await localSupabase
           .from("projects")
           .insert({
-            id: project.id,
-            name: project.name,
-            description: project.description,
-            location: project.location,
-            total_area_sqm: project.total_area_sqm,
-            tariff_id: project.tariff_id,
-            created_at: project.created_at,
-            updated_at: project.updated_at,
+            ...projectData,
+            created_at: new Date().toISOString(),
           });
 
         if (insertError) {
-          console.error(`Error inserting project ${project.id}:`, insertError);
+          console.error(`Failed to insert project ${project.id}:`, insertError.message);
         } else {
           projectsInserted++;
-        }
-      }
-    }
-
-    // Sync tenants
-    for (const tenant of externalTenants) {
-      // Check if tenant exists locally
-      const { data: existingTenant } = await localSupabase
-        .from("project_tenants")
-        .select("id, updated_at")
-        .eq("id", tenant.id)
-        .maybeSingle();
-
-      if (existingTenant) {
-        // Update if external is newer
-        if (new Date(tenant.updated_at) > new Date(existingTenant.updated_at)) {
-          const { error: updateError } = await localSupabase
-            .from("project_tenants")
-            .update({
-              name: tenant.name,
-              project_id: tenant.project_id,
-              shop_type_id: tenant.shop_type_id,
-              area_sqm: tenant.area_sqm,
-              monthly_kwh_override: tenant.monthly_kwh_override,
-              updated_at: tenant.updated_at,
-            })
-            .eq("id", tenant.id);
-
-          if (updateError) {
-            console.error(`Error updating tenant ${tenant.id}:`, updateError);
-          } else {
-            tenantsUpdated++;
-          }
+          console.log(`Inserted project: ${project.name}`);
         }
       } else {
-        // Insert new tenant
-        const { error: insertError } = await localSupabase
-          .from("project_tenants")
-          .insert({
-            id: tenant.id,
-            name: tenant.name,
-            project_id: tenant.project_id,
-            shop_type_id: tenant.shop_type_id,
-            area_sqm: tenant.area_sqm,
-            monthly_kwh_override: tenant.monthly_kwh_override,
-            created_at: tenant.created_at,
-            updated_at: tenant.updated_at,
-          });
+        // Update existing project
+        const { error: updateError } = await localSupabase
+          .from("projects")
+          .update(projectData)
+          .eq("id", project.id);
 
-        if (insertError) {
-          console.error(`Error inserting tenant ${tenant.id}:`, insertError);
+        if (updateError) {
+          console.error(`Failed to update project ${project.id}:`, updateError.message);
         } else {
-          tenantsInserted++;
+          projectsUpdated++;
+        }
+      }
+
+      // Sync tenants for this project
+      for (const tenant of project.tenants || []) {
+        // Map external tenant to local schema
+        const tenantData = {
+          id: tenant.id,
+          project_id: tenant.project_id,
+          name: tenant.shop_name || tenant.shop_number || "Unknown",
+          area_sqm: tenant.area || 0,
+          updated_at: tenant.updated_at || new Date().toISOString(),
+        };
+
+        // Check if tenant exists locally
+        const { data: existingTenant } = await localSupabase
+          .from("project_tenants")
+          .select("id, updated_at")
+          .eq("id", tenant.id)
+          .maybeSingle();
+
+        if (!existingTenant) {
+          // Insert new tenant
+          const { error: insertError } = await localSupabase
+            .from("project_tenants")
+            .insert({
+              ...tenantData,
+              created_at: tenant.created_at || new Date().toISOString(),
+            });
+
+          if (insertError) {
+            console.error(`Failed to insert tenant ${tenant.id}:`, insertError.message);
+          } else {
+            tenantsInserted++;
+          }
+        } else {
+          // Update if external is newer
+          const externalUpdated = new Date(tenant.updated_at || 0);
+          const localUpdated = new Date(existingTenant.updated_at || 0);
+
+          if (externalUpdated > localUpdated) {
+            const { error: updateError } = await localSupabase
+              .from("project_tenants")
+              .update(tenantData)
+              .eq("id", tenant.id);
+
+            if (updateError) {
+              console.error(`Failed to update tenant ${tenant.id}:`, updateError.message);
+            } else {
+              tenantsUpdated++;
+            }
+          }
         }
       }
     }
@@ -172,12 +148,12 @@ serve(async (req) => {
     const result = {
       success: true,
       projects: {
-        found: externalProjects?.length || 0,
+        found: externalData.total_projects,
         inserted: projectsInserted,
         updated: projectsUpdated,
       },
       tenants: {
-        found: externalTenants?.length || 0,
+        found: externalData.total_tenants,
         inserted: tenantsInserted,
         updated: tenantsUpdated,
       },
