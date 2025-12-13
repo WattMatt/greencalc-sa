@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Upload, Trash2, Download } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Plus, Upload, Trash2, Download, Pencil, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { TenantProfileMatcher } from "./TenantProfileMatcher";
@@ -32,6 +33,78 @@ interface TenantManagerProps {
   projectId: string;
   tenants: Tenant[];
   shopTypes: ShopType[];
+}
+
+// KwhOverrideCell component for inline editing
+function KwhOverrideCell({
+  tenant,
+  calculatedKwh,
+  onUpdate,
+}: {
+  tenant: Tenant;
+  calculatedKwh: number;
+  onUpdate: (value: number | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(
+    tenant.monthly_kwh_override?.toString() || Math.round(calculatedKwh).toString()
+  );
+
+  const displayKwh = tenant.monthly_kwh_override ?? calculatedKwh;
+  const isOverridden = tenant.monthly_kwh_override !== null;
+
+  const handleSave = () => {
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue) && numValue > 0) {
+      onUpdate(numValue);
+    }
+    setOpen(false);
+  };
+
+  const handleReset = () => {
+    onUpdate(null);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="inline-flex items-center gap-1.5 hover:text-primary transition-colors group">
+          <span className={isOverridden ? "text-primary font-medium" : ""}>
+            {Math.round(displayKwh).toLocaleString()}
+          </span>
+          <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56" align="end">
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">kWh/month override</Label>
+            <Input
+              type="number"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="Enter kWh"
+              className="h-8"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Calculated: {Math.round(calculatedKwh).toLocaleString()} kWh
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleSave} className="flex-1">
+              Save
+            </Button>
+            {isOverridden && (
+              <Button size="sm" variant="outline" onClick={handleReset}>
+                <RotateCcw className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerProps) {
@@ -79,6 +152,21 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const updateTenantKwhOverride = useMutation({
+    mutationFn: async ({ tenantId, kwhOverride }: { tenantId: string; kwhOverride: number | null }) => {
+      const { error } = await supabase
+        .from("project_tenants")
+        .update({ monthly_kwh_override: kwhOverride })
+        .eq("id", tenantId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
+      toast.success("kWh override updated");
     },
     onError: (error) => toast.error(error.message),
   });
@@ -312,7 +400,13 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                       </Select>
                     </TableCell>
                     <TableCell className="text-right">
-                      {Math.round(monthlyKwh).toLocaleString()}
+                      <KwhOverrideCell
+                        tenant={tenant}
+                        calculatedKwh={(tenant.shop_types?.kwh_per_sqm_month || 50) * Number(tenant.area_sqm)}
+                        onUpdate={(kwhOverride) =>
+                          updateTenantKwhOverride.mutate({ tenantId: tenant.id, kwhOverride })
+                        }
+                      />
                     </TableCell>
                     <TableCell>
                       <Button
