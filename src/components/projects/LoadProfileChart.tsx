@@ -1142,8 +1142,8 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                     fill: "hsl(var(--background))"
                   }}
                 />
-                {/* PV Generation area (AC output - clipped) */}
-                {showPVProfile && maxPvAcKva && (
+                {/* PV Generation - When NOT showing baseline comparison, show as single area */}
+                {showPVProfile && maxPvAcKva && !showBaselineComparison && (
                   <Area
                     type="monotone"
                     dataKey="pvGeneration"
@@ -1158,6 +1158,39 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                       fill: "hsl(var(--background))"
                     }}
                   />
+                )}
+                {/* When showing baseline comparison, use STACKED areas: baseline (gray) + gain (green) = total */}
+                {showPVProfile && maxPvAcKva && showBaselineComparison && dcAcRatio > 1 && (
+                  <>
+                    {/* Baseline area (1:1 ratio) - gray, this is what you'd get without over-paneling */}
+                    <Area
+                      type="monotone"
+                      dataKey="pvBaseline"
+                      stackId="pvComparison"
+                      stroke="hsl(var(--muted-foreground))"
+                      strokeWidth={1.5}
+                      strokeDasharray="3 3"
+                      fill="hsl(var(--muted-foreground))"
+                      fillOpacity={0.25}
+                      dot={false}
+                    />
+                    {/* Overpanel gain area - green, stacked on top of baseline */}
+                    <Area
+                      type="monotone"
+                      dataKey="pvOverpanelGain"
+                      stackId="pvComparison"
+                      stroke="hsl(142 76% 36%)"
+                      strokeWidth={2}
+                      fill="url(#overpanelGainGradient)"
+                      dot={false}
+                      activeDot={{ 
+                        r: 5, 
+                        stroke: "hsl(142 76% 36%)", 
+                        strokeWidth: 2,
+                        fill: "hsl(var(--background))"
+                      }}
+                    />
+                  </>
                 )}
                 {/* DC Output line (theoretical before clipping) - dashed line showing clipped energy */}
                 {showPVProfile && maxPvAcKva && dcAcRatio > 1 && (
@@ -1175,36 +1208,6 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                       fill: "hsl(var(--background))"
                     }}
                   />
-                )}
-                {/* 1:1 DC/AC Baseline - dotted line for comparison */}
-                {showPVProfile && maxPvAcKva && showBaselineComparison && dcAcRatio > 1 && (
-                  <>
-                    {/* Overpanel gain area - shaded between AC output and baseline */}
-                    <Area
-                      type="monotone"
-                      dataKey="pvOverpanelGain"
-                      stroke="none"
-                      fill="url(#overpanelGainGradient)"
-                      baseValue="dataMin"
-                      dot={false}
-                    />
-                    {/* Baseline line (1:1 ratio) */}
-                    <Line
-                      type="monotone"
-                      dataKey="pvBaseline"
-                      stroke="hsl(var(--muted-foreground))"
-                      strokeWidth={2}
-                      strokeDasharray="3 3"
-                      dot={false}
-                      activeDot={{ 
-                        r: 4, 
-                        stroke: "hsl(var(--muted-foreground))", 
-                        strokeWidth: 2,
-                        fill: "hsl(var(--background))"
-                      }}
-                      name="1:1 Baseline"
-                    />
-                  </>
                 )}
                 {/* Grid Import area (load exceeds PV) */}
                 {showPVProfile && maxPvAcKva && (
