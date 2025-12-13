@@ -1,18 +1,25 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { Badge } from "@/components/ui/badge";
 
 interface Tenant {
   id: string;
   name: string;
   area_sqm: number;
   shop_type_id: string | null;
+  scada_import_id: string | null;
   monthly_kwh_override: number | null;
   shop_types?: {
     name: string;
     kwh_per_sqm_month: number;
     load_profile_weekday: number[];
     load_profile_weekend: number[];
+  } | null;
+  scada_imports?: {
+    shop_name: string | null;
+    area_sqm: number | null;
+    load_profile_weekday: number[] | null;
   } | null;
 }
 
@@ -29,12 +36,25 @@ interface LoadProfileChartProps {
   shopTypes: ShopType[];
 }
 
-// Default flat profile if none defined
-const DEFAULT_PROFILE = Array(24).fill(4.17);
+// Default flat profile if none defined (kWh per hour for 100kWh/day)
+const DEFAULT_PROFILE_PERCENT = Array(24).fill(4.17);
 
 export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) {
+  // Count tenants with actual SCADA data vs estimated
+  const { tenantsWithScada, tenantsEstimated } = useMemo(() => {
+    let scadaCount = 0;
+    let estimatedCount = 0;
+    tenants.forEach((t) => {
+      if (t.scada_imports?.load_profile_weekday?.length === 24) {
+        scadaCount++;
+      } else {
+        estimatedCount++;
+      }
+    });
+    return { tenantsWithScada: scadaCount, tenantsEstimated: estimatedCount };
+  }, [tenants]);
+
   const chartData = useMemo(() => {
-    // Calculate hourly consumption for each tenant and stack them
     const hourlyData: { hour: string; total: number; [key: string]: number | string }[] = [];
 
     for (let h = 0; h < 24; h++) {
@@ -45,6 +65,16 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
       };
 
       tenants.forEach((tenant) => {
+        // Priority 1: Use assigned SCADA profile (actual kWh values)
+        if (tenant.scada_imports?.load_profile_weekday?.length === 24) {
+          const hourlyKwh = tenant.scada_imports.load_profile_weekday[h] || 0;
+          const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
+          hourData[key] = (hourData[key] as number || 0) + hourlyKwh;
+          hourData.total += hourlyKwh;
+          return;
+        }
+
+        // Priority 2: Fallback to shop_type profile (percentage-based estimation)
         const shopType = tenant.shop_type_id
           ? shopTypes.find((st) => st.id === tenant.shop_type_id)
           : null;
@@ -60,12 +90,11 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
         // Get hourly percentage from profile
         const profile = shopType?.load_profile_weekday?.length === 24
           ? shopType.load_profile_weekday.map(Number)
-          : DEFAULT_PROFILE;
+          : DEFAULT_PROFILE_PERCENT;
         
         const hourlyPercent = profile[h] / 100;
         const hourlyKwh = dailyKwh * hourlyPercent;
 
-        // Truncate tenant name for legend
         const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
         hourData[key] = (hourData[key] as number || 0) + hourlyKwh;
         hourData.total += hourlyKwh;
@@ -151,10 +180,22 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
 
       <Card>
         <CardHeader>
-          <CardTitle>Combined Load Profile (Weekday)</CardTitle>
-          <CardDescription>
-            Stacked hourly consumption by tenant - based on shop type profiles
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Combined Load Profile (Weekday)</CardTitle>
+              <CardDescription>
+                Stacked hourly consumption by tenant
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              {tenantsWithScada > 0 && (
+                <Badge variant="default">{tenantsWithScada} actual profiles</Badge>
+              )}
+              {tenantsEstimated > 0 && (
+                <Badge variant="secondary">{tenantsEstimated} estimated</Badge>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="h-[400px]">
