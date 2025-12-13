@@ -283,7 +283,15 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
   // Convert to display unit (kWh or kVA) and add PV profile
   const chartData = useMemo(() => {
     return baseChartData.map((hourData, index) => {
-      const result: { hour: string; total: number; pvGeneration?: number; [key: string]: number | string | undefined } = {
+      const result: { 
+        hour: string; 
+        total: number; 
+        pvGeneration?: number; 
+        netLoad?: number;
+        gridImport?: number;
+        gridExport?: number;
+        [key: string]: number | string | undefined;
+      } = {
         hour: hourData.hour,
         total: 0,
       };
@@ -300,7 +308,13 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
 
       // Add PV generation profile if enabled and connection size is set
       if (showPVProfile && maxPvKva) {
-        result.pvGeneration = PV_PROFILE_NORMALIZED[index] * maxPvKva;
+        const pvValue = PV_PROFILE_NORMALIZED[index] * maxPvKva;
+        result.pvGeneration = pvValue;
+        const netLoad = result.total - pvValue;
+        result.netLoad = netLoad;
+        // Split into grid import (positive) and export (negative, stored as positive for chart)
+        result.gridImport = netLoad > 0 ? netLoad : 0;
+        result.gridExport = netLoad < 0 ? Math.abs(netLoad) : 0;
       }
 
       return result;
@@ -336,6 +350,27 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
   );
   const avgHourly = totalDaily / 24;
   const loadFactor = peakHour.val > 0 ? (avgHourly / peakHour.val) * 100 : 0;
+
+  // Calculate daily PV stats when enabled
+  const pvStats = useMemo(() => {
+    if (!showPVProfile || !maxPvKva) return null;
+    
+    const totalGeneration = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);
+    const totalImport = chartData.reduce((sum, d) => sum + (d.gridImport || 0), 0);
+    const totalExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
+    const selfConsumption = totalGeneration - totalExport;
+    const selfConsumptionRate = totalGeneration > 0 ? (selfConsumption / totalGeneration) * 100 : 0;
+    const solarCoverage = totalDaily > 0 ? (selfConsumption / totalDaily) * 100 : 0;
+    
+    return {
+      totalGeneration,
+      totalImport,
+      totalExport,
+      selfConsumption,
+      selfConsumptionRate,
+      solarCoverage,
+    };
+  }, [chartData, showPVProfile, maxPvKva, totalDaily]);
 
   const unit = displayUnit === "kwh" ? "kWh" : "kVA";
 
@@ -565,6 +600,47 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
         </div>
       )}
 
+      {/* PV Stats Summary - shown when PV profile enabled */}
+      {pvStats && (
+        <Card className="bg-amber-500/5 border-amber-500/20">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Sun className="h-4 w-4 text-amber-500" />
+              <CardTitle className="text-lg">Solar PV Analysis</CardTitle>
+            </div>
+            <CardDescription>Based on {maxPvKva?.toFixed(0)} kVA max PV capacity (70% of connection size)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-6">
+              <div>
+                <p className="text-xs text-muted-foreground">PV Generation</p>
+                <p className="text-lg font-semibold text-amber-600">{Math.round(pvStats.totalGeneration).toLocaleString()} {unit}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Self-Consumed</p>
+                <p className="text-lg font-semibold text-green-600">{Math.round(pvStats.selfConsumption).toLocaleString()} {unit}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Grid Import</p>
+                <p className="text-lg font-semibold text-red-500">{Math.round(pvStats.totalImport).toLocaleString()} {unit}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Grid Export</p>
+                <p className="text-lg font-semibold text-blue-500">{Math.round(pvStats.totalExport).toLocaleString()} {unit}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Self-Consumption Rate</p>
+                <p className="text-lg font-semibold">{pvStats.selfConsumptionRate.toFixed(1)}%</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Solar Coverage</p>
+                <p className="text-lg font-semibold">{pvStats.solarCoverage.toFixed(1)}%</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Chart */}
       <Card>
         <CardHeader className="pb-2">
@@ -596,6 +672,14 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   <linearGradient id="pvGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="hsl(38 92% 50%)" stopOpacity={0.4}/>
                     <stop offset="95%" stopColor="hsl(38 92% 50%)" stopOpacity={0.05}/>
+                  </linearGradient>
+                  <linearGradient id="gridImportGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(0 72% 51%)" stopOpacity={0.5}/>
+                    <stop offset="95%" stopColor="hsl(0 72% 51%)" stopOpacity={0.1}/>
+                  </linearGradient>
+                  <linearGradient id="gridExportGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(210 100% 50%)" stopOpacity={0.5}/>
+                    <stop offset="95%" stopColor="hsl(210 100% 50%)" stopOpacity={0.1}/>
                   </linearGradient>
                 </defs>
                 
@@ -723,7 +807,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                     fill: "hsl(var(--background))"
                   }}
                 />
-                {/* PV Generation line */}
+                {/* PV Generation area */}
                 {showPVProfile && maxPvKva && (
                   <Area
                     type="monotone"
@@ -739,6 +823,28 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                       strokeWidth: 2,
                       fill: "hsl(var(--background))"
                     }}
+                  />
+                )}
+                {/* Grid Import area (load exceeds PV) */}
+                {showPVProfile && maxPvKva && (
+                  <Area
+                    type="monotone"
+                    dataKey="gridImport"
+                    stroke="hsl(0 72% 51%)"
+                    strokeWidth={1.5}
+                    fill="url(#gridImportGradient)"
+                    dot={false}
+                  />
+                )}
+                {/* Grid Export area (PV exceeds load) */}
+                {showPVProfile && maxPvKva && (
+                  <Area
+                    type="monotone"
+                    dataKey="gridExport"
+                    stroke="hsl(210 100% 50%)"
+                    strokeWidth={1.5}
+                    fill="url(#gridExportGradient)"
+                    dot={false}
                   />
                 )}
               </ComposedChart>
@@ -764,6 +870,33 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   <div className="w-5 h-4 rounded-sm border" style={{ backgroundColor: TOU_COLORS["off-peak"].fill, borderColor: TOU_COLORS["off-peak"].stroke, opacity: 0.8 }} />
                   <span className="text-xs font-medium">Off-Peak</span>
                   <span className="text-xs text-muted-foreground">(22-6h)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PV Legend */}
+          {showPVProfile && maxPvKva && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <p className="text-xs text-muted-foreground mb-2">Solar PV & Grid Flow</p>
+              <div className="flex flex-wrap gap-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(var(--primary))', opacity: 0.6 }} />
+                  <span className="text-xs font-medium">Total Load</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-1 rounded-sm" style={{ backgroundColor: 'hsl(38 92% 50%)', borderTop: '2px dashed hsl(38 92% 50%)' }} />
+                  <span className="text-xs font-medium">PV Generation</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(0 72% 51%)', opacity: 0.5 }} />
+                  <span className="text-xs font-medium text-red-500">Grid Import</span>
+                  <span className="text-xs text-muted-foreground">(load &gt; PV)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(210 100% 50%)', opacity: 0.5 }} />
+                  <span className="text-xs font-medium text-blue-500">Grid Export</span>
+                  <span className="text-xs text-muted-foreground">(PV &gt; load)</span>
                 </div>
               </div>
             </div>
