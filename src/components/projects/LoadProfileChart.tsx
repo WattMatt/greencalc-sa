@@ -74,12 +74,19 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
       };
 
       tenants.forEach((tenant) => {
-        // Priority 1: Use assigned SCADA profile (actual kWh values)
+        const tenantArea = Number(tenant.area_sqm) || 0;
+        
+        // Priority 1: Use assigned SCADA profile with area scaling
         if (tenant.scada_imports?.load_profile_weekday?.length === 24) {
-          const hourlyKwh = tenant.scada_imports.load_profile_weekday[h] || 0;
+          const scadaArea = tenant.scada_imports.area_sqm || tenantArea;
+          const areaScaleFactor = scadaArea > 0 ? tenantArea / scadaArea : 1;
+          
+          const baseHourlyKwh = tenant.scada_imports.load_profile_weekday[h] || 0;
+          const scaledHourlyKwh = baseHourlyKwh * areaScaleFactor;
+          
           const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
-          hourData[key] = (hourData[key] as number || 0) + hourlyKwh;
-          hourData.total += hourlyKwh;
+          hourData[key] = (hourData[key] as number || 0) + scaledHourlyKwh;
+          hourData.total += scaledHourlyKwh;
           return;
         }
 
@@ -90,7 +97,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
 
         const monthlyKwh =
           tenant.monthly_kwh_override ||
-          (shopType?.kwh_per_sqm_month || 50) * Number(tenant.area_sqm);
+          (shopType?.kwh_per_sqm_month || 50) * tenantArea;
 
         const dailyKwh = monthlyKwh / 30;
 
