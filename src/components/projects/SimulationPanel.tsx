@@ -237,6 +237,11 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
     );
   }
 
+  // Connection size and max solar limit
+  const connectionSizeKva = project.connection_size_kva ? Number(project.connection_size_kva) : null;
+  const maxSolarKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
+  const solarExceedsLimit = maxSolarKva && solarCapacity > maxSolarKva;
+
   return (
     <div className="space-y-6">
       <div>
@@ -246,28 +251,67 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
         </p>
       </div>
 
+      {/* Connection Size Warning */}
+      {!connectionSizeKva && (
+        <Card className="border-amber-500/50 bg-amber-500/5">
+          <CardContent className="py-3 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-500" />
+            <p className="text-sm text-amber-700 dark:text-amber-400">
+              Set the site's connection size (kVA) in the project header to enable solar sizing limits.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Solar Limit Exceeded Warning */}
+      {solarExceedsLimit && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="py-3 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-destructive" />
+            <p className="text-sm text-destructive">
+              Solar capacity ({solarCapacity} kWp) exceeds the 70% limit of {maxSolarKva?.toFixed(0)} kVA for a {connectionSizeKva} kVA connection.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* System Configuration */}
       <div className="grid gap-6 md:grid-cols-3">
-        <Card>
+        <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Sun className="h-4 w-4" />
               Solar PV System
+              {maxSolarKva && (
+                <span className="text-xs font-normal text-muted-foreground ml-auto">
+                  Max: {maxSolarKva.toFixed(0)} kVA
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <div className="flex justify-between">
                 <Label className="text-xs">Capacity</Label>
-                <span className="text-xs text-muted-foreground">{solarCapacity} kWp</span>
+                <span className={`text-xs ${solarExceedsLimit ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                  {solarCapacity} kWp
+                </span>
               </div>
               <Slider
                 value={[solarCapacity]}
                 onValueChange={([v]) => setSolarCapacity(v)}
                 min={10}
-                max={500}
+                max={maxSolarKva ? Math.max(maxSolarKva * 1.5, 500) : 500}
                 step={10}
+                className={solarExceedsLimit ? "[&_[role=slider]]:border-destructive [&_[role=slider]]:bg-destructive" : ""}
               />
+              {maxSolarKva && (
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>10 kWp</span>
+                  <span className="text-amber-500">70% limit: {maxSolarKva.toFixed(0)}</span>
+                  <span>{Math.round(maxSolarKva * 1.5)} kWp</span>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

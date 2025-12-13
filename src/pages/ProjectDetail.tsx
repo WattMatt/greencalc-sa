@@ -4,12 +4,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug } from "lucide-react";
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
 import { SimulationPanel } from "@/components/projects/SimulationPanel";
 import { toast } from "sonner";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -58,7 +61,7 @@ export default function ProjectDetail() {
   });
 
   const updateProject = useMutation({
-    mutationFn: async (updates: { tariff_id?: string; total_area_sqm?: number }) => {
+    mutationFn: async (updates: { tariff_id?: string; total_area_sqm?: number; connection_size_kva?: number }) => {
       const { error } = await supabase.from("projects").update(updates).eq("id", id);
       if (error) throw error;
     },
@@ -68,6 +71,12 @@ export default function ProjectDetail() {
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const [connectionSizeInput, setConnectionSizeInput] = useState<string>("");
+
+  // Sync connection size input when project loads
+  const connectionSize = project?.connection_size_kva;
+  const maxSolarKva = connectionSize ? connectionSize * 0.7 : null;
 
   if (isLoading) {
     return (
@@ -105,8 +114,41 @@ export default function ProjectDetail() {
           <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
           <p className="text-muted-foreground">
             {project.location || "No location set"} • {tenants?.length || 0} tenants ({assignedCount} with profiles) • {totalArea.toLocaleString()} m²
+            {connectionSize && ` • ${connectionSize} kVA connection`}
           </p>
         </div>
+        
+        {/* Connection Size Card */}
+        <Card className="ml-auto">
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center gap-3">
+              <Plug className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Connection Size</Label>
+                <Input
+                  type="number"
+                  placeholder="kVA"
+                  className="w-24 h-8"
+                  value={connectionSizeInput || connectionSize || ""}
+                  onChange={(e) => setConnectionSizeInput(e.target.value)}
+                  onBlur={() => {
+                    const value = parseFloat(connectionSizeInput);
+                    if (!isNaN(value) && value > 0) {
+                      updateProject.mutate({ connection_size_kva: value });
+                    }
+                    setConnectionSizeInput("");
+                  }}
+                />
+                <span className="text-xs text-muted-foreground">kVA</span>
+              </div>
+              {maxSolarKva && (
+                <div className="text-xs text-muted-foreground border-l pl-3 ml-2">
+                  Max PV: <span className="font-medium text-foreground">{maxSolarKva.toFixed(0)} kVA</span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
