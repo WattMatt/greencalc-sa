@@ -41,7 +41,7 @@ export default function ProjectDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("project_tenants")
-        .select(`*, shop_types(*)`)
+        .select(`*, shop_types(*), scada_imports(shop_name, area_sqm, load_profile_weekday)`)
         .eq("project_id", id)
         .order("name");
       if (error) throw error;
