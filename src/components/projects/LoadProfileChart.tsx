@@ -81,13 +81,25 @@ const getTOUPeriod = (hour: number, isWeekend: boolean): TOUPeriod => {
   return "standard";
 };
 
-const TOU_COLORS: Record<TOUPeriod, string> = {
-  "peak": "hsl(0 84% 60%)",      // Red
-  "standard": "hsl(45 93% 47%)", // Yellow/Amber
-  "off-peak": "hsl(142 76% 36%)" // Green
+const TOU_COLORS: Record<TOUPeriod, { fill: string; stroke: string; label: string }> = {
+  "peak": { 
+    fill: "hsl(0 72% 51%)",        // Vivid red
+    stroke: "hsl(0 72% 40%)",
+    label: "Peak"
+  },
+  "standard": { 
+    fill: "hsl(38 92% 50%)",       // Orange/Amber - more distinct from yellow
+    stroke: "hsl(38 92% 40%)",
+    label: "Standard"
+  },
+  "off-peak": { 
+    fill: "hsl(160 84% 39%)",      // Teal/green - more distinct
+    stroke: "hsl(160 84% 30%)",
+    label: "Off-Peak"
+  }
 };
 
-const TOU_BG_OPACITY = 0.15;
+const TOU_BG_OPACITY = 0.25; // Increased opacity for better visibility
 
 export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) {
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kwh");
@@ -561,9 +573,10 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                     key={i}
                     x1={`${range.start.toString().padStart(2, "0")}:00`}
                     x2={`${range.end.toString().padStart(2, "0")}:00`}
-                    fill={TOU_COLORS[range.period]}
+                    fill={TOU_COLORS[range.period].fill}
                     fillOpacity={TOU_BG_OPACITY}
-                    stroke="none"
+                    stroke={TOU_COLORS[range.period].stroke}
+                    strokeOpacity={0.3}
                   />
                 ))}
                 
@@ -593,11 +606,6 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                     const total = payload.reduce((sum, entry) => sum + (Number(entry.value) || 0), 0);
                     const hourNum = parseInt(label?.toString() || "0");
                     const period = getTOUPeriod(hourNum, isWeekend);
-                    const periodLabels: Record<TOUPeriod, string> = {
-                      "peak": "Peak",
-                      "standard": "Standard", 
-                      "off-peak": "Off-Peak"
-                    };
                     return (
                       <div className="bg-popover border border-border rounded-lg px-4 py-3 shadow-lg">
                         <div className="flex items-center gap-2 mb-1">
@@ -606,11 +614,12 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                             variant="outline" 
                             className="text-[10px] px-1.5 py-0"
                             style={{ 
-                              borderColor: TOU_COLORS[period],
-                              color: TOU_COLORS[period]
+                              borderColor: TOU_COLORS[period].stroke,
+                              color: TOU_COLORS[period].stroke,
+                              backgroundColor: `${TOU_COLORS[period].fill}20`
                             }}
                           >
-                            {periodLabels[period]}
+                            {TOU_COLORS[period].label}
                           </Badge>
                         </div>
                         <p className="text-xl font-bold">{total.toFixed(1)} {unit}</p>
@@ -644,18 +653,21 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
           {showTOU && (
             <div className="mt-4 pt-4 border-t border-border">
               <p className="text-xs text-muted-foreground mb-2">Time of Use Periods {isWeekend ? "(Weekend - All Off-Peak)" : "(Weekday)"}</p>
-              <div className="flex flex-wrap gap-4">
+              <div className="flex flex-wrap gap-6">
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: TOU_COLORS["peak"], opacity: 0.6 }} />
-                  <span className="text-xs">Peak (7-10h, 18-20h)</span>
+                  <div className="w-5 h-4 rounded-sm border" style={{ backgroundColor: TOU_COLORS["peak"].fill, borderColor: TOU_COLORS["peak"].stroke, opacity: 0.8 }} />
+                  <span className="text-xs font-medium">Peak</span>
+                  <span className="text-xs text-muted-foreground">(7-10h, 18-20h)</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: TOU_COLORS["standard"], opacity: 0.6 }} />
-                  <span className="text-xs">Standard (6-7h, 10-18h, 20-22h)</span>
+                  <div className="w-5 h-4 rounded-sm border" style={{ backgroundColor: TOU_COLORS["standard"].fill, borderColor: TOU_COLORS["standard"].stroke, opacity: 0.8 }} />
+                  <span className="text-xs font-medium">Standard</span>
+                  <span className="text-xs text-muted-foreground">(6-7h, 10-18h, 20-22h)</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: TOU_COLORS["off-peak"], opacity: 0.6 }} />
-                  <span className="text-xs">Off-Peak (22-6h)</span>
+                  <div className="w-5 h-4 rounded-sm border" style={{ backgroundColor: TOU_COLORS["off-peak"].fill, borderColor: TOU_COLORS["off-peak"].stroke, opacity: 0.8 }} />
+                  <span className="text-xs font-medium">Off-Peak</span>
+                  <span className="text-xs text-muted-foreground">(22-6h)</span>
                 </div>
               </div>
             </div>
