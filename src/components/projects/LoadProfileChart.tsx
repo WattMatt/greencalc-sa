@@ -121,6 +121,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
   const [batteryCapacity, setBatteryCapacity] = useState(500); // kWh
   const [batteryPower, setBatteryPower] = useState(250); // kW max charge/discharge rate
   const [dcAcRatio, setDcAcRatio] = useState(1.3); // DC/AC ratio (1.0 = no oversize, 1.3 = 130% DC)
+  const [showBaselineComparison, setShowBaselineComparison] = useState(false); // Show 1:1 ratio comparison
 
   // Max AC PV size is 70% of connection size
   const maxPvAcKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
@@ -296,6 +297,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
         pvGeneration?: number;
         pvClipping?: number;
         pvDcOutput?: number;
+        pvBaseline?: number; // 1:1 ratio output for comparison
         netLoad?: number;
         gridImport?: number;
         gridExport?: number;
@@ -330,6 +332,11 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
         result.pvGeneration = pvValue;
         result.pvClipping = dcOutput > maxPvAcKva ? dcOutput - maxPvAcKva : 0;
         result.pvDcOutput = dcOutput;
+        
+        // Calculate 1:1 baseline for comparison (DC = AC, no clipping possible)
+        const baselineDcOutput = PV_PROFILE_NORMALIZED[index] * maxPvAcKva;
+        result.pvBaseline = baselineDcOutput;
+        
         const netLoad = result.total - pvValue;
         result.netLoad = netLoad;
         // Split into grid import (positive) and export (negative, stored as positive for chart)
@@ -425,6 +432,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
     const totalGeneration = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);
     const totalClipping = chartData.reduce((sum, d) => sum + (d.pvClipping || 0), 0);
     const totalDcOutput = chartData.reduce((sum, d) => sum + (d.pvDcOutput || 0), 0);
+    const totalBaseline = chartData.reduce((sum, d) => sum + (d.pvBaseline || 0), 0);
     const totalImport = chartData.reduce((sum, d) => sum + (d.gridImport || 0), 0);
     const totalExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
     const selfConsumption = totalGeneration - totalExport;
@@ -432,16 +440,23 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
     const solarCoverage = totalDaily > 0 ? (selfConsumption / totalDaily) * 100 : 0;
     const clippingLoss = totalDcOutput > 0 ? (totalClipping / totalDcOutput) * 100 : 0;
     
+    // Benefit of over-paneling: extra kWh from higher DC capacity
+    const overPanelBenefit = totalGeneration - totalBaseline;
+    const overPanelBenefitPercent = totalBaseline > 0 ? (overPanelBenefit / totalBaseline) * 100 : 0;
+    
     return {
       totalGeneration,
       totalClipping,
       totalDcOutput,
+      totalBaseline,
       totalImport,
       totalExport,
       selfConsumption,
       selfConsumptionRate,
       solarCoverage,
       clippingLoss,
+      overPanelBenefit,
+      overPanelBenefitPercent,
     };
   }, [chartData, showPVProfile, maxPvAcKva, totalDaily]);
 
@@ -578,7 +593,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
 
             {/* PV Configuration - DC/AC Ratio */}
             {showPVProfile && maxPvAcKva && (
-              <div className="flex flex-wrap gap-4">
+              <div className="flex flex-wrap gap-4 items-end">
                 <div className="flex-1 min-w-[150px] max-w-[200px] space-y-1">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs text-muted-foreground">DC/AC Ratio</Label>
@@ -596,6 +611,12 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                     DC: {dcCapacityKwp?.toFixed(0)} kWp → AC: {maxPvAcKva.toFixed(0)} kVA
                   </p>
                 </div>
+                {dcAcRatio > 1 && (
+                  <Label className="text-xs text-muted-foreground flex items-center gap-2 pb-4">
+                    <Switch checked={showBaselineComparison} onCheckedChange={setShowBaselineComparison} />
+                    Compare to 1:1 Ratio
+                  </Label>
+                )}
               </div>
             )}
 
@@ -782,7 +803,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
             <CardDescription>DC: {dcCapacityKwp?.toFixed(0)} kWp ({(dcAcRatio * 100).toFixed(0)}% DC/AC) • AC: {maxPvAcKva?.toFixed(0)} kVA max (70% of connection)</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-7">
+            <div className="grid gap-4 md:grid-cols-8">
               <div>
                 <p className="text-xs text-muted-foreground">DC Output</p>
                 <p className="text-lg font-semibold text-amber-500">{Math.round(pvStats.totalDcOutput).toLocaleString()} {unit}</p>
@@ -794,6 +815,15 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   <p className="text-[10px] text-orange-500">-{Math.round(pvStats.totalClipping)} clipped</p>
                 )}
               </div>
+              {dcAcRatio > 1 && (
+                <div className="bg-emerald-500/10 rounded-md p-2 -my-1">
+                  <p className="text-xs text-muted-foreground">1:1 Baseline</p>
+                  <p className="text-lg font-semibold text-muted-foreground">{Math.round(pvStats.totalBaseline).toLocaleString()} {unit}</p>
+                  <p className="text-[10px] text-emerald-600">
+                    +{Math.round(pvStats.overPanelBenefit)} ({pvStats.overPanelBenefitPercent.toFixed(1)}%) from over-panel
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-xs text-muted-foreground">Self-Consumed</p>
                 <p className="text-lg font-semibold text-green-600">{Math.round(pvStats.selfConsumption).toLocaleString()} {unit}</p>
@@ -1112,6 +1142,23 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                     }}
                   />
                 )}
+                {/* 1:1 DC/AC Baseline - dotted line for comparison */}
+                {showPVProfile && maxPvAcKva && showBaselineComparison && dcAcRatio > 1 && (
+                  <Line
+                    type="monotone"
+                    dataKey="pvBaseline"
+                    stroke="hsl(var(--muted-foreground))"
+                    strokeWidth={2}
+                    strokeDasharray="3 3"
+                    dot={false}
+                    activeDot={{ 
+                      r: 4, 
+                      stroke: "hsl(var(--muted-foreground))", 
+                      strokeWidth: 2,
+                      fill: "hsl(var(--background))"
+                    }}
+                  />
+                )}
                 {/* Grid Import area (load exceeds PV) */}
                 {showPVProfile && maxPvAcKva && (
                   <Area
@@ -1215,6 +1262,12 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                     <span className="text-xs font-medium text-orange-500">DC Output (Clipping)</span>
                   </div>
                 )}
+                {showBaselineComparison && dcAcRatio > 1 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-0 border-t-2 border-dotted" style={{ borderColor: 'hsl(var(--muted-foreground))' }} />
+                    <span className="text-xs font-medium text-muted-foreground">1:1 Baseline</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(0 72% 51%)', opacity: 0.5 }} />
                   <span className="text-xs font-medium text-red-500">Grid Import</span>
@@ -1246,6 +1299,12 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   <div className="flex items-center gap-2">
                     <div className="w-5 h-0 border-t-2 border-dashed" style={{ borderColor: 'hsl(25 95% 53%)' }} />
                     <span className="text-xs font-medium text-orange-500">DC Output (Clipping)</span>
+                  </div>
+                )}
+                {showBaselineComparison && dcAcRatio > 1 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-0 border-t-2 border-dotted" style={{ borderColor: 'hsl(var(--muted-foreground))' }} />
+                    <span className="text-xs font-medium text-muted-foreground">1:1 Baseline</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
