@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Tenant {
   id: string;
@@ -23,6 +25,7 @@ interface Tenant {
     shop_name: string | null;
     area_sqm: number | null;
     load_profile_weekday: number[] | null;
+    load_profile_weekend?: number[] | null;
   } | null;
 }
 
@@ -41,12 +44,26 @@ interface LoadProfileChartProps {
 
 type DisplayUnit = "kwh" | "kva";
 
+const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
+type DayOfWeek = typeof DAYS_OF_WEEK[number];
+
 // Default flat profile if none defined (percentage per hour for 100% daily)
 const DEFAULT_PROFILE_PERCENT = Array(24).fill(4.17);
 
 export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) {
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kwh");
   const [powerFactor, setPowerFactor] = useState(0.9);
+  const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Monday");
+
+  const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
+  const isWeekend = selectedDay === "Saturday" || selectedDay === "Sunday";
+
+  const navigateDay = (direction: "prev" | "next") => {
+    const newIndex = direction === "prev" 
+      ? (dayIndex - 1 + 7) % 7 
+      : (dayIndex + 1) % 7;
+    setSelectedDay(DAYS_OF_WEEK[newIndex]);
+  };
 
   // Count tenants with actual SCADA data vs estimated
   const { tenantsWithScada, tenantsEstimated } = useMemo(() => {
@@ -62,7 +79,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
     return { tenantsWithScada: scadaCount, tenantsEstimated: estimatedCount };
   }, [tenants]);
 
-  // Calculate base kWh data
+  // Calculate base kWh data based on selected day
   const baseChartData = useMemo(() => {
     const hourlyData: { hour: string; total: number; [key: string]: number | string }[] = [];
 
@@ -77,11 +94,15 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
         const tenantArea = Number(tenant.area_sqm) || 0;
         
         // Priority 1: Use assigned SCADA profile with area scaling
-        if (tenant.scada_imports?.load_profile_weekday?.length === 24) {
-          const scadaArea = tenant.scada_imports.area_sqm || tenantArea;
+        const scadaWeekday = tenant.scada_imports?.load_profile_weekday;
+        const scadaWeekend = tenant.scada_imports?.load_profile_weekend;
+        const scadaProfile = isWeekend ? (scadaWeekend || scadaWeekday) : scadaWeekday;
+        
+        if (scadaProfile?.length === 24) {
+          const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
           const areaScaleFactor = scadaArea > 0 ? tenantArea / scadaArea : 1;
           
-          const baseHourlyKwh = tenant.scada_imports.load_profile_weekday[h] || 0;
+          const baseHourlyKwh = scadaProfile[h] || 0;
           const scaledHourlyKwh = baseHourlyKwh * areaScaleFactor;
           
           const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
@@ -101,8 +122,12 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
 
         const dailyKwh = monthlyKwh / 30;
 
-        const profile = shopType?.load_profile_weekday?.length === 24
-          ? shopType.load_profile_weekday.map(Number)
+        const shopTypeProfile = isWeekend 
+          ? (shopType?.load_profile_weekend || shopType?.load_profile_weekday)
+          : shopType?.load_profile_weekday;
+        
+        const profile = shopTypeProfile?.length === 24
+          ? shopTypeProfile.map(Number)
           : DEFAULT_PROFILE_PERCENT;
         
         const hourlyPercent = profile[h] / 100;
@@ -117,7 +142,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
     }
 
     return hourlyData;
-  }, [tenants, shopTypes]);
+  }, [tenants, shopTypes, isWeekend]);
 
   // Convert to display unit (kWh or kVA)
   const chartData = useMemo(() => {
@@ -190,6 +215,35 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-center gap-6">
+            {/* Day Navigation */}
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Day of Week</Label>
+              <div className="flex items-center gap-1">
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-8 w-8"
+                  onClick={() => navigateDay("prev")}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="w-24 text-center">
+                  <span className="text-sm font-medium">{selectedDay}</span>
+                  <Badge variant={isWeekend ? "secondary" : "outline"} className="ml-2 text-xs">
+                    {isWeekend ? "Weekend" : "Weekday"}
+                  </Badge>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  className="h-8 w-8"
+                  onClick={() => navigateDay("next")}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Display Unit</Label>
               <Tabs value={displayUnit} onValueChange={(v) => setDisplayUnit(v as DisplayUnit)}>
@@ -293,7 +347,7 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
       {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Combined Load Profile (Weekday) - {displayUnit.toUpperCase()}</CardTitle>
+          <CardTitle>Combined Load Profile ({selectedDay}) - {displayUnit.toUpperCase()}</CardTitle>
           <CardDescription>
             Stacked hourly {displayUnit === "kwh" ? "energy consumption" : "apparent power"} by tenant
             {displayUnit === "kva" && ` (PF: ${powerFactor.toFixed(2)})`}
