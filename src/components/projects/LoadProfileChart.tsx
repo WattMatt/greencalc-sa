@@ -475,61 +475,111 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
 
       {/* Chart */}
       <Card>
-        <CardHeader>
-          <CardTitle>Combined Load Profile ({selectedDay}) - {displayUnit.toUpperCase()}</CardTitle>
-          <CardDescription>
-            Stacked hourly {displayUnit === "kwh" ? "energy consumption" : "apparent power"} by tenant
-            {displayUnit === "kva" && ` (PF: ${powerFactor.toFixed(2)})`}
-          </CardDescription>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">
+                {selectedDay} Load Profile
+              </CardTitle>
+              <CardDescription>
+                {tenants.length} tenants • {displayUnit === "kwh" ? "Energy consumption" : "Apparent power demand"}
+                {displayUnit === "kva" && ` (PF: ${powerFactor.toFixed(2)})`}
+              </CardDescription>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-primary">{Math.round(peakHour.val).toLocaleString()} {unit}</p>
+              <p className="text-xs text-muted-foreground">Peak at {peakHour.hour.toString().padStart(2, "0")}:00</p>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="h-[400px]">
+        <CardContent className="pt-0">
+          <div className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid 
+                  strokeDasharray="3 3" 
+                  vertical={false}
+                  stroke="hsl(var(--border))"
+                  strokeOpacity={0.5}
+                />
                 <XAxis
                   dataKey="hour"
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                   tickLine={false}
-                  className="text-muted-foreground"
+                  axisLine={{ stroke: "hsl(var(--border))" }}
+                  interval={2}
                 />
                 <YAxis
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                   tickLine={false}
-                  tickFormatter={(v) => `${v} ${unit}`}
-                  className="text-muted-foreground"
+                  axisLine={false}
+                  tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v.toString()}
+                  width={50}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "8px",
-                  }}
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
                     const total = payload.reduce((sum, entry) => sum + (Number(entry.value) || 0), 0);
                     return (
-                      <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-md">
-                        <p className="text-sm font-medium">{label}</p>
-                        <p className="text-lg font-bold">{total.toFixed(1)} {unit}</p>
+                      <div className="bg-popover border border-border rounded-lg px-4 py-3 shadow-lg">
+                        <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                        <p className="text-xl font-bold">{total.toFixed(1)} {unit}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {((total / peakHour.val) * 100).toFixed(0)}% of peak
+                        </p>
                       </div>
                     );
                   }}
                 />
-                <Legend />
-                {tenantKeys.map((key, i) => (
-                  <Area
-                    key={key}
-                    type="monotone"
-                    dataKey={key}
-                    stackId="1"
-                    stroke={colors[i % colors.length]}
-                    fill={colors[i % colors.length]}
-                    fillOpacity={0.6}
-                  />
-                ))}
+                {/* Single smooth area for total - much cleaner than stacked */}
+                <Area
+                  type="monotone"
+                  dataKey="total"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  fill="url(#totalGradient)"
+                  dot={false}
+                  activeDot={{ 
+                    r: 6, 
+                    stroke: "hsl(var(--primary))", 
+                    strokeWidth: 2,
+                    fill: "hsl(var(--background))"
+                  }}
+                />
               </AreaChart>
             </ResponsiveContainer>
+          </div>
+          
+          {/* Compact tenant breakdown */}
+          <div className="mt-4 pt-4 border-t border-border">
+            <p className="text-xs text-muted-foreground mb-2">Top contributors by daily {unit}</p>
+            <div className="flex flex-wrap gap-2">
+              {tenants
+                .map(t => {
+                  const key = t.name.length > 15 ? t.name.slice(0, 15) + "…" : t.name;
+                  const total = chartData.reduce((sum, h) => sum + (Number(h[key]) || 0), 0);
+                  return { name: t.name, total };
+                })
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 8)
+                .map((t, i) => (
+                  <Badge key={i} variant="secondary" className="text-xs font-normal">
+                    {t.name.length > 12 ? t.name.slice(0, 12) + "…" : t.name}: {Math.round(t.total).toLocaleString()} {unit}
+                  </Badge>
+                ))
+              }
+              {tenants.length > 8 && (
+                <Badge variant="outline" className="text-xs font-normal">
+                  +{tenants.length - 8} more
+                </Badge>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
