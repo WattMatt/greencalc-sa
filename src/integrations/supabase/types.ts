@@ -269,6 +269,7 @@ export type Database = {
       }
       projects: {
         Row: {
+          connection_size_kva: number | null
           created_at: string
           description: string | null
           id: string
@@ -279,6 +280,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          connection_size_kva?: number | null
           created_at?: string
           description?: string | null
           id?: string
@@ -289,6 +291,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          connection_size_kva?: number | null
           created_at?: string
           description?: string | null
           id?: string
