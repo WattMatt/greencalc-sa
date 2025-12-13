@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -62,13 +63,57 @@ const DAY_MULTIPLIERS: Record<DayOfWeek, number> = {
 // Default flat profile if none defined (percentage per hour for 100% daily)
 const DEFAULT_PROFILE_PERCENT = Array(24).fill(4.17);
 
+// South African TOU period definitions
+// Weekday: Peak 7-10am & 6-8pm, Standard 6-7am & 10am-6pm & 8-10pm, Off-Peak 10pm-6am
+// Weekend: All Off-Peak
+type TOUPeriod = "peak" | "standard" | "off-peak";
+
+const getTOUPeriod = (hour: number, isWeekend: boolean): TOUPeriod => {
+  if (isWeekend) return "off-peak";
+  
+  // Peak: 7-10 (7,8,9) and 18-20 (18,19)
+  if ((hour >= 7 && hour < 10) || (hour >= 18 && hour < 20)) return "peak";
+  
+  // Off-Peak: 22-6 (22,23,0,1,2,3,4,5)
+  if (hour >= 22 || hour < 6) return "off-peak";
+  
+  // Standard: 6-7, 10-18, 20-22
+  return "standard";
+};
+
+const TOU_COLORS: Record<TOUPeriod, string> = {
+  "peak": "hsl(0 84% 60%)",      // Red
+  "standard": "hsl(45 93% 47%)", // Yellow/Amber
+  "off-peak": "hsl(142 76% 36%)" // Green
+};
+
+const TOU_BG_OPACITY = 0.15;
+
 export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) {
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kwh");
   const [powerFactor, setPowerFactor] = useState(0.9);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Monday");
+  const [showTOU, setShowTOU] = useState(true);
 
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
   const isWeekend = selectedDay === "Saturday" || selectedDay === "Sunday";
+
+  // Generate TOU period ranges for ReferenceArea components
+  const touRanges = useMemo(() => {
+    const ranges: { start: number; end: number; period: TOUPeriod }[] = [];
+    let currentPeriod = getTOUPeriod(0, isWeekend);
+    let rangeStart = 0;
+
+    for (let h = 1; h <= 24; h++) {
+      const period = h < 24 ? getTOUPeriod(h, isWeekend) : currentPeriod;
+      if (period !== currentPeriod || h === 24) {
+        ranges.push({ start: rangeStart, end: h - 1, period: currentPeriod });
+        currentPeriod = period;
+        rangeStart = h;
+      }
+    }
+    return ranges;
+  }, [isWeekend]);
 
   const navigateDay = (direction: "prev" | "next") => {
     const newIndex = direction === "prev" 
@@ -335,6 +380,13 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
               </div>
             )}
 
+            <div className="flex items-center gap-4">
+              <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                <Switch checked={showTOU} onCheckedChange={setShowTOU} />
+                TOU Periods
+              </Label>
+            </div>
+
             <div className="flex gap-2 ml-auto">
               {tenantsWithScada > 0 && (
                 <Badge variant="default">{tenantsWithScada} actual profiles</Badge>
@@ -502,6 +554,19 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                     <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
                   </linearGradient>
                 </defs>
+                
+                {/* TOU Period Background Bands */}
+                {showTOU && touRanges.map((range, i) => (
+                  <ReferenceArea
+                    key={i}
+                    x1={`${range.start.toString().padStart(2, "0")}:00`}
+                    x2={`${range.end.toString().padStart(2, "0")}:00`}
+                    fill={TOU_COLORS[range.period]}
+                    fillOpacity={TOU_BG_OPACITY}
+                    stroke="none"
+                  />
+                ))}
+                
                 <CartesianGrid 
                   strokeDasharray="3 3" 
                   vertical={false}
@@ -526,9 +591,28 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
                     const total = payload.reduce((sum, entry) => sum + (Number(entry.value) || 0), 0);
+                    const hourNum = parseInt(label?.toString() || "0");
+                    const period = getTOUPeriod(hourNum, isWeekend);
+                    const periodLabels: Record<TOUPeriod, string> = {
+                      "peak": "Peak",
+                      "standard": "Standard", 
+                      "off-peak": "Off-Peak"
+                    };
                     return (
                       <div className="bg-popover border border-border rounded-lg px-4 py-3 shadow-lg">
-                        <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-xs text-muted-foreground">{label}</p>
+                          <Badge 
+                            variant="outline" 
+                            className="text-[10px] px-1.5 py-0"
+                            style={{ 
+                              borderColor: TOU_COLORS[period],
+                              color: TOU_COLORS[period]
+                            }}
+                          >
+                            {periodLabels[period]}
+                          </Badge>
+                        </div>
                         <p className="text-xl font-bold">{total.toFixed(1)} {unit}</p>
                         <p className="text-xs text-muted-foreground mt-1">
                           {((total / peakHour.val) * 100).toFixed(0)}% of peak
@@ -556,6 +640,27 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
             </ResponsiveContainer>
           </div>
           
+          {/* TOU Legend */}
+          {showTOU && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <p className="text-xs text-muted-foreground mb-2">Time of Use Periods {isWeekend ? "(Weekend - All Off-Peak)" : "(Weekday)"}</p>
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: TOU_COLORS["peak"], opacity: 0.6 }} />
+                  <span className="text-xs">Peak (7-10h, 18-20h)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: TOU_COLORS["standard"], opacity: 0.6 }} />
+                  <span className="text-xs">Standard (6-7h, 10-18h, 20-22h)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: TOU_COLORS["off-peak"], opacity: 0.6 }} />
+                  <span className="text-xs">Off-Peak (22-6h)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Compact tenant breakdown */}
           <div className="mt-4 pt-4 border-t border-border">
             <p className="text-xs text-muted-foreground mb-2">Top contributors by daily {unit}</p>
