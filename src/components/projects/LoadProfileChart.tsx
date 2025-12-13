@@ -1021,8 +1021,26 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                           <div className="mt-2 pt-2 border-t border-border space-y-1">
                             <div className="flex items-center gap-2">
                               <Sun className="h-3 w-3 text-amber-500" />
-                              <span className="text-xs">PV Generation: {pvValue.toFixed(1)} {unit}</span>
+                              <span className="text-xs">PV AC Output: {pvValue.toFixed(1)} {unit}</span>
                             </div>
+                            {(() => {
+                              const dcEntry = payload.find(p => p.dataKey === "pvDcOutput");
+                              const clippingEntry = payload.find(p => p.dataKey === "pvClipping");
+                              const dcValue = Number(dcEntry?.value) || 0;
+                              const clippingValue = Number(clippingEntry?.value) || 0;
+                              return dcAcRatio > 1 && dcValue > pvValue ? (
+                                <>
+                                  <p className="text-xs text-orange-500">
+                                    DC Output: {dcValue.toFixed(1)} {unit}
+                                  </p>
+                                  {clippingValue > 0 && (
+                                    <p className="text-xs text-red-400">
+                                      Clipped: {clippingValue.toFixed(1)} {unit}
+                                    </p>
+                                  )}
+                                </>
+                              ) : null;
+                            })()}
                             <p className="text-xs font-medium" style={{ color: netLoad > 0 ? 'inherit' : 'hsl(160 84% 39%)' }}>
                               Net Load: {netLoad.toFixed(1)} {unit}
                             </p>
@@ -1060,19 +1078,35 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                     fill: "hsl(var(--background))"
                   }}
                 />
-                {/* PV Generation area */}
+                {/* PV Generation area (AC output - clipped) */}
                 {showPVProfile && maxPvAcKva && (
                   <Area
                     type="monotone"
                     dataKey="pvGeneration"
                     stroke="hsl(38 92% 50%)"
                     strokeWidth={2}
-                    strokeDasharray="5 3"
                     fill="url(#pvGradient)"
                     dot={false}
                     activeDot={{ 
                       r: 5, 
                       stroke: "hsl(38 92% 50%)", 
+                      strokeWidth: 2,
+                      fill: "hsl(var(--background))"
+                    }}
+                  />
+                )}
+                {/* DC Output line (theoretical before clipping) - dashed line showing clipped energy */}
+                {showPVProfile && maxPvAcKva && dcAcRatio > 1 && (
+                  <Line
+                    type="monotone"
+                    dataKey="pvDcOutput"
+                    stroke="hsl(25 95% 53%)"
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    dot={false}
+                    activeDot={{ 
+                      r: 4, 
+                      stroke: "hsl(25 95% 53%)", 
                       strokeWidth: 2,
                       fill: "hsl(var(--background))"
                     }}
@@ -1172,9 +1206,15 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   <span className="text-xs font-medium">Total Load</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-1 rounded-sm" style={{ backgroundColor: 'hsl(38 92% 50%)', borderTop: '2px dashed hsl(38 92% 50%)' }} />
-                  <span className="text-xs font-medium">PV Generation</span>
+                  <div className="w-5 h-1 rounded-sm" style={{ backgroundColor: 'hsl(38 92% 50%)' }} />
+                  <span className="text-xs font-medium">PV AC Output</span>
                 </div>
+                {dcAcRatio > 1 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-0 border-t-2 border-dashed" style={{ borderColor: 'hsl(25 95% 53%)' }} />
+                    <span className="text-xs font-medium text-orange-500">DC Output (Clipping)</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(0 72% 51%)', opacity: 0.5 }} />
                   <span className="text-xs font-medium text-red-500">Grid Import</span>
@@ -1199,9 +1239,15 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   <span className="text-xs font-medium">Total Load</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-1 rounded-sm" style={{ backgroundColor: 'hsl(38 92% 50%)', borderTop: '2px dashed hsl(38 92% 50%)' }} />
-                  <span className="text-xs font-medium">PV Generation</span>
+                  <div className="w-5 h-1 rounded-sm" style={{ backgroundColor: 'hsl(38 92% 50%)' }} />
+                  <span className="text-xs font-medium">PV AC Output</span>
                 </div>
+                {dcAcRatio > 1 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-0 border-t-2 border-dashed" style={{ borderColor: 'hsl(25 95% 53%)' }} />
+                    <span className="text-xs font-medium text-orange-500">DC Output (Clipping)</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-4 rounded-sm" style={{ backgroundColor: 'hsl(142 76% 36%)', opacity: 0.6 }} />
                   <span className="text-xs font-medium text-green-600">Battery Charge</span>
