@@ -144,6 +144,55 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
     return hourlyData;
   }, [tenants, shopTypes, isWeekend]);
 
+  // Calculate weekly totals (need both weekday and weekend data)
+  const weeklyStats = useMemo(() => {
+    const calculateDayTotal = (useWeekend: boolean) => {
+      let total = 0;
+      for (let h = 0; h < 24; h++) {
+        tenants.forEach((tenant) => {
+          const tenantArea = Number(tenant.area_sqm) || 0;
+          
+          const scadaWeekday = tenant.scada_imports?.load_profile_weekday;
+          const scadaWeekend = tenant.scada_imports?.load_profile_weekend;
+          const scadaProfile = useWeekend ? (scadaWeekend || scadaWeekday) : scadaWeekday;
+          
+          if (scadaProfile?.length === 24) {
+            const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
+            const areaScaleFactor = scadaArea > 0 ? tenantArea / scadaArea : 1;
+            total += (scadaProfile[h] || 0) * areaScaleFactor;
+            return;
+          }
+
+          const shopType = tenant.shop_type_id
+            ? shopTypes.find((st) => st.id === tenant.shop_type_id)
+            : null;
+
+          const monthlyKwh = tenant.monthly_kwh_override || (shopType?.kwh_per_sqm_month || 50) * tenantArea;
+          const dailyKwh = monthlyKwh / 30;
+          const shopTypeProfile = useWeekend 
+            ? (shopType?.load_profile_weekend || shopType?.load_profile_weekday)
+            : shopType?.load_profile_weekday;
+          const profile = shopTypeProfile?.length === 24 ? shopTypeProfile.map(Number) : DEFAULT_PROFILE_PERCENT;
+          total += dailyKwh * (profile[h] / 100);
+        });
+      }
+      return total;
+    };
+
+    const weekdayTotal = calculateDayTotal(false);
+    const weekendTotal = calculateDayTotal(true);
+    const weeklyTotal = (weekdayTotal * 5) + (weekendTotal * 2);
+    const weeklyPeakDemand = Math.max(weekdayTotal, weekendTotal) / 24; // Rough peak from avg
+
+    return {
+      weekdayDaily: weekdayTotal,
+      weekendDaily: weekendTotal,
+      weeklyTotal,
+      monthlyEstimate: weeklyTotal * 4.33,
+      avgWeeklyDemand: weeklyTotal / (24 * 7),
+    };
+  }, [tenants, shopTypes]);
+
   // Convert to display unit (kWh or kVA)
   const chartData = useMemo(() => {
     if (displayUnit === "kwh") return baseChartData;
@@ -185,14 +234,13 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
     "hsl(190 70% 45%)",
   ];
 
-  // Summary stats
+  // Daily stats for selected day
   const totalDaily = chartData.reduce((sum, d) => sum + d.total, 0);
   const peakHour = chartData.reduce(
     (max, d, i) => (d.total > max.val ? { val: d.total, hour: i } : max),
     { val: 0, hour: 0 }
   );
   const avgHourly = totalDaily / 24;
-  const monthlyEstimate = totalDaily * 30;
   const loadFactor = peakHour.val > 0 ? (avgHourly / peakHour.val) * 100 : 0;
 
   const unit = displayUnit === "kwh" ? "kWh" : "kVA";
@@ -283,19 +331,65 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
         </CardContent>
       </Card>
 
-      {/* Stats - contextual based on display unit */}
+      {/* Weekly Summary */}
+      <Card className="bg-muted/30">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg">Weekly Summary</CardTitle>
+          <CardDescription>Total consumption across Mon-Sun</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-5">
+            <div>
+              <p className="text-xs text-muted-foreground">Weekday Daily Avg</p>
+              <p className="text-lg font-semibold">
+                {displayUnit === "kwh" 
+                  ? `${Math.round(weeklyStats.weekdayDaily).toLocaleString()} kWh`
+                  : `${(weeklyStats.weekdayDaily / powerFactor).toFixed(0)} kVA`}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Weekend Daily Avg</p>
+              <p className="text-lg font-semibold">
+                {displayUnit === "kwh" 
+                  ? `${Math.round(weeklyStats.weekendDaily).toLocaleString()} kWh`
+                  : `${(weeklyStats.weekendDaily / powerFactor).toFixed(0)} kVA`}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Weekly Total</p>
+              <p className="text-lg font-semibold">
+                {displayUnit === "kwh" 
+                  ? `${Math.round(weeklyStats.weeklyTotal).toLocaleString()} kWh`
+                  : `${(weeklyStats.weeklyTotal / powerFactor).toFixed(0)} kVA`}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Monthly Estimate</p>
+              <p className="text-lg font-semibold">
+                {displayUnit === "kwh" 
+                  ? `${Math.round(weeklyStats.monthlyEstimate).toLocaleString()} kWh`
+                  : `${(weeklyStats.monthlyEstimate / powerFactor).toFixed(0)} kVA`}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Annual Estimate</p>
+              <p className="text-lg font-semibold">
+                {displayUnit === "kwh" 
+                  ? `${Math.round(weeklyStats.weeklyTotal * 52).toLocaleString()} kWh`
+                  : `${((weeklyStats.weeklyTotal * 52) / powerFactor).toFixed(0)} kVA`}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Daily Stats - contextual based on display unit */}
       {displayUnit === "kwh" ? (
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardDescription>Est. Daily Consumption</CardDescription>
+              <CardDescription>{selectedDay} Consumption</CardDescription>
               <CardTitle className="text-2xl">{Math.round(totalDaily).toLocaleString()} kWh</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Est. Monthly Consumption</CardDescription>
-              <CardTitle className="text-2xl">{Math.round(monthlyEstimate).toLocaleString()} kWh</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -310,6 +404,12 @@ export function LoadProfileChart({ tenants, shopTypes }: LoadProfileChartProps) 
             <CardHeader className="pb-2">
               <CardDescription>Avg. Hourly Consumption</CardDescription>
               <CardTitle className="text-2xl">{avgHourly.toFixed(1)} kWh</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Load Factor</CardDescription>
+              <CardTitle className="text-2xl">{loadFactor.toFixed(1)}%</CardTitle>
             </CardHeader>
           </Card>
         </div>
