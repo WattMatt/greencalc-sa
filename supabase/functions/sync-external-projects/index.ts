@@ -42,18 +42,21 @@ serve(async (req) => {
 
     console.log(`Found ${externalProjects?.length || 0} projects in external DB`);
 
-    // Fetch project_tenants from external DB
+    // Fetch project_tenants from external DB (optional - table may not exist)
     console.log("Fetching tenants from external database...");
-    const { data: externalTenants, error: tenantsError } = await externalSupabase
+    let externalTenants: any[] = [];
+    const { data: tenantData, error: tenantsError } = await externalSupabase
       .from("project_tenants")
       .select("*");
 
     if (tenantsError) {
-      console.error("Error fetching external tenants:", tenantsError);
-      throw new Error(`Failed to fetch external tenants: ${tenantsError.message}`);
+      // Table might not exist in external DB - log warning but continue
+      console.warn("Could not fetch external tenants (table may not exist):", tenantsError.message);
+    } else {
+      externalTenants = tenantData || [];
     }
 
-    console.log(`Found ${externalTenants?.length || 0} tenants in external DB`);
+    console.log(`Found ${externalTenants.length} tenants in external DB`);
 
     let projectsInserted = 0;
     let projectsUpdated = 0;
@@ -114,7 +117,7 @@ serve(async (req) => {
     }
 
     // Sync tenants
-    for (const tenant of externalTenants || []) {
+    for (const tenant of externalTenants) {
       // Check if tenant exists locally
       const { data: existingTenant } = await localSupabase
         .from("project_tenants")
