@@ -217,6 +217,7 @@ export type Database = {
           monthly_kwh_override: number | null
           name: string
           project_id: string
+          scada_import_id: string | null
           shop_type_id: string | null
           updated_at: string
         }
@@ -227,6 +228,7 @@ export type Database = {
           monthly_kwh_override?: number | null
           name: string
           project_id: string
+          scada_import_id?: string | null
           shop_type_id?: string | null
           updated_at?: string
         }
@@ -237,6 +239,7 @@ export type Database = {
           monthly_kwh_override?: number | null
           name?: string
           project_id?: string
+          scada_import_id?: string | null
           shop_type_id?: string | null
           updated_at?: string
         }
@@ -246,6 +249,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_tenants_scada_import_id_fkey"
+            columns: ["scada_import_id"]
+            isOneToOne: false
+            referencedRelation: "scada_imports"
             referencedColumns: ["id"]
           },
           {

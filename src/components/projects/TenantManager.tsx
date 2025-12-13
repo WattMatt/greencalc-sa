@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,14 +19,23 @@ interface Tenant {
   name: string;
   area_sqm: number;
   shop_type_id: string | null;
+  scada_import_id: string | null;
   monthly_kwh_override: number | null;
   shop_types?: { name: string; kwh_per_sqm_month: number } | null;
+  scada_imports?: { shop_name: string | null; area_sqm: number | null; load_profile_weekday: number[] | null } | null;
 }
 
 interface ShopType {
   id: string;
   name: string;
   kwh_per_sqm_month: number;
+}
+
+interface ScadaImport {
+  id: string;
+  shop_name: string | null;
+  area_sqm: number | null;
+  load_profile_weekday: number[] | null;
 }
 
 interface TenantManagerProps {
@@ -107,14 +116,46 @@ function KwhOverrideCell({
   );
 }
 
+// Calculate daily kWh from load profile array
+function calculateDailyKwh(profile: number[] | null): number {
+  if (!profile || profile.length === 0) return 0;
+  return profile.reduce((sum, val) => sum + (val || 0), 0);
+}
+
+// Format profile option label: "Shop Name (XXX m²)"
+function formatProfileOption(meter: ScadaImport): string {
+  const name = meter.shop_name || "Unknown";
+  const area = meter.area_sqm ? `${Math.round(meter.area_sqm)} m²` : "No area";
+  return `${name} (${area})`;
+}
+
+// Find closest area match for sorting
+function getAreaDifference(meterArea: number | null, tenantArea: number): number {
+  if (!meterArea) return Infinity;
+  return Math.abs(meterArea - tenantArea);
+}
+
 export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [newTenant, setNewTenant] = useState({ name: "", area_sqm: "", shop_type_id: "" });
+  const [newTenant, setNewTenant] = useState({ name: "", area_sqm: "", scada_import_id: "" });
+
+  // Fetch SCADA imports for profile assignment
+  const { data: scadaImports } = useQuery({
+    queryKey: ["scada-imports-for-assignment"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("scada_imports")
+        .select("id, shop_name, area_sqm, load_profile_weekday")
+        .order("shop_name");
+      if (error) throw error;
+      return data as ScadaImport[];
+    },
+  });
 
   const addTenant = useMutation({
-    mutationFn: async (tenant: { name: string; area_sqm: number; shop_type_id: string | null }) => {
+    mutationFn: async (tenant: { name: string; area_sqm: number; scada_import_id: string | null }) => {
       const { error } = await supabase.from("project_tenants").insert({
         project_id: projectId,
         ...tenant,
@@ -125,7 +166,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
       toast.success("Tenant added");
       setDialogOpen(false);
-      setNewTenant({ name: "", area_sqm: "", shop_type_id: "" });
+      setNewTenant({ name: "", area_sqm: "", scada_import_id: "" });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -142,11 +183,11 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     onError: (error) => toast.error(error.message),
   });
 
-  const updateTenantShopType = useMutation({
-    mutationFn: async ({ tenantId, shopTypeId }: { tenantId: string; shopTypeId: string | null }) => {
+  const updateTenantProfile = useMutation({
+    mutationFn: async ({ tenantId, scadaImportId }: { tenantId: string; scadaImportId: string | null }) => {
       const { error } = await supabase
         .from("project_tenants")
-        .update({ shop_type_id: shopTypeId })
+        .update({ scada_import_id: scadaImportId })
         .eq("id", tenantId);
       if (error) throw error;
     },
@@ -190,16 +231,10 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         const name = cols[nameIdx];
         const area = parseFloat(cols[areaIdx]);
         if (name && !isNaN(area) && area > 0) {
-          // Try to match shop type by name
-          const matchedType = shopTypes.find((st) =>
-            name.toLowerCase().includes(st.name.toLowerCase()) ||
-            st.name.toLowerCase().includes(name.toLowerCase().split(" ")[0])
-          );
           tenantsToInsert.push({
             project_id: projectId,
             name,
             area_sqm: area,
-            shop_type_id: matchedType?.id || null,
           });
         }
       }
@@ -240,9 +275,24 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
 
   const totalArea = tenants.reduce((sum, t) => sum + Number(t.area_sqm), 0);
   const totalMonthlyKwh = tenants.reduce((sum, t) => {
-    const kwh = t.monthly_kwh_override || (t.shop_types?.kwh_per_sqm_month || 50) * Number(t.area_sqm);
+    if (t.monthly_kwh_override) return sum + t.monthly_kwh_override;
+    // Calculate from SCADA profile if assigned
+    if (t.scada_imports?.load_profile_weekday) {
+      const dailyKwh = calculateDailyKwh(t.scada_imports.load_profile_weekday);
+      return sum + dailyKwh * 30; // Approximate monthly
+    }
+    // Fallback to shop type or default
+    const kwh = (t.shop_types?.kwh_per_sqm_month || 50) * Number(t.area_sqm);
     return sum + kwh;
   }, 0);
+
+  // Sort SCADA imports by similarity to tenant area for better UX
+  const getSortedProfiles = (tenantArea: number) => {
+    if (!scadaImports) return [];
+    return [...scadaImports].sort((a, b) => 
+      getAreaDifference(a.area_sqm, tenantArea) - getAreaDifference(b.area_sqm, tenantArea)
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -299,18 +349,18 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Shop Type (optional)</Label>
+                  <Label>Load Profile (optional)</Label>
                   <Select
-                    value={newTenant.shop_type_id}
-                    onValueChange={(v) => setNewTenant({ ...newTenant, shop_type_id: v })}
+                    value={newTenant.scada_import_id}
+                    onValueChange={(v) => setNewTenant({ ...newTenant, scada_import_id: v })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select type..." />
+                      <SelectValue placeholder="Select profile..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {shopTypes.map((st) => (
-                        <SelectItem key={st.id} value={st.id}>
-                          {st.name} ({st.kwh_per_sqm_month} kWh/m²/mo)
+                      {scadaImports?.map((meter) => (
+                        <SelectItem key={meter.id} value={meter.id}>
+                          {formatProfileOption(meter)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -322,7 +372,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     addTenant.mutate({
                       name: newTenant.name,
                       area_sqm: parseFloat(newTenant.area_sqm),
-                      shop_type_id: newTenant.shop_type_id || null,
+                      scada_import_id: newTenant.scada_import_id || null,
                     })
                   }
                   disabled={!newTenant.name || !newTenant.area_sqm}
@@ -363,37 +413,47 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
               <TableRow>
                 <TableHead>Tenant Name</TableHead>
                 <TableHead>Area (m²)</TableHead>
-                <TableHead>Shop Type</TableHead>
+                <TableHead>Load Profile</TableHead>
                 <TableHead className="text-right">Est. kWh/month</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tenants.map((tenant) => {
-                const monthlyKwh =
-                  tenant.monthly_kwh_override ||
-                  (tenant.shop_types?.kwh_per_sqm_month || 50) * Number(tenant.area_sqm);
+                // Calculate kWh from SCADA profile or fallback
+                let calculatedKwh: number;
+                if (tenant.scada_imports?.load_profile_weekday) {
+                  calculatedKwh = calculateDailyKwh(tenant.scada_imports.load_profile_weekday) * 30;
+                } else {
+                  calculatedKwh = (tenant.shop_types?.kwh_per_sqm_month || 50) * Number(tenant.area_sqm);
+                }
+
+                const assignedProfile = scadaImports?.find(m => m.id === tenant.scada_import_id);
+                const sortedProfiles = getSortedProfiles(Number(tenant.area_sqm));
+
                 return (
                   <TableRow key={tenant.id}>
                     <TableCell className="font-medium">{tenant.name}</TableCell>
                     <TableCell>{Number(tenant.area_sqm).toLocaleString()}</TableCell>
                     <TableCell>
                       <Select
-                        value={tenant.shop_type_id || ""}
+                        value={tenant.scada_import_id || ""}
                         onValueChange={(v) =>
-                          updateTenantShopType.mutate({
+                          updateTenantProfile.mutate({
                             tenantId: tenant.id,
-                            shopTypeId: v || null,
+                            scadaImportId: v || null,
                           })
                         }
                       >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Unassigned" />
+                        <SelectTrigger className="w-[220px]">
+                          <SelectValue placeholder="Unassigned">
+                            {assignedProfile ? formatProfileOption(assignedProfile) : "Unassigned"}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {shopTypes.map((st) => (
-                            <SelectItem key={st.id} value={st.id}>
-                              {st.name}
+                          {sortedProfiles.map((meter) => (
+                            <SelectItem key={meter.id} value={meter.id}>
+                              {formatProfileOption(meter)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -402,7 +462,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     <TableCell className="text-right">
                       <KwhOverrideCell
                         tenant={tenant}
-                        calculatedKwh={(tenant.shop_types?.kwh_per_sqm_month || 50) * Number(tenant.area_sqm)}
+                        calculatedKwh={calculatedKwh}
                         onUpdate={(kwhOverride) =>
                           updateTenantKwhOverride.mutate({ tenantId: tenant.id, kwhOverride })
                         }
