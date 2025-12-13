@@ -332,6 +332,59 @@ export type Database = {
         }
         Relationships: []
       }
+      pv_layouts: {
+        Row: {
+          cables: Json | null
+          created_at: string
+          equipment: Json | null
+          id: string
+          name: string
+          pdf_data: string | null
+          project_id: string
+          pv_arrays: Json | null
+          pv_config: Json | null
+          roof_masks: Json | null
+          scale_pixels_per_meter: number | null
+          updated_at: string
+        }
+        Insert: {
+          cables?: Json | null
+          created_at?: string
+          equipment?: Json | null
+          id?: string
+          name?: string
+          pdf_data?: string | null
+          project_id: string
+          pv_arrays?: Json | null
+          pv_config?: Json | null
+          roof_masks?: Json | null
+          scale_pixels_per_meter?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cables?: Json | null
+          created_at?: string
+          equipment?: Json | null
+          id?: string
+          name?: string
+          pdf_data?: string | null
+          project_id?: string
+          pv_arrays?: Json | null
+          pv_config?: Json | null
+          roof_masks?: Json | null
+          scale_pixels_per_meter?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pv_layouts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scada_imports: {
         Row: {
           area_sqm: number | null

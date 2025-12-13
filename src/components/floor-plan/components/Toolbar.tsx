@@ -1,6 +1,6 @@
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
-  Download, Upload, Settings, Undo2, Redo2
+  Download, Upload, Settings, Undo2, Redo2, Save, Loader2
 } from 'lucide-react';
 import { Tool, ScaleInfo, PVPanelConfig } from '../types';
 import { Button } from '@/components/ui/button';
@@ -57,8 +57,11 @@ interface ToolbarProps {
   onOpenPVConfig: () => void;
   onUndo: () => void;
   onRedo: () => void;
+  onSave: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  isSaving: boolean;
+  hasUnsavedChanges: boolean;
   placementRotation: number;
   setPlacementRotation: (rotation: number) => void;
   pdfLoaded: boolean;
@@ -74,8 +77,11 @@ export function Toolbar({
   onOpenPVConfig,
   onUndo,
   onRedo,
+  onSave,
   canUndo,
   canRedo,
+  isSaving,
+  hasUnsavedChanges,
   placementRotation,
   setPlacementRotation,
   pdfLoaded,
@@ -276,25 +282,41 @@ export function Toolbar({
       </div>
 
       {/* Bottom actions */}
-      <div className="p-2 border-t flex gap-1">
+      <div className="p-2 border-t space-y-2">
         <Button
-          variant="ghost"
-          size="icon"
-          onClick={onUndo}
-          disabled={!canUndo}
-          title="Undo (Ctrl+Z)"
+          variant={hasUnsavedChanges ? 'default' : 'outline'}
+          size="sm"
+          className="w-full"
+          onClick={onSave}
+          disabled={isSaving}
         >
-          <Undo2 className="h-4 w-4" />
+          {isSaving ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4 mr-2" />
+          )}
+          <span className="text-xs">{isSaving ? 'Saving...' : 'Save Layout'}</span>
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onRedo}
-          disabled={!canRedo}
-          title="Redo (Ctrl+Y)"
-        >
-          <Redo2 className="h-4 w-4" />
-        </Button>
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onUndo}
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo2 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRedo}
+            disabled={!canRedo}
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo2 className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );
