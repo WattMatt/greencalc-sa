@@ -1179,16 +1179,16 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                 {/* 1:1 DC/AC Baseline - dotted line for comparison */}
                 {showPVProfile && maxPvAcKva && showBaselineComparison && dcAcRatio > 1 && (
                   <>
-                    {/* Baseline area fill (what 1:1 would produce) */}
+                    {/* Overpanel gain area - shaded between AC output and baseline */}
                     <Area
                       type="monotone"
-                      dataKey="pvBaseline"
+                      dataKey="pvOverpanelGain"
                       stroke="none"
-                      fill="hsl(var(--muted-foreground))"
-                      fillOpacity={0.15}
+                      fill="url(#overpanelGainGradient)"
+                      baseValue="dataMin"
                       dot={false}
                     />
-                    {/* Baseline line */}
+                    {/* Baseline line (1:1 ratio) */}
                     <Line
                       type="monotone"
                       dataKey="pvBaseline"
