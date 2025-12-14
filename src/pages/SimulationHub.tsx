@@ -1,4 +1,3 @@
-import { AppLayout } from "@/components/layout/AppLayout";
 import { ModeCard } from "@/components/simulation/ModeCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -72,8 +71,7 @@ export default function SimulationHub() {
   ];
 
   return (
-    <AppLayout>
-      <div className="container max-w-6xl py-6 space-y-8">
+    <div className="container max-w-6xl py-6 space-y-8">
         {/* Header */}
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Simulation Hub</h1>
@@ -136,7 +134,6 @@ export default function SimulationHub() {
             </div>
           </CardContent>
         </Card>
-      </div>
-    </AppLayout>
+    </div>
   );
 }
