@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { useSolcastForecast } from "@/hooks/useSolcastForecast";
+import { SavedSimulations } from "./SavedSimulations";
 import { 
   PVSystemConfig, 
   PVSystemConfigData, 
@@ -559,6 +560,38 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           </CardHeader>
         </Card>
       </div>
+
+      {/* Saved Simulations */}
+      <SavedSimulations
+        projectId={projectId}
+        currentConfig={{
+          solarCapacity,
+          batteryCapacity,
+          batteryPower,
+          pvConfig,
+          usingSolcast: !!usingRealData,
+        }}
+        currentResults={{
+          totalDailyLoad: simulation.totalDailyLoad,
+          totalDailySolar: simulation.totalDailySolar,
+          totalGridImport: simulation.totalGridImport,
+          totalSolarUsed: simulation.totalSolarUsed,
+          annualSavings: simulation.annualSavings,
+          systemCost: simulation.systemCost,
+          paybackYears: simulation.paybackYears,
+          roi: simulation.roi,
+          peakDemand: simulation.peakDemand,
+          newPeakDemand: simulation.newPeakDemand,
+        }}
+        onLoadSimulation={(config) => {
+          setSolarCapacity(config.solarCapacity);
+          setBatteryCapacity(config.batteryCapacity);
+          setBatteryPower(config.batteryPower);
+          if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
+            setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
+          }
+        }}
+      />
 
       {/* Charts */}
       <Tabs defaultValue="energy">
