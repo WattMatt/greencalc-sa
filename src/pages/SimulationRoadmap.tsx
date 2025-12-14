@@ -39,7 +39,7 @@ const phases = [
     id: 3,
     name: "Sandbox Mode",
     icon: FlaskConical,
-    status: "pending" as const,
+    status: "complete" as const,
     description: "Experimental environment for what-if analysis and parameter optimization",
     features: [
       "Clone projects to sandbox",
@@ -47,20 +47,7 @@ const phases = [
       "A/B/C scenario comparison",
       "Draft reports with watermarks",
     ],
-    prompt: `Develop the Sandbox/Playground Mode for energy simulations. This mode should:
-
-1. Allow users to clone any existing project into a sandbox environment
-2. Add parameter sweep functionality with sliders for:
-   - Solar capacity range (min-max with step)
-   - Battery capacity range  
-   - DC/AC ratio range
-3. Enable A/B/C scenario comparison with side-by-side result cards
-4. Add 'Save Draft' functionality separate from production simulations
-5. Generate shareable draft reports with watermark
-6. Include undo/redo for parameter changes
-7. Add 'Promote to Project' button to convert sandbox to real project
-
-The sandbox should feel experimental with a distinct visual theme (dashed borders, 'DRAFT' watermarks).`,
+    prompt: null,
   },
   {
     id: 4,

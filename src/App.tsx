@@ -14,6 +14,7 @@ import ProjectDetail from "./pages/ProjectDetail";
 import SimulationHub from "./pages/SimulationHub";
 import QuickEstimate from "./pages/QuickEstimate";
 import Sandbox from "./pages/Sandbox";
+import SandboxWorkspace from "./pages/SandboxWorkspace";
 import ProposalBuilder from "./pages/ProposalBuilder";
 import SimulationRoadmap from "./pages/SimulationRoadmap";
 import NotFound from "./pages/NotFound";
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/simulations" element={<SimulationHub />} />
             <Route path="/simulations/quick-estimate" element={<QuickEstimate />} />
             <Route path="/simulations/sandbox" element={<Sandbox />} />
+            <Route path="/simulations/sandbox/:id" element={<SandboxWorkspace />} />
             <Route path="/simulations/proposal" element={<ProposalBuilder />} />
             <Route path="/simulations/roadmap" element={<SimulationRoadmap />} />
             <Route path="/calculator" element={<Calculator />} />
