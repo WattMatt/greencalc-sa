@@ -105,6 +105,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
   const [batteryCapacity, setBatteryCapacity] = useState(500);
   const [batteryPower, setBatteryPower] = useState(250);
   const [dcAcRatio, setDcAcRatio] = useState(1.3);
+  const [show1to1Comparison, setShow1to1Comparison] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -193,6 +194,11 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
         result.pvGeneration = pvValue;
         result.pvDcOutput = dcOutput;
         result.pvClipping = dcOutput > maxPvAcKva ? dcOutput - maxPvAcKva : 0;
+        
+        // 1:1 baseline comparison (no oversizing)
+        const baseline1to1 = PV_PROFILE_NORMALIZED[index] * maxPvAcKva;
+        result.pv1to1Baseline = baseline1to1;
+        
         const netLoad = result.total - pvValue;
         result.netLoad = netLoad;
         result.gridImport = netLoad > 0 ? netLoad : 0;
@@ -627,14 +633,22 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   </div>
                 )}
                 {showPVProfile && maxPvAcKva && (
-                  <div className="w-40 space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">DC/AC Ratio</span>
-                      <span className="font-medium">{(dcAcRatio * 100).toFixed(0)}%</span>
+                  <>
+                    <div className="w-40 space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">DC/AC Ratio</span>
+                        <span className="font-medium">{(dcAcRatio * 100).toFixed(0)}%</span>
+                      </div>
+                      <Slider value={[dcAcRatio]} onValueChange={([v]) => setDcAcRatio(v)} min={1.0} max={1.5} step={0.05} />
+                      <p className="text-[10px] text-muted-foreground">DC: {dcCapacityKwp?.toFixed(0)} kWp → AC: {maxPvAcKva.toFixed(0)} kVA</p>
                     </div>
-                    <Slider value={[dcAcRatio]} onValueChange={([v]) => setDcAcRatio(v)} min={1.0} max={1.5} step={0.05} />
-                    <p className="text-[10px] text-muted-foreground">DC: {dcCapacityKwp?.toFixed(0)} kWp → AC: {maxPvAcKva.toFixed(0)} kVA</p>
-                  </div>
+                    {dcAcRatio > 1 && (
+                      <Label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <Switch checked={show1to1Comparison} onCheckedChange={setShow1to1Comparison} className="scale-75" />
+                        Show 1:1 Baseline
+                      </Label>
+                    )}
+                  </>
                 )}
                 {showBattery && (
                   <>
@@ -751,8 +765,20 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                 <div className="flex items-center gap-3 text-[10px]">
                   <span className="flex items-center gap-1">
                     <div className="w-2 h-2 rounded-sm bg-amber-500/60" />
-                    PV ({maxPvAcKva.toFixed(0)} kVA)
+                    PV ({dcAcRatio > 1 ? `${(dcAcRatio * 100).toFixed(0)}%` : '1:1'})
                   </span>
+                  {dcAcRatio > 1 && (
+                    <span className="flex items-center gap-1">
+                      <div className="w-3 h-0.5 bg-orange-400" style={{ borderBottom: '1px dashed' }} />
+                      DC Output
+                    </span>
+                  )}
+                  {show1to1Comparison && dcAcRatio > 1 && (
+                    <span className="flex items-center gap-1">
+                      <div className="w-3 h-0.5 bg-gray-400" style={{ borderBottom: '2px dotted' }} />
+                      1:1 Baseline
+                    </span>
+                  )}
                   <span className="flex items-center gap-1">
                     <div className="w-2 h-2 rounded-sm bg-red-500/40" />
                     Grid Import
@@ -835,6 +861,18 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                         stroke="hsl(25 95% 53%)"
                         strokeWidth={1.5}
                         strokeDasharray="4 3"
+                        dot={false}
+                      />
+                    )}
+                    
+                    {/* 1:1 Baseline Comparison Line */}
+                    {show1to1Comparison && dcAcRatio > 1 && (
+                      <Line
+                        type="monotone"
+                        dataKey="pv1to1Baseline"
+                        stroke="hsl(var(--muted-foreground))"
+                        strokeWidth={2}
+                        strokeDasharray="2 4"
                         dot={false}
                       />
                     )}
