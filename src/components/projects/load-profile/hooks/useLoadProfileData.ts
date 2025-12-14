@@ -5,13 +5,13 @@ import {
   DayOfWeek,
   DAY_MULTIPLIERS,
   DEFAULT_PROFILE_PERCENT,
-  PV_PROFILE_NORMALIZED,
   getTOUPeriod,
   ChartDataPoint,
   DisplayUnit,
   OverPanelingStats,
   PVStats,
 } from "../types";
+import { SolcastPVProfile } from "./useSolcastPVProfile";
 
 interface UseLoadProfileDataProps {
   tenants: Tenant[];
@@ -26,7 +26,12 @@ interface UseLoadProfileDataProps {
   showBattery: boolean;
   batteryCapacity: number;
   batteryPower: number;
+  solcastProfile?: SolcastPVProfile;
+  systemLosses?: number; // 0-1, default 0.14 (14% losses)
 }
+
+// Temperature derating coefficient (%/°C above 25°C)
+const TEMP_COEFFICIENT = 0.004; // 0.4% per degree
 
 export function useLoadProfileData({
   tenants,
@@ -41,8 +46,24 @@ export function useLoadProfileData({
   showBattery,
   batteryCapacity,
   batteryPower,
+  solcastProfile,
+  systemLosses = 0.14,
 }: UseLoadProfileDataProps) {
   const isWeekend = selectedDay === "Saturday" || selectedDay === "Sunday";
+
+  // Get the PV profile to use (Solcast or static)
+  const pvNormalizedProfile = useMemo(() => {
+    if (solcastProfile) {
+      return solcastProfile.normalizedProfile;
+    }
+    // Default static profile
+    return [0.0, 0.0, 0.0, 0.0, 0.0, 0.02, 0.08, 0.2, 0.38, 0.58, 0.78, 0.92, 1.0, 0.98, 0.9, 0.75, 0.55, 0.32, 0.12, 0.02, 0.0, 0.0, 0.0, 0.0];
+  }, [solcastProfile]);
+
+  // Get hourly temperatures for derating (if available)
+  const hourlyTemps = useMemo(() => {
+    return solcastProfile?.hourlyTemp || Array(24).fill(25);
+  }, [solcastProfile]);
 
   // Count tenants with actual SCADA data
   const { tenantsWithScada, tenantsEstimated } = useMemo(() => {
@@ -69,14 +90,14 @@ export function useLoadProfileData({
         const tenantArea = Number(tenant.area_sqm) || 0;
         const scadaWeekday = tenant.scada_imports?.load_profile_weekday;
         const scadaWeekend = tenant.scada_imports?.load_profile_weekend;
-        const scadaProfile = isWeekendDay ? (scadaWeekend || scadaWeekday) : scadaWeekday;
+        const scadaProfile = isWeekendDay ? scadaWeekend || scadaWeekday : scadaWeekday;
 
         if (scadaProfile?.length === 24) {
           const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
           const areaScaleFactor = scadaArea > 0 ? tenantArea / scadaArea : 1;
           const scaledHourlyKwh = (scadaProfile[h] || 0) * areaScaleFactor * dayMultiplier;
           const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
-          hourData[key] = (hourData[key] as number || 0) + scaledHourlyKwh;
+          hourData[key] = ((hourData[key] as number) || 0) + scaledHourlyKwh;
           hourData.total += scaledHourlyKwh;
           return;
         }
@@ -84,11 +105,11 @@ export function useLoadProfileData({
         const shopType = tenant.shop_type_id ? shopTypes.find((st) => st.id === tenant.shop_type_id) : null;
         const monthlyKwh = tenant.monthly_kwh_override || (shopType?.kwh_per_sqm_month || 50) * tenantArea;
         const dailyKwh = monthlyKwh / 30;
-        const shopTypeProfile = isWeekendDay ? (shopType?.load_profile_weekend || shopType?.load_profile_weekday) : shopType?.load_profile_weekday;
+        const shopTypeProfile = isWeekendDay ? shopType?.load_profile_weekend || shopType?.load_profile_weekday : shopType?.load_profile_weekday;
         const profile = shopTypeProfile?.length === 24 ? shopTypeProfile.map(Number) : DEFAULT_PROFILE_PERCENT;
         const hourlyKwh = dailyKwh * (profile[h] / 100) * dayMultiplier;
         const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
-        hourData[key] = (hourData[key] as number || 0) + hourlyKwh;
+        hourData[key] = ((hourData[key] as number) || 0) + hourlyKwh;
         hourData.total += hourlyKwh;
       });
 
@@ -112,15 +133,31 @@ export function useLoadProfileData({
       });
 
       if (showPVProfile && maxPvAcKva && dcCapacityKwp) {
-        const dcOutput = PV_PROFILE_NORMALIZED[index] * dcCapacityKwp;
+        // Calculate temperature derating
+        const temp = hourlyTemps[index];
+        const tempDerating = temp > 25 ? 1 - TEMP_COEFFICIENT * (temp - 25) : 1;
+
+        // Apply system losses and temperature derating
+        const effectiveEfficiency = (1 - systemLosses) * tempDerating;
+
+        // DC output using normalized profile
+        const dcOutputRaw = pvNormalizedProfile[index] * dcCapacityKwp;
+        const dcOutput = dcOutputRaw * effectiveEfficiency;
+
+        // AC output capped at inverter limit
         const pvValue = Math.min(dcOutput, maxPvAcKva);
+
         result.pvGeneration = pvValue;
         result.pvDcOutput = dcOutput;
         result.pvClipping = dcOutput > maxPvAcKva ? dcOutput - maxPvAcKva : 0;
 
-        // 1:1 baseline comparison (no oversizing)
-        const baseline1to1 = PV_PROFILE_NORMALIZED[index] * maxPvAcKva;
+        // 1:1 baseline comparison (no oversizing, same efficiency)
+        const baseline1to1Raw = pvNormalizedProfile[index] * maxPvAcKva;
+        const baseline1to1 = baseline1to1Raw * effectiveEfficiency;
         result.pv1to1Baseline = baseline1to1;
+
+        // Temperature for display
+        result.temperature = temp;
 
         const netLoad = result.total - pvValue;
         result.netLoad = netLoad;
@@ -162,7 +199,21 @@ export function useLoadProfileData({
     }
 
     return baseData;
-  }, [baseChartData, displayUnit, powerFactor, showPVProfile, maxPvAcKva, dcCapacityKwp, showBattery, batteryCapacity, batteryPower, isWeekend]);
+  }, [
+    baseChartData,
+    displayUnit,
+    powerFactor,
+    showPVProfile,
+    maxPvAcKva,
+    dcCapacityKwp,
+    showBattery,
+    batteryCapacity,
+    batteryPower,
+    isWeekend,
+    pvNormalizedProfile,
+    hourlyTemps,
+    systemLosses,
+  ]);
 
   // Stats
   const totalDaily = chartData.reduce((sum, d) => sum + d.total, 0);

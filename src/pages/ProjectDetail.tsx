@@ -194,6 +194,8 @@ export default function ProjectDetail() {
             tenants={tenants || []} 
             shopTypes={shopTypes || []} 
             connectionSizeKva={project.connection_size_kva}
+            latitude={-33.9249} // Cape Town default - TODO: Add project coordinates
+            longitude={18.4241}
           />
         </TabsContent>
 

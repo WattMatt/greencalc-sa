@@ -59,14 +59,6 @@ export const TOU_COLORS: Record<TOUPeriod, { fill: string; stroke: string; label
   "off-peak": { fill: "hsl(160 84% 39%)", stroke: "hsl(160 84% 30%)", label: "Off-Peak" }
 };
 
-// Typical PV generation profile (normalized to peak = 1.0)
-export const PV_PROFILE_NORMALIZED = [
-  0.00, 0.00, 0.00, 0.00, 0.00, 0.02,
-  0.08, 0.20, 0.38, 0.58, 0.78, 0.92,
-  1.00, 0.98, 0.90, 0.75, 0.55, 0.32,
-  0.12, 0.02, 0.00, 0.00, 0.00, 0.00,
-];
-
 export interface Annotation {
   id: string;
   hour: number;
@@ -88,6 +80,7 @@ export interface ChartDataPoint {
   batteryDischarge?: number;
   batterySoC?: number;
   gridImportWithBattery?: number;
+  temperature?: number;
   [key: string]: number | string | undefined;
 }
 
