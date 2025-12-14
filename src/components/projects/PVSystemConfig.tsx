@@ -129,13 +129,44 @@ export function calculateSystemEfficiency(config: PVSystemConfigData): number {
   return moduleEff * arrayMod * inverterEff * lossMultiplier * tiltFactor * azimuthFactor;
 }
 
+// Hourly GHI data from Solcast (optional, for real irradiance data)
+export interface HourlyIrradianceData {
+  hour: number;
+  ghi: number; // W/m²
+  dni?: number;
+  dhi?: number;
+}
+
 // Generate hourly solar profile based on location and configuration
-export function generateSolarProfile(config: PVSystemConfigData, capacityKwp: number): number[] {
+// If hourlyGhi is provided (from Solcast), use real irradiance data instead of Gaussian model
+export function generateSolarProfile(
+  config: PVSystemConfigData, 
+  capacityKwp: number,
+  hourlyGhi?: HourlyIrradianceData[]
+): number[] {
   const location = SA_SOLAR_LOCATIONS[config.location];
   const efficiency = calculateSystemEfficiency(config);
   
-  // Base solar curve (Gaussian-like, peak at solar noon)
-  // This creates a more realistic bell curve than the simple linear profile
+  // If we have real Solcast hourly data, use it
+  if (hourlyGhi && hourlyGhi.length === 24) {
+    const profile: number[] = [];
+    
+    for (let hour = 0; hour < 24; hour++) {
+      const hourData = hourlyGhi.find(h => h.hour === hour);
+      const ghiWm2 = hourData?.ghi ?? 0;
+      
+      // Convert W/m² to kWh output for this hour
+      // GHI in W/m² × 1 hour = Wh/m², divide by 1000 = kWh/m²
+      // Then multiply by capacity and efficiency
+      const ghiKwhM2 = ghiWm2 / 1000; // kWh/m² for this hour
+      const hourlyOutput = capacityKwp * ghiKwhM2 * efficiency;
+      profile.push(Math.max(0, hourlyOutput));
+    }
+    
+    return profile;
+  }
+  
+  // Fallback: Base solar curve (Gaussian-like, peak at solar noon)
   const profile: number[] = [];
   const peakHour = 12.5; // Solar noon slightly after 12:00
   const sigma = 3.5; // Width of the curve (hours)
@@ -171,6 +202,40 @@ export function generateSolarProfile(config: PVSystemConfigData, capacityKwp: nu
   const scaleFactor = expectedDaily / (totalGenerated || 1);
   
   return profile.map(v => v * scaleFactor);
+}
+
+// Generate an average daily profile from Solcast multi-day forecast
+export function generateAverageSolcastProfile(
+  hourlyForecasts: Array<{ period_end: string; ghi: number; dni?: number; dhi?: number }>
+): HourlyIrradianceData[] {
+  const hourlyTotals: { [hour: number]: { sum: number; count: number } } = {};
+  
+  // Initialize all hours
+  for (let h = 0; h < 24; h++) {
+    hourlyTotals[h] = { sum: 0, count: 0 };
+  }
+  
+  // Aggregate by hour of day
+  hourlyForecasts.forEach(forecast => {
+    const date = new Date(forecast.period_end);
+    const hour = date.getUTCHours();
+    if (hour >= 0 && hour < 24) {
+      hourlyTotals[hour].sum += forecast.ghi;
+      hourlyTotals[hour].count += 1;
+    }
+  });
+  
+  // Calculate averages
+  const result: HourlyIrradianceData[] = [];
+  for (let h = 0; h < 24; h++) {
+    const data = hourlyTotals[h];
+    result.push({
+      hour: h,
+      ghi: data.count > 0 ? data.sum / data.count : 0
+    });
+  }
+  
+  return result;
 }
 
 export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity }: PVSystemConfigProps) {
