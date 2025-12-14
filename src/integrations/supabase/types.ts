@@ -385,6 +385,65 @@ export type Database = {
           },
         ]
       }
+      sandbox_simulations: {
+        Row: {
+          cloned_from_project_id: string | null
+          created_at: string
+          draft_notes: string | null
+          history_index: number | null
+          id: string
+          is_draft: boolean | null
+          name: string
+          parameter_history: Json | null
+          project_snapshot: Json | null
+          scenario_a: Json | null
+          scenario_b: Json | null
+          scenario_c: Json | null
+          sweep_config: Json | null
+          updated_at: string
+        }
+        Insert: {
+          cloned_from_project_id?: string | null
+          created_at?: string
+          draft_notes?: string | null
+          history_index?: number | null
+          id?: string
+          is_draft?: boolean | null
+          name: string
+          parameter_history?: Json | null
+          project_snapshot?: Json | null
+          scenario_a?: Json | null
+          scenario_b?: Json | null
+          scenario_c?: Json | null
+          sweep_config?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          cloned_from_project_id?: string | null
+          created_at?: string
+          draft_notes?: string | null
+          history_index?: number | null
+          id?: string
+          is_draft?: boolean | null
+          name?: string
+          parameter_history?: Json | null
+          project_snapshot?: Json | null
+          scenario_a?: Json | null
+          scenario_b?: Json | null
+          scenario_c?: Json | null
+          sweep_config?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sandbox_simulations_cloned_from_project_id_fkey"
+            columns: ["cloned_from_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scada_imports: {
         Row: {
           area_sqm: number | null

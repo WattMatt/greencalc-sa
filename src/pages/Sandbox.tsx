@@ -1,56 +1,86 @@
-import { PromptCard } from "@/components/simulation/PromptCard";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, FlaskConical, GitBranch, SlidersHorizontal, FileText } from "lucide-react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, FlaskConical, Trash2, Play, Clock } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
-const SANDBOX_PROMPT = `Develop the Sandbox/Playground Mode for energy simulations. This mode should:
-
-1. Allow users to clone any existing project into a sandbox environment
-2. Add parameter sweep functionality with sliders for:
-   - Solar capacity range (min-max with step)
-   - Battery capacity range  
-   - DC/AC ratio range
-3. Enable A/B/C scenario comparison with side-by-side result cards
-4. Add 'Save Draft' functionality separate from production simulations
-5. Generate shareable draft reports with watermark
-6. Include undo/redo for parameter changes
-7. Add 'Promote to Project' button to convert sandbox to real project
-
-The sandbox should feel experimental with a distinct visual theme (dashed borders, 'DRAFT' watermarks).
-
-Technical requirements:
-- Create src/pages/SandboxWorkspace.tsx as the main workspace
-- Create src/components/sandbox/ParameterSweep.tsx for range sliders
-- Create src/components/sandbox/ScenarioComparison.tsx for A/B/C view
-- Store drafts in a new 'sandbox_simulations' table with project_id reference
-- Add 'cloned_from' column to track source project
-- Include visual indicators that this is a draft environment`;
+import { ProjectCloneSelector } from "@/components/sandbox/ProjectCloneSelector";
 
 export default function Sandbox() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const features = [
-    {
-      icon: GitBranch,
-      title: "Clone Projects",
-      description: "Create experimental copies of any project without affecting the original",
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [sandboxName, setSandboxName] = useState("");
+
+  // Fetch existing sandboxes
+  const { data: sandboxes, isLoading } = useQuery({
+    queryKey: ["sandboxes"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sandbox_simulations")
+        .select("*, projects:cloned_from_project_id(name)")
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return data;
     },
-    {
-      icon: SlidersHorizontal,
-      title: "Parameter Sweeps",
-      description: "Test ranges of values to find optimal system configurations",
+  });
+
+  // Create sandbox mutation
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      // Fetch project snapshot if cloning
+      let projectSnapshot = null;
+      if (selectedProjectId) {
+        const { data: project } = await supabase
+          .from("projects")
+          .select("*")
+          .eq("id", selectedProjectId)
+          .single();
+        projectSnapshot = project;
+      }
+
+      const { data, error } = await supabase
+        .from("sandbox_simulations")
+        .insert({
+          name: sandboxName,
+          cloned_from_project_id: selectedProjectId,
+          project_snapshot: projectSnapshot ? JSON.parse(JSON.stringify(projectSnapshot)) : null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
     },
-    {
-      icon: FileText,
-      title: "Draft Reports",
-      description: "Generate watermarked reports for internal review before finalizing",
+    onSuccess: (data) => {
+      toast.success("Sandbox created");
+      queryClient.invalidateQueries({ queryKey: ["sandboxes"] });
+      navigate(`/simulations/sandbox/${data.id}`);
     },
-  ];
+    onError: () => {
+      toast.error("Failed to create sandbox");
+    },
+  });
+
+  // Delete sandbox mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("sandbox_simulations").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Sandbox deleted");
+      queryClient.invalidateQueries({ queryKey: ["sandboxes"] });
+    },
+  });
 
   return (
-    <div className="container max-w-4xl py-6 space-y-8">
+    <div className="container max-w-5xl py-6 space-y-8">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate("/simulations")}>
@@ -58,8 +88,8 @@ export default function Sandbox() {
         </Button>
         <div className="flex-1">
           <div className="flex items-center gap-2">
+            <FlaskConical className="h-6 w-6 text-primary" />
             <h1 className="text-2xl font-bold tracking-tight">Sandbox Mode</h1>
-            <Badge variant="secondary">Coming Soon</Badge>
           </div>
           <p className="text-muted-foreground">
             Experiment freely with different scenarios without affecting production data
@@ -67,47 +97,90 @@ export default function Sandbox() {
         </div>
       </div>
 
-      {/* Coming Soon Hero */}
-      <Card className="border-dashed bg-muted/30">
-        <CardContent className="py-12 text-center">
-          <FlaskConical className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
-          <h2 className="text-xl font-semibold mb-2">Under Development</h2>
-          <p className="text-muted-foreground max-w-md mx-auto">
-            The Sandbox Mode will allow you to experiment with different system configurations,
-            compare scenarios side-by-side, and generate draft reports.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Feature Preview */}
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Planned Features</h3>
-        <div className="grid gap-4 md:grid-cols-3">
-          {features.map((feature) => (
-            <Card key={feature.title}>
-              <CardContent className="pt-6">
-                <feature.icon className="h-8 w-8 mb-3 text-primary" />
-                <h4 className="font-medium mb-1">{feature.title}</h4>
-                <p className="text-sm text-muted-foreground">{feature.description}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      {/* Development Prompt */}
-      <PromptCard
-        title="Development Prompt"
-        description="Copy this prompt to implement Sandbox Mode"
-        prompt={SANDBOX_PROMPT}
+      {/* Create New Sandbox */}
+      <ProjectCloneSelector
+        selectedProjectId={selectedProjectId}
+        sandboxName={sandboxName}
+        onProjectSelect={setSelectedProjectId}
+        onNameChange={setSandboxName}
+        onClone={() => createMutation.mutate()}
+        isCloning={createMutation.isPending}
       />
 
-      {/* Back to Hub */}
-      <div className="text-center">
-        <Button variant="outline" onClick={() => navigate("/simulations")}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Simulation Hub
-        </Button>
+      {/* Existing Sandboxes */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Your Sandboxes</h2>
+
+        {isLoading ? (
+          <p className="text-muted-foreground">Loading...</p>
+        ) : sandboxes?.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="py-8 text-center text-muted-foreground">
+              <FlaskConical className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p>No sandboxes yet. Create one above to start experimenting.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-3">
+            {sandboxes?.map((sandbox) => (
+              <Card
+                key={sandbox.id}
+                className="border-dashed hover:border-primary/50 transition-colors cursor-pointer"
+                onClick={() => navigate(`/simulations/sandbox/${sandbox.id}`)}
+              >
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <FlaskConical className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{sandbox.name}</span>
+                          <Badge
+                            variant="outline"
+                            className="border-dashed bg-amber-500/10 text-amber-700 border-amber-500/30"
+                          >
+                            DRAFT
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {(sandbox.projects as any)?.name && (
+                            <span>Cloned from: {(sandbox.projects as any).name}</span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {new Date(sandbox.updated_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/simulations/sandbox/${sandbox.id}`);
+                        }}
+                      >
+                        <Play className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteMutation.mutate(sandbox.id);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
