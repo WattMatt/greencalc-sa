@@ -1,0 +1,273 @@
+import { AppLayout } from "@/components/layout/AppLayout";
+import { PromptCard } from "@/components/simulation/PromptCard";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { ArrowLeft, CheckCircle2, Circle, Zap, Layers, FlaskConical, FileCheck, HelpCircle, Settings2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+const phases = [
+  {
+    id: 1,
+    name: "Simulation Hub & Quick Estimate",
+    icon: Zap,
+    status: "complete" as const,
+    description: "Central hub for all simulation modes with fully functional quick estimate tool",
+    features: [
+      "Mode selection hub with recommendations",
+      "Quick estimate with location-based irradiance",
+      "Default assumptions with advanced options",
+      "Instant results with accuracy disclaimers",
+    ],
+    prompt: null,
+  },
+  {
+    id: 2,
+    name: "Profile Builder Enhancements",
+    icon: Layers,
+    status: "complete" as const,
+    description: "Existing project-based simulation with tenant stacking and load modeling",
+    features: [
+      "Tenant management and profile assignment",
+      "SCADA meter integration",
+      "TOU period visualization",
+      "Battery and PV simulation",
+    ],
+    prompt: null,
+  },
+  {
+    id: 3,
+    name: "Sandbox Mode",
+    icon: FlaskConical,
+    status: "pending" as const,
+    description: "Experimental environment for what-if analysis and parameter optimization",
+    features: [
+      "Clone projects to sandbox",
+      "Parameter sweep with ranges",
+      "A/B/C scenario comparison",
+      "Draft reports with watermarks",
+    ],
+    prompt: `Develop the Sandbox/Playground Mode for energy simulations. This mode should:
+
+1. Allow users to clone any existing project into a sandbox environment
+2. Add parameter sweep functionality with sliders for:
+   - Solar capacity range (min-max with step)
+   - Battery capacity range  
+   - DC/AC ratio range
+3. Enable A/B/C scenario comparison with side-by-side result cards
+4. Add 'Save Draft' functionality separate from production simulations
+5. Generate shareable draft reports with watermark
+6. Include undo/redo for parameter changes
+7. Add 'Promote to Project' button to convert sandbox to real project
+
+The sandbox should feel experimental with a distinct visual theme (dashed borders, 'DRAFT' watermarks).`,
+  },
+  {
+    id: 4,
+    name: "Proposal Builder",
+    icon: FileCheck,
+    status: "pending" as const,
+    description: "Create professional, client-ready proposals with verification and branding",
+    features: [
+      "Verification checklist workflow",
+      "Professional PDF report generation",
+      "Company branding options",
+      "Version tracking and history",
+    ],
+    prompt: `Develop the Proposal Builder Mode for creating client-ready solar installation proposals. This mode should:
+
+1. Start from a completed simulation (from Profile Builder or Sandbox)
+2. Add verification checklist requiring confirmation of:
+   - Site coordinates verified
+   - Consumption data source (actual vs estimated)
+   - Tariff rates confirmed current
+   - System specifications validated
+3. Create professional PDF report template with sections:
+   - Executive Summary (1 page)
+   - Site Overview with map
+   - System Specification table
+   - Financial Analysis (25-year projection)
+   - Assumptions & Disclaimers
+   - Appendix with detailed hourly data
+4. Add company branding options (logo, colors, contact info)
+5. Implement version tracking (v1, v2, etc.)
+6. Add digital signature/approval workflow
+7. Export to PDF and Excel formats`,
+  },
+  {
+    id: 5,
+    name: "Guided Tooltips System",
+    icon: HelpCircle,
+    status: "pending" as const,
+    description: "Comprehensive contextual help and onboarding across all simulation modes",
+    features: [
+      "Info icons with explanatory tooltips",
+      "Mode-specific onboarding tours",
+      "Accuracy indicators (actual vs estimated)",
+      "Expandable methodology sections",
+    ],
+    prompt: `Implement a comprehensive Guided Tooltips System across all simulation modes. This should:
+
+1. Create a TooltipContext provider wrapping the app
+2. Add ℹ️ icons next to ALL key inputs with:
+   - Hover tooltips explaining the input
+   - 'Learn More' links to expanded explanations
+   - Warning indicators when using estimated/generic data
+3. Implement mode-specific onboarding tours:
+   - First-time user detection
+   - Step-by-step walkthrough with highlights
+   - 'Skip' and 'Don't show again' options
+4. Add accuracy indicators showing:
+   - Green: Using actual data (Solcast, SCADA meters)
+   - Amber: Using estimated data (generic profiles)
+   - Red: Missing critical data
+5. Create expandable 'Methodology' sections explaining:
+   - How solar generation is calculated
+   - Battery simulation logic
+   - Financial projection assumptions
+6. Add contextual warnings for:
+   - Using old tariff data
+   - Oversized systems exceeding connection limits
+   - Unrealistic payback expectations`,
+  },
+  {
+    id: 6,
+    name: "Advanced Features",
+    icon: Settings2,
+    status: "pending" as const,
+    description: "Sophisticated modeling features for detailed long-term projections",
+    features: [
+      "Seasonal variation modeling",
+      "Degradation curves (panel, battery)",
+      "NPV and IRR calculations",
+      "Sensitivity analysis",
+    ],
+    prompt: `Add advanced simulation features:
+
+1. Seasonal variation modeling:
+   - Monthly irradiance curves from Solcast historical
+   - Seasonal consumption patterns
+   - High/Low demand season differentiation
+   
+2. Degradation modeling:
+   - Panel degradation (0.5%/year default)
+   - Battery degradation curves
+   - Inverter replacement at year 12
+   
+3. Financial sophistication:
+   - Tariff escalation rates (configurable)
+   - Inflation adjustment
+   - NPV and IRR calculations
+   - Sensitivity analysis (best/worst/expected)
+   
+4. Grid constraints:
+   - Maximum export limits
+   - Time-based export restrictions
+   - Wheeling charges for export
+   
+5. Load growth modeling:
+   - Annual consumption growth rate
+   - New tenant projections
+
+Add these as 'Advanced' toggles in existing simulation panels.`,
+  },
+];
+
+export default function SimulationRoadmap() {
+  const navigate = useNavigate();
+
+  const completedCount = phases.filter((p) => p.status === "complete").length;
+  const progressPercentage = (completedCount / phases.length) * 100;
+
+  return (
+    <AppLayout>
+      <div className="container max-w-4xl py-6 space-y-8">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/simulations")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold tracking-tight">Development Roadmap</h1>
+            <p className="text-muted-foreground">
+              Track progress and access development prompts for simulation features
+            </p>
+          </div>
+        </div>
+
+        {/* Progress Overview */}
+        <Card>
+          <CardContent className="py-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">Overall Progress</span>
+              <span className="text-sm text-muted-foreground">
+                {completedCount} of {phases.length} phases complete
+              </span>
+            </div>
+            <Progress value={progressPercentage} className="h-2" />
+          </CardContent>
+        </Card>
+
+        {/* Phase List */}
+        <div className="space-y-4">
+          {phases.map((phase) => (
+            <Card key={phase.id} className={phase.status === "complete" ? "border-green-500/30" : ""}>
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${phase.status === "complete" ? "bg-green-500/10" : "bg-muted"}`}>
+                      <phase.icon className={`h-5 w-5 ${phase.status === "complete" ? "text-green-600" : "text-muted-foreground"}`} />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        Phase {phase.id}: {phase.name}
+                        {phase.status === "complete" ? (
+                          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Complete
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">
+                            <Circle className="h-3 w-3 mr-1" />
+                            Pending
+                          </Badge>
+                        )}
+                      </CardTitle>
+                      <CardDescription>{phase.description}</CardDescription>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">FEATURES</p>
+                  <ul className="grid grid-cols-2 gap-1 text-sm">
+                    {phase.features.map((feature) => (
+                      <li key={feature} className="flex items-center gap-2 text-muted-foreground">
+                        {phase.status === "complete" ? (
+                          <CheckCircle2 className="h-3 w-3 text-green-600" />
+                        ) : (
+                          <Circle className="h-3 w-3" />
+                        )}
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                
+                {phase.prompt && (
+                  <PromptCard
+                    title="Development Prompt"
+                    description="Copy this prompt to start building this phase"
+                    prompt={phase.prompt}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </AppLayout>
+  );
+}
