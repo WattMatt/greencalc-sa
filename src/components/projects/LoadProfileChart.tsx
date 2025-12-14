@@ -8,8 +8,9 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Sun, ChevronLeft, ChevronRight, Battery, Settings2, ChevronDown, Download, FileSpreadsheet, FileText } from "lucide-react";
+import { Sun, ChevronLeft, ChevronRight, Battery, Settings2, ChevronDown, Download, FileSpreadsheet, FileText, Image } from "lucide-react";
 import { toast } from "sonner";
+import html2canvas from "html2canvas";
 interface Tenant {
   id: string;
   name: string;
@@ -356,6 +357,34 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
     toast.success("PDF ready for printing");
   }, [chartData, unit, selectedDay, isWeekend, totalDaily, peakHour, loadFactor, showPVProfile, tenants.length, tenantsWithScada, tenantsEstimated]);
 
+  // Export to PNG
+  const exportToPNG = useCallback(async () => {
+    if (!chartRef.current) {
+      toast.error("Chart not available");
+      return;
+    }
+    
+    try {
+      toast.loading("Generating image...", { id: "png-export" });
+      
+      const canvas = await html2canvas(chartRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2, // Higher resolution
+        logging: false,
+      });
+      
+      const link = document.createElement("a");
+      link.download = `load-profile-${selectedDay.toLowerCase()}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      
+      toast.success("PNG exported successfully", { id: "png-export" });
+    } catch (error) {
+      console.error("PNG export error:", error);
+      toast.error("Failed to export PNG", { id: "png-export" });
+    }
+  }, [selectedDay]);
+
   // PV Stats
   const pvStats = useMemo(() => {
     if (!showPVProfile || !maxPvAcKva) return null;
@@ -475,6 +504,10 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   <DropdownMenuItem onClick={exportToPDF} className="gap-2">
                     <FileText className="h-4 w-4" />
                     Export as PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportToPNG} className="gap-2">
+                    <Image className="h-4 w-4" />
+                    Export as PNG
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
