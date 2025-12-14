@@ -1,15 +1,13 @@
 import { useState, useMemo, useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
 import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { useSolcastForecast } from "@/hooks/useSolcastForecast";
@@ -24,6 +22,13 @@ import {
   calculateSystemEfficiency,
   HourlyIrradianceData
 } from "./PVSystemConfig";
+import {
+  runEnergySimulation,
+  calculateFinancials,
+  scaleToAnnual,
+  DEFAULT_SYSTEM_COSTS,
+  type TariffData,
+} from "./simulation";
 
 interface Tenant {
   id: string;
@@ -68,8 +73,27 @@ const SA_LOCATION_LONGITUDES: Record<string, number> = {
   kimberley: 24.8,
 };
 
+// Helper component for showing differences
+function DifferenceIndicator({ baseValue, compareValue, suffix = "", invert = false }: {
+  baseValue: number;
+  compareValue: number;
+  suffix?: string;
+  invert?: boolean;
+}) {
+  const diff = compareValue - baseValue;
+  const pct = baseValue !== 0 ? (diff / baseValue) * 100 : 0;
+  const isPositive = invert ? diff < 0 : diff > 0;
+  
+  if (Math.abs(pct) < 0.5) return null;
+  
+  return (
+    <span className={`text-xs ml-1 ${isPositive ? "text-green-600" : "text-amber-600"}`}>
+      ({pct > 0 ? "+" : ""}{pct.toFixed(1)}%{suffix})
+    </span>
+  );
+}
+
 export function SimulationPanel({ projectId, project, tenants, shopTypes }: SimulationPanelProps) {
-  const queryClient = useQueryClient();
   const [solarCapacity, setSolarCapacity] = useState(100);
   const [batteryCapacity, setBatteryCapacity] = useState(50);
   const [batteryPower, setBatteryPower] = useState(25);
@@ -78,7 +102,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const [useSolcast, setUseSolcast] = useState(false);
   
   // Solcast forecast hook
-  const { data: solcastData, isLoading: solcastLoading, fetchForecast, error: solcastError } = useSolcastForecast();
+  const { data: solcastData, isLoading: solcastLoading, fetchForecast } = useSolcastForecast();
 
   // Get location coordinates from PV config location
   const selectedLocation = SA_SOLAR_LOCATIONS[pvConfig.location];
@@ -90,7 +114,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
       fetchForecast({
         latitude: selectedLocation.lat,
         longitude: SA_LOCATION_LONGITUDES[pvConfig.location] ?? 28.0,
-        hours: 168, // 7 days
+        hours: 168,
         period: 'PT60M'
       });
     }
@@ -102,6 +126,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
     return generateAverageSolcastProfile(solcastData.hourly);
   }, [solcastData]);
 
+  // Fetch tariff data (for financial analysis only)
   const { data: tariffRates } = useQuery({
     queryKey: ["tariff-rates", project.tariff_id],
     queryFn: async () => {
@@ -129,7 +154,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
     enabled: !!project.tariff_id,
   });
 
-  // Calculate load profile from tenants
+  // Calculate load profile from tenants (kWh per hour)
   const loadProfile = useMemo(() => {
     const profile = Array(24).fill(0);
     tenants.forEach((tenant) => {
@@ -164,121 +189,64 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   // Active solar profile based on toggle
   const solarProfile = useSolcast && solarProfileSolcast ? solarProfileSolcast : solarProfileGeneric;
 
-  // Simulation calculation function
-  const runSimulation = (solarGeneration: number[]) => {
-    const hourlyData = [];
-    let totalGridImport = 0;
-    let totalSolarUsed = 0;
-    let totalSolarExport = 0;
-    let batteryState = batteryCapacity * 0.5;
-    let totalBatteryDischarge = 0;
-    let totalBatteryCharge = 0;
+  // ========================================
+  // PHASE 1: Energy Simulation (tariff-independent)
+  // ========================================
+  const energyConfig = useMemo(() => ({
+    solarCapacity,
+    batteryCapacity,
+    batteryPower,
+  }), [solarCapacity, batteryCapacity, batteryPower]);
 
-    for (let h = 0; h < 24; h++) {
-      const load = loadProfile[h];
-      const solar = solarGeneration[h];
-      let netLoad = load - solar;
-      let gridImport = 0;
-      let solarUsed = Math.min(solar, load);
-      let solarExport = 0;
-      let batteryDischarge = 0;
-      let batteryCharge = 0;
+  const energyResults = useMemo(() => 
+    runEnergySimulation(loadProfile, solarProfile, energyConfig),
+    [loadProfile, solarProfile, energyConfig]
+  );
 
-      if (netLoad > 0) {
-        const batteryAvailable = Math.min(batteryState, batteryPower);
-        batteryDischarge = Math.min(netLoad, batteryAvailable);
-        batteryState -= batteryDischarge;
-        totalBatteryDischarge += batteryDischarge;
-        gridImport = netLoad - batteryDischarge;
-        totalGridImport += gridImport;
-      } else {
-        const excess = -netLoad;
-        const batterySpace = batteryCapacity - batteryState;
-        batteryCharge = Math.min(excess, batterySpace, batteryPower);
-        batteryState += batteryCharge;
-        totalBatteryCharge += batteryCharge;
-        solarExport = excess - batteryCharge;
-        totalSolarExport += solarExport;
-      }
+  const energyResultsGeneric = useMemo(() => 
+    runEnergySimulation(loadProfile, solarProfileGeneric, energyConfig),
+    [loadProfile, solarProfileGeneric, energyConfig]
+  );
 
-      totalSolarUsed += solarUsed;
+  const energyResultsSolcast = useMemo(() => 
+    solarProfileSolcast ? runEnergySimulation(loadProfile, solarProfileSolcast, energyConfig) : null,
+    [loadProfile, solarProfileSolcast, energyConfig]
+  );
 
-      hourlyData.push({
-        hour: `${h.toString().padStart(2, "0")}:00`,
-        load,
-        solar,
-        gridImport,
-        solarUsed,
-        solarExport,
-        batterySOC: (batteryState / batteryCapacity) * 100,
-        batteryDischarge,
-        batteryCharge,
-      });
-    }
-
-    const avgRate = tariffRates?.length
+  // ========================================
+  // PHASE 2: Financial Analysis (tariff-dependent)
+  // ========================================
+  const tariffData: TariffData = useMemo(() => ({
+    fixedMonthlyCharge: Number(tariff?.fixed_monthly_charge || 0),
+    demandChargePerKva: Number(tariff?.demand_charge_per_kva || 0),
+    networkAccessCharge: Number(tariff?.network_access_charge || 0),
+    averageRatePerKwh: tariffRates?.length
       ? tariffRates.reduce((sum, r) => sum + Number(r.rate_per_kwh), 0) / tariffRates.length
-      : 2.5;
-    const fixedCharge = Number(tariff?.fixed_monthly_charge || 0);
-    const demandCharge = Number(tariff?.demand_charge_per_kva || 0);
-    
-    const totalDailyLoad = loadProfile.reduce((a, b) => a + b, 0);
-    const totalDailySolar = solarGeneration.reduce((a, b) => a + b, 0);
-    const peakDemand = Math.max(...loadProfile);
-    
-    const gridOnlyEnergyCost = totalDailyLoad * avgRate;
-    const gridOnlyDemandCost = peakDemand * demandCharge;
-    const gridOnlyDailyCost = gridOnlyEnergyCost + gridOnlyDemandCost + (fixedCharge / 30);
+      : 2.5,
+    exportRatePerKwh: 0, // No feed-in tariff by default
+  }), [tariff, tariffRates]);
 
-    const newPeakDemand = Math.max(...hourlyData.map((d) => d.gridImport));
-    const solarEnergyCost = totalGridImport * avgRate;
-    const solarDemandCost = newPeakDemand * demandCharge;
-    const solarDailyCost = solarEnergyCost + solarDemandCost + (fixedCharge / 30);
+  const financialResults = useMemo(() => 
+    calculateFinancials(energyResults, tariffData, DEFAULT_SYSTEM_COSTS, solarCapacity, batteryCapacity),
+    [energyResults, tariffData, solarCapacity, batteryCapacity]
+  );
 
-    const dailySavings = gridOnlyDailyCost - solarDailyCost;
-    const monthlySavings = dailySavings * 30;
-    const annualSavings = dailySavings * 365;
+  const financialResultsGeneric = useMemo(() => 
+    calculateFinancials(energyResultsGeneric, tariffData, DEFAULT_SYSTEM_COSTS, solarCapacity, batteryCapacity),
+    [energyResultsGeneric, tariffData, solarCapacity, batteryCapacity]
+  );
 
-    const solarCostPerKwp = 12000;
-    const batteryCostPerKwh = 8000;
-    const systemCost = (solarCapacity * solarCostPerKwp) + (batteryCapacity * batteryCostPerKwh);
-    const paybackYears = annualSavings > 0 ? systemCost / annualSavings : Infinity;
-    const roi = (annualSavings / systemCost) * 100;
+  const financialResultsSolcast = useMemo(() => 
+    energyResultsSolcast 
+      ? calculateFinancials(energyResultsSolcast, tariffData, DEFAULT_SYSTEM_COSTS, solarCapacity, batteryCapacity)
+      : null,
+    [energyResultsSolcast, tariffData, solarCapacity, batteryCapacity]
+  );
 
-    return {
-      hourlyData,
-      totalDailyLoad,
-      totalDailySolar,
-      totalGridImport,
-      totalSolarUsed,
-      totalSolarExport,
-      totalBatteryDischarge,
-      peakDemand,
-      newPeakDemand,
-      gridOnlyDailyCost,
-      solarDailyCost,
-      dailySavings,
-      monthlySavings,
-      annualSavings,
-      systemCost,
-      paybackYears,
-      roi,
-      avgRate,
-    };
-  };
+  // Annual scaling
+  const annualEnergy = useMemo(() => scaleToAnnual(energyResults), [energyResults]);
 
-  // Main simulation (active profile)
-  const simulation = useMemo(() => runSimulation(solarProfile), 
-    [loadProfile, solarProfile, solarCapacity, batteryCapacity, batteryPower, tariffRates, tariff]);
-
-  // Comparison simulations (both profiles for side-by-side)
-  const simulationGeneric = useMemo(() => runSimulation(solarProfileGeneric),
-    [loadProfile, solarProfileGeneric, solarCapacity, batteryCapacity, batteryPower, tariffRates, tariff]);
-
-  const simulationSolcast = useMemo(() => 
-    solarProfileSolcast ? runSimulation(solarProfileSolcast) : null,
-    [loadProfile, solarProfileSolcast, solarCapacity, batteryCapacity, batteryPower, tariffRates, tariff]);
-
+  // Empty states
   if (tenants.length === 0) {
     return (
       <Card className="border-dashed">
@@ -286,19 +254,6 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-muted-foreground text-center">
             Add tenants first to run energy simulations
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!project.tariff_id) {
-    return (
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground text-center">
-            Select a tariff first to run cost simulations
           </p>
         </CardContent>
       </Card>
@@ -316,13 +271,16 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const usingRealData = useSolcast && solcastHourlyProfile;
   const avgDailyGhi = solcastData?.summary?.average_daily_ghi_kwh_m2;
 
+  // Check if financial analysis is available
+  const hasFinancialData = !!project.tariff_id;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Energy Simulation</h2>
           <p className="text-sm text-muted-foreground">
-            Model solar and battery systems to optimize costs • {selectedLocation.name} 
+            Model solar and battery energy flows • {selectedLocation.name} 
             {usingRealData ? (
               <span className="text-primary"> (Solcast: {avgDailyGhi?.toFixed(1)} kWh/m²/day)</span>
             ) : (
@@ -440,16 +398,16 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                 </div>
               )}
             </div>
-            {/* Location-based output estimate */}
+            {/* Energy output estimate (tariff-independent) */}
             <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
               <div className="flex justify-between">
                 <span>Expected daily output</span>
-                <span className="text-foreground">{solarProfile.reduce((a, b) => a + b, 0).toFixed(0)} kWh</span>
+                <span className="text-foreground">{energyResults.totalDailySolar.toFixed(0)} kWh</span>
               </div>
               <div className="flex justify-between">
                 <span>Specific yield</span>
                 <span className="text-foreground">
-                  {((solarProfile.reduce((a, b) => a + b, 0) * 365) / solarCapacity).toFixed(0)} kWh/kWp/yr
+                  {((energyResults.totalDailySolar * 365) / solarCapacity).toFixed(0)} kWh/kWp/yr
                 </span>
               </div>
             </div>
@@ -490,64 +448,92 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                 step={5}
               />
             </div>
+            {/* Battery utilization (tariff-independent) */}
+            <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
+              <div className="flex justify-between">
+                <span>Daily cycles</span>
+                <span className="text-foreground">{energyResults.batteryCycles.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Energy throughput</span>
+                <span className="text-foreground">{energyResults.totalBatteryDischarge.toFixed(0)} kWh</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Financial Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">System Cost</span>
-              <span className="font-medium">R{simulation.systemCost.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Annual Savings</span>
-              <span className="font-medium text-green-600">R{Math.round(simulation.annualSavings).toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Payback</span>
-              <span className="font-medium">{simulation.paybackYears.toFixed(1)} years</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">ROI</span>
-              <span className="font-medium">{simulation.roi.toFixed(1)}%</span>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Financial Summary - only show if tariff is selected */}
+        {hasFinancialData ? (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Financial Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">System Cost</span>
+                <span className="font-medium">R{financialResults.systemCost.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Annual Savings</span>
+                <span className="font-medium text-green-600">R{Math.round(financialResults.annualSavings).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Payback</span>
+                <span className="font-medium">{financialResults.paybackYears.toFixed(1)} years</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">ROI</span>
+                <span className="font-medium">{financialResults.roi.toFixed(1)}%</span>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-dashed">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                <TrendingUp className="h-4 w-4" />
+                Financial Analysis
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
+                Select a tariff to enable cost analysis and ROI calculations.
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      {/* Results Summary */}
+      {/* Energy Results Summary (always visible - tariff-independent) */}
       <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Daily Load</CardDescription>
-            <CardTitle className="text-2xl">{Math.round(simulation.totalDailyLoad)} kWh</CardTitle>
+            <CardTitle className="text-2xl">{Math.round(energyResults.totalDailyLoad)} kWh</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Solar Generated</CardDescription>
             <CardTitle className="text-2xl text-amber-500">
-              {Math.round(solarProfile.reduce((a, b) => a + b, 0))} kWh
+              {Math.round(energyResults.totalDailySolar)} kWh
             </CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Grid Import</CardDescription>
-            <CardTitle className="text-2xl">{Math.round(simulation.totalGridImport)} kWh</CardTitle>
+            <CardTitle className="text-2xl">{Math.round(energyResults.totalGridImport)} kWh</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Solar Self-Use</CardDescription>
+            <CardDescription>Self-Consumption</CardDescription>
             <CardTitle className="text-2xl text-green-600">
-              {Math.round((simulation.totalSolarUsed / solarProfile.reduce((a, b) => a + b, 0)) * 100)}%
+              {Math.round(energyResults.selfConsumptionRate)}%
             </CardTitle>
           </CardHeader>
         </Card>
@@ -555,7 +541,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           <CardHeader className="pb-2">
             <CardDescription>Peak Reduction</CardDescription>
             <CardTitle className="text-2xl">
-              {Math.round(((simulation.peakDemand - simulation.newPeakDemand) / simulation.peakDemand) * 100)}%
+              {Math.round(energyResults.peakReduction)}%
             </CardTitle>
           </CardHeader>
         </Card>
@@ -572,16 +558,16 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           usingSolcast: !!usingRealData,
         }}
         currentResults={{
-          totalDailyLoad: simulation.totalDailyLoad,
-          totalDailySolar: simulation.totalDailySolar,
-          totalGridImport: simulation.totalGridImport,
-          totalSolarUsed: simulation.totalSolarUsed,
-          annualSavings: simulation.annualSavings,
-          systemCost: simulation.systemCost,
-          paybackYears: simulation.paybackYears,
-          roi: simulation.roi,
-          peakDemand: simulation.peakDemand,
-          newPeakDemand: simulation.newPeakDemand,
+          totalDailyLoad: energyResults.totalDailyLoad,
+          totalDailySolar: energyResults.totalDailySolar,
+          totalGridImport: energyResults.totalGridImport,
+          totalSolarUsed: energyResults.totalSolarUsed,
+          annualSavings: hasFinancialData ? financialResults.annualSavings : 0,
+          systemCost: financialResults.systemCost,
+          paybackYears: hasFinancialData ? financialResults.paybackYears : 0,
+          roi: hasFinancialData ? financialResults.roi : 0,
+          peakDemand: energyResults.peakLoad,
+          newPeakDemand: energyResults.peakGridImport,
         }}
         onLoadSimulation={(config) => {
           setSolarCapacity(config.solarCapacity);
@@ -598,8 +584,8 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
         <TabsList>
           <TabsTrigger value="energy">Energy Flow</TabsTrigger>
           <TabsTrigger value="battery">Battery State</TabsTrigger>
-          <TabsTrigger value="cost">Cost Comparison</TabsTrigger>
-          {simulationSolcast && (
+          {hasFinancialData && <TabsTrigger value="cost">Cost Comparison</TabsTrigger>}
+          {energyResultsSolcast && (
             <TabsTrigger value="compare" className="gap-1">
               <Cloud className="h-3 w-3" />
               Data Comparison
@@ -611,12 +597,12 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           <Card>
             <CardHeader>
               <CardTitle>Hourly Energy Flow</CardTitle>
-              <CardDescription>Load, solar generation, and grid import by hour</CardDescription>
+              <CardDescription>Load, solar generation, and grid import by hour (kWh)</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={simulation.hourlyData}>
+                  <BarChart data={energyResults.hourlyData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                     <XAxis dataKey="hour" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}`} />
@@ -647,7 +633,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
             <CardContent>
               <div className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={simulation.hourlyData}>
+                  <LineChart data={energyResults.hourlyData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                     <XAxis dataKey="hour" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
@@ -674,59 +660,61 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           </Card>
         </TabsContent>
 
-        <TabsContent value="cost" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Cost Comparison</CardTitle>
-              <CardDescription>Grid-only vs Solar+Battery system costs</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <h4 className="font-medium mb-3">Grid Only</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Daily Cost</span>
-                      <span>R{simulation.gridOnlyDailyCost.toFixed(2)}</span>
+        {hasFinancialData && (
+          <TabsContent value="cost" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Cost Comparison</CardTitle>
+                <CardDescription>Grid-only vs Solar+Battery system costs</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="p-4 rounded-lg bg-muted/50">
+                    <h4 className="font-medium mb-3">Grid Only</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Daily Cost</span>
+                        <span>R{financialResults.gridOnlyDailyCost.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Monthly Cost</span>
+                        <span>R{financialResults.gridOnlyMonthlyCost.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-medium">
+                        <span>Annual Cost</span>
+                        <span>R{Math.round(financialResults.gridOnlyAnnualCost).toLocaleString()}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Monthly Cost</span>
-                      <span>R{(simulation.gridOnlyDailyCost * 30).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between font-medium">
-                      <span>Annual Cost</span>
-                      <span>R{Math.round(simulation.gridOnlyDailyCost * 365).toLocaleString()}</span>
+                  </div>
+                  <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <h4 className="font-medium mb-3 text-green-700">With Solar + Battery</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Daily Cost</span>
+                        <span>R{financialResults.solarDailyCost.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Monthly Cost</span>
+                        <span>R{financialResults.solarMonthlyCost.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-medium">
+                        <span>Annual Cost</span>
+                        <span>R{Math.round(financialResults.solarAnnualCost).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between font-medium text-green-600 pt-2 border-t border-green-500/20">
+                        <span>Annual Savings</span>
+                        <span>R{Math.round(financialResults.annualSavings).toLocaleString()}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-                  <h4 className="font-medium mb-3 text-green-700">With Solar + Battery</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Daily Cost</span>
-                      <span>R{simulation.solarDailyCost.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Monthly Cost</span>
-                      <span>R{(simulation.solarDailyCost * 30).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between font-medium">
-                      <span>Annual Cost</span>
-                      <span>R{Math.round(simulation.solarDailyCost * 365).toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between font-medium text-green-600 pt-2 border-t border-green-500/20">
-                      <span>Annual Savings</span>
-                      <span>R{Math.round(simulation.annualSavings).toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {/* Data Comparison Tab - Solcast vs Generic */}
-        {simulationSolcast && (
+        {energyResultsSolcast && (
           <TabsContent value="compare" className="mt-4 space-y-4">
             {/* Solar Profile Comparison Chart */}
             <Card>
@@ -787,7 +775,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
               </CardContent>
             </Card>
 
-            {/* Side-by-Side Metrics Comparison */}
+            {/* Side-by-Side Energy Metrics Comparison */}
             <div className="grid gap-4 md:grid-cols-2">
               {/* Generic Model Results */}
               <Card className="border-muted">
@@ -804,31 +792,33 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Daily Solar</p>
-                      <p className="text-lg font-semibold">{simulationGeneric.totalDailySolar.toFixed(0)} kWh</p>
+                      <p className="text-lg font-semibold">{energyResultsGeneric.totalDailySolar.toFixed(0)} kWh</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Grid Import</p>
-                      <p className="text-lg font-semibold">{simulationGeneric.totalGridImport.toFixed(0)} kWh</p>
+                      <p className="text-lg font-semibold">{energyResultsGeneric.totalGridImport.toFixed(0)} kWh</p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Annual Savings</p>
-                      <p className="text-lg font-semibold text-green-600">R{Math.round(simulationGeneric.annualSavings).toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">Self-Consumption</p>
+                      <p className="text-lg font-semibold">{Math.round(energyResultsGeneric.selfConsumptionRate)}%</p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Payback</p>
-                      <p className="text-lg font-semibold">{simulationGeneric.paybackYears.toFixed(1)} yrs</p>
+                      <p className="text-xs text-muted-foreground">Peak Reduction</p>
+                      <p className="text-lg font-semibold">{Math.round(energyResultsGeneric.peakReduction)}%</p>
                     </div>
                   </div>
-                  <div className="pt-2 border-t space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Self-Consumption</span>
-                      <span>{Math.round((simulationGeneric.totalSolarUsed / simulationGeneric.totalDailySolar) * 100)}%</span>
+                  {hasFinancialData && (
+                    <div className="pt-2 border-t space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Annual Savings</span>
+                        <span className="text-green-600">R{Math.round(financialResultsGeneric.annualSavings).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Payback</span>
+                        <span>{financialResultsGeneric.paybackYears.toFixed(1)} yrs</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Peak Reduction</span>
-                      <span>{Math.round(((simulationGeneric.peakDemand - simulationGeneric.newPeakDemand) / simulationGeneric.peakDemand) * 100)}%</span>
-                    </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -849,93 +839,116 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Daily Solar</p>
                       <p className="text-lg font-semibold">
-                        {simulationSolcast.totalDailySolar.toFixed(0)} kWh
+                        {energyResultsSolcast.totalDailySolar.toFixed(0)} kWh
                         <DifferenceIndicator 
-                          current={simulationSolcast.totalDailySolar} 
-                          baseline={simulationGeneric.totalDailySolar} 
+                          baseValue={energyResultsGeneric.totalDailySolar} 
+                          compareValue={energyResultsSolcast.totalDailySolar} 
                         />
                       </p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Grid Import</p>
                       <p className="text-lg font-semibold">
-                        {simulationSolcast.totalGridImport.toFixed(0)} kWh
+                        {energyResultsSolcast.totalGridImport.toFixed(0)} kWh
                         <DifferenceIndicator 
-                          current={simulationSolcast.totalGridImport} 
-                          baseline={simulationGeneric.totalGridImport}
-                          inverted
+                          baseValue={energyResultsGeneric.totalGridImport} 
+                          compareValue={energyResultsSolcast.totalGridImport}
+                          invert
                         />
                       </p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Annual Savings</p>
-                      <p className="text-lg font-semibold text-green-600">
-                        R{Math.round(simulationSolcast.annualSavings).toLocaleString()}
-                        <DifferenceIndicator 
-                          current={simulationSolcast.annualSavings} 
-                          baseline={simulationGeneric.annualSavings}
-                          isMonetary
-                        />
-                      </p>
+                      <p className="text-xs text-muted-foreground">Self-Consumption</p>
+                      <p className="text-lg font-semibold">{Math.round(energyResultsSolcast.selfConsumptionRate)}%</p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Payback</p>
-                      <p className="text-lg font-semibold">
-                        {simulationSolcast.paybackYears.toFixed(1)} yrs
-                        <DifferenceIndicator 
-                          current={simulationSolcast.paybackYears} 
-                          baseline={simulationGeneric.paybackYears}
-                          inverted
-                          suffix=" yrs"
-                        />
-                      </p>
+                      <p className="text-xs text-muted-foreground">Peak Reduction</p>
+                      <p className="text-lg font-semibold">{Math.round(energyResultsSolcast.peakReduction)}%</p>
                     </div>
                   </div>
-                  <div className="pt-2 border-t space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Self-Consumption</span>
-                      <span>{Math.round((simulationSolcast.totalSolarUsed / simulationSolcast.totalDailySolar) * 100)}%</span>
+                  {hasFinancialData && financialResultsSolcast && (
+                    <div className="pt-2 border-t space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Annual Savings</span>
+                        <span className="text-green-600">
+                          R{Math.round(financialResultsSolcast.annualSavings).toLocaleString()}
+                          <DifferenceIndicator 
+                            baseValue={financialResultsGeneric.annualSavings} 
+                            compareValue={financialResultsSolcast.annualSavings} 
+                          />
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Payback</span>
+                        <span>
+                          {financialResultsSolcast.paybackYears.toFixed(1)} yrs
+                          <DifferenceIndicator 
+                            baseValue={financialResultsGeneric.paybackYears} 
+                            compareValue={financialResultsSolcast.paybackYears}
+                            invert
+                          />
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Peak Reduction</span>
-                      <span>{Math.round(((simulationSolcast.peakDemand - simulationSolcast.newPeakDemand) / simulationSolcast.peakDemand) * 100)}%</span>
-                    </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
 
-            {/* Accuracy Summary */}
+            {/* Accuracy Impact Summary */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Accuracy Impact Summary</CardTitle>
+                <CardTitle className="text-sm">Accuracy Impact Summary</CardTitle>
+                <CardDescription className="text-xs">
+                  How real weather data affects your simulation results
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-4">
                   <div className="text-center p-3 rounded-lg bg-muted/50">
-                    <p className="text-xs text-muted-foreground mb-1">Solar Output Difference</p>
-                    <p className={`text-xl font-bold ${simulationSolcast.totalDailySolar >= simulationGeneric.totalDailySolar ? 'text-green-600' : 'text-amber-600'}`}>
-                      {((simulationSolcast.totalDailySolar - simulationGeneric.totalDailySolar) / simulationGeneric.totalDailySolar * 100).toFixed(1)}%
+                    <p className="text-xs text-muted-foreground mb-1">Solar Output</p>
+                    <p className={`text-lg font-semibold ${
+                      energyResultsSolcast.totalDailySolar >= energyResultsGeneric.totalDailySolar 
+                        ? "text-green-600" : "text-amber-600"
+                    }`}>
+                      {((energyResultsSolcast.totalDailySolar - energyResultsGeneric.totalDailySolar) / 
+                        energyResultsGeneric.totalDailySolar * 100).toFixed(1)}%
                     </p>
                   </div>
                   <div className="text-center p-3 rounded-lg bg-muted/50">
-                    <p className="text-xs text-muted-foreground mb-1">Grid Import Difference</p>
-                    <p className={`text-xl font-bold ${simulationSolcast.totalGridImport <= simulationGeneric.totalGridImport ? 'text-green-600' : 'text-amber-600'}`}>
-                      {((simulationSolcast.totalGridImport - simulationGeneric.totalGridImport) / simulationGeneric.totalGridImport * 100).toFixed(1)}%
+                    <p className="text-xs text-muted-foreground mb-1">Grid Import</p>
+                    <p className={`text-lg font-semibold ${
+                      energyResultsSolcast.totalGridImport <= energyResultsGeneric.totalGridImport 
+                        ? "text-green-600" : "text-amber-600"
+                    }`}>
+                      {((energyResultsSolcast.totalGridImport - energyResultsGeneric.totalGridImport) / 
+                        energyResultsGeneric.totalGridImport * 100).toFixed(1)}%
                     </p>
                   </div>
-                  <div className="text-center p-3 rounded-lg bg-muted/50">
-                    <p className="text-xs text-muted-foreground mb-1">Savings Variance</p>
-                    <p className={`text-xl font-bold ${simulationSolcast.annualSavings >= simulationGeneric.annualSavings ? 'text-green-600' : 'text-amber-600'}`}>
-                      R{Math.abs(Math.round(simulationSolcast.annualSavings - simulationGeneric.annualSavings)).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="text-center p-3 rounded-lg bg-muted/50">
-                    <p className="text-xs text-muted-foreground mb-1">Payback Variance</p>
-                    <p className={`text-xl font-bold ${simulationSolcast.paybackYears <= simulationGeneric.paybackYears ? 'text-green-600' : 'text-amber-600'}`}>
-                      {Math.abs(simulationSolcast.paybackYears - simulationGeneric.paybackYears).toFixed(1)} yrs
-                    </p>
-                  </div>
+                  {hasFinancialData && financialResultsSolcast && (
+                    <>
+                      <div className="text-center p-3 rounded-lg bg-muted/50">
+                        <p className="text-xs text-muted-foreground mb-1">Savings</p>
+                        <p className={`text-lg font-semibold ${
+                          financialResultsSolcast.annualSavings >= financialResultsGeneric.annualSavings 
+                            ? "text-green-600" : "text-amber-600"
+                        }`}>
+                          {((financialResultsSolcast.annualSavings - financialResultsGeneric.annualSavings) / 
+                            financialResultsGeneric.annualSavings * 100).toFixed(1)}%
+                        </p>
+                      </div>
+                      <div className="text-center p-3 rounded-lg bg-muted/50">
+                        <p className="text-xs text-muted-foreground mb-1">Payback</p>
+                        <p className={`text-lg font-semibold ${
+                          financialResultsSolcast.paybackYears <= financialResultsGeneric.paybackYears 
+                            ? "text-green-600" : "text-amber-600"
+                        }`}>
+                          {((financialResultsSolcast.paybackYears - financialResultsGeneric.paybackYears) / 
+                            financialResultsGeneric.paybackYears * 100).toFixed(1)}%
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -943,35 +956,5 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
         )}
       </Tabs>
     </div>
-  );
-}
-
-// Helper component to show difference between values
-function DifferenceIndicator({ 
-  current, 
-  baseline, 
-  inverted = false, 
-  isMonetary = false,
-  suffix = ''
-}: { 
-  current: number; 
-  baseline: number; 
-  inverted?: boolean;
-  isMonetary?: boolean;
-  suffix?: string;
-}) {
-  const diff = current - baseline;
-  const pctDiff = baseline !== 0 ? (diff / baseline) * 100 : 0;
-  
-  if (Math.abs(pctDiff) < 0.5) return null;
-  
-  const isPositive = inverted ? diff < 0 : diff > 0;
-  const color = isPositive ? 'text-green-600' : 'text-amber-600';
-  const sign = diff > 0 ? '+' : '';
-  
-  return (
-    <span className={`text-xs font-normal ml-1 ${color}`}>
-      ({sign}{isMonetary ? `R${Math.round(diff).toLocaleString()}` : pctDiff.toFixed(0) + '%'}{suffix})
-    </span>
   );
 }
