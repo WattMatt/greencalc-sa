@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,16 +8,20 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Badge } from "@/components/ui/badge";
+import { useSolcastForecast } from "@/hooks/useSolcastForecast";
 import { 
   PVSystemConfig, 
   PVSystemConfigData, 
   getDefaultPVConfig, 
   generateSolarProfile,
+  generateAverageSolcastProfile,
   SA_SOLAR_LOCATIONS,
-  calculateSystemEfficiency
+  calculateSystemEfficiency,
+  HourlyIrradianceData
 } from "./PVSystemConfig";
 
 interface Tenant {
@@ -49,6 +53,20 @@ interface SimulationPanelProps {
 
 const DEFAULT_PROFILE = Array(24).fill(4.17);
 
+// Longitude values for SA cities (matching SA_SOLAR_LOCATIONS)
+const SA_LOCATION_LONGITUDES: Record<string, number> = {
+  johannesburg: 28.0,
+  capetown: 18.4,
+  durban: 31.0,
+  pretoria: 28.2,
+  bloemfontein: 26.2,
+  port_elizabeth: 25.6,
+  upington: 21.3,
+  polokwane: 29.4,
+  nelspruit: 30.9,
+  kimberley: 24.8,
+};
+
 export function SimulationPanel({ projectId, project, tenants, shopTypes }: SimulationPanelProps) {
   const queryClient = useQueryClient();
   const [solarCapacity, setSolarCapacity] = useState(100);
@@ -56,6 +74,32 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const [batteryPower, setBatteryPower] = useState(25);
   const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [useSolcast, setUseSolcast] = useState(false);
+  
+  // Solcast forecast hook
+  const { data: solcastData, isLoading: solcastLoading, fetchForecast, error: solcastError } = useSolcastForecast();
+
+  // Get location coordinates from PV config location
+  const selectedLocation = SA_SOLAR_LOCATIONS[pvConfig.location];
+  const hasCoordinates = selectedLocation?.lat !== undefined;
+  
+  // Fetch Solcast data when enabled and location is available
+  useEffect(() => {
+    if (useSolcast && hasCoordinates && !solcastData && !solcastLoading) {
+      fetchForecast({
+        latitude: selectedLocation.lat,
+        longitude: SA_LOCATION_LONGITUDES[pvConfig.location] ?? 28.0,
+        hours: 168, // 7 days
+        period: 'PT60M'
+      });
+    }
+  }, [useSolcast, hasCoordinates, pvConfig.location]);
+  
+  // Process Solcast data into hourly average profile
+  const solcastHourlyProfile = useMemo<HourlyIrradianceData[] | undefined>(() => {
+    if (!solcastData?.hourly || solcastData.hourly.length === 0) return undefined;
+    return generateAverageSolcastProfile(solcastData.hourly);
+  }, [solcastData]);
 
   const { data: tariffRates } = useQuery({
     queryKey: ["tariff-rates", project.tariff_id],
@@ -106,10 +150,11 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
     return profile;
   }, [tenants, shopTypes]);
 
-  // Generate solar profile using PVWatts-style calculation
+  // Generate solar profile - use Solcast data if available, otherwise fallback to PVWatts-style calculation
   const solarProfile = useMemo(() => {
-    return generateSolarProfile(pvConfig, solarCapacity);
-  }, [pvConfig, solarCapacity]);
+    const hourlyData = useSolcast && solcastHourlyProfile ? solcastHourlyProfile : undefined;
+    return generateSolarProfile(pvConfig, solarCapacity, hourlyData);
+  }, [pvConfig, solarCapacity, useSolcast, solcastHourlyProfile]);
 
   // Simulation calculations
   const simulation = useMemo(() => {
@@ -255,8 +300,11 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const maxSolarKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
   const solarExceedsLimit = maxSolarKva && solarCapacity > maxSolarKva;
 
-  const location = SA_SOLAR_LOCATIONS[pvConfig.location];
   const systemEfficiency = calculateSystemEfficiency(pvConfig);
+
+  // Data source indicator
+  const usingRealData = useSolcast && solcastHourlyProfile;
+  const avgDailyGhi = solcastData?.summary?.average_daily_ghi_kwh_m2;
 
   return (
     <div className="space-y-6">
@@ -264,8 +312,35 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
         <div>
           <h2 className="text-lg font-semibold">Energy Simulation</h2>
           <p className="text-sm text-muted-foreground">
-            Model solar and battery systems to optimize costs • {location.name} ({location.ghi} kWh/m²/day)
+            Model solar and battery systems to optimize costs • {selectedLocation.name} 
+            {usingRealData ? (
+              <span className="text-primary"> (Solcast: {avgDailyGhi?.toFixed(1)} kWh/m²/day)</span>
+            ) : (
+              <span> ({selectedLocation.ghi} kWh/m²/day)</span>
+            )}
           </p>
+        </div>
+        {/* Solcast Toggle */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant={useSolcast ? "default" : "outline"}
+            size="sm"
+            onClick={() => setUseSolcast(!useSolcast)}
+            disabled={solcastLoading}
+            className="gap-2"
+          >
+            {solcastLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Cloud className="h-4 w-4" />
+            )}
+            {useSolcast ? "Using Solcast" : "Use Solcast Forecast"}
+          </Button>
+          {usingRealData && (
+            <Badge variant="outline" className="text-xs text-primary border-primary">
+              Real Irradiance Data
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -301,7 +376,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
               <Sun className="h-4 w-4" />
               Advanced PV Configuration (PVWatts-style)
               <span className="text-xs text-muted-foreground ml-2">
-                {location.name} • {(systemEfficiency * 100).toFixed(1)}% efficiency
+                {selectedLocation.name} • {(systemEfficiency * 100).toFixed(1)}% efficiency
               </span>
             </span>
             {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
