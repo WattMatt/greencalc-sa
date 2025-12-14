@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tenant, ShopType, DAYS_OF_WEEK, DayOfWeek, DisplayUnit, Annotation } from "./types";
 import { useLoadProfileData } from "./hooks/useLoadProfileData";
 import { useExportHandlers } from "./hooks/useExportHandlers";
+import { useSolcastPVProfile } from "./hooks/useSolcastPVProfile";
 import { LoadChart } from "./charts/LoadChart";
 import { SolarChart } from "./charts/SolarChart";
 import { BatteryChart } from "./charts/BatteryChart";
@@ -18,9 +19,11 @@ interface LoadProfileChartProps {
   tenants: Tenant[];
   shopTypes: ShopType[];
   connectionSizeKva?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
-export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: LoadProfileChartProps) {
+export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitude, longitude }: LoadProfileChartProps) {
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kwh");
   const [powerFactor, setPowerFactor] = useState(0.9);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Wednesday");
@@ -34,6 +37,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [systemLosses, setSystemLosses] = useState(0.14);
   const chartRef = useRef<HTMLDivElement>(null);
 
   const maxPvAcKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
@@ -41,6 +45,19 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
   const isWeekend = selectedDay === "Saturday" || selectedDay === "Sunday";
   const unit = displayUnit === "kwh" ? "kWh" : "kVA";
+
+  // Solcast PV profile hook
+  const {
+    pvProfile: solcastProfile,
+    isLoading: solcastLoading,
+    useSolcast,
+    toggleSolcast,
+    refetch: refetchSolcast,
+    hasLocation,
+  } = useSolcastPVProfile({
+    latitude: latitude || null,
+    longitude: longitude || null,
+  });
 
   const navigateDay = (direction: "prev" | "next") => {
     const newIndex = direction === "prev" ? (dayIndex - 1 + 7) % 7 : (dayIndex + 1) % 7;
@@ -70,6 +87,8 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
     showBattery,
     batteryCapacity,
     batteryPower,
+    solcastProfile: useSolcast ? solcastProfile : undefined,
+    systemLosses,
   });
 
   const { exportToCSV, exportToPDF, exportToPNG, exportToSVG } = useExportHandlers({
@@ -148,6 +167,16 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
             setBatteryCapacity={setBatteryCapacity}
             batteryPower={batteryPower}
             setBatteryPower={setBatteryPower}
+            // Solcast props
+            solcastProfile={solcastProfile}
+            useSolcast={useSolcast}
+            toggleSolcast={toggleSolcast}
+            solcastLoading={solcastLoading}
+            refetchSolcast={refetchSolcast}
+            hasLocation={hasLocation}
+            // System losses
+            systemLosses={systemLosses}
+            setSystemLosses={setSystemLosses}
           />
 
           {/* Load Profile Chart */}
