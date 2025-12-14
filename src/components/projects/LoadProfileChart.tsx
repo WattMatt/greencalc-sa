@@ -499,7 +499,18 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
     const percentGain = total1to1Baseline > 0 ? (additionalKwh / total1to1Baseline) * 100 : 0;
     const clippingPercent = totalDcOutput > 0 ? (totalClipping / totalDcOutput) * 100 : 0;
     
+    // Monthly and annual projections
+    const monthlyAdditionalKwh = additionalKwh * 30;
+    const annualAdditionalKwh = additionalKwh * 365;
+    const monthlyClipping = totalClipping * 30;
+    const annualClipping = totalClipping * 365;
+    const monthly1to1 = total1to1Baseline * 30;
+    const annual1to1 = total1to1Baseline * 365;
+    const monthlyWithOversizing = totalAcOutput * 30;
+    const annualWithOversizing = totalAcOutput * 365;
+    
     return {
+      // Daily
       totalDcOutput,
       totalAcOutput,
       total1to1Baseline,
@@ -507,6 +518,16 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
       percentGain,
       totalClipping,
       clippingPercent,
+      // Monthly
+      monthlyAdditionalKwh,
+      monthlyClipping,
+      monthly1to1,
+      monthlyWithOversizing,
+      // Annual
+      annualAdditionalKwh,
+      annualClipping,
+      annual1to1,
+      annualWithOversizing,
     };
   }, [chartData, showPVProfile, maxPvAcKva, dcAcRatio]);
 
@@ -928,37 +949,66 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
               
               {/* Over-Paneling Summary */}
               {overPanelingStats && dcAcRatio > 1 && (
-                <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                  <p className="text-xs font-medium text-amber-600 mb-2 flex items-center gap-1.5">
-                    <Sun className="h-3 w-3" />
-                    DC/AC Oversizing Analysis ({(dcAcRatio * 100).toFixed(0)}% ratio)
-                  </p>
-                  <div className="grid grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <p className="text-muted-foreground">1:1 Baseline</p>
-                      <p className="font-semibold">{overPanelingStats.total1to1Baseline.toFixed(1)} kWh</p>
+              <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <p className="text-xs font-medium text-amber-600 mb-2 flex items-center gap-1.5">
+                  <Sun className="h-3 w-3" />
+                  DC/AC Oversizing Analysis ({(dcAcRatio * 100).toFixed(0)}% ratio)
+                </p>
+                
+                {/* Daily Stats */}
+                <div className="grid grid-cols-4 gap-3 text-xs mb-3">
+                  <div>
+                    <p className="text-muted-foreground">Daily 1:1 Baseline</p>
+                    <p className="font-semibold">{overPanelingStats.total1to1Baseline.toFixed(1)} kWh</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Daily With Oversizing</p>
+                    <p className="font-semibold">{overPanelingStats.totalAcOutput.toFixed(1)} kWh</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Daily Additional</p>
+                    <p className={`font-semibold ${overPanelingStats.additionalKwh >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      +{overPanelingStats.additionalKwh.toFixed(1)} kWh
+                      <span className="text-[10px] ml-1">({overPanelingStats.percentGain >= 0 ? '+' : ''}{overPanelingStats.percentGain.toFixed(1)}%)</span>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Daily Clipping</p>
+                    <p className="font-semibold text-orange-500">
+                      {overPanelingStats.totalClipping.toFixed(1)} kWh
+                      <span className="text-[10px] ml-1">({overPanelingStats.clippingPercent.toFixed(1)}%)</span>
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Monthly & Annual Projections */}
+                <div className="pt-2 border-t border-amber-500/20">
+                  <p className="text-[10px] text-muted-foreground mb-1.5">Projected Gains</p>
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="flex items-center justify-between p-2 rounded bg-green-500/10">
+                      <div>
+                        <p className="text-muted-foreground text-[10px]">Monthly Additional</p>
+                        <p className="font-semibold text-green-600">+{(overPanelingStats.monthlyAdditionalKwh / 1000).toFixed(1)} MWh</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-muted-foreground text-[10px]">Annual Additional</p>
+                        <p className="font-bold text-green-600">+{(overPanelingStats.annualAdditionalKwh / 1000).toFixed(1)} MWh</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-muted-foreground">With Oversizing</p>
-                      <p className="font-semibold">{overPanelingStats.totalAcOutput.toFixed(1)} kWh</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Additional kWh</p>
-                      <p className={`font-semibold ${overPanelingStats.additionalKwh >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        +{overPanelingStats.additionalKwh.toFixed(1)} kWh
-                        <span className="text-[10px] ml-1">({overPanelingStats.percentGain >= 0 ? '+' : ''}{overPanelingStats.percentGain.toFixed(1)}%)</span>
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Clipping Loss</p>
-                      <p className="font-semibold text-orange-500">
-                        {overPanelingStats.totalClipping.toFixed(1)} kWh
-                        <span className="text-[10px] ml-1">({overPanelingStats.clippingPercent.toFixed(1)}%)</span>
-                      </p>
+                    <div className="flex items-center justify-between p-2 rounded bg-orange-500/10">
+                      <div>
+                        <p className="text-muted-foreground text-[10px]">Monthly Clipping</p>
+                        <p className="font-semibold text-orange-500">{(overPanelingStats.monthlyClipping / 1000).toFixed(1)} MWh</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-muted-foreground text-[10px]">Annual Clipping</p>
+                        <p className="font-bold text-orange-500">{(overPanelingStats.annualClipping / 1000).toFixed(1)} MWh</p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
             </div>
           )}
 
