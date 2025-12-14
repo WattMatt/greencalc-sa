@@ -658,176 +658,325 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
             </CollapsibleContent>
           </Collapsible>
 
-          {/* Chart */}
-          <div className="h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
-                  </linearGradient>
-                  <linearGradient id="pvGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(38 92% 50%)" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="hsl(38 92% 50%)" stopOpacity={0.05}/>
-                  </linearGradient>
-                </defs>
-                
-                {/* TOU Background */}
-                {showTOU && Array.from({ length: 24 }, (_, h) => {
-                  const period = getTOUPeriod(h, isWeekend);
-                  const nextHour = h === 23 ? 23 : h + 1;
-                  return (
-                    <ReferenceArea
-                      key={h}
-                      x1={`${h.toString().padStart(2, "0")}:00`}
-                      x2={`${nextHour.toString().padStart(2, "0")}:00`}
-                      fill={TOU_COLORS[period].fill}
-                      fillOpacity={0.12}
-                      stroke="none"
-                    />
-                  );
-                })}
-                
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                <XAxis
-                  dataKey="hour"
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                  tickLine={false}
-                  axisLine={{ stroke: "hsl(var(--border))" }}
-                  interval={2}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v.toString()}
-                  width={45}
-                />
-                <Tooltip
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload?.length) return null;
-                    const loadValue = Number(payload.find(p => p.dataKey === "total")?.value) || 0;
-                    const pvValue = Number(payload.find(p => p.dataKey === "pvGeneration")?.value) || 0;
-                    const hourNum = parseInt(label?.toString() || "0");
-                    const period = getTOUPeriod(hourNum, isWeekend);
+          {/* Load Profile Chart */}
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Load Profile</p>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05}/>
+                    </linearGradient>
+                  </defs>
+                  
+                  {/* TOU Background */}
+                  {showTOU && Array.from({ length: 24 }, (_, h) => {
+                    const period = getTOUPeriod(h, isWeekend);
+                    const nextHour = h === 23 ? 23 : h + 1;
                     return (
-                      <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="text-xs font-medium">{label}</p>
-                          <Badge 
-                            variant="outline" 
-                            className="text-[10px] px-1.5 py-0"
-                            style={{ borderColor: TOU_COLORS[period].stroke, color: TOU_COLORS[period].stroke }}
-                          >
-                            {TOU_COLORS[period].label}
-                          </Badge>
-                        </div>
-                        <p className="text-lg font-bold">{loadValue.toFixed(1)} {unit}</p>
-                        {showPVProfile && pvValue > 0 && (
-                          <div className="mt-1 pt-1 border-t text-xs space-y-0.5">
-                            <p className="text-amber-500">PV: {pvValue.toFixed(1)} {unit}</p>
-                            <p className={loadValue - pvValue > 0 ? "text-red-400" : "text-green-500"}>
-                              Net: {(loadValue - pvValue).toFixed(1)} {unit}
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                      <ReferenceArea
+                        key={h}
+                        x1={`${h.toString().padStart(2, "0")}:00`}
+                        x2={`${nextHour.toString().padStart(2, "0")}:00`}
+                        fill={TOU_COLORS[period].fill}
+                        fillOpacity={0.12}
+                        stroke="none"
+                      />
                     );
-                  }}
-                />
-                
-                {/* Load Area */}
-                <Area
-                  type="monotone"
-                  dataKey="total"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  fill="url(#totalGradient)"
-                  dot={false}
-                  activeDot={{ r: 5, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }}
-                />
-                
-                {/* PV Generation */}
-                {showPVProfile && maxPvAcKva && (
+                  })}
+                  
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                  <XAxis
+                    dataKey="hour"
+                    tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                    tickLine={false}
+                    axisLine={{ stroke: "hsl(var(--border))" }}
+                    interval={2}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v.toString()}
+                    width={45}
+                  />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      const loadValue = Number(payload.find(p => p.dataKey === "total")?.value) || 0;
+                      const hourNum = parseInt(label?.toString() || "0");
+                      const period = getTOUPeriod(hourNum, isWeekend);
+                      return (
+                        <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-xs font-medium">{label}</p>
+                            <Badge 
+                              variant="outline" 
+                              className="text-[10px] px-1.5 py-0"
+                              style={{ borderColor: TOU_COLORS[period].stroke, color: TOU_COLORS[period].stroke }}
+                            >
+                              {TOU_COLORS[period].label}
+                            </Badge>
+                          </div>
+                          <p className="text-lg font-bold">{loadValue.toFixed(1)} {unit}</p>
+                        </div>
+                      );
+                    }}
+                  />
+                  
                   <Area
                     type="monotone"
-                    dataKey="pvGeneration"
-                    stroke="hsl(38 92% 50%)"
+                    dataKey="total"
+                    stroke="hsl(var(--primary))"
                     strokeWidth={2}
-                    fill="url(#pvGradient)"
+                    fill="url(#totalGradient)"
                     dot={false}
+                    activeDot={{ r: 5, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }}
                   />
-                )}
-                
-                {/* DC Output Line (when oversizing) */}
-                {showPVProfile && maxPvAcKva && dcAcRatio > 1 && (
-                  <Line
-                    type="monotone"
-                    dataKey="pvDcOutput"
-                    stroke="hsl(25 95% 53%)"
-                    strokeWidth={1.5}
-                    strokeDasharray="4 3"
-                    dot={false}
-                  />
-                )}
-                
-                {/* Grid Import */}
-                {showPVProfile && (
-                  <Area
-                    type="monotone"
-                    dataKey="gridImport"
-                    stroke="hsl(0 72% 51%)"
-                    strokeWidth={1}
-                    fill="hsl(0 72% 51%)"
-                    fillOpacity={0.2}
-                    dot={false}
-                  />
-                )}
-                
-                {/* Battery */}
-                {showBattery && (
-                  <>
-                    <Area type="monotone" dataKey="batteryCharge" stroke="hsl(142 76% 36%)" strokeWidth={1.5} fill="hsl(142 76% 36%)" fillOpacity={0.3} dot={false} />
-                    <Area type="monotone" dataKey="batteryDischarge" stroke="hsl(25 95% 53%)" strokeWidth={1.5} fill="hsl(25 95% 53%)" fillOpacity={0.3} dot={false} />
-                  </>
-                )}
-              </ComposedChart>
-            </ResponsiveContainer>
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
-          {/* Compact Legend */}
-          <div className="mt-3 pt-3 border-t flex flex-wrap gap-4 text-xs">
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm bg-primary/60" />
-              <span>Load</span>
+          {/* PV Generation Chart */}
+          {showPVProfile && maxPvAcKva && (
+            <div className="space-y-1 mt-4 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Sun className="h-3 w-3 text-amber-500" />
+                  Solar Generation vs Load
+                </p>
+                <div className="flex items-center gap-3 text-[10px]">
+                  <span className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-sm bg-amber-500/60" />
+                    PV ({maxPvAcKva.toFixed(0)} kVA)
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-sm bg-red-500/40" />
+                    Grid Import
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-sm bg-green-500/40" />
+                    Export
+                  </span>
+                </div>
+              </div>
+              <div className="h-[180px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="pvGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(38 92% 50%)" stopOpacity={0.5}/>
+                        <stop offset="95%" stopColor="hsl(38 92% 50%)" stopOpacity={0.05}/>
+                      </linearGradient>
+                    </defs>
+                    
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                    <XAxis
+                      dataKey="hour"
+                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                      tickLine={false}
+                      axisLine={{ stroke: "hsl(var(--border))" }}
+                      interval={2}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v.toString()}
+                      width={45}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null;
+                        const pvValue = Number(payload.find(p => p.dataKey === "pvGeneration")?.value) || 0;
+                        const loadValue = Number(payload.find(p => p.dataKey === "total")?.value) || 0;
+                        const gridImport = Number(payload.find(p => p.dataKey === "gridImport")?.value) || 0;
+                        const gridExport = Number(payload.find(p => p.dataKey === "gridExport")?.value) || 0;
+                        return (
+                          <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg text-xs space-y-1">
+                            <p className="font-medium">{label}</p>
+                            <p className="text-amber-500">PV: {pvValue.toFixed(1)} {unit}</p>
+                            <p className="text-muted-foreground">Load: {loadValue.toFixed(1)} {unit}</p>
+                            {gridImport > 0 && <p className="text-red-400">Grid Import: {gridImport.toFixed(1)} {unit}</p>}
+                            {gridExport > 0 && <p className="text-green-500">Export: {gridExport.toFixed(1)} {unit}</p>}
+                          </div>
+                        );
+                      }}
+                    />
+                    
+                    {/* Load as reference line */}
+                    <Line
+                      type="monotone"
+                      dataKey="total"
+                      stroke="hsl(var(--muted-foreground))"
+                      strokeWidth={1}
+                      strokeDasharray="4 2"
+                      dot={false}
+                    />
+                    
+                    {/* PV Generation */}
+                    <Area
+                      type="monotone"
+                      dataKey="pvGeneration"
+                      stroke="hsl(38 92% 50%)"
+                      strokeWidth={2}
+                      fill="url(#pvGradient)"
+                      dot={false}
+                    />
+                    
+                    {/* DC Output Line (when oversizing) */}
+                    {dcAcRatio > 1 && (
+                      <Line
+                        type="monotone"
+                        dataKey="pvDcOutput"
+                        stroke="hsl(25 95% 53%)"
+                        strokeWidth={1.5}
+                        strokeDasharray="4 3"
+                        dot={false}
+                      />
+                    )}
+                    
+                    {/* Grid Import */}
+                    <Area
+                      type="monotone"
+                      dataKey="gridImport"
+                      stroke="hsl(0 72% 51%)"
+                      strokeWidth={1}
+                      fill="hsl(0 72% 51%)"
+                      fillOpacity={0.25}
+                      dot={false}
+                    />
+                    
+                    {/* Grid Export */}
+                    <Area
+                      type="monotone"
+                      dataKey="gridExport"
+                      stroke="hsl(142 76% 36%)"
+                      strokeWidth={1}
+                      fill="hsl(142 76% 36%)"
+                      fillOpacity={0.25}
+                      dot={false}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-            {showPVProfile && (
-              <>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "hsl(38 92% 50%)", opacity: 0.6 }} />
-                  <span>PV ({maxPvAcKva?.toFixed(0)} kVA)</span>
+          )}
+
+          {/* Battery Chart */}
+          {showBattery && showPVProfile && maxPvAcKva && (
+            <div className="space-y-1 mt-4 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Battery className="h-3 w-3 text-green-500" />
+                  Battery Storage ({batteryCapacity} kWh / {batteryPower} kW)
+                </p>
+                <div className="flex items-center gap-3 text-[10px]">
+                  <span className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-sm bg-green-500/60" />
+                    Charge
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-sm bg-orange-500/60" />
+                    Discharge
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <div className="w-2 h-0.5 bg-blue-500" />
+                    SoC
+                  </span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "hsl(0 72% 51%)", opacity: 0.4 }} />
-                  <span>Grid Import</span>
-                </div>
-              </>
-            )}
-            {showBattery && (
-              <>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "hsl(142 76% 36%)", opacity: 0.6 }} />
-                  <span>Charge</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "hsl(25 95% 53%)", opacity: 0.6 }} />
-                  <span>Discharge</span>
-                </div>
-              </>
-            )}
-            {showTOU && (
-              <div className="flex items-center gap-3 ml-auto">
+              </div>
+              <div className="h-[150px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={chartData} margin={{ top: 10, right: 40, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                    <XAxis
+                      dataKey="hour"
+                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                      tickLine={false}
+                      axisLine={{ stroke: "hsl(var(--border))" }}
+                      interval={2}
+                    />
+                    <YAxis
+                      yAxisId="power"
+                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => `${v}`}
+                      width={45}
+                    />
+                    <YAxis
+                      yAxisId="soc"
+                      orientation="right"
+                      domain={[0, batteryCapacity]}
+                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => `${Math.round((v / batteryCapacity) * 100)}%`}
+                      width={40}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null;
+                        const charge = Number(payload.find(p => p.dataKey === "batteryCharge")?.value) || 0;
+                        const discharge = Number(payload.find(p => p.dataKey === "batteryDischarge")?.value) || 0;
+                        const soc = Number(payload.find(p => p.dataKey === "batterySoC")?.value) || 0;
+                        return (
+                          <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg text-xs space-y-1">
+                            <p className="font-medium">{label}</p>
+                            {charge > 0 && <p className="text-green-500">Charging: {charge.toFixed(1)} kW</p>}
+                            {discharge > 0 && <p className="text-orange-500">Discharging: {discharge.toFixed(1)} kW</p>}
+                            <p className="text-blue-500">SoC: {Math.round((soc / batteryCapacity) * 100)}% ({soc.toFixed(0)} kWh)</p>
+                          </div>
+                        );
+                      }}
+                    />
+                    
+                    <Area 
+                      yAxisId="power"
+                      type="monotone" 
+                      dataKey="batteryCharge" 
+                      stroke="hsl(142 76% 36%)" 
+                      strokeWidth={1.5} 
+                      fill="hsl(142 76% 36%)" 
+                      fillOpacity={0.4} 
+                      dot={false} 
+                    />
+                    <Area 
+                      yAxisId="power"
+                      type="monotone" 
+                      dataKey="batteryDischarge" 
+                      stroke="hsl(25 95% 53%)" 
+                      strokeWidth={1.5} 
+                      fill="hsl(25 95% 53%)" 
+                      fillOpacity={0.4} 
+                      dot={false} 
+                    />
+                    <Line
+                      yAxisId="soc"
+                      type="monotone"
+                      dataKey="batterySoC"
+                      stroke="hsl(217 91% 60%)"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* TOU Legend (only shown when TOU is enabled) */}
+          {showTOU && (
+            <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-sm bg-primary/60" />
+                <span>Load Profile</span>
+              </div>
+              <div className="flex items-center gap-3">
                 {Object.entries(TOU_COLORS).map(([key, val]) => (
                   <div key={key} className="flex items-center gap-1">
                     <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: val.fill, opacity: 0.7 }} />
@@ -835,8 +984,8 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Annotations Panel */}
           {showAnnotations && (
