@@ -1,4 +1,4 @@
-import { LayoutDashboard, Settings, Calculator, Database, Zap, Building2, Activity } from "lucide-react";
+import { LayoutDashboard, Settings, Calculator, Database, Zap, Building2, Activity, Sparkles } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -19,6 +19,7 @@ const referenceDataItems = [
 ];
 
 const projectItems = [
+  { title: "Simulations", url: "/simulations", icon: Sparkles },
   { title: "Projects", url: "/projects", icon: Building2 },
   { title: "Calculator", url: "/calculator", icon: Calculator },
 ];
