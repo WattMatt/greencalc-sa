@@ -8,7 +8,7 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Sun, ChevronLeft, ChevronRight, Battery, Settings2, ChevronDown, Download, FileSpreadsheet, FileText, Image } from "lucide-react";
+import { Sun, ChevronLeft, ChevronRight, Battery, Settings2, ChevronDown, Download, FileSpreadsheet, FileText, Image, FileCode } from "lucide-react";
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
 interface Tenant {
@@ -385,6 +385,49 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
     }
   }, [selectedDay]);
 
+  // Export to SVG
+  const exportToSVG = useCallback(() => {
+    if (!chartRef.current) {
+      toast.error("Chart not available");
+      return;
+    }
+    
+    const svgElement = chartRef.current.querySelector("svg");
+    if (!svgElement) {
+      toast.error("Chart SVG not found");
+      return;
+    }
+    
+    try {
+      // Clone the SVG to avoid modifying the original
+      const clonedSvg = svgElement.cloneNode(true) as SVGElement;
+      
+      // Add white background
+      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("width", "100%");
+      rect.setAttribute("height", "100%");
+      rect.setAttribute("fill", "white");
+      clonedSvg.insertBefore(rect, clonedSvg.firstChild);
+      
+      // Serialize and download
+      const serializer = new XMLSerializer();
+      const svgString = serializer.serializeToString(clonedSvg);
+      const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `load-profile-${selectedDay.toLowerCase()}.svg`;
+      link.click();
+      
+      URL.revokeObjectURL(url);
+      toast.success("SVG exported successfully");
+    } catch (error) {
+      console.error("SVG export error:", error);
+      toast.error("Failed to export SVG");
+    }
+  }, [selectedDay]);
+
   // PV Stats
   const pvStats = useMemo(() => {
     if (!showPVProfile || !maxPvAcKva) return null;
@@ -508,6 +551,10 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   <DropdownMenuItem onClick={exportToPNG} className="gap-2">
                     <Image className="h-4 w-4" />
                     Export as PNG
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportToSVG} className="gap-2">
+                    <FileCode className="h-4 w-4" />
+                    Export as SVG
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
