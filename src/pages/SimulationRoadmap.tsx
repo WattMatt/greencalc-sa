@@ -1,4 +1,3 @@
-import { AppLayout } from "@/components/layout/AppLayout";
 import { PromptCard } from "@/components/simulation/PromptCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -181,93 +180,91 @@ export default function SimulationRoadmap() {
   const progressPercentage = (completedCount / phases.length) * 100;
 
   return (
-    <AppLayout>
-      <div className="container max-w-4xl py-6 space-y-8">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/simulations")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold tracking-tight">Development Roadmap</h1>
-            <p className="text-muted-foreground">
-              Track progress and access development prompts for simulation features
-            </p>
-          </div>
-        </div>
-
-        {/* Progress Overview */}
-        <Card>
-          <CardContent className="py-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Overall Progress</span>
-              <span className="text-sm text-muted-foreground">
-                {completedCount} of {phases.length} phases complete
-              </span>
-            </div>
-            <Progress value={progressPercentage} className="h-2" />
-          </CardContent>
-        </Card>
-
-        {/* Phase List */}
-        <div className="space-y-4">
-          {phases.map((phase) => (
-            <Card key={phase.id} className={phase.status === "complete" ? "border-green-500/30" : ""}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${phase.status === "complete" ? "bg-green-500/10" : "bg-muted"}`}>
-                      <phase.icon className={`h-5 w-5 ${phase.status === "complete" ? "text-green-600" : "text-muted-foreground"}`} />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base flex items-center gap-2">
-                        Phase {phase.id}: {phase.name}
-                        {phase.status === "complete" ? (
-                          <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Complete
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary">
-                            <Circle className="h-3 w-3 mr-1" />
-                            Pending
-                          </Badge>
-                        )}
-                      </CardTitle>
-                      <CardDescription>{phase.description}</CardDescription>
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-2">FEATURES</p>
-                  <ul className="grid grid-cols-2 gap-1 text-sm">
-                    {phase.features.map((feature) => (
-                      <li key={feature} className="flex items-center gap-2 text-muted-foreground">
-                        {phase.status === "complete" ? (
-                          <CheckCircle2 className="h-3 w-3 text-green-600" />
-                        ) : (
-                          <Circle className="h-3 w-3" />
-                        )}
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                
-                {phase.prompt && (
-                  <PromptCard
-                    title="Development Prompt"
-                    description="Copy this prompt to start building this phase"
-                    prompt={phase.prompt}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          ))}
+    <div className="container max-w-4xl py-6 space-y-8">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/simulations")}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold tracking-tight">Development Roadmap</h1>
+          <p className="text-muted-foreground">
+            Track progress and access development prompts for simulation features
+          </p>
         </div>
       </div>
-    </AppLayout>
+
+      {/* Progress Overview */}
+      <Card>
+        <CardContent className="py-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">Overall Progress</span>
+            <span className="text-sm text-muted-foreground">
+              {completedCount} of {phases.length} phases complete
+            </span>
+          </div>
+          <Progress value={progressPercentage} className="h-2" />
+        </CardContent>
+      </Card>
+
+      {/* Phase List */}
+      <div className="space-y-4">
+        {phases.map((phase) => (
+          <Card key={phase.id} className={phase.status === "complete" ? "border-green-500/30" : ""}>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${phase.status === "complete" ? "bg-green-500/10" : "bg-muted"}`}>
+                    <phase.icon className={`h-5 w-5 ${phase.status === "complete" ? "text-green-600" : "text-muted-foreground"}`} />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      Phase {phase.id}: {phase.name}
+                      {phase.status === "complete" ? (
+                        <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Complete
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          <Circle className="h-3 w-3 mr-1" />
+                          Pending
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <CardDescription>{phase.description}</CardDescription>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">FEATURES</p>
+                <ul className="grid grid-cols-2 gap-1 text-sm">
+                  {phase.features.map((feature) => (
+                    <li key={feature} className="flex items-center gap-2 text-muted-foreground">
+                      {phase.status === "complete" ? (
+                        <CheckCircle2 className="h-3 w-3 text-green-600" />
+                      ) : (
+                        <Circle className="h-3 w-3" />
+                      )}
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              
+              {phase.prompt && (
+                <PromptCard
+                  title="Development Prompt"
+                  description="Copy this prompt to start building this phase"
+                  prompt={phase.prompt}
+                />
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
   );
 }

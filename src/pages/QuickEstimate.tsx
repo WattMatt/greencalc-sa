@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { QuickEstimateForm, QuickEstimateInputs } from "@/components/simulation/QuickEstimateForm";
 import { QuickEstimateResults, QuickEstimateOutput } from "@/components/simulation/QuickEstimateResults";
 import { Button } from "@/components/ui/button";
@@ -95,32 +94,30 @@ export default function QuickEstimate() {
   };
 
   return (
-    <AppLayout>
-      <div className="container max-w-5xl py-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/simulations")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Quick Estimate</h1>
-            <p className="text-muted-foreground">
-              Get instant ballpark figures for a theoretical solar installation
-            </p>
-          </div>
-        </div>
-
-        {/* Two column layout */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <QuickEstimateForm
-            inputs={inputs}
-            onInputChange={setInputs}
-            onCalculate={calculateEstimate}
-            isCalculating={isCalculating}
-          />
-          <QuickEstimateResults results={results} />
+    <div className="container max-w-5xl py-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/simulations")}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Quick Estimate</h1>
+          <p className="text-muted-foreground">
+            Get instant ballpark figures for a theoretical solar installation
+          </p>
         </div>
       </div>
-    </AppLayout>
+
+      {/* Two column layout */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <QuickEstimateForm
+          inputs={inputs}
+          onInputChange={setInputs}
+          onCalculate={calculateEstimate}
+          isCalculating={isCalculating}
+        />
+        <QuickEstimateResults results={results} />
+      </div>
+    </div>
   );
 }

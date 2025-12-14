@@ -1,4 +1,3 @@
-import { AppLayout } from "@/components/layout/AppLayout";
 import { PromptCard } from "@/components/simulation/PromptCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -66,67 +65,65 @@ export default function ProposalBuilder() {
   ];
 
   return (
-    <AppLayout>
-      <div className="container max-w-4xl py-6 space-y-8">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/simulations")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight">Proposal Builder</h1>
-              <Badge variant="secondary">Coming Soon</Badge>
-            </div>
-            <p className="text-muted-foreground">
-              Create professional, client-ready proposals with verified data
-            </p>
+    <div className="container max-w-4xl py-6 space-y-8">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/simulations")}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight">Proposal Builder</h1>
+            <Badge variant="secondary">Coming Soon</Badge>
           </div>
-        </div>
-
-        {/* Coming Soon Hero */}
-        <Card className="border-dashed bg-muted/30">
-          <CardContent className="py-12 text-center">
-            <FileCheck className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
-            <h2 className="text-xl font-semibold mb-2">Under Development</h2>
-            <p className="text-muted-foreground max-w-md mx-auto">
-              The Proposal Builder will help you create professional, branded proposals
-              with verification workflows and version tracking.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Feature Preview */}
-        <div>
-          <h3 className="text-lg font-semibold mb-4">Planned Features</h3>
-          <div className="grid gap-4 md:grid-cols-3">
-            {features.map((feature) => (
-              <Card key={feature.title}>
-                <CardContent className="pt-6">
-                  <feature.icon className="h-8 w-8 mb-3 text-primary" />
-                  <h4 className="font-medium mb-1">{feature.title}</h4>
-                  <p className="text-sm text-muted-foreground">{feature.description}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        {/* Development Prompt */}
-        <PromptCard
-          title="Development Prompt"
-          description="Copy this prompt to implement Proposal Builder"
-          prompt={PROPOSAL_PROMPT}
-        />
-
-        {/* Back to Hub */}
-        <div className="text-center">
-          <Button variant="outline" onClick={() => navigate("/simulations")}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Simulation Hub
-          </Button>
+          <p className="text-muted-foreground">
+            Create professional, client-ready proposals with verified data
+          </p>
         </div>
       </div>
-    </AppLayout>
+
+      {/* Coming Soon Hero */}
+      <Card className="border-dashed bg-muted/30">
+        <CardContent className="py-12 text-center">
+          <FileCheck className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
+          <h2 className="text-xl font-semibold mb-2">Under Development</h2>
+          <p className="text-muted-foreground max-w-md mx-auto">
+            The Proposal Builder will help you create professional, branded proposals
+            with verification workflows and version tracking.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Feature Preview */}
+      <div>
+        <h3 className="text-lg font-semibold mb-4">Planned Features</h3>
+        <div className="grid gap-4 md:grid-cols-3">
+          {features.map((feature) => (
+            <Card key={feature.title}>
+              <CardContent className="pt-6">
+                <feature.icon className="h-8 w-8 mb-3 text-primary" />
+                <h4 className="font-medium mb-1">{feature.title}</h4>
+                <p className="text-sm text-muted-foreground">{feature.description}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Development Prompt */}
+      <PromptCard
+        title="Development Prompt"
+        description="Copy this prompt to implement Proposal Builder"
+        prompt={PROPOSAL_PROMPT}
+      />
+
+      {/* Back to Hub */}
+      <div className="text-center">
+        <Button variant="outline" onClick={() => navigate("/simulations")}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Simulation Hub
+        </Button>
+      </div>
+    </div>
   );
 }
