@@ -486,6 +486,30 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
     };
   }, [chartData, showPVProfile, maxPvAcKva, totalDaily]);
 
+  // Over-paneling stats (DC/AC ratio > 1)
+  const overPanelingStats = useMemo(() => {
+    if (!showPVProfile || !maxPvAcKva || dcAcRatio <= 1) return null;
+    
+    const totalDcOutput = chartData.reduce((sum, d) => sum + (d.pvDcOutput || 0), 0);
+    const totalAcOutput = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);
+    const totalClipping = chartData.reduce((sum, d) => sum + (d.pvClipping || 0), 0);
+    const total1to1Baseline = chartData.reduce((sum, d) => sum + (d.pv1to1Baseline || 0), 0);
+    
+    const additionalKwh = totalAcOutput - total1to1Baseline;
+    const percentGain = total1to1Baseline > 0 ? (additionalKwh / total1to1Baseline) * 100 : 0;
+    const clippingPercent = totalDcOutput > 0 ? (totalClipping / totalDcOutput) * 100 : 0;
+    
+    return {
+      totalDcOutput,
+      totalAcOutput,
+      total1to1Baseline,
+      additionalKwh,
+      percentGain,
+      totalClipping,
+      clippingPercent,
+    };
+  }, [chartData, showPVProfile, maxPvAcKva, dcAcRatio]);
+
   if (tenants.length === 0) {
     return (
       <Card className="border-dashed">
@@ -901,6 +925,40 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
+              
+              {/* Over-Paneling Summary */}
+              {overPanelingStats && dcAcRatio > 1 && (
+                <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-xs font-medium text-amber-600 mb-2 flex items-center gap-1.5">
+                    <Sun className="h-3 w-3" />
+                    DC/AC Oversizing Analysis ({(dcAcRatio * 100).toFixed(0)}% ratio)
+                  </p>
+                  <div className="grid grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">1:1 Baseline</p>
+                      <p className="font-semibold">{overPanelingStats.total1to1Baseline.toFixed(1)} kWh</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">With Oversizing</p>
+                      <p className="font-semibold">{overPanelingStats.totalAcOutput.toFixed(1)} kWh</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Additional kWh</p>
+                      <p className={`font-semibold ${overPanelingStats.additionalKwh >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        +{overPanelingStats.additionalKwh.toFixed(1)} kWh
+                        <span className="text-[10px] ml-1">({overPanelingStats.percentGain >= 0 ? '+' : ''}{overPanelingStats.percentGain.toFixed(1)}%)</span>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Clipping Loss</p>
+                      <p className="font-semibold text-orange-500">
+                        {overPanelingStats.totalClipping.toFixed(1)} kWh
+                        <span className="text-[10px] ml-1">({overPanelingStats.clippingPercent.toFixed(1)}%)</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
