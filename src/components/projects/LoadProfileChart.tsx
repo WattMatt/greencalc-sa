@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, Line, ComposedChart } from "recharts";
 import { Badge } from "@/components/ui/badge";
@@ -7,8 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Sun, ChevronLeft, ChevronRight, Battery, Settings2, ChevronDown } from "lucide-react";
-
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Sun, ChevronLeft, ChevronRight, Battery, Settings2, ChevronDown, Download, FileSpreadsheet, FileText } from "lucide-react";
+import { toast } from "sonner";
 interface Tenant {
   id: string;
   name: string;
@@ -95,7 +96,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
   const [batteryPower, setBatteryPower] = useState(250);
   const [dcAcRatio, setDcAcRatio] = useState(1.3);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-
+  const chartRef = useRef<HTMLDivElement>(null);
   const maxPvAcKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
   const dcCapacityKwp = maxPvAcKva ? maxPvAcKva * dcAcRatio : null;
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
@@ -227,6 +228,134 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
   const loadFactor = peakHour.val > 0 ? (avgHourly / peakHour.val) * 100 : 0;
   const unit = displayUnit === "kwh" ? "kWh" : "kVA";
 
+  // Export to CSV
+  const exportToCSV = useCallback(() => {
+    const headers = ["Hour", `Load (${unit})`];
+    if (showPVProfile) {
+      headers.push("PV Generation", "Grid Import", "Grid Export", "Net Load");
+    }
+    if (showBattery) {
+      headers.push("Battery Charge", "Battery Discharge", "Battery SoC");
+    }
+    headers.push("TOU Period");
+
+    const rows = chartData.map((d, i) => {
+      const row = [d.hour, d.total.toFixed(2)];
+      if (showPVProfile) {
+        row.push(
+          (d.pvGeneration || 0).toFixed(2),
+          (d.gridImport || 0).toFixed(2),
+          (d.gridExport || 0).toFixed(2),
+          (d.netLoad || 0).toFixed(2)
+        );
+      }
+      if (showBattery) {
+        row.push(
+          (d.batteryCharge || 0).toFixed(2),
+          (d.batteryDischarge || 0).toFixed(2),
+          (d.batterySoC || 0).toFixed(2)
+        );
+      }
+      row.push(TOU_COLORS[getTOUPeriod(i, isWeekend)].label);
+      return row;
+    });
+
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `load-profile-${selectedDay.toLowerCase()}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV exported successfully");
+  }, [chartData, unit, showPVProfile, showBattery, selectedDay, isWeekend]);
+
+  // Export to PDF
+  const exportToPDF = useCallback(() => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Please allow popups to export PDF");
+      return;
+    }
+
+    const tableRows = chartData.map((d, i) => {
+      const period = getTOUPeriod(i, isWeekend);
+      return `
+        <tr>
+          <td style="padding: 4px 8px; border-bottom: 1px solid #eee;">${d.hour}</td>
+          <td style="padding: 4px 8px; border-bottom: 1px solid #eee; text-align: right;">${d.total.toFixed(1)}</td>
+          ${showPVProfile ? `<td style="padding: 4px 8px; border-bottom: 1px solid #eee; text-align: right;">${(d.pvGeneration || 0).toFixed(1)}</td>` : ""}
+          ${showPVProfile ? `<td style="padding: 4px 8px; border-bottom: 1px solid #eee; text-align: right;">${(d.gridImport || 0).toFixed(1)}</td>` : ""}
+          <td style="padding: 4px 8px; border-bottom: 1px solid #eee;">${TOU_COLORS[period].label}</td>
+        </tr>
+      `;
+    }).join("");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Load Profile Report - ${selectedDay}</title>
+        <style>
+          body { font-family: system-ui, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+          h1 { font-size: 24px; margin-bottom: 8px; }
+          .meta { color: #666; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          th { text-align: left; padding: 8px; border-bottom: 2px solid #333; font-weight: 600; }
+          .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+          .stat { background: #f5f5f5; padding: 12px; border-radius: 6px; }
+          .stat-label { font-size: 12px; color: #666; }
+          .stat-value { font-size: 20px; font-weight: 600; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <h1>Load Profile Report</h1>
+        <p class="meta">${selectedDay} • ${isWeekend ? "Weekend" : "Weekday"} • Generated ${new Date().toLocaleDateString()}</p>
+        
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Daily ${unit}</div>
+            <div class="stat-value">${Math.round(totalDaily).toLocaleString()}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Peak</div>
+            <div class="stat-value">${Math.round(peakHour.val).toLocaleString()} ${unit}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Load Factor</div>
+            <div class="stat-value">${loadFactor.toFixed(0)}%</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Hour</th>
+              <th style="text-align: right;">Load (${unit})</th>
+              ${showPVProfile ? '<th style="text-align: right;">PV Gen</th>' : ""}
+              ${showPVProfile ? '<th style="text-align: right;">Grid Import</th>' : ""}
+              <th>TOU Period</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+
+        <p style="color: #999; font-size: 12px; margin-top: 20px;">
+          ${tenants.length} tenants • ${tenantsWithScada} SCADA meters, ${tenantsEstimated} estimated
+        </p>
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.print();
+    toast.success("PDF ready for printing");
+  }, [chartData, unit, selectedDay, isWeekend, totalDaily, peakHour, loadFactor, showPVProfile, tenants.length, tenantsWithScada, tenantsEstimated]);
+
   // PV Stats
   const pvStats = useMemo(() => {
     if (!showPVProfile || !maxPvAcKva) return null;
@@ -329,6 +458,26 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva }: Load
                 {tenantsWithScada > 0 && <Badge className="text-[10px]">{tenantsWithScada} SCADA</Badge>}
                 {tenantsEstimated > 0 && <Badge variant="secondary" className="text-[10px]">{tenantsEstimated} Est.</Badge>}
               </div>
+
+              {/* Export Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                    <Download className="h-3.5 w-3.5" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={exportToCSV} className="gap-2">
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Export as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportToPDF} className="gap-2">
+                    <FileText className="h-4 w-4" />
+                    Export as PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </CardHeader>
