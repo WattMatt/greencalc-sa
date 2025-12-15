@@ -1,5 +1,8 @@
-import { LayoutDashboard, Settings, Calculator, Database, Zap, Building2, Activity, Sparkles } from "lucide-react";
+import { LayoutDashboard, Settings, Calculator, Database, Zap, Building2, Activity, Sparkles, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import {
   Sidebar,
   SidebarContent,
@@ -30,7 +33,13 @@ const otherItems = [
 
 export function AppSidebar() {
   const { state } = useSidebar();
+  const { user, signOut } = useAuth();
   const isCollapsed = state === "collapsed";
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success('Signed out successfully');
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -135,6 +144,27 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {user && (
+          <SidebarGroup className="mt-auto">
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Sign Out">
+                    <Button
+                      variant="ghost"
+                      onClick={handleSignOut}
+                      className="w-full justify-start gap-3 px-3 py-2 h-auto font-normal text-muted-foreground hover:text-foreground"
+                    >
+                      <LogOut className="h-5 w-5 shrink-0" />
+                      {!isCollapsed && <span>Sign Out</span>}
+                    </Button>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
     </Sidebar>
   );
