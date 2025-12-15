@@ -166,6 +166,147 @@ export const DEFAULT_ADVANCED_CONFIG: AdvancedSimulationConfig = {
   loadGrowth: DEFAULT_LOAD_GROWTH_CONFIG,
 };
 
+// ============= Presets =============
+export type PresetName = 'conservative' | 'optimistic' | 'sa_market_standard';
+
+export interface SimulationPreset {
+  name: string;
+  description: string;
+  config: AdvancedSimulationConfig;
+}
+
+export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
+  conservative: {
+    name: "Conservative",
+    description: "Lower expectations, higher degradation rates, cautious assumptions",
+    config: {
+      seasonal: {
+        ...DEFAULT_SEASONAL_CONFIG,
+        enabled: true,
+        highDemandLoadMultiplier: 1.08,
+        lowDemandLoadMultiplier: 0.95,
+      },
+      degradation: {
+        enabled: true,
+        panelDegradationRate: 0.7,
+        panelFirstYearDegradation: 2.5,
+        batteryDegradationRate: 4.0,
+        batteryEolCapacity: 70,
+        inverterReplacementYear: 10,
+        inverterReplacementCost: 65000,
+      },
+      financial: {
+        enabled: true,
+        tariffEscalationRate: 8.0,
+        inflationRate: 6.5,
+        discountRate: 12.0,
+        projectLifetimeYears: 20,
+        sensitivityEnabled: true,
+        sensitivityVariation: 25,
+      },
+      gridConstraints: {
+        ...DEFAULT_GRID_CONSTRAINTS_CONFIG,
+        enabled: false,
+      },
+      loadGrowth: {
+        enabled: true,
+        annualGrowthRate: 1.0,
+        newTenantEnabled: false,
+        newTenantYear: 3,
+        newTenantLoadKwh: 5000,
+      },
+    },
+  },
+  optimistic: {
+    name: "Optimistic",
+    description: "Higher performance assumptions, lower degradation, favorable economics",
+    config: {
+      seasonal: {
+        ...DEFAULT_SEASONAL_CONFIG,
+        enabled: true,
+        highDemandLoadMultiplier: 1.03,
+        lowDemandLoadMultiplier: 0.98,
+      },
+      degradation: {
+        enabled: true,
+        panelDegradationRate: 0.4,
+        panelFirstYearDegradation: 1.5,
+        batteryDegradationRate: 2.5,
+        batteryEolCapacity: 75,
+        inverterReplacementYear: 15,
+        inverterReplacementCost: 40000,
+      },
+      financial: {
+        enabled: true,
+        tariffEscalationRate: 12.0,
+        inflationRate: 4.5,
+        discountRate: 8.0,
+        projectLifetimeYears: 30,
+        sensitivityEnabled: true,
+        sensitivityVariation: 15,
+      },
+      gridConstraints: {
+        ...DEFAULT_GRID_CONSTRAINTS_CONFIG,
+        enabled: false,
+      },
+      loadGrowth: {
+        enabled: true,
+        annualGrowthRate: 3.0,
+        newTenantEnabled: false,
+        newTenantYear: 3,
+        newTenantLoadKwh: 5000,
+      },
+    },
+  },
+  sa_market_standard: {
+    name: "SA Market Standard",
+    description: "Realistic South African market assumptions based on industry data",
+    config: {
+      seasonal: {
+        enabled: true,
+        monthlyIrradianceFactors: [1.15, 1.10, 1.05, 0.95, 0.85, 0.80, 0.82, 0.90, 1.00, 1.08, 1.15, 1.15],
+        highDemandMonths: [5, 6, 7],
+        highDemandLoadMultiplier: 1.05,
+        lowDemandLoadMultiplier: 0.98,
+      },
+      degradation: {
+        enabled: true,
+        panelDegradationRate: 0.5,
+        panelFirstYearDegradation: 2.0,
+        batteryDegradationRate: 3.0,
+        batteryEolCapacity: 70,
+        inverterReplacementYear: 12,
+        inverterReplacementCost: 50000,
+      },
+      financial: {
+        enabled: true,
+        tariffEscalationRate: 10.0,
+        inflationRate: 5.5,
+        discountRate: 10.0,
+        projectLifetimeYears: 25,
+        sensitivityEnabled: true,
+        sensitivityVariation: 20,
+      },
+      gridConstraints: {
+        enabled: true,
+        maxExportKw: 100,
+        exportLimitEnabled: false,
+        exportRestrictedHours: [],
+        exportRestrictionsEnabled: false,
+        wheelingChargePerKwh: 0.30,
+        wheelingEnabled: false,
+      },
+      loadGrowth: {
+        enabled: true,
+        annualGrowthRate: 2.0,
+        newTenantEnabled: false,
+        newTenantYear: 3,
+        newTenantLoadKwh: 5000,
+      },
+    },
+  },
+};
+
 // ============= Advanced Financial Results =============
 export interface AdvancedFinancialResults {
   // Standard metrics

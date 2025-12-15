@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun } from "lucide-react";
+import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -8,6 +8,7 @@ import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AdvancedSimulationConfig,
   DEFAULT_ADVANCED_CONFIG,
@@ -16,6 +17,8 @@ import {
   AdvancedFinancialConfig,
   GridConstraintsConfig,
   LoadGrowthConfig,
+  SIMULATION_PRESETS,
+  PresetName,
 } from "./AdvancedSimulationTypes";
 
 interface AdvancedSimulationConfigProps {
@@ -61,6 +64,50 @@ export function AdvancedSimulationConfigPanel({
         
         <CollapsibleContent>
           <CardContent className="space-y-4 pt-0">
+            {/* Presets */}
+            <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg border bg-muted/30">
+              <div className="flex items-center gap-2 mr-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <Label className="text-sm font-medium">Quick Presets:</Label>
+              </div>
+              <TooltipProvider>
+                {(Object.keys(SIMULATION_PRESETS) as PresetName[]).map((key) => {
+                  const preset = SIMULATION_PRESETS[key];
+                  return (
+                    <Tooltip key={key}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onChange(preset.config);
+                          }}
+                        >
+                          {preset.name}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-xs">
+                        <p className="text-xs">{preset.description}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </TooltipProvider>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground ml-auto"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange(DEFAULT_ADVANCED_CONFIG);
+                }}
+              >
+                Reset
+              </Button>
+            </div>
+
             {/* Seasonal Variation */}
             <SeasonalSection 
               config={config.seasonal}
