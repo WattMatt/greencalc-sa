@@ -1,9 +1,19 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Info } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Info, RotateCcw, HelpCircle } from "lucide-react";
+import { useTour, TOURS } from "@/components/onboarding";
+import { toast } from "sonner";
 
 export default function Settings() {
+  const { completedTours, resetAllTours } = useTour();
+
+  const handleResetTours = () => {
+    resetAllTours();
+    toast.success("All tours have been reset. They will appear again when you visit each page.");
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -38,6 +48,42 @@ export default function Settings() {
               </div>
               <Switch />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-card-foreground">
+              <HelpCircle className="h-5 w-5" />
+              Onboarding Tours
+            </CardTitle>
+            <CardDescription>Manage guided tours and help overlays</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 rounded-lg bg-accent/50">
+              <p className="text-sm text-muted-foreground">
+                {completedTours.length === 0 ? (
+                  "No tours completed yet. Visit simulation pages to see guided tours."
+                ) : (
+                  <>
+                    You have completed <strong>{completedTours.length}</strong> of{" "}
+                    <strong>{Object.keys(TOURS).length}</strong> available tours.
+                  </>
+                )}
+              </p>
+            </div>
+            <Button 
+              variant="outline" 
+              onClick={handleResetTours}
+              disabled={completedTours.length === 0}
+              className="w-full"
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reset All Tours
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Resetting tours will show the onboarding guides again when you visit each simulation page.
+            </p>
           </CardContent>
         </Card>
 
