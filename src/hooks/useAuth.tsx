@@ -36,7 +36,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    // Handle temporary session - sign out when browser closes
+    const handleBeforeUnload = () => {
+      if (sessionStorage.getItem('session_temporary') === 'true') {
+        // Clear the auth tokens from localStorage to end session
+        localStorage.removeItem('sb-zhhcwtftckdwfoactkea-auth-token');
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
