@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getTour, useAutoTour } from "@/components/onboarding";
 
 import { SandboxToolbar } from "@/components/sandbox/SandboxToolbar";
 import { ScenarioCard, ScenarioConfig } from "@/components/sandbox/ScenarioCard";
@@ -13,6 +14,8 @@ import { ParameterSweep, SweepConfig } from "@/components/sandbox/ParameterSweep
 import { DraftReportDialog } from "@/components/sandbox/DraftReportDialog";
 import { useSandboxState } from "@/components/sandbox/useSandboxState";
 
+const sandboxTour = getTour("sandbox");
+
 export default function SandboxWorkspace() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -20,6 +23,9 @@ export default function SandboxWorkspace() {
 
   const [isRunning, setIsRunning] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+
+  // Auto-start tour for first-time visitors
+  useAutoTour({ tour: sandboxTour });
 
   const {
     state,

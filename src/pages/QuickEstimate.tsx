@@ -4,8 +4,10 @@ import { QuickEstimateResults, QuickEstimateOutput } from "@/components/simulati
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { TourButton, getTour } from "@/components/onboarding";
+import { TourButton, getTour, useAutoTour } from "@/components/onboarding";
 import { MethodologySection, solarMethodology, financialMethodology } from "@/components/simulation/MethodologySection";
+
+const quickEstimateTour = getTour("quickEstimate");
 
 const DEFAULT_INPUTS: QuickEstimateInputs = {
   location: "",
@@ -30,6 +32,9 @@ export default function QuickEstimate() {
   const [inputs, setInputs] = useState<QuickEstimateInputs>(DEFAULT_INPUTS);
   const [results, setResults] = useState<QuickEstimateOutput | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+
+  // Auto-start tour for first-time visitors
+  useAutoTour({ tour: quickEstimateTour });
 
   const calculateEstimate = () => {
     setIsCalculating(true);
@@ -110,7 +115,7 @@ export default function QuickEstimate() {
             </p>
           </div>
         </div>
-        <TourButton tour={getTour("quickEstimate")} />
+        <TourButton tour={quickEstimateTour} />
       </div>
 
       {/* Two column layout */}
