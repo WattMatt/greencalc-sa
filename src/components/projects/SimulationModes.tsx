@@ -216,14 +216,43 @@ export function SimulationModes({ projectId, project, tenants, shopTypes }: Simu
 
       {/* Proposal Builder */}
       <TabsContent value="proposal">
-        <Card className="border-dashed">
-          <CardContent className="py-12 text-center">
-            <FileCheck className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Proposal Builder</h3>
-            <p className="text-muted-foreground mb-4">
-              Create professional, client-ready proposals with verified assumptions
-            </p>
-            <Badge variant="outline">Coming Soon</Badge>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <FileCheck className="h-6 w-6 text-primary" />
+                <div>
+                  <CardTitle>Proposal Builder</CardTitle>
+                  <CardDescription>
+                    Create professional, client-ready proposals with verified assumptions
+                  </CardDescription>
+                </div>
+              </div>
+              <Button onClick={() => navigate(`/projects/${projectId}/proposal`)}>
+                Create Proposal
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-muted-foreground">Verification</p>
+                <p className="font-medium">4 checks required</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-muted-foreground">Branding</p>
+                <p className="font-medium">Logo & colors</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-muted-foreground">Export</p>
+                <p className="font-medium">PDF & Excel</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-muted-foreground">Workflow</p>
+                <p className="font-medium">Digital signatures</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </TabsContent>
