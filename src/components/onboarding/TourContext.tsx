@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from "react";
+import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
 
 export interface TourStep {
   target: string; // CSS selector for the element to highlight
@@ -45,14 +45,12 @@ interface TourContextType {
 const TourContext = createContext<TourContextType | undefined>(undefined);
 
 const COMPLETED_TOURS_KEY = "completed_tours";
-const DEFAULT_AUTO_ADVANCE_MS = 4000;
 
 export function TourProvider({ children }: { children: ReactNode }) {
   const [activeTour, setActiveTour] = useState<Tour | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [demoSpeed, setDemoSpeed] = useState(1);
-  const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [completedTours, setCompletedTours] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem(COMPLETED_TOURS_KEY);
@@ -83,9 +81,6 @@ export function TourProvider({ children }: { children: ReactNode }) {
     setActiveTour(null);
     setCurrentStepIndex(0);
     setIsDemoMode(false);
-    if (autoAdvanceTimerRef.current) {
-      clearTimeout(autoAdvanceTimerRef.current);
-    }
   }, [activeTour, markTourCompleted]);
 
   const nextStep = useCallback(() => {
@@ -112,25 +107,6 @@ export function TourProvider({ children }: { children: ReactNode }) {
     setCompletedTours([]);
     localStorage.removeItem(COMPLETED_TOURS_KEY);
   }, []);
-
-  // Demo mode auto-advance effect
-  useEffect(() => {
-    if (!isDemoMode || !activeTour) return;
-
-    const currentStep = activeTour.steps[currentStepIndex];
-    const baseDelay = currentStep?.autoAdvanceMs || DEFAULT_AUTO_ADVANCE_MS;
-    const adjustedDelay = baseDelay / demoSpeed;
-
-    autoAdvanceTimerRef.current = setTimeout(() => {
-      nextStep();
-    }, adjustedDelay);
-
-    return () => {
-      if (autoAdvanceTimerRef.current) {
-        clearTimeout(autoAdvanceTimerRef.current);
-      }
-    };
-  }, [isDemoMode, activeTour, currentStepIndex, demoSpeed, nextStep]);
 
   return (
     <TourContext.Provider

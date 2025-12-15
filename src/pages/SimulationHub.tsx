@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { getTour, useAutoTour } from "@/components/onboarding";
+import { getTour, useAutoTour, DemoLauncher } from "@/components/onboarding";
 
 const simulationHubTour = getTour("simulationHub");
 
@@ -57,14 +57,17 @@ export default function SimulationHub() {
     <div className="container max-w-5xl py-6 space-y-8">
       {/* Header */}
       <div className="space-y-2">
-        <div className="flex items-center gap-3">
-          <FlaskConical className="h-8 w-8 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">All Sandboxes</h1>
-            <p className="text-muted-foreground">
-              Overview of all experimental sandboxes across your projects
-            </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <FlaskConical className="h-8 w-8 text-primary" />
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">All Sandboxes</h1>
+              <p className="text-muted-foreground">
+                Overview of all experimental sandboxes across your projects
+              </p>
+            </div>
           </div>
+          <DemoLauncher />
         </div>
       </div>
 
