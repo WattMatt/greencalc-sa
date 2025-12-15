@@ -53,33 +53,18 @@ const phases = [
     id: 4,
     name: "Proposal Builder",
     icon: FileCheck,
-    status: "pending" as const,
+    status: "complete" as const,
     description: "Create professional, client-ready proposals with verification and branding",
     features: [
       "Verification checklist workflow",
       "Professional PDF report generation",
       "Company branding options",
       "Version tracking and history",
+      "Digital signature/approval workflow",
+      "25-year financial projections",
+      "Excel export with hourly data",
     ],
-    prompt: `Develop the Proposal Builder Mode for creating client-ready solar installation proposals. This mode should:
-
-1. Start from a completed simulation (from Profile Builder or Sandbox)
-2. Add verification checklist requiring confirmation of:
-   - Site coordinates verified
-   - Consumption data source (actual vs estimated)
-   - Tariff rates confirmed current
-   - System specifications validated
-3. Create professional PDF report template with sections:
-   - Executive Summary (1 page)
-   - Site Overview with map
-   - System Specification table
-   - Financial Analysis (25-year projection)
-   - Assumptions & Disclaimers
-   - Appendix with detailed hourly data
-4. Add company branding options (logo, colors, contact info)
-5. Implement version tracking (v1, v2, etc.)
-6. Add digital signature/approval workflow
-7. Export to PDF and Excel formats`,
+    prompt: null,
   },
   {
     id: 5,

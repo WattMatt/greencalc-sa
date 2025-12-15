@@ -1,7 +1,8 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Sun, Battery, Zap, TrendingUp, Calendar, MapPin, Building2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sun, Battery, Zap, TrendingUp, Calendar, MapPin, Building2, ChevronDown, ChevronUp } from "lucide-react";
+import { useState } from "react";
 import type { Proposal, SimulationData, ProposalBranding } from "./types";
 
 interface ProposalPreviewProps {
@@ -14,6 +15,7 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
   const branding = proposal.branding as ProposalBranding;
   const primaryColor = branding?.primary_color || "#22c55e";
   const secondaryColor = branding?.secondary_color || "#0f172a";
+  const [showFullProjection, setShowFullProjection] = useState(false);
 
   // Generate 25-year projection
   const generateProjection = () => {
@@ -41,6 +43,8 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
   };
 
   const projection = generateProjection();
+  const displayedProjection = showFullProjection ? projection : projection.slice(0, 10);
+  const paybackYear = projection.find(p => p.cumulative >= (simulation?.systemCost || 0))?.year || 0;
 
   return (
     <div className="bg-background border rounded-lg overflow-hidden" id="proposal-preview">
@@ -97,28 +101,38 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
         </p>
       </div>
 
-      {/* Site Overview */}
+      {/* Site Overview with Map Placeholder */}
       <div className="p-6 border-b">
         <h2 className="text-lg font-semibold mb-3 flex items-center gap-2" style={{ color: primaryColor }}>
           <MapPin className="h-5 w-5" />
           Site Overview
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-3 rounded-lg bg-muted/50">
-            <p className="text-xs text-muted-foreground">Location</p>
-            <p className="font-medium">{project?.location || "Not specified"}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3">
+            <div className="p-3 rounded-lg bg-muted/50">
+              <p className="text-xs text-muted-foreground">Location</p>
+              <p className="font-medium">{project?.location || "Not specified"}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50">
+              <p className="text-xs text-muted-foreground">Total Area</p>
+              <p className="font-medium">{project?.total_area_sqm?.toLocaleString() || "—"} m²</p>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50">
+              <p className="text-xs text-muted-foreground">Connection Size</p>
+              <p className="font-medium">{project?.connection_size_kva || "—"} kVA</p>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50">
+              <p className="text-xs text-muted-foreground">Tariff</p>
+              <p className="font-medium">{simulation?.tariffName || "Standard"}</p>
+            </div>
           </div>
-          <div className="p-3 rounded-lg bg-muted/50">
-            <p className="text-xs text-muted-foreground">Total Area</p>
-            <p className="font-medium">{project?.total_area_sqm?.toLocaleString() || "—"} m²</p>
-          </div>
-          <div className="p-3 rounded-lg bg-muted/50">
-            <p className="text-xs text-muted-foreground">Connection Size</p>
-            <p className="font-medium">{project?.connection_size_kva || "—"} kVA</p>
-          </div>
-          <div className="p-3 rounded-lg bg-muted/50">
-            <p className="text-xs text-muted-foreground">Tariff</p>
-            <p className="font-medium">{simulation?.tariffName || "Standard"}</p>
+          {/* Map Placeholder */}
+          <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center p-6 bg-muted/20 min-h-[200px]">
+            <MapPin className="h-12 w-12 text-muted-foreground/40 mb-2" />
+            <p className="text-sm text-muted-foreground text-center">Site Location Map</p>
+            <p className="text-xs text-muted-foreground/60 text-center mt-1">
+              {project?.location || "Coordinates not set"}
+            </p>
           </div>
         </div>
       </div>
@@ -183,11 +197,11 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
           </div>
           <div className="p-4 rounded-lg" style={{ backgroundColor: primaryColor + "10" }}>
             <p className="text-xs text-muted-foreground">Payback Period</p>
-            <p className="text-xl font-bold">{(simulation?.paybackYears || 0).toFixed(1)} years</p>
+            <p className="text-xl font-bold">{paybackYear || (simulation?.paybackYears || 0).toFixed(1)} years</p>
           </div>
           <div className="p-4 rounded-lg" style={{ backgroundColor: primaryColor + "10" }}>
             <p className="text-xs text-muted-foreground">25-Year ROI</p>
-            <p className="text-xl font-bold">{(simulation?.roiPercentage || 0).toFixed(0)}%</p>
+            <p className="text-xl font-bold">{projection[24]?.roi.toFixed(0) || simulation?.roiPercentage || 0}%</p>
           </div>
         </div>
 
@@ -204,9 +218,19 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
               </tr>
             </thead>
             <tbody>
-              {projection.slice(0, 10).map((row) => (
-                <tr key={row.year} className="border-b">
-                  <td className="py-2 px-2">{row.year}</td>
+              {displayedProjection.map((row) => (
+                <tr 
+                  key={row.year} 
+                  className={`border-b ${row.year === paybackYear ? 'bg-primary/5 font-medium' : ''}`}
+                >
+                  <td className="py-2 px-2">
+                    {row.year}
+                    {row.year === paybackYear && (
+                      <Badge variant="outline" className="ml-2 text-xs" style={{ borderColor: primaryColor, color: primaryColor }}>
+                        Payback
+                      </Badge>
+                    )}
+                  </td>
                   <td className="text-right py-2 px-2">{row.generation.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                   <td className="text-right py-2 px-2">R{row.savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                   <td className="text-right py-2 px-2">R{row.cumulative.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
@@ -215,12 +239,52 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
                   </td>
                 </tr>
               ))}
-              <tr className="text-xs text-muted-foreground">
-                <td colSpan={5} className="py-2 px-2 text-center">... Years 11-25 available in full report ...</td>
-              </tr>
             </tbody>
           </table>
+          
+          {projection.length > 10 && (
+            <Button 
+              variant="ghost" 
+              className="w-full mt-2 text-muted-foreground"
+              onClick={() => setShowFullProjection(!showFullProjection)}
+            >
+              {showFullProjection ? (
+                <>
+                  <ChevronUp className="h-4 w-4 mr-2" />
+                  Show Less
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-4 w-4 mr-2" />
+                  Show Years 11-25
+                </>
+              )}
+            </Button>
+          )}
         </div>
+
+        {/* 25-Year Totals */}
+        {projection.length > 0 && (
+          <div className="mt-4 p-4 rounded-lg border-2" style={{ borderColor: primaryColor + "40" }}>
+            <h4 className="font-semibold mb-2">25-Year Summary</h4>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Total Generation</p>
+                <p className="font-bold">{projection.reduce((sum, r) => sum + r.generation, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Total Savings</p>
+                <p className="font-bold">R{projection[24]?.cumulative.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Net Profit</p>
+                <p className="font-bold" style={{ color: primaryColor }}>
+                  R{((projection[24]?.cumulative || 0) - (simulation?.systemCost || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Assumptions & Disclaimers */}
@@ -232,14 +296,85 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
         <div className="space-y-3 text-sm text-muted-foreground">
           <div className="p-3 rounded-lg bg-muted/50">
             <p className="font-medium text-foreground mb-1">Assumptions</p>
-            <p>{proposal.assumptions || "• 0.5% annual panel degradation\n• 8% annual tariff escalation\n• Standard weather conditions"}</p>
+            <p className="whitespace-pre-line">{proposal.assumptions || "• 0.5% annual panel degradation\n• 8% annual tariff escalation\n• Standard weather conditions"}</p>
           </div>
           <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
             <p className="font-medium text-foreground mb-1">Disclaimers</p>
             <p>{proposal.disclaimers}</p>
           </div>
+          {proposal.custom_notes && (
+            <div className="p-3 rounded-lg bg-muted/50">
+              <p className="font-medium text-foreground mb-1">Additional Notes</p>
+              <p>{proposal.custom_notes}</p>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Verification Status */}
+      {proposal.verification_checklist && (
+        <div className="p-6 border-b bg-muted/30">
+          <h3 className="text-sm font-semibold mb-2 text-muted-foreground">Data Verification</h3>
+          <div className="flex flex-wrap gap-2">
+            {proposal.verification_checklist.site_coordinates_verified && (
+              <Badge variant="outline" className="border-green-500/50 text-green-700">✓ Coordinates Verified</Badge>
+            )}
+            {proposal.verification_checklist.consumption_data_source && (
+              <Badge variant="outline" className="border-green-500/50 text-green-700">
+                ✓ {proposal.verification_checklist.consumption_data_source === 'actual' ? 'Actual' : 'Estimated'} Data
+              </Badge>
+            )}
+            {proposal.verification_checklist.tariff_rates_confirmed && (
+              <Badge variant="outline" className="border-green-500/50 text-green-700">✓ Tariff Confirmed</Badge>
+            )}
+            {proposal.verification_checklist.system_specs_validated && (
+              <Badge variant="outline" className="border-green-500/50 text-green-700">✓ Specs Validated</Badge>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Signature Section */}
+      {(proposal.prepared_by || proposal.approved_by || proposal.client_signature) && (
+        <div className="p-6 border-b">
+          <h3 className="text-sm font-semibold mb-4 text-muted-foreground">Signatures</h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center">
+              <div className="h-16 border-b-2 border-muted-foreground/30 mb-2 flex items-end justify-center pb-1">
+                {proposal.prepared_by && <span className="font-semibold">{proposal.prepared_by}</span>}
+              </div>
+              <p className="text-xs text-muted-foreground">Prepared By</p>
+              {proposal.prepared_at && (
+                <p className="text-xs text-muted-foreground">
+                  {new Date(proposal.prepared_at).toLocaleDateString('en-ZA')}
+                </p>
+              )}
+            </div>
+            <div className="text-center">
+              <div className="h-16 border-b-2 border-muted-foreground/30 mb-2 flex items-end justify-center pb-1">
+                {proposal.approved_by && <span className="font-semibold">{proposal.approved_by}</span>}
+              </div>
+              <p className="text-xs text-muted-foreground">Approved By</p>
+              {proposal.approved_at && (
+                <p className="text-xs text-muted-foreground">
+                  {new Date(proposal.approved_at).toLocaleDateString('en-ZA')}
+                </p>
+              )}
+            </div>
+            <div className="text-center">
+              <div className="h-16 border-b-2 border-muted-foreground/30 mb-2 flex items-end justify-center pb-1">
+                {proposal.client_signature && <span className="font-semibold text-primary">{proposal.client_signature}</span>}
+              </div>
+              <p className="text-xs text-muted-foreground">Client Acceptance</p>
+              {proposal.client_signed_at && (
+                <p className="text-xs text-muted-foreground">
+                  {new Date(proposal.client_signed_at).toLocaleDateString('en-ZA')}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer with branding */}
       <div 
