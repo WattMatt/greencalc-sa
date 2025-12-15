@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Info, RotateCcw, HelpCircle, Sun, Moon, Monitor, Settings2, ExternalLink, Bell, Sparkles } from "lucide-react";
 import { NotificationSettings } from "@/components/pwa";
-import { useTour, TOURS, InfographicManager, ContentEnhancerDemo } from "@/components/onboarding";
+import { useTour, TOURS, InfographicManager, ContentEnhancerDemo, resetWelcomeModal } from "@/components/onboarding";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { 
@@ -23,7 +23,8 @@ export default function Settings() {
 
   const handleResetTours = () => {
     resetAllTours();
-    toast.success("All tours have been reset. They will appear again when you visit each page.");
+    resetWelcomeModal();
+    toast.success("All tours and welcome modal have been reset. They will appear again on next visit.");
   };
 
   return (
