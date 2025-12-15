@@ -1,10 +1,11 @@
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sun, ChevronLeft, ChevronRight, Battery, Download, FileSpreadsheet, FileText, Image, FileCode, MessageSquare } from "lucide-react";
 import { DayOfWeek, DisplayUnit } from "../types";
+import { AccuracyBadge } from "@/components/simulation/AccuracyBadge";
 
 interface ChartHeaderProps {
   selectedDay: DayOfWeek;
@@ -122,12 +123,12 @@ export function ChartHeader({
         </div>
 
         {/* Data Source Badges */}
-        <div className="flex gap-1">
-          {tenantsWithScada > 0 && <Badge className="text-[10px]">{tenantsWithScada} SCADA</Badge>}
+        <div className="flex gap-1.5">
+          {tenantsWithScada > 0 && (
+            <AccuracyBadge level="actual" label={`${tenantsWithScada} SCADA`} showIcon={false} />
+          )}
           {tenantsEstimated > 0 && (
-            <Badge variant="secondary" className="text-[10px]">
-              {tenantsEstimated} Est.
-            </Badge>
+            <AccuracyBadge level="estimated" label={`${tenantsEstimated} Est.`} showIcon={false} />
           )}
         </div>
 
