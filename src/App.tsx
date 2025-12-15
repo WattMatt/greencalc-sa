@@ -16,6 +16,7 @@ import QuickEstimate from "./pages/QuickEstimate";
 import SandboxWorkspace from "./pages/SandboxWorkspace";
 import ProposalWorkspace from "./pages/ProposalWorkspace";
 import SimulationRoadmap from "./pages/SimulationRoadmap";
+import ClientPortal from "./pages/ClientPortal";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/simulations/sandbox/:id" element={<SandboxWorkspace />} />
             <Route path="/projects/:projectId/proposal" element={<ProposalWorkspace />} />
             <Route path="/simulations/roadmap" element={<SimulationRoadmap />} />
+            <Route path="/portal/:token" element={<ClientPortal />} />
             <Route path="/calculator" element={<Calculator />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />

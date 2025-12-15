@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, FileCheck, CheckCircle, Settings, Eye, History, Save, Loader2, FileText } from "lucide-react";
+import { ArrowLeft, FileCheck, CheckCircle, Settings, Eye, History, Save, Loader2, FileText, Share2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import { SignaturePanel } from "@/components/proposals/SignaturePanel";
 import { ProposalPreview } from "@/components/proposals/ProposalPreview";
 import { ProposalExport } from "@/components/proposals/ProposalExport";
 import { SimulationSelector } from "@/components/proposals/SimulationSelector";
+import { ShareLinkButton } from "@/components/proposals/ShareLinkButton";
 import { 
   Proposal, 
   VerificationChecklist as VerificationChecklistType, 
@@ -360,6 +361,16 @@ export default function ProposalWorkspace() {
         </div>
 
         <div className="flex items-center gap-2">
+          {proposalId && existingProposal && (
+            <ShareLinkButton
+              proposalId={proposalId}
+              shareToken={existingProposal.share_token}
+              status={existingProposal.status}
+              onTokenGenerated={() => {
+                queryClient.invalidateQueries({ queryKey: ["proposal", proposalId] });
+              }}
+            />
+          )}
           <Button 
             variant="outline" 
             onClick={() => saveMutation.mutate()}
