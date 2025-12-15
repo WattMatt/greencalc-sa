@@ -24,6 +24,7 @@ interface TourContextType {
   goToStep: (index: number) => void;
   completedTours: string[];
   markTourCompleted: (tourId: string) => void;
+  resetAllTours: () => void;
 }
 
 const TourContext = createContext<TourContextType | undefined>(undefined);
@@ -84,6 +85,11 @@ export function TourProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const resetAllTours = useCallback(() => {
+    setCompletedTours([]);
+    localStorage.removeItem(COMPLETED_TOURS_KEY);
+  }, []);
+
   return (
     <TourContext.Provider
       value={{
@@ -97,6 +103,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
         goToStep,
         completedTours,
         markTourCompleted,
+        resetAllTours,
       }}
     >
       {children}
