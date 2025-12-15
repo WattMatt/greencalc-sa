@@ -14,6 +14,7 @@ import { OverPanelingAnalysis } from "./components/OverPanelingAnalysis";
 import { AnnotationsPanel } from "./components/AnnotationsPanel";
 import { TOULegend } from "./components/TOULegend";
 import { TopContributors } from "./components/TopContributors";
+import { MethodologySection, solarMethodology, batteryMethodology, financialMethodology, touMethodology } from "@/components/simulation/MethodologySection";
 
 interface LoadProfileChartProps {
   tenants: Tenant[];
@@ -217,6 +218,16 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
 
       {/* Top Contributors */}
       <TopContributors tenants={tenants} chartData={chartData} />
+
+      {/* Methodology Section */}
+      <MethodologySection 
+        items={[
+          solarMethodology,
+          ...(showBattery ? [batteryMethodology] : []),
+          touMethodology,
+          financialMethodology,
+        ]} 
+      />
     </div>
   );
 }
