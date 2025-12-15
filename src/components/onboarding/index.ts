@@ -16,3 +16,4 @@ export { DemoCursor } from "./DemoCursor";
 export { DemoProgress } from "./DemoProgress";
 export { DemoLauncher } from "./DemoLauncher";
 export { WelcomeModal, resetWelcomeModal } from "./WelcomeModal";
+export { TourInfographic } from "./TourInfographic";

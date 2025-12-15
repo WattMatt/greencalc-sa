@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useTour } from "./TourContext";
 import { DemoCursor } from "./DemoCursor";
 import { DemoProgress } from "./DemoProgress";
+import { TourInfographic } from "./TourInfographic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { X, ChevronLeft, ChevronRight, Circle, Play, Pause, SkipForward, RotateCcw } from "lucide-react";
@@ -216,6 +217,18 @@ export function TourOverlay() {
 
     const imageSrc = currentStep.gif || currentStep.image;
     if (imageSrc) {
+      // Check if this is a tour:// URI for AI-generated infographics
+      if (imageSrc.startsWith("tour://")) {
+        return (
+          <div className={mediaContainerClass}>
+            <TourInfographic 
+              tourUri={imageSrc} 
+              alt={currentStep.mediaAlt || currentStep.title}
+            />
+          </div>
+        );
+      }
+
       return (
         <div className={cn(mediaContainerClass, "relative min-h-[120px]")}>
           {!imageLoaded && (
