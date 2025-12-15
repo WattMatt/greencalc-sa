@@ -103,42 +103,17 @@ const phases = [
     id: 7,
     name: "Advanced Features",
     icon: Settings2,
-    status: "pending" as const,
+    status: "complete" as const,
     description: "Sophisticated modeling features for detailed long-term projections",
     features: [
       "Seasonal variation modeling",
       "Degradation curves (panel, battery)",
       "NPV and IRR calculations",
       "Sensitivity analysis",
+      "Grid constraints & wheeling",
+      "Load growth modeling",
     ],
-    prompt: `Add advanced simulation features:
-
-1. Seasonal variation modeling:
-   - Monthly irradiance curves from Solcast historical
-   - Seasonal consumption patterns
-   - High/Low demand season differentiation
-   
-2. Degradation modeling:
-   - Panel degradation (0.5%/year default)
-   - Battery degradation curves
-   - Inverter replacement at year 12
-   
-3. Financial sophistication:
-   - Tariff escalation rates (configurable)
-   - Inflation adjustment
-   - NPV and IRR calculations
-   - Sensitivity analysis (best/worst/expected)
-   
-4. Grid constraints:
-   - Maximum export limits
-   - Time-based export restrictions
-   - Wheeling charges for export
-   
-5. Load growth modeling:
-   - Annual consumption growth rate
-   - New tenant projections
-
-Add these as 'Advanced' toggles in existing simulation panels.`,
+    prompt: null,
   },
 ];
 
