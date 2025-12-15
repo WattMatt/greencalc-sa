@@ -151,43 +151,17 @@ const phases = [
     id: 10,
     name: "Mobile & Offline",
     icon: Smartphone,
-    status: "pending" as const,
+    status: "complete" as const,
     description: "Progressive web app capabilities and mobile-first experience",
     features: [
       "PWA support with install prompt",
-      "Offline data sync",
+      "Offline data sync with IndexedDB",
       "Mobile-optimized dashboards",
       "Push notifications",
-      "Touch-friendly interactions",
-      "Background sync",
+      "Background sync on reconnect",
+      "Code-splitting for performance",
     ],
-    prompt: `Add mobile and offline features:
-
-1. PWA Support:
-   - Service worker for offline caching
-   - Web app manifest with icons
-   - Install prompt on mobile browsers
-   - App-like experience without app stores
-   
-2. Offline Data Sync:
-   - IndexedDB for local data storage
-   - Background sync when connectivity restored
-   - Conflict resolution for offline edits
-   - Offline indicator in UI
-   
-3. Mobile-Optimized Dashboards:
-   - Responsive chart components
-   - Touch-friendly controls and gestures
-   - Swipe navigation between views
-   - Collapsible panels for small screens
-   
-4. Push Notifications:
-   - Browser push notification support
-   - Simulation completion alerts
-   - Proposal status updates
-   - Configurable notification preferences
-
-Implement as PWA with Vite PWA plugin and mobile-first UI components.`,
+    prompt: null,
   },
 ];
 
