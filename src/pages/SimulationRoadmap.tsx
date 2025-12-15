@@ -84,6 +84,21 @@ const phases = [
   },
   {
     id: 6,
+    name: "Methodology Documentation",
+    icon: HelpCircle,
+    status: "complete" as const,
+    description: "Expandable methodology sections explaining calculation logic",
+    features: [
+      "Solar generation calculation methodology",
+      "Battery simulation logic documentation",
+      "Financial projections assumptions",
+      "TOU period explanations",
+      "Collapsible sections in simulation pages",
+    ],
+    prompt: null,
+  },
+  {
+    id: 7,
     name: "Advanced Features",
     icon: Settings2,
     status: "pending" as const,

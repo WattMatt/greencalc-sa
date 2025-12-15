@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { TourButton, getTour } from "@/components/onboarding";
+import { MethodologySection, solarMethodology, financialMethodology } from "@/components/simulation/MethodologySection";
 
 const DEFAULT_INPUTS: QuickEstimateInputs = {
   location: "",
@@ -114,12 +115,15 @@ export default function QuickEstimate() {
 
       {/* Two column layout */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <QuickEstimateForm
-          inputs={inputs}
-          onInputChange={setInputs}
-          onCalculate={calculateEstimate}
-          isCalculating={isCalculating}
-        />
+        <div className="space-y-4">
+          <QuickEstimateForm
+            inputs={inputs}
+            onInputChange={setInputs}
+            onCalculate={calculateEstimate}
+            isCalculating={isCalculating}
+          />
+          <MethodologySection items={[solarMethodology, financialMethodology]} />
+        </div>
         <QuickEstimateResults results={results} />
       </div>
     </div>
