@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,24 +9,33 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { TourProvider, TourOverlay } from "@/components/onboarding";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { OfflineIndicator, InstallPrompt } from "@/components/pwa";
-import Dashboard from "./pages/Dashboard";
-import TariffManagement from "./pages/TariffManagement";
-import LoadProfiles from "./pages/LoadProfiles";
-import Calculator from "./pages/Calculator";
-import Settings from "./pages/Settings";
-import Projects from "./pages/Projects";
-import ProjectDetail from "./pages/ProjectDetail";
-import SimulationHub from "./pages/SimulationHub";
-import QuickEstimate from "./pages/QuickEstimate";
-import SandboxWorkspace from "./pages/SandboxWorkspace";
-import ProposalWorkspace from "./pages/ProposalWorkspace";
-import SimulationRoadmap from "./pages/SimulationRoadmap";
-import ClientPortal from "./pages/ClientPortal";
-import Auth from "./pages/Auth";
-import ResetPassword from "./pages/ResetPassword";
-import ProfileSettings from "./pages/ProfileSettings";
-import Install from "./pages/Install";
-import NotFound from "./pages/NotFound";
+
+// Lazy load all pages for code-splitting
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const TariffManagement = lazy(() => import("./pages/TariffManagement"));
+const LoadProfiles = lazy(() => import("./pages/LoadProfiles"));
+const Calculator = lazy(() => import("./pages/Calculator"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Projects = lazy(() => import("./pages/Projects"));
+const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
+const SimulationHub = lazy(() => import("./pages/SimulationHub"));
+const QuickEstimate = lazy(() => import("./pages/QuickEstimate"));
+const SandboxWorkspace = lazy(() => import("./pages/SandboxWorkspace"));
+const ProposalWorkspace = lazy(() => import("./pages/ProposalWorkspace"));
+const SimulationRoadmap = lazy(() => import("./pages/SimulationRoadmap"));
+const ClientPortal = lazy(() => import("./pages/ClientPortal"));
+const Auth = lazy(() => import("./pages/Auth"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
+const Install = lazy(() => import("./pages/Install"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
+// Loading fallback component
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+  </div>
+);
 
 const queryClient = new QueryClient();
 
@@ -49,37 +59,41 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/auth" element={<Auth />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/portal/:token" element={<ClientPortal />} />
-      <Route
-        path="/*"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/tariffs" element={<TariffManagement />} />
-                <Route path="/load-profiles" element={<LoadProfiles />} />
-                <Route path="/projects" element={<Projects />} />
-                <Route path="/projects/:id" element={<ProjectDetail />} />
-                <Route path="/projects/:id/quick-estimate" element={<QuickEstimate />} />
-                <Route path="/simulations" element={<SimulationHub />} />
-                <Route path="/simulations/sandbox/:id" element={<SandboxWorkspace />} />
-                <Route path="/projects/:projectId/proposal" element={<ProposalWorkspace />} />
-                <Route path="/simulations/roadmap" element={<SimulationRoadmap />} />
-                <Route path="/calculator" element={<Calculator />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/profile" element={<ProfileSettings />} />
-                <Route path="/install" element={<Install />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-    </Routes>
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/portal/:token" element={<ClientPortal />} />
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <AppLayout>
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/tariffs" element={<TariffManagement />} />
+                    <Route path="/load-profiles" element={<LoadProfiles />} />
+                    <Route path="/projects" element={<Projects />} />
+                    <Route path="/projects/:id" element={<ProjectDetail />} />
+                    <Route path="/projects/:id/quick-estimate" element={<QuickEstimate />} />
+                    <Route path="/simulations" element={<SimulationHub />} />
+                    <Route path="/simulations/sandbox/:id" element={<SandboxWorkspace />} />
+                    <Route path="/projects/:projectId/proposal" element={<ProposalWorkspace />} />
+                    <Route path="/simulations/roadmap" element={<SimulationRoadmap />} />
+                    <Route path="/calculator" element={<Calculator />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/profile" element={<ProfileSettings />} />
+                    <Route path="/install" element={<Install />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </Suspense>
+              </AppLayout>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </Suspense>
   );
 }
 
