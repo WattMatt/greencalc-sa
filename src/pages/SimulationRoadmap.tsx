@@ -131,6 +131,48 @@ const phases = [
     ],
     prompt: null,
   },
+  {
+    id: 9,
+    name: "API Integrations",
+    icon: Settings2,
+    status: "pending" as const,
+    description: "External system connectivity and automation capabilities",
+    features: [
+      "External SCADA system APIs",
+      "CRM integration (Salesforce, HubSpot)",
+      "Automated report scheduling",
+      "Webhook notifications",
+      "Third-party data sync",
+      "REST API endpoints",
+    ],
+    prompt: `Add API integration features:
+
+1. External SCADA Systems:
+   - Connect to third-party SCADA APIs
+   - Real-time meter data streaming
+   - Automatic profile updates from live data
+   - Multi-vendor SCADA protocol support
+   
+2. CRM Integration:
+   - Salesforce connector for opportunity sync
+   - HubSpot integration for lead tracking
+   - Automatic proposal creation from CRM deals
+   - Contact and company data sync
+   
+3. Automated Report Scheduling:
+   - Scheduled report generation (daily/weekly/monthly)
+   - Email delivery with PDF attachments
+   - Custom report templates
+   - Distribution list management
+   
+4. Webhook Notifications:
+   - Event-driven webhooks for simulation completion
+   - Proposal status change notifications
+   - Integration with Slack, Teams, Discord
+   - Custom webhook endpoints for external systems
+
+Add these as new API modules with configuration UI.`,
+  },
 ];
 
 export default function SimulationRoadmap() {
