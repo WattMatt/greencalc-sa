@@ -2,12 +2,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { Info, RotateCcw, HelpCircle } from "lucide-react";
+import { Info, RotateCcw, HelpCircle, Sun, Moon, Monitor } from "lucide-react";
 import { useTour, TOURS } from "@/components/onboarding";
+import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
 export default function Settings() {
   const { completedTours, resetAllTours } = useTour();
+  const { theme, setTheme } = useTheme();
 
   const handleResetTours = () => {
     resetAllTours();
@@ -24,6 +26,48 @@ export default function Settings() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
+        {/* Theme Settings */}
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-card-foreground">
+              <Sun className="h-5 w-5" />
+              Appearance
+            </CardTitle>
+            <CardDescription>Customize the look and feel of the application</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                variant={theme === "light" ? "default" : "outline"}
+                className="flex flex-col gap-1 h-auto py-3"
+                onClick={() => setTheme("light")}
+              >
+                <Sun className="h-5 w-5" />
+                <span className="text-xs">Light</span>
+              </Button>
+              <Button
+                variant={theme === "dark" ? "default" : "outline"}
+                className="flex flex-col gap-1 h-auto py-3"
+                onClick={() => setTheme("dark")}
+              >
+                <Moon className="h-5 w-5" />
+                <span className="text-xs">Dark</span>
+              </Button>
+              <Button
+                variant={theme === "system" ? "default" : "outline"}
+                className="flex flex-col gap-1 h-auto py-3"
+                onClick={() => setTheme("system")}
+              >
+                <Monitor className="h-5 w-5" />
+                <span className="text-xs">System</span>
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Choose your preferred color scheme. System will follow your device settings.
+            </p>
+          </CardContent>
+        </Card>
+
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-card-foreground">Calculation Settings</CardTitle>
