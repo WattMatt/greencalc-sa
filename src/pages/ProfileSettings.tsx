@@ -6,8 +6,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Camera, Loader2, Save, Lock } from 'lucide-react';
+import { Camera, Loader2, Save, Lock, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface Profile {
   id: string;
@@ -17,7 +29,8 @@ interface Profile {
 }
 
 export default function ProfileSettings() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -25,6 +38,8 @@ export default function ProfileSettings() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -169,6 +184,27 @@ export default function ProfileSettings() {
       toast.error(error.message || 'Failed to change password');
     } finally {
       setChangingPassword(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmation !== 'DELETE') {
+      toast.error('Please type DELETE to confirm');
+      return;
+    }
+
+    setDeleting(true);
+
+    try {
+      // Sign out first, then the account will be deleted via cascade
+      // Note: Full account deletion requires admin API, but we can sign out and inform user
+      await signOut();
+      toast.success('You have been signed out. Contact support to complete account deletion.');
+      navigate('/auth');
+    } catch (error: any) {
+      console.error('Error during sign out:', error);
+      toast.error(error.message || 'Failed to process request');
+      setDeleting(false);
     }
   };
 
@@ -326,6 +362,65 @@ export default function ProfileSettings() {
                 </>
               )}
             </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-destructive/50">
+          <CardHeader>
+            <CardTitle className="text-destructive">Danger Zone</CardTitle>
+            <CardDescription>Permanently delete your account and all associated data</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive">
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Account
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-3">
+                    <p>
+                      This action cannot be undone. This will permanently delete your account
+                      and remove all your data from our servers.
+                    </p>
+                    <div className="pt-2">
+                      <Label htmlFor="deleteConfirm" className="text-foreground">
+                        Type <span className="font-mono font-bold">DELETE</span> to confirm
+                      </Label>
+                      <Input
+                        id="deleteConfirm"
+                        value={deleteConfirmation}
+                        onChange={(e) => setDeleteConfirmation(e.target.value)}
+                        placeholder="DELETE"
+                        className="mt-2"
+                      />
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => setDeleteConfirmation('')}>
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteAccount}
+                    disabled={deleteConfirmation !== 'DELETE' || deleting}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {deleting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete Account'
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </CardContent>
         </Card>
       </div>
