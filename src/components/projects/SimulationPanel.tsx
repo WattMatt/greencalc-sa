@@ -29,6 +29,14 @@ import {
   DEFAULT_SYSTEM_COSTS,
   type TariffData,
 } from "./simulation";
+import {
+  AdvancedSimulationConfig,
+  DEFAULT_ADVANCED_CONFIG,
+  AdvancedFinancialResults,
+} from "./simulation/AdvancedSimulationTypes";
+import { AdvancedSimulationConfigPanel } from "./simulation/AdvancedSimulationConfig";
+import { runAdvancedSimulation } from "./simulation/AdvancedSimulationEngine";
+import { AdvancedResultsDisplay } from "./simulation/AdvancedResultsDisplay";
 
 interface Tenant {
   id: string;
@@ -100,6 +108,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [useSolcast, setUseSolcast] = useState(false);
+  const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
   
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, fetchForecast } = useSolcastForecast();
@@ -246,6 +255,31 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   // Annual scaling
   const annualEnergy = useMemo(() => scaleToAnnual(energyResults), [energyResults]);
 
+  // Check if financial analysis is available (moved up for use in advanced simulation)
+  const hasFinancialData = !!project.tariff_id;
+
+  // Check if any advanced features are enabled
+  const isAdvancedEnabled = 
+    advancedConfig.seasonal.enabled ||
+    advancedConfig.degradation.enabled ||
+    advancedConfig.financial.enabled ||
+    advancedConfig.gridConstraints.enabled ||
+    advancedConfig.loadGrowth.enabled;
+
+  // Run advanced simulation when enabled
+  const advancedResults = useMemo<AdvancedFinancialResults | null>(() => {
+    if (!isAdvancedEnabled || !hasFinancialData) return null;
+    
+    return runAdvancedSimulation(
+      energyResults,
+      tariffData,
+      DEFAULT_SYSTEM_COSTS,
+      solarCapacity,
+      batteryCapacity,
+      advancedConfig
+    );
+  }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, solarCapacity, batteryCapacity, advancedConfig]);
+
   // Empty states
   if (tenants.length === 0) {
     return (
@@ -271,8 +305,6 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const usingRealData = useSolcast && solcastHourlyProfile;
   const avgDailyGhi = solcastData?.summary?.average_daily_ghi_kwh_m2;
 
-  // Check if financial analysis is available
-  const hasFinancialData = !!project.tariff_id;
 
   return (
     <div className="space-y-6">
@@ -359,6 +391,12 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           />
         </CollapsibleContent>
       </Collapsible>
+
+      {/* Advanced Simulation Configuration */}
+      <AdvancedSimulationConfigPanel
+        config={advancedConfig}
+        onChange={setAdvancedConfig}
+      />
 
       {/* System Configuration */}
       <div className="grid gap-6 md:grid-cols-3">
@@ -578,6 +616,11 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           }
         }}
       />
+
+      {/* Advanced Results Display */}
+      {advancedResults && (
+        <AdvancedResultsDisplay results={advancedResults} />
+      )}
 
       {/* Charts */}
       <Tabs defaultValue="energy">
