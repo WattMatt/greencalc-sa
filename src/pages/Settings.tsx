@@ -4,9 +4,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Info, RotateCcw, HelpCircle, Sun, Moon, Monitor, Settings2, ExternalLink, Bell } from "lucide-react";
+import { Info, RotateCcw, HelpCircle, Sun, Moon, Monitor, Settings2, ExternalLink, Bell, Sparkles } from "lucide-react";
 import { NotificationSettings } from "@/components/pwa";
-import { useTour, TOURS } from "@/components/onboarding";
+import { useTour, TOURS, InfographicManager } from "@/components/onboarding";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { 
@@ -44,6 +44,10 @@ export default function Settings() {
           <TabsTrigger value="notifications" className="flex items-center gap-2">
             <Bell className="h-4 w-4" />
             Notifications
+          </TabsTrigger>
+          <TabsTrigger value="onboarding" className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4" />
+            Onboarding
           </TabsTrigger>
           <TabsTrigger value="integrations" className="flex items-center gap-2">
             <ExternalLink className="h-4 w-4" />
@@ -190,6 +194,10 @@ export default function Settings() {
           <div className="max-w-2xl">
             <NotificationSettings />
           </div>
+        </TabsContent>
+
+        <TabsContent value="onboarding" className="space-y-6">
+          <InfographicManager />
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-6">

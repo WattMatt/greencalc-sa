@@ -5,5 +5,7 @@ export { TourButton } from "./TourButton";
 export { TourBeacon } from "./TourBeacon";
 export { HelpTooltip } from "./HelpTooltip";
 export { ProcessFlow } from "./ProcessFlow";
+export { InfographicManager } from "./InfographicManager";
+export { useInfographicGenerator } from "./useInfographicGenerator";
 export { TOURS, getTour } from "./tours";
 export { useAutoTour } from "./useAutoTour";
