@@ -1,0 +1,377 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TrendingUp, TrendingDown, DollarSign, Zap, Calendar } from "lucide-react";
+import { AdvancedFinancialResults, YearlyProjection } from "./AdvancedSimulationTypes";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Area,
+  AreaChart,
+  Legend,
+  ReferenceLine,
+} from "recharts";
+
+interface AdvancedResultsDisplayProps {
+  results: AdvancedFinancialResults;
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-ZA", {
+    style: "currency",
+    currency: "ZAR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatNumber(value: number, decimals: number = 1): string {
+  return new Intl.NumberFormat("en-ZA", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+}
+
+export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps) {
+  const paybackYear = results.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year;
+  
+  return (
+    <div className="space-y-4">
+      {/* Key Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MetricCard
+          label="NPV"
+          value={formatCurrency(results.npv)}
+          icon={<DollarSign className="h-4 w-4" />}
+          variant={results.npv > 0 ? "positive" : "negative"}
+          tooltip="Net Present Value of all cash flows"
+        />
+        <MetricCard
+          label="IRR"
+          value={`${formatNumber(results.irr)}%`}
+          icon={<TrendingUp className="h-4 w-4" />}
+          variant={results.irr > 10 ? "positive" : results.irr > 0 ? "neutral" : "negative"}
+          tooltip="Internal Rate of Return"
+        />
+        <MetricCard
+          label="LCOE"
+          value={`R${formatNumber(results.lcoe, 2)}/kWh`}
+          icon={<Zap className="h-4 w-4" />}
+          variant="neutral"
+          tooltip="Levelized Cost of Energy"
+        />
+        <MetricCard
+          label="Payback"
+          value={paybackYear ? `${paybackYear} years` : ">25 years"}
+          icon={<Calendar className="h-4 w-4" />}
+          variant={paybackYear && paybackYear < 7 ? "positive" : paybackYear && paybackYear < 12 ? "neutral" : "negative"}
+          tooltip="Years to break even"
+        />
+      </div>
+
+      {/* Sensitivity Analysis */}
+      {results.sensitivityResults && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Sensitivity Analysis</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              <SensitivityCard
+                label="Best Case"
+                npv={results.sensitivityResults.best.npv}
+                irr={results.sensitivityResults.best.irr}
+                payback={results.sensitivityResults.best.payback}
+                assumptions={results.sensitivityResults.best.assumptions}
+                variant="positive"
+              />
+              <SensitivityCard
+                label="Expected"
+                npv={results.sensitivityResults.expected.npv}
+                irr={results.sensitivityResults.expected.irr}
+                payback={results.sensitivityResults.expected.payback}
+                variant="neutral"
+              />
+              <SensitivityCard
+                label="Worst Case"
+                npv={results.sensitivityResults.worst.npv}
+                irr={results.sensitivityResults.worst.irr}
+                payback={results.sensitivityResults.worst.payback}
+                assumptions={results.sensitivityResults.worst.assumptions}
+                variant="negative"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Charts */}
+      <Tabs defaultValue="cashflow" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="cashflow">Cash Flow</TabsTrigger>
+          <TabsTrigger value="generation">Generation</TabsTrigger>
+          <TabsTrigger value="degradation">Degradation</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="cashflow" className="mt-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Cumulative Cash Flow</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={results.yearlyProjections}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis 
+                      dataKey="year" 
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(v) => `Y${v}`}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(v) => `R${(v / 1000).toFixed(0)}k`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => formatCurrency(value)}
+                      labelFormatter={(label) => `Year ${label}`}
+                    />
+                    <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
+                    <Area
+                      type="monotone"
+                      dataKey="cumulativeCashFlow"
+                      stroke="hsl(var(--primary))"
+                      fill="hsl(var(--primary))"
+                      fillOpacity={0.3}
+                      name="Cumulative Cash Flow"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="generation" className="mt-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Annual Energy Flow</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={results.yearlyProjections}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis 
+                      dataKey="year" 
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(v) => `Y${v}`}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => `${formatNumber(value, 0)} kWh`}
+                      labelFormatter={(label) => `Year ${label}`}
+                    />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="solarGeneration"
+                      stroke="hsl(var(--chart-1))"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Solar Generation"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="loadConsumption"
+                      stroke="hsl(var(--chart-2))"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Load"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="gridImport"
+                      stroke="hsl(var(--chart-3))"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Grid Import"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="degradation" className="mt-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">System Degradation</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={results.yearlyProjections}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis 
+                      dataKey="year" 
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(v) => `Y${v}`}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 10 }}
+                      domain={[60, 100]}
+                      tickFormatter={(v) => `${v}%`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => `${formatNumber(value)}%`}
+                      labelFormatter={(label) => `Year ${label}`}
+                    />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="panelEfficiency"
+                      stroke="hsl(var(--chart-1))"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Panel Efficiency"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="batteryCapacityRemaining"
+                      stroke="hsl(var(--chart-4))"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Battery Capacity"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Summary Stats */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">Lifetime Summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <div className="text-muted-foreground">Total Generation</div>
+              <div className="font-medium">{formatNumber(results.lifetimeGeneration / 1000, 0)} MWh</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Total Savings</div>
+              <div className="font-medium">{formatCurrency(results.lifetimeSavings)}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Final Year Generation</div>
+              <div className="font-medium">
+                {formatNumber(results.yearlyProjections[results.yearlyProjections.length - 1]?.solarGeneration / 1000, 0)} MWh
+              </div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Final Year Savings</div>
+              <div className="font-medium">
+                {formatCurrency(results.yearlyProjections[results.yearlyProjections.length - 1]?.energySavings)}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ============= Helper Components =============
+
+function MetricCard({ 
+  label, 
+  value, 
+  icon, 
+  variant = "neutral",
+  tooltip 
+}: { 
+  label: string; 
+  value: string; 
+  icon: React.ReactNode;
+  variant?: "positive" | "negative" | "neutral";
+  tooltip?: string;
+}) {
+  const variantStyles = {
+    positive: "border-green-500/30 bg-green-500/5",
+    negative: "border-destructive/30 bg-destructive/5",
+    neutral: "border-border bg-card",
+  };
+  
+  return (
+    <Card className={`${variantStyles[variant]}`}>
+      <CardContent className="p-3">
+        <div className="flex items-center gap-2 text-muted-foreground mb-1">
+          {icon}
+          <span className="text-xs">{label}</span>
+        </div>
+        <div className="text-lg font-semibold">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SensitivityCard({
+  label,
+  npv,
+  irr,
+  payback,
+  assumptions,
+  variant,
+}: {
+  label: string;
+  npv: number;
+  irr: number;
+  payback: number;
+  assumptions?: string;
+  variant: "positive" | "negative" | "neutral";
+}) {
+  const variantStyles = {
+    positive: "border-green-500/30 bg-green-500/5",
+    negative: "border-destructive/30 bg-destructive/5",
+    neutral: "border-border bg-card",
+  };
+  
+  return (
+    <div className={`p-3 rounded-lg border ${variantStyles[variant]}`}>
+      <div className="text-xs font-medium mb-2">{label}</div>
+      <div className="space-y-1 text-xs">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">NPV:</span>
+          <span className="font-medium">{formatCurrency(npv)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">IRR:</span>
+          <span className="font-medium">{formatNumber(irr)}%</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Payback:</span>
+          <span className="font-medium">{formatNumber(payback)} yrs</span>
+        </div>
+      </div>
+      {assumptions && (
+        <div className="mt-2 text-[10px] text-muted-foreground">{assumptions}</div>
+      )}
+    </div>
+  );
+}
+
+export default AdvancedResultsDisplay;
