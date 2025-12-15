@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Circle, Zap, Layers, FlaskConical, FileCheck, HelpCircle, Settings2, Smartphone } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, Zap, Layers, FlaskConical, FileCheck, HelpCircle, Settings2, Smartphone, Globe, Palette, BarChart3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const phases = [
@@ -162,6 +162,52 @@ const phases = [
       "Code-splitting for performance",
     ],
     prompt: null,
+  },
+  {
+    id: 11,
+    name: "Enterprise & Customization",
+    icon: Palette,
+    status: "pending" as const,
+    description: "White-labeling, multi-language support, and advanced analytics for enterprise deployments",
+    features: [
+      "Multi-language support (i18n)",
+      "White-label branding options",
+      "Custom domain configuration",
+      "Advanced usage analytics",
+      "User activity dashboards",
+      "Custom report templates",
+    ],
+    prompt: `Add enterprise and customization features:
+
+1. Multi-Language Support (i18n):
+   - Install react-i18next for internationalization
+   - Create language JSON files (en, af, zu)
+   - Language switcher in settings
+   - Translate all UI strings
+   - Date/number formatting per locale
+   
+2. White-Label Branding:
+   - Custom logo upload in settings
+   - Primary/secondary color customization
+   - Custom favicon support
+   - Hide "Green Energy Platform" branding
+   - Custom email templates
+   
+3. Advanced Analytics Dashboard:
+   - User activity tracking
+   - Simulation usage statistics
+   - Popular tariffs/profiles reports
+   - Export analytics as CSV/PDF
+   - Time-based usage charts
+   
+4. Custom Report Templates:
+   - Template builder interface
+   - Drag-and-drop sections
+   - Custom headers/footers
+   - Save and reuse templates
+   - Per-client branding in reports
+
+Implement with react-i18next for i18n, store branding config in Supabase, and use Recharts for analytics visualizations.`,
   },
 ];
 
