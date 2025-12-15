@@ -10,7 +10,7 @@ import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun } fro
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
-import { SimulationPanel } from "@/components/projects/SimulationPanel";
+import { SimulationModes } from "@/components/projects/SimulationModes";
 import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { SolarForecastCard } from "@/components/projects/SolarForecastCard";
 import { toast } from "sonner";
@@ -208,7 +208,7 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="simulation" className="mt-6">
-          <SimulationPanel
+          <SimulationModes
             projectId={id!}
             project={project}
             tenants={tenants || []}
