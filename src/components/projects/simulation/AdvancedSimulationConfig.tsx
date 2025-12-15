@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles, Save, Trash2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import {
   AdvancedSimulationConfig,
   DEFAULT_ADVANCED_CONFIG,
@@ -20,6 +22,7 @@ import {
   SIMULATION_PRESETS,
   PresetName,
 } from "./AdvancedSimulationTypes";
+import { useSimulationPresets, SimulationPreset } from "@/hooks/useSimulationPresets";
 
 interface AdvancedSimulationConfigProps {
   config: AdvancedSimulationConfig;
@@ -31,6 +34,11 @@ export function AdvancedSimulationConfigPanel({
   onChange 
 }: AdvancedSimulationConfigProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  const [presetDescription, setPresetDescription] = useState("");
+  
+  const { presets, isLoading, createPreset, deletePreset } = useSimulationPresets();
   
   const enabledCount = [
     config.seasonal.enabled,
@@ -39,6 +47,29 @@ export function AdvancedSimulationConfigPanel({
     config.gridConstraints.enabled,
     config.loadGrowth.enabled,
   ].filter(Boolean).length;
+
+  const handleSavePreset = () => {
+    if (!presetName.trim()) return;
+    
+    createPreset.mutate({
+      name: presetName.trim(),
+      description: presetDescription.trim() || undefined,
+      config,
+    }, {
+      onSuccess: () => {
+        setSaveDialogOpen(false);
+        setPresetName("");
+        setPresetDescription("");
+      },
+    });
+  };
+
+  const handleDeletePreset = (preset: SimulationPreset, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm(`Delete preset "${preset.name}"?`)) {
+      deletePreset.mutate(preset.id);
+    }
+  };
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -64,7 +95,7 @@ export function AdvancedSimulationConfigPanel({
         
         <CollapsibleContent>
           <CardContent className="space-y-4 pt-0">
-            {/* Presets */}
+            {/* Built-in Presets */}
             <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg border bg-muted/30">
               <div className="flex items-center gap-2 mr-2">
                 <Sparkles className="h-4 w-4 text-primary" />
@@ -107,6 +138,104 @@ export function AdvancedSimulationConfigPanel({
                 Reset
               </Button>
             </div>
+
+            {/* Custom Presets */}
+            {(presets.length > 0 || !isLoading) && (
+              <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg border bg-card">
+                <div className="flex items-center gap-2 mr-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <Label className="text-sm font-medium">My Presets:</Label>
+                </div>
+                
+                <TooltipProvider>
+                  {presets.map((preset) => (
+                    <Tooltip key={preset.id}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="h-7 text-xs gap-1 group"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onChange(preset.config);
+                          }}
+                        >
+                          {preset.name}
+                          <Trash2 
+                            className="h-3 w-3 opacity-0 group-hover:opacity-100 text-destructive transition-opacity"
+                            onClick={(e) => handleDeletePreset(preset, e)}
+                          />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-xs">
+                        <p className="text-xs">{preset.description || "Custom preset"}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ))}
+                </TooltipProvider>
+
+                {presets.length === 0 && (
+                  <span className="text-xs text-muted-foreground">No saved presets yet</span>
+                )}
+                
+                <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1 ml-auto"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Save className="h-3 w-3" />
+                      Save Current
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent onClick={(e) => e.stopPropagation()}>
+                    <DialogHeader>
+                      <DialogTitle>Save Preset</DialogTitle>
+                      <DialogDescription>
+                        Save your current configuration as a reusable preset.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="preset-name">Preset Name</Label>
+                        <Input
+                          id="preset-name"
+                          placeholder="e.g., High Solar Scenario"
+                          value={presetName}
+                          onChange={(e) => setPresetName(e.target.value)}
+                          maxLength={50}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="preset-description">Description (optional)</Label>
+                        <Input
+                          id="preset-description"
+                          placeholder="Brief description of this configuration"
+                          value={presetDescription}
+                          onChange={(e) => setPresetDescription(e.target.value)}
+                          maxLength={200}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={handleSavePreset}
+                        disabled={!presetName.trim() || createPreset.isPending}
+                      >
+                        {createPreset.isPending ? "Saving..." : "Save Preset"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
+
+            <Separator />
 
             {/* Seasonal Variation */}
             <SeasonalSection 
