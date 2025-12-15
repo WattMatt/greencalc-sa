@@ -13,6 +13,7 @@ import { Plus, Upload, Trash2, Download, Pencil, RotateCcw } from "lucide-react"
 import { toast } from "sonner";
 
 import { TenantProfileMatcher } from "./TenantProfileMatcher";
+import { AccuracyBadge, AccuracySummary, getAccuracyLevel } from "@/components/simulation/AccuracyBadge";
 
 interface Tenant {
   id: string;
@@ -406,6 +407,15 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         </Card>
       </div>
 
+      {/* Accuracy Summary */}
+      {tenants.length > 0 && (
+        <AccuracySummary
+          actualCount={tenants.filter(t => t.scada_import_id && t.scada_imports?.load_profile_weekday).length}
+          estimatedCount={tenants.filter(t => !t.scada_import_id && t.shop_type_id).length}
+          missingCount={tenants.filter(t => !t.scada_import_id && !t.shop_type_id).length}
+        />
+      )}
+
       {tenants.length > 0 ? (
         <Card>
           <Table>
@@ -416,6 +426,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                 <TableHead>Load Profile</TableHead>
                 <TableHead className="text-center">Scale</TableHead>
                 <TableHead className="text-right">Est. kWh/month</TableHead>
+                <TableHead className="text-center">Source</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -493,6 +504,15 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                         onUpdate={(kwhOverride) =>
                           updateTenantKwhOverride.mutate({ tenantId: tenant.id, kwhOverride })
                         }
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <AccuracyBadge 
+                        level={getAccuracyLevel(
+                          !!tenant.scada_imports?.load_profile_weekday,
+                          !!tenant.shop_type_id
+                        )} 
+                        showIcon={true}
                       />
                     </TableCell>
                     <TableCell>

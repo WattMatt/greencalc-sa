@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Info, ChevronDown, MapPin, Zap, Sun, Battery } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState } from "react";
+import { AccuracyBadge } from "./AccuracyBadge";
 
 const SA_CITIES = [
   { name: "Johannesburg", lat: -26.2041, lng: 28.0473, psh: 5.5 },
@@ -135,9 +136,16 @@ export function QuickEstimateForm({ inputs, onInputChange, onCalculate, isCalcul
 
         {/* Monthly Consumption */}
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="consumption">Monthly Consumption (kWh)</Label>
-            <InfoTooltip content="Average monthly electricity consumption. If unknown, we estimate 50 kWh/m²/month for commercial buildings." />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="consumption">Monthly Consumption (kWh)</Label>
+              <InfoTooltip content="Average monthly electricity consumption. If unknown, we estimate 50 kWh/m²/month for commercial buildings." />
+            </div>
+            <AccuracyBadge 
+              level="estimated" 
+              label="Manual Input"
+              showIcon={true}
+            />
           </div>
           <Input
             id="consumption"
@@ -146,6 +154,9 @@ export function QuickEstimateForm({ inputs, onInputChange, onCalculate, isCalcul
             onChange={(e) => onInputChange({ ...inputs, monthlyConsumption: Number(e.target.value) })}
             placeholder="e.g., 250000"
           />
+          <p className="text-xs text-muted-foreground">
+            For actual data accuracy, use Profile Builder mode with SCADA meters
+          </p>
         </div>
 
         {/* Solar Capacity */}

@@ -94,6 +94,7 @@ const phases = [
       "Financial projections assumptions",
       "TOU period explanations",
       "Collapsible sections in simulation pages",
+      "Data accuracy badges (green/amber/red)",
     ],
     prompt: null,
   },
