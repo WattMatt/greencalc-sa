@@ -5,22 +5,23 @@ import { Badge } from "@/components/ui/badge";
 import { 
   GitCompare, 
   Save, 
-  ArrowRight, 
   TrendingUp, 
   TrendingDown,
   DollarSign,
   Calendar,
   Zap,
   CheckCircle2,
-  XCircle
+  X,
+  Trophy
 } from "lucide-react";
 import { 
   AdvancedSimulationConfig, 
   AdvancedFinancialResults,
-  DEFAULT_ADVANCED_CONFIG 
 } from "./AdvancedSimulationTypes";
 import { runAdvancedSimulation } from "./AdvancedSimulationEngine";
 import { EnergySimulationResults, TariffData, SystemCosts } from "./index";
+
+type ScenarioKey = "A" | "B" | "C";
 
 interface Scenario {
   name: string;
@@ -38,6 +39,12 @@ interface AdvancedConfigComparisonProps {
   onApplyConfig: (config: AdvancedSimulationConfig) => void;
 }
 
+const SCENARIO_COLORS: Record<ScenarioKey, { bg: string; text: string; border: string }> = {
+  A: { bg: "bg-blue-500/10", text: "text-blue-600", border: "border-blue-500/30" },
+  B: { bg: "bg-purple-500/10", text: "text-purple-600", border: "border-purple-500/30" },
+  C: { bg: "bg-amber-500/10", text: "text-amber-600", border: "border-amber-500/30" },
+};
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-ZA", {
     style: "currency",
@@ -54,58 +61,8 @@ function formatNumber(value: number, decimals: number = 1): string {
   }).format(value);
 }
 
-function DifferenceIndicator({ 
-  valueA, 
-  valueB, 
-  invert = false,
-  showAbsolute = false 
-}: { 
-  valueA: number; 
-  valueB: number; 
-  invert?: boolean;
-  showAbsolute?: boolean;
-}) {
-  const diff = valueB - valueA;
-  const pct = valueA !== 0 ? (diff / valueA) * 100 : 0;
-  const isBetter = invert ? diff < 0 : diff > 0;
-  
-  if (Math.abs(pct) < 0.1) {
-    return <span className="text-xs text-muted-foreground">Same</span>;
-  }
-  
-  return (
-    <span className={`flex items-center gap-1 text-xs font-medium ${
-      isBetter ? "text-green-600" : "text-destructive"
-    }`}>
-      {isBetter ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-      {pct > 0 ? "+" : ""}{pct.toFixed(1)}%
-      {showAbsolute && (
-        <span className="text-muted-foreground ml-1">
-          ({diff > 0 ? "+" : ""}{formatCurrency(diff)})
-        </span>
-      )}
-    </span>
-  );
-}
-
-function ConfigDiffBadge({ 
-  labelA, 
-  labelB, 
-  isDifferent 
-}: { 
-  labelA: string; 
-  labelB: string; 
-  isDifferent: boolean;
-}) {
-  if (!isDifferent) return null;
-  
-  return (
-    <div className="flex items-center gap-1 text-[10px]">
-      <Badge variant="outline" className="text-[10px] px-1.5 py-0">{labelA}</Badge>
-      <ArrowRight className="h-2.5 w-2.5 text-muted-foreground" />
-      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{labelB}</Badge>
-    </div>
-  );
+function getPaybackYear(results: AdvancedFinancialResults): number {
+  return results.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25;
 }
 
 export function AdvancedConfigComparison({
@@ -117,22 +74,15 @@ export function AdvancedConfigComparison({
   batteryCapacity,
   onApplyConfig,
 }: AdvancedConfigComparisonProps) {
-  const [scenarioA, setScenarioA] = useState<Scenario>({
-    name: "Scenario A",
-    config: currentConfig,
-    results: null,
-  });
-  
-  const [scenarioB, setScenarioB] = useState<Scenario>({
-    name: "Scenario B", 
-    config: currentConfig,
-    results: null,
+  const [scenarios, setScenarios] = useState<Record<ScenarioKey, Scenario>>({
+    A: { name: "Scenario A", config: currentConfig, results: null },
+    B: { name: "Scenario B", config: currentConfig, results: null },
+    C: { name: "Scenario C", config: currentConfig, results: null },
   });
   
   const [isComparing, setIsComparing] = useState(false);
 
-  // Capture current config as Scenario A
-  const captureAsScenarioA = () => {
+  const captureScenario = (key: ScenarioKey) => {
     const results = runAdvancedSimulation(
       energyResults,
       tariffData,
@@ -141,184 +91,118 @@ export function AdvancedConfigComparison({
       batteryCapacity,
       currentConfig
     );
-    setScenarioA({
-      name: "Scenario A",
-      config: { ...currentConfig },
-      results,
-    });
+    setScenarios(prev => ({
+      ...prev,
+      [key]: {
+        name: `Scenario ${key}`,
+        config: { ...currentConfig },
+        results,
+      },
+    }));
   };
 
-  // Capture current config as Scenario B
-  const captureAsScenarioB = () => {
-    const results = runAdvancedSimulation(
-      energyResults,
-      tariffData,
-      systemCosts,
-      solarCapacity,
-      batteryCapacity,
-      currentConfig
-    );
-    setScenarioB({
-      name: "Scenario B",
-      config: { ...currentConfig },
-      results,
-    });
-    setIsComparing(true);
+  const clearScenario = (key: ScenarioKey) => {
+    setScenarios(prev => ({
+      ...prev,
+      [key]: { name: `Scenario ${key}`, config: currentConfig, results: null },
+    }));
   };
 
-  // Get configuration differences
-  const configDiffs = useMemo(() => {
-    const diffs: { category: string; field: string; a: string; b: string }[] = [];
-    
-    // Seasonal
-    if (scenarioA.config.seasonal.enabled !== scenarioB.config.seasonal.enabled) {
-      diffs.push({ 
-        category: "Seasonal", 
-        field: "Enabled", 
-        a: scenarioA.config.seasonal.enabled ? "Yes" : "No",
-        b: scenarioB.config.seasonal.enabled ? "Yes" : "No"
-      });
-    }
-    
-    // Degradation
-    if (scenarioA.config.degradation.enabled !== scenarioB.config.degradation.enabled) {
-      diffs.push({
-        category: "Degradation",
-        field: "Enabled",
-        a: scenarioA.config.degradation.enabled ? "Yes" : "No",
-        b: scenarioB.config.degradation.enabled ? "Yes" : "No"
-      });
-    }
-    if (scenarioA.config.degradation.panelDegradationRate !== scenarioB.config.degradation.panelDegradationRate) {
-      diffs.push({
-        category: "Degradation",
-        field: "Panel Rate",
-        a: `${scenarioA.config.degradation.panelDegradationRate}%/yr`,
-        b: `${scenarioB.config.degradation.panelDegradationRate}%/yr`
-      });
-    }
-    
-    // Financial
-    if (scenarioA.config.financial.enabled !== scenarioB.config.financial.enabled) {
-      diffs.push({
-        category: "Financial",
-        field: "Enabled",
-        a: scenarioA.config.financial.enabled ? "Yes" : "No",
-        b: scenarioB.config.financial.enabled ? "Yes" : "No"
-      });
-    }
-    if (scenarioA.config.financial.tariffEscalationRate !== scenarioB.config.financial.tariffEscalationRate) {
-      diffs.push({
-        category: "Financial",
-        field: "Tariff Escalation",
-        a: `${scenarioA.config.financial.tariffEscalationRate}%`,
-        b: `${scenarioB.config.financial.tariffEscalationRate}%`
-      });
-    }
-    if (scenarioA.config.financial.discountRate !== scenarioB.config.financial.discountRate) {
-      diffs.push({
-        category: "Financial",
-        field: "Discount Rate",
-        a: `${scenarioA.config.financial.discountRate}%`,
-        b: `${scenarioB.config.financial.discountRate}%`
-      });
-    }
-    if (scenarioA.config.financial.projectLifetimeYears !== scenarioB.config.financial.projectLifetimeYears) {
-      diffs.push({
-        category: "Financial",
-        field: "Lifetime",
-        a: `${scenarioA.config.financial.projectLifetimeYears} yrs`,
-        b: `${scenarioB.config.financial.projectLifetimeYears} yrs`
-      });
-    }
-    
-    // Grid Constraints
-    if (scenarioA.config.gridConstraints.enabled !== scenarioB.config.gridConstraints.enabled) {
-      diffs.push({
-        category: "Grid",
-        field: "Enabled",
-        a: scenarioA.config.gridConstraints.enabled ? "Yes" : "No",
-        b: scenarioB.config.gridConstraints.enabled ? "Yes" : "No"
-      });
-    }
-    
-    // Load Growth
-    if (scenarioA.config.loadGrowth.enabled !== scenarioB.config.loadGrowth.enabled) {
-      diffs.push({
-        category: "Load Growth",
-        field: "Enabled",
-        a: scenarioA.config.loadGrowth.enabled ? "Yes" : "No",
-        b: scenarioB.config.loadGrowth.enabled ? "Yes" : "No"
-      });
-    }
-    if (scenarioA.config.loadGrowth.annualGrowthRate !== scenarioB.config.loadGrowth.annualGrowthRate) {
-      diffs.push({
-        category: "Load Growth",
-        field: "Growth Rate",
-        a: `${scenarioA.config.loadGrowth.annualGrowthRate}%/yr`,
-        b: `${scenarioB.config.loadGrowth.annualGrowthRate}%/yr`
-      });
-    }
-    
-    return diffs;
-  }, [scenarioA.config, scenarioB.config]);
+  const activeScenarios = (Object.keys(scenarios) as ScenarioKey[]).filter(
+    key => scenarios[key].results !== null
+  );
 
-  // Determine winner for each metric
-  const getWinner = (valueA: number, valueB: number, higherIsBetter: boolean) => {
-    if (Math.abs(valueA - valueB) < 0.01) return "tie";
-    if (higherIsBetter) return valueA > valueB ? "A" : "B";
-    return valueA < valueB ? "A" : "B";
+  const startComparison = () => {
+    if (activeScenarios.length >= 2) {
+      setIsComparing(true);
+    }
   };
 
+  // Find best value for each metric across all scenarios
+  const findBest = (
+    getValue: (results: AdvancedFinancialResults) => number,
+    higherIsBetter: boolean
+  ): ScenarioKey | null => {
+    const activeWithResults = activeScenarios.filter(k => scenarios[k].results);
+    if (activeWithResults.length === 0) return null;
+    
+    let bestKey = activeWithResults[0];
+    let bestValue = getValue(scenarios[bestKey].results!);
+    
+    for (const key of activeWithResults.slice(1)) {
+      const value = getValue(scenarios[key].results!);
+      if (higherIsBetter ? value > bestValue : value < bestValue) {
+        bestKey = key;
+        bestValue = value;
+      }
+    }
+    return bestKey;
+  };
+
+  // Capture UI
   if (!isComparing) {
     return (
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <GitCompare className="h-4 w-4" />
-            Scenario Comparison
+            Scenario Comparison (A/B/C)
           </CardTitle>
           <CardDescription className="text-xs">
-            Compare two different configuration scenarios side-by-side
+            Capture up to 3 scenarios for side-by-side comparison
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <Button 
-                variant={scenarioA.results ? "secondary" : "outline"}
-                size="sm" 
-                onClick={captureAsScenarioA}
-                className="flex-1"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                {scenarioA.results ? "Update Scenario A" : "Capture as Scenario A"}
-              </Button>
-              {scenarioA.results && (
-                <Badge variant="outline" className="text-xs">
-                  NPV: {formatCurrency(scenarioA.results.npv)}
-                </Badge>
-              )}
-            </div>
+          <div className="space-y-3">
+            {(["A", "B", "C"] as ScenarioKey[]).map(key => (
+              <div key={key} className="flex items-center gap-3">
+                <Button 
+                  variant={scenarios[key].results ? "secondary" : "outline"}
+                  size="sm" 
+                  onClick={() => captureScenario(key)}
+                  className="flex-1"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {scenarios[key].results ? `Update ${key}` : `Capture as ${key}`}
+                </Button>
+                {scenarios[key].results && (
+                  <>
+                    <Badge 
+                      variant="outline" 
+                      className={`text-xs ${SCENARIO_COLORS[key].bg} ${SCENARIO_COLORS[key].text} ${SCENARIO_COLORS[key].border}`}
+                    >
+                      NPV: {formatCurrency(scenarios[key].results!.npv)}
+                    </Badge>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => clearScenario(key)}
+                      className="h-7 w-7 p-0"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            ))}
             
-            <div className="flex items-center gap-3">
+            <div className="pt-2 border-t mt-4">
               <Button 
-                variant="outline"
+                variant="default"
                 size="sm" 
-                onClick={captureAsScenarioB}
-                disabled={!scenarioA.results}
-                className="flex-1"
+                onClick={startComparison}
+                disabled={activeScenarios.length < 2}
+                className="w-full"
               >
                 <GitCompare className="h-4 w-4 mr-2" />
-                Capture & Compare as Scenario B
+                Compare {activeScenarios.length} Scenarios
               </Button>
+              {activeScenarios.length < 2 && (
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Capture at least 2 scenarios to compare
+                </p>
+              )}
             </div>
-            
-            {!scenarioA.results && (
-              <p className="text-xs text-muted-foreground text-center mt-2">
-                First capture a scenario, then modify settings and capture another to compare.
-              </p>
-            )}
           </div>
         </CardContent>
       </Card>
@@ -326,8 +210,21 @@ export function AdvancedConfigComparison({
   }
 
   // Full comparison view
-  const resultsA = scenarioA.results!;
-  const resultsB = scenarioB.results!;
+  const bestNpv = findBest(r => r.npv, true);
+  const bestIrr = findBest(r => r.irr, true);
+  const bestLcoe = findBest(r => r.lcoe, false);
+  const bestPayback = findBest(r => getPaybackYear(r), false);
+  const bestLifetime = findBest(r => r.lifetimeSavings, true);
+
+  // Count wins per scenario
+  const winCounts: Record<ScenarioKey, number> = { A: 0, B: 0, C: 0 };
+  [bestNpv, bestIrr, bestLcoe, bestPayback, bestLifetime].forEach(winner => {
+    if (winner) winCounts[winner]++;
+  });
+
+  const overallWinner = (Object.keys(winCounts) as ScenarioKey[])
+    .filter(k => scenarios[k].results)
+    .reduce((a, b) => winCounts[a] > winCounts[b] ? a : b);
 
   return (
     <Card>
@@ -339,190 +236,153 @@ export function AdvancedConfigComparison({
               Scenario Comparison
             </CardTitle>
             <CardDescription className="text-xs">
-              {configDiffs.length} configuration differences
+              Comparing {activeScenarios.length} scenarios
             </CardDescription>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={() => setIsComparing(false)}>
-              Close
+              Edit Scenarios
             </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => onApplyConfig(scenarioA.config)}
-            >
-              Apply A
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => onApplyConfig(scenarioB.config)}
-            >
-              Apply B
-            </Button>
+            {activeScenarios.map(key => (
+              <Button 
+                key={key}
+                variant="outline" 
+                size="sm" 
+                onClick={() => onApplyConfig(scenarios[key].config)}
+                className={`${SCENARIO_COLORS[key].text}`}
+              >
+                Apply {key}
+              </Button>
+            ))}
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Configuration Differences */}
-        {configDiffs.length > 0 && (
-          <div className="p-3 rounded-lg bg-muted/50 space-y-2">
-            <h4 className="text-xs font-medium text-muted-foreground mb-2">Configuration Differences</h4>
-            <div className="grid grid-cols-2 gap-2">
-              {configDiffs.map((diff, i) => (
-                <div key={i} className="text-xs flex items-center gap-2">
-                  <span className="text-muted-foreground">{diff.category} - {diff.field}:</span>
-                  <ConfigDiffBadge labelA={diff.a} labelB={diff.b} isDifferent={true} />
-                </div>
-              ))}
-            </div>
+        {/* Overall Winner */}
+        <div className={`p-3 rounded-lg ${SCENARIO_COLORS[overallWinner].bg} ${SCENARIO_COLORS[overallWinner].border} border flex items-center justify-between`}>
+          <div className="flex items-center gap-2">
+            <Trophy className={`h-5 w-5 ${SCENARIO_COLORS[overallWinner].text}`} />
+            <span className="text-sm font-medium">Overall Winner: Scenario {overallWinner}</span>
           </div>
-        )}
+          <span className="text-xs text-muted-foreground">
+            Wins {winCounts[overallWinner]} of 5 metrics
+          </span>
+        </div>
 
-        {/* Metrics Comparison */}
-        <div className="grid grid-cols-2 gap-4">
-          {/* Scenario A */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
-                Scenario A
-              </Badge>
-            </div>
-            
-            <div className="grid gap-2">
-              <MetricRow
+        {/* Metrics Comparison Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 font-medium text-muted-foreground">Metric</th>
+                {activeScenarios.map(key => (
+                  <th key={key} className="text-right py-2">
+                    <Badge 
+                      variant="outline" 
+                      className={`${SCENARIO_COLORS[key].bg} ${SCENARIO_COLORS[key].text} ${SCENARIO_COLORS[key].border}`}
+                    >
+                      {key}
+                    </Badge>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <MetricTableRow
                 icon={<DollarSign className="h-3.5 w-3.5" />}
                 label="NPV"
-                value={formatCurrency(resultsA.npv)}
-                isWinner={getWinner(resultsA.npv, resultsB.npv, true) === "A"}
+                scenarios={activeScenarios}
+                getValue={r => r.npv}
+                formatValue={v => formatCurrency(v)}
+                bestKey={bestNpv}
+                scenarioData={scenarios}
               />
-              <MetricRow
+              <MetricTableRow
                 icon={<TrendingUp className="h-3.5 w-3.5" />}
                 label="IRR"
-                value={`${formatNumber(resultsA.irr)}%`}
-                isWinner={getWinner(resultsA.irr, resultsB.irr, true) === "A"}
+                scenarios={activeScenarios}
+                getValue={r => r.irr}
+                formatValue={v => `${formatNumber(v)}%`}
+                bestKey={bestIrr}
+                scenarioData={scenarios}
               />
-              <MetricRow
+              <MetricTableRow
                 icon={<Zap className="h-3.5 w-3.5" />}
                 label="LCOE"
-                value={`R${formatNumber(resultsA.lcoe, 2)}/kWh`}
-                isWinner={getWinner(resultsA.lcoe, resultsB.lcoe, false) === "A"}
+                scenarios={activeScenarios}
+                getValue={r => r.lcoe}
+                formatValue={v => `R${formatNumber(v, 2)}/kWh`}
+                bestKey={bestLcoe}
+                scenarioData={scenarios}
               />
-              <MetricRow
+              <MetricTableRow
                 icon={<Calendar className="h-3.5 w-3.5" />}
                 label="Payback"
-                value={`${formatNumber(resultsA.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25)} yrs`}
-                isWinner={getWinner(
-                  resultsA.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25,
-                  resultsB.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25,
-                  false
-                ) === "A"}
+                scenarios={activeScenarios}
+                getValue={r => getPaybackYear(r)}
+                formatValue={v => `${formatNumber(v)} yrs`}
+                bestKey={bestPayback}
+                scenarioData={scenarios}
               />
-              <MetricRow
+              <MetricTableRow
                 icon={<DollarSign className="h-3.5 w-3.5" />}
                 label="Lifetime Savings"
-                value={formatCurrency(resultsA.lifetimeSavings)}
-                isWinner={getWinner(resultsA.lifetimeSavings, resultsB.lifetimeSavings, true) === "A"}
+                scenarios={activeScenarios}
+                getValue={r => r.lifetimeSavings}
+                formatValue={v => formatCurrency(v)}
+                bestKey={bestLifetime}
+                scenarioData={scenarios}
               />
-            </div>
-          </div>
-
-          {/* Scenario B */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
-                Scenario B
-              </Badge>
-            </div>
-            
-            <div className="grid gap-2">
-              <MetricRow
-                icon={<DollarSign className="h-3.5 w-3.5" />}
-                label="NPV"
-                value={formatCurrency(resultsB.npv)}
-                isWinner={getWinner(resultsA.npv, resultsB.npv, true) === "B"}
-                difference={<DifferenceIndicator valueA={resultsA.npv} valueB={resultsB.npv} showAbsolute />}
-              />
-              <MetricRow
-                icon={<TrendingUp className="h-3.5 w-3.5" />}
-                label="IRR"
-                value={`${formatNumber(resultsB.irr)}%`}
-                isWinner={getWinner(resultsA.irr, resultsB.irr, true) === "B"}
-                difference={<DifferenceIndicator valueA={resultsA.irr} valueB={resultsB.irr} />}
-              />
-              <MetricRow
+              <MetricTableRow
                 icon={<Zap className="h-3.5 w-3.5" />}
-                label="LCOE"
-                value={`R${formatNumber(resultsB.lcoe, 2)}/kWh`}
-                isWinner={getWinner(resultsA.lcoe, resultsB.lcoe, false) === "B"}
-                difference={<DifferenceIndicator valueA={resultsA.lcoe} valueB={resultsB.lcoe} invert />}
+                label="Lifetime Gen."
+                scenarios={activeScenarios}
+                getValue={r => r.lifetimeGeneration / 1000}
+                formatValue={v => `${formatNumber(v, 0)} MWh`}
+                bestKey={findBest(r => r.lifetimeGeneration, true)}
+                scenarioData={scenarios}
               />
-              <MetricRow
-                icon={<Calendar className="h-3.5 w-3.5" />}
-                label="Payback"
-                value={`${formatNumber(resultsB.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25)} yrs`}
-                isWinner={getWinner(
-                  resultsA.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25,
-                  resultsB.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25,
-                  false
-                ) === "B"}
-                difference={
-                  <DifferenceIndicator 
-                    valueA={resultsA.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25} 
-                    valueB={resultsB.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25} 
-                    invert 
-                  />
-                }
-              />
-              <MetricRow
-                icon={<DollarSign className="h-3.5 w-3.5" />}
-                label="Lifetime Savings"
-                value={formatCurrency(resultsB.lifetimeSavings)}
-                isWinner={getWinner(resultsA.lifetimeSavings, resultsB.lifetimeSavings, true) === "B"}
-                difference={<DifferenceIndicator valueA={resultsA.lifetimeSavings} valueB={resultsB.lifetimeSavings} showAbsolute />}
-              />
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
 
         {/* Summary */}
         <div className="pt-3 border-t">
-          <div className="flex items-center justify-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30">A</Badge>
-              <span className="text-muted-foreground">wins</span>
-              <span className="font-medium">
-                {[
-                  getWinner(resultsA.npv, resultsB.npv, true),
-                  getWinner(resultsA.irr, resultsB.irr, true),
-                  getWinner(resultsA.lcoe, resultsB.lcoe, false),
-                  getWinner(
-                    resultsA.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25,
-                    resultsB.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25,
-                    false
-                  ),
-                  getWinner(resultsA.lifetimeSavings, resultsB.lifetimeSavings, true),
-                ].filter(w => w === "A").length} metrics
-              </span>
-            </div>
-            <span className="text-muted-foreground">vs</span>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">B</Badge>
-              <span className="text-muted-foreground">wins</span>
-              <span className="font-medium">
-                {[
-                  getWinner(resultsA.npv, resultsB.npv, true),
-                  getWinner(resultsA.irr, resultsB.irr, true),
-                  getWinner(resultsA.lcoe, resultsB.lcoe, false),
-                  getWinner(
-                    resultsA.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25,
-                    resultsB.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year || 25,
-                    false
-                  ),
-                  getWinner(resultsA.lifetimeSavings, resultsB.lifetimeSavings, true),
-                ].filter(w => w === "B").length} metrics
-              </span>
-            </div>
+          <div className="flex items-center justify-center gap-4 text-sm flex-wrap">
+            {activeScenarios.map(key => (
+              <div key={key} className="flex items-center gap-2">
+                <Badge 
+                  variant="outline" 
+                  className={`${SCENARIO_COLORS[key].bg} ${SCENARIO_COLORS[key].text} ${SCENARIO_COLORS[key].border}`}
+                >
+                  {key}
+                </Badge>
+                <span className="text-muted-foreground">wins</span>
+                <span className="font-medium">{winCounts[key]} metrics</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Key Config Differences */}
+        <div className="pt-3 border-t">
+          <h4 className="text-xs font-medium text-muted-foreground mb-3">Key Configuration Differences</h4>
+          <div className="grid gap-2 md:grid-cols-3">
+            {activeScenarios.map(key => {
+              const config = scenarios[key].config;
+              return (
+                <div key={key} className={`p-2 rounded-lg ${SCENARIO_COLORS[key].bg} ${SCENARIO_COLORS[key].border} border`}>
+                  <div className={`text-xs font-medium ${SCENARIO_COLORS[key].text} mb-1`}>Scenario {key}</div>
+                  <div className="text-[10px] space-y-0.5 text-muted-foreground">
+                    <div>Tariff Esc: {config.financial.tariffEscalationRate}%</div>
+                    <div>Discount: {config.financial.discountRate}%</div>
+                    <div>Lifetime: {config.financial.projectLifetimeYears} yrs</div>
+                    <div>Panel Deg: {config.degradation.panelDegradationRate}%/yr</div>
+                    <div>Load Growth: {config.loadGrowth.annualGrowthRate}%/yr</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </CardContent>
@@ -530,35 +390,65 @@ export function AdvancedConfigComparison({
   );
 }
 
-function MetricRow({ 
-  icon, 
-  label, 
-  value, 
-  isWinner,
-  difference 
-}: { 
-  icon: React.ReactNode; 
-  label: string; 
-  value: string;
-  isWinner: boolean;
-  difference?: React.ReactNode;
+function MetricTableRow({
+  icon,
+  label,
+  scenarios,
+  getValue,
+  formatValue,
+  bestKey,
+  scenarioData,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  scenarios: ScenarioKey[];
+  getValue: (results: AdvancedFinancialResults) => number;
+  formatValue: (value: number) => string;
+  bestKey: ScenarioKey | null;
+  scenarioData: Record<ScenarioKey, Scenario>;
 }) {
+  const baseValue = scenarioData[scenarios[0]].results 
+    ? getValue(scenarioData[scenarios[0]].results!) 
+    : 0;
+
   return (
-    <div className={`flex items-center justify-between p-2 rounded-lg ${
-      isWinner ? "bg-green-500/10 border border-green-500/30" : "bg-muted/30"
-    }`}>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {icon}
-        {label}
-      </div>
-      <div className="text-right">
-        <div className={`text-sm font-medium ${isWinner ? "text-green-600" : ""}`}>
-          {value}
-          {isWinner && <CheckCircle2 className="h-3 w-3 inline ml-1" />}
+    <tr className="border-b last:border-b-0">
+      <td className="py-2.5">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          {icon}
+          <span>{label}</span>
         </div>
-        {difference && <div className="mt-0.5">{difference}</div>}
-      </div>
-    </div>
+      </td>
+      {scenarios.map((key, idx) => {
+        const results = scenarioData[key].results;
+        if (!results) return <td key={key} className="text-right py-2.5">-</td>;
+        
+        const value = getValue(results);
+        const isBest = bestKey === key;
+        const diff = idx > 0 && baseValue !== 0 
+          ? ((value - baseValue) / Math.abs(baseValue)) * 100 
+          : null;
+
+        return (
+          <td key={key} className="text-right py-2.5">
+            <div className={`flex flex-col items-end ${isBest ? "font-medium" : ""}`}>
+              <span className={`flex items-center gap-1 ${isBest ? `${SCENARIO_COLORS[key].text}` : ""}`}>
+                {formatValue(value)}
+                {isBest && <CheckCircle2 className="h-3 w-3" />}
+              </span>
+              {diff !== null && (
+                <span className={`text-[10px] flex items-center gap-0.5 ${
+                  diff > 0 ? "text-green-600" : diff < 0 ? "text-destructive" : "text-muted-foreground"
+                }`}>
+                  {diff > 0 ? <TrendingUp className="h-2.5 w-2.5" /> : diff < 0 ? <TrendingDown className="h-2.5 w-2.5" /> : null}
+                  {diff > 0 ? "+" : ""}{diff.toFixed(1)}% vs A
+                </span>
+              )}
+            </div>
+          </td>
+        );
+      })}
+    </tr>
   );
 }
 
