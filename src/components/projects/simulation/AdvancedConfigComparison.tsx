@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { 
   GitCompare, 
   Save, 
@@ -12,7 +13,8 @@ import {
   Zap,
   CheckCircle2,
   X,
-  Trophy
+  Trophy,
+  Pencil
 } from "lucide-react";
 import { 
   AdvancedSimulationConfig, 
@@ -45,6 +47,12 @@ const SCENARIO_COLORS: Record<ScenarioKey, { bg: string; text: string; border: s
   C: { bg: "bg-amber-500/10", text: "text-amber-600", border: "border-amber-500/30" },
 };
 
+const DEFAULT_NAMES: Record<ScenarioKey, string> = {
+  A: "Conservative",
+  B: "Base Case", 
+  C: "Optimistic",
+};
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("en-ZA", {
     style: "currency",
@@ -75,12 +83,14 @@ export function AdvancedConfigComparison({
   onApplyConfig,
 }: AdvancedConfigComparisonProps) {
   const [scenarios, setScenarios] = useState<Record<ScenarioKey, Scenario>>({
-    A: { name: "Scenario A", config: currentConfig, results: null },
-    B: { name: "Scenario B", config: currentConfig, results: null },
-    C: { name: "Scenario C", config: currentConfig, results: null },
+    A: { name: DEFAULT_NAMES.A, config: currentConfig, results: null },
+    B: { name: DEFAULT_NAMES.B, config: currentConfig, results: null },
+    C: { name: DEFAULT_NAMES.C, config: currentConfig, results: null },
   });
   
   const [isComparing, setIsComparing] = useState(false);
+  const [editingName, setEditingName] = useState<ScenarioKey | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const captureScenario = (key: ScenarioKey) => {
     const results = runAdvancedSimulation(
@@ -94,7 +104,7 @@ export function AdvancedConfigComparison({
     setScenarios(prev => ({
       ...prev,
       [key]: {
-        name: `Scenario ${key}`,
+        ...prev[key],
         config: { ...currentConfig },
         results,
       },
@@ -104,8 +114,21 @@ export function AdvancedConfigComparison({
   const clearScenario = (key: ScenarioKey) => {
     setScenarios(prev => ({
       ...prev,
-      [key]: { name: `Scenario ${key}`, config: currentConfig, results: null },
+      [key]: { name: prev[key].name, config: currentConfig, results: null },
     }));
+  };
+
+  const updateScenarioName = (key: ScenarioKey, name: string) => {
+    setScenarios(prev => ({
+      ...prev,
+      [key]: { ...prev[key], name: name || DEFAULT_NAMES[key] },
+    }));
+    setEditingName(null);
+  };
+
+  const startEditing = (key: ScenarioKey) => {
+    setEditingName(key);
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const activeScenarios = (Object.keys(scenarios) as ScenarioKey[]).filter(
@@ -155,7 +178,33 @@ export function AdvancedConfigComparison({
         <CardContent>
           <div className="space-y-3">
             {(["A", "B", "C"] as ScenarioKey[]).map(key => (
-              <div key={key} className="flex items-center gap-3">
+              <div key={key} className="flex items-center gap-2">
+                {/* Scenario name (editable) */}
+                <div className={`flex items-center gap-1.5 min-w-[120px] px-2 py-1 rounded ${SCENARIO_COLORS[key].bg} ${SCENARIO_COLORS[key].border} border`}>
+                  <span className={`text-xs font-medium ${SCENARIO_COLORS[key].text}`}>{key}:</span>
+                  {editingName === key ? (
+                    <Input
+                      ref={inputRef}
+                      className="h-5 text-xs px-1 py-0 w-20"
+                      defaultValue={scenarios[key].name}
+                      onBlur={(e) => updateScenarioName(key, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") updateScenarioName(key, e.currentTarget.value);
+                        if (e.key === "Escape") setEditingName(null);
+                      }}
+                    />
+                  ) : (
+                    <button 
+                      onClick={() => startEditing(key)}
+                      className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 truncate max-w-[80px]"
+                      title={scenarios[key].name}
+                    >
+                      {scenarios[key].name}
+                      <Pencil className="h-2.5 w-2.5 opacity-50" />
+                    </button>
+                  )}
+                </div>
+                
                 <Button 
                   variant={scenarios[key].results ? "secondary" : "outline"}
                   size="sm" 
@@ -163,7 +212,7 @@ export function AdvancedConfigComparison({
                   className="flex-1"
                 >
                   <Save className="h-4 w-4 mr-2" />
-                  {scenarios[key].results ? `Update ${key}` : `Capture as ${key}`}
+                  {scenarios[key].results ? "Update" : "Capture"}
                 </Button>
                 {scenarios[key].results && (
                   <>
@@ -250,8 +299,9 @@ export function AdvancedConfigComparison({
                 size="sm" 
                 onClick={() => onApplyConfig(scenarios[key].config)}
                 className={`${SCENARIO_COLORS[key].text}`}
+                title={`Apply ${scenarios[key].name}`}
               >
-                Apply {key}
+                Apply {scenarios[key].name}
               </Button>
             ))}
           </div>
@@ -262,7 +312,7 @@ export function AdvancedConfigComparison({
         <div className={`p-3 rounded-lg ${SCENARIO_COLORS[overallWinner].bg} ${SCENARIO_COLORS[overallWinner].border} border flex items-center justify-between`}>
           <div className="flex items-center gap-2">
             <Trophy className={`h-5 w-5 ${SCENARIO_COLORS[overallWinner].text}`} />
-            <span className="text-sm font-medium">Overall Winner: Scenario {overallWinner}</span>
+            <span className="text-sm font-medium">Overall Winner: {scenarios[overallWinner].name}</span>
           </div>
           <span className="text-xs text-muted-foreground">
             Wins {winCounts[overallWinner]} of 5 metrics
@@ -280,8 +330,9 @@ export function AdvancedConfigComparison({
                     <Badge 
                       variant="outline" 
                       className={`${SCENARIO_COLORS[key].bg} ${SCENARIO_COLORS[key].text} ${SCENARIO_COLORS[key].border}`}
+                      title={scenarios[key].name}
                     >
-                      {key}
+                      {scenarios[key].name.length > 12 ? scenarios[key].name.slice(0, 10) + "…" : scenarios[key].name}
                     </Badge>
                   </th>
                 ))}
@@ -355,7 +406,7 @@ export function AdvancedConfigComparison({
                   variant="outline" 
                   className={`${SCENARIO_COLORS[key].bg} ${SCENARIO_COLORS[key].text} ${SCENARIO_COLORS[key].border}`}
                 >
-                  {key}
+                  {scenarios[key].name}
                 </Badge>
                 <span className="text-muted-foreground">wins</span>
                 <span className="font-medium">{winCounts[key]} metrics</span>
@@ -372,7 +423,7 @@ export function AdvancedConfigComparison({
               const config = scenarios[key].config;
               return (
                 <div key={key} className={`p-2 rounded-lg ${SCENARIO_COLORS[key].bg} ${SCENARIO_COLORS[key].border} border`}>
-                  <div className={`text-xs font-medium ${SCENARIO_COLORS[key].text} mb-1`}>Scenario {key}</div>
+                  <div className={`text-xs font-medium ${SCENARIO_COLORS[key].text} mb-1`}>{scenarios[key].name}</div>
                   <div className="text-[10px] space-y-0.5 text-muted-foreground">
                     <div>Tariff Esc: {config.financial.tariffEscalationRate}%</div>
                     <div>Discount: {config.financial.discountRate}%</div>
