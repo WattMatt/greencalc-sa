@@ -11,3 +11,7 @@ export { useInfographicGenerator } from "./useInfographicGenerator";
 export { useContentEnhancer, FEATURE_AREAS } from "./useContentEnhancer";
 export { TOURS, getTour } from "./tours";
 export { useAutoTour } from "./useAutoTour";
+// Demo mode components
+export { DemoCursor } from "./DemoCursor";
+export { DemoProgress } from "./DemoProgress";
+export { DemoLauncher } from "./DemoLauncher";

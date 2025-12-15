@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTour } from "./TourContext";
+import { DemoCursor } from "./DemoCursor";
+import { DemoProgress } from "./DemoProgress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { X, ChevronLeft, ChevronRight, Circle, Play, Pause } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Circle, Play, Pause, SkipForward, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -19,6 +21,8 @@ interface Position {
   height: number;
 }
 
+const DEFAULT_AUTO_ADVANCE_MS = 4000;
+
 export function TourOverlay() {
   const { 
     activeTour, 
@@ -27,6 +31,7 @@ export function TourOverlay() {
     nextStep, 
     prevStep, 
     endTour,
+    goToStep,
     isDemoMode,
     setDemoMode,
     demoSpeed,
@@ -35,10 +40,17 @@ export function TourOverlay() {
   const [targetPosition, setTargetPosition] = useState<Position | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [cursorArrived, setCursorArrived] = useState(false);
 
   const currentStep = activeTour?.steps[currentStepIndex];
   const hasMedia = currentStep?.image || currentStep?.gif || currentStep?.videoUrl;
   const tooltipWidth = hasMedia ? 450 : 350;
+
+  // Calculate auto-advance duration
+  const getAutoAdvanceDuration = () => {
+    const baseDelay = currentStep?.autoAdvanceMs || DEFAULT_AUTO_ADVANCE_MS;
+    return baseDelay / demoSpeed;
+  };
 
   const calculatePositions = useCallback(() => {
     if (!currentStep) return;
@@ -104,8 +116,9 @@ export function TourOverlay() {
   useEffect(() => {
     if (!isActive) return;
 
-    // Reset image loaded state when step changes
+    // Reset states when step changes
     setImageLoaded(false);
+    setCursorArrived(false);
     calculatePositions();
     
     const handleResize = () => calculatePositions();
@@ -122,10 +135,18 @@ export function TourOverlay() {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") endTour();
+      // Arrow keys for navigation
+      if (e.key === "ArrowRight") nextStep();
+      if (e.key === "ArrowLeft") prevStep();
+      // Space to toggle demo mode
+      if (e.key === " " && isActive) {
+        e.preventDefault();
+        setDemoMode(!isDemoMode);
+      }
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [endTour]);
+  }, [endTour, nextStep, prevStep, isActive, isDemoMode, setDemoMode]);
 
   if (!isActive || !activeTour || !currentStep) return null;
 
@@ -218,6 +239,11 @@ export function TourOverlay() {
     return null;
   };
 
+  const handleRestart = () => {
+    goToStep(0);
+    if (!isDemoMode) setDemoMode(true);
+  };
+
   return (
     <div className="fixed inset-0 z-[100] pointer-events-none">
       {/* Dark overlay with spotlight cutout */}
@@ -262,26 +288,43 @@ export function TourOverlay() {
         />
       )}
 
+      {/* Demo cursor - animated pointer */}
+      <DemoCursor
+        targetSelector={currentStep.target}
+        isActive={isDemoMode}
+        onArrived={() => setCursorArrived(true)}
+      />
+
       {/* Tooltip Card */}
       <Card
         className={cn(
           "absolute shadow-xl pointer-events-auto animate-in fade-in-0 zoom-in-95 duration-200",
-          isDemoMode && "border-primary/50"
+          isDemoMode && "border-primary/50 ring-1 ring-primary/20"
         )}
         style={{ 
           top: tooltipPosition.top, 
           left: tooltipPosition.left,
           width: tooltipWidth,
         }}
-        onMouseEnter={() => isDemoMode && setDemoMode(false)}
       >
-        <CardHeader className="pb-2">
+        {/* Demo progress bar at top */}
+        {isDemoMode && (
+          <DemoProgress
+            key={`${currentStepIndex}-${demoSpeed}`}
+            duration={getAutoAdvanceDuration()}
+            isPaused={!isDemoMode}
+            onComplete={nextStep}
+            className="absolute top-0 left-0 right-0 rounded-t-lg"
+          />
+        )}
+
+        <CardHeader className={cn("pb-2", isDemoMode && "pt-4")}>
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
               <CardTitle className="text-base">{currentStep.title}</CardTitle>
               {isDemoMode && (
-                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                  Demo
+                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full animate-pulse">
+                  Auto-playing
                 </span>
               )}
             </div>
@@ -299,30 +342,39 @@ export function TourOverlay() {
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-1">
               {activeTour.steps.map((_, index) => (
-                <Circle
+                <button
                   key={index}
-                  className={cn(
-                    "h-2 w-2 cursor-pointer transition-colors",
-                    index === currentStepIndex
-                      ? "fill-primary text-primary"
-                      : "fill-muted text-muted hover:fill-muted-foreground"
-                  )}
                   onClick={() => {
                     if (isDemoMode) setDemoMode(false);
-                    useTour().goToStep?.(index);
+                    goToStep(index);
                   }}
-                />
+                  className="p-0.5 hover:scale-125 transition-transform"
+                >
+                  <Circle
+                    className={cn(
+                      "h-2 w-2 transition-colors",
+                      index === currentStepIndex
+                        ? "fill-primary text-primary"
+                        : index < currentStepIndex
+                        ? "fill-primary/40 text-primary/40"
+                        : "fill-muted text-muted hover:fill-muted-foreground"
+                    )}
+                  />
+                </button>
               ))}
+              <span className="text-xs text-muted-foreground ml-2">
+                {currentStepIndex + 1}/{activeTour.steps.length}
+              </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               {!isFirstStep && (
-                <Button variant="ghost" size="sm" onClick={prevStep}>
+                <Button variant="ghost" size="sm" onClick={prevStep} className="h-8">
                   <ChevronLeft className="h-4 w-4 mr-1" />
                   Back
                 </Button>
               )}
-              <Button size="sm" onClick={nextStep}>
+              <Button size="sm" onClick={nextStep} className="h-8">
                 {isLastStep ? "Finish" : "Next"}
                 {!isLastStep && <ChevronRight className="h-4 w-4 ml-1" />}
               </Button>
@@ -331,24 +383,49 @@ export function TourOverlay() {
 
           {/* Demo mode controls */}
           <div className="flex items-center justify-between w-full border-t pt-2 mt-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setDemoMode(!isDemoMode)}
-            >
-              {isDemoMode ? (
+            <div className="flex items-center gap-1">
+              <Button
+                variant={isDemoMode ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setDemoMode(!isDemoMode)}
+              >
+                {isDemoMode ? (
+                  <>
+                    <Pause className="h-3 w-3 mr-1" />
+                    Pause
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3 w-3 mr-1" />
+                    Auto Demo
+                  </>
+                )}
+              </Button>
+
+              {isDemoMode && (
                 <>
-                  <Pause className="h-3 w-3 mr-1" />
-                  Pause Demo
-                </>
-              ) : (
-                <>
-                  <Play className="h-3 w-3 mr-1" />
-                  Auto Demo
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={nextStep}
+                    title="Skip to next"
+                  >
+                    <SkipForward className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={handleRestart}
+                    title="Restart demo"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                  </Button>
                 </>
               )}
-            </Button>
+            </div>
 
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Speed:</span>
@@ -367,6 +444,14 @@ export function TourOverlay() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Keyboard shortcuts hint */}
+          <div className="text-[10px] text-muted-foreground/60 text-center w-full">
+            Press <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Space</kbd> to toggle demo • 
+            <kbd className="px-1 py-0.5 bg-muted rounded text-[10px] ml-1">←</kbd>
+            <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">→</kbd> to navigate • 
+            <kbd className="px-1 py-0.5 bg-muted rounded text-[10px] ml-1">Esc</kbd> to exit
           </div>
         </CardFooter>
       </Card>
