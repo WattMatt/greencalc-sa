@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.generate-tour-infographic]
 verify_jwt = false
+
+[functions.enhance-tour-content]
+verify_jwt = false
