@@ -11,6 +11,7 @@ import { ArrowLeft, FileCheck, CheckCircle, Settings, Eye, History, Save, Loader
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getTour, useAutoTour } from "@/components/onboarding";
 import { VerificationChecklist } from "@/components/proposals/VerificationChecklist";
 import { BrandingForm } from "@/components/proposals/BrandingForm";
 import { SignaturePanel } from "@/components/proposals/SignaturePanel";
@@ -27,6 +28,8 @@ import {
   STATUS_COLORS
 } from "@/components/proposals/types";
 
+const proposalBuilderTour = getTour("proposalBuilder");
+
 export default function ProposalWorkspace() {
   const { projectId } = useParams();
   const [searchParams] = useSearchParams();
@@ -37,6 +40,9 @@ export default function ProposalWorkspace() {
   const [selectedSimulationId, setSelectedSimulationId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<'profile' | 'sandbox' | null>(null);
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null);
+
+  // Auto-start tour for first-time visitors
+  useAutoTour({ tour: proposalBuilderTour });
   
   const [verificationChecklist, setVerificationChecklist] = useState<VerificationChecklistType>({
     site_coordinates_verified: false,

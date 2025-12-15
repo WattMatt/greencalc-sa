@@ -79,6 +79,7 @@ const phases = [
       "HelpTooltip component for contextual info",
       "Tour completion tracking",
       "Data-tour attributes on key inputs",
+      "Auto-start tours for first-time visitors",
     ],
     prompt: null,
   },
