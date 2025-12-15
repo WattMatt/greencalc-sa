@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, CheckCircle2, Circle, Zap, Layers, FlaskConical, FileCheck, HelpCircle, Settings2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, Zap, Layers, FlaskConical, FileCheck, HelpCircle, Settings2, Smartphone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const phases = [
@@ -172,6 +172,48 @@ const phases = [
    - Custom webhook endpoints for external systems
 
 Add these as new API modules with configuration UI.`,
+  },
+  {
+    id: 10,
+    name: "Mobile & Offline",
+    icon: Smartphone,
+    status: "pending" as const,
+    description: "Progressive web app capabilities and mobile-first experience",
+    features: [
+      "PWA support with install prompt",
+      "Offline data sync",
+      "Mobile-optimized dashboards",
+      "Push notifications",
+      "Touch-friendly interactions",
+      "Background sync",
+    ],
+    prompt: `Add mobile and offline features:
+
+1. PWA Support:
+   - Service worker for offline caching
+   - Web app manifest with icons
+   - Install prompt on mobile browsers
+   - App-like experience without app stores
+   
+2. Offline Data Sync:
+   - IndexedDB for local data storage
+   - Background sync when connectivity restored
+   - Conflict resolution for offline edits
+   - Offline indicator in UI
+   
+3. Mobile-Optimized Dashboards:
+   - Responsive chart components
+   - Touch-friendly controls and gestures
+   - Swipe navigation between views
+   - Collapsible panels for small screens
+   
+4. Push Notifications:
+   - Browser push notification support
+   - Simulation completion alerts
+   - Proposal status updates
+   - Configurable notification preferences
+
+Implement as PWA with Vite PWA plugin and mobile-first UI components.`,
   },
 ];
 
