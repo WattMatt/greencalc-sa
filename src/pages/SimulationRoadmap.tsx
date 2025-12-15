@@ -115,6 +115,57 @@ const phases = [
     ],
     prompt: null,
   },
+  {
+    id: 8,
+    name: "Future Enhancements",
+    icon: Zap,
+    status: "pending" as const,
+    description: "Extended capabilities for enterprise-scale deployments and advanced integrations",
+    features: [
+      "Historical weather API integration",
+      "Grid feed-in tariff modeling",
+      "Multi-site portfolio analysis",
+      "Carbon offset calculations",
+      "Financing options (PPA, lease, loan)",
+      "Equipment database integration",
+    ],
+    prompt: `Add future enhancement features:
+
+1. Historical Weather Integration:
+   - Connect to weather APIs for historical irradiance data
+   - Compare forecast vs actual generation
+   - Weather-adjusted performance reporting
+   
+2. Grid Feed-in Tariff Modeling:
+   - Configurable export rates by time period
+   - Net metering vs gross metering options
+   - Feed-in tariff escalation rates
+   
+3. Multi-site Portfolio Analysis:
+   - Aggregate multiple projects into portfolios
+   - Portfolio-level financial metrics
+   - Comparative site performance dashboards
+   - Bulk export and reporting
+   
+4. Carbon & Sustainability:
+   - CO2 offset calculations (kg/MWh factors)
+   - Renewable energy certificate tracking
+   - ESG reporting exports
+   
+5. Financing Options:
+   - PPA (Power Purchase Agreement) modeling
+   - Lease vs purchase comparison
+   - Loan amortization with interest rates
+   - Cash flow projections by financing type
+   
+6. Equipment Database:
+   - Panel specifications library
+   - Inverter efficiency curves
+   - Battery chemistry comparisons
+   - Automatic equipment matching
+
+Add these as new sections in the simulation ecosystem.`,
+  },
 ];
 
 export default function SimulationRoadmap() {
