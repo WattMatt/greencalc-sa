@@ -89,7 +89,7 @@ export function QuickEstimateForm({ inputs, onInputChange, onCalculate, isCalcul
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Location */}
-        <div className="space-y-2">
+        <div className="space-y-2" data-tour="location-select">
           <div className="flex items-center gap-2">
             <Label htmlFor="location">Location</Label>
             <InfoTooltip content="Select the nearest city to your site. This determines solar irradiance levels used in calculations." />
@@ -119,7 +119,7 @@ export function QuickEstimateForm({ inputs, onInputChange, onCalculate, isCalcul
         </div>
 
         {/* Site Area */}
-        <div className="space-y-2">
+        <div className="space-y-2" data-tour="site-area">
           <div className="flex items-center gap-2">
             <Label htmlFor="siteArea">Site Area (m²)</Label>
             <InfoTooltip content="Total floor area of the facility. Used to estimate consumption if not specified." />
@@ -149,7 +149,7 @@ export function QuickEstimateForm({ inputs, onInputChange, onCalculate, isCalcul
         </div>
 
         {/* Solar Capacity */}
-        <div className="space-y-3">
+        <div className="space-y-3" data-tour="solar-capacity">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Label>Solar PV Capacity</Label>
@@ -171,7 +171,7 @@ export function QuickEstimateForm({ inputs, onInputChange, onCalculate, isCalcul
         </div>
 
         {/* Battery Capacity */}
-        <div className="space-y-3">
+        <div className="space-y-3" data-tour="battery-capacity">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Label>Battery Storage</Label>
@@ -264,7 +264,13 @@ export function QuickEstimateForm({ inputs, onInputChange, onCalculate, isCalcul
           </CollapsibleContent>
         </Collapsible>
 
-        <Button onClick={onCalculate} className="w-full" size="lg" disabled={isCalculating || !inputs.location}>
+        <Button 
+          onClick={onCalculate} 
+          className="w-full" 
+          size="lg" 
+          disabled={isCalculating || !inputs.location}
+          data-tour="calculate-btn"
+        >
           {isCalculating ? (
             <>Calculating...</>
           ) : (

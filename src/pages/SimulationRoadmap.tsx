@@ -70,37 +70,17 @@ const phases = [
     id: 5,
     name: "Guided Tooltips System",
     icon: HelpCircle,
-    status: "pending" as const,
+    status: "complete" as const,
     description: "Comprehensive contextual help and onboarding across all simulation modes",
     features: [
-      "Info icons with explanatory tooltips",
-      "Mode-specific onboarding tours",
-      "Accuracy indicators (actual vs estimated)",
-      "Expandable methodology sections",
+      "TourProvider context with localStorage persistence",
+      "Spotlight overlay with step-by-step tours",
+      "Mode-specific onboarding tours (5 defined)",
+      "HelpTooltip component for contextual info",
+      "Tour completion tracking",
+      "Data-tour attributes on key inputs",
     ],
-    prompt: `Implement a comprehensive Guided Tooltips System across all simulation modes. This should:
-
-1. Create a TooltipContext provider wrapping the app
-2. Add ℹ️ icons next to ALL key inputs with:
-   - Hover tooltips explaining the input
-   - 'Learn More' links to expanded explanations
-   - Warning indicators when using estimated/generic data
-3. Implement mode-specific onboarding tours:
-   - First-time user detection
-   - Step-by-step walkthrough with highlights
-   - 'Skip' and 'Don't show again' options
-4. Add accuracy indicators showing:
-   - Green: Using actual data (Solcast, SCADA meters)
-   - Amber: Using estimated data (generic profiles)
-   - Red: Missing critical data
-5. Create expandable 'Methodology' sections explaining:
-   - How solar generation is calculated
-   - Battery simulation logic
-   - Financial projection assumptions
-6. Add contextual warnings for:
-   - Using old tariff data
-   - Oversized systems exceeding connection limits
-   - Unrealistic payback expectations`,
+    prompt: null,
   },
   {
     id: 6,
