@@ -23,9 +23,12 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isResetLoading, setIsResetLoading] = useState(false);
   const [showVerificationMessage, setShowVerificationMessage] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showResetSent, setShowResetSent] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const { signIn, signUp, signInWithGoogle, user, loading } = useAuth();
+  const { signIn, signUp, signInWithGoogle, resetPassword, user, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -64,6 +67,26 @@ export default function Auth() {
       }
       toast.success('Signed in successfully');
       navigate('/');
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const emailValidation = z.string().trim().email({ message: "Invalid email address" }).safeParse(email);
+    if (!emailValidation.success) {
+      toast.error(emailValidation.error.errors[0].message);
+      return;
+    }
+
+    setIsResetLoading(true);
+    const { error } = await resetPassword(email);
+    setIsResetLoading(false);
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      setShowResetSent(true);
     }
   };
 
@@ -121,6 +144,72 @@ export default function Auth() {
             </TabsList>
             
             <TabsContent value="signin">
+              {showForgotPassword ? (
+                showResetSent ? (
+                  <div className="space-y-4 py-4">
+                    <div className="flex justify-center">
+                      <div className="p-3 bg-primary/10 rounded-full">
+                        <Mail className="h-8 w-8 text-primary" />
+                      </div>
+                    </div>
+                    <div className="text-center space-y-2">
+                      <h3 className="font-semibold text-lg">Check your email</h3>
+                      <p className="text-muted-foreground text-sm">
+                        We've sent a password reset link to your email address.
+                        Click the link to set a new password.
+                      </p>
+                    </div>
+                    <Alert className="bg-primary/5 border-primary/20">
+                      <CheckCircle className="h-4 w-4 text-primary" />
+                      <AlertDescription>
+                        The link will expire in 24 hours.
+                      </AlertDescription>
+                    </Alert>
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={() => {
+                        setShowForgotPassword(false);
+                        setShowResetSent(false);
+                        setEmail('');
+                      }}
+                    >
+                      Back to Sign In
+                    </Button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <div className="text-center mb-4">
+                      <h3 className="font-semibold text-lg">Forgot Password?</h3>
+                      <p className="text-muted-foreground text-sm">
+                        Enter your email and we'll send you a reset link
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reset-email">Email</Label>
+                      <Input
+                        id="reset-email"
+                        type="email"
+                        placeholder="you@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isResetLoading}>
+                      {isResetLoading ? 'Sending...' : 'Send Reset Link'}
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      className="w-full"
+                      onClick={() => setShowForgotPassword(false)}
+                    >
+                      Back to Sign In
+                    </Button>
+                  </form>
+                )
+              ) : (
               <form onSubmit={handleSignIn} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="signin-email">Email</Label>
@@ -159,8 +248,19 @@ export default function Auth() {
                   </Label>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? 'Signing in...' : 'Sign In'}
+                <div className="flex items-center justify-between">
+                  <Button type="submit" className="flex-1" disabled={isLoading}>
+                    {isLoading ? 'Signing in...' : 'Sign In'}
+                  </Button>
+                </div>
+
+                <Button 
+                  type="button" 
+                  variant="link" 
+                  className="w-full text-sm"
+                  onClick={() => setShowForgotPassword(true)}
+                >
+                  Forgot password?
                 </Button>
 
                 <div className="relative my-4">
@@ -213,6 +313,7 @@ export default function Auth() {
                   )}
                 </Button>
               </form>
+              )}
             </TabsContent>
             
             <TabsContent value="signup">
