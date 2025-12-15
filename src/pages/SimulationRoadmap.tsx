@@ -6,7 +6,25 @@ import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, CheckCircle2, Circle, Zap, Layers, FlaskConical, FileCheck, HelpCircle, Settings2, Smartphone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-const phases = [
+interface SubPhase {
+  id: string;
+  name: string;
+  status: "complete" | "pending";
+  features: string[];
+}
+
+interface Phase {
+  id: number;
+  name: string;
+  icon: React.ComponentType<{ className?: string }>;
+  status: "complete" | "pending";
+  description: string;
+  features: string[];
+  subPhases?: SubPhase[];
+  prompt: string | null;
+}
+
+const phases: Phase[] = [
   {
     id: 1,
     name: "Simulation Hub & Quick Estimate",
@@ -71,15 +89,59 @@ const phases = [
     name: "Guided Tooltips System",
     icon: HelpCircle,
     status: "complete" as const,
-    description: "Comprehensive contextual help and onboarding across all simulation modes",
+    description: "Comprehensive contextual help, onboarding, and AI-powered content across all simulation modes",
     features: [
       "TourProvider context with localStorage persistence",
       "Spotlight overlay with step-by-step tours",
       "Mode-specific onboarding tours (5 defined)",
       "HelpTooltip component for contextual info",
-      "Tour completion tracking",
-      "Data-tour attributes on key inputs",
       "Auto-start tours for first-time visitors",
+    ],
+    subPhases: [
+      {
+        id: "5.1",
+        name: "Rich Media Infrastructure",
+        status: "complete" as const,
+        features: [
+          "Image/GIF/Video support in tour steps",
+          "Highlight animations (pulse, glow, bounce)",
+          "TourBeacon pulsing indicator component",
+          "ProcessFlow visual workflow diagrams",
+        ],
+      },
+      {
+        id: "5.2",
+        name: "AI Infographic Generation",
+        status: "complete" as const,
+        features: [
+          "Gemini Flash Image integration",
+          "Auto-generate visuals for tour steps",
+          "Storage bucket for tour assets",
+          "Batch generation with progress tracking",
+        ],
+      },
+      {
+        id: "5.3",
+        name: "AI Content Enhancement",
+        status: "complete" as const,
+        features: [
+          "Gemini 3 Pro for intelligent help",
+          "Contextual explanations & FAQs",
+          "Pro tips & glossary generation",
+          "In-memory caching for performance",
+        ],
+      },
+      {
+        id: "5.4",
+        name: "Demo Mode",
+        status: "complete" as const,
+        features: [
+          "Auto-playing walkthroughs",
+          "Animated cursor movements",
+          "Progress bar & speed controls",
+          "Keyboard shortcuts (Space/Arrows/Esc)",
+        ],
+      },
     ],
     prompt: null,
   },
@@ -231,20 +293,67 @@ export default function SimulationRoadmap() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">FEATURES</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2">CORE FEATURES</p>
                 <ul className="grid grid-cols-2 gap-1 text-sm">
                   {phase.features.map((feature) => (
                     <li key={feature} className="flex items-center gap-2 text-muted-foreground">
                       {phase.status === "complete" ? (
-                        <CheckCircle2 className="h-3 w-3 text-green-600" />
+                        <CheckCircle2 className="h-3 w-3 text-green-600 shrink-0" />
                       ) : (
-                        <Circle className="h-3 w-3" />
+                        <Circle className="h-3 w-3 shrink-0" />
                       )}
                       {feature}
                     </li>
                   ))}
                 </ul>
               </div>
+
+              {/* Sub-phases if present */}
+              {phase.subPhases && phase.subPhases.length > 0 && (
+                <div className="border-t pt-4 mt-4">
+                  <p className="text-xs font-medium text-muted-foreground mb-3">SUB-PHASES</p>
+                  <div className="grid gap-3">
+                    {phase.subPhases.map((subPhase) => (
+                      <div
+                        key={subPhase.id}
+                        className={`rounded-lg border p-3 ${
+                          subPhase.status === "complete" 
+                            ? "bg-green-500/5 border-green-500/20" 
+                            : "bg-muted/30"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-medium">
+                            {subPhase.id}: {subPhase.name}
+                          </span>
+                          {subPhase.status === "complete" ? (
+                            <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30 text-[10px] px-1.5 py-0">
+                              <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />
+                              Done
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              Pending
+                            </Badge>
+                          )}
+                        </div>
+                        <ul className="grid grid-cols-2 gap-1 text-xs">
+                          {subPhase.features.map((feature) => (
+                            <li key={feature} className="flex items-center gap-1.5 text-muted-foreground">
+                              {subPhase.status === "complete" ? (
+                                <CheckCircle2 className="h-2.5 w-2.5 text-green-600 shrink-0" />
+                              ) : (
+                                <Circle className="h-2.5 w-2.5 shrink-0" />
+                              )}
+                              {feature}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               {phase.prompt && (
                 <PromptCard
