@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Settings, Calculator, Database, Zap, Building2, Activity, Sparkles, LogOut, User } from "lucide-react";
+import { LayoutDashboard, Settings, Calculator, Database, Zap, Building2, Activity, Sparkles, LogOut, Sun, Moon } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useTheme } from "next-themes";
 import {
   Sidebar,
   SidebarContent,
@@ -44,8 +46,13 @@ const otherItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const { user, signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [profile, setProfile] = useState<Profile | null>(null);
   const isCollapsed = state === "collapsed";
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
 
   useEffect(() => {
     if (user) {
@@ -71,16 +78,37 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-            <Zap className="h-6 w-6 text-primary-foreground" />
-          </div>
-          {!isCollapsed && (
-            <div className="flex flex-col">
-              <span className="font-semibold text-sidebar-foreground">Green Energy</span>
-              <span className="text-xs text-muted-foreground">Financial Platform</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+              <Zap className="h-6 w-6 text-primary-foreground" />
             </div>
-          )}
+            {!isCollapsed && (
+              <div className="flex flex-col">
+                <span className="font-semibold text-sidebar-foreground">Green Energy</span>
+                <span className="text-xs text-muted-foreground">Financial Platform</span>
+              </div>
+            )}
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                className="h-8 w-8 shrink-0"
+              >
+                {theme === "dark" ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </SidebarHeader>
 
