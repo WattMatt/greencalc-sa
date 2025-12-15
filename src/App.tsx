@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { TourProvider, TourOverlay } from "@/components/onboarding";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import TariffManagement from "./pages/TariffManagement";
@@ -69,7 +70,6 @@ function AppRoutes() {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/profile" element={<ProfileSettings />} />
                 <Route path="*" element={<NotFound />} />
-                <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>
           </ProtectedRoute>
@@ -82,13 +82,16 @@ function AppRoutes() {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
-      </BrowserRouter>
+      <TourProvider>
+        <Toaster />
+        <Sonner />
+        <TourOverlay />
+        <BrowserRouter>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </BrowserRouter>
+      </TourProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

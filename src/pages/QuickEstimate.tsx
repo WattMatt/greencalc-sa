@@ -4,6 +4,7 @@ import { QuickEstimateResults, QuickEstimateOutput } from "@/components/simulati
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { TourButton, getTour } from "@/components/onboarding";
 
 const DEFAULT_INPUTS: QuickEstimateInputs = {
   location: "",
@@ -96,16 +97,19 @@ export default function QuickEstimate() {
   return (
     <div className="container max-w-5xl py-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/simulations")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Quick Estimate</h1>
-          <p className="text-muted-foreground">
-            Get instant ballpark figures for a theoretical solar installation
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/simulations")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Quick Estimate</h1>
+            <p className="text-muted-foreground">
+              Get instant ballpark figures for a theoretical solar installation
+            </p>
+          </div>
         </div>
+        <TourButton tour={getTour("quickEstimate")} />
       </div>
 
       {/* Two column layout */}
