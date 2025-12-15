@@ -77,3 +77,8 @@ export { AdvancedResultsDisplay } from "./AdvancedResultsDisplay";
 export { FutureEnhancementsConfigPanel } from "./FutureEnhancementsConfig";
 export { FutureEnhancementsResults } from "./FutureEnhancementsResults";
 export * from "./FutureEnhancementsTypes";
+
+// Phase 9: API Integrations
+export { APIIntegrationConfigPanel, defaultAPIIntegrationConfig } from "./APIIntegrationConfig";
+export { APIIntegrationStatus } from "./APIIntegrationStatus";
+export * from "./APIIntegrationTypes";
