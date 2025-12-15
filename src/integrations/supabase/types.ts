@@ -311,6 +311,112 @@ export type Database = {
           },
         ]
       }
+      proposals: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          assumptions: string | null
+          branding: Json | null
+          client_signature: string | null
+          client_signed_at: string | null
+          created_at: string
+          custom_notes: string | null
+          disclaimers: string | null
+          executive_summary: string | null
+          id: string
+          prepared_at: string | null
+          prepared_by: string | null
+          project_id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          sandbox_id: string | null
+          simulation_id: string | null
+          simulation_snapshot: Json | null
+          status: string
+          updated_at: string
+          verification_checklist: Json
+          verification_completed_at: string | null
+          verification_completed_by: string | null
+          version: number
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          assumptions?: string | null
+          branding?: Json | null
+          client_signature?: string | null
+          client_signed_at?: string | null
+          created_at?: string
+          custom_notes?: string | null
+          disclaimers?: string | null
+          executive_summary?: string | null
+          id?: string
+          prepared_at?: string | null
+          prepared_by?: string | null
+          project_id: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sandbox_id?: string | null
+          simulation_id?: string | null
+          simulation_snapshot?: Json | null
+          status?: string
+          updated_at?: string
+          verification_checklist?: Json
+          verification_completed_at?: string | null
+          verification_completed_by?: string | null
+          version?: number
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          assumptions?: string | null
+          branding?: Json | null
+          client_signature?: string | null
+          client_signed_at?: string | null
+          created_at?: string
+          custom_notes?: string | null
+          disclaimers?: string | null
+          executive_summary?: string | null
+          id?: string
+          prepared_at?: string | null
+          prepared_by?: string | null
+          project_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          sandbox_id?: string | null
+          simulation_id?: string | null
+          simulation_snapshot?: Json | null
+          status?: string
+          updated_at?: string
+          verification_checklist?: Json
+          verification_completed_at?: string | null
+          verification_completed_by?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proposals_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proposals_sandbox_id_fkey"
+            columns: ["sandbox_id"]
+            isOneToOne: false
+            referencedRelation: "sandbox_simulations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proposals_simulation_id_fkey"
+            columns: ["simulation_id"]
+            isOneToOne: false
+            referencedRelation: "project_simulations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       provinces: {
         Row: {
           created_at: string
