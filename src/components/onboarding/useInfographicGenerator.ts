@@ -3,13 +3,50 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { TOURS } from "./tours";
 
-interface TourStepContext {
-  tourId: string;
-  stepIndex: number;
-  title: string;
-  content: string;
-  featureArea: string;
-  infographicType?: "process-flow" | "feature-overview" | "data-flow" | "comparison";
+// Map tour URIs to infographic prompts for AI generation
+const INFOGRAPHIC_PROMPTS: Record<string, string> = {
+  // Quick Estimate
+  "quick-estimate/location": "Simple flat icon illustration of South Africa map with sun icons showing solar irradiance zones, green energy theme, minimal clean design, white background",
+  "quick-estimate/area": "Simple flat icon of a building floor plan with square meter measurement markers, green energy theme, minimal design, white background",
+  "quick-estimate/solar": "Simple flat icon of solar panels with capacity meter/slider, showing kW measurement, green energy theme, minimal design, white background",
+  "quick-estimate/battery": "Simple flat icon of battery storage system with charge level indicator, green energy theme, minimal design, white background",
+  "quick-estimate/calculate": "Simple flat icon of calculator with ROI chart showing savings graph, green energy theme, minimal design, white background",
+  
+  // Simulation Hub
+  "simulation-hub/quick-estimate": "Simple flat icon showing lightning bolt with ±20% badge, quick calculation concept, green energy theme, minimal design, white background",
+  "simulation-hub/profile-builder": "Simple flat icon showing stacked load profile charts with meter data, accuracy indicator, green energy theme, minimal design, white background",
+  "simulation-hub/sandbox": "Simple flat icon showing A/B/C comparison cards with experiment beaker, sandbox concept, green energy theme, minimal design, white background",
+  "simulation-hub/proposal": "Simple flat icon showing professional document with checkmark and signature line, green energy theme, minimal design, white background",
+  
+  // Profile Builder
+  "profile-builder/pv-config": "Simple flat icon of solar panel array with configuration sliders, DC/AC ratio indicator, green energy theme, minimal design, white background",
+  "profile-builder/battery": "Simple flat icon of battery with charge/discharge arrows and power rating, green energy theme, minimal design, white background",
+  "profile-builder/load-chart": "Simple flat icon of 24-hour bar chart with colored TOU periods (red peak, yellow standard, green off-peak), minimal design, white background",
+  "profile-builder/save": "Simple flat icon of floppy disk with checkmark, save simulation concept, green energy theme, minimal design, white background",
+  
+  // Sandbox
+  "sandbox/scenarios": "Simple flat icon showing three cards labeled A B C side by side for comparison, green energy theme, minimal design, white background",
+  "sandbox/parameter-sweep": "Simple flat icon of slider controls with range indicators and optimization graph, green energy theme, minimal design, white background",
+  "sandbox/draft": "Simple flat icon of document with DRAFT watermark badge, green energy theme, minimal design, white background",
+  "sandbox/promote": "Simple flat icon of arrow pointing up from draft to production with star badge, green energy theme, minimal design, white background",
+  
+  // Proposal Builder
+  "proposal-builder/simulation": "Simple flat icon of dropdown selector with simulation chart thumbnails, green energy theme, minimal design, white background",
+  "proposal-builder/checklist": "Simple flat icon of checklist with progress bar and checkmarks, verification concept, green energy theme, minimal design, white background",
+  "proposal-builder/branding": "Simple flat icon of company logo placeholder with color palette swatches, branding concept, green energy theme, minimal design, white background",
+  "proposal-builder/export": "Simple flat icon showing PDF and Excel file icons with download arrow, export concept, green energy theme, minimal design, white background",
+  "proposal-builder/signature": "Simple flat icon of signature line with pen and approval checkmark, digital signature concept, green energy theme, minimal design, white background",
+};
+
+// Extract path from tour:// URI in tour step
+function getPathFromTourStep(tourId: string, stepIndex: number): string | null {
+  const tour = TOURS[tourId];
+  if (!tour) return null;
+  
+  const step = tour.steps[stepIndex];
+  if (!step?.image?.startsWith("tour://")) return null;
+  
+  return step.image.replace("tour://", "");
 }
 
 interface GenerationResult {
@@ -24,64 +61,8 @@ interface UseInfographicGeneratorReturn {
   totalSteps: number;
   currentStep: string;
   generateForTour: (tourId: string) => Promise<GenerationResult[]>;
-  generateForStep: (tourId: string, stepIndex: number, infographicType?: TourStepContext["infographicType"]) => Promise<GenerationResult>;
+  generateForStep: (tourId: string, stepIndex: number) => Promise<GenerationResult>;
   generateAll: () => Promise<void>;
-}
-
-// Map tour IDs to feature areas
-const TOUR_FEATURE_AREAS: Record<string, string> = {
-  "quick-estimate": "Quick Estimate - Instant solar feasibility calculator",
-  "simulation-hub": "Simulation Hub - Central navigation for all simulation modes",
-  "profile-builder": "Profile Builder - Detailed load profile modeling",
-  "sandbox": "Sandbox Mode - Experimental scenario testing",
-  "proposal-builder": "Proposal Builder - Client-ready proposal generation",
-};
-
-// Map step indices to infographic types based on content
-function getInfographicType(tourId: string, stepIndex: number): TourStepContext["infographicType"] {
-  // Default mapping based on common patterns
-  const tour = TOURS[tourId];
-  if (!tour) return "feature-overview";
-
-  const step = tour.steps[stepIndex];
-  if (!step) return "feature-overview";
-
-  const title = step.title.toLowerCase();
-  const content = step.content.toLowerCase();
-
-  // Detect process-flow type steps
-  if (
-    title.includes("calculate") ||
-    title.includes("save") ||
-    title.includes("export") ||
-    content.includes("workflow") ||
-    content.includes("process")
-  ) {
-    return "process-flow";
-  }
-
-  // Detect comparison type steps
-  if (
-    title.includes("compare") ||
-    title.includes("scenario") ||
-    content.includes("side-by-side") ||
-    content.includes("different")
-  ) {
-    return "comparison";
-  }
-
-  // Detect data-flow type steps
-  if (
-    title.includes("data") ||
-    title.includes("import") ||
-    title.includes("profile") ||
-    content.includes("meter data") ||
-    content.includes("load profile")
-  ) {
-    return "data-flow";
-  }
-
-  return "feature-overview";
 }
 
 export function useInfographicGenerator(): UseInfographicGeneratorReturn {
@@ -92,31 +73,21 @@ export function useInfographicGenerator(): UseInfographicGeneratorReturn {
 
   const generateForStep = useCallback(async (
     tourId: string,
-    stepIndex: number,
-    infographicType?: TourStepContext["infographicType"]
+    stepIndex: number
   ): Promise<GenerationResult> => {
-    const tour = TOURS[tourId];
-    if (!tour) {
-      return { success: false, error: `Tour not found: ${tourId}` };
+    const path = getPathFromTourStep(tourId, stepIndex);
+    if (!path) {
+      return { success: false, error: `No tour:// URI for ${tourId} step ${stepIndex}` };
     }
 
-    const step = tour.steps[stepIndex];
-    if (!step) {
-      return { success: false, error: `Step ${stepIndex} not found in tour ${tourId}` };
+    const prompt = INFOGRAPHIC_PROMPTS[path];
+    if (!prompt) {
+      return { success: false, error: `No prompt defined for path: ${path}` };
     }
-
-    const tourStep: TourStepContext = {
-      tourId: tour.id,
-      stepIndex,
-      title: step.title,
-      content: step.content,
-      featureArea: TOUR_FEATURE_AREAS[tourId] || tourId,
-      infographicType: infographicType || getInfographicType(tourId, stepIndex),
-    };
 
     try {
       const { data, error } = await supabase.functions.invoke("generate-tour-infographic", {
-        body: { tourStep },
+        body: { path, prompt },
       });
 
       if (error) {
@@ -161,7 +132,7 @@ export function useInfographicGenerator(): UseInfographicGeneratorReturn {
 
       // Small delay between requests to avoid rate limiting
       if (i < tour.steps.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
@@ -202,8 +173,8 @@ export function useInfographicGenerator(): UseInfographicGeneratorReturn {
         
         setProgress(prev => prev + 1);
 
-        // Delay between requests
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Delay between requests to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 2500));
       }
     }
 
