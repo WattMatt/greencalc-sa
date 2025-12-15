@@ -19,6 +19,7 @@ import ProposalWorkspace from "./pages/ProposalWorkspace";
 import SimulationRoadmap from "./pages/SimulationRoadmap";
 import ClientPortal from "./pages/ClientPortal";
 import Auth from "./pages/Auth";
+import ProfileSettings from "./pages/ProfileSettings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -64,6 +65,8 @@ function AppRoutes() {
                 <Route path="/simulations/roadmap" element={<SimulationRoadmap />} />
                 <Route path="/calculator" element={<Calculator />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/profile" element={<ProfileSettings />} />
+                <Route path="*" element={<NotFound />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>

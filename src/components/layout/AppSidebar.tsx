@@ -175,7 +175,11 @@ export function AppSidebar() {
         {user && (
           <SidebarGroup className="mt-auto">
             <SidebarGroupContent>
-              <div className="px-3 py-2 mb-2 flex items-center gap-3">
+              <NavLink
+                to="/profile"
+                className="px-3 py-2 mb-2 flex items-center gap-3 rounded-md transition-colors hover:bg-sidebar-accent"
+                activeClassName="bg-sidebar-accent"
+              >
                 <Avatar className="h-8 w-8 shrink-0">
                   <AvatarImage src={profile?.avatar_url || undefined} alt={displayName} />
                   <AvatarFallback className="bg-primary/10 text-primary text-sm">
@@ -194,7 +198,7 @@ export function AppSidebar() {
                     )}
                   </div>
                 )}
-              </div>
+              </NavLink>
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild tooltip="Sign Out">
