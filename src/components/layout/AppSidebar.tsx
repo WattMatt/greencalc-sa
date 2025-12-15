@@ -19,8 +19,8 @@ const referenceDataItems = [
 ];
 
 const projectItems = [
-  { title: "Simulations", url: "/simulations", icon: Sparkles },
   { title: "Projects", url: "/projects", icon: Building2 },
+  { title: "Sandboxes", url: "/simulations", icon: Sparkles },
   { title: "Calculator", url: "/calculator", icon: Calculator },
 ];
 
