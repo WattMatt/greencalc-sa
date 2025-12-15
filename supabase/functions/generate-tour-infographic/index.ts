@@ -33,10 +33,20 @@ serve(async (req) => {
       throw new Error("Supabase credentials not configured");
     }
 
-    const { tourStep, generateAll } = await req.json();
+    const body = await req.json();
 
     // Initialize Supabase client for storage
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Support simple path + prompt for TourInfographic component
+    if (body.path && body.prompt) {
+      const result = await generateSimpleInfographic(body.path, body.prompt, LOVABLE_API_KEY, supabase);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { tourStep, generateAll } = body;
 
     if (generateAll) {
       // Generate infographics for multiple tour steps
@@ -163,6 +173,86 @@ async function generateInfographic(
   } catch (err: unknown) {
     const error = err as Error;
     console.error("Error generating infographic:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Simple infographic generation for TourInfographic component
+async function generateSimpleInfographic(
+  path: string,
+  prompt: string,
+  apiKey: string,
+  supabase: any
+): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
+  console.log(`Generating simple infographic for path: ${path}`);
+
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image-preview",
+        messages: [
+          {
+            role: "user",
+            content: `Generate a professional 512x256 icon-style infographic illustration: ${prompt}`,
+          },
+        ],
+        modalities: ["image", "text"],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("AI Gateway error:", response.status, errorText);
+      throw new Error(`AI Gateway error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log("AI response received for simple infographic");
+
+    // Extract the base64 image from the response
+    const imageData = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    
+    if (!imageData) {
+      console.error("No image in response:", JSON.stringify(data));
+      return { success: false, error: "No image generated" };
+    }
+
+    // Upload to Supabase storage
+    const fileName = `infographics/${path}.png`;
+    
+    // Convert base64 to binary
+    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
+    const binaryData = Uint8Array.from(atob(base64Data), (c: string) => c.charCodeAt(0));
+
+    const { error: uploadError } = await supabase.storage
+      .from("tour-assets")
+      .upload(fileName, binaryData, {
+        contentType: "image/png",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error("Upload error:", uploadError);
+      return { success: false, error: `Upload failed: ${uploadError.message}` };
+    }
+
+    // Get public URL
+    const { data: publicUrlData } = supabase.storage
+      .from("tour-assets")
+      .getPublicUrl(fileName);
+
+    const imageUrl = publicUrlData.publicUrl;
+    console.log(`Simple infographic uploaded: ${imageUrl}`);
+
+    return { success: true, imageUrl };
+  } catch (err: unknown) {
+    const error = err as Error;
+    console.error("Error generating simple infographic:", error);
     return { success: false, error: error.message };
   }
 }
