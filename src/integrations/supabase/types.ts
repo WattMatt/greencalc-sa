@@ -330,6 +330,7 @@ export type Database = {
           reviewed_at: string | null
           reviewed_by: string | null
           sandbox_id: string | null
+          share_token: string | null
           simulation_id: string | null
           simulation_snapshot: Json | null
           status: string
@@ -357,6 +358,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           sandbox_id?: string | null
+          share_token?: string | null
           simulation_id?: string | null
           simulation_snapshot?: Json | null
           status?: string
@@ -384,6 +386,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           sandbox_id?: string | null
+          share_token?: string | null
           simulation_id?: string | null
           simulation_snapshot?: Json | null
           status?: string
@@ -944,7 +947,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_share_token: { Args: never; Returns: string }
     }
     Enums: {
       day_type: "Weekday" | "Saturday" | "Sunday"
