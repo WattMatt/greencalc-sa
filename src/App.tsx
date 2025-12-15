@@ -19,6 +19,7 @@ import ProposalWorkspace from "./pages/ProposalWorkspace";
 import SimulationRoadmap from "./pages/SimulationRoadmap";
 import ClientPortal from "./pages/ClientPortal";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import ProfileSettings from "./pages/ProfileSettings";
 import NotFound from "./pages/NotFound";
 
@@ -46,6 +47,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/auth" element={<Auth />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/portal/:token" element={<ClientPortal />} />
       <Route
         path="/*"
