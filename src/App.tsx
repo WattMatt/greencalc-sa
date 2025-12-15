@@ -7,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { TourProvider, TourOverlay } from "@/components/onboarding";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { OfflineIndicator, InstallPrompt } from "@/components/pwa";
 import Dashboard from "./pages/Dashboard";
 import TariffManagement from "./pages/TariffManagement";
 import LoadProfiles from "./pages/LoadProfiles";
@@ -23,6 +24,7 @@ import ClientPortal from "./pages/ClientPortal";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import ProfileSettings from "./pages/ProfileSettings";
+import Install from "./pages/Install";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -70,6 +72,7 @@ function AppRoutes() {
                 <Route path="/calculator" element={<Calculator />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/profile" element={<ProfileSettings />} />
+                <Route path="/install" element={<Install />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </AppLayout>
@@ -88,6 +91,8 @@ const App = () => (
           <Toaster />
           <Sonner />
           <TourOverlay />
+          <OfflineIndicator />
+          <InstallPrompt />
           <BrowserRouter>
             <AuthProvider>
               <AppRoutes />
