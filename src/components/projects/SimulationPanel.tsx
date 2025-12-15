@@ -37,6 +37,7 @@ import {
 import { AdvancedSimulationConfigPanel } from "./simulation/AdvancedSimulationConfig";
 import { runAdvancedSimulation } from "./simulation/AdvancedSimulationEngine";
 import { AdvancedResultsDisplay } from "./simulation/AdvancedResultsDisplay";
+import { AdvancedConfigComparison } from "./simulation/AdvancedConfigComparison";
 
 interface Tenant {
   id: string;
@@ -397,6 +398,19 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
         config={advancedConfig}
         onChange={setAdvancedConfig}
       />
+
+      {/* Scenario Comparison */}
+      {hasFinancialData && isAdvancedEnabled && (
+        <AdvancedConfigComparison
+          currentConfig={advancedConfig}
+          energyResults={energyResults}
+          tariffData={tariffData}
+          systemCosts={DEFAULT_SYSTEM_COSTS}
+          solarCapacity={solarCapacity}
+          batteryCapacity={batteryCapacity}
+          onApplyConfig={setAdvancedConfig}
+        />
+      )}
 
       {/* System Configuration */}
       <div className="grid gap-6 md:grid-cols-3">
