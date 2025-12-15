@@ -72,3 +72,8 @@ export {
 
 export { AdvancedSimulationConfigPanel } from "./AdvancedSimulationConfig";
 export { AdvancedResultsDisplay } from "./AdvancedResultsDisplay";
+
+// Phase 8: Future Enhancements
+export { FutureEnhancementsConfigPanel } from "./FutureEnhancementsConfig";
+export { FutureEnhancementsResults } from "./FutureEnhancementsResults";
+export * from "./FutureEnhancementsTypes";
