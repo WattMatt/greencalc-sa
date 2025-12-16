@@ -1,134 +1,250 @@
 # Report Builder Development Roadmap
 
 ## Overview
-Visual-first reporting system integrated into Proposal Builder workflow, featuring DC/AC ratio analysis, infographics, and engineering KPIs with Google Docs-style formatting.
+Visual-first reporting system integrated into **Proposal Builder workflow**, featuring DC/AC ratio analysis, AI-generated infographics, and engineering KPIs with Google Docs-style formatting.
 
-**Design Philosophy**: Visual over written content - let graphs, charts, and infographics tell the story.
+**Design Philosophy**: Visual over written content - let graphs, illustrations, and infographics tell the story.
 
 ---
 
-## Phase 1: Report Data Foundation
-**Goal**: Establish data structures and calculation engine for report segments
+## Architecture Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **Data Storage** | Database from start | Persistent report configs enable versioning |
+| **Chart Priority** | All 4 core charts | Complete visual story for DC/AC analysis |
+| **Infographic Style** | AI-generated illustrations | Professional, unique visuals per report |
+| **Versioning** | Included | Track changes between report iterations |
+| **Integration Point** | Proposal Builder | Reports are the output of proposal workflow |
+
+---
+
+## Phase 1: Database Schema & Types
+**Goal**: Establish database tables and TypeScript interfaces for reports
 
 ### Deliverables
-- [ ] Report segment types definition (TypeScript interfaces)
-- [ ] DC/AC ratio comparison calculations (1:1 vs oversized)
-- [ ] KPI calculation utilities (yield, performance ratio, capacity factor, LCOE)
-- [ ] Report configuration schema (what segments to include)
+- [ ] `report_configs` table - stores report segment selections
+- [ ] `report_versions` table - tracks version history
+- [ ] `report_segments` table - defines available segment types
+- [ ] TypeScript interfaces for all report data structures
+- [ ] KPI calculation types and utilities
+
+### Database Schema
+```sql
+-- Report configurations per proposal
+CREATE TABLE report_configs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  proposal_id UUID REFERENCES proposals(id),
+  name TEXT NOT NULL,
+  template TEXT DEFAULT 'executive', -- executive, technical, financial
+  segments JSONB NOT NULL DEFAULT '[]',
+  branding JSONB,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Version history for reports
+CREATE TABLE report_versions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_config_id UUID REFERENCES report_configs(id),
+  version INTEGER NOT NULL DEFAULT 1,
+  snapshot JSONB NOT NULL, -- full report data at this version
+  generated_by TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+```
 
 ### Files to Create
-- `src/components/reports/types.ts` - Report data types
-- `src/components/reports/calculations/dcAcComparison.ts` - Oversizing analysis
-- `src/components/reports/calculations/kpiCalculations.ts` - Engineering KPIs
-- `src/components/reports/ReportConfig.ts` - Report configuration
+- `src/components/reports/types.ts`
+- `src/components/reports/calculations/dcAcComparison.ts`
+- `src/components/reports/calculations/kpiCalculations.ts`
 
 ### Review Gate
-- [ ] Unit tests pass for calculation functions
-- [ ] Sample data produces expected KPI values
-- [ ] Types are comprehensive for all report segments
+- [ ] Migration applied successfully
+- [ ] Types compile without errors
+- [ ] Calculation utilities have test coverage
 
 ---
 
 ## Phase 2: Core Chart Components
-**Goal**: Build reusable, export-ready chart components
+**Goal**: Build all 4 priority chart components with export capability
 
 ### Deliverables
-- [ ] DC/AC Ratio Comparison Chart (bar/area showing clipping vs gain)
-- [ ] Energy Flow Sankey Diagram (generation → consumption → grid)
-- [ ] Monthly Yield Comparison Chart (1:1 vs oversized)
-- [ ] Financial Payback Timeline Chart
-- [ ] Chart export utilities (PNG, SVG for reports)
+- [ ] **DC/AC Ratio Comparison Chart** - Bar/area showing:
+  - 1:1 baseline output
+  - Oversized (1.3:1) output
+  - Clipping losses (highlighted)
+  - Net gain visualization
+- [ ] **Energy Flow Sankey Diagram** - Visual flow:
+  - PV Generation → Self-consumption
+  - PV Generation → Grid Export
+  - Grid Import → Consumption
+  - Battery charge/discharge flows
+- [ ] **Monthly Yield Chart** - 12-month comparison:
+  - 1:1 vs oversized monthly production
+  - Seasonal variation
+  - Cumulative difference
+- [ ] **Payback Timeline Chart** - Financial projection:
+  - Investment cost line
+  - Cumulative savings curve
+  - Breakeven point marker
+  - Year-by-year ROI markers
 
 ### Files to Create
 - `src/components/reports/charts/DcAcComparisonChart.tsx`
 - `src/components/reports/charts/EnergyFlowSankey.tsx`
 - `src/components/reports/charts/MonthlyYieldChart.tsx`
 - `src/components/reports/charts/PaybackTimelineChart.tsx`
+- `src/components/reports/charts/index.ts`
 - `src/components/reports/charts/chartExportUtils.ts`
 
 ### Review Gate
-- [ ] Charts render correctly with sample data
-- [ ] Charts export cleanly to PNG/SVG
-- [ ] Responsive and print-friendly styling
+- [ ] All charts render with sample data
+- [ ] Charts export to PNG/SVG cleanly
+- [ ] Responsive and print-optimized
+- [ ] Consistent styling across all charts
 
 ---
 
-## Phase 3: Infographic Components
-**Goal**: Create visual summary cards and infographic elements
+## Phase 3: AI-Generated Infographics
+**Goal**: Create illustrated visual summaries using Lovable AI image generation
 
 ### Deliverables
-- [ ] Executive Summary Card (key metrics at a glance)
-- [ ] System Overview Infographic (PV size, battery, connection)
-- [ ] Savings Breakdown Visual (pie/donut with categories)
-- [ ] Environmental Impact Card (CO2, trees equivalent)
-- [ ] Engineering Specs Card (technical parameters)
-- [ ] AI-generated insight summaries
+- [ ] **Executive Summary Illustration** - Visual overview card with:
+  - System size icon/illustration
+  - Key savings number (large, prominent)
+  - Payback period visual
+  - ROI percentage badge
+- [ ] **System Overview Graphic** - Illustrated diagram showing:
+  - PV array representation
+  - Battery storage icon
+  - Grid connection
+  - Load/building
+- [ ] **Savings Breakdown Visual** - Illustrated pie/donut:
+  - TOU period savings allocation
+  - Self-consumption vs export
+  - Battery contribution
+- [ ] **Environmental Impact Card** - Illustrated with:
+  - CO2 offset visualization
+  - Tree equivalent graphic
+  - Car miles avoided
+- [ ] **Engineering Specs Panel** - Clean technical card:
+  - DC/AC configuration
+  - String layout
+  - Efficiency metrics
+
+### AI Generation Strategy
+```typescript
+// Use Lovable AI (Gemini) with image generation
+const generateInfographic = async (type: string, data: ReportData) => {
+  const prompt = buildInfographicPrompt(type, data);
+  // Generate using google/gemini-2.5-flash-image-preview
+  // Cache result in tour-assets bucket
+};
+```
 
 ### Files to Create
-- `src/components/reports/infographics/ExecutiveSummaryCard.tsx`
+- `src/components/reports/infographics/ExecutiveSummaryGraphic.tsx`
 - `src/components/reports/infographics/SystemOverviewGraphic.tsx`
-- `src/components/reports/infographics/SavingsBreakdown.tsx`
-- `src/components/reports/infographics/EnvironmentalImpact.tsx`
-- `src/components/reports/infographics/EngineeringSpecs.tsx`
+- `src/components/reports/infographics/SavingsBreakdownGraphic.tsx`
+- `src/components/reports/infographics/EnvironmentalImpactGraphic.tsx`
+- `src/components/reports/infographics/EngineeringSpecsPanel.tsx`
+- `src/components/reports/infographics/generateInfographic.ts`
 
 ### Review Gate
-- [ ] Infographics are visually polished and professional
-- [ ] Data displays correctly with real project data
-- [ ] Print-ready sizing and layout
+- [ ] AI generates relevant illustrations
+- [ ] Images cache correctly
+- [ ] Fallback to static icons if generation fails
+- [ ] Professional appearance
 
 ---
 
 ## Phase 4: Report Builder UI
-**Goal**: Build the report composition interface in Proposal workflow
+**Goal**: Build the report composition interface within Proposal workflow
 
 ### Deliverables
-- [ ] Report segment selector (drag-drop or checkbox)
-- [ ] Report preview panel (live preview as you build)
-- [ ] Segment ordering/arrangement
-- [ ] Report template presets (Executive, Technical, Financial)
-- [ ] Custom branding integration (logo, colors)
+- [ ] **Segment Selector Panel** - Choose which segments to include:
+  - Checkbox list with previews
+  - Drag-drop reordering
+  - Category grouping (Executive, Technical, Financial)
+- [ ] **Template Presets** - One-click configurations:
+  - Executive Summary (high-level, visual-heavy)
+  - Technical Report (detailed specs, all charts)
+  - Financial Analysis (ROI focus, projections)
+  - Custom (user-defined)
+- [ ] **Live Preview Panel** - Real-time report preview:
+  - Page-by-page navigation
+  - Zoom controls
+  - Mobile/desktop toggle
+- [ ] **Version History** - Track iterations:
+  - Version list with timestamps
+  - Compare versions side-by-side
+  - Restore previous version
+
+### Integration with Proposal Workflow
+```
+Proposal Builder Flow:
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  Verify     │ → │  Configure  │ → │  Generate   │
+│  Checklist  │    │  Report     │    │  & Export   │
+└─────────────┘    └─────────────┘    └─────────────┘
+                        ↑
+                   NEW: Report Builder UI
+```
 
 ### Files to Create
-- `src/components/reports/ReportBuilder.tsx` - Main builder UI
-- `src/components/reports/SegmentSelector.tsx` - Choose segments
-- `src/components/reports/ReportPreview.tsx` - Live preview
-- `src/components/reports/ReportTemplates.tsx` - Preset templates
+- `src/components/reports/ReportBuilder.tsx` - Main container
+- `src/components/reports/SegmentSelector.tsx`
+- `src/components/reports/ReportPreview.tsx`
+- `src/components/reports/TemplateSelector.tsx`
+- `src/components/reports/VersionHistory.tsx`
 
-### Integration Points
-- Integrate into `src/pages/ProposalWorkspace.tsx` as new tab/section
-- Connect to existing proposal data and simulation results
+### Files to Modify
+- `src/pages/ProposalWorkspace.tsx` - Add Report Builder tab/section
 
 ### Review Gate
-- [ ] Can compose report from available segments
-- [ ] Preview matches expected output
-- [ ] Templates produce professional layouts
+- [ ] Can compose report from segments
+- [ ] Preview updates in real-time
+- [ ] Templates apply correctly
+- [ ] Version history saves and restores
 
 ---
 
 ## Phase 5: Native Export (PDF/Excel)
-**Goal**: Generate downloadable reports in standard formats
+**Goal**: Generate professional downloadable reports
 
-### Deliverables
-- [ ] PDF export with professional formatting
-  - Cover page with branding
-  - Table of contents
-  - Charts embedded as images
-  - Page numbers and headers
-- [ ] Excel export for data tables
-  - Summary sheet with KPIs
-  - Detailed data sheets
-  - Charts as Excel charts where possible
-- [ ] Export progress indicator
+### PDF Export Features
+- [ ] **Cover Page** - Branded with:
+  - Company logo
+  - Project name
+  - Date and version
+  - Prepared by / for
+- [ ] **Table of Contents** - Auto-generated from segments
+- [ ] **Executive Summary Page** - AI illustration + KPIs
+- [ ] **Chart Pages** - Full-page or half-page charts
+- [ ] **Technical Appendix** - Detailed data tables
+- [ ] **Page Headers/Footers** - Branding, page numbers, date
+
+### Excel Export Features
+- [ ] **Summary Sheet** - Key metrics dashboard
+- [ ] **Hourly Data Sheet** - Detailed simulation data
+- [ ] **Monthly Comparison Sheet** - 1:1 vs oversized
+- [ ] **Financial Projections Sheet** - Year-by-year cashflows
+- [ ] **Charts** - Embedded Excel charts where possible
 
 ### Files to Create
-- `src/components/reports/export/pdfExport.ts`
-- `src/components/reports/export/excelExport.ts`
+- `src/components/reports/export/pdfGenerator.ts`
+- `src/components/reports/export/excelGenerator.ts`
 - `src/components/reports/export/ExportDialog.tsx`
+- `src/components/reports/export/CoverPage.tsx`
+- `src/components/reports/export/TableOfContents.tsx`
 
 ### Review Gate
-- [ ] PDF opens correctly in all viewers
-- [ ] Excel formulas work correctly
-- [ ] Charts are crisp and readable in exports
+- [ ] PDF renders correctly in all viewers
+- [ ] Excel formulas work
+- [ ] Charts are crisp at print resolution
+- [ ] File sizes reasonable (<10MB)
 
 ---
 
@@ -136,125 +252,160 @@ Visual-first reporting system integrated into Proposal Builder workflow, featuri
 **Goal**: Export directly to Google Docs, Slides, Sheets
 
 ### Deliverables
-- [ ] Google OAuth setup and authentication
-- [ ] Google Docs export (formatted report document)
-- [ ] Google Slides export (presentation with infographics)
-- [ ] Google Sheets export (data and charts)
-- [ ] "Open in Google" buttons
+- [ ] **OAuth Flow** - Google sign-in for export
+- [ ] **Google Docs Export** - Formatted report document:
+  - Styled headings and sections
+  - Embedded images (charts, infographics)
+  - Table formatting
+- [ ] **Google Slides Export** - Presentation deck:
+  - Executive summary slide
+  - One slide per major section
+  - Chart slides with annotations
+  - Conclusion/next steps slide
+- [ ] **Google Sheets Export** - Data workbook:
+  - Same structure as Excel export
+  - Google Sheets-native charts
 
 ### Files to Create
-- `supabase/functions/google-docs-export/index.ts`
-- `supabase/functions/google-slides-export/index.ts`
-- `supabase/functions/google-sheets-export/index.ts`
+- `supabase/functions/google-export/index.ts` - Unified export function
 - `src/components/reports/export/GoogleExportButton.tsx`
+- `src/hooks/useGoogleAuth.ts`
 
 ### Secrets Required
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 
 ### Review Gate
-- [ ] OAuth flow works end-to-end
-- [ ] Documents created in user's Google Drive
-- [ ] Formatting preserved in Google formats
+- [ ] OAuth works end-to-end
+- [ ] Documents created in user's Drive
+- [ ] Formatting matches native exports
+- [ ] Error handling for API failures
 
 ---
 
-## Phase 7: Polish & Analytics
+## Phase 7: Polish, Analytics & Documentation
 **Goal**: Final refinements and usage tracking
 
 ### Deliverables
-- [ ] Report generation analytics (track what's used)
-- [ ] Performance optimization (lazy load charts)
-- [ ] Error handling and retry logic
-- [ ] User feedback collection
-- [ ] Documentation and help content
-
-### Files to Create
-- `src/components/reports/ReportAnalytics.ts`
-- Update onboarding tours for Report Builder
+- [ ] **Performance Optimization**
+  - Lazy load chart components
+  - Cache AI-generated graphics
+  - Progressive PDF generation
+- [ ] **Analytics Integration**
+  - Track which segments are most used
+  - Export format preferences
+  - Generation time metrics
+- [ ] **Error Handling**
+  - Retry logic for AI generation
+  - Fallback graphics
+  - Clear error messages
+- [ ] **User Onboarding**
+  - Report Builder tour
+  - Help tooltips
+  - Example templates
+- [ ] **Documentation**
+  - Update help content
+  - Add to onboarding tours
 
 ### Review Gate
 - [ ] Full end-to-end test with real project
-- [ ] Performance benchmarks met
+- [ ] Performance benchmarks met (<5s generation)
 - [ ] User acceptance testing complete
+- [ ] Documentation reviewed
 
 ---
 
-## DC/AC Ratio Analysis - Key Visuals
+## DC/AC Ratio Analysis - Visual Specification
 
-### 1:1 vs Oversizing Comparison
-The core visual shows:
-- **Baseline (1:1)**: DC array = AC inverter capacity
-- **Oversized (1.3:1)**: DC array 30% larger than inverter
-- **Clipping losses**: Energy lost when DC > AC limit
-- **Net gain**: Additional energy captured in morning/evening
-
+### Primary Comparison Visual
 ```
-┌─────────────────────────────────────────────┐
-│  Daily Energy Production Comparison         │
-│                                             │
-│  ████████████████████  1.3:1 (Net Output)  │
-│  ░░░░░░░░░░░░░░░░░░░░  Clipping Losses     │
-│  ████████████████      1:1 Baseline        │
-│                                             │
-│  Key Metrics:                               │
-│  • Additional yield: +8-12%                 │
-│  • Clipping losses: 2-4%                    │
-│  • ROI improvement: +6-10%                  │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  Daily Energy Production: 1:1 vs 1.3:1 Oversizing       │
+│                                                         │
+│  kWh                                                    │
+│   ▲                                                     │
+│ 50│        ┌─────┐ ← Theoretical DC (clipped)          │
+│   │       ╱│░░░░░│╲                                    │
+│ 40│      ╱ │░░░░░│ ╲  ░ = Clipping losses             │
+│   │     ╱  │█████│  ╲                                  │
+│ 30│    ╱   │█████│   ╲ █ = Actual AC output           │
+│   │   ╱    │█████│    ╲                                │
+│ 20│  ╱     │█████│     ╲                               │
+│   │ ╱      │█████│      ╲ ── = 1:1 baseline           │
+│ 10│╱───────│█████│───────╲                             │
+│   │        │█████│                                     │
+│  0└────────┴─────┴─────────▶                           │
+│    6am     12pm     6pm       Hour                     │
+│                                                         │
+│  Key Metrics:                                           │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │ +12.4%   │ │ -2.1%    │ │ +10.3%   │ │ +8.5%    │  │
+│  │ DC Gain  │ │ Clipping │ │ Net Gain │ │ ROI Boost│  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Engineering KPIs to Display
-1. **Specific Yield** (kWh/kWp) - Energy per installed capacity
-2. **Performance Ratio** (%) - Actual vs theoretical output
-3. **Capacity Factor** (%) - Average output vs peak
-4. **LCOE** (R/kWh) - Levelized cost of energy
-5. **Grid Independence** (%) - Self-consumption rate
-6. **Peak Shaving** (kW) - Demand reduction achieved
+### Engineering KPIs (Always Displayed)
+| KPI | Unit | Description |
+|-----|------|-------------|
+| Specific Yield | kWh/kWp | Energy per installed DC capacity |
+| Performance Ratio | % | Actual vs theoretical output |
+| Capacity Factor | % | Average output vs peak |
+| LCOE | R/kWh | Levelized cost of energy |
+| Self-Consumption | % | PV used on-site vs exported |
+| Grid Independence | % | Load met by PV vs grid |
 
 ---
 
 ## Development Process
 
 ### Per-Phase Workflow
-1. **Plan**: Review deliverables, create tasks
-2. **Build**: Implement features
-3. **Test**: Run tests, manual QA
-4. **Review**: Demonstrate to stakeholders
-5. **Gate**: Checklist must be complete before next phase
+```
+┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐
+│  PLAN   │ → │  BUILD  │ → │  TEST   │ → │ REVIEW  │ → │  GATE   │
+│         │   │         │   │         │   │         │   │         │
+│ - Tasks │   │ - Code  │   │ - Unit  │   │ - Demo  │   │ - Pass  │
+│ - Scope │   │ - Tests │   │ - E2E   │   │ - Adjust│   │ - Next  │
+└─────────┘   └─────────┘   └─────────┘   └─────────┘   └─────────┘
+```
 
-### Testing Strategy
-- Unit tests for calculations
-- Component tests for UI elements
-- Integration tests for export flows
-- Visual regression for charts/infographics
-- End-to-end for full report generation
+### Testing Checklist (Per Phase)
+- [ ] Unit tests for new utilities
+- [ ] Component renders without errors
+- [ ] Integration with existing data
+- [ ] Visual review (no layout breaks)
+- [ ] Export outputs valid files
 
-### Progress Tracking
-Use task tracking in each session:
-- Create tasks for current phase deliverables
-- Mark complete as each is done
-- Note blockers and decisions
-- Don't proceed to next phase until gate passed
+### How to Start Each Phase
+Say: **"Let's start Phase [N]: [Phase Name]"**
+
+I will:
+1. Create tasks for deliverables
+2. Build incrementally
+3. Test each component
+4. Await your review before proceeding
 
 ---
 
 ## Timeline Estimate
 
-| Phase | Scope | Est. Sessions |
-|-------|-------|---------------|
-| 1 | Data Foundation | 1-2 |
-| 2 | Chart Components | 2-3 |
-| 3 | Infographics | 2-3 |
-| 4 | Builder UI | 2-3 |
-| 5 | PDF/Excel Export | 2-3 |
-| 6 | Google Integration | 3-4 |
-| 7 | Polish | 1-2 |
+| Phase | Focus | Est. Sessions | Dependencies |
+|-------|-------|---------------|--------------|
+| 1 | Database & Types | 1-2 | None |
+| 2 | Chart Components | 2-3 | Phase 1 |
+| 3 | AI Infographics | 2-3 | Phase 1 |
+| 4 | Builder UI | 2-3 | Phases 2, 3 |
+| 5 | PDF/Excel Export | 2-3 | Phase 4 |
+| 6 | Google Integration | 3-4 | Phase 5 |
+| 7 | Polish | 1-2 | Phase 6 |
 
-**Total**: ~13-20 sessions depending on complexity
+**Total**: ~13-20 sessions
+
+**Phases 2 & 3 can run in parallel** after Phase 1 completes.
 
 ---
 
 ## Ready to Start?
-Begin with **Phase 1** by saying:
-> "Let's start Phase 1: Report Data Foundation"
+
+When ready, say:
+> **"Let's start Phase 1: Database Schema & Types"**
