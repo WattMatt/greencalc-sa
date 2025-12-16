@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { 
@@ -18,6 +19,8 @@ import {
   Star,
   Zap,
   Info,
+  Trash2,
+  CheckCircle2,
 } from "lucide-react";
 import { useContentEnhancer, FEATURE_AREAS } from "./useContentEnhancer";
 import { cn } from "@/lib/utils";
@@ -48,6 +51,7 @@ export function ContentEnhancerDemo() {
     generateTips,
     generateGlossary,
     askContextualHelp,
+    clearCache,
   } = useContentEnhancer();
 
   const [selectedFeature, setSelectedFeature] = useState<string>(FEATURE_AREAS.QUICK_ESTIMATE);
@@ -57,27 +61,59 @@ export function ContentEnhancerDemo() {
   const [glossary, setGlossary] = useState<GlossaryEntry[] | null>(null);
   const [userQuestion, setUserQuestion] = useState("");
   const [helpResponse, setHelpResponse] = useState<string | null>(null);
+  const [loadedFromCache, setLoadedFromCache] = useState<Record<string, boolean>>({});
 
   const featureOptions = Object.entries(FEATURE_AREAS);
 
+  // Reset content when feature changes
+  const handleFeatureChange = (feature: string) => {
+    setSelectedFeature(feature);
+    setExplanation(null);
+    setFaqs(null);
+    setTips(null);
+    setGlossary(null);
+    setLoadedFromCache({});
+  };
+
   const handleGenerateExplanation = async () => {
+    const startTime = Date.now();
     const result = await generateExplanation({ featureArea: selectedFeature });
+    const elapsed = Date.now() - startTime;
     setExplanation(result);
+    setLoadedFromCache(prev => ({ ...prev, explanation: elapsed < 500 }));
   };
 
   const handleGenerateFAQs = async () => {
+    const startTime = Date.now();
     const result = await generateFAQs({ featureArea: selectedFeature });
+    const elapsed = Date.now() - startTime;
     setFaqs(result);
+    setLoadedFromCache(prev => ({ ...prev, faq: elapsed < 500 }));
   };
 
   const handleGenerateTips = async () => {
+    const startTime = Date.now();
     const result = await generateTips({ featureArea: selectedFeature });
+    const elapsed = Date.now() - startTime;
     setTips(result);
+    setLoadedFromCache(prev => ({ ...prev, tips: elapsed < 500 }));
   };
 
   const handleGenerateGlossary = async () => {
+    const startTime = Date.now();
     const result = await generateGlossary({ featureArea: selectedFeature });
+    const elapsed = Date.now() - startTime;
     setGlossary(result);
+    setLoadedFromCache(prev => ({ ...prev, glossary: elapsed < 500 }));
+  };
+
+  const handleClearCache = async () => {
+    await clearCache(selectedFeature);
+    setExplanation(null);
+    setFaqs(null);
+    setTips(null);
+    setGlossary(null);
+    setLoadedFromCache({});
   };
 
   const handleAskHelp = async () => {
@@ -113,10 +149,24 @@ export function ContentEnhancerDemo() {
         <CardContent className="space-y-4">
           {/* Feature selector */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Select Feature Area</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Select Feature Area</label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  await handleClearCache();
+                  toast.success("Cache cleared for this feature");
+                }}
+                className="h-7 text-xs text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Clear Cache
+              </Button>
+            </div>
             <select
               value={selectedFeature}
-              onChange={(e) => setSelectedFeature(e.target.value)}
+              onChange={(e) => handleFeatureChange(e.target.value)}
               className="w-full p-2 rounded-md border bg-background"
             >
               {featureOptions.map(([key, value]) => (
@@ -167,7 +217,15 @@ export function ContentEnhancerDemo() {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Enhanced Explanation</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base">Enhanced Explanation</CardTitle>
+                  {explanation && loadedFromCache.explanation && (
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      Cached
+                    </Badge>
+                  )}
+                </div>
                 <Button 
                   size="sm" 
                   onClick={handleGenerateExplanation}
@@ -178,7 +236,7 @@ export function ContentEnhancerDemo() {
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4 mr-1" />
-                      Generate
+                      {explanation ? "Reload" : "Generate"}
                     </>
                   )}
                 </Button>
@@ -203,7 +261,15 @@ export function ContentEnhancerDemo() {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Frequently Asked Questions</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base">Frequently Asked Questions</CardTitle>
+                  {faqs && loadedFromCache.faq && (
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      Cached
+                    </Badge>
+                  )}
+                </div>
                 <Button 
                   size="sm" 
                   onClick={handleGenerateFAQs}
@@ -214,7 +280,7 @@ export function ContentEnhancerDemo() {
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4 mr-1" />
-                      Generate
+                      {faqs ? "Reload" : "Generate"}
                     </>
                   )}
                 </Button>
@@ -248,7 +314,15 @@ export function ContentEnhancerDemo() {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Did You Know?</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base">Did You Know?</CardTitle>
+                  {tips && loadedFromCache.tips && (
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      Cached
+                    </Badge>
+                  )}
+                </div>
                 <Button 
                   size="sm" 
                   onClick={handleGenerateTips}
@@ -259,7 +333,7 @@ export function ContentEnhancerDemo() {
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4 mr-1" />
-                      Generate
+                      {tips ? "Reload" : "Generate"}
                     </>
                   )}
                 </Button>
@@ -304,7 +378,15 @@ export function ContentEnhancerDemo() {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Glossary</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base">Glossary</CardTitle>
+                  {glossary && loadedFromCache.glossary && (
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      Cached
+                    </Badge>
+                  )}
+                </div>
                 <Button 
                   size="sm" 
                   onClick={handleGenerateGlossary}
@@ -315,7 +397,7 @@ export function ContentEnhancerDemo() {
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4 mr-1" />
-                      Generate
+                      {glossary ? "Reload" : "Generate"}
                     </>
                   )}
                 </Button>

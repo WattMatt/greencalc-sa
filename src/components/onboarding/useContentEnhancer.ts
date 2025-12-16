@@ -42,25 +42,89 @@ interface UseContentEnhancerReturn {
   generateTips: (context: ContentContext) => Promise<Tip[] | null>;
   generateGlossary: (context: ContentContext) => Promise<GlossaryEntry[] | null>;
   askContextualHelp: (context: ContentContext) => Promise<string | null>;
-  cachedContent: Map<string, EnhancedContent>;
+  clearCache: (featureArea?: string) => Promise<void>;
 }
 
-// Simple in-memory cache
-const contentCache = new Map<string, EnhancedContent>();
+// Generate storage path for content
+function getStoragePath(type: ContentType, featureArea: string): string {
+  // Sanitize feature area for path (take first part, lowercase, replace spaces with dashes)
+  const sanitizedArea = featureArea
+    .split(" - ")[0]
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+  return `help-content/${sanitizedArea}/${type}.json`;
+}
 
 export function useContentEnhancer(): UseContentEnhancerReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Check if content exists in Supabase storage
+  const loadFromStorage = useCallback(async (
+    type: ContentType,
+    featureArea: string
+  ): Promise<EnhancedContent | null> => {
+    try {
+      const path = getStoragePath(type, featureArea);
+      
+      // Try to get signed URL to check if file exists
+      const { data: signedData } = await supabase.storage
+        .from("tour-assets")
+        .createSignedUrl(path, 3600);
+
+      if (signedData?.signedUrl) {
+        // Fetch the content
+        const response = await fetch(signedData.signedUrl);
+        if (response.ok) {
+          const content = await response.json();
+          return content as EnhancedContent;
+        }
+      }
+      return null;
+    } catch (err) {
+      console.log("No cached content found, will generate new");
+      return null;
+    }
+  }, []);
+
+  // Save content to Supabase storage
+  const saveToStorage = useCallback(async (
+    type: ContentType,
+    featureArea: string,
+    content: EnhancedContent
+  ): Promise<void> => {
+    try {
+      const path = getStoragePath(type, featureArea);
+      const jsonBlob = new Blob([JSON.stringify(content, null, 2)], {
+        type: "application/json",
+      });
+
+      await supabase.storage
+        .from("tour-assets")
+        .upload(path, jsonBlob, {
+          upsert: true,
+          contentType: "application/json",
+        });
+      
+      console.log(`Cached help content: ${path}`);
+    } catch (err) {
+      console.error("Failed to cache content:", err);
+    }
+  }, []);
+
   const generateContent = useCallback(async (
     type: ContentType,
     context: ContentContext
   ): Promise<EnhancedContent | null> => {
-    // Check cache first
-    const cacheKey = `${type}-${context.featureArea}-${context.tourId || ""}-${context.stepIndex || ""}`;
-    const cached = contentCache.get(cacheKey);
-    if (cached && type !== "contextual-help") {
-      return cached;
+    // Skip cache for contextual-help (dynamic Q&A)
+    if (type !== "contextual-help") {
+      // Check Supabase storage cache first
+      const cached = await loadFromStorage(type, context.featureArea);
+      if (cached) {
+        console.log(`Loaded cached ${type} for ${context.featureArea}`);
+        return cached;
+      }
     }
 
     setIsLoading(true);
@@ -84,9 +148,9 @@ export function useContentEnhancer(): UseContentEnhancerReturn {
 
       const enhancedContent = data as EnhancedContent;
 
-      // Cache the result (except contextual-help which is dynamic)
+      // Save to Supabase storage (except contextual-help)
       if (type !== "contextual-help") {
-        contentCache.set(cacheKey, enhancedContent);
+        await saveToStorage(type, context.featureArea, enhancedContent);
       }
 
       return enhancedContent;
@@ -98,7 +162,7 @@ export function useContentEnhancer(): UseContentEnhancerReturn {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loadFromStorage, saveToStorage]);
 
   const generateExplanation = useCallback(async (context: ContentContext): Promise<string | null> => {
     const result = await generateContent("explanation", context);
@@ -125,6 +189,49 @@ export function useContentEnhancer(): UseContentEnhancerReturn {
     return result?.content as string | null;
   }, [generateContent]);
 
+  // Clear cached content for a feature area (or all)
+  const clearCache = useCallback(async (featureArea?: string): Promise<void> => {
+    try {
+      if (featureArea) {
+        const sanitizedArea = featureArea
+          .split(" - ")[0]
+          .toLowerCase()
+          .replace(/\s+/g, "-")
+          .replace(/[^a-z0-9-]/g, "");
+        
+        const { data: files } = await supabase.storage
+          .from("tour-assets")
+          .list(`help-content/${sanitizedArea}`);
+        
+        if (files && files.length > 0) {
+          const paths = files.map(f => `help-content/${sanitizedArea}/${f.name}`);
+          await supabase.storage.from("tour-assets").remove(paths);
+        }
+      } else {
+        // Clear all help content
+        const { data: folders } = await supabase.storage
+          .from("tour-assets")
+          .list("help-content");
+        
+        if (folders) {
+          for (const folder of folders) {
+            const { data: files } = await supabase.storage
+              .from("tour-assets")
+              .list(`help-content/${folder.name}`);
+            
+            if (files && files.length > 0) {
+              const paths = files.map(f => `help-content/${folder.name}/${f.name}`);
+              await supabase.storage.from("tour-assets").remove(paths);
+            }
+          }
+        }
+      }
+      console.log("Cache cleared");
+    } catch (err) {
+      console.error("Failed to clear cache:", err);
+    }
+  }, []);
+
   return {
     isLoading,
     error,
@@ -133,7 +240,7 @@ export function useContentEnhancer(): UseContentEnhancerReturn {
     generateTips,
     generateGlossary,
     askContextualHelp,
-    cachedContent: contentCache,
+    clearCache,
   };
 }
 
