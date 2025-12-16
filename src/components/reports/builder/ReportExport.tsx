@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, FileText, Table, Loader2, CheckCircle, Image, ExternalLink } from "lucide-react";
@@ -7,6 +7,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas";
 import { supabase } from "@/integrations/supabase/client";
+import { useReportAnalytics } from "@/hooks/useReportAnalytics";
 import {
   AreaChart,
   Area,
@@ -162,11 +163,17 @@ export function ReportExport({
   disabled 
 }: ReportExportProps) {
   const [exporting, setExporting] = useState<string | null>(null);
+  const { trackEvent } = useReportAnalytics();
   
   // Refs for chart capture
   const dcAcChartRef = useRef<HTMLDivElement>(null);
   const monthlyChartRef = useRef<HTMLDivElement>(null);
   const paybackChartRef = useRef<HTMLDivElement>(null);
+
+  // Track view on mount
+  useEffect(() => {
+    trackEvent('view', { metadata: { reportName } });
+  }, []);
 
   const hexToRgb = (hex: string) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -369,6 +376,7 @@ export function ReportExport({
       }
 
       doc.save(`${reportName || "Report"}_${new Date().toISOString().split('T')[0]}.pdf`);
+      trackEvent('export_pdf', { metadata: { reportName, segmentCount: enabledSegments.length } });
       toast.success("Report exported as PDF with charts");
     } catch (error) {
       console.error("PDF export error:", error);
@@ -664,6 +672,7 @@ export function ReportExport({
       link.download = `${reportName || "Report"}_${new Date().toISOString().split('T')[0]}.csv`;
       link.click();
 
+      trackEvent('export_excel', { metadata: { reportName } });
       toast.success("Report exported to Excel (CSV)");
     } catch (error) {
       console.error("Excel export error:", error);
@@ -688,6 +697,7 @@ export function ReportExport({
       if (error) throw error;
 
       if (data?.spreadsheetUrl) {
+        trackEvent('export_sheets', { metadata: { reportName, spreadsheetUrl: data.spreadsheetUrl } });
         toast.success("Report exported to Google Sheets!", {
           action: {
             label: "Open",

@@ -27,6 +27,7 @@ import { DcAcRatioChart } from "./charts";
 import { calculateDcAcAnalysis } from "./calculations";
 import { InfographicGenerator } from "./infographics";
 import { ReportBuilder, ReportExport } from "./builder";
+import { ReportAnalyticsDashboard } from "./analytics";
 
 interface Phase {
   id: number;
@@ -145,13 +146,13 @@ const phases: Phase[] = [
     name: "Polish & Analytics",
     description: "Final refinements",
     icon: CheckCircle2,
-    status: "upcoming",
-    progress: 0,
+    status: "completed",
+    progress: 100,
     deliverables: [
       "Performance optimization",
-      "Usage analytics",
-      "Error handling",
-      "Documentation"
+      "Usage analytics dashboard",
+      "Error handling improvements",
+      "Export tracking"
     ]
   }
 ];
@@ -473,6 +474,20 @@ export function ReportsRoadmap() {
 
       {/* Report Builder UI */}
       <ReportBuilder projectName="Demo Solar Project" />
+
+      {/* Analytics Dashboard */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Usage Analytics
+          </CardTitle>
+          <CardDescription>Track report generation and export activity</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ReportAnalyticsDashboard />
+        </CardContent>
+      </Card>
 
       {/* Export Demo */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
