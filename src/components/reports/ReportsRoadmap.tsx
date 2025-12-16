@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { 
   FileText, 
@@ -21,6 +23,8 @@ import {
   Palette,
   Copy
 } from "lucide-react";
+import { DcAcRatioChart } from "./charts";
+import { calculateDcAcAnalysis } from "./calculations";
 
 interface Phase {
   id: number;
@@ -233,6 +237,89 @@ const wireframes = {
 └─────────────────────────────────────────────┘`
 };
 
+function ChartDemo() {
+  const [solarCapacity, setSolarCapacity] = useState(100);
+  const [dcAcRatio, setDcAcRatio] = useState(1.3);
+
+  const analysis = useMemo(
+    () => calculateDcAcAnalysis(solarCapacity, dcAcRatio),
+    [solarCapacity, dcAcRatio]
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <BarChart3 className="h-4 w-4" />
+          Live Chart Demo
+        </CardTitle>
+        <CardDescription>
+          Interactive DC/AC ratio analysis - adjust parameters to see real-time changes
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <Label>Solar Capacity (AC)</Label>
+                <span className="text-sm text-muted-foreground">{solarCapacity} kW</span>
+              </div>
+              <Slider
+                value={[solarCapacity]}
+                onValueChange={([v]) => setSolarCapacity(v)}
+                min={50}
+                max={500}
+                step={10}
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <Label>DC/AC Ratio</Label>
+                <span className="text-sm text-muted-foreground">{dcAcRatio.toFixed(2)}:1</span>
+              </div>
+              <Slider
+                value={[dcAcRatio * 100]}
+                onValueChange={([v]) => setDcAcRatio(v / 100)}
+                min={100}
+                max={150}
+                step={5}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-muted p-3 text-center">
+              <p className="text-2xl font-bold text-primary">
+                {(solarCapacity * dcAcRatio).toFixed(0)}
+              </p>
+              <p className="text-xs text-muted-foreground">kWp DC Capacity</p>
+            </div>
+            <div className="rounded-lg bg-muted p-3 text-center">
+              <p className="text-2xl font-bold text-chart-1">
+                +{analysis.net_gain_percent}%
+              </p>
+              <p className="text-xs text-muted-foreground">Net Energy Gain</p>
+            </div>
+            <div className="rounded-lg bg-muted p-3 text-center">
+              <p className="text-2xl font-bold text-destructive">
+                {analysis.clipping_percent}%
+              </p>
+              <p className="text-xs text-muted-foreground">Clipping Loss</p>
+            </div>
+            <div className="rounded-lg bg-muted p-3 text-center">
+              <p className="text-2xl font-bold">
+                {analysis.oversized_annual_kwh.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">kWh/year</p>
+            </div>
+          </div>
+        </div>
+        <DcAcRatioChart analysis={analysis} dcAcRatio={dcAcRatio} />
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ReportsRoadmap() {
   const [selectedPhase, setSelectedPhase] = useState<Phase>(phases[0]);
   
@@ -378,6 +465,9 @@ export function ReportsRoadmap() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Chart Demo Section */}
+      <ChartDemo />
 
       {/* Wireframes Section */}
       <Card>
