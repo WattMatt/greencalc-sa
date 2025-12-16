@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Info, RotateCcw, HelpCircle, Sun, Moon, Monitor, Settings2, ExternalLink, Bell, Sparkles } from "lucide-react";
 import { NotificationSettings } from "@/components/pwa";
-import { useTour, TOURS, InfographicManager, ContentEnhancerDemo, resetWelcomeModal } from "@/components/onboarding";
+import { useTour, TOURS, ContentEnhancerDemo, resetWelcomeModal } from "@/components/onboarding";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { 
@@ -198,18 +198,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="onboarding" className="space-y-6">
-          <Tabs defaultValue="infographics" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="infographics">AI Infographics</TabsTrigger>
-              <TabsTrigger value="content">AI Content</TabsTrigger>
-            </TabsList>
-            <TabsContent value="infographics">
-              <InfographicManager />
-            </TabsContent>
-            <TabsContent value="content">
-              <ContentEnhancerDemo />
-            </TabsContent>
-          </Tabs>
+          <ContentEnhancerDemo />
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-6">
