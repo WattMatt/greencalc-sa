@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { DcAcRatioChart } from "./charts";
 import { calculateDcAcAnalysis } from "./calculations";
+import { InfographicGenerator } from "./infographics";
 
 interface Phase {
   id: number;
@@ -86,8 +87,8 @@ const phases: Phase[] = [
     name: "AI Infographics",
     description: "AI-generated visual summaries",
     icon: Sparkles,
-    status: "upcoming",
-    progress: 0,
+    status: "completed",
+    progress: 100,
     deliverables: [
       "Executive Summary Illustration",
       "System Overview Graphic",
@@ -468,6 +469,9 @@ export function ReportsRoadmap() {
 
       {/* Chart Demo Section */}
       <ChartDemo />
+
+      {/* AI Infographic Generator */}
+      <InfographicGenerator />
 
       {/* Wireframes Section */}
       <Card>
