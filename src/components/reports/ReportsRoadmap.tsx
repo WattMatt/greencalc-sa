@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
 import { 
   FileText, 
   Database, 
@@ -17,7 +18,8 @@ import {
   Circle,
   Clock,
   ChevronRight,
-  Palette
+  Palette,
+  Copy
 } from "lucide-react";
 
 interface Phase {
@@ -348,11 +350,28 @@ export function ReportsRoadmap() {
                 </div>
               </div>
 
-              {selectedPhase.status === "in-progress" && (
-                <div className="pt-4 border-t">
+              {selectedPhase.status !== "completed" && (
+                <div className="pt-4 border-t space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Review wireframes below, then say <strong>"Let's start Phase 0"</strong> in chat to begin.
+                    Copy and paste this prompt into chat to begin:
                   </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-sm bg-muted px-3 py-2 rounded-md">
+                      Let's start Phase {selectedPhase.id}: {selectedPhase.name}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          `Let's start Phase ${selectedPhase.id}: ${selectedPhase.name}`
+                        );
+                        toast.success("Prompt copied to clipboard");
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
