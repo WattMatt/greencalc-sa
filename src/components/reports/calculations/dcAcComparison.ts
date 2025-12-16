@@ -37,32 +37,30 @@ function getHourlySolarCurve(): number[] {
 /**
  * Industry-validated clipping model based on published research
  * 
- * Key benchmarks from industry data:
- * - DC/AC 1.2 → ~0.5-1% clipping
- * - DC/AC 1.3 → ~1-3% clipping  
- * - DC/AC 1.5 → ~4-5% clipping (user's source: 4.8%)
- * - DC/AC 1.6 → ~6-8% clipping
+ * Key benchmarks from NotebookLM/industry data:
+ * - DC/AC 1.0 → 0% clipping
+ * - DC/AC 1.3 → 0.9% clipping  
+ * - DC/AC 1.5 → 4.9% clipping
+ * - DC/AC 1.6 → ~8% clipping (extrapolated)
  * 
  * The clipping percentage is calculated as clipped energy / total potential DC energy
  */
 function calculateClippingLoss(dcAcRatio: number): { clippingPercent: number; yieldGainPercent: number } {
-  // Empirical model fitted to industry data
-  // Clipping increases non-linearly as DC/AC ratio increases
-  // Based on analysis of ~1000+ commercial installations
-  
   if (dcAcRatio <= 1.0) {
     return { clippingPercent: 0, yieldGainPercent: 0 };
   }
   
-  // Clipping model: clipping increases exponentially above 1.0
-  // Fitted to match: 1.3→2%, 1.5→4.8%, 1.6→7%
+  // Power law model fitted to industry data points:
+  // 1.3 → 0.9%, 1.5 → 4.9%
+  // clipping = 47.6 * x^3.31 where x = (ratio - 1)
   const oversizeAmount = dcAcRatio - 1.0;
   
-  // Polynomial fit: clipping = a * x^2 + b * x where x = (ratio - 1)
-  // Calibrated to: 0.3→2%, 0.5→4.8%, 0.6→7%
-  const a = 12.0;  // Quadratic coefficient
-  const b = 4.0;   // Linear coefficient
-  const clippingPercent = a * Math.pow(oversizeAmount, 2) + b * oversizeAmount;
+  // Power law coefficients derived from regression:
+  // Solving: a * 0.3^n = 0.9 and a * 0.5^n = 4.9
+  // Yields: n = 3.31, a = 47.6
+  const coefficient = 47.6;
+  const exponent = 3.31;
+  const clippingPercent = coefficient * Math.pow(oversizeAmount, exponent);
   
   // Yield gain model: diminishing returns as ratio increases
   // At 1.3, you get ~30% more DC capacity but only ~12% more AC output (due to clipping)
