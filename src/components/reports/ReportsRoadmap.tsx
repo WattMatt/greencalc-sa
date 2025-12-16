@@ -26,7 +26,7 @@ import {
 import { DcAcRatioChart } from "./charts";
 import { calculateDcAcAnalysis } from "./calculations";
 import { InfographicGenerator } from "./infographics";
-import { ReportBuilder } from "./builder";
+import { ReportBuilder, ReportExport } from "./builder";
 
 interface Phase {
   id: number;
@@ -117,8 +117,8 @@ const phases: Phase[] = [
     name: "PDF/Excel Export",
     description: "Native document exports",
     icon: Download,
-    status: "upcoming",
-    progress: 0,
+    status: "completed",
+    progress: 100,
     deliverables: [
       "PDF with cover page",
       "Table of contents",
@@ -473,6 +473,131 @@ export function ReportsRoadmap() {
 
       {/* Report Builder UI */}
       <ReportBuilder projectName="Demo Solar Project" />
+
+      {/* Export Demo */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <ReportExport
+          reportName="Demo Solar Report"
+          segments={[
+            { id: "1", type: "executive_summary", enabled: true, order: 0 },
+            { id: "2", type: "dcac_comparison", enabled: true, order: 1 },
+            { id: "3", type: "payback_timeline", enabled: true, order: 2 },
+            { id: "4", type: "engineering_specs", enabled: true, order: 3 },
+            { id: "5", type: "environmental_impact", enabled: true, order: 4 },
+          ]}
+          branding={{
+            company_name: "Solar Solutions Inc",
+            primary_color: "#22c55e",
+            secondary_color: "#0f172a",
+            contact_email: "info@solarsolutions.co.za",
+            contact_phone: "+27 11 123 4567",
+            website: "www.solarsolutions.co.za"
+          }}
+          reportData={{
+            project: {
+              name: "Demo Shopping Centre",
+              location: "Johannesburg, South Africa",
+              total_area_sqm: 15000,
+              connection_size_kva: 800,
+              tenant_count: 45
+            },
+            simulation: {
+              solar_capacity_kwp: 500,
+              battery_capacity_kwh: 200,
+              battery_power_kw: 100,
+              dc_ac_ratio: 130,
+              annual_solar_generation_kwh: 825000,
+              annual_consumption_kwh: 1200000,
+              self_consumption_kwh: 742500,
+              grid_import_kwh: 457500,
+              grid_export_kwh: 82500
+            },
+            kpis: {
+              specific_yield: 1650,
+              performance_ratio: 82.5,
+              capacity_factor: 18.8,
+              lcoe: 0.85,
+              self_consumption_rate: 90,
+              solar_coverage: 61.9,
+              grid_independence: 68.5,
+              peak_shaving_kw: 150
+            },
+            dcAcAnalysis: {
+              baseline_annual_kwh: 735000,
+              oversized_annual_kwh: 825000,
+              clipping_loss_kwh: 18000,
+              additional_capture_kwh: 108000,
+              net_gain_kwh: 90000,
+              net_gain_percent: 12.2,
+              clipping_percent: 2.1,
+              hourly_comparison: [],
+              monthly_comparison: [
+                { month: "Jan", baseline_kwh: 68000, oversized_kwh: 76500, gain_kwh: 8500, gain_percent: 12.5 },
+                { month: "Feb", baseline_kwh: 62000, oversized_kwh: 69500, gain_kwh: 7500, gain_percent: 12.1 },
+                { month: "Mar", baseline_kwh: 65000, oversized_kwh: 73000, gain_kwh: 8000, gain_percent: 12.3 },
+                { month: "Apr", baseline_kwh: 58000, oversized_kwh: 65000, gain_kwh: 7000, gain_percent: 12.1 },
+                { month: "May", baseline_kwh: 52000, oversized_kwh: 58000, gain_kwh: 6000, gain_percent: 11.5 },
+                { month: "Jun", baseline_kwh: 48000, oversized_kwh: 53500, gain_kwh: 5500, gain_percent: 11.5 },
+                { month: "Jul", baseline_kwh: 50000, oversized_kwh: 56000, gain_kwh: 6000, gain_percent: 12.0 },
+                { month: "Aug", baseline_kwh: 55000, oversized_kwh: 61500, gain_kwh: 6500, gain_percent: 11.8 },
+                { month: "Sep", baseline_kwh: 60000, oversized_kwh: 67500, gain_kwh: 7500, gain_percent: 12.5 },
+                { month: "Oct", baseline_kwh: 65000, oversized_kwh: 73000, gain_kwh: 8000, gain_percent: 12.3 },
+                { month: "Nov", baseline_kwh: 70000, oversized_kwh: 78500, gain_kwh: 8500, gain_percent: 12.1 },
+                { month: "Dec", baseline_kwh: 72000, oversized_kwh: 81000, gain_kwh: 9000, gain_percent: 12.5 }
+              ]
+            },
+            financials: {
+              system_cost: 6500000,
+              annual_grid_cost_baseline: 2400000,
+              annual_grid_cost_with_solar: 915000,
+              annual_savings: 1485000,
+              payback_years: 4.4,
+              roi_percent: 471,
+              npv: 12500000,
+              irr: 28.5,
+              yearly_cashflows: Array.from({ length: 25 }, (_, i) => ({
+                year: i + 1,
+                cumulative_savings: 1485000 * (i + 1) * 0.98,
+                cumulative_cost: 6500000,
+                net_position: 1485000 * (i + 1) * 0.98 - 6500000
+              }))
+            },
+            environmental: {
+              co2_avoided_tons: 742,
+              trees_equivalent: 12200,
+              car_miles_avoided: 1850000,
+              homes_powered_equivalent: 68.5,
+              grid_emission_factor: 0.9
+            }
+          }}
+        />
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Phase 5 Complete</CardTitle>
+            <CardDescription>PDF and Excel export functionality is now available</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <span className="text-sm">PDF with cover page & TOC</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <span className="text-sm">Segment-based content pages</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <span className="text-sm">Data tables with styling</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <span className="text-sm">Excel/CSV comprehensive export</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Wireframes Section */}
       <Card>
