@@ -26,6 +26,7 @@ import {
 import { DcAcRatioChart } from "./charts";
 import { calculateDcAcAnalysis } from "./calculations";
 import { InfographicGenerator } from "./infographics";
+import { ReportBuilder } from "./builder";
 
 interface Phase {
   id: number;
@@ -102,8 +103,8 @@ const phases: Phase[] = [
     name: "Builder UI",
     description: "Report composition interface",
     icon: Layout,
-    status: "upcoming",
-    progress: 0,
+    status: "completed",
+    progress: 100,
     deliverables: [
       "Segment Selector Panel",
       "Template Presets",
@@ -470,8 +471,8 @@ export function ReportsRoadmap() {
       {/* Chart Demo Section */}
       <ChartDemo />
 
-      {/* AI Infographic Generator */}
-      <InfographicGenerator />
+      {/* Report Builder UI */}
+      <ReportBuilder projectName="Demo Solar Project" />
 
       {/* Wireframes Section */}
       <Card>
