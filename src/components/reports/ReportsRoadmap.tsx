@@ -68,8 +68,8 @@ const phases: Phase[] = [
     name: "Chart Components",
     description: "Core visualization charts",
     icon: BarChart3,
-    status: "in-progress",
-    progress: 0,
+    status: "completed",
+    progress: 100,
     deliverables: [
       "DC/AC Ratio Comparison Chart",
       "Energy Flow Sankey Diagram",
