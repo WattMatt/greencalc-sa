@@ -83,13 +83,17 @@ interface ExportRequest {
 
 async function getAccessToken(credentials: any): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
+  
+  console.log("Service account email:", credentials.client_email);
+  console.log("Project ID:", credentials.project_id);
+  
   const payload = {
     iss: credentials.client_email,
-    sub: credentials.client_email,
     aud: "https://oauth2.googleapis.com/token",
     iat: now,
     exp: now + 3600,
-    scope: "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive",
+    // Only request spreadsheets scope - service accounts can create files with this
+    scope: "https://www.googleapis.com/auth/spreadsheets",
   };
 
   // Import the private key
@@ -164,6 +168,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (!createResponse.ok) {
       const err = await createResponse.text();
+      console.error("Create response status:", createResponse.status);
+      console.error("Create response body:", err);
       throw new Error(`Failed to create spreadsheet: ${err}`);
     }
 
