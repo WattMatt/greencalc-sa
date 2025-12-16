@@ -92,8 +92,8 @@ async function getAccessToken(credentials: any): Promise<string> {
     aud: "https://oauth2.googleapis.com/token",
     iat: now,
     exp: now + 3600,
-    // Only request spreadsheets scope - service accounts can create files with this
-    scope: "https://www.googleapis.com/auth/spreadsheets",
+    // Need drive.file scope to CREATE new spreadsheets
+    scope: "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file",
   };
 
   // Import the private key
