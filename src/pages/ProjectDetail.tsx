@@ -6,13 +6,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText } from "lucide-react";
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
 import { SimulationModes } from "@/components/projects/SimulationModes";
 import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { SolarForecastCard } from "@/components/projects/SolarForecastCard";
+import { ReportsRoadmap } from "@/components/reports/ReportsRoadmap";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -179,6 +180,10 @@ export default function ProjectDetail() {
             <CloudSun className="h-4 w-4 mr-2" />
             Solar Forecast
           </TabsTrigger>
+          <TabsTrigger value="reports">
+            <FileText className="h-4 w-4 mr-2" />
+            Reports
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="tenants" className="mt-6">
@@ -222,6 +227,10 @@ export default function ProjectDetail() {
 
         <TabsContent value="solar-forecast" className="mt-6">
           <SolarForecastCard projectLocation={project.location || undefined} />
+        </TabsContent>
+
+        <TabsContent value="reports" className="mt-6">
+          <ReportsRoadmap />
         </TabsContent>
       </Tabs>
     </div>
