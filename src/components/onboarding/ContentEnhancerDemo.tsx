@@ -116,6 +116,22 @@ export function ContentEnhancerDemo() {
     setLoadedFromCache({});
   };
 
+  const handleGenerateAll = async () => {
+    toast.info("Generating all content...");
+    const results = await Promise.all([
+      generateExplanation({ featureArea: selectedFeature }),
+      generateFAQs({ featureArea: selectedFeature }),
+      generateTips({ featureArea: selectedFeature }),
+      generateGlossary({ featureArea: selectedFeature }),
+    ]);
+    setExplanation(results[0]);
+    setFaqs(results[1]);
+    setTips(results[2]);
+    setGlossary(results[3]);
+    setLoadedFromCache({ explanation: true, faq: true, tips: true, glossary: true });
+    toast.success("All content generated and cached");
+  };
+
   const handleAskHelp = async () => {
     if (!userQuestion.trim()) return;
     const result = await askContextualHelp({ 
@@ -151,18 +167,34 @@ export function ContentEnhancerDemo() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">Select Feature Area</label>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={async () => {
-                  await handleClearCache();
-                  toast.success("Cache cleared for this feature");
-                }}
-                className="h-7 text-xs text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="h-3 w-3 mr-1" />
-                Clear Cache
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleGenerateAll}
+                  disabled={isLoading}
+                  className="h-7 text-xs"
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  ) : (
+                    <Sparkles className="h-3 w-3 mr-1" />
+                  )}
+                  Generate All
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    await handleClearCache();
+                    toast.success("Cache cleared for this feature");
+                  }}
+                  className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Clear Cache
+                </Button>
+              </div>
             </div>
             <select
               value={selectedFeature}
