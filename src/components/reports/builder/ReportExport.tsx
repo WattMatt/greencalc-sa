@@ -1,11 +1,26 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, FileText, Table, Loader2, CheckCircle } from "lucide-react";
+import { Download, FileText, Table, Loader2, CheckCircle, Image } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import type { ReportData, ReportBranding, ReportSegment, SegmentType, SEGMENT_DEFINITIONS } from "../types";
+import html2canvas from "html2canvas";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+} from "recharts";
+import type { ReportData, ReportBranding, ReportSegment, SegmentType } from "../types";
 
 interface ReportExportProps {
   reportName: string;
@@ -13,6 +28,129 @@ interface ReportExportProps {
   branding?: ReportBranding;
   reportData: ReportData;
   disabled?: boolean;
+}
+
+// Hidden chart components for PDF capture
+function HiddenDcAcChart({ data, chartRef }: { data: ReportData; chartRef: React.RefObject<HTMLDivElement> }) {
+  return (
+    <div 
+      ref={chartRef} 
+      style={{ 
+        position: 'absolute', 
+        left: '-9999px', 
+        width: '600px', 
+        height: '300px',
+        backgroundColor: 'white',
+        padding: '16px'
+      }}
+    >
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data.dcAcAnalysis.hourly_comparison}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} stroke="#6b7280" fontSize={10} />
+          <YAxis stroke="#6b7280" fontSize={10} />
+          <Legend wrapperStyle={{ fontSize: '10px' }} />
+          <Area
+            type="monotone"
+            dataKey="baseline_kw"
+            name="1:1 Baseline"
+            stroke="#9ca3af"
+            fill="#e5e7eb"
+            strokeDasharray="5 5"
+          />
+          <Area
+            type="monotone"
+            dataKey="oversized_ac_kw"
+            name="AC Output"
+            stroke="#22c55e"
+            fill="#22c55e"
+            fillOpacity={0.3}
+          />
+          <Area
+            type="monotone"
+            dataKey="clipping_kw"
+            name="Clipping"
+            stroke="#ef4444"
+            fill="#ef4444"
+            fillOpacity={0.3}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function HiddenMonthlyChart({ data, chartRef }: { data: ReportData; chartRef: React.RefObject<HTMLDivElement> }) {
+  return (
+    <div 
+      ref={chartRef} 
+      style={{ 
+        position: 'absolute', 
+        left: '-9999px', 
+        width: '600px', 
+        height: '300px',
+        backgroundColor: 'white',
+        padding: '16px'
+      }}
+    >
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data.dcAcAnalysis.monthly_comparison}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis dataKey="month" stroke="#6b7280" fontSize={10} />
+          <YAxis stroke="#6b7280" fontSize={10} />
+          <Legend wrapperStyle={{ fontSize: '10px' }} />
+          <Bar dataKey="baseline_kwh" name="Baseline" fill="#9ca3af" />
+          <Bar dataKey="oversized_kwh" name="Oversized" fill="#22c55e" />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function HiddenPaybackChart({ data, chartRef }: { data: ReportData; chartRef: React.RefObject<HTMLDivElement> }) {
+  return (
+    <div 
+      ref={chartRef} 
+      style={{ 
+        position: 'absolute', 
+        left: '-9999px', 
+        width: '600px', 
+        height: '300px',
+        backgroundColor: 'white',
+        padding: '16px'
+      }}
+    >
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data.financials.yearly_cashflows.slice(0, 15)}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis dataKey="year" stroke="#6b7280" fontSize={10} />
+          <YAxis 
+            stroke="#6b7280" 
+            fontSize={10}
+            tickFormatter={(v) => `R${(v / 1000000).toFixed(1)}M`}
+          />
+          <Legend wrapperStyle={{ fontSize: '10px' }} />
+          <Line
+            type="monotone"
+            dataKey="cumulative_savings"
+            name="Cumulative Savings"
+            stroke="#22c55e"
+            strokeWidth={2}
+            dot={false}
+          />
+          <Line
+            type="monotone"
+            dataKey="cumulative_cost"
+            name="System Cost"
+            stroke="#ef4444"
+            strokeWidth={2}
+            strokeDasharray="5 5"
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
 }
 
 export function ReportExport({ 
@@ -23,6 +161,11 @@ export function ReportExport({
   disabled 
 }: ReportExportProps) {
   const [exporting, setExporting] = useState<string | null>(null);
+  
+  // Refs for chart capture
+  const dcAcChartRef = useRef<HTMLDivElement>(null);
+  const monthlyChartRef = useRef<HTMLDivElement>(null);
+  const paybackChartRef = useRef<HTMLDivElement>(null);
 
   const hexToRgb = (hex: string) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -35,6 +178,24 @@ export function ReportExport({
 
   const enabledSegments = segments.filter(s => s.enabled).sort((a, b) => a.order - b.order);
 
+  const captureChart = useCallback(async (ref: React.RefObject<HTMLDivElement>): Promise<string | null> => {
+    if (!ref.current) return null;
+    try {
+      // Wait for recharts to render
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const canvas = await html2canvas(ref.current, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        logging: false,
+        useCORS: true,
+      });
+      return canvas.toDataURL('image/png');
+    } catch (error) {
+      console.error('Chart capture error:', error);
+      return null;
+    }
+  }, []);
+
   const exportToPDF = async () => {
     setExporting("pdf");
     try {
@@ -43,6 +204,20 @@ export function ReportExport({
       const primary = hexToRgb(primaryColor);
       const secondary = hexToRgb(secondaryColor);
       
+      // Capture charts first
+      toast.info("Capturing charts...");
+      const [dcAcImage, monthlyImage, paybackImage] = await Promise.all([
+        captureChart(dcAcChartRef),
+        captureChart(monthlyChartRef),
+        captureChart(paybackChartRef),
+      ]);
+
+      const chartImages: Record<string, string | null> = {
+        dcac_comparison: dcAcImage,
+        monthly_yield: monthlyImage,
+        payback_timeline: paybackImage,
+      };
+
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -61,7 +236,6 @@ export function ReportExport({
       doc.setFont("helvetica", "normal");
       doc.text(`${branding?.company_name || "Solar Energy Report"}`, 20, 50);
 
-      // Date and project info
       doc.setTextColor(200, 200, 200);
       doc.setFontSize(10);
       doc.text(new Date().toLocaleDateString('en-ZA', { 
@@ -121,7 +295,7 @@ export function ReportExport({
       });
 
       // ========== SEGMENT PAGES ==========
-      enabledSegments.forEach((segment) => {
+      for (const segment of enabledSegments) {
         doc.addPage();
         yPos = 20;
 
@@ -135,6 +309,15 @@ export function ReportExport({
 
         doc.setTextColor(0, 0, 0);
         yPos = 40;
+
+        // Add chart image if available for this segment
+        const chartImage = chartImages[segment.type];
+        if (chartImage) {
+          const imgWidth = pageWidth - 40;
+          const imgHeight = imgWidth * 0.5; // 2:1 aspect ratio
+          doc.addImage(chartImage, 'PNG', 20, yPos, imgWidth, imgHeight);
+          yPos += imgHeight + 15;
+        }
 
         // Render segment content based on type
         switch (segment.type) {
@@ -164,7 +347,7 @@ export function ReportExport({
             doc.setTextColor(100, 100, 100);
             doc.text("Content placeholder for this segment type.", 20, yPos);
         }
-      });
+      }
 
       // ========== FOOTER ON ALL PAGES ==========
       const totalPages = doc.getNumberOfPages();
@@ -185,7 +368,7 @@ export function ReportExport({
       }
 
       doc.save(`${reportName || "Report"}_${new Date().toISOString().split('T')[0]}.pdf`);
-      toast.success("Report exported as PDF");
+      toast.success("Report exported as PDF with charts");
     } catch (error) {
       console.error("PDF export error:", error);
       toast.error("Failed to export PDF");
@@ -490,56 +673,66 @@ export function ReportExport({
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <Download className="h-5 w-5 text-muted-foreground" />
-          <CardTitle className="text-base">Export Report</CardTitle>
-        </div>
-        <CardDescription>
-          Download your report in different formats
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-          <CheckCircle className="h-4 w-4 text-primary" />
-          <span>{enabledSegments.length} segments selected</span>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-3">
-          <Button
-            variant="outline"
-            onClick={exportToPDF}
-            disabled={disabled || exporting !== null}
-            className="w-full"
-          >
-            {exporting === "pdf" ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <FileText className="mr-2 h-4 w-4" />
-            )}
-            PDF Report
-          </Button>
-          <Button
-            variant="outline"
-            onClick={exportToExcel}
-            disabled={disabled || exporting !== null}
-            className="w-full"
-          >
-            {exporting === "excel" ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Table className="mr-2 h-4 w-4" />
-            )}
-            Excel Data
-          </Button>
-        </div>
-        
-        <div className="text-xs text-muted-foreground space-y-1 mt-2">
-          <p><strong>PDF:</strong> Cover page, TOC, charts, data tables</p>
-          <p><strong>Excel:</strong> All data in spreadsheet format</p>
-        </div>
-      </CardContent>
-    </Card>
+    <>
+      {/* Hidden chart containers for PDF capture */}
+      <HiddenDcAcChart data={reportData} chartRef={dcAcChartRef} />
+      <HiddenMonthlyChart data={reportData} chartRef={monthlyChartRef} />
+      <HiddenPaybackChart data={reportData} chartRef={paybackChartRef} />
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Download className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-base">Export Report</CardTitle>
+          </div>
+          <CardDescription>
+            Download your report with visual charts
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+            <CheckCircle className="h-4 w-4 text-primary" />
+            <span>{enabledSegments.length} segments selected</span>
+            <span className="text-muted-foreground">•</span>
+            <Image className="h-4 w-4" />
+            <span>Charts included</span>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="outline"
+              onClick={exportToPDF}
+              disabled={disabled || exporting !== null}
+              className="w-full"
+            >
+              {exporting === "pdf" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileText className="mr-2 h-4 w-4" />
+              )}
+              PDF with Charts
+            </Button>
+            <Button
+              variant="outline"
+              onClick={exportToExcel}
+              disabled={disabled || exporting !== null}
+              className="w-full"
+            >
+              {exporting === "excel" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Table className="mr-2 h-4 w-4" />
+              )}
+              Excel Data
+            </Button>
+          </div>
+          
+          <div className="text-xs text-muted-foreground space-y-1 mt-2">
+            <p><strong>PDF:</strong> Cover page, TOC, visual charts, data tables</p>
+            <p><strong>Excel:</strong> All data in spreadsheet format</p>
+          </div>
+        </CardContent>
+      </Card>
+    </>
   );
 }
