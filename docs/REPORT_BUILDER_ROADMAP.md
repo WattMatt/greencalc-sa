@@ -19,6 +19,144 @@ Visual-first reporting system integrated into **Proposal Builder workflow**, fea
 
 ---
 
+## Phase 0: Wireframes & Design Validation
+**Goal**: Sketch UI mockups to validate design approach before building
+
+### Deliverables
+- [ ] **Report Builder Layout Wireframe** - Overall page structure:
+  - Segment selector panel (left)
+  - Live preview panel (right)
+  - Toolbar with template/export actions
+- [ ] **Segment Selector Mockup** - How users choose content:
+  - Grouped by category (Executive, Technical, Financial)
+  - Drag handles for reordering
+  - Preview thumbnails
+- [ ] **Chart Layout Options** - How charts appear in report:
+  - Full-page vs half-page
+  - Side-by-side comparison layouts
+  - Caption and annotation placement
+- [ ] **Infographic Card Designs** - Visual style for KPI cards:
+  - Executive Summary card layout
+  - Environmental Impact card
+  - Engineering Specs panel
+- [ ] **Export Flow Mockup** - Export dialog and options:
+  - Format selection (PDF, Excel, Google)
+  - Quality/size options
+  - Progress indicator
+- [ ] **Version History UI** - How versioning appears:
+  - Version list sidebar
+  - Compare view layout
+  - Restore confirmation
+
+### Wireframe Format
+Simple ASCII/text wireframes in this document, or quick component sketches using existing UI primitives.
+
+### Example: Report Builder Layout
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Report Builder                    [Templates ▼] [Export ▼]     │
+├──────────────────┬──────────────────────────────────────────────┤
+│  SEGMENTS        │  PREVIEW                                     │
+│  ─────────────   │  ┌────────────────────────────────────────┐  │
+│  ☑ Executive     │  │                                        │  │
+│    Summary       │  │     [Executive Summary Card]           │  │
+│  ☑ DC/AC Chart   │  │                                        │  │
+│  ☑ Energy Flow   │  │     ┌──────────┐  ┌──────────┐        │  │
+│  ☐ Monthly Yield │  │     │ DC/AC    │  │ Sankey   │        │  │
+│  ☑ Payback       │  │     │ Chart    │  │ Diagram  │        │  │
+│  ☐ Env. Impact   │  │     └──────────┘  └──────────┘        │  │
+│  ☑ Tech Specs    │  │                                        │  │
+│                  │  │     [Financial Summary]                │  │
+│  [+ Add Custom]  │  │                                        │  │
+│                  │  └────────────────────────────────────────┘  │
+│  ─────────────   │                                              │
+│  VERSIONS        │  Page 1 of 4    [◀] [▶]    [Zoom: 100%]     │
+│  v3 (current)    │                                              │
+│  v2 - Jun 10     │                                              │
+│  v1 - Jun 8      │                                              │
+└──────────────────┴──────────────────────────────────────────────┘
+```
+
+### Example: Executive Summary Card
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  [AI Illustration: Solar panels on building]            │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                                                                 │
+│  PROJECT NAME                           Prepared: 15 Jun 2025   │
+│  ═══════════════════════════════════════════════════════════   │
+│                                                                 │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐   │
+│  │  R 2.4M   │  │   5.2     │  │   18%     │  │  1,240    │   │
+│  │  Annual   │  │  Years    │  │   ROI     │  │  Tons CO2 │   │
+│  │  Savings  │  │  Payback  │  │           │  │  Avoided  │   │
+│  └───────────┘  └───────────┘  └───────────┘  └───────────┘   │
+│                                                                 │
+│  System: 500 kWp DC │ 385 kVA AC │ 200 kWh Battery            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Example: DC/AC Comparison Chart Layout
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  DC/AC Ratio Analysis: 1:1 vs 1.3:1 Oversizing                 │
+│  ───────────────────────────────────────────────────────────── │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                                                         │   │
+│  │              [Hourly Production Chart]                  │   │
+│  │         Showing baseline, oversized, clipping           │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  KEY FINDINGS                                                   │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐              │
+│  │   +12.4%    │ │   -2.1%     │ │   +10.3%    │              │
+│  │  Additional │ │  Clipping   │ │    NET      │              │
+│  │  DC Capture │ │   Losses    │ │    GAIN     │              │
+│  └─────────────┘ └─────────────┘ └─────────────┘              │
+│                                                                 │
+│  💡 Recommendation: 1.3:1 oversizing delivers 10.3% more       │
+│     energy annually with minimal clipping impact.              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Example: Export Dialog
+```
+┌─────────────────────────────────────────────┐
+│  Export Report                          [X] │
+├─────────────────────────────────────────────┤
+│                                             │
+│  FORMAT                                     │
+│  ○ PDF Document                             │
+│  ○ Excel Workbook                           │
+│  ○ Google Docs                              │
+│  ○ Google Slides                            │
+│  ○ Google Sheets                            │
+│                                             │
+│  OPTIONS                                    │
+│  ☑ Include cover page                       │
+│  ☑ Include table of contents                │
+│  ☐ High resolution charts (larger file)     │
+│                                             │
+│  ─────────────────────────────────────────  │
+│  Estimated size: ~4.2 MB                    │
+│                                             │
+│        [Cancel]        [Export]             │
+└─────────────────────────────────────────────┘
+```
+
+### Review Gate
+- [ ] Layout approved for Report Builder page
+- [ ] Segment selection UX validated
+- [ ] Chart placement approach confirmed
+- [ ] Infographic card style approved
+- [ ] Export flow makes sense
+- [ ] Version history interaction clear
+
+---
+
 ## Phase 1: Database Schema & Types
 **Goal**: Establish database tables and TypeScript interfaces for reports
 
@@ -391,7 +529,8 @@ I will:
 
 | Phase | Focus | Est. Sessions | Dependencies |
 |-------|-------|---------------|--------------|
-| 1 | Database & Types | 1-2 | None |
+| 0 | Wireframes & Validation | 1 | None |
+| 1 | Database & Types | 1-2 | Phase 0 approved |
 | 2 | Chart Components | 2-3 | Phase 1 |
 | 3 | AI Infographics | 2-3 | Phase 1 |
 | 4 | Builder UI | 2-3 | Phases 2, 3 |
@@ -399,7 +538,7 @@ I will:
 | 6 | Google Integration | 3-4 | Phase 5 |
 | 7 | Polish | 1-2 | Phase 6 |
 
-**Total**: ~13-20 sessions
+**Total**: ~14-21 sessions
 
 **Phases 2 & 3 can run in parallel** after Phase 1 completes.
 
@@ -408,4 +547,6 @@ I will:
 ## Ready to Start?
 
 When ready, say:
-> **"Let's start Phase 1: Database Schema & Types"**
+> **"Let's start Phase 0: Wireframes & Design Validation"**
+
+We'll review each wireframe together before moving to implementation.
