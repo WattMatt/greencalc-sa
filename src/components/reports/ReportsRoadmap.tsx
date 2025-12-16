@@ -131,13 +131,13 @@ const phases: Phase[] = [
     name: "Google Integration",
     description: "Docs, Slides, Sheets export",
     icon: Cloud,
-    status: "upcoming",
-    progress: 0,
+    status: "completed",
+    progress: 100,
     deliverables: [
-      "OAuth authentication",
-      "Google Docs export",
-      "Google Slides export",
-      "Google Sheets export"
+      "Service account authentication",
+      "Google Sheets export",
+      "Multi-sheet workbook",
+      "Automatic formatting"
     ]
   },
   {

@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, FileText, Table, Loader2, CheckCircle, Image } from "lucide-react";
+import { Download, FileText, Table, Loader2, CheckCircle, Image, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas";
+import { supabase } from "@/integrations/supabase/client";
 import {
   AreaChart,
   Area,
@@ -672,6 +673,38 @@ export function ReportExport({
     }
   };
 
+  const exportToGoogleSheets = async () => {
+    setExporting("sheets");
+    try {
+      toast.info("Exporting to Google Sheets...");
+      
+      const { data, error } = await supabase.functions.invoke('export-to-google-sheets', {
+        body: {
+          reportName: reportName || "Energy Report",
+          reportData,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.spreadsheetUrl) {
+        toast.success("Report exported to Google Sheets!", {
+          action: {
+            label: "Open",
+            onClick: () => window.open(data.spreadsheetUrl, '_blank'),
+          },
+        });
+      } else {
+        throw new Error("No spreadsheet URL returned");
+      }
+    } catch (error: any) {
+      console.error("Google Sheets export error:", error);
+      toast.error(error.message || "Failed to export to Google Sheets");
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <>
       {/* Hidden chart containers for PDF capture */}
@@ -698,7 +731,7 @@ export function ReportExport({
             <span>Charts included</span>
           </div>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Button
               variant="outline"
               onClick={exportToPDF}
@@ -710,7 +743,7 @@ export function ReportExport({
               ) : (
                 <FileText className="mr-2 h-4 w-4" />
               )}
-              PDF with Charts
+              PDF
             </Button>
             <Button
               variant="outline"
@@ -723,13 +756,27 @@ export function ReportExport({
               ) : (
                 <Table className="mr-2 h-4 w-4" />
               )}
-              Excel Data
+              Excel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={exportToGoogleSheets}
+              disabled={disabled || exporting !== null}
+              className="w-full"
+            >
+              {exporting === "sheets" ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <ExternalLink className="mr-2 h-4 w-4" />
+              )}
+              Sheets
             </Button>
           </div>
           
           <div className="text-xs text-muted-foreground space-y-1 mt-2">
-            <p><strong>PDF:</strong> Cover page, TOC, visual charts, data tables</p>
-            <p><strong>Excel:</strong> All data in spreadsheet format</p>
+            <p><strong>PDF:</strong> Cover page, TOC, visual charts</p>
+            <p><strong>Excel:</strong> Spreadsheet format (offline)</p>
+            <p><strong>Sheets:</strong> Export to Google Sheets</p>
           </div>
         </CardContent>
       </Card>
