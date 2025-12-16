@@ -521,6 +521,85 @@ export type Database = {
           },
         ]
       }
+      report_configs: {
+        Row: {
+          branding: Json | null
+          created_at: string
+          id: string
+          name: string
+          proposal_id: string | null
+          segments: Json
+          template: string
+          updated_at: string
+        }
+        Insert: {
+          branding?: Json | null
+          created_at?: string
+          id?: string
+          name?: string
+          proposal_id?: string | null
+          segments?: Json
+          template?: string
+          updated_at?: string
+        }
+        Update: {
+          branding?: Json | null
+          created_at?: string
+          id?: string
+          name?: string
+          proposal_id?: string | null
+          segments?: Json
+          template?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_configs_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "proposals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      report_versions: {
+        Row: {
+          created_at: string
+          generated_by: string | null
+          id: string
+          notes: string | null
+          report_config_id: string
+          snapshot: Json
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          generated_by?: string | null
+          id?: string
+          notes?: string | null
+          report_config_id: string
+          snapshot: Json
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          generated_by?: string | null
+          id?: string
+          notes?: string | null
+          report_config_id?: string
+          snapshot?: Json
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_versions_report_config_id_fkey"
+            columns: ["report_config_id"]
+            isOneToOne: false
+            referencedRelation: "report_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sandbox_simulations: {
         Row: {
           cloned_from_project_id: string | null

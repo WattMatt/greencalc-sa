@@ -38,8 +38,8 @@ const phases: Phase[] = [
     name: "Wireframes & Validation",
     description: "UI mockups and design approval",
     icon: Palette,
-    status: "in-progress",
-    progress: 0,
+    status: "completed",
+    progress: 100,
     deliverables: [
       "Report Builder layout wireframe",
       "Segment selector mockup",
@@ -54,8 +54,8 @@ const phases: Phase[] = [
     name: "Database & Types",
     description: "Schema and TypeScript interfaces",
     icon: Database,
-    status: "upcoming",
-    progress: 0,
+    status: "completed",
+    progress: 100,
     deliverables: [
       "report_configs table",
       "report_versions table",
@@ -68,7 +68,7 @@ const phases: Phase[] = [
     name: "Chart Components",
     description: "Core visualization charts",
     icon: BarChart3,
-    status: "upcoming",
+    status: "in-progress",
     progress: 0,
     deliverables: [
       "DC/AC Ratio Comparison Chart",
