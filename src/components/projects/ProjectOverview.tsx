@@ -85,6 +85,23 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
   const peakLoad = miniChartData.length > 0 ? Math.max(...miniChartData.map(d => d.load)) : 0;
   const dailyTotal = miniChartData.reduce((sum, d) => sum + d.load, 0);
 
+  // Generate mini PV profile data (typical solar curve)
+  const pvChartData = useMemo(() => {
+    if (!maxSolarKva) return [];
+    
+    // Typical solar generation curve (percentage of peak for each hour)
+    const solarCurve = [0, 0, 0, 0, 0, 0, 5, 20, 45, 70, 85, 95, 100, 98, 90, 75, 55, 30, 10, 0, 0, 0, 0, 0];
+    const peakGeneration = maxSolarKva * 0.85; // 85% efficiency factor
+    
+    return solarCurve.map((pct, h) => ({
+      hour: `${h.toString().padStart(2, '0')}:00`,
+      generation: (pct / 100) * peakGeneration
+    }));
+  }, [maxSolarKva]);
+
+  const dailyPvGeneration = pvChartData.reduce((sum, d) => sum + d.generation, 0);
+  const peakPvGeneration = pvChartData.length > 0 ? Math.max(...pvChartData.map(d => d.generation)) : 0;
+
   // Financial estimates
   const annualConsumption = dailyTotal * 365;
   const avgTariffRate = 2.50; // R/kWh - default estimate for commercial
@@ -281,80 +298,161 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
         </Card>
       </div>
 
-      {/* Mini Load Profile Chart */}
+      {/* Mini Charts Grid */}
       {tenants.length > 0 && miniChartData.length > 0 && (
-        <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => onNavigateTab("load-profile")}>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />
-                Daily Load Profile
-              </CardTitle>
-              <div className="flex items-center gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Peak: </span>
-                  <span className="font-medium">{peakLoad.toFixed(0)} kWh</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Daily: </span>
-                  <span className="font-medium">{dailyTotal.toFixed(0)} kWh</span>
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Load Profile Chart */}
+          <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => onNavigateTab("load-profile")}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  Daily Load Profile
+                </CardTitle>
+                <div className="flex items-center gap-3 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Peak: </span>
+                    <span className="font-medium">{peakLoad.toFixed(0)} kWh</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Daily: </span>
+                    <span className="font-medium">{dailyTotal.toFixed(0)} kWh</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="h-40 max-w-2xl mx-auto">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={miniChartData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id="loadGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis 
-                    dataKey="hour" 
-                    tick={{ fontSize: 9 }} 
-                    tickLine={false}
-                    axisLine={false}
-                    interval={0}
-                    tickFormatter={(v) => v.replace(':00', '')}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 10 }} 
-                    tickLine={false}
-                    axisLine={false}
-                    width={35}
-                    tickFormatter={(v) => `${v.toFixed(0)}`}
-                  />
-                  <Tooltip 
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        return (
-                          <div className="rounded-lg border bg-background px-3 py-2 shadow-sm">
-                            <p className="text-xs text-muted-foreground">{payload[0].payload.hour}</p>
-                            <p className="text-sm font-medium">{Number(payload[0].value).toFixed(1)} kWh</p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="load"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    fill="url(#loadGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2 text-center">
-              Click to view detailed analysis →
-            </p>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="h-36">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={miniChartData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                    <defs>
+                      <linearGradient id="loadGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis 
+                      dataKey="hour" 
+                      tick={{ fontSize: 9 }} 
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      tickFormatter={(v) => v.replace(':00', '')}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 9 }} 
+                      tickLine={false}
+                      axisLine={false}
+                      width={30}
+                      tickFormatter={(v) => `${v.toFixed(0)}`}
+                    />
+                    <Tooltip 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="rounded-lg border bg-background px-3 py-2 shadow-sm">
+                              <p className="text-xs text-muted-foreground">{payload[0].payload.hour}</p>
+                              <p className="text-sm font-medium">{Number(payload[0].value).toFixed(1)} kWh</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="load"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      fill="url(#loadGradient)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* PV Generation Chart */}
+          {pvChartData.length > 0 ? (
+            <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => onNavigateTab("load-profile")}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Sun className="h-4 w-4 text-amber-500" />
+                    Est. PV Generation
+                  </CardTitle>
+                  <div className="flex items-center gap-3 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Peak: </span>
+                      <span className="font-medium">{peakPvGeneration.toFixed(0)} kW</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Daily: </span>
+                      <span className="font-medium">{dailyPvGeneration.toFixed(0)} kWh</span>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="h-36">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={pvChartData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                      <defs>
+                        <linearGradient id="pvGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(45 93% 47%)" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="hsl(45 93% 47%)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis 
+                        dataKey="hour" 
+                        tick={{ fontSize: 9 }} 
+                        tickLine={false}
+                        axisLine={false}
+                        interval={0}
+                        tickFormatter={(v) => v.replace(':00', '')}
+                      />
+                      <YAxis 
+                        tick={{ fontSize: 9 }} 
+                        tickLine={false}
+                        axisLine={false}
+                        width={30}
+                        tickFormatter={(v) => `${v.toFixed(0)}`}
+                      />
+                      <Tooltip 
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            return (
+                              <div className="rounded-lg border bg-background px-3 py-2 shadow-sm">
+                                <p className="text-xs text-muted-foreground">{payload[0].payload.hour}</p>
+                                <p className="text-sm font-medium text-amber-600">{Number(payload[0].value).toFixed(1)} kW</p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="generation"
+                        stroke="hsl(45 93% 47%)"
+                        strokeWidth={2}
+                        fill="url(#pvGradient)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="cursor-pointer hover:border-primary/50 transition-colors flex items-center justify-center" onClick={() => onNavigateTab("tenants")}>
+              <CardContent className="py-8 text-center">
+                <Sun className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground">Set connection size to see</p>
+                <p className="text-sm text-muted-foreground">estimated PV generation</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Financial Summary Card */}
