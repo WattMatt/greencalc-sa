@@ -4,9 +4,46 @@ import { cn } from "@/lib/utils";
 type SystemType = "grid-tied" | "hybrid" | "generator" | "solar-generator" | "full-hybrid";
 type OperationMode = "normal" | "loadshedding";
 
+interface SystemCapacity {
+  solarKw?: number;
+  inverterKw?: number;
+  batteryKwh?: number;
+  generatorKw?: number;
+  gridKw?: number;
+  loadKw?: number;
+}
+
 interface EnergyFlowInfographicProps {
   systemType: SystemType;
   className?: string;
+  capacity?: SystemCapacity;
+}
+
+// Default commercial scale capacities
+const DEFAULT_CAPACITY: Required<SystemCapacity> = {
+  solarKw: 50,
+  inverterKw: 50,
+  batteryKwh: 100,
+  generatorKw: 80,
+  gridKw: 100,
+  loadKw: 60,
+};
+
+// Helper to format capacity for display
+function formatCapacity(value: number, unit: string): string {
+  return `${value} ${unit}`;
+}
+
+// Calculate derived power flows based on system capacity
+function calculateFlows(cap: Required<SystemCapacity>) {
+  return {
+    solarOutput: cap.solarKw,
+    gridImport: Math.round(cap.gridKw * 0.2), // Typical 20% of grid capacity
+    batteryCharge: Math.round(cap.batteryKwh * 0.25), // 0.25C charge rate
+    batteryDischarge: Math.round(cap.batteryKwh * 0.4), // 0.4C discharge rate
+    toLoads: cap.loadKw,
+    generatorOutput: cap.generatorKw,
+  };
 }
 
 // Power label component for flow lines
@@ -267,7 +304,13 @@ function HomeIcon({ active, x, y }: { active: boolean; x: number; y: number }) {
 // BatteryIcon: x-18 = left, x+22 = right, y-12 = top, y+12 = bottom
 // HomeIcon: y-16 = top (roof)
 
-function GridTiedFlow({ mode }: { mode: OperationMode }) {
+interface FlowProps {
+  mode: OperationMode;
+  cap: Required<SystemCapacity>;
+  flows: ReturnType<typeof calculateFlows>;
+}
+
+function GridTiedFlow({ mode, cap, flows }: FlowProps) {
   const isNormal = mode === "normal";
   
   // Positions
@@ -291,7 +334,7 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
       {/* System capacity label */}
       <rect x="10" y="2" width="180" height="16" rx="3" className="fill-muted/50" />
       <text x="100" y="13" className="text-[8px] font-semibold fill-muted-foreground" textAnchor="middle">
-        50kW Solar / 50kW Inverter
+        {cap.solarKw}kW Solar / {cap.inverterKw}kW Inverter
       </text>
       
       {/* Top: Solar + Grid side by side */}
@@ -304,7 +347,7 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#eab308" 
       />
-      <PowerLabel x={solarX} y={solarY + 47} value="50 kW" color="#eab308" active={isNormal} />
+      <PowerLabel x={solarX} y={solarY + 47} value={`${flows.solarOutput} kW`} color="#eab308" active={isNormal} />
       
       {/* Flow: Grid down to Inverter */}
       <FlowLine 
@@ -312,7 +355,7 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#6b7280" 
       />
-      <PowerLabel x={gridX} y={gridY + 50} value="20 kW" color="#6b7280" active={isNormal} />
+      <PowerLabel x={gridX} y={gridY + 50} value={`${flows.gridImport} kW`} color="#6b7280" active={isNormal} />
       
       {/* Middle: Inverter */}
       <InverterIcon active={isNormal} x={invX} y={invY} />
@@ -323,7 +366,7 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#22c55e" 
       />
-      <PowerLabel x={invX + 25} y={(invY + homeY) / 2} value="70 kW" color="#22c55e" active={isNormal} />
+      <PowerLabel x={invX + 25} y={(invY + homeY) / 2} value={`${flows.solarOutput + flows.gridImport} kW`} color="#22c55e" active={isNormal} />
       
       {/* Bottom: Home/Loads */}
       <HomeIcon active={isNormal} x={homeX} y={homeY} />
@@ -339,7 +382,7 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
   );
 }
 
-function HybridFlow({ mode }: { mode: OperationMode }) {
+function HybridFlow({ mode, cap, flows }: FlowProps) {
   const isNormal = mode === "normal";
   
   // Positions
@@ -364,7 +407,7 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
       {/* System capacity label */}
       <rect x="10" y="2" width="180" height="16" rx="3" className="fill-muted/50" />
       <text x="100" y="13" className="text-[8px] font-semibold fill-muted-foreground" textAnchor="middle">
-        50kW Solar / 50kW Inverter / 100kWh Battery
+        {cap.solarKw}kW Solar / {cap.inverterKw}kW Inv / {cap.batteryKwh}kWh Batt
       </text>
       
       {/* Top: Solar + Grid */}
@@ -377,7 +420,7 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#eab308" 
       />
-      <PowerLabel x={solarX} y={solarY + 32} value="50 kW" color="#eab308" active={true} />
+      <PowerLabel x={solarX} y={solarY + 32} value={`${flows.solarOutput} kW`} color="#eab308" active={true} />
       
       {/* Flow: Grid to Inverter */}
       <FlowLine 
@@ -385,7 +428,7 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#6b7280" 
       />
-      <PowerLabel x={gridX} y={gridY + 35} value="20 kW" color="#6b7280" active={isNormal} />
+      <PowerLabel x={gridX} y={gridY + 35} value={`${flows.gridImport} kW`} color="#6b7280" active={isNormal} />
       
       {/* Middle: Hybrid Inverter */}
       <InverterIcon active={true} x={invX} y={invY} label="Hybrid Inv" />
@@ -397,7 +440,7 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
         color={isNormal ? "#22c55e" : "#f97316"}
         reverse={!isNormal}
       />
-      <PowerLabel x={(invX + battX) / 2} y={invY - 12} value={isNormal ? "25 kW" : "40 kW"} color={isNormal ? "#22c55e" : "#f97316"} active={true} />
+      <PowerLabel x={(invX + battX) / 2} y={invY - 12} value={isNormal ? `${flows.batteryCharge} kW` : `${flows.batteryDischarge} kW`} color={isNormal ? "#22c55e" : "#f97316"} active={true} />
       
       {/* Battery on right side */}
       <BatteryIcon active={true} charging={isNormal} x={battX} y={battY} />
@@ -408,7 +451,7 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#22c55e" 
       />
-      <PowerLabel x={invX + 25} y={(invY + homeY) / 2} value="45 kW" color="#22c55e" active={true} />
+      <PowerLabel x={invX + 25} y={(invY + homeY) / 2} value={`${flows.toLoads - 15} kW`} color="#22c55e" active={true} />
       
       {/* Bottom: Home */}
       <HomeIcon active={true} x={homeX} y={homeY} />
@@ -424,7 +467,7 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
   );
 }
 
-function GeneratorFlow({ mode }: { mode: OperationMode }) {
+function GeneratorFlow({ mode, cap, flows }: FlowProps) {
   const isNormal = mode === "normal";
   
   // Positions
@@ -448,7 +491,7 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
       {/* System capacity label */}
       <rect x="10" y="2" width="180" height="16" rx="3" className="fill-muted/50" />
       <text x="100" y="13" className="text-[8px] font-semibold fill-muted-foreground" textAnchor="middle">
-        100kW Grid Connection / 80kW Generator
+        {cap.gridKw}kW Grid / {cap.generatorKw}kW Generator
       </text>
       
       {/* Top: Grid + Generator */}
@@ -461,7 +504,7 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#6b7280" 
       />
-      <PowerLabel x={gridX} y={gridY + 35} value="100 kW" color="#6b7280" active={isNormal} />
+      <PowerLabel x={gridX} y={gridY + 35} value={`${cap.gridKw} kW`} color="#6b7280" active={isNormal} />
       
       {/* Flow: Generator to ATS */}
       <FlowLine 
@@ -469,7 +512,7 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
         active={!isNormal} 
         color="#f97316" 
       />
-      <PowerLabel x={genX} y={genY + 30} value="80 kW" color="#f97316" active={!isNormal} />
+      <PowerLabel x={genX} y={genY + 30} value={`${flows.generatorOutput} kW`} color="#f97316" active={!isNormal} />
       
       {/* Middle: ATS */}
       <ATSIcon active={true} gridMode={isNormal} x={atsX} y={atsY} />
@@ -480,7 +523,7 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color={isNormal ? "#6b7280" : "#f97316"} 
       />
-      <PowerLabel x={atsX + 25} y={(atsY + homeY) / 2} value="60 kW" color={isNormal ? "#6b7280" : "#f97316"} active={true} />
+      <PowerLabel x={atsX + 25} y={(atsY + homeY) / 2} value={`${flows.toLoads} kW`} color={isNormal ? "#6b7280" : "#f97316"} active={true} />
       
       {/* Bottom: Home */}
       <HomeIcon active={true} x={homeX} y={homeY} />
@@ -496,7 +539,7 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
   );
 }
 
-function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
+function SolarGeneratorFlow({ mode, cap, flows }: FlowProps) {
   const isNormal = mode === "normal";
   
   // Positions - Solar + Generator system WITHOUT battery
@@ -506,6 +549,8 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
   const invX = 80, invY = 115;
   const atsX = 145, atsY = 115;
   const homeX = 110, homeY = 195;
+  
+  const gridFlow = Math.round(cap.gridKw * 0.3);
   
   return (
     <svg viewBox="0 0 220 275" className="w-full h-auto max-w-[220px] mx-auto">
@@ -522,7 +567,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
       {/* System capacity label */}
       <rect x="10" y="2" width="200" height="16" rx="3" className="fill-muted/50" />
       <text x="110" y="13" className="text-[8px] font-semibold fill-muted-foreground" textAnchor="middle">
-        50kW Solar / 50kW Inverter / 80kW Generator
+        {cap.solarKw}kW Solar / {cap.inverterKw}kW Inv / {cap.generatorKw}kW Gen
       </text>
       
       {/* Top row: Solar, Grid, Generator */}
@@ -536,7 +581,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#eab308" 
       />
-      <PowerLabel x={solarX} y={solarY + 32} value="50 kW" color="#eab308" active={true} />
+      <PowerLabel x={solarX} y={solarY + 32} value={`${flows.solarOutput} kW`} color="#eab308" active={true} />
       
       {/* Flow: Grid to ATS */}
       <FlowLine 
@@ -544,7 +589,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#6b7280" 
       />
-      <PowerLabel x={gridX} y={gridY + 35} value="30 kW" color="#6b7280" active={isNormal} />
+      <PowerLabel x={gridX} y={gridY + 35} value={`${gridFlow} kW`} color="#6b7280" active={isNormal} />
       
       {/* Flow: Generator to ATS */}
       <FlowLine 
@@ -552,7 +597,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
         active={!isNormal} 
         color="#f97316" 
       />
-      <PowerLabel x={genX} y={genY + 30} value="80 kW" color="#f97316" active={!isNormal} />
+      <PowerLabel x={genX} y={genY + 30} value={`${flows.generatorOutput} kW`} color="#f97316" active={!isNormal} />
       
       {/* Middle: Inverter (for solar) and ATS (for grid/gen switching) */}
       <InverterIcon active={true} x={invX} y={invY} label="Inverter" />
@@ -564,7 +609,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#22c55e" 
       />
-      <PowerLabel x={invX - 5} y={invY + 40} value="50 kW" color="#22c55e" active={true} />
+      <PowerLabel x={invX - 5} y={invY + 40} value={`${flows.solarOutput} kW`} color="#22c55e" active={true} />
       
       {/* Flow: ATS to Home */}
       <FlowLine 
@@ -572,7 +617,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color={isNormal ? "#6b7280" : "#f97316"} 
       />
-      <PowerLabel x={atsX + 5} y={atsX + 40} value="30 kW" color={isNormal ? "#6b7280" : "#f97316"} active={true} />
+      <PowerLabel x={atsX + 5} y={atsX + 40} value={`${gridFlow} kW`} color={isNormal ? "#6b7280" : "#f97316"} active={true} />
       
       {/* Bottom: Home */}
       <HomeIcon active={true} x={homeX} y={homeY} />
@@ -588,7 +633,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
   );
 }
 
-function FullHybridFlow({ mode }: { mode: OperationMode }) {
+function FullHybridFlow({ mode, cap, flows }: FlowProps) {
   const isNormal = mode === "normal";
   
   // Full hybrid: Solar + Grid + Generator + Battery
@@ -615,7 +660,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
       {/* System capacity label */}
       <rect x="10" y="2" width="180" height="16" rx="3" className="fill-muted/50" />
       <text x="100" y="13" className="text-[7px] font-semibold fill-muted-foreground" textAnchor="middle">
-        50kW Solar / 100kWh Battery / 80kW Generator
+        {cap.solarKw}kW Solar / {cap.batteryKwh}kWh Batt / {cap.generatorKw}kW Gen
       </text>
       
       {/* Top row: Solar, Grid, Generator */}
@@ -629,7 +674,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#eab308" 
       />
-      <PowerLabel x={solarX} y={solarY + 32} value="50 kW" color="#eab308" active={true} />
+      <PowerLabel x={solarX} y={solarY + 32} value={`${flows.solarOutput} kW`} color="#eab308" active={true} />
       
       {/* Flow: Grid to Inverter (when grid available) */}
       <FlowLine 
@@ -637,7 +682,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#6b7280" 
       />
-      <PowerLabel x={gridX} y={gridY + 35} value="20 kW" color="#6b7280" active={isNormal} />
+      <PowerLabel x={gridX} y={gridY + 35} value={`${flows.gridImport} kW`} color="#6b7280" active={isNormal} />
       
       {/* Flow: Generator to Inverter (when grid down) */}
       <FlowLine 
@@ -645,7 +690,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={!isNormal} 
         color="#f97316" 
       />
-      <PowerLabel x={genX} y={genY + 30} value="80 kW" color="#f97316" active={!isNormal} />
+      <PowerLabel x={genX} y={genY + 30} value={`${flows.generatorOutput} kW`} color="#f97316" active={!isNormal} />
       
       {/* Middle row: Hybrid Inverter + Battery */}
       <InverterIcon active={true} x={invX} y={invY} label="Hybrid Inv" />
@@ -658,7 +703,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         color={isNormal ? "#22c55e" : "#f97316"}
         reverse={!isNormal}
       />
-      <PowerLabel x={(invX + battX) / 2} y={invY - 12} value={isNormal ? "25 kW" : "40 kW"} color={isNormal ? "#22c55e" : "#f97316"} active={true} />
+      <PowerLabel x={(invX + battX) / 2} y={invY - 12} value={isNormal ? `${flows.batteryCharge} kW` : `${flows.batteryDischarge} kW`} color={isNormal ? "#22c55e" : "#f97316"} active={true} />
       
       {/* Flow: Inverter to ATS */}
       <FlowLine 
@@ -666,7 +711,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#22c55e" 
       />
-      <PowerLabel x={invX - 5} y={invY + 40} value="45 kW" color="#22c55e" active={true} />
+      <PowerLabel x={invX - 5} y={invY + 40} value={`${flows.toLoads - 15} kW`} color="#22c55e" active={true} />
       
       {/* Flow: Battery can also supply ATS during extended outages */}
       <FlowLine 
@@ -674,7 +719,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={!isNormal} 
         color="#22c55e" 
       />
-      <PowerLabel x={battX} y={battY + 30} value="40 kW" color="#22c55e" active={!isNormal} />
+      <PowerLabel x={battX} y={battY + 30} value={`${flows.batteryDischarge} kW`} color="#22c55e" active={!isNormal} />
       
       {/* ATS - manages power source priority */}
       <ATSIcon active={true} gridMode={isNormal} x={atsX} y={atsY} />
@@ -685,7 +730,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#22c55e" 
       />
-      <PowerLabel x={atsX + 25} y={(atsY + homeY) / 2} value="60 kW" color="#22c55e" active={true} />
+      <PowerLabel x={atsX + 25} y={(atsY + homeY) / 2} value={`${flows.toLoads} kW`} color="#22c55e" active={true} />
       
       {/* Bottom: Home */}
       <HomeIcon active={true} x={homeX} y={homeY} />
@@ -701,8 +746,17 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
   );
 }
 
-export function EnergyFlowInfographic({ systemType, className }: EnergyFlowInfographicProps) {
+export function EnergyFlowInfographic({ systemType, className, capacity }: EnergyFlowInfographicProps) {
   const [mode, setMode] = useState<OperationMode>("normal");
+  
+  // Merge user capacity with defaults
+  const cap: Required<SystemCapacity> = {
+    ...DEFAULT_CAPACITY,
+    ...capacity,
+  };
+  
+  // Calculate power flows based on capacity
+  const flows = calculateFlows(cap);
   
   useEffect(() => {
     const interval = setInterval(() => {
@@ -733,7 +787,7 @@ export function EnergyFlowInfographic({ systemType, className }: EnergyFlowInfog
         </span>
       </div>
       
-      <FlowComponent mode={mode} />
+      <FlowComponent mode={mode} cap={cap} flows={flows} />
     </div>
   );
 }
