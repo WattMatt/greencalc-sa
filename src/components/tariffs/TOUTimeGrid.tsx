@@ -12,7 +12,9 @@ interface TOUPeriod {
 }
 
 // 2025/2026 Eskom TOU periods - Updated per NERSA approval
+// Source: Eskom Tariffs & Charges Booklet 2025/2026, Appendix A, Page 47
 // Changes: Morning peak 3h→2h, Evening peak 2h→3h, New Sunday evening standard period
+// Note: Saturday has NO evening standard period - only Sunday has the NEW 18-20 standard
 const TOU_PERIODS: Record<SeasonType, Record<DayType, TOUPeriod[]>> = {
   High: {
     Weekday: [
@@ -27,15 +29,13 @@ const TOU_PERIODS: Record<SeasonType, Record<DayType, TOUPeriod[]>> = {
     Saturday: [
       { start: 0, end: 7, type: "Off-Peak" },
       { start: 7, end: 12, type: "Standard" },
-      { start: 12, end: 18, type: "Off-Peak" },
-      { start: 18, end: 20, type: "Standard" },
-      { start: 20, end: 24, type: "Off-Peak" },
+      { start: 12, end: 24, type: "Off-Peak" }, // NO evening standard on Saturday
     ],
     Sunday: [
       { start: 0, end: 7, type: "Off-Peak" },
       { start: 7, end: 12, type: "Standard" },
       { start: 12, end: 18, type: "Off-Peak" },
-      { start: 18, end: 20, type: "Standard" }, // New 2025 period
+      { start: 18, end: 20, type: "Standard" }, // NEW 2025 Sunday evening period
       { start: 20, end: 24, type: "Off-Peak" },
     ],
   },
@@ -52,15 +52,13 @@ const TOU_PERIODS: Record<SeasonType, Record<DayType, TOUPeriod[]>> = {
     Saturday: [
       { start: 0, end: 7, type: "Off-Peak" },
       { start: 7, end: 12, type: "Standard" },
-      { start: 12, end: 18, type: "Off-Peak" },
-      { start: 18, end: 20, type: "Standard" },
-      { start: 20, end: 24, type: "Off-Peak" },
+      { start: 12, end: 24, type: "Off-Peak" }, // NO evening standard on Saturday
     ],
     Sunday: [
       { start: 0, end: 7, type: "Off-Peak" },
       { start: 7, end: 12, type: "Standard" },
       { start: 12, end: 18, type: "Off-Peak" },
-      { start: 18, end: 20, type: "Standard" }, // New 2025 period
+      { start: 18, end: 20, type: "Standard" }, // NEW 2025 Sunday evening period
       { start: 20, end: 24, type: "Off-Peak" },
     ],
   },
