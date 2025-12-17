@@ -2,7 +2,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Zap, Clock, AlertTriangle, ExternalLink, MapPin } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Zap, Clock, AlertTriangle, ExternalLink, MapPin, 
+  Sun, Battery, Fuel, Cable, TrendingUp, ShieldCheck, 
+  Gauge, DollarSign, Leaf, Volume2, Droplets
+} from "lucide-react";
 
 const ESKOM_PROVINCIAL_SCHEDULES = [
   { province: "Eastern Cape", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/eastern-cape/" },
@@ -227,38 +232,317 @@ export function LoadSheddingStages() {
         </CardContent>
       </Card>
 
-      {/* Impact Card */}
+      {/* Impact on Solar PV & Backup Systems */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-orange-500" />
-            Impact on Solar PV Systems
+            Impact on Solar PV Systems & Backup Solutions
           </CardTitle>
+          <CardDescription>
+            Compare different backup power solutions for load shedding resilience
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="p-4 rounded-lg border bg-card">
-              <h4 className="font-medium mb-2">Grid-Tied Systems</h4>
-              <p className="text-sm text-muted-foreground">
-                Without battery storage, grid-tied systems shut down during load shedding, 
-                losing potential solar generation during outage hours.
-              </p>
-            </div>
-            <div className="p-4 rounded-lg border bg-card">
-              <h4 className="font-medium mb-2">Hybrid Systems</h4>
-              <p className="text-sm text-muted-foreground">
-                Battery storage enables continued operation during outages. Solar charges 
-                batteries and powers loads, reducing grid dependency.
-              </p>
-            </div>
-            <div className="p-4 rounded-lg border bg-card">
-              <h4 className="font-medium mb-2">Backup Value</h4>
-              <p className="text-sm text-muted-foreground">
-                Higher stages increase the financial value of backup power systems, 
-                improving ROI for battery storage investments.
-              </p>
-            </div>
-          </div>
+        <CardContent>
+          <Tabs defaultValue="overview" className="w-full">
+            <TabsList className="grid w-full grid-cols-4 mb-6">
+              <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+              <TabsTrigger value="solar" className="text-xs sm:text-sm">Solar PV</TabsTrigger>
+              <TabsTrigger value="battery" className="text-xs sm:text-sm">Battery</TabsTrigger>
+              <TabsTrigger value="generator" className="text-xs sm:text-sm">Generator</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {/* Grid-Tied Solar */}
+                <div className="p-4 rounded-xl border-2 border-yellow-500/30 bg-gradient-to-br from-yellow-500/10 to-transparent relative overflow-hidden group hover:border-yellow-500/50 transition-all">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-yellow-500/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <Sun className="h-8 w-8 text-yellow-500 mb-3" />
+                  <h4 className="font-semibold mb-2">Grid-Tied Solar</h4>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Lowest cost entry point but no backup during outages
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs bg-yellow-500/10 border-yellow-500/30">No Backup</Badge>
+                  </div>
+                </div>
+
+                {/* Hybrid Solar + Battery */}
+                <div className="p-4 rounded-xl border-2 border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-transparent relative overflow-hidden group hover:border-emerald-500/50 transition-all">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <Battery className="h-8 w-8 text-emerald-500 mb-3" />
+                  <h4 className="font-semibold mb-2">Hybrid System</h4>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Solar + Battery for seamless backup power
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs bg-emerald-500/10 border-emerald-500/30">Recommended</Badge>
+                  </div>
+                </div>
+
+                {/* Generator */}
+                <div className="p-4 rounded-xl border-2 border-orange-500/30 bg-gradient-to-br from-orange-500/10 to-transparent relative overflow-hidden group hover:border-orange-500/50 transition-all">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-orange-500/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <Fuel className="h-8 w-8 text-orange-500 mb-3" />
+                  <h4 className="font-semibold mb-2">Generator</h4>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Reliable backup but ongoing fuel costs
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs bg-orange-500/10 border-orange-500/30">Traditional</Badge>
+                  </div>
+                </div>
+
+                {/* Solar + Generator Hybrid */}
+                <div className="p-4 rounded-xl border-2 border-primary/30 bg-gradient-to-br from-primary/10 to-transparent relative overflow-hidden group hover:border-primary/50 transition-all">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                  <div className="flex items-center gap-1 mb-3">
+                    <Sun className="h-6 w-6 text-yellow-500" />
+                    <span className="text-muted-foreground">+</span>
+                    <Fuel className="h-6 w-6 text-orange-500" />
+                  </div>
+                  <h4 className="font-semibold mb-2">Solar + Generator</h4>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Maximum resilience with fuel savings
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs bg-primary/10 border-primary/30">Best Value</Badge>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="solar" className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Grid-Tied Infographic */}
+                <div className="p-5 rounded-xl border bg-gradient-to-br from-yellow-500/5 to-transparent">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-yellow-500/10">
+                      <Sun className="h-6 w-6 text-yellow-500" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold">Grid-Tied Systems</h4>
+                      <p className="text-xs text-muted-foreground">Without battery storage</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                      <Cable className="h-5 w-5 text-muted-foreground mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Grid Dependency</p>
+                        <p className="text-xs text-muted-foreground">System shuts down during load shedding due to anti-islanding protection</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                      <TrendingUp className="h-5 w-5 text-red-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Lost Generation</p>
+                        <p className="text-xs text-muted-foreground">At Stage 4+, lose 25-40% of potential daytime solar production</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                      <DollarSign className="h-5 w-5 text-emerald-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Lowest Capital Cost</p>
+                        <p className="text-xs text-muted-foreground">No battery = 40-60% lower initial investment</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hybrid System Infographic */}
+                <div className="p-5 rounded-xl border bg-gradient-to-br from-emerald-500/5 to-transparent">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-emerald-500/10">
+                      <Battery className="h-6 w-6 text-emerald-500" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold">Hybrid Systems</h4>
+                      <p className="text-xs text-muted-foreground">Solar + Battery storage</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                      <ShieldCheck className="h-5 w-5 text-emerald-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Seamless Backup</p>
+                        <p className="text-xs text-muted-foreground">Automatic switchover in &lt;20ms, no interruption to critical loads</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                      <Sun className="h-5 w-5 text-yellow-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Continued Generation</p>
+                        <p className="text-xs text-muted-foreground">Solar keeps charging battery and powering loads during outages</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                      <Gauge className="h-5 w-5 text-primary mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Improved ROI at Higher Stages</p>
+                        <p className="text-xs text-muted-foreground">Stage 4+ increases battery value by 30-50% due to backup utility</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="battery" className="space-y-4">
+              <div className="p-5 rounded-xl border bg-gradient-to-br from-emerald-500/5 to-transparent">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-emerald-500/10">
+                    <Battery className="h-6 w-6 text-emerald-500" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold">Battery Energy Storage Systems (BESS)</h4>
+                    <p className="text-xs text-muted-foreground">Sizing guidelines for load shedding resilience</p>
+                  </div>
+                </div>
+                
+                <div className="grid gap-4 md:grid-cols-3 mb-4">
+                  <div className="p-4 rounded-lg bg-muted/30 text-center">
+                    <p className="text-2xl font-bold text-emerald-500">2-4h</p>
+                    <p className="text-xs text-muted-foreground">Coverage for Stage 1-2</p>
+                    <p className="text-xs font-medium mt-1">5-10 kWh typical</p>
+                  </div>
+                  <div className="p-4 rounded-lg bg-muted/30 text-center">
+                    <p className="text-2xl font-bold text-orange-500">4-8h</p>
+                    <p className="text-xs text-muted-foreground">Coverage for Stage 3-4</p>
+                    <p className="text-xs font-medium mt-1">10-20 kWh typical</p>
+                  </div>
+                  <div className="p-4 rounded-lg bg-muted/30 text-center">
+                    <p className="text-2xl font-bold text-red-500">8-14h</p>
+                    <p className="text-xs text-muted-foreground">Coverage for Stage 5+</p>
+                    <p className="text-xs font-medium mt-1">20-40 kWh typical</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Battery sizing depends on essential load requirements. A typical home needs 5-10 kWh for essential backup; 
+                  commercial sites may require 50-200+ kWh depending on critical load profile.
+                </p>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="generator" className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Generator Only */}
+                <div className="p-5 rounded-xl border bg-gradient-to-br from-orange-500/5 to-transparent">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-orange-500/10">
+                      <Fuel className="h-6 w-6 text-orange-500" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold">Diesel/Petrol Generator</h4>
+                      <p className="text-xs text-muted-foreground">Standalone backup power</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                      <ShieldCheck className="h-5 w-5 text-emerald-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Unlimited Runtime</p>
+                        <p className="text-xs text-muted-foreground">As long as fuel is available, provides continuous power</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                      <DollarSign className="h-5 w-5 text-red-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">High Running Costs</p>
+                        <p className="text-xs text-muted-foreground">R8-15/kWh fuel cost vs R2-3/kWh grid. Stage 6 = R15,000+/month fuel</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                      <Volume2 className="h-5 w-5 text-orange-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Noise & Emissions</p>
+                        <p className="text-xs text-muted-foreground">65-80 dB noise, CO2 emissions, requires ventilation</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
+                      <Droplets className="h-5 w-5 text-blue-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Maintenance Required</p>
+                        <p className="text-xs text-muted-foreground">Oil changes, filter replacements, servicing every 100-250 hours</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Solar + Generator Hybrid */}
+                <div className="p-5 rounded-xl border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-primary/10 flex items-center gap-1">
+                      <Sun className="h-5 w-5 text-yellow-500" />
+                      <Fuel className="h-5 w-5 text-orange-500" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold">Solar + Generator Integration</h4>
+                      <p className="text-xs text-muted-foreground">Best of both worlds</p>
+                    </div>
+                    <Badge className="ml-auto bg-primary text-primary-foreground">Recommended</Badge>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5">
+                      <Leaf className="h-5 w-5 text-emerald-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">60-80% Fuel Savings</p>
+                        <p className="text-xs text-muted-foreground">Solar handles daytime load, generator only runs when needed</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5">
+                      <Battery className="h-5 w-5 text-emerald-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Extended Autonomy</p>
+                        <p className="text-xs text-muted-foreground">Battery provides instant backup, generator charges when depleted</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5">
+                      <ShieldCheck className="h-5 w-5 text-primary mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Maximum Resilience</p>
+                        <p className="text-xs text-muted-foreground">No single point of failure - solar, battery, and generator backup</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5">
+                      <TrendingUp className="h-5 w-5 text-emerald-500 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Best ROI at Stage 4+</p>
+                        <p className="text-xs text-muted-foreground">Fuel savings offset higher capital cost within 2-3 years</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Comparison Table */}
+              <div className="p-4 rounded-lg border bg-muted/20">
+                <h4 className="font-semibold mb-3 text-sm">Monthly Cost Comparison at Stage 4 (6h/day outages)</h4>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Generator Only</p>
+                    <p className="text-lg font-bold text-red-500">R8,000-12,000</p>
+                    <p className="text-xs text-muted-foreground">Fuel + maintenance</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Solar + Battery</p>
+                    <p className="text-lg font-bold text-emerald-500">R0-500</p>
+                    <p className="text-xs text-muted-foreground">Minimal running cost</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Solar + Gen Hybrid</p>
+                    <p className="text-lg font-bold text-primary">R1,500-3,000</p>
+                    <p className="text-xs text-muted-foreground">Reduced fuel usage</p>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
