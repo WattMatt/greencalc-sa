@@ -290,6 +290,7 @@ export function ReportExport({
         savings_breakdown: "Savings Breakdown",
         environmental_impact: "Environmental Impact",
         engineering_specs: "Engineering Specifications",
+        ai_infographics: "AI Infographics",
         custom_notes: "Notes & Annotations"
       };
 
