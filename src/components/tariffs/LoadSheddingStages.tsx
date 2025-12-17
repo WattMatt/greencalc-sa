@@ -15,40 +15,156 @@ const ESKOM_PROVINCIAL_SCHEDULES = [
   { province: "Northern Cape", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/northern-cape/" },
   { province: "Western Cape", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/western-cape/" },
 ];
+
 const LOAD_SHEDDING_STAGES = [
-  { stage: 0, name: "No Load Shedding", hoursPerDay: 0, description: "Normal grid operation", color: "bg-green-500" },
-  { stage: 1, name: "Stage 1", hoursPerDay: 2.5, description: "2.5 hours per day (1000 MW shed)", color: "bg-yellow-400" },
-  { stage: 2, name: "Stage 2", hoursPerDay: 4, description: "4 hours per day (2000 MW shed)", color: "bg-yellow-500" },
-  { stage: 3, name: "Stage 3", hoursPerDay: 6, description: "6 hours per day (3000 MW shed)", color: "bg-orange-400" },
-  { stage: 4, name: "Stage 4", hoursPerDay: 8, description: "8 hours per day (4000 MW shed)", color: "bg-orange-500" },
-  { stage: 5, name: "Stage 5", hoursPerDay: 10, description: "10 hours per day (5000 MW shed)", color: "bg-red-400" },
-  { stage: 6, name: "Stage 6", hoursPerDay: 12, description: "12 hours per day (6000 MW shed)", color: "bg-red-500" },
-  { stage: 7, name: "Stage 7", hoursPerDay: 14, description: "14 hours per day (7000 MW shed)", color: "bg-red-600" },
-  { stage: 8, name: "Stage 8", hoursPerDay: 16, description: "16 hours per day (8000 MW shed)", color: "bg-red-700" },
+  { stage: 0, name: "No Load Shedding", hoursPerDay: 0, description: "Normal grid operation", mwShed: 0 },
+  { stage: 1, name: "Stage 1", hoursPerDay: 2.5, description: "2.5 hours per day", mwShed: 1000 },
+  { stage: 2, name: "Stage 2", hoursPerDay: 4, description: "4 hours per day", mwShed: 2000 },
+  { stage: 3, name: "Stage 3", hoursPerDay: 6, description: "6 hours per day", mwShed: 3000 },
+  { stage: 4, name: "Stage 4", hoursPerDay: 8, description: "8 hours per day", mwShed: 4000 },
+  { stage: 5, name: "Stage 5", hoursPerDay: 10, description: "10 hours per day", mwShed: 5000 },
+  { stage: 6, name: "Stage 6", hoursPerDay: 12, description: "12 hours per day", mwShed: 6000 },
+  { stage: 7, name: "Stage 7", hoursPerDay: 14, description: "14 hours per day", mwShed: 7000 },
+  { stage: 8, name: "Stage 8", hoursPerDay: 16, description: "16 hours per day", mwShed: 8000 },
 ];
 
-const TYPICAL_SCHEDULES: Record<number, string[]> = {
-  1: ["06:00-08:30", "18:00-20:30"],
-  2: ["06:00-08:30", "10:00-12:30", "18:00-20:30"],
-  3: ["06:00-08:30", "10:00-12:30", "14:00-16:30", "18:00-20:30"],
-  4: ["00:00-02:30", "06:00-08:30", "10:00-12:30", "14:00-16:30", "18:00-20:30", "22:00-00:30"],
-  5: ["00:00-02:30", "04:00-06:30", "06:00-08:30", "10:00-12:30", "14:00-16:30", "18:00-20:30", "22:00-00:30"],
-  6: ["00:00-02:30", "02:00-04:30", "06:00-08:30", "10:00-12:30", "14:00-16:30", "18:00-20:30", "20:00-22:30", "22:00-00:30"],
-  7: ["Continuous rolling blackouts with 2-hour intervals"],
-  8: ["Continuous rolling blackouts with minimal grid availability"],
+// Typical outage blocks per stage (start hour, duration in hours)
+const STAGE_OUTAGE_BLOCKS: Record<number, [number, number][]> = {
+  0: [],
+  1: [[6, 2.5]],
+  2: [[6, 2], [18, 2]],
+  3: [[6, 2], [14, 2], [22, 2]],
+  4: [[2, 2], [6, 2], [14, 2], [22, 2]],
+  5: [[2, 2], [6, 2], [10, 2], [18, 2], [22, 2]],
+  6: [[0, 2], [6, 2], [10, 2], [14, 2], [18, 2], [22, 2]],
+  7: [[0, 2], [4, 2], [8, 2], [12, 2], [16, 2], [20, 2], [22, 2]],
+  8: [[0, 2], [3, 2], [6, 2], [9, 2], [12, 2], [15, 2], [18, 2], [21, 2]],
 };
+
+// Get severity color classes based on stage
+const getStageColors = (stage: number) => {
+  if (stage === 0) return { bar: "bg-emerald-500", bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400" };
+  if (stage <= 2) return { bar: "bg-yellow-500", bg: "bg-yellow-500/10", text: "text-yellow-600 dark:text-yellow-400" };
+  if (stage <= 4) return { bar: "bg-orange-500", bg: "bg-orange-500/10", text: "text-orange-600 dark:text-orange-400" };
+  return { bar: "bg-red-500", bg: "bg-red-500/10", text: "text-red-600 dark:text-red-400" };
+};
+
+// Check if an hour falls within any outage block
+const isOutageHour = (hour: number, blocks: [number, number][]): boolean => {
+  return blocks.some(([start, duration]) => {
+    const end = start + duration;
+    if (end > 24) {
+      // Handle wraparound
+      return hour >= start || hour < (end - 24);
+    }
+    return hour >= start && hour < end;
+  });
+};
+
+// Timeline component showing 24-hour visual
+function StageTimeline({ stage }: { stage: number }) {
+  const blocks = STAGE_OUTAGE_BLOCKS[stage] || [];
+  const colors = getStageColors(stage);
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  
+  return (
+    <div className="flex items-center gap-3">
+      <div className={`w-20 text-right font-semibold text-sm ${colors.text}`}>
+        Stage {stage}
+      </div>
+      <div className="flex-1 flex h-8 rounded-md overflow-hidden border border-border/50 bg-muted/20">
+        {hours.map((hour) => {
+          const isOutage = isOutageHour(hour, blocks);
+          return (
+            <div
+              key={hour}
+              className={`flex-1 transition-all relative group ${
+                isOutage ? colors.bar : "bg-transparent"
+              } ${hour > 0 ? "border-l border-border/10" : ""}`}
+              title={`${String(hour).padStart(2, '0')}:00 - ${String(hour + 1).padStart(2, '0')}:00`}
+            >
+              {/* Hover indicator */}
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-foreground/10 transition-opacity" />
+            </div>
+          );
+        })}
+      </div>
+      <div className="w-16 text-left">
+        <span className={`text-sm font-medium ${colors.text}`}>
+          {LOAD_SHEDDING_STAGES[stage].hoursPerDay}h
+        </span>
+        <span className="text-xs text-muted-foreground ml-1">off</span>
+      </div>
+    </div>
+  );
+}
+
+// Hour labels component
+function HourLabels() {
+  const labelHours = [0, 6, 12, 18, 24];
+  return (
+    <div className="flex items-center gap-3 mb-2">
+      <div className="w-20" />
+      <div className="flex-1 flex justify-between text-xs text-muted-foreground px-0.5">
+        {labelHours.map((hour) => (
+          <span key={hour}>{String(hour).padStart(2, '0')}:00</span>
+        ))}
+      </div>
+      <div className="w-16" />
+    </div>
+  );
+}
 
 export function LoadSheddingStages() {
   return (
     <div className="space-y-6">
+      {/* Visual Timeline Infographic */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-yellow-500" />
-            Eskom Load Shedding Stages Reference
+            24-Hour Load Shedding Timeline
           </CardTitle>
           <CardDescription>
-            Standard load shedding stages used for energy simulation and backup power planning in South Africa
+            Visual representation of typical outage patterns per stage over a 24-hour period
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          <HourLabels />
+          {LOAD_SHEDDING_STAGES.map((stageData) => (
+            <StageTimeline key={stageData.stage} stage={stageData.stage} />
+          ))}
+          
+          {/* Legend */}
+          <div className="flex items-center gap-6 mt-6 pt-4 border-t">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-muted/30 border border-border/50" />
+              <span className="text-sm text-muted-foreground">Power Available</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500" />
+              <span className="text-sm text-muted-foreground">Outage Period</span>
+            </div>
+          </div>
+          
+          <p className="text-xs text-muted-foreground mt-4">
+            Note: Actual schedules vary by municipality and area block. Colors indicate severity: 
+            <span className="text-yellow-600 dark:text-yellow-400 font-medium"> Yellow</span> (Stage 1-2),
+            <span className="text-orange-600 dark:text-orange-400 font-medium"> Orange</span> (Stage 3-4),
+            <span className="text-red-600 dark:text-red-400 font-medium"> Red</span> (Stage 5+).
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Stage Details Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-muted-foreground" />
+            Stage Reference Table
+          </CardTitle>
+          <CardDescription>
+            Detailed breakdown of each load shedding stage with MW capacity shed
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -56,44 +172,55 @@ export function LoadSheddingStages() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-24">Stage</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-center">Hours/Day</TableHead>
-                <TableHead>Typical Schedule Windows</TableHead>
+                <TableHead>Hours/Day</TableHead>
+                <TableHead className="text-center">MW Shed</TableHead>
+                <TableHead className="text-right">Grid Availability</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {LOAD_SHEDDING_STAGES.map((stage) => (
-                <TableRow key={stage.stage}>
-                  <TableCell>
-                    <Badge variant={stage.stage === 0 ? "default" : "secondary"} className="font-mono">
-                      {stage.name}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{stage.description}</TableCell>
-                  <TableCell className="text-center font-medium">{stage.hoursPerDay}h</TableCell>
-                  <TableCell>
-                    {stage.stage === 0 ? (
-                      <span className="text-muted-foreground">N/A</span>
-                    ) : TYPICAL_SCHEDULES[stage.stage] ? (
-                      <div className="flex flex-wrap gap-1">
-                        {TYPICAL_SCHEDULES[stage.stage].map((slot, idx) => (
-                          <Badge key={idx} variant="outline" className="text-xs font-mono">
-                            <Clock className="h-3 w-3 mr-1" />
-                            {slot}
-                          </Badge>
-                        ))}
+              {LOAD_SHEDDING_STAGES.map((stage) => {
+                const colors = getStageColors(stage.stage);
+                const availability = ((24 - stage.hoursPerDay) / 24 * 100).toFixed(0);
+                return (
+                  <TableRow key={stage.stage}>
+                    <TableCell>
+                      <Badge 
+                        variant="secondary" 
+                        className={`font-mono ${colors.bg} ${colors.text} border-0`}
+                      >
+                        {stage.name}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-16 h-2 rounded-full bg-muted overflow-hidden`}>
+                          <div 
+                            className={`h-full ${colors.bar}`} 
+                            style={{ width: `${(stage.hoursPerDay / 24) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-medium">{stage.hoursPerDay}h</span>
                       </div>
-                    ) : (
-                      <span className="text-muted-foreground">Varies by area</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="font-mono text-sm">
+                        {stage.mwShed > 0 ? `${(stage.mwShed / 1000).toFixed(0)} GW` : "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={`font-medium ${stage.stage === 0 ? "text-emerald-600" : ""}`}>
+                        {availability}%
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
+      {/* Impact Card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -125,12 +252,10 @@ export function LoadSheddingStages() {
               </p>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Note: Actual schedules vary by municipality and area block. These are typical patterns used for simulation modeling.
-          </p>
         </CardContent>
       </Card>
 
+      {/* Provincial Links */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
