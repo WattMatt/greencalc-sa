@@ -90,15 +90,21 @@ Deno.serve(async (req) => {
       console.log(`Processed ${workbook.SheetNames.length} sheets`);
     } else if (fileType === "pdf") {
       console.log("Processing PDF file - using AI vision...");
-      // Use chunked approach to avoid stack overflow for large PDFs
+      console.log("PDF size:", fileData.size, "bytes");
+      
+      // Convert to base64 safely without stack overflow
       const uint8Array = new Uint8Array(await fileData.arrayBuffer());
+      console.log("Uint8Array length:", uint8Array.length);
+      
+      // Build base64 string in small chunks to avoid call stack issues
       let binaryString = '';
-      const chunkSize = 8192;
-      for (let i = 0; i < uint8Array.length; i += chunkSize) {
-        const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+      for (let i = 0; i < uint8Array.length; i++) {
+        binaryString += String.fromCharCode(uint8Array[i]);
       }
+      console.log("Binary string length:", binaryString.length);
+      
       const base64 = btoa(binaryString);
+      console.log("Base64 length:", base64.length);
       
       const visionRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
