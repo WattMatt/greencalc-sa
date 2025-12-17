@@ -17,28 +17,29 @@ const ESKOM_PROVINCIAL_SCHEDULES = [
 ];
 
 const LOAD_SHEDDING_STAGES = [
-  { stage: 0, name: "No Load Shedding", hoursPerDay: 0, description: "Normal grid operation", mwShed: 0 },
-  { stage: 1, name: "Stage 1", hoursPerDay: 2.5, description: "2.5 hours per day", mwShed: 1000 },
-  { stage: 2, name: "Stage 2", hoursPerDay: 4, description: "4 hours per day", mwShed: 2000 },
-  { stage: 3, name: "Stage 3", hoursPerDay: 6, description: "6 hours per day", mwShed: 3000 },
-  { stage: 4, name: "Stage 4", hoursPerDay: 8, description: "8 hours per day", mwShed: 4000 },
-  { stage: 5, name: "Stage 5", hoursPerDay: 10, description: "10 hours per day", mwShed: 5000 },
-  { stage: 6, name: "Stage 6", hoursPerDay: 12, description: "12 hours per day", mwShed: 6000 },
-  { stage: 7, name: "Stage 7", hoursPerDay: 14, description: "14 hours per day", mwShed: 7000 },
-  { stage: 8, name: "Stage 8", hoursPerDay: 16, description: "16 hours per day", mwShed: 8000 },
+  { stage: 0, name: "No Load Shedding", hoursPerDay: 0, description: "Normal grid operation", mwShed: 0, slots: 0 },
+  { stage: 1, name: "Stage 1", hoursPerDay: 2, description: "Up to 2 hours per day", mwShed: 1000, slots: 1 },
+  { stage: 2, name: "Stage 2", hoursPerDay: 4, description: "2-4 hours per day", mwShed: 2000, slots: 2 },
+  { stage: 3, name: "Stage 3", hoursPerDay: 6, description: "4-6 hours per day", mwShed: 3000, slots: 3 },
+  { stage: 4, name: "Stage 4", hoursPerDay: 6, description: "6+ hours per day", mwShed: 4000, slots: 3 },
+  { stage: 5, name: "Stage 5", hoursPerDay: 8, description: "6-8 hours per day", mwShed: 5000, slots: 4 },
+  { stage: 6, name: "Stage 6", hoursPerDay: 10, description: "8-10 hours per day", mwShed: 6000, slots: 5 },
+  { stage: 7, name: "Stage 7", hoursPerDay: 12, description: "10-12 hours per day", mwShed: 7000, slots: 6 },
+  { stage: 8, name: "Stage 8", hoursPerDay: 12, description: "12+ hours per day", mwShed: 8000, slots: 6 },
 ];
 
 // Typical outage blocks per stage (start hour, duration in hours)
+// Based on standard 2-hour slots spread across the day
 const STAGE_OUTAGE_BLOCKS: Record<number, [number, number][]> = {
   0: [],
-  1: [[6, 2.5]],
-  2: [[6, 2], [18, 2]],
-  3: [[6, 2], [14, 2], [22, 2]],
-  4: [[2, 2], [6, 2], [14, 2], [22, 2]],
-  5: [[2, 2], [6, 2], [10, 2], [18, 2], [22, 2]],
-  6: [[0, 2], [6, 2], [10, 2], [14, 2], [18, 2], [22, 2]],
-  7: [[0, 2], [4, 2], [8, 2], [12, 2], [16, 2], [20, 2], [22, 2]],
-  8: [[0, 2], [3, 2], [6, 2], [9, 2], [12, 2], [15, 2], [18, 2], [21, 2]],
+  1: [[6, 2]], // 1 x 2hr slot
+  2: [[6, 2], [18, 2]], // 2 x 2hr slots
+  3: [[6, 2], [14, 2], [22, 2]], // 3 x 2hr slots
+  4: [[6, 2], [14, 2], [22, 2]], // 3 x 2hr slots (same as stage 3)
+  5: [[2, 2], [6, 2], [14, 2], [22, 2]], // 4 x 2hr slots
+  6: [[2, 2], [6, 2], [10, 2], [18, 2], [22, 2]], // 5 x 2hr slots
+  7: [[0, 2], [4, 2], [8, 2], [14, 2], [18, 2], [22, 2]], // 6 x 2hr slots
+  8: [[0, 2], [4, 2], [8, 2], [12, 2], [16, 2], [20, 2]], // 6 x 2hr slots (evenly spread)
 };
 
 // Get severity color classes based on stage
@@ -164,15 +165,16 @@ export function LoadSheddingStages() {
             Stage Reference Table
           </CardTitle>
           <CardDescription>
-            Detailed breakdown of each load shedding stage with MW capacity shed
+            Each stage sheds 1000 MW. Power goes off in 2-hour slots; at higher stages some slots occur back-to-back.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-24">Stage</TableHead>
-                <TableHead>Hours/Day</TableHead>
+                <TableHead className="w-28">Stage</TableHead>
+                <TableHead>Outage Range</TableHead>
+                <TableHead className="text-center">2hr Slots</TableHead>
                 <TableHead className="text-center">MW Shed</TableHead>
                 <TableHead className="text-right">Grid Availability</TableHead>
               </TableRow>
@@ -192,25 +194,30 @@ export function LoadSheddingStages() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-16 h-2 rounded-full bg-muted overflow-hidden`}>
-                          <div 
-                            className={`h-full ${colors.bar}`} 
-                            style={{ width: `${(stage.hoursPerDay / 24) * 100}%` }}
-                          />
-                        </div>
-                        <span className="text-sm font-medium">{stage.hoursPerDay}h</span>
-                      </div>
+                      <span className="text-sm text-muted-foreground">{stage.description}</span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="font-mono text-sm font-medium">
+                        {stage.slots > 0 ? `${stage.slots}×` : "—"}
+                      </span>
                     </TableCell>
                     <TableCell className="text-center">
                       <span className="font-mono text-sm">
-                        {stage.mwShed > 0 ? `${(stage.mwShed / 1000).toFixed(0)} GW` : "—"}
+                        {stage.mwShed > 0 ? `${stage.mwShed.toLocaleString()} MW` : "—"}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <span className={`font-medium ${stage.stage === 0 ? "text-emerald-600" : ""}`}>
-                        {availability}%
-                      </span>
+                      <div className="flex items-center justify-end gap-2">
+                        <div className={`w-12 h-2 rounded-full bg-muted overflow-hidden`}>
+                          <div 
+                            className={`h-full ${stage.stage === 0 ? "bg-emerald-500" : colors.bar}`} 
+                            style={{ width: `${100 - (stage.hoursPerDay / 24) * 100}%` }}
+                          />
+                        </div>
+                        <span className={`font-medium text-sm ${stage.stage === 0 ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
+                          {availability}%
+                        </span>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
