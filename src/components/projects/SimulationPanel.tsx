@@ -38,6 +38,7 @@ import { AdvancedSimulationConfigPanel } from "./simulation/AdvancedSimulationCo
 import { runAdvancedSimulation } from "./simulation/AdvancedSimulationEngine";
 import { AdvancedResultsDisplay } from "./simulation/AdvancedResultsDisplay";
 import { AdvancedConfigComparison } from "./simulation/AdvancedConfigComparison";
+import { LoadSheddingAnalysisPanel } from "./simulation/LoadSheddingAnalysisPanel";
 
 interface Tenant {
   id: string;
@@ -642,6 +643,10 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           <TabsTrigger value="energy">Energy Flow</TabsTrigger>
           <TabsTrigger value="battery">Battery State</TabsTrigger>
           {hasFinancialData && <TabsTrigger value="cost">Cost Comparison</TabsTrigger>}
+          <TabsTrigger value="loadshed" className="gap-1">
+            <Zap className="h-3 w-3" />
+            Load Shedding
+          </TabsTrigger>
           {energyResultsSolcast && (
             <TabsTrigger value="compare" className="gap-1">
               <Cloud className="h-3 w-3" />
@@ -769,6 +774,16 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
             </Card>
           </TabsContent>
         )}
+
+        {/* Load Shedding Scenarios Tab */}
+        <TabsContent value="loadshed" className="mt-4">
+          <LoadSheddingAnalysisPanel
+            loadProfile={loadProfile}
+            solarProfile={solarProfile}
+            config={energyConfig}
+            tariffRate={tariffData.averageRatePerKwh}
+          />
+        </TabsContent>
 
         {/* Data Comparison Tab - Solcast vs Generic */}
         {energyResultsSolcast && (
