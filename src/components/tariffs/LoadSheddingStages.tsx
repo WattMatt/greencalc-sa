@@ -9,6 +9,7 @@ import {
   Gauge, DollarSign, Leaf, Volume2, Droplets
 } from "lucide-react";
 import { EnergyFlowInfographic } from "./EnergyFlowInfographic";
+import { BatteryStateInfographic } from "./BatteryStateInfographic";
 
 const ESKOM_PROVINCIAL_SCHEDULES = [
   { province: "Eastern Cape", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/eastern-cape/" },
@@ -344,6 +345,15 @@ export function LoadSheddingStages() {
                   </h4>
                   <EnergyFlowInfographic systemType="solar-generator" />
                 </div>
+              </div>
+              
+              {/* Battery State of Charge Timeline */}
+              <div className="mt-6">
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Battery className="h-4 w-4 text-emerald-500" />
+                  Battery Daily Cycle Analysis
+                </h4>
+                <BatteryStateInfographic />
               </div>
             </TabsContent>
 
