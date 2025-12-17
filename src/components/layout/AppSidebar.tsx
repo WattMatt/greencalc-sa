@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Settings, Calculator, Database, Zap, Building2, Activity, Sparkles, LogOut, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, Settings, Calculator, Database, Zap, Building2, Activity, LogOut, Sun, Moon } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,6 @@ const referenceDataItems = [
 
 const projectItems = [
   { title: "Projects", url: "/projects", icon: Building2 },
-  { title: "Playground", url: "/simulations", icon: Sparkles },
   { title: "Calculator", url: "/calculator", icon: Calculator },
 ];
 
