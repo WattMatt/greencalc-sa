@@ -1,4 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type TimeOfUseType = "Peak" | "Standard" | "Off-Peak";
 type DayType = "Weekday" | "Saturday" | "Sunday";
@@ -14,12 +20,19 @@ interface TOUClockDiagramProps {
   title: string;
   periods: TOUPeriodData[];
   size?: number;
+  showAnnotations?: boolean;
 }
 
 const TIME_OF_USE_COLORS: Record<TimeOfUseType, string> = {
   Peak: "#ef4444",      // Red
   Standard: "#eab308",  // Yellow
   "Off-Peak": "#22c55e", // Green
+};
+
+const TIME_OF_USE_DESCRIPTIONS: Record<TimeOfUseType, string> = {
+  Peak: "Highest tariff rates - avoid heavy usage",
+  Standard: "Moderate tariff rates",
+  "Off-Peak": "Lowest tariff rates - ideal for high consumption",
 };
 
 // Ring definitions - outer to inner order for clarity
@@ -35,6 +48,12 @@ const hourToAngle = (hour: number): number => {
   const normalizedHour = ((hour % 24) + 24) % 24;
   // Convert to radians: 0 at top, clockwise
   return ((normalizedHour / 24) * 2 * Math.PI) - (Math.PI / 2);
+};
+
+// Format hour for display
+const formatHour = (hour: number): string => {
+  const h = hour % 24;
+  return `${h.toString().padStart(2, '0')}:00`;
 };
 
 // Create SVG arc path for a segment
@@ -105,14 +124,26 @@ const buildDayPeriods = (dayType: DayType, periods: TOUPeriodData[]): { start: n
   return result;
 };
 
-export function TOUClockDiagram({ title, periods, size = 280 }: TOUClockDiagramProps) {
+interface ArcData {
+  key: string;
+  path: string;
+  color: string;
+  dayType: DayType;
+  touType: TimeOfUseType;
+  startHour: number;
+  endHour: number;
+  duration: number;
+}
+
+export function TOUClockDiagram({ title, periods, size = 280, showAnnotations = true }: TOUClockDiagramProps) {
   const cx = size / 2;
   const cy = size / 2;
   const radius = size / 2 - 20;
+  const [hoveredArc, setHoveredArc] = useState<string | null>(null);
 
   // Generate arcs for all periods across all day types
   const allArcs = useMemo(() => {
-    const arcs: { key: string; path: string; color: string }[] = [];
+    const arcs: ArcData[] = [];
     
     for (const ring of DAY_RINGS) {
       const dayPeriods = buildDayPeriods(ring.type, periods);
@@ -129,6 +160,11 @@ export function TOUClockDiagram({ title, periods, size = 280 }: TOUClockDiagramP
             period.end
           ),
           color: TIME_OF_USE_COLORS[period.type],
+          dayType: ring.type,
+          touType: period.type,
+          startHour: period.start,
+          endHour: period.end,
+          duration: period.end - period.start,
         });
       }
     }
@@ -177,80 +213,165 @@ export function TOUClockDiagram({ title, periods, size = 280 }: TOUClockDiagramP
     }));
   }, [radius]);
 
+  // Key annotations for the diagram
+  const annotations = useMemo(() => {
+    if (!showAnnotations) return [];
+    
+    return [
+      {
+        key: "morning-peak",
+        text: "Morning Peak",
+        hour: 8,
+        radius: radius * 1.15,
+        visible: periods.some(p => p.time_of_use === "Peak" && p.start_hour >= 6 && p.start_hour < 10),
+      },
+      {
+        key: "evening-peak",
+        text: "Evening Peak",
+        hour: 18.5,
+        radius: radius * 1.15,
+        visible: periods.some(p => p.time_of_use === "Peak" && p.start_hour >= 17),
+      },
+      {
+        key: "sunday-evening",
+        text: "NEW: Sun Evening Std",
+        hour: 19,
+        radius: radius * 0.15,
+        visible: periods.some(p => p.day_type === "Sunday" && p.time_of_use === "Standard" && p.start_hour === 18),
+        isNew: true,
+      },
+    ].filter(a => a.visible);
+  }, [periods, radius, showAnnotations]);
+
   return (
-    <div className="flex flex-col items-center">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {/* Period arcs */}
-        {allArcs.map((arc) => (
-          <path key={arc.key} d={arc.path} fill={arc.color} />
-        ))}
+    <TooltipProvider delayDuration={100}>
+      <div className="flex flex-col items-center">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          {/* Period arcs with tooltips */}
+          {allArcs.map((arc) => (
+            <Tooltip key={arc.key}>
+              <TooltipTrigger asChild>
+                <path
+                  d={arc.path}
+                  fill={arc.color}
+                  className="cursor-pointer transition-opacity duration-150"
+                  opacity={hoveredArc && hoveredArc !== arc.key ? 0.5 : 1}
+                  onMouseEnter={() => setHoveredArc(arc.key)}
+                  onMouseLeave={() => setHoveredArc(null)}
+                  stroke={hoveredArc === arc.key ? "white" : "transparent"}
+                  strokeWidth={hoveredArc === arc.key ? 2 : 0}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[200px]">
+                <div className="space-y-1">
+                  <div className="font-semibold flex items-center gap-2">
+                    <div 
+                      className="w-3 h-3 rounded-full" 
+                      style={{ backgroundColor: arc.color }}
+                    />
+                    {arc.touType}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    <strong>{arc.dayType}</strong>
+                  </div>
+                  <div className="text-xs">
+                    {formatHour(arc.startHour)} - {formatHour(arc.endHour)}
+                    <span className="text-muted-foreground ml-1">
+                      ({arc.duration}h)
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground italic">
+                    {TIME_OF_USE_DESCRIPTIONS[arc.touType]}
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          ))}
 
-        {/* Ring separators */}
-        {ringBorders.map((border) => (
-          <circle
-            key={border.key}
-            cx={cx}
-            cy={cy}
-            r={border.r}
-            fill="none"
-            stroke="white"
-            strokeWidth={1.5}
-            opacity={0.8}
-          />
-        ))}
+          {/* Ring separators */}
+          {ringBorders.map((border) => (
+            <circle
+              key={border.key}
+              cx={cx}
+              cy={cy}
+              r={border.r}
+              fill="none"
+              stroke="white"
+              strokeWidth={1.5}
+              opacity={0.8}
+              className="pointer-events-none"
+            />
+          ))}
 
-        {/* Hour tick marks */}
-        {hourTicks.map((tick) => (
-          <line
-            key={`tick-${tick.hour}`}
-            x1={tick.x1}
-            y1={tick.y1}
-            x2={tick.x2}
-            y2={tick.y2}
-            stroke="white"
-            strokeWidth={tick.isMajor ? 2 : 0.5}
-            opacity={tick.isMajor ? 1 : 0.5}
-          />
-        ))}
+          {/* Hour tick marks */}
+          {hourTicks.map((tick) => (
+            <line
+              key={`tick-${tick.hour}`}
+              x1={tick.x1}
+              y1={tick.y1}
+              x2={tick.x2}
+              y2={tick.y2}
+              stroke="white"
+              strokeWidth={tick.isMajor ? 2 : 0.5}
+              opacity={tick.isMajor ? 1 : 0.5}
+              className="pointer-events-none"
+            />
+          ))}
 
-        {/* Center circle with day labels */}
-        <circle cx={cx} cy={cy} r={radius * 0.28} fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth={1} />
+          {/* Center circle with day labels */}
+          <circle cx={cx} cy={cy} r={radius * 0.28} fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth={1} />
 
-        {/* Day type labels in center */}
-        <text x={cx} y={cy - 12} textAnchor="middle" className="text-[8px] font-bold fill-foreground">
-          WD
-        </text>
-        <text x={cx} y={cy + 2} textAnchor="middle" className="text-[7px] fill-muted-foreground">
-          SAT
-        </text>
-        <text x={cx} y={cy + 14} textAnchor="middle" className="text-[7px] fill-muted-foreground">
-          SUN
-        </text>
-
-        {/* Hour labels */}
-        {hourLabels.map((label) => (
-          <text
-            key={`label-${label.hour}`}
-            x={label.x}
-            y={label.y}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            className="text-[9px] font-medium fill-foreground"
-          >
-            {label.hour}
+          {/* Day type labels in center */}
+          <text x={cx} y={cy - 12} textAnchor="middle" className="text-[8px] font-bold fill-foreground pointer-events-none">
+            WD
           </text>
-        ))}
-      </svg>
+          <text x={cx} y={cy + 2} textAnchor="middle" className="text-[7px] fill-muted-foreground pointer-events-none">
+            SAT
+          </text>
+          <text x={cx} y={cy + 14} textAnchor="middle" className="text-[7px] fill-muted-foreground pointer-events-none">
+            SUN
+          </text>
 
-      <h3 className="mt-2 font-semibold text-foreground text-sm">{title}</h3>
-      
-      {/* Ring legend */}
-      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-        <span>Outer: <span className="font-medium text-foreground">Weekday</span></span>
-        <span>Middle: <span className="font-medium text-foreground">Saturday</span></span>
-        <span>Inner: <span className="font-medium text-foreground">Sunday</span></span>
+          {/* Hour labels */}
+          {hourLabels.map((label) => (
+            <text
+              key={`label-${label.hour}`}
+              x={label.x}
+              y={label.y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              className="text-[9px] font-medium fill-foreground pointer-events-none"
+            >
+              {label.hour}
+            </text>
+          ))}
+        </svg>
+
+        <h3 className="mt-2 font-semibold text-foreground text-sm">{title}</h3>
+        
+        {/* Ring legend */}
+        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+          <span>Outer: <span className="font-medium text-foreground">Weekday</span></span>
+          <span>Middle: <span className="font-medium text-foreground">Saturday</span></span>
+          <span>Inner: <span className="font-medium text-foreground">Sunday</span></span>
+        </div>
+
+        {/* Annotations */}
+        {showAnnotations && annotations.length > 0 && (
+          <div className="mt-3 space-y-1">
+            {annotations.map((annotation) => (
+              <div 
+                key={annotation.key} 
+                className={`text-xs flex items-center gap-1 ${annotation.isNew ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-muted-foreground'}`}
+              >
+                {annotation.isNew && <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded text-[10px]">2025</span>}
+                <span>{annotation.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
 
