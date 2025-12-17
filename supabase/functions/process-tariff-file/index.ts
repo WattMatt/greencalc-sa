@@ -90,7 +90,15 @@ Deno.serve(async (req) => {
       console.log(`Processed ${workbook.SheetNames.length} sheets`);
     } else if (fileType === "pdf") {
       console.log("Processing PDF file - using AI vision...");
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(await fileData.arrayBuffer())));
+      // Use chunked approach to avoid stack overflow for large PDFs
+      const uint8Array = new Uint8Array(await fileData.arrayBuffer());
+      let binaryString = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < uint8Array.length; i += chunkSize) {
+        const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      const base64 = btoa(binaryString);
       
       const visionRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
