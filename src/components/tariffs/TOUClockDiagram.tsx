@@ -22,44 +22,87 @@ const TIME_OF_USE_COLORS: Record<TimeOfUseType, string> = {
   "Off-Peak": "#22c55e", // Green
 };
 
-const DAY_RINGS: { type: DayType; innerRadius: number; outerRadius: number }[] = [
-  { type: "Sunday", innerRadius: 0.35, outerRadius: 0.55 },
-  { type: "Saturday", innerRadius: 0.55, outerRadius: 0.75 },
-  { type: "Weekday", innerRadius: 0.75, outerRadius: 0.95 },
+// Ring definitions - outer to inner order for clarity
+const DAY_RINGS: { type: DayType; innerRadius: number; outerRadius: number; label: string }[] = [
+  { type: "Weekday", innerRadius: 0.72, outerRadius: 0.95, label: "WD" },
+  { type: "Saturday", innerRadius: 0.52, outerRadius: 0.70, label: "Sat" },
+  { type: "Sunday", innerRadius: 0.32, outerRadius: 0.50, label: "Sun" },
 ];
 
-// Convert hour to angle (0 = top, clockwise)
-const hourToAngle = (hour: number) => {
-  return ((hour / 24) * 360 - 90) * (Math.PI / 180);
+// Convert hour to angle (0/24 = top, clockwise)
+const hourToAngle = (hour: number): number => {
+  // Normalize to 0-24 range
+  const normalizedHour = ((hour % 24) + 24) % 24;
+  // Convert to radians: 0 at top, clockwise
+  return ((normalizedHour / 24) * 2 * Math.PI) - (Math.PI / 2);
 };
 
-// Create SVG arc path
+// Create SVG arc path for a segment
 const createArcPath = (
   cx: number,
   cy: number,
-  innerRadius: number,
-  outerRadius: number,
-  startAngle: number,
-  endAngle: number
-) => {
-  const innerStartX = cx + innerRadius * Math.cos(startAngle);
-  const innerStartY = cy + innerRadius * Math.sin(startAngle);
-  const innerEndX = cx + innerRadius * Math.cos(endAngle);
-  const innerEndY = cy + innerRadius * Math.sin(endAngle);
-  const outerStartX = cx + outerRadius * Math.cos(startAngle);
-  const outerStartY = cy + outerRadius * Math.sin(startAngle);
-  const outerEndX = cx + outerRadius * Math.cos(endAngle);
-  const outerEndY = cy + outerRadius * Math.sin(endAngle);
+  innerR: number,
+  outerR: number,
+  startHour: number,
+  endHour: number
+): string => {
+  const startAngle = hourToAngle(startHour);
+  const endAngle = hourToAngle(endHour);
+  
+  // Calculate points
+  const innerStartX = cx + innerR * Math.cos(startAngle);
+  const innerStartY = cy + innerR * Math.sin(startAngle);
+  const innerEndX = cx + innerR * Math.cos(endAngle);
+  const innerEndY = cy + innerR * Math.sin(endAngle);
+  const outerStartX = cx + outerR * Math.cos(startAngle);
+  const outerStartY = cy + outerR * Math.sin(startAngle);
+  const outerEndX = cx + outerR * Math.cos(endAngle);
+  const outerEndY = cy + outerR * Math.sin(endAngle);
 
-  const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
+  // Determine if arc is larger than 180 degrees
+  const angleDiff = endHour - startHour;
+  const largeArc = angleDiff > 12 ? 1 : 0;
 
   return `
     M ${outerStartX} ${outerStartY}
-    A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEndX} ${outerEndY}
+    A ${outerR} ${outerR} 0 ${largeArc} 1 ${outerEndX} ${outerEndY}
     L ${innerEndX} ${innerEndY}
-    A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStartX} ${innerStartY}
+    A ${innerR} ${innerR} 0 ${largeArc} 0 ${innerStartX} ${innerStartY}
     Z
   `;
+};
+
+// Build complete period coverage for a day type
+const buildDayPeriods = (dayType: DayType, periods: TOUPeriodData[]): { start: number; end: number; type: TimeOfUseType }[] => {
+  const dayPeriods = periods.filter(p => p.day_type === dayType);
+  const result: { start: number; end: number; type: TimeOfUseType }[] = [];
+  
+  // Create a 24-hour array to track coverage
+  const hourTypes: TimeOfUseType[] = Array(24).fill("Off-Peak");
+  
+  // Mark hours based on periods
+  for (const period of dayPeriods) {
+    for (let h = period.start_hour; h < period.end_hour; h++) {
+      hourTypes[h] = period.time_of_use;
+    }
+  }
+  
+  // Convert to contiguous segments
+  let currentType = hourTypes[0];
+  let startHour = 0;
+  
+  for (let h = 1; h <= 24; h++) {
+    const type = h === 24 ? hourTypes[0] : hourTypes[h];
+    if (h === 24 || type !== currentType) {
+      result.push({ start: startHour, end: h, type: currentType });
+      if (h < 24) {
+        currentType = type;
+        startHour = h;
+      }
+    }
+  }
+  
+  return result;
 };
 
 export function TOUClockDiagram({ title, periods, size = 280 }: TOUClockDiagramProps) {
@@ -67,60 +110,41 @@ export function TOUClockDiagram({ title, periods, size = 280 }: TOUClockDiagramP
   const cy = size / 2;
   const radius = size / 2 - 20;
 
-  // Generate default 24-hour Off-Peak background for each ring
-  const backgroundArcs = useMemo(() => {
-    return DAY_RINGS.map((ring) => ({
-      dayType: ring.type,
-      path: createArcPath(
-        cx,
-        cy,
-        ring.innerRadius * radius,
-        ring.outerRadius * radius,
-        hourToAngle(0),
-        hourToAngle(24)
-      ),
-      color: TIME_OF_USE_COLORS["Off-Peak"],
-    }));
-  }, [cx, cy, radius]);
-
-  // Generate arcs for each period
-  const periodArcs = useMemo(() => {
-    return periods.map((period, index) => {
-      const ring = DAY_RINGS.find((r) => r.type === period.day_type);
-      if (!ring) return null;
-
-      const startAngle = hourToAngle(period.start_hour);
-      let endAngle = hourToAngle(period.end_hour);
+  // Generate arcs for all periods across all day types
+  const allArcs = useMemo(() => {
+    const arcs: { key: string; path: string; color: string }[] = [];
+    
+    for (const ring of DAY_RINGS) {
+      const dayPeriods = buildDayPeriods(ring.type, periods);
       
-      // Handle periods that wrap around midnight
-      if (period.end_hour <= period.start_hour) {
-        endAngle = hourToAngle(24);
+      for (const period of dayPeriods) {
+        arcs.push({
+          key: `${ring.type}-${period.start}-${period.end}-${period.type}`,
+          path: createArcPath(
+            cx,
+            cy,
+            ring.innerRadius * radius,
+            ring.outerRadius * radius,
+            period.start,
+            period.end
+          ),
+          color: TIME_OF_USE_COLORS[period.type],
+        });
       }
-
-      return {
-        key: `${period.day_type}-${period.start_hour}-${period.end_hour}-${index}`,
-        path: createArcPath(
-          cx,
-          cy,
-          ring.innerRadius * radius,
-          ring.outerRadius * radius,
-          startAngle,
-          endAngle
-        ),
-        color: TIME_OF_USE_COLORS[period.time_of_use],
-      };
-    }).filter(Boolean);
+    }
+    
+    return arcs;
   }, [periods, cx, cy, radius]);
 
-  // Generate hour labels
+  // Generate hour labels (every 2 hours for clarity)
   const hourLabels = useMemo(() => {
     const labels = [];
-    for (let hour = 0; hour < 24; hour++) {
+    for (let hour = 0; hour < 24; hour += 2) {
       const angle = hourToAngle(hour);
       const labelRadius = radius + 12;
       const x = cx + labelRadius * Math.cos(angle);
       const y = cy + labelRadius * Math.sin(angle);
-      labels.push({ hour, x, y });
+      labels.push({ hour: hour === 0 ? 24 : hour, x, y });
     }
     return labels;
   }, [cx, cy, radius]);
@@ -130,30 +154,49 @@ export function TOUClockDiagram({ title, periods, size = 280 }: TOUClockDiagramP
     const ticks = [];
     for (let hour = 0; hour < 24; hour++) {
       const angle = hourToAngle(hour);
-      const innerR = 0.33 * radius;
+      const innerR = 0.30 * radius;
       const outerR = 0.97 * radius;
+      const isMajor = hour % 6 === 0;
       ticks.push({
         hour,
         x1: cx + innerR * Math.cos(angle),
         y1: cy + innerR * Math.sin(angle),
         x2: cx + outerR * Math.cos(angle),
         y2: cy + outerR * Math.sin(angle),
+        isMajor,
       });
     }
     return ticks;
   }, [cx, cy, radius]);
 
+  // Ring separators for clarity
+  const ringBorders = useMemo(() => {
+    return DAY_RINGS.map((ring, i) => ({
+      key: `ring-${i}`,
+      r: ring.innerRadius * radius,
+    }));
+  }, [radius]);
+
   return (
     <div className="flex flex-col items-center">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {/* Background arcs (Off-Peak by default) */}
-        {backgroundArcs.map((arc, i) => (
-          <path key={`bg-${i}`} d={arc.path} fill={arc.color} />
+        {/* Period arcs */}
+        {allArcs.map((arc) => (
+          <path key={arc.key} d={arc.path} fill={arc.color} />
         ))}
 
-        {/* Period arcs */}
-        {periodArcs.map((arc) => arc && (
-          <path key={arc.key} d={arc.path} fill={arc.color} />
+        {/* Ring separators */}
+        {ringBorders.map((border) => (
+          <circle
+            key={border.key}
+            cx={cx}
+            cy={cy}
+            r={border.r}
+            fill="none"
+            stroke="white"
+            strokeWidth={1.5}
+            opacity={0.8}
+          />
         ))}
 
         {/* Hour tick marks */}
@@ -165,22 +208,23 @@ export function TOUClockDiagram({ title, periods, size = 280 }: TOUClockDiagramP
             x2={tick.x2}
             y2={tick.y2}
             stroke="white"
-            strokeWidth={1}
+            strokeWidth={tick.isMajor ? 2 : 0.5}
+            opacity={tick.isMajor ? 1 : 0.5}
           />
         ))}
 
-        {/* Center circle */}
-        <circle cx={cx} cy={cy} r={radius * 0.33} fill="white" />
+        {/* Center circle with day labels */}
+        <circle cx={cx} cy={cy} r={radius * 0.28} fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth={1} />
 
         {/* Day type labels in center */}
-        <text x={cx} y={cy - 15} textAnchor="middle" className="text-[9px] font-semibold fill-foreground">
-          WEEKDAYS
+        <text x={cx} y={cy - 12} textAnchor="middle" className="text-[8px] font-bold fill-foreground">
+          WD
         </text>
-        <text x={cx} y={cy} textAnchor="middle" className="text-[8px] fill-muted-foreground">
-          SATURDAY
+        <text x={cx} y={cy + 2} textAnchor="middle" className="text-[7px] fill-muted-foreground">
+          SAT
         </text>
-        <text x={cx} y={cy + 15} textAnchor="middle" className="text-[8px] fill-muted-foreground">
-          SUNDAY
+        <text x={cx} y={cy + 14} textAnchor="middle" className="text-[7px] fill-muted-foreground">
+          SUN
         </text>
 
         {/* Hour labels */}
@@ -191,14 +235,14 @@ export function TOUClockDiagram({ title, periods, size = 280 }: TOUClockDiagramP
             y={label.y}
             textAnchor="middle"
             dominantBaseline="middle"
-            className="text-[10px] font-medium fill-foreground"
+            className="text-[9px] font-medium fill-foreground"
           >
-            {label.hour === 0 ? "24" : label.hour}
+            {label.hour}
           </text>
         ))}
       </svg>
 
-      <h3 className="mt-2 font-semibold text-foreground">{title}</h3>
+      <h3 className="mt-2 font-semibold text-foreground text-sm">{title}</h3>
     </div>
   );
 }
