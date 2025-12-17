@@ -124,6 +124,16 @@ const buildDayPeriods = (dayType: DayType, periods: TOUPeriodData[]): { start: n
   return result;
 };
 
+// Get TOU type for a specific hour and day from period data
+const getTOUTypeForHour = (hour: number, dayType: DayType, periods: TOUPeriodData[]): TimeOfUseType => {
+  for (const period of periods) {
+    if (period.day_type === dayType && hour >= period.start_hour && hour < period.end_hour) {
+      return period.time_of_use;
+    }
+  }
+  return "Off-Peak";
+};
+
 interface ArcData {
   key: string;
   path: string;
@@ -473,21 +483,202 @@ export function TOUClockLegend() {
   );
 }
 
+// Morphing clock that smoothly transitions between two period states
+interface MorphingClockProps {
+  showNew: boolean;
+  oldPeriods: TOUPeriodData[];
+  newPeriods: TOUPeriodData[];
+  size?: number;
+}
+
+function MorphingClock({ showNew, oldPeriods, newPeriods, size = 280 }: MorphingClockProps) {
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = size / 2 - 20;
+
+  // Generate individual hour segments for each ring (24 segments per ring for smooth morphing)
+  const hourSegments = useMemo(() => {
+    const segments: {
+      key: string;
+      path: string;
+      dayType: DayType;
+      hour: number;
+      oldType: TimeOfUseType;
+      newType: TimeOfUseType;
+    }[] = [];
+
+    for (const ring of DAY_RINGS) {
+      for (let hour = 0; hour < 24; hour++) {
+        const path = createArcPath(
+          cx,
+          cy,
+          ring.innerRadius * radius,
+          ring.outerRadius * radius,
+          hour,
+          hour + 1
+        );
+        
+        segments.push({
+          key: `${ring.type}-${hour}`,
+          path,
+          dayType: ring.type,
+          hour,
+          oldType: getTOUTypeForHour(hour, ring.type, oldPeriods),
+          newType: getTOUTypeForHour(hour, ring.type, newPeriods),
+        });
+      }
+    }
+
+    return segments;
+  }, [cx, cy, radius, oldPeriods, newPeriods]);
+
+  // Generate hour labels
+  const hourLabels = useMemo(() => {
+    const labels = [];
+    for (let hour = 0; hour < 24; hour += 2) {
+      const angle = hourToAngle(hour);
+      const labelRadius = radius + 12;
+      const x = cx + labelRadius * Math.cos(angle);
+      const y = cy + labelRadius * Math.sin(angle);
+      labels.push({ hour: hour === 0 ? 24 : hour, x, y });
+    }
+    return labels;
+  }, [cx, cy, radius]);
+
+  // Generate hour tick marks
+  const hourTicks = useMemo(() => {
+    const ticks = [];
+    for (let hour = 0; hour < 24; hour++) {
+      const angle = hourToAngle(hour);
+      const innerR = 0.30 * radius;
+      const outerR = 0.97 * radius;
+      const isMajor = hour % 6 === 0;
+      ticks.push({
+        hour,
+        x1: cx + innerR * Math.cos(angle),
+        y1: cy + innerR * Math.sin(angle),
+        x2: cx + outerR * Math.cos(angle),
+        y2: cy + outerR * Math.sin(angle),
+        isMajor,
+      });
+    }
+    return ticks;
+  }, [cx, cy, radius]);
+
+  // Ring separators
+  const ringBorders = useMemo(() => {
+    return DAY_RINGS.map((ring, i) => ({
+      key: `ring-${i}`,
+      r: ring.innerRadius * radius,
+    }));
+  }, [radius]);
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {/* Hour segments with morphing colors */}
+      {hourSegments.map((segment) => {
+        const currentType = showNew ? segment.newType : segment.oldType;
+        const isChanging = segment.oldType !== segment.newType;
+        
+        return (
+          <path
+            key={segment.key}
+            d={segment.path}
+            fill={TIME_OF_USE_COLORS[currentType]}
+            className="transition-all duration-700 ease-in-out"
+            style={{
+              filter: isChanging ? 'brightness(1.1)' : 'none',
+            }}
+          />
+        );
+      })}
+
+      {/* Highlight segments that changed */}
+      {hourSegments
+        .filter(s => s.oldType !== s.newType)
+        .map((segment) => (
+          <path
+            key={`highlight-${segment.key}`}
+            d={segment.path}
+            fill="none"
+            stroke="white"
+            strokeWidth={showNew ? 1.5 : 0}
+            className="transition-all duration-700 ease-in-out pointer-events-none"
+            opacity={showNew ? 0.8 : 0}
+          />
+        ))}
+
+      {/* Ring separators */}
+      {ringBorders.map((border) => (
+        <circle
+          key={border.key}
+          cx={cx}
+          cy={cy}
+          r={border.r}
+          fill="none"
+          stroke="white"
+          strokeWidth={1.5}
+          opacity={0.8}
+          className="pointer-events-none"
+        />
+      ))}
+
+      {/* Hour tick marks */}
+      {hourTicks.map((tick) => (
+        <line
+          key={`tick-${tick.hour}`}
+          x1={tick.x1}
+          y1={tick.y1}
+          x2={tick.x2}
+          y2={tick.y2}
+          stroke="white"
+          strokeWidth={tick.isMajor ? 2 : 0.5}
+          opacity={tick.isMajor ? 1 : 0.5}
+          className="pointer-events-none"
+        />
+      ))}
+
+      {/* Center circle */}
+      <circle cx={cx} cy={cy} r={radius * 0.28} fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth={1} />
+
+      {/* Day type labels */}
+      <text x={cx} y={cy - 12} textAnchor="middle" className="text-[8px] font-bold fill-foreground pointer-events-none">
+        WD
+      </text>
+      <text x={cx} y={cy + 2} textAnchor="middle" className="text-[7px] fill-muted-foreground pointer-events-none">
+        SAT
+      </text>
+      <text x={cx} y={cy + 14} textAnchor="middle" className="text-[7px] fill-muted-foreground pointer-events-none">
+        SUN
+      </text>
+
+      {/* Hour labels */}
+      {hourLabels.map((label) => (
+        <text
+          key={`label-${label.hour}`}
+          x={label.x}
+          y={label.y}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          className="text-[9px] font-medium fill-foreground pointer-events-none"
+        >
+          {label.hour}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
 // Comparison component showing pre-2025 vs 2025/2026 with animated toggle
 export function TOUComparisonView() {
   const [showNew, setShowNew] = useState(true);
-  const [isAnimating, setIsAnimating] = useState(false);
   const [viewMode, setViewMode] = useState<'toggle' | 'sideBySide'>('toggle');
   const [isAutoPlaying, setIsAutoPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
 
   const handleToggle = useCallback(() => {
-    setIsAnimating(true);
     setProgress(0);
-    setTimeout(() => {
-      setShowNew(prev => !prev);
-      setTimeout(() => setIsAnimating(false), 300);
-    }, 150);
+    setShowNew(prev => !prev);
   }, []);
 
   // Auto-play effect
@@ -670,54 +861,48 @@ export function TOUComparisonView() {
               </div>
             )}
 
-            {/* Animated Clock Container */}
+            {/* Morphing Clock Container */}
             <div className="relative">
-              <div 
-                className={`transition-all duration-300 ease-out ${
-                  isAnimating ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
-                }`}
-              >
-                <div className={`p-6 rounded-xl border-2 transition-all duration-500 ${
-                  showNew 
-                    ? 'border-primary/40 bg-primary/5 shadow-lg shadow-primary/10' 
-                    : 'border-muted bg-muted/30'
-                }`}>
-                  <div className="flex items-center gap-2 mb-4 justify-center">
-                    <span className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 ${
-                      showNew 
-                        ? 'bg-primary text-primary-foreground' 
-                        : 'bg-muted text-muted-foreground'
-                    }`}>
-                      {showNew ? '2025/2026' : 'Pre-2025'}
-                    </span>
-                    <span className={`text-sm font-semibold transition-colors duration-300 ${
-                      showNew ? 'text-foreground' : 'text-muted-foreground'
-                    }`}>
-                      {showNew ? 'Current Structure' : 'Previous Structure'}
-                    </span>
+              <div className={`p-6 rounded-xl border-2 transition-all duration-500 ${
+                showNew 
+                  ? 'border-primary/40 bg-primary/5 shadow-lg shadow-primary/10' 
+                  : 'border-muted bg-muted/30'
+              }`}>
+                <div className="flex items-center gap-2 mb-4 justify-center">
+                  <span className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-500 ${
+                    showNew 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'bg-muted text-muted-foreground'
+                  }`}>
+                    {showNew ? '2025/2026' : 'Pre-2025'}
+                  </span>
+                  <span className={`text-sm font-semibold transition-colors duration-500 ${
+                    showNew ? 'text-foreground' : 'text-muted-foreground'
+                  }`}>
+                    {showNew ? 'Current Structure' : 'Previous Structure'}
+                  </span>
+                </div>
+                <div className="flex justify-center">
+                  <MorphingClock 
+                    showNew={showNew}
+                    oldPeriods={ESKOM_PRE_2025_HIGH_DEMAND_PERIODS}
+                    newPeriods={ESKOM_HIGH_DEMAND_PERIODS}
+                    size={280}
+                  />
+                </div>
+                <div className="mt-2 font-semibold text-foreground text-sm text-center">
+                  High-Demand Season
+                </div>
+                <div className="mt-3 text-xs text-center space-y-1">
+                  <div className={`transition-all duration-500 ${showNew ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>
+                    <p className="text-muted-foreground">• 2-hour morning peak (07:00-09:00)</p>
+                    <p className="text-muted-foreground">• 3-hour evening peak (17:00-20:00)</p>
+                    <p className="text-amber-600 dark:text-amber-400 font-medium">• NEW: Sunday 18:00-20:00 Standard</p>
                   </div>
-                  <div className="flex justify-center">
-                    <TOUClockDiagram 
-                      title={showNew ? "High-Demand (2025/2026)" : "High-Demand (Pre-2025)"} 
-                      periods={showNew ? ESKOM_HIGH_DEMAND_PERIODS : ESKOM_PRE_2025_HIGH_DEMAND_PERIODS} 
-                      size={280}
-                      showAnnotations={showNew}
-                    />
-                  </div>
-                  <div className="mt-4 text-xs text-center space-y-1">
-                    {showNew ? (
-                      <>
-                        <p className="text-muted-foreground">• 2-hour morning peak (07:00-09:00)</p>
-                        <p className="text-muted-foreground">• 3-hour evening peak (17:00-20:00)</p>
-                        <p className="text-amber-600 dark:text-amber-400 font-medium animate-pulse">• NEW: Sunday 18:00-20:00 Standard</p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-muted-foreground">• 3-hour morning peak (06:00-09:00)</p>
-                        <p className="text-muted-foreground">• 2-hour evening peak (17:00-19:00)</p>
-                        <p className="text-muted-foreground">• Sunday entirely Off-Peak</p>
-                      </>
-                    )}
+                  <div className={`transition-all duration-500 ${!showNew ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>
+                    <p className="text-muted-foreground">• 3-hour morning peak (06:00-09:00)</p>
+                    <p className="text-muted-foreground">• 2-hour evening peak (17:00-19:00)</p>
+                    <p className="text-muted-foreground">• Sunday entirely Off-Peak</p>
                   </div>
                 </div>
               </div>
