@@ -1,8 +1,20 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Clock, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Zap, Clock, AlertTriangle, ExternalLink, MapPin } from "lucide-react";
 
+const ESKOM_PROVINCIAL_SCHEDULES = [
+  { province: "Eastern Cape", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/eastern-cape/" },
+  { province: "Free State", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/free-state/" },
+  { province: "Gauteng", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/gauteng/" },
+  { province: "KwaZulu-Natal", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/kwazulu-natal/" },
+  { province: "Limpopo", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/limpopo/" },
+  { province: "Mpumalanga", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/mpumalanga/" },
+  { province: "North West", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/north-west/" },
+  { province: "Northern Cape", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/northern-cape/" },
+  { province: "Western Cape", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/western-cape/" },
+];
 const LOAD_SHEDDING_STAGES = [
   { stage: 0, name: "No Load Shedding", hoursPerDay: 0, description: "Normal grid operation", color: "bg-green-500" },
   { stage: 1, name: "Stage 1", hoursPerDay: 2.5, description: "2.5 hours per day (1000 MW shed)", color: "bg-yellow-400" },
@@ -115,6 +127,38 @@ export function LoadSheddingStages() {
           </div>
           <p className="text-xs text-muted-foreground">
             Note: Actual schedules vary by municipality and area block. These are typical patterns used for simulation modeling.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-primary" />
+            Official Eskom Provincial Schedules
+          </CardTitle>
+          <CardDescription>
+            View detailed municipal load shedding schedules by province on the official Eskom website
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+            {ESKOM_PROVINCIAL_SCHEDULES.map((item) => (
+              <Button
+                key={item.province}
+                variant="outline"
+                className="justify-between h-auto py-3"
+                asChild
+              >
+                <a href={item.url} target="_blank" rel="noopener noreferrer">
+                  <span>{item.province}</span>
+                  <ExternalLink className="h-4 w-4 ml-2 opacity-50" />
+                </a>
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-4">
+            These links open the official Eskom website where you can find detailed area-specific schedules.
           </p>
         </CardContent>
       </Card>
