@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { 
   Users, BarChart3, DollarSign, Zap, Sun, MapPin, Plug, 
-  CheckCircle2, AlertCircle, ArrowRight, Building2, TrendingDown, Wallet
+  CheckCircle2, AlertCircle, ArrowRight, Building2, TrendingDown, Wallet, TrendingUp
 } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line, Legend, CartesianGrid } from "recharts";
 
 interface Tenant {
   id: string;
@@ -117,6 +117,35 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
       savingsPercent
     };
   }, [maxSolarKva, dailyTotal, annualConsumption]);
+
+  // Generate savings breakdown chart data (10-year projection)
+  const savingsChartData = useMemo(() => {
+    if (!solarFinancials || annualGridCost === 0) return [];
+    
+    const escalationRate = 0.08; // 8% annual electricity increase
+    const years = 15;
+    const data: { year: number; gridCost: number; solarCost: number; cumulativeSavings: number }[] = [];
+    
+    let cumulativeSavings = 0;
+    
+    for (let year = 1; year <= years; year++) {
+      const gridCostThisYear = annualGridCost * Math.pow(1 + escalationRate, year - 1);
+      const remainingGridCost = (annualConsumption - solarFinancials.usableSolarEnergy) * avgTariffRate * Math.pow(1 + escalationRate, year - 1);
+      const solarCostThisYear = remainingGridCost + (solarFinancials.systemCost / 20); // 20-year amortization
+      
+      const savingsThisYear = gridCostThisYear - solarCostThisYear;
+      cumulativeSavings += savingsThisYear;
+      
+      data.push({
+        year,
+        gridCost: gridCostThisYear / 1000, // in thousands
+        solarCost: solarCostThisYear / 1000,
+        cumulativeSavings: cumulativeSavings / 1000
+      });
+    }
+    
+    return data;
+  }, [solarFinancials, annualGridCost, annualConsumption, avgTariffRate]);
 
   const setupSteps = [
     { label: "Add tenants", done: tenants.length > 0, tab: "tenants" },
@@ -395,6 +424,130 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
                 </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Savings Breakdown Chart */}
+      {savingsChartData.length > 0 && solarFinancials && (
+        <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => onNavigateTab("simulation")}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                15-Year Cost Projection
+              </CardTitle>
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded-full bg-destructive" />
+                  <span className="text-muted-foreground">Grid Only</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <span className="text-muted-foreground">With Solar</span>
+                </div>
+              </div>
+            </div>
+            <CardDescription>
+              Projected annual costs assuming 8% electricity escalation
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={savingsChartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis 
+                    dataKey="year" 
+                    tick={{ fontSize: 11 }} 
+                    tickLine={false}
+                    axisLine={false}
+                    label={{ value: 'Year', position: 'insideBottomRight', offset: -5, fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 11 }} 
+                    tickLine={false}
+                    axisLine={false}
+                    width={60}
+                    tickFormatter={(v) => `R${v.toFixed(0)}k`}
+                    label={{ value: 'Annual Cost', angle: -90, position: 'insideLeft', fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                  />
+                  <Tooltip 
+                    content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        const gridCost = Number(payload[0]?.value || 0);
+                        const solarCost = Number(payload[1]?.value || 0);
+                        const savings = gridCost - solarCost;
+                        const cumulative = Number(payload[2]?.value || 0);
+                        return (
+                          <div className="rounded-lg border bg-background px-3 py-2 shadow-sm">
+                            <p className="text-sm font-medium mb-1">Year {label}</p>
+                            <div className="space-y-1 text-xs">
+                              <p><span className="text-destructive">Grid Cost:</span> R{(gridCost * 1000).toLocaleString()}</p>
+                              <p><span className="text-green-600">With Solar:</span> R{(solarCost * 1000).toLocaleString()}</p>
+                              <p className="pt-1 border-t">
+                                <span className="text-muted-foreground">Annual Savings:</span>{' '}
+                                <span className="font-medium text-green-600">R{(savings * 1000).toLocaleString()}</span>
+                              </p>
+                              <p>
+                                <span className="text-muted-foreground">Cumulative Savings:</span>{' '}
+                                <span className="font-medium">R{(cumulative * 1000).toLocaleString()}</span>
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="gridCost"
+                    stroke="hsl(var(--destructive))"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Grid Only"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="solarCost"
+                    stroke="hsl(142 76% 36%)"
+                    strokeWidth={2}
+                    dot={false}
+                    name="With Solar"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="cumulativeSavings"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={1.5}
+                    strokeDasharray="5 5"
+                    dot={false}
+                    name="Cumulative Savings"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-4 pt-3 border-t grid grid-cols-3 gap-4 text-center">
+              <div>
+                <p className="text-xs text-muted-foreground">5-Year Savings</p>
+                <p className="text-lg font-bold text-green-600">
+                  R{((savingsChartData[4]?.cumulativeSavings || 0) * 1000 / 1000000).toFixed(2)}M
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">10-Year Savings</p>
+                <p className="text-lg font-bold text-green-600">
+                  R{((savingsChartData[9]?.cumulativeSavings || 0) * 1000 / 1000000).toFixed(2)}M
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">15-Year Savings</p>
+                <p className="text-lg font-bold text-green-600">
+                  R{((savingsChartData[14]?.cumulativeSavings || 0) * 1000 / 1000000).toFixed(2)}M
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
