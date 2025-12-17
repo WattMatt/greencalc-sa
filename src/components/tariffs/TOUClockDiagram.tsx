@@ -673,7 +673,7 @@ function MorphingClock({ showNew, oldPeriods, newPeriods, size = 280 }: Morphing
 export function TOUComparisonView() {
   const [showNew, setShowNew] = useState(true);
   const [viewMode, setViewMode] = useState<'toggle' | 'sideBySide'>('toggle');
-  const [isAutoPlaying, setIsAutoPlaying] = useState(false);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
 
   const handleToggle = useCallback(() => {
