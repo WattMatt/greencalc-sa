@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,7 @@ import {
   Users, BarChart3, DollarSign, Zap, Sun, MapPin, Plug, 
   CheckCircle2, AlertCircle, ArrowRight, Building2
 } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 
 interface Tenant {
   id: string;
@@ -13,6 +15,14 @@ interface Tenant {
   area_sqm: number;
   scada_import_id: string | null;
   shop_type_id: string | null;
+  scada_imports?: {
+    load_profile_weekday?: number[];
+  } | null;
+  shop_types?: {
+    kwh_per_sqm_month?: number;
+    load_profile_weekday?: number[];
+  } | null;
+  monthly_kwh_override?: number | null;
 }
 
 interface ProjectOverviewProps {
@@ -32,6 +42,48 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
 
   // Calculate estimated monthly consumption (simplified)
   const estimatedMonthlyKwh = totalArea * 50; // Default 50 kWh/m²/month
+
+  // Generate mini load profile data
+  const DEFAULT_PROFILE = [4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17, 4.17];
+  
+  const miniChartData = useMemo(() => {
+    if (tenants.length === 0) return [];
+    
+    const hourlyData: { hour: string; load: number }[] = [];
+    
+    for (let h = 0; h < 24; h++) {
+      let totalLoad = 0;
+      
+      tenants.forEach((tenant) => {
+        const tenantArea = Number(tenant.area_sqm) || 0;
+        const scadaProfile = tenant.scada_imports?.load_profile_weekday;
+        
+        if (scadaProfile?.length === 24) {
+          const scadaArea = 100; // Simplified - use tenant area as base
+          const areaScaleFactor = tenantArea / scadaArea;
+          totalLoad += (scadaProfile[h] || 0) * areaScaleFactor;
+        } else {
+          const shopType = tenant.shop_types;
+          const monthlyKwh = tenant.monthly_kwh_override || (shopType?.kwh_per_sqm_month || 50) * tenantArea;
+          const dailyKwh = monthlyKwh / 30;
+          const profile = shopType?.load_profile_weekday?.length === 24 
+            ? shopType.load_profile_weekday 
+            : DEFAULT_PROFILE;
+          totalLoad += dailyKwh * (profile[h] / 100);
+        }
+      });
+      
+      hourlyData.push({
+        hour: `${h.toString().padStart(2, '0')}:00`,
+        load: totalLoad
+      });
+    }
+    
+    return hourlyData;
+  }, [tenants]);
+
+  const peakLoad = miniChartData.length > 0 ? Math.max(...miniChartData.map(d => d.load)) : 0;
+  const dailyTotal = miniChartData.reduce((sum, d) => sum + d.load, 0);
 
   const setupSteps = [
     { label: "Add tenants", done: tenants.length > 0, tab: "tenants" },
@@ -148,6 +200,81 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
           </CardContent>
         </Card>
       </div>
+
+      {/* Mini Load Profile Chart */}
+      {tenants.length > 0 && miniChartData.length > 0 && (
+        <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => onNavigateTab("load-profile")}>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Daily Load Profile
+              </CardTitle>
+              <div className="flex items-center gap-4 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Peak: </span>
+                  <span className="font-medium">{peakLoad.toFixed(0)} kWh</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Daily: </span>
+                  <span className="font-medium">{dailyTotal.toFixed(0)} kWh</span>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="h-32">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={miniChartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="loadGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis 
+                    dataKey="hour" 
+                    tick={{ fontSize: 10 }} 
+                    tickLine={false}
+                    axisLine={false}
+                    interval={5}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 10 }} 
+                    tickLine={false}
+                    axisLine={false}
+                    width={35}
+                    tickFormatter={(v) => `${v.toFixed(0)}`}
+                  />
+                  <Tooltip 
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="rounded-lg border bg-background px-3 py-2 shadow-sm">
+                            <p className="text-xs text-muted-foreground">{payload[0].payload.hour}</p>
+                            <p className="text-sm font-medium">{Number(payload[0].value).toFixed(1)} kWh</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="load"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    fill="url(#loadGradient)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              Click to view detailed analysis →
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Actions */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
