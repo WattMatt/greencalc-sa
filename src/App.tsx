@@ -22,7 +22,6 @@ const SimulationHub = lazy(() => import("./pages/SimulationHub"));
 const QuickEstimate = lazy(() => import("./pages/QuickEstimate"));
 const SandboxWorkspace = lazy(() => import("./pages/SandboxWorkspace"));
 const ProposalWorkspace = lazy(() => import("./pages/ProposalWorkspace"));
-const SimulationRoadmap = lazy(() => import("./pages/SimulationRoadmap"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const Auth = lazy(() => import("./pages/Auth"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
@@ -80,7 +79,6 @@ function AppRoutes() {
                     <Route path="/simulations" element={<SimulationHub />} />
                     <Route path="/simulations/sandbox/:id" element={<SandboxWorkspace />} />
                     <Route path="/projects/:projectId/proposal" element={<ProposalWorkspace />} />
-                    <Route path="/simulations/roadmap" element={<SimulationRoadmap />} />
                     <Route path="/calculator" element={<Calculator />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/profile" element={<ProfileSettings />} />
