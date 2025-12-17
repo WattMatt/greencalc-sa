@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { 
   Users, BarChart3, DollarSign, Zap, Sun, MapPin, Plug, 
-  CheckCircle2, AlertCircle, ArrowRight, Building2
+  CheckCircle2, AlertCircle, ArrowRight, Building2, TrendingDown, Wallet
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 
@@ -84,6 +84,39 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
 
   const peakLoad = miniChartData.length > 0 ? Math.max(...miniChartData.map(d => d.load)) : 0;
   const dailyTotal = miniChartData.reduce((sum, d) => sum + d.load, 0);
+
+  // Financial estimates
+  const annualConsumption = dailyTotal * 365;
+  const avgTariffRate = 2.50; // R/kWh - default estimate for commercial
+  const annualGridCost = annualConsumption * avgTariffRate;
+  
+  // Solar savings estimates (if connection size is set)
+  const solarFinancials = useMemo(() => {
+    if (!maxSolarKva || dailyTotal === 0) return null;
+    
+    // Typical SA solar yield: ~1600-1800 kWh/kWp/year, use 1700 as average
+    const annualSolarYield = maxSolarKva * 1700;
+    // Self-consumption typically 60-80% for commercial
+    const selfConsumptionRate = 0.7;
+    const usableSolarEnergy = Math.min(annualSolarYield * selfConsumptionRate, annualConsumption);
+    const annualSavings = usableSolarEnergy * avgTariffRate;
+    
+    // System cost estimate: ~R12,000/kWp installed
+    const systemCost = maxSolarKva * 12000;
+    const paybackYears = systemCost / annualSavings;
+    const roiPercent = (annualSavings / systemCost) * 100;
+    const savingsPercent = (usableSolarEnergy / annualConsumption) * 100;
+    
+    return {
+      annualSolarYield,
+      usableSolarEnergy,
+      annualSavings,
+      systemCost,
+      paybackYears,
+      roiPercent,
+      savingsPercent
+    };
+  }, [maxSolarKva, dailyTotal, annualConsumption]);
 
   const setupSteps = [
     { label: "Add tenants", done: tenants.length > 0, tab: "tenants" },
@@ -272,6 +305,96 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
             <p className="text-xs text-muted-foreground mt-2 text-center">
               Click to view detailed analysis →
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Financial Summary Card */}
+      {tenants.length > 0 && (
+        <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => onNavigateTab("simulation")}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Wallet className="h-4 w-4" />
+                Financial Summary
+              </CardTitle>
+              <Badge variant="outline" className="text-xs">Estimates</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {/* Annual Consumption */}
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Annual Consumption</p>
+                <p className="text-xl font-bold">{(annualConsumption / 1000).toFixed(0)} MWh</p>
+                <p className="text-xs text-muted-foreground">{annualConsumption.toLocaleString()} kWh/year</p>
+              </div>
+
+              {/* Annual Grid Cost */}
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Est. Annual Cost</p>
+                <p className="text-xl font-bold text-destructive">
+                  R {(annualGridCost / 1000000).toFixed(2)}M
+                </p>
+                <p className="text-xs text-muted-foreground">@ R{avgTariffRate.toFixed(2)}/kWh avg</p>
+              </div>
+
+              {/* Potential Savings */}
+              {solarFinancials ? (
+                <>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <TrendingDown className="h-3 w-3 text-green-500" />
+                      Potential Savings
+                    </p>
+                    <p className="text-xl font-bold text-green-600">
+                      R {(solarFinancials.annualSavings / 1000).toFixed(0)}k
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {solarFinancials.savingsPercent.toFixed(0)}% of consumption
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Simple Payback</p>
+                    <p className="text-xl font-bold">
+                      {solarFinancials.paybackYears.toFixed(1)} years
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {solarFinancials.roiPercent.toFixed(0)}% ROI
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="col-span-2 flex items-center justify-center p-4 rounded-lg bg-muted/50">
+                  <p className="text-sm text-muted-foreground text-center">
+                    Set connection size to see solar savings potential
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {solarFinancials && (
+              <div className="mt-4 pt-4 border-t flex items-center justify-between text-sm">
+                <div className="flex items-center gap-4">
+                  <div>
+                    <span className="text-muted-foreground">System Size: </span>
+                    <span className="font-medium">{maxSolarKva?.toFixed(0)} kWp</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Est. Cost: </span>
+                    <span className="font-medium">R {(solarFinancials.systemCost / 1000000).toFixed(2)}M</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Annual Yield: </span>
+                    <span className="font-medium">{(solarFinancials.annualSolarYield / 1000).toFixed(0)} MWh</span>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm">
+                  Run Full Simulation <ArrowRight className="ml-2 h-3 w-3" />
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
