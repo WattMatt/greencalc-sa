@@ -430,16 +430,16 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
 function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
   const isNormal = mode === "normal";
   
-  // Positions - more compact layout
-  const solarX = 40, solarY = 40;
+  // Positions - Solar + Generator system WITHOUT battery
+  const solarX = 50, solarY = 40;
   const gridX = 110, gridY = 40;
-  const genX = 180, genY = 40;
-  const invX = 75, invY = 120;
-  const battX = 170, battY = 120;
-  const homeX = 110, homeY = 210;
+  const genX = 170, genY = 40;
+  const invX = 80, invY = 115;
+  const atsX = 145, atsY = 115;
+  const homeX = 110, homeY = 195;
   
   return (
-    <svg viewBox="0 0 220 280" className="w-full h-auto max-w-[220px] mx-auto">
+    <svg viewBox="0 0 220 260" className="w-full h-auto max-w-[220px] mx-auto">
       <style>{`
         @keyframes flowAnimation {
           0% { stroke-dashoffset: 40; }
@@ -455,57 +455,54 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
       <GridIcon active={isNormal} x={gridX} y={gridY} />
       <GeneratorIcon active={!isNormal} x={genX} y={genY} />
       
-      {/* Flow: Solar to Inverter - solar bottom at y+15, inverter top at y-16 */}
+      {/* Flow: Solar to Inverter */}
       <FlowLine 
         path={`M ${solarX} ${solarY + 15} L ${solarX} ${invY - 30} L ${invX} ${invY - 30} L ${invX} ${invY - 16}`} 
         active={true} 
         color="#eab308" 
       />
       
-      {/* Flow: Grid to Inverter - grid bottom at y+18 */}
+      {/* Flow: Grid to ATS */}
       <FlowLine 
-        path={`M ${gridX} ${gridY + 18} L ${gridX} ${invY - 30} L ${invX} ${invY - 30}`} 
+        path={`M ${gridX} ${gridY + 18} L ${gridX} ${atsY - 30} L ${atsX} ${atsY - 30} L ${atsX} ${atsY - 16}`} 
         active={isNormal} 
         color="#6b7280" 
       />
       
-      {/* Flow: Generator to Inverter when grid down - gen bottom at y+12 */}
+      {/* Flow: Generator to ATS */}
       <FlowLine 
-        path={`M ${genX} ${genY + 12} L ${genX} ${invY - 30} L ${invX} ${invY - 30}`} 
+        path={`M ${genX} ${genY + 12} L ${genX} ${atsY - 30} L ${atsX} ${atsY - 30}`} 
         active={!isNormal} 
         color="#f97316" 
       />
       
-      {/* Middle: Hybrid Inverter */}
-      <InverterIcon active={true} x={invX} y={invY} label="Hybrid Inv" />
+      {/* Middle: Inverter (for solar) and ATS (for grid/gen switching) */}
+      <InverterIcon active={true} x={invX} y={invY} label="Inverter" />
+      <ATSIcon active={true} gridMode={isNormal} x={atsX} y={atsY} />
       
-      {/* Battery on right */}
-      <BatteryIcon active={true} charging={isNormal} x={battX} y={battY} />
-      
-      {/* Flow: Inverter to Battery - inverter right at x+18, battery left at x-18 */}
-      <FlowLine 
-        path={`M ${invX + 18} ${invY} L ${battX - 18} ${battY}`} 
-        active={true} 
-        color={isNormal ? "#22c55e" : "#f97316"}
-        reverse={!isNormal}
-      />
-      
-      {/* Flow: Inverter to Home - inverter bottom at y+16, home top at y-16 */}
+      {/* Flow: Inverter to Home */}
       <FlowLine 
         path={`M ${invX} ${invY + 16} L ${invX} ${homeY - 30} L ${homeX} ${homeY - 30} L ${homeX} ${homeY - 16}`} 
         active={true} 
         color="#22c55e" 
       />
       
+      {/* Flow: ATS to Home */}
+      <FlowLine 
+        path={`M ${atsX} ${atsY + 16} L ${atsX} ${homeY - 30} L ${homeX} ${homeY - 30}`} 
+        active={true} 
+        color={isNormal ? "#6b7280" : "#f97316"} 
+      />
+      
       {/* Bottom: Home */}
       <HomeIcon active={true} x={homeX} y={homeY} />
       
       {/* Status */}
-      <rect x="10" y="250" width="200" height="24" rx="4" 
-        className="fill-emerald-500/10 stroke-emerald-500/30" 
+      <rect x="10" y="230" width="200" height="24" rx="4" 
+        className={cn("transition-all duration-500", isNormal ? "fill-emerald-500/10 stroke-emerald-500/30" : "fill-orange-500/10 stroke-orange-500/30")} 
         strokeWidth="1" />
-      <text x="110" y="266" className="text-[9px] font-semibold fill-emerald-600" textAnchor="middle">
-        {isNormal ? "✓ Full system: Solar + Grid + Battery" : "✓ Generator charges battery, solar active"}
+      <text x="110" y="246" className={cn("text-[9px] font-semibold", isNormal ? "fill-emerald-600" : "fill-orange-600")} textAnchor="middle">
+        {isNormal ? "✓ Solar + Grid powering loads" : "⚡ Solar + Generator backup"}
       </text>
     </svg>
   );
