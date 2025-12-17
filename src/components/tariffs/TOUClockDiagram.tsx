@@ -243,6 +243,13 @@ export function TOUClockDiagram({ title, periods, size = 280 }: TOUClockDiagramP
       </svg>
 
       <h3 className="mt-2 font-semibold text-foreground text-sm">{title}</h3>
+      
+      {/* Ring legend */}
+      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+        <span>Outer: <span className="font-medium text-foreground">Weekday</span></span>
+        <span>Middle: <span className="font-medium text-foreground">Saturday</span></span>
+        <span>Inner: <span className="font-medium text-foreground">Sunday</span></span>
+      </div>
     </div>
   );
 }
