@@ -7,6 +7,7 @@ import { useSolcastPVProfile } from "./hooks/useSolcastPVProfile";
 import { LoadChart } from "./charts/LoadChart";
 import { SolarChart } from "./charts/SolarChart";
 import { GridFlowChart } from "./charts/GridFlowChart";
+import { NetLoadChart } from "./charts/NetLoadChart";
 import { BatteryChart } from "./charts/BatteryChart";
 import { ChartHeader } from "./components/ChartHeader";
 import { ChartSettings } from "./components/ChartSettings";
@@ -199,6 +200,16 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
           {/* Grid Flow Chart */}
           {showPVProfile && maxPvAcKva && (
             <GridFlowChart
+              chartData={chartData}
+              showTOU={showTOU}
+              isWeekend={isWeekend}
+              unit={unit}
+            />
+          )}
+
+          {/* Net Load Chart */}
+          {showPVProfile && maxPvAcKva && (
+            <NetLoadChart
               chartData={chartData}
               showTOU={showTOU}
               isWeekend={isWeekend}
