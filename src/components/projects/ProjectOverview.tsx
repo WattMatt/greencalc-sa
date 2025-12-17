@@ -314,10 +314,11 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
                   </defs>
                   <XAxis 
                     dataKey="hour" 
-                    tick={{ fontSize: 10 }} 
+                    tick={{ fontSize: 9 }} 
                     tickLine={false}
                     axisLine={false}
-                    interval={5}
+                    interval={0}
+                    tickFormatter={(v) => v.replace(':00', '')}
                   />
                   <YAxis 
                     tick={{ fontSize: 10 }} 
