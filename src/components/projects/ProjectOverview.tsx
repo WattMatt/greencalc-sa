@@ -303,9 +303,9 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="h-32">
+            <div className="h-40 max-w-2xl mx-auto">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={miniChartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                <AreaChart data={miniChartData} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
                   <defs>
                     <linearGradient id="loadGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
