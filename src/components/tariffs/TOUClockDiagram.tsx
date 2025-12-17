@@ -418,6 +418,42 @@ export const ESKOM_LOW_DEMAND_PERIODS: TOUPeriodData[] = [
   // Sunday Off-Peak: 00:00-07:00, 12:00-18:00, 20:00-24:00 (default background)
 ];
 
+// Pre-2025 Eskom TOU periods (for comparison)
+// Old structure: 3h morning peak, 2h evening peak, no Sunday evening standard
+export const ESKOM_PRE_2025_HIGH_DEMAND_PERIODS: TOUPeriodData[] = [
+  // Weekday Peak (3h morning, 2h evening) - OLD
+  { day_type: "Weekday", time_of_use: "Peak", start_hour: 6, end_hour: 9 },
+  { day_type: "Weekday", time_of_use: "Peak", start_hour: 17, end_hour: 19 },
+  // Weekday Standard
+  { day_type: "Weekday", time_of_use: "Standard", start_hour: 9, end_hour: 17 },
+  { day_type: "Weekday", time_of_use: "Standard", start_hour: 19, end_hour: 22 },
+  // Weekday Off-Peak: 22:00-06:00 (default background)
+  
+  // Saturday Standard (morning only)
+  { day_type: "Saturday", time_of_use: "Standard", start_hour: 7, end_hour: 12 },
+  // Saturday Off-Peak: 00:00-07:00, 12:00-24:00 (default background)
+  
+  // Sunday - ALL Off-Peak (no standard period) - OLD
+  // Sunday Off-Peak: 00:00-24:00 (default background)
+];
+
+export const ESKOM_PRE_2025_LOW_DEMAND_PERIODS: TOUPeriodData[] = [
+  // Weekday Peak (3h morning, 2h evening) - OLD
+  { day_type: "Weekday", time_of_use: "Peak", start_hour: 6, end_hour: 9 },
+  { day_type: "Weekday", time_of_use: "Peak", start_hour: 17, end_hour: 19 },
+  // Weekday Standard
+  { day_type: "Weekday", time_of_use: "Standard", start_hour: 9, end_hour: 17 },
+  { day_type: "Weekday", time_of_use: "Standard", start_hour: 19, end_hour: 22 },
+  // Weekday Off-Peak: 22:00-06:00 (default background)
+  
+  // Saturday Standard (morning only)
+  { day_type: "Saturday", time_of_use: "Standard", start_hour: 7, end_hour: 12 },
+  // Saturday Off-Peak: 00:00-07:00, 12:00-24:00 (default background)
+  
+  // Sunday - ALL Off-Peak (no standard period) - OLD
+  // Sunday Off-Peak: 00:00-24:00 (default background)
+];
+
 export function TOUClockLegend() {
   return (
     <div className="flex items-center justify-center gap-6 mt-4">
@@ -433,6 +469,99 @@ export function TOUClockLegend() {
         <div className="w-4 h-4 rounded-full bg-green-500" />
         <span className="text-sm text-foreground">Off-Peak</span>
       </div>
+    </div>
+  );
+}
+
+// Comparison component showing pre-2025 vs 2025/2026 side-by-side
+export function TOUComparisonView() {
+  const changes = [
+    { label: "Morning Peak", old: "06:00-09:00 (3h)", new: "07:00-09:00 (2h)", impact: "reduced", description: "1 hour shorter" },
+    { label: "Evening Peak", old: "17:00-19:00 (2h)", new: "17:00-20:00 (3h)", impact: "increased", description: "1 hour longer" },
+    { label: "Sunday Evening", old: "Off-Peak all day", new: "Standard 18:00-20:00", impact: "new", description: "New standard period" },
+    { label: "Peak:Off-Peak Ratio", old: "8:1", new: "6:1", impact: "reduced", description: "Lower price differential" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Key Changes Summary */}
+      <div className="grid gap-3">
+        {changes.map((change) => (
+          <div 
+            key={change.label}
+            className={`p-3 rounded-lg border flex items-center justify-between ${
+              change.impact === 'new' 
+                ? 'border-amber-500/30 bg-amber-500/10' 
+                : change.impact === 'increased'
+                ? 'border-red-500/30 bg-red-500/10'
+                : 'border-green-500/30 bg-green-500/10'
+            }`}
+          >
+            <div>
+              <div className="font-medium text-sm">{change.label}</div>
+              <div className="text-xs text-muted-foreground">{change.description}</div>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-muted-foreground line-through">{change.old}</span>
+              <span className="text-foreground">→</span>
+              <span className={`font-medium ${
+                change.impact === 'new' 
+                  ? 'text-amber-600 dark:text-amber-400' 
+                  : change.impact === 'increased'
+                  ? 'text-red-600 dark:text-red-400'
+                  : 'text-green-600 dark:text-green-400'
+              }`}>{change.new}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Side-by-side clock comparison */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Pre-2025 */}
+        <div className="p-4 rounded-lg border border-muted bg-muted/30">
+          <div className="flex items-center gap-2 mb-4 justify-center">
+            <span className="px-2 py-1 rounded text-xs font-medium bg-muted text-muted-foreground">Pre-2025</span>
+            <span className="text-sm font-semibold text-muted-foreground">Previous Structure</span>
+          </div>
+          <div className="flex justify-center">
+            <TOUClockDiagram 
+              title="High-Demand (Pre-2025)" 
+              periods={ESKOM_PRE_2025_HIGH_DEMAND_PERIODS} 
+              size={240}
+              showAnnotations={false}
+            />
+          </div>
+          <div className="mt-4 text-xs text-center text-muted-foreground space-y-1">
+            <p>• 3-hour morning peak (06:00-09:00)</p>
+            <p>• 2-hour evening peak (17:00-19:00)</p>
+            <p>• Sunday entirely Off-Peak</p>
+          </div>
+        </div>
+
+        {/* 2025/2026 */}
+        <div className="p-4 rounded-lg border border-primary/30 bg-primary/5">
+          <div className="flex items-center gap-2 mb-4 justify-center">
+            <span className="px-2 py-1 rounded text-xs font-medium bg-primary text-primary-foreground">2025/2026</span>
+            <span className="text-sm font-semibold">Current Structure</span>
+          </div>
+          <div className="flex justify-center">
+            <TOUClockDiagram 
+              title="High-Demand (2025/2026)" 
+              periods={ESKOM_HIGH_DEMAND_PERIODS} 
+              size={240}
+              showAnnotations={false}
+            />
+          </div>
+          <div className="mt-4 text-xs text-center text-muted-foreground space-y-1">
+            <p>• 2-hour morning peak (07:00-09:00)</p>
+            <p>• 3-hour evening peak (17:00-20:00)</p>
+            <p className="text-amber-600 dark:text-amber-400 font-medium">• NEW: Sunday 18:00-20:00 Standard</p>
+          </div>
+        </div>
+      </div>
+
+      <TOUClockLegend />
     </div>
   );
 }

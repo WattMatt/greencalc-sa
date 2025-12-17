@@ -5,11 +5,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   TOUClockDiagram, 
   TOUClockLegend, 
+  TOUComparisonView,
   ESKOM_HIGH_DEMAND_PERIODS, 
   ESKOM_LOW_DEMAND_PERIODS 
 } from "./TOUClockDiagram";
 import { TOUTimeGrid, TOUPeriodSummary } from "./TOUTimeGrid";
-import { Info, Clock, Calendar, Zap, AlertTriangle, Gauge, Sun, Snowflake } from "lucide-react";
+import { Info, Clock, Calendar, Zap, AlertTriangle, Gauge, Sun, Snowflake, GitCompare } from "lucide-react";
 
 export function TOUReference() {
   return (
@@ -47,14 +48,18 @@ export function TOUReference() {
           </div>
 
           <Tabs defaultValue="grid" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsList className="grid w-full grid-cols-3 mb-6">
               <TabsTrigger value="grid" className="flex items-center gap-2">
                 <Clock className="h-4 w-4" />
-                Timeline View
+                Timeline
               </TabsTrigger>
               <TabsTrigger value="clock" className="flex items-center gap-2">
                 <Gauge className="h-4 w-4" />
-                Clock View
+                Clock
+              </TabsTrigger>
+              <TabsTrigger value="compare" className="flex items-center gap-2">
+                <GitCompare className="h-4 w-4" />
+                Compare
               </TabsTrigger>
             </TabsList>
 
@@ -104,6 +109,10 @@ export function TOUReference() {
                 />
               </div>
               <TOUClockLegend />
+            </TabsContent>
+
+            <TabsContent value="compare" className="space-y-6">
+              <TOUComparisonView />
             </TabsContent>
           </Tabs>
         </CardContent>
