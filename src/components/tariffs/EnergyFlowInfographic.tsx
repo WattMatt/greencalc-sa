@@ -220,8 +220,20 @@ function HomeIcon({ active, x, y }: { active: boolean; x: number; y: number }) {
 }
 
 // Flow diagrams - Top-down layout with loads at bottom
+// Icon bounds reference:
+// SolarIcon: y+15 = bottom, GridIcon: y+18 = bottom, GeneratorIcon: y+12 = bottom
+// InverterIcon: y-16 = top, y+16 = bottom, ATSIcon: y-16 = top, y+16 = bottom
+// BatteryIcon: x-18 = left, x+22 = right, y-12 = top, y+12 = bottom
+// HomeIcon: y-16 = top (roof)
+
 function GridTiedFlow({ mode }: { mode: OperationMode }) {
   const isNormal = mode === "normal";
+  
+  // Positions
+  const solarX = 60, solarY = 40;
+  const gridX = 140, gridY = 40;
+  const invX = 100, invY = 110;
+  const homeX = 100, homeY = 190;
   
   return (
     <svg viewBox="0 0 200 240" className="w-full h-auto max-w-[200px] mx-auto">
@@ -236,23 +248,35 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
       `}</style>
       
       {/* Top: Solar + Grid side by side */}
-      <SolarIcon active={isNormal} x={60} y={35} />
-      <GridIcon active={isNormal} x={140} y={35} />
+      <SolarIcon active={isNormal} x={solarX} y={solarY} />
+      <GridIcon active={isNormal} x={gridX} y={gridY} />
       
-      {/* Flow: Solar down to Inverter */}
-      <FlowLine path="M 60 55 L 60 85 L 100 85" active={isNormal} color="#eab308" />
+      {/* Flow: Solar down to Inverter - solar bottom at y+15, inverter top at y-16 */}
+      <FlowLine 
+        path={`M ${solarX} ${solarY + 15} L ${solarX} ${invY - 26} L ${invX} ${invY - 26} L ${invX} ${invY - 16}`} 
+        active={isNormal} 
+        color="#eab308" 
+      />
       
-      {/* Flow: Grid down to Inverter */}
-      <FlowLine path="M 140 55 L 140 85 L 100 85" active={isNormal} color="#6b7280" />
+      {/* Flow: Grid down to Inverter - grid bottom at y+18 */}
+      <FlowLine 
+        path={`M ${gridX} ${gridY + 18} L ${gridX} ${invY - 26} L ${invX} ${invY - 26}`} 
+        active={isNormal} 
+        color="#6b7280" 
+      />
       
       {/* Middle: Inverter */}
-      <InverterIcon active={isNormal} x={100} y={110} />
+      <InverterIcon active={isNormal} x={invX} y={invY} />
       
-      {/* Flow: Inverter down to Home */}
-      <FlowLine path="M 100 135 L 100 165" active={isNormal} color="#22c55e" />
+      {/* Flow: Inverter down to Home - inverter bottom at y+16, home top at y-16 */}
+      <FlowLine 
+        path={`M ${invX} ${invY + 16} L ${invX} ${homeY - 16}`} 
+        active={isNormal} 
+        color="#22c55e" 
+      />
       
       {/* Bottom: Home/Loads */}
-      <HomeIcon active={isNormal} x={100} y={190} />
+      <HomeIcon active={isNormal} x={homeX} y={homeY} />
       
       {/* Status indicator */}
       <rect x="10" y="210" width="180" height="24" rx="4" 
@@ -268,6 +292,13 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
 function HybridFlow({ mode }: { mode: OperationMode }) {
   const isNormal = mode === "normal";
   
+  // Positions
+  const solarX = 50, solarY = 40;
+  const gridX = 150, gridY = 40;
+  const invX = 100, invY = 115;
+  const battX = 170, battY = 115;
+  const homeX = 100, homeY = 195;
+  
   return (
     <svg viewBox="0 0 200 260" className="w-full h-auto max-w-[200px] mx-auto">
       <style>{`
@@ -281,34 +312,46 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
       `}</style>
       
       {/* Top: Solar + Grid */}
-      <SolarIcon active={true} x={60} y={35} />
-      <GridIcon active={isNormal} x={140} y={35} />
+      <SolarIcon active={true} x={solarX} y={solarY} />
+      <GridIcon active={isNormal} x={gridX} y={gridY} />
       
-      {/* Flow: Solar to Inverter */}
-      <FlowLine path="M 60 55 L 60 85 L 100 85" active={true} color="#eab308" />
+      {/* Flow: Solar to Inverter - solar bottom at y+15, inverter top at y-16 */}
+      <FlowLine 
+        path={`M ${solarX} ${solarY + 15} L ${solarX} ${invY - 30} L ${invX} ${invY - 30} L ${invX} ${invY - 16}`} 
+        active={true} 
+        color="#eab308" 
+      />
       
-      {/* Flow: Grid to Inverter */}
-      <FlowLine path="M 140 55 L 140 85 L 100 85" active={isNormal} color="#6b7280" />
+      {/* Flow: Grid to Inverter - grid bottom at y+18 */}
+      <FlowLine 
+        path={`M ${gridX} ${gridY + 18} L ${gridX} ${invY - 30} L ${invX} ${invY - 30}`} 
+        active={isNormal} 
+        color="#6b7280" 
+      />
       
       {/* Middle: Hybrid Inverter */}
-      <InverterIcon active={true} x={100} y={110} label="Hybrid Inv" />
+      <InverterIcon active={true} x={invX} y={invY} label="Hybrid Inv" />
       
-      {/* Flow: Inverter to Battery (side) */}
+      {/* Flow: Inverter to Battery - inverter right at x+18, battery left at x-18 */}
       <FlowLine 
-        path="M 118 110 L 160 110" 
+        path={`M ${invX + 18} ${invY} L ${battX - 18} ${battY}`} 
         active={true} 
         color={isNormal ? "#22c55e" : "#f97316"}
         reverse={!isNormal}
       />
       
       {/* Battery on right side */}
-      <BatteryIcon active={true} charging={isNormal} x={160} y={150} />
+      <BatteryIcon active={true} charging={isNormal} x={battX} y={battY} />
       
-      {/* Flow: Inverter to Home */}
-      <FlowLine path="M 100 135 L 100 175" active={true} color="#22c55e" />
+      {/* Flow: Inverter to Home - inverter bottom at y+16, home top at y-16 */}
+      <FlowLine 
+        path={`M ${invX} ${invY + 16} L ${invX} ${homeY - 16}`} 
+        active={true} 
+        color="#22c55e" 
+      />
       
       {/* Bottom: Home */}
-      <HomeIcon active={true} x={100} y={200} />
+      <HomeIcon active={true} x={homeX} y={homeY} />
       
       {/* Status */}
       <rect x="10" y="230" width="180" height="24" rx="4" 
@@ -324,6 +367,12 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
 function GeneratorFlow({ mode }: { mode: OperationMode }) {
   const isNormal = mode === "normal";
   
+  // Positions
+  const gridX = 60, gridY = 40;
+  const genX = 140, genY = 40;
+  const atsX = 100, atsY = 115;
+  const homeX = 100, homeY = 195;
+  
   return (
     <svg viewBox="0 0 200 260" className="w-full h-auto max-w-[200px] mx-auto">
       <style>{`
@@ -337,23 +386,35 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
       `}</style>
       
       {/* Top: Grid + Generator */}
-      <GridIcon active={isNormal} x={60} y={35} />
-      <GeneratorIcon active={!isNormal} x={140} y={35} />
+      <GridIcon active={isNormal} x={gridX} y={gridY} />
+      <GeneratorIcon active={!isNormal} x={genX} y={genY} />
       
-      {/* Flow: Grid to ATS */}
-      <FlowLine path="M 60 55 L 60 95 L 100 95" active={isNormal} color="#6b7280" />
+      {/* Flow: Grid to ATS - grid bottom at y+18, ATS top at y-16 */}
+      <FlowLine 
+        path={`M ${gridX} ${gridY + 18} L ${gridX} ${atsY - 30} L ${atsX} ${atsY - 30} L ${atsX} ${atsY - 16}`} 
+        active={isNormal} 
+        color="#6b7280" 
+      />
       
-      {/* Flow: Generator to ATS */}
-      <FlowLine path="M 140 55 L 140 95 L 100 95" active={!isNormal} color="#f97316" />
+      {/* Flow: Generator to ATS - generator bottom at y+12 */}
+      <FlowLine 
+        path={`M ${genX} ${genY + 12} L ${genX} ${atsY - 30} L ${atsX} ${atsY - 30}`} 
+        active={!isNormal} 
+        color="#f97316" 
+      />
       
       {/* Middle: ATS */}
-      <ATSIcon active={true} gridMode={isNormal} x={100} y={120} />
+      <ATSIcon active={true} gridMode={isNormal} x={atsX} y={atsY} />
       
-      {/* Flow: ATS to Home */}
-      <FlowLine path="M 100 145 L 100 175" active={true} color={isNormal ? "#6b7280" : "#f97316"} />
+      {/* Flow: ATS to Home - ATS bottom at y+16, home top at y-16 */}
+      <FlowLine 
+        path={`M ${atsX} ${atsY + 16} L ${atsX} ${homeY - 16}`} 
+        active={true} 
+        color={isNormal ? "#6b7280" : "#f97316"} 
+      />
       
       {/* Bottom: Home */}
-      <HomeIcon active={true} x={100} y={200} />
+      <HomeIcon active={true} x={homeX} y={homeY} />
       
       {/* Status */}
       <rect x="10" y="230" width="180" height="24" rx="4" 
@@ -369,8 +430,16 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
 function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
   const isNormal = mode === "normal";
   
+  // Positions - more compact layout
+  const solarX = 40, solarY = 40;
+  const gridX = 110, gridY = 40;
+  const genX = 180, genY = 40;
+  const invX = 75, invY = 120;
+  const battX = 170, battY = 120;
+  const homeX = 110, homeY = 210;
+  
   return (
-    <svg viewBox="0 0 220 300" className="w-full h-auto max-w-[220px] mx-auto">
+    <svg viewBox="0 0 220 280" className="w-full h-auto max-w-[220px] mx-auto">
       <style>{`
         @keyframes flowAnimation {
           0% { stroke-dashoffset: 40; }
@@ -382,44 +451,60 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
       `}</style>
       
       {/* Top row: Solar, Grid, Generator */}
-      <SolarIcon active={true} x={40} y={35} />
-      <GridIcon active={isNormal} x={110} y={35} />
-      <GeneratorIcon active={!isNormal} x={180} y={35} />
+      <SolarIcon active={true} x={solarX} y={solarY} />
+      <GridIcon active={isNormal} x={gridX} y={gridY} />
+      <GeneratorIcon active={!isNormal} x={genX} y={genY} />
       
-      {/* Flow: Solar to Inverter */}
-      <FlowLine path="M 40 55 L 40 95 L 80 95" active={true} color="#eab308" />
+      {/* Flow: Solar to Inverter - solar bottom at y+15, inverter top at y-16 */}
+      <FlowLine 
+        path={`M ${solarX} ${solarY + 15} L ${solarX} ${invY - 30} L ${invX} ${invY - 30} L ${invX} ${invY - 16}`} 
+        active={true} 
+        color="#eab308" 
+      />
       
-      {/* Flow: Grid to Inverter */}
-      <FlowLine path="M 110 55 L 110 95 L 80 95" active={isNormal} color="#6b7280" />
+      {/* Flow: Grid to Inverter - grid bottom at y+18 */}
+      <FlowLine 
+        path={`M ${gridX} ${gridY + 18} L ${gridX} ${invY - 30} L ${invX} ${invY - 30}`} 
+        active={isNormal} 
+        color="#6b7280" 
+      />
       
-      {/* Flow: Generator to Inverter (when grid down) */}
-      <FlowLine path="M 180 55 L 180 75 L 110 75 L 110 95 L 80 95" active={!isNormal} color="#f97316" />
+      {/* Flow: Generator to Inverter when grid down - gen bottom at y+12 */}
+      <FlowLine 
+        path={`M ${genX} ${genY + 12} L ${genX} ${invY - 30} L ${invX} ${invY - 30}`} 
+        active={!isNormal} 
+        color="#f97316" 
+      />
       
       {/* Middle: Hybrid Inverter */}
-      <InverterIcon active={true} x={80} y={120} label="Hybrid Inv" />
+      <InverterIcon active={true} x={invX} y={invY} label="Hybrid Inv" />
       
       {/* Battery on right */}
-      <BatteryIcon active={true} charging={isNormal} x={170} y={120} />
+      <BatteryIcon active={true} charging={isNormal} x={battX} y={battY} />
       
-      {/* Flow: Inverter to Battery */}
+      {/* Flow: Inverter to Battery - inverter right at x+18, battery left at x-18 */}
       <FlowLine 
-        path="M 98 120 L 148 120" 
+        path={`M ${invX + 18} ${invY} L ${battX - 18} ${battY}`} 
         active={true} 
         color={isNormal ? "#22c55e" : "#f97316"}
         reverse={!isNormal}
       />
       
-      {/* Flow: Inverter to Home */}
-      <FlowLine path="M 80 145 L 80 195" active={true} color="#22c55e" />
+      {/* Flow: Inverter to Home - inverter bottom at y+16, home top at y-16 */}
+      <FlowLine 
+        path={`M ${invX} ${invY + 16} L ${invX} ${homeY - 30} L ${homeX} ${homeY - 30} L ${homeX} ${homeY - 16}`} 
+        active={true} 
+        color="#22c55e" 
+      />
       
       {/* Bottom: Home */}
-      <HomeIcon active={true} x={80} y={220} />
+      <HomeIcon active={true} x={homeX} y={homeY} />
       
       {/* Status */}
-      <rect x="10" y="265" width="200" height="28" rx="4" 
+      <rect x="10" y="250" width="200" height="24" rx="4" 
         className="fill-emerald-500/10 stroke-emerald-500/30" 
         strokeWidth="1" />
-      <text x="110" y="280" className="text-[9px] font-semibold fill-emerald-600" textAnchor="middle">
+      <text x="110" y="266" className="text-[9px] font-semibold fill-emerald-600" textAnchor="middle">
         {isNormal ? "✓ Full system: Solar + Grid + Battery" : "✓ Generator charges battery, solar active"}
       </text>
     </svg>
