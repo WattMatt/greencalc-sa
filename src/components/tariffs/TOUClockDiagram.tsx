@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -478,14 +478,50 @@ export function TOUComparisonView() {
   const [showNew, setShowNew] = useState(true);
   const [isAnimating, setIsAnimating] = useState(false);
   const [viewMode, setViewMode] = useState<'toggle' | 'sideBySide'>('toggle');
+  const [isAutoPlaying, setIsAutoPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
 
-  const handleToggle = () => {
+  const handleToggle = useCallback(() => {
     setIsAnimating(true);
+    setProgress(0);
     setTimeout(() => {
-      setShowNew(!showNew);
+      setShowNew(prev => !prev);
       setTimeout(() => setIsAnimating(false), 300);
     }, 150);
-  };
+  }, []);
+
+  // Auto-play effect
+  useEffect(() => {
+    if (!isAutoPlaying || viewMode !== 'toggle') {
+      setProgress(0);
+      return;
+    }
+
+    // Progress bar animation
+    const progressInterval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 100) return 0;
+        return prev + (100 / 30); // 30 steps over 3 seconds
+      });
+    }, 100);
+
+    // Toggle interval
+    const toggleInterval = setInterval(() => {
+      handleToggle();
+    }, 3000);
+
+    return () => {
+      clearInterval(progressInterval);
+      clearInterval(toggleInterval);
+    };
+  }, [isAutoPlaying, viewMode, handleToggle]);
+
+  // Reset progress when manually toggling
+  useEffect(() => {
+    if (isAutoPlaying) {
+      setProgress(0);
+    }
+  }, [showNew, isAutoPlaying]);
 
   const changes = [
     { label: "Morning Peak", old: "06:00-09:00 (3h)", new: "07:00-09:00 (2h)", impact: "reduced", description: "1 hour shorter" },
@@ -499,7 +535,10 @@ export function TOUComparisonView() {
       {/* View Mode Toggle */}
       <div className="flex justify-center gap-2">
         <button
-          onClick={() => setViewMode('toggle')}
+          onClick={() => {
+            setViewMode('toggle');
+            setIsAutoPlaying(false);
+          }}
           className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
             viewMode === 'toggle' 
               ? 'bg-primary text-primary-foreground' 
@@ -509,7 +548,10 @@ export function TOUComparisonView() {
           Animated Toggle
         </button>
         <button
-          onClick={() => setViewMode('sideBySide')}
+          onClick={() => {
+            setViewMode('sideBySide');
+            setIsAutoPlaying(false);
+          }}
           className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
             viewMode === 'sideBySide' 
               ? 'bg-primary text-primary-foreground' 
@@ -561,27 +603,72 @@ export function TOUComparisonView() {
         <>
           {/* Animated Toggle View */}
           <div className="flex flex-col items-center gap-4">
-            {/* Toggle Button */}
-            <button
-              onClick={handleToggle}
-              className="group relative flex items-center gap-3 px-6 py-3 rounded-full bg-gradient-to-r from-muted to-muted/50 hover:from-primary/20 hover:to-primary/10 border border-border hover:border-primary/30 transition-all duration-300 hover:scale-105"
-            >
-              <span className={`text-sm font-medium transition-all duration-300 ${!showNew ? 'text-foreground' : 'text-muted-foreground'}`}>
-                Pre-2025
-              </span>
-              <div className="relative w-14 h-7 bg-muted rounded-full border border-border overflow-hidden">
-                <div 
-                  className={`absolute top-0.5 w-6 h-6 rounded-full transition-all duration-300 ease-out ${
-                    showNew 
-                      ? 'left-[calc(100%-1.625rem)] bg-primary shadow-lg shadow-primary/30' 
-                      : 'left-0.5 bg-muted-foreground'
-                  }`}
-                />
+            {/* Controls Row */}
+            <div className="flex items-center gap-4">
+              {/* Auto-play Button */}
+              <button
+                onClick={() => setIsAutoPlaying(!isAutoPlaying)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all duration-300 ${
+                  isAutoPlaying 
+                    ? 'bg-primary/10 border-primary text-primary' 
+                    : 'bg-muted border-border text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                {isAutoPlaying ? (
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="6" y="4" width="4" height="16" rx="1" />
+                    <rect x="14" y="4" width="4" height="16" rx="1" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                )}
+                <span className="text-sm font-medium">
+                  {isAutoPlaying ? 'Pause' : 'Auto-play'}
+                </span>
+              </button>
+
+              {/* Toggle Button */}
+              <button
+                onClick={() => {
+                  handleToggle();
+                  if (isAutoPlaying) setIsAutoPlaying(false);
+                }}
+                className="group relative flex items-center gap-3 px-6 py-3 rounded-full bg-gradient-to-r from-muted to-muted/50 hover:from-primary/20 hover:to-primary/10 border border-border hover:border-primary/30 transition-all duration-300 hover:scale-105"
+              >
+                <span className={`text-sm font-medium transition-all duration-300 ${!showNew ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  Pre-2025
+                </span>
+                <div className="relative w-14 h-7 bg-muted rounded-full border border-border overflow-hidden">
+                  {/* Progress bar for auto-play */}
+                  {isAutoPlaying && (
+                    <div 
+                      className="absolute bottom-0 left-0 h-1 bg-primary/50 transition-all duration-100"
+                      style={{ width: `${progress}%` }}
+                    />
+                  )}
+                  <div 
+                    className={`absolute top-0.5 w-6 h-6 rounded-full transition-all duration-300 ease-out ${
+                      showNew 
+                        ? 'left-[calc(100%-1.625rem)] bg-primary shadow-lg shadow-primary/30' 
+                        : 'left-0.5 bg-muted-foreground'
+                    }`}
+                  />
+                </div>
+                <span className={`text-sm font-medium transition-all duration-300 ${showNew ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  2025/2026
+                </span>
+              </button>
+            </div>
+
+            {/* Auto-play indicator */}
+            {isAutoPlaying && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground animate-fade-in">
+                <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                <span>Auto-cycling every 3 seconds</span>
               </div>
-              <span className={`text-sm font-medium transition-all duration-300 ${showNew ? 'text-foreground' : 'text-muted-foreground'}`}>
-                2025/2026
-              </span>
-            </button>
+            )}
 
             {/* Animated Clock Container */}
             <div className="relative">
@@ -636,9 +723,11 @@ export function TOUComparisonView() {
               </div>
             </div>
 
-            <p className="text-xs text-muted-foreground text-center">
-              Click the toggle to compare the TOU period changes
-            </p>
+            {!isAutoPlaying && (
+              <p className="text-xs text-muted-foreground text-center">
+                Click the toggle or enable auto-play to compare the TOU period changes
+              </p>
+            )}
           </div>
         </>
       ) : (
