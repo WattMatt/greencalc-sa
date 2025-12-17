@@ -1,83 +1,189 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   TOUClockDiagram, 
   TOUClockLegend, 
   ESKOM_HIGH_DEMAND_PERIODS, 
   ESKOM_LOW_DEMAND_PERIODS 
 } from "./TOUClockDiagram";
-import { Info, Clock, Calendar, Zap, AlertTriangle, Gauge } from "lucide-react";
+import { TOUTimeGrid, TOUPeriodSummary } from "./TOUTimeGrid";
+import { Info, Clock, Calendar, Zap, AlertTriangle, Gauge, Sun, Snowflake } from "lucide-react";
 
 export function TOUReference() {
   return (
     <div className="space-y-6">
+      {/* Main TOU Visual */}
       <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle className="text-card-foreground flex items-center gap-2">
-            <Info className="h-5 w-5" />
-            Time of Use (TOU) Reference
-          </CardTitle>
-          <CardDescription>
-            TOU tariffs ensure cost-reflective pricing by reflecting the cost of supply for different combinations of generation categories (base, mid merit, and peak) needed to meet integrated system demand.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Clock Diagrams */}
-          <div className="grid gap-8 md:grid-cols-2">
-            <TOUClockDiagram 
-              title="High-Demand Season (Winter)" 
-              periods={ESKOM_HIGH_DEMAND_PERIODS} 
-              size={280}
-            />
-            <TOUClockDiagram 
-              title="Low-Demand Season (Summer)" 
-              periods={ESKOM_LOW_DEMAND_PERIODS} 
-              size={280}
-            />
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-card-foreground flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Time of Use (TOU) Periods
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Eskom 2025/2026 - Updated per NERSA approval (11 March 2025)
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="text-xs">
+              Effective 1 April 2025
+            </Badge>
           </div>
-          
-          <TOUClockLegend />
+        </CardHeader>
+        <CardContent>
+          {/* 2025 Changes Alert */}
+          <div className="mb-6 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+            <h4 className="font-semibold text-sm text-blue-600 dark:text-blue-400 mb-2">
+              2025/2026 TOU Period Changes
+            </h4>
+            <ul className="text-sm text-muted-foreground space-y-1">
+              <li>• Morning peak reduced from 3 hours to <strong>2 hours</strong> (07:00-09:00)</li>
+              <li>• Evening peak increased from 2 hours to <strong>3 hours</strong> (17:00-20:00)</li>
+              <li>• New <strong>2-hour standard period on Sunday evenings</strong> (18:00-20:00)</li>
+              <li>• Peak-to-off-peak ratio reduced from 8:1 to <strong>6:1</strong></li>
+            </ul>
+          </div>
 
-          {/* Detailed Breakdown */}
+          <Tabs defaultValue="grid" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="grid" className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Timeline View
+              </TabsTrigger>
+              <TabsTrigger value="clock" className="flex items-center gap-2">
+                <Gauge className="h-4 w-4" />
+                Clock View
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="grid" className="space-y-6">
+              {/* High Demand Season */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/10">
+                    <Snowflake className="h-5 w-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">High-Demand Season (Winter)</h3>
+                    <p className="text-sm text-muted-foreground">June - August</p>
+                  </div>
+                </div>
+                <TOUTimeGrid season="High" />
+              </div>
+
+              <div className="border-t border-border my-6" />
+
+              {/* Low Demand Season */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/10">
+                    <Sun className="h-5 w-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Low-Demand Season (Summer)</h3>
+                    <p className="text-sm text-muted-foreground">September - May</p>
+                  </div>
+                </div>
+                <TOUTimeGrid season="Low" showLegend={false} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="clock" className="space-y-6">
+              <div className="grid gap-8 md:grid-cols-2">
+                <TOUClockDiagram 
+                  title="High-Demand Season (Winter)" 
+                  periods={ESKOM_HIGH_DEMAND_PERIODS} 
+                  size={280}
+                />
+                <TOUClockDiagram 
+                  title="Low-Demand Season (Summer)" 
+                  periods={ESKOM_LOW_DEMAND_PERIODS} 
+                  size={280}
+                />
+              </div>
+              <TOUClockLegend />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      {/* Detailed Period Summary */}
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <CardTitle className="text-card-foreground flex items-center gap-2 text-base">
+            <Calendar className="h-5 w-5" />
+            Detailed Period Breakdown
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Snowflake className="h-4 w-4 text-blue-500" />
+                <span className="font-semibold text-sm">High-Demand (Jun-Aug)</span>
+              </div>
+              <TOUPeriodSummary season="High" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Sun className="h-4 w-4 text-amber-500" />
+                <span className="font-semibold text-sm">Low-Demand (Sep-May)</span>
+              </div>
+              <TOUPeriodSummary season="Low" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Additional Information Accordion */}
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <CardTitle className="text-card-foreground flex items-center gap-2 text-base">
+            <Info className="h-5 w-5" />
+            Additional Information
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
           <Accordion type="multiple" className="w-full">
             {/* Seasonal Span */}
             <AccordionItem value="seasonal">
               <AccordionTrigger className="text-left">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
-                  <span className="font-semibold">Time of Use Across a Year (Seasonal Span)</span>
+                  <span className="font-semibold">Seasonal Span & Cost Implications</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-4 pt-2">
                   <p className="text-sm text-muted-foreground">
-                    The annual span for TOU differentiation is based on seasonality, reflecting the significant difference in usage (demand) during high and low periods nationally. All tariffs should be differentiated by season to accurately reflect the full cost difference.
+                    TOU differentiation is based on seasonality, reflecting the significant difference in demand nationally. Higher rates during winter reflect maximum system strain.
                   </p>
                   
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="p-4 rounded-lg border border-blue-500/30 bg-blue-500/10">
                       <div className="flex items-center gap-2 mb-2">
                         <Badge className="bg-blue-600">Winter</Badge>
-                        <span className="font-semibold text-blue-600 dark:text-blue-400">High Demand Season</span>
+                        <span className="font-semibold text-blue-600 dark:text-blue-400">High Demand</span>
                       </div>
                       <p className="text-sm font-medium">June - August</p>
                       <ul className="text-sm text-muted-foreground mt-2 space-y-1">
-                        <li>• Peak and Standard energy charges are significantly higher</li>
-                        <li>• Demand charges (R/kVA) apply a specific higher rate</li>
-                        <li>• Reflects maximum system strain and cost of supply</li>
+                        <li>• Peak and Standard rates significantly higher</li>
+                        <li>• Demand charges (R/kVA) apply higher rate</li>
+                        <li>• Maximum system strain period</li>
                       </ul>
                     </div>
                     
                     <div className="p-4 rounded-lg border border-amber-500/30 bg-amber-500/10">
                       <div className="flex items-center gap-2 mb-2">
                         <Badge className="bg-amber-600">Summer</Badge>
-                        <span className="font-semibold text-amber-600 dark:text-amber-400">Low Demand Season</span>
+                        <span className="font-semibold text-amber-600 dark:text-amber-400">Low Demand</span>
                       </div>
                       <p className="text-sm font-medium">September - May</p>
                       <ul className="text-sm text-muted-foreground mt-2 space-y-1">
-                        <li>• Energy charges across all periods are lower</li>
-                        <li>• Reflects reduced system strain</li>
+                        <li>• Energy charges across all periods lower</li>
+                        <li>• Reduced system strain</li>
                         <li>• Lower overall costs of supply</li>
                       </ul>
                     </div>
@@ -91,15 +197,11 @@ export function TOUReference() {
               <AccordionTrigger className="text-left">
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4" />
-                  <span className="font-semibold">Time of Use Across a Week (Time Periods)</span>
+                  <span className="font-semibold">Understanding TOU Periods</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-4 pt-2">
-                  <p className="text-sm text-muted-foreground">
-                    TOU tariffs categorize energy consumption (c/kWh) and demand charges (R/kVA) into distinct periods defined by the relative cost of supplying power during those hours:
-                  </p>
-                  
                   <div className="grid gap-3">
                     <div className="p-3 rounded-lg border-l-4 border-l-red-500 bg-red-500/10">
                       <div className="flex items-center gap-2 mb-1">
@@ -107,8 +209,7 @@ export function TOUReference() {
                         <span className="font-semibold">Highest Cost Period</span>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        Corresponds to times of maximum system stress. Consumption carries the highest energy rate (c/kWh). 
-                        Sophisticated TOU tariffs may include a <strong>Super Peak</strong> rate during interruptions using cost of unserved energy.
+                        Times of maximum system stress. Morning (07:00-09:00) and evening (17:00-20:00) on weekdays only.
                       </p>
                     </div>
                     
@@ -118,7 +219,7 @@ export function TOUReference() {
                         <span className="font-semibold">Intermediate Cost Period</span>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        Reflects a cost higher than Off-Peak but lower than Peak. Covers normal daytime operations.
+                        Normal daytime operations. Higher than Off-Peak but lower than Peak rates.
                       </p>
                     </div>
                     
@@ -128,7 +229,7 @@ export function TOUReference() {
                         <span className="font-semibold">Lowest Cost Period</span>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        Designed to incentivize customers to shift energy load from high demand periods. Typically overnight hours.
+                        Designed to incentivize load shifting from high demand periods. Typically overnight (22:00-06:00).
                       </p>
                     </div>
                   </div>
@@ -152,8 +253,7 @@ export function TOUReference() {
                       <span className="font-semibold text-destructive">System Emergency Pricing</span>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      In extreme cases, <strong>Critical Peak Pricing Tariffs</strong> are introduced with periods of very high prices when the system's reliability is threatened. 
-                      These use the <strong>cost of unserved energy</strong> to set penalty signals during load shedding or grid emergencies.
+                      In extreme cases, <strong>Critical Peak Pricing</strong> applies with very high prices when system reliability is threatened. Uses the <strong>cost of unserved energy</strong> as penalty signal during load shedding or grid emergencies.
                     </p>
                     <div className="mt-3 p-2 rounded bg-background">
                       <p className="text-xs text-muted-foreground">
@@ -178,15 +278,15 @@ export function TOUReference() {
                   <div className="p-4 rounded-lg bg-muted">
                     <h4 className="font-semibold mb-2">Demand Measurement</h4>
                     <p className="text-sm text-muted-foreground">
-                      For customers on TOU tariffs, demand (kVA) is measured over <strong>half-hourly integrating periods</strong>. 
-                      Monthly maximum demand charges (R/kVA/m) are levied based on the highest demand registered during the expensive <strong>Peak or Standard periods</strong>.
+                      For TOU customers, demand (kVA) is measured over <strong>half-hourly integrating periods</strong>. 
+                      Monthly maximum demand charges (R/kVA/m) are based on the highest demand registered during <strong>Peak or Standard periods</strong>.
                     </p>
                   </div>
                   
                   <div className="p-4 rounded-lg bg-muted">
                     <h4 className="font-semibold mb-2">Metering Requirements</h4>
                     <p className="text-sm text-muted-foreground">
-                      Implementing TOU tariffs requires metering capable of Time-of-Use measurement. Licensees can choose:
+                      TOU tariffs require Time-of-Use capable metering. Options include:
                     </p>
                     <ul className="text-sm text-muted-foreground mt-2 space-y-1">
                       <li>• Half-hourly reconciliation (most granular)</li>
@@ -197,30 +297,32 @@ export function TOUReference() {
                 </div>
               </AccordionContent>
             </AccordionItem>
-          </Accordion>
 
-          {/* Quick Reference Tables */}
-          <div className="grid gap-4 md:grid-cols-2 mt-6">
-            <div className="p-4 rounded-lg bg-accent/50">
-              <h4 className="font-semibold text-foreground mb-2">High-Demand Season (Jun-Aug)</h4>
-              <div className="space-y-1 text-sm">
-                <p><strong className="text-red-600">Peak:</strong> Weekdays 06:00-09:00 & 17:00-20:00</p>
-                <p><strong className="text-yellow-600">Standard:</strong> Weekdays 09:00-17:00 & 20:00-22:00</p>
-                <p><strong className="text-yellow-600">Standard:</strong> Sat/Sun 07:00-12:00 & 18:00-20:00</p>
-                <p><strong className="text-green-600">Off-Peak:</strong> All other times</p>
-              </div>
-            </div>
-            <div className="p-4 rounded-lg bg-accent/50">
-              <h4 className="font-semibold text-foreground mb-2">Low-Demand Season (Sep-May)</h4>
-              <div className="space-y-1 text-sm">
-                <p><strong className="text-red-600">Peak:</strong> Weekdays 07:00-10:00 & 18:00-20:00</p>
-                <p><strong className="text-yellow-600">Standard:</strong> Weekdays 06:00-07:00, 10:00-18:00 & 20:00-22:00</p>
-                <p><strong className="text-yellow-600">Standard:</strong> Sat 07:00-12:00 & 18:00-20:00</p>
-                <p><strong className="text-yellow-600">Standard:</strong> Sun 07:00-12:00</p>
-                <p><strong className="text-green-600">Off-Peak:</strong> All other times</p>
-              </div>
-            </div>
-          </div>
+            {/* Applicable Tariffs */}
+            <AccordionItem value="tariffs">
+              <AccordionTrigger className="text-left">
+                <div className="flex items-center gap-2">
+                  <Info className="h-4 w-4" />
+                  <span className="font-semibold">Applicable Tariffs</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="pt-2">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    The TOU periods shown apply to the following Eskom tariffs:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {["Megaflex", "Megaflex Gen", "Municflex", "Miniflex", "Homeflex", "Ruraflex", "Ruraflex Gen", "WEPS"].map((tariff) => (
+                      <Badge key={tariff} variant="secondary">{tariff}</Badge>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Note: Nightsave tariffs (Urban Large, Urban Small, Rural) have different TOU periods - Peak and Off-Peak only.
+                  </p>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </CardContent>
       </Card>
     </div>

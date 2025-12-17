@@ -203,12 +203,14 @@ export function TOUClockDiagram({ title, periods, size = 280 }: TOUClockDiagramP
   );
 }
 
-// Pre-defined Eskom TOU periods
+// Pre-defined Eskom TOU periods - Updated for 2025/2026
+// Per NERSA approval: Morning peak 3h→2h, Evening peak 2h→3h, New Sunday evening standard
 export const ESKOM_HIGH_DEMAND_PERIODS: TOUPeriodData[] = [
-  // Weekday Peak
-  { day_type: "Weekday", time_of_use: "Peak", start_hour: 6, end_hour: 9 },
+  // Weekday Peak (2h morning, 3h evening)
+  { day_type: "Weekday", time_of_use: "Peak", start_hour: 7, end_hour: 9 },
   { day_type: "Weekday", time_of_use: "Peak", start_hour: 17, end_hour: 20 },
   // Weekday Standard
+  { day_type: "Weekday", time_of_use: "Standard", start_hour: 6, end_hour: 7 },
   { day_type: "Weekday", time_of_use: "Standard", start_hour: 9, end_hour: 17 },
   { day_type: "Weekday", time_of_use: "Standard", start_hour: 20, end_hour: 22 },
   // Weekday Off-Peak (default, 22-6)
@@ -217,26 +219,27 @@ export const ESKOM_HIGH_DEMAND_PERIODS: TOUPeriodData[] = [
   { day_type: "Saturday", time_of_use: "Standard", start_hour: 7, end_hour: 12 },
   { day_type: "Saturday", time_of_use: "Standard", start_hour: 18, end_hour: 20 },
   
-  // Sunday Standard (new 2-hour period in evening)
+  // Sunday Standard (includes new 2025 evening period)
   { day_type: "Sunday", time_of_use: "Standard", start_hour: 7, end_hour: 12 },
   { day_type: "Sunday", time_of_use: "Standard", start_hour: 18, end_hour: 20 },
 ];
 
 export const ESKOM_LOW_DEMAND_PERIODS: TOUPeriodData[] = [
-  // Weekday Peak (reduced)
-  { day_type: "Weekday", time_of_use: "Peak", start_hour: 7, end_hour: 10 },
-  { day_type: "Weekday", time_of_use: "Peak", start_hour: 18, end_hour: 20 },
+  // Weekday Peak (2h morning, 3h evening - same as high demand)
+  { day_type: "Weekday", time_of_use: "Peak", start_hour: 7, end_hour: 9 },
+  { day_type: "Weekday", time_of_use: "Peak", start_hour: 17, end_hour: 20 },
   // Weekday Standard
   { day_type: "Weekday", time_of_use: "Standard", start_hour: 6, end_hour: 7 },
-  { day_type: "Weekday", time_of_use: "Standard", start_hour: 10, end_hour: 18 },
+  { day_type: "Weekday", time_of_use: "Standard", start_hour: 9, end_hour: 17 },
   { day_type: "Weekday", time_of_use: "Standard", start_hour: 20, end_hour: 22 },
   
   // Saturday Standard
   { day_type: "Saturday", time_of_use: "Standard", start_hour: 7, end_hour: 12 },
   { day_type: "Saturday", time_of_use: "Standard", start_hour: 18, end_hour: 20 },
   
-  // Sunday Standard
+  // Sunday Standard (includes new 2025 evening period)
   { day_type: "Sunday", time_of_use: "Standard", start_hour: 7, end_hour: 12 },
+  { day_type: "Sunday", time_of_use: "Standard", start_hour: 18, end_hour: 20 },
 ];
 
 export function TOUClockLegend() {
