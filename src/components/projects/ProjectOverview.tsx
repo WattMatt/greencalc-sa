@@ -7,7 +7,7 @@ import {
   Users, BarChart3, DollarSign, Zap, Sun, MapPin, Plug, 
   CheckCircle2, AlertCircle, ArrowRight, Building2, TrendingDown, Wallet, TrendingUp
 } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line, Legend, CartesianGrid } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line, Legend, CartesianGrid, ReferenceLine } from "recharts";
 
 interface Tenant {
   id: string;
@@ -146,6 +146,24 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
     
     return data;
   }, [solarFinancials, annualGridCost, annualConsumption, avgTariffRate]);
+
+  // Calculate breakeven year (when cumulative savings exceed system cost)
+  const breakevenYear = useMemo(() => {
+    if (!solarFinancials || savingsChartData.length === 0) return null;
+    const systemCostK = solarFinancials.systemCost / 1000;
+    const breakevenPoint = savingsChartData.find(d => d.cumulativeSavings >= systemCostK);
+    if (breakevenPoint) return breakevenPoint.year;
+    // Interpolate if between years
+    for (let i = 1; i < savingsChartData.length; i++) {
+      const prev = savingsChartData[i - 1];
+      const curr = savingsChartData[i];
+      if (prev.cumulativeSavings < systemCostK && curr.cumulativeSavings >= systemCostK) {
+        const fraction = (systemCostK - prev.cumulativeSavings) / (curr.cumulativeSavings - prev.cumulativeSavings);
+        return prev.year + fraction;
+      }
+    }
+    return null;
+  }, [solarFinancials, savingsChartData]);
 
   const setupSteps = [
     { label: "Add tenants", done: tenants.length > 0, tab: "tenants" },
@@ -448,8 +466,13 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
                 </div>
               </div>
             </div>
-            <CardDescription>
+            <CardDescription className="flex items-center gap-2">
               Projected annual costs assuming 8% electricity escalation
+              {breakevenYear && (
+                <Badge variant="secondary" className="ml-2 bg-chart-4/20 text-chart-4 border-chart-4/30">
+                  Breakeven: {breakevenYear.toFixed(1)} years
+                </Badge>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -525,6 +548,21 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
                     dot={false}
                     name="Cumulative Savings"
                   />
+                  {breakevenYear && (
+                    <ReferenceLine 
+                      x={breakevenYear} 
+                      stroke="hsl(var(--chart-4))" 
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
+                      label={{ 
+                        value: `Breakeven: Year ${breakevenYear.toFixed(1)}`, 
+                        position: 'top',
+                        fill: 'hsl(var(--foreground))',
+                        fontSize: 11,
+                        fontWeight: 500
+                      }}
+                    />
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             </div>
