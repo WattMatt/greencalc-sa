@@ -76,8 +76,7 @@ function AppRoutes() {
                     <Route path="/projects" element={<Projects />} />
                     <Route path="/projects/:id" element={<ProjectDetail />} />
                     <Route path="/projects/:id/quick-estimate" element={<QuickEstimate />} />
-                    
-                    <Route path="/simulations/sandbox/:id" element={<SandboxWorkspace />} />
+                    <Route path="/projects/:projectId/sandbox/:id" element={<SandboxWorkspace />} />
                     <Route path="/projects/:projectId/proposal" element={<ProposalWorkspace />} />
                     <Route path="/calculator" element={<Calculator />} />
                     <Route path="/settings" element={<Settings />} />

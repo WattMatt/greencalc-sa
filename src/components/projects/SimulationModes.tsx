@@ -74,7 +74,7 @@ export function SimulationModes({ projectId, project, tenants, shopTypes }: Simu
     onSuccess: (data) => {
       toast.success("Sandbox created");
       queryClient.invalidateQueries({ queryKey: ["project-sandboxes", projectId] });
-      navigate(`/simulations/sandbox/${data.id}`);
+      navigate(`/projects/${projectId}/sandbox/${data.id}`);
     },
     onError: () => toast.error("Failed to create sandbox"),
   });
@@ -188,7 +188,7 @@ export function SimulationModes({ projectId, project, tenants, shopTypes }: Simu
                   <Card
                     key={sandbox.id}
                     className="border-dashed hover:border-primary/50 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/simulations/sandbox/${sandbox.id}`)}
+                    onClick={() => navigate(`/projects/${projectId}/sandbox/${sandbox.id}`)}
                   >
                     <CardContent className="py-3">
                       <div className="flex items-center justify-between">

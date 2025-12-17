@@ -18,7 +18,7 @@ const sandboxTour = getTour("sandbox");
 
 export default function SandboxWorkspace() {
   const navigate = useNavigate();
-  const { id } = useParams<{ id: string }>();
+  const { projectId, id } = useParams<{ projectId: string; id: string }>();
   const queryClient = useQueryClient();
 
   const [isRunning, setIsRunning] = useState(false);
@@ -111,8 +111,8 @@ export default function SandboxWorkspace() {
     return (
       <div className="container py-6">
         <p className="text-destructive">Sandbox not found</p>
-        <Button variant="outline" onClick={() => navigate("/simulations/sandbox")}>
-          Back to Sandbox
+        <Button variant="outline" onClick={() => navigate(`/projects/${projectId}`)}>
+          Back to Project
         </Button>
       </div>
     );
@@ -122,7 +122,7 @@ export default function SandboxWorkspace() {
     <div className="container max-w-7xl py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/simulations/sandbox")}>
+        <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}`)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1">
