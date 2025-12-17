@@ -33,6 +33,7 @@ const defaultSegments: Segment[] = [
   { id: "payback_timeline", label: "Payback Timeline", description: "Financial payback projection", icon: DollarSign, enabled: true },
   { id: "environmental_impact", label: "Environmental Impact", description: "CO2 reduction metrics", icon: Leaf, enabled: false },
   { id: "engineering_specs", label: "Engineering Specs", description: "Technical specifications", icon: Settings2, enabled: true },
+  { id: "ai_infographics", label: "AI Infographics", description: "Auto-generated professional visuals", icon: Sparkles, enabled: false },
 ];
 
 interface SegmentSelectorProps {

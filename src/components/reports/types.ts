@@ -69,6 +69,7 @@ export type SegmentType =
   | "savings_breakdown"
   | "environmental_impact"
   | "engineering_specs"
+  | "ai_infographics"
   | "custom_notes";
 
 export interface ReportSegment {
@@ -135,6 +136,12 @@ export const SEGMENT_DEFINITIONS: Record<SegmentType, { name: string; descriptio
     description: "Technical system parameters and configuration",
     icon: "Settings",
     category: "technical"
+  },
+  ai_infographics: {
+    name: "AI Infographics",
+    description: "Auto-generated professional visual summaries",
+    icon: "Sparkles",
+    category: "executive"
   },
   custom_notes: {
     name: "Custom Notes",

@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   FileText, 
   BarChart3, 
@@ -14,7 +16,8 @@ import {
   Sun,
   Battery,
   Zap,
-  TrendingUp
+  TrendingUp,
+  RefreshCw
 } from "lucide-react";
 import { Segment } from "./SegmentSelector";
 
@@ -33,6 +36,7 @@ const segmentIcons: Record<string, React.ElementType> = {
   savings_breakdown: DollarSign,
   environmental_impact: Leaf,
   engineering_specs: Settings2,
+  ai_infographics: Sparkles,
 };
 
 // Sample data for previews
@@ -47,8 +51,100 @@ const sampleData = {
   dcAcRatio: 1.3,
 };
 
-function SegmentContent({ segmentId }: { segmentId: string }) {
+function AIInfographicSegment({ projectName }: { projectName: string }) {
+  const [generating, setGenerating] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const generateInfographic = async () => {
+      if (imageUrl || generating) return;
+      
+      setGenerating(true);
+      setError(null);
+      
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke("generate-report-infographic", {
+          body: { 
+            type: "executive", 
+            data: {
+              projectName,
+              solarCapacityKwp: sampleData.solarCapacity,
+              batteryCapacityKwh: sampleData.batteryCapacity,
+              annualSavings: sampleData.annualSavings,
+              paybackYears: sampleData.paybackYears,
+              co2AvoidedTons: sampleData.co2Avoided,
+              selfConsumptionPercent: sampleData.selfConsumption,
+              dcAcRatio: sampleData.dcAcRatio,
+            }
+          },
+        });
+
+        if (fnError) throw fnError;
+        if (data?.error) throw new Error(data.error);
+        
+        setImageUrl(data?.imageUrl);
+      } catch (err) {
+        console.error("Failed to generate infographic:", err);
+        setError(err instanceof Error ? err.message : "Generation failed");
+      } finally {
+        setGenerating(false);
+      }
+    };
+
+    generateInfographic();
+  }, [projectName, imageUrl, generating]);
+
+  if (generating) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-center gap-2 text-[10px] text-primary">
+          <RefreshCw className="h-3 w-3 animate-spin" />
+          <span>Generating AI infographic...</span>
+        </div>
+        <Skeleton className="h-24 w-full rounded" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center text-[10px] text-muted-foreground">
+        <Sparkles className="h-6 w-6 mx-auto mb-1 opacity-30" />
+        <p>Could not generate infographic</p>
+        <p className="text-destructive">{error}</p>
+      </div>
+    );
+  }
+
+  if (imageUrl) {
+    return (
+      <div className="space-y-2">
+        <img 
+          src={imageUrl} 
+          alt="AI Generated Infographic" 
+          className="w-full rounded border object-cover"
+        />
+        <p className="text-[8px] text-center text-muted-foreground">
+          AI-generated executive summary
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-center text-muted-foreground">
+      <Sparkles className="h-6 w-6 mx-auto mb-1 opacity-30" />
+      <p className="text-[10px]">Preparing infographic...</p>
+    </div>
+  );
+}
+
+function SegmentContent({ segmentId, projectName }: { segmentId: string; projectName: string }) {
   switch (segmentId) {
+    case "ai_infographics":
+      return <AIInfographicSegment projectName={projectName} />;
+      
     case "executive_summary":
       return (
         <div className="space-y-3 text-xs">
@@ -316,7 +412,7 @@ export function ReportPreview({ segments, projectName = "Demo Solar Project", cl
                   </div>
                   
                   <div className="flex-1">
-                    <SegmentContent segmentId={segment.id} />
+                    <SegmentContent segmentId={segment.id} projectName={projectName} />
                   </div>
                   
                   <div className="mt-3 pt-2 border-t text-center">
