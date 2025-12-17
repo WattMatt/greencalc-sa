@@ -1,0 +1,146 @@
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
+import { Badge } from "@/components/ui/badge";
+import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { ChartDataPoint, getTOUPeriod, TOU_COLORS } from "../types";
+
+interface GridFlowChartProps {
+  chartData: ChartDataPoint[];
+  showTOU: boolean;
+  isWeekend: boolean;
+  unit: string;
+}
+
+export function GridFlowChart({ chartData, showTOU, isWeekend, unit }: GridFlowChartProps) {
+  const totalImport = chartData.reduce((sum, d) => sum + (d.gridImport || 0), 0);
+  const totalExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
+
+  return (
+    <div className="space-y-1 mt-4 pt-4 border-t">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+          <ArrowDownToLine className="h-3 w-3 text-red-500" />
+          Grid Flow
+        </p>
+        <div className="flex items-center gap-4 text-[10px]">
+          <span className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-sm bg-red-500/60" />
+            Import: {totalImport.toFixed(0)} {unit}
+          </span>
+          <span className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-sm bg-green-500/60" />
+            Export: {totalExport.toFixed(0)} {unit}
+          </span>
+        </div>
+      </div>
+      <div className="h-[160px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="gridImportGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="hsl(0 72% 51%)" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="hsl(0 72% 51%)" stopOpacity={0.05} />
+              </linearGradient>
+              <linearGradient id="gridExportGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="hsl(142 76% 36%)" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="hsl(142 76% 36%)" stopOpacity={0.05} />
+              </linearGradient>
+            </defs>
+
+            {/* TOU Background */}
+            {showTOU &&
+              Array.from({ length: 24 }, (_, h) => {
+                const period = getTOUPeriod(h, isWeekend);
+                const nextHour = h === 23 ? 23 : h + 1;
+                return (
+                  <ReferenceArea
+                    key={h}
+                    x1={`${h.toString().padStart(2, "0")}:00`}
+                    x2={`${nextHour.toString().padStart(2, "0")}:00`}
+                    fill={TOU_COLORS[period].fill}
+                    fillOpacity={0.08}
+                    stroke="none"
+                  />
+                );
+              })}
+
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
+            <XAxis
+              dataKey="hour"
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              tickLine={false}
+              axisLine={{ stroke: "hsl(var(--border))" }}
+              interval={2}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())}
+              width={45}
+            />
+            <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1} />
+            <Tooltip
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null;
+                const gridImport = Number(payload.find((p) => p.dataKey === "gridImport")?.value) || 0;
+                const gridExport = Number(payload.find((p) => p.dataKey === "gridExport")?.value) || 0;
+                const hourNum = parseInt(label?.toString() || "0");
+                const period = getTOUPeriod(hourNum, isWeekend);
+
+                return (
+                  <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg text-xs space-y-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{label}</p>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0"
+                        style={{ borderColor: TOU_COLORS[period].stroke, color: TOU_COLORS[period].stroke }}
+                      >
+                        {TOU_COLORS[period].label}
+                      </Badge>
+                    </div>
+                    {gridImport > 0 && (
+                      <p className="text-red-500 flex items-center gap-1">
+                        <ArrowDownToLine className="h-3 w-3" />
+                        Import: {gridImport.toFixed(1)} {unit}
+                      </p>
+                    )}
+                    {gridExport > 0 && (
+                      <p className="text-green-500 flex items-center gap-1">
+                        <ArrowUpFromLine className="h-3 w-3" />
+                        Export: {gridExport.toFixed(1)} {unit}
+                      </p>
+                    )}
+                    {gridImport === 0 && gridExport === 0 && (
+                      <p className="text-muted-foreground">Self-sufficient</p>
+                    )}
+                  </div>
+                );
+              }}
+            />
+
+            {/* Grid Import */}
+            <Area
+              type="monotone"
+              dataKey="gridImport"
+              stroke="hsl(0 72% 51%)"
+              strokeWidth={1.5}
+              fill="url(#gridImportGradient)"
+              dot={false}
+            />
+
+            {/* Grid Export */}
+            <Area
+              type="monotone"
+              dataKey="gridExport"
+              stroke="hsl(142 76% 36%)"
+              strokeWidth={1.5}
+              fill="url(#gridExportGradient)"
+              dot={false}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}

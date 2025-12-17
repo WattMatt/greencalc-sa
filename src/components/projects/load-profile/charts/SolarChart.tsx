@@ -13,41 +13,40 @@ interface SolarChartProps {
 }
 
 export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1Comparison, unit }: SolarChartProps) {
+  const totalPv = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);
+  const totalLoad = chartData.reduce((sum, d) => sum + d.total, 0);
+  const peakPv = Math.max(...chartData.map((d) => d.pvGeneration || 0));
+
   return (
     <div className="space-y-1 mt-4 pt-4 border-t">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
           <Sun className="h-3 w-3 text-amber-500" />
-          Solar Generation vs Load
+          PV Generation
         </p>
-        <div className="flex items-center gap-3 text-[10px]">
+        <div className="flex items-center gap-4 text-[10px]">
           <span className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-sm bg-amber-500/60" />
-            PV ({dcAcRatio > 1 ? `${(dcAcRatio * 100).toFixed(0)}%` : "1:1"})
+            Total: {totalPv.toFixed(0)} {unit}
+          </span>
+          <span className="flex items-center gap-1">
+            Peak: {peakPv.toFixed(0)} {unit}
           </span>
           {dcAcRatio > 1 && (
             <span className="flex items-center gap-1">
               <div className="w-3 h-0.5 bg-orange-400" style={{ borderBottom: "1px dashed" }} />
-              DC Output
+              DC ({(dcAcRatio * 100).toFixed(0)}%)
             </span>
           )}
           {show1to1Comparison && dcAcRatio > 1 && (
             <span className="flex items-center gap-1">
               <div className="w-3 h-0.5 bg-gray-400" style={{ borderBottom: "2px dotted" }} />
-              1:1 Baseline
+              1:1
             </span>
           )}
-          <span className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-sm bg-red-500/40" />
-            Grid Import
-          </span>
-          <span className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-sm bg-green-500/40" />
-            Grid Export
-          </span>
         </div>
       </div>
-      <div className="h-[200px]">
+      <div className="h-[160px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
@@ -94,8 +93,6 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
                 if (!active || !payload?.length) return null;
                 const pv = Number(payload.find((p) => p.dataKey === "pvGeneration")?.value) || 0;
                 const load = Number(payload.find((p) => p.dataKey === "total")?.value) || 0;
-                const gridImport = Number(payload.find((p) => p.dataKey === "gridImport")?.value) || 0;
-                const gridExport = Number(payload.find((p) => p.dataKey === "gridExport")?.value) || 0;
                 const dcOutput = Number(payload.find((p) => p.dataKey === "pvDcOutput")?.value) || 0;
                 const clipping = Number(payload.find((p) => p.dataKey === "pvClipping")?.value) || 0;
                 const baseline = Number(payload.find((p) => p.dataKey === "pv1to1Baseline")?.value) || 0;
@@ -114,11 +111,8 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
                         {TOU_COLORS[period].label}
                       </Badge>
                     </div>
-                    <p>
-                      Load: {load.toFixed(1)} {unit}
-                    </p>
                     <p className="text-amber-500">
-                      PV AC: {pv.toFixed(1)} {unit}
+                      PV AC Output: {pv.toFixed(1)} {unit}
                     </p>
                     {dcAcRatio > 1 && (
                       <>
@@ -126,33 +120,30 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
                         {clipping > 0 && <p className="text-orange-600">Clipping: {clipping.toFixed(1)} kWh</p>}
                       </>
                     )}
-                    {show1to1Comparison && dcAcRatio > 1 && <p className="text-muted-foreground">1:1 Baseline: {baseline.toFixed(1)} kWh</p>}
-                    {gridImport > 0 && <p className="text-red-500">Grid Import: {gridImport.toFixed(1)}</p>}
-                    {gridExport > 0 && <p className="text-green-500">Grid Export: {gridExport.toFixed(1)}</p>}
+                    {show1to1Comparison && dcAcRatio > 1 && (
+                      <p className="text-muted-foreground">1:1 Baseline: {baseline.toFixed(1)} kWh</p>
+                    )}
+                    <p className="text-muted-foreground border-t pt-1 mt-1">Load: {load.toFixed(1)} {unit}</p>
                   </div>
                 );
               }}
             />
 
-            {/* Load Line */}
-            <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={1.5} strokeDasharray="3 3" dot={false} />
+            {/* Load Line (reference) */}
+            <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={1} strokeDasharray="4 4" dot={false} opacity={0.5} />
 
             {/* PV Generation Area */}
             <Area type="monotone" dataKey="pvGeneration" stroke="hsl(38 92% 50%)" strokeWidth={2} fill="url(#pvGradient)" dot={false} />
 
             {/* DC Output Line (when oversizing) */}
-            {dcAcRatio > 1 && <Line type="monotone" dataKey="pvDcOutput" stroke="hsl(25 95% 53%)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />}
+            {dcAcRatio > 1 && (
+              <Line type="monotone" dataKey="pvDcOutput" stroke="hsl(25 95% 53%)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
+            )}
 
             {/* 1:1 Baseline Comparison Line */}
             {show1to1Comparison && dcAcRatio > 1 && (
               <Line type="monotone" dataKey="pv1to1Baseline" stroke="hsl(var(--muted-foreground))" strokeWidth={2} strokeDasharray="2 4" dot={false} />
             )}
-
-            {/* Grid Import */}
-            <Area type="monotone" dataKey="gridImport" stroke="hsl(0 72% 51%)" strokeWidth={1} fill="hsl(0 72% 51%)" fillOpacity={0.25} dot={false} />
-
-            {/* Grid Export */}
-            <Area type="monotone" dataKey="gridExport" stroke="hsl(142 76% 36%)" strokeWidth={1} fill="hsl(142 76% 36%)" fillOpacity={0.25} dot={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

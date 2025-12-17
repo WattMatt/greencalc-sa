@@ -6,6 +6,7 @@ import { useExportHandlers } from "./hooks/useExportHandlers";
 import { useSolcastPVProfile } from "./hooks/useSolcastPVProfile";
 import { LoadChart } from "./charts/LoadChart";
 import { SolarChart } from "./charts/SolarChart";
+import { GridFlowChart } from "./charts/GridFlowChart";
 import { BatteryChart } from "./charts/BatteryChart";
 import { ChartHeader } from "./components/ChartHeader";
 import { ChartSettings } from "./components/ChartSettings";
@@ -185,19 +186,29 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
 
           {/* PV Generation Chart */}
           {showPVProfile && maxPvAcKva && (
-            <>
-              <SolarChart
-                chartData={chartData}
-                showTOU={showTOU}
-                isWeekend={isWeekend}
-                dcAcRatio={dcAcRatio}
-                show1to1Comparison={show1to1Comparison}
-                unit={unit}
-              />
+            <SolarChart
+              chartData={chartData}
+              showTOU={showTOU}
+              isWeekend={isWeekend}
+              dcAcRatio={dcAcRatio}
+              show1to1Comparison={show1to1Comparison}
+              unit={unit}
+            />
+          )}
 
-              {/* Over-Paneling Summary */}
-              {overPanelingStats && dcAcRatio > 1 && <OverPanelingAnalysis stats={overPanelingStats} dcAcRatio={dcAcRatio} />}
-            </>
+          {/* Grid Flow Chart */}
+          {showPVProfile && maxPvAcKva && (
+            <GridFlowChart
+              chartData={chartData}
+              showTOU={showTOU}
+              isWeekend={isWeekend}
+              unit={unit}
+            />
+          )}
+
+          {/* Over-Paneling Summary */}
+          {showPVProfile && maxPvAcKva && overPanelingStats && dcAcRatio > 1 && (
+            <OverPanelingAnalysis stats={overPanelingStats} dcAcRatio={dcAcRatio} />
           )}
 
           {/* Battery Chart */}
