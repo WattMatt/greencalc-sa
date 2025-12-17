@@ -314,7 +314,7 @@ export function LoadSheddingStages() {
               </div>
 
               {/* Animated Infographics Grid */}
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <div>
                   <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
                     <Sun className="h-4 w-4 text-yellow-500" />
@@ -341,9 +341,21 @@ export function LoadSheddingStages() {
                     <Sun className="h-4 w-4 text-yellow-500" />
                     <span className="text-muted-foreground">+</span>
                     <Fuel className="h-4 w-4 text-orange-500" />
-                    Solar + Generator Hybrid
+                    Solar + Generator
                   </h4>
                   <EnergyFlowInfographic systemType="solar-generator" />
+                </div>
+                <div className="md:col-span-2 lg:col-span-2">
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Sun className="h-4 w-4 text-yellow-500" />
+                    <span className="text-muted-foreground">+</span>
+                    <Battery className="h-4 w-4 text-emerald-500" />
+                    <span className="text-muted-foreground">+</span>
+                    <Fuel className="h-4 w-4 text-orange-500" />
+                    Full Hybrid (Solar + Battery + Generator)
+                    <Badge variant="outline" className="ml-2 text-[10px] bg-primary/10 border-primary/30">Maximum Resilience</Badge>
+                  </h4>
+                  <EnergyFlowInfographic systemType="full-hybrid" />
                 </div>
               </div>
               

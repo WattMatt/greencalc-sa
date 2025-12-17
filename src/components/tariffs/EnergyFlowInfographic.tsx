@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
-type SystemType = "grid-tied" | "hybrid" | "generator" | "solar-generator";
+type SystemType = "grid-tied" | "hybrid" | "generator" | "solar-generator" | "full-hybrid";
 type OperationMode = "normal" | "loadshedding";
 
 interface EnergyFlowInfographicProps {
@@ -508,6 +508,106 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
   );
 }
 
+function FullHybridFlow({ mode }: { mode: OperationMode }) {
+  const isNormal = mode === "normal";
+  
+  // Full hybrid: Solar + Grid + Generator + Battery
+  const solarX = 35, solarY = 35;
+  const gridX = 95, gridY = 35;
+  const genX = 155, genY = 35;
+  const invX = 65, invY = 115;
+  const battX = 155, battY = 115;
+  const atsX = 110, atsY = 175;
+  const homeX = 110, homeY = 245;
+  
+  return (
+    <svg viewBox="0 0 200 300" className="w-full h-auto max-w-[200px] mx-auto">
+      <style>{`
+        @keyframes flowAnimation {
+          0% { stroke-dashoffset: 40; }
+          100% { stroke-dashoffset: 0; }
+        }
+        .animate-flow {
+          animation: flowAnimation 0.8s linear infinite;
+        }
+      `}</style>
+      
+      {/* Top row: Solar, Grid, Generator */}
+      <SolarIcon active={true} x={solarX} y={solarY} />
+      <GridIcon active={isNormal} x={gridX} y={gridY} />
+      <GeneratorIcon active={!isNormal} x={genX} y={genY} />
+      
+      {/* Flow: Solar to Inverter */}
+      <FlowLine 
+        path={`M ${solarX} ${solarY + 15} L ${solarX} ${invY - 30} L ${invX} ${invY - 30} L ${invX} ${invY - 16}`} 
+        active={true} 
+        color="#eab308" 
+      />
+      
+      {/* Flow: Grid to Inverter (when grid available) */}
+      <FlowLine 
+        path={`M ${gridX} ${gridY + 18} L ${gridX} ${invY - 30} L ${invX} ${invY - 30}`} 
+        active={isNormal} 
+        color="#6b7280" 
+      />
+      
+      {/* Flow: Generator to Inverter (when grid down) */}
+      <FlowLine 
+        path={`M ${genX} ${genY + 12} L ${genX} ${invY - 30} L ${invX + 20} ${invY - 30} L ${invX} ${invY - 30}`} 
+        active={!isNormal} 
+        color="#f97316" 
+      />
+      
+      {/* Middle row: Hybrid Inverter + Battery */}
+      <InverterIcon active={true} x={invX} y={invY} label="Hybrid Inv" />
+      <BatteryIcon active={true} charging={isNormal} x={battX} y={battY} />
+      
+      {/* Flow: Inverter to Battery */}
+      <FlowLine 
+        path={`M ${invX + 18} ${invY} L ${battX - 18} ${battY}`} 
+        active={true} 
+        color={isNormal ? "#22c55e" : "#f97316"}
+        reverse={!isNormal}
+      />
+      
+      {/* Flow: Inverter to ATS */}
+      <FlowLine 
+        path={`M ${invX} ${invY + 16} L ${invX} ${atsY - 30} L ${atsX} ${atsY - 30} L ${atsX} ${atsY - 16}`} 
+        active={true} 
+        color="#22c55e" 
+      />
+      
+      {/* Flow: Battery can also supply ATS during extended outages */}
+      <FlowLine 
+        path={`M ${battX} ${battY + 12} L ${battX} ${atsY - 30} L ${atsX} ${atsY - 30}`} 
+        active={!isNormal} 
+        color="#22c55e" 
+      />
+      
+      {/* ATS - manages power source priority */}
+      <ATSIcon active={true} gridMode={isNormal} x={atsX} y={atsY} />
+      
+      {/* Flow: ATS to Home */}
+      <FlowLine 
+        path={`M ${atsX} ${atsY + 16} L ${atsX} ${homeY - 16}`} 
+        active={true} 
+        color="#22c55e" 
+      />
+      
+      {/* Bottom: Home */}
+      <HomeIcon active={true} x={homeX} y={homeY} />
+      
+      {/* Status */}
+      <rect x="10" y="275" width="180" height="20" rx="4" 
+        className={cn("transition-all duration-500", isNormal ? "fill-emerald-500/10 stroke-emerald-500/30" : "fill-orange-500/10 stroke-orange-500/30")} 
+        strokeWidth="1" />
+      <text x="100" y="288" className={cn("text-[8px] font-semibold", isNormal ? "fill-emerald-600" : "fill-orange-600")} textAnchor="middle">
+        {isNormal ? "✓ Solar + Grid + Battery charging" : "⚡ Battery + Generator backup active"}
+      </text>
+    </svg>
+  );
+}
+
 export function EnergyFlowInfographic({ systemType, className }: EnergyFlowInfographicProps) {
   const [mode, setMode] = useState<OperationMode>("normal");
   
@@ -523,6 +623,7 @@ export function EnergyFlowInfographic({ systemType, className }: EnergyFlowInfog
     "hybrid": HybridFlow,
     "generator": GeneratorFlow,
     "solar-generator": SolarGeneratorFlow,
+    "full-hybrid": FullHybridFlow,
   }[systemType];
 
   return (
