@@ -298,7 +298,7 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#eab308" 
       />
-      <PowerLabel x={solarX} y={solarY + 32} value="5 kW" color="#eab308" active={isNormal} />
+      <PowerLabel x={solarX} y={solarY + 32} value="50 kW" color="#eab308" active={isNormal} />
       
       {/* Flow: Grid down to Inverter */}
       <FlowLine 
@@ -306,7 +306,7 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#6b7280" 
       />
-      <PowerLabel x={gridX} y={gridY + 35} value="3 kW" color="#6b7280" active={isNormal} />
+      <PowerLabel x={gridX} y={gridY + 35} value="20 kW" color="#6b7280" active={isNormal} />
       
       {/* Middle: Inverter */}
       <InverterIcon active={isNormal} x={invX} y={invY} />
@@ -317,7 +317,7 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#22c55e" 
       />
-      <PowerLabel x={invX + 25} y={(invY + homeY) / 2} value="8 kW" color="#22c55e" active={isNormal} />
+      <PowerLabel x={invX + 25} y={(invY + homeY) / 2} value="70 kW" color="#22c55e" active={isNormal} />
       
       {/* Bottom: Home/Loads */}
       <HomeIcon active={isNormal} x={homeX} y={homeY} />
@@ -365,7 +365,7 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#eab308" 
       />
-      <PowerLabel x={solarX} y={solarY + 32} value="5 kW" color="#eab308" active={true} />
+      <PowerLabel x={solarX} y={solarY + 32} value="50 kW" color="#eab308" active={true} />
       
       {/* Flow: Grid to Inverter */}
       <FlowLine 
@@ -373,7 +373,7 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#6b7280" 
       />
-      <PowerLabel x={gridX} y={gridY + 35} value="2 kW" color="#6b7280" active={isNormal} />
+      <PowerLabel x={gridX} y={gridY + 35} value="20 kW" color="#6b7280" active={isNormal} />
       
       {/* Middle: Hybrid Inverter */}
       <InverterIcon active={true} x={invX} y={invY} label="Hybrid Inv" />
@@ -385,7 +385,7 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
         color={isNormal ? "#22c55e" : "#f97316"}
         reverse={!isNormal}
       />
-      <PowerLabel x={(invX + battX) / 2} y={invY - 12} value={isNormal ? "3 kW" : "5 kW"} color={isNormal ? "#22c55e" : "#f97316"} active={true} />
+      <PowerLabel x={(invX + battX) / 2} y={invY - 12} value={isNormal ? "25 kW" : "40 kW"} color={isNormal ? "#22c55e" : "#f97316"} active={true} />
       
       {/* Battery on right side */}
       <BatteryIcon active={true} charging={isNormal} x={battX} y={battY} />
@@ -396,7 +396,7 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#22c55e" 
       />
-      <PowerLabel x={invX + 25} y={(invY + homeY) / 2} value="4 kW" color="#22c55e" active={true} />
+      <PowerLabel x={invX + 25} y={(invY + homeY) / 2} value="45 kW" color="#22c55e" active={true} />
       
       {/* Bottom: Home */}
       <HomeIcon active={true} x={homeX} y={homeY} />
@@ -443,7 +443,7 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#6b7280" 
       />
-      <PowerLabel x={gridX} y={gridY + 35} value="15 kW" color="#6b7280" active={isNormal} />
+      <PowerLabel x={gridX} y={gridY + 35} value="100 kW" color="#6b7280" active={isNormal} />
       
       {/* Flow: Generator to ATS */}
       <FlowLine 
@@ -451,7 +451,7 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
         active={!isNormal} 
         color="#f97316" 
       />
-      <PowerLabel x={genX} y={genY + 30} value="20 kW" color="#f97316" active={!isNormal} />
+      <PowerLabel x={genX} y={genY + 30} value="80 kW" color="#f97316" active={!isNormal} />
       
       {/* Middle: ATS */}
       <ATSIcon active={true} gridMode={isNormal} x={atsX} y={atsY} />
@@ -462,7 +462,7 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color={isNormal ? "#6b7280" : "#f97316"} 
       />
-      <PowerLabel x={atsX + 25} y={(atsY + homeY) / 2} value="12 kW" color={isNormal ? "#6b7280" : "#f97316"} active={true} />
+      <PowerLabel x={atsX + 25} y={(atsY + homeY) / 2} value="60 kW" color={isNormal ? "#6b7280" : "#f97316"} active={true} />
       
       {/* Bottom: Home */}
       <HomeIcon active={true} x={homeX} y={homeY} />
@@ -512,7 +512,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#eab308" 
       />
-      <PowerLabel x={solarX} y={solarY + 32} value="8 kW" color="#eab308" active={true} />
+      <PowerLabel x={solarX} y={solarY + 32} value="50 kW" color="#eab308" active={true} />
       
       {/* Flow: Grid to ATS */}
       <FlowLine 
@@ -520,7 +520,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#6b7280" 
       />
-      <PowerLabel x={gridX} y={gridY + 35} value="5 kW" color="#6b7280" active={isNormal} />
+      <PowerLabel x={gridX} y={gridY + 35} value="30 kW" color="#6b7280" active={isNormal} />
       
       {/* Flow: Generator to ATS */}
       <FlowLine 
@@ -528,7 +528,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
         active={!isNormal} 
         color="#f97316" 
       />
-      <PowerLabel x={genX} y={genY + 30} value="15 kW" color="#f97316" active={!isNormal} />
+      <PowerLabel x={genX} y={genY + 30} value="80 kW" color="#f97316" active={!isNormal} />
       
       {/* Middle: Inverter (for solar) and ATS (for grid/gen switching) */}
       <InverterIcon active={true} x={invX} y={invY} label="Inverter" />
@@ -540,7 +540,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#22c55e" 
       />
-      <PowerLabel x={invX - 5} y={invY + 40} value="8 kW" color="#22c55e" active={true} />
+      <PowerLabel x={invX - 5} y={invY + 40} value="50 kW" color="#22c55e" active={true} />
       
       {/* Flow: ATS to Home */}
       <FlowLine 
@@ -548,7 +548,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color={isNormal ? "#6b7280" : "#f97316"} 
       />
-      <PowerLabel x={atsX + 5} y={atsY + 40} value="5 kW" color={isNormal ? "#6b7280" : "#f97316"} active={true} />
+      <PowerLabel x={atsX + 5} y={atsX + 40} value="30 kW" color={isNormal ? "#6b7280" : "#f97316"} active={true} />
       
       {/* Bottom: Home */}
       <HomeIcon active={true} x={homeX} y={homeY} />
@@ -599,7 +599,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#eab308" 
       />
-      <PowerLabel x={solarX} y={solarY + 32} value="10 kW" color="#eab308" active={true} />
+      <PowerLabel x={solarX} y={solarY + 32} value="50 kW" color="#eab308" active={true} />
       
       {/* Flow: Grid to Inverter (when grid available) */}
       <FlowLine 
@@ -607,7 +607,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={isNormal} 
         color="#6b7280" 
       />
-      <PowerLabel x={gridX} y={gridY + 35} value="3 kW" color="#6b7280" active={isNormal} />
+      <PowerLabel x={gridX} y={gridY + 35} value="20 kW" color="#6b7280" active={isNormal} />
       
       {/* Flow: Generator to Inverter (when grid down) */}
       <FlowLine 
@@ -615,7 +615,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={!isNormal} 
         color="#f97316" 
       />
-      <PowerLabel x={genX} y={genY + 30} value="20 kW" color="#f97316" active={!isNormal} />
+      <PowerLabel x={genX} y={genY + 30} value="80 kW" color="#f97316" active={!isNormal} />
       
       {/* Middle row: Hybrid Inverter + Battery */}
       <InverterIcon active={true} x={invX} y={invY} label="Hybrid Inv" />
@@ -628,7 +628,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         color={isNormal ? "#22c55e" : "#f97316"}
         reverse={!isNormal}
       />
-      <PowerLabel x={(invX + battX) / 2} y={invY - 12} value={isNormal ? "5 kW" : "8 kW"} color={isNormal ? "#22c55e" : "#f97316"} active={true} />
+      <PowerLabel x={(invX + battX) / 2} y={invY - 12} value={isNormal ? "25 kW" : "40 kW"} color={isNormal ? "#22c55e" : "#f97316"} active={true} />
       
       {/* Flow: Inverter to ATS */}
       <FlowLine 
@@ -636,7 +636,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#22c55e" 
       />
-      <PowerLabel x={invX - 5} y={invY + 40} value="8 kW" color="#22c55e" active={true} />
+      <PowerLabel x={invX - 5} y={invY + 40} value="45 kW" color="#22c55e" active={true} />
       
       {/* Flow: Battery can also supply ATS during extended outages */}
       <FlowLine 
@@ -644,7 +644,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={!isNormal} 
         color="#22c55e" 
       />
-      <PowerLabel x={battX} y={battY + 30} value="5 kW" color="#22c55e" active={!isNormal} />
+      <PowerLabel x={battX} y={battY + 30} value="40 kW" color="#22c55e" active={!isNormal} />
       
       {/* ATS - manages power source priority */}
       <ATSIcon active={true} gridMode={isNormal} x={atsX} y={atsY} />
@@ -655,7 +655,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         active={true} 
         color="#22c55e" 
       />
-      <PowerLabel x={atsX + 25} y={(atsY + homeY) / 2} value="12 kW" color="#22c55e" active={true} />
+      <PowerLabel x={atsX + 25} y={(atsY + homeY) / 2} value="60 kW" color="#22c55e" active={true} />
       
       {/* Bottom: Home */}
       <HomeIcon active={true} x={homeX} y={homeY} />
