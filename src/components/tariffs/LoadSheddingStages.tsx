@@ -8,6 +8,7 @@ import {
   Sun, Battery, Fuel, Cable, TrendingUp, ShieldCheck, 
   Gauge, DollarSign, Leaf, Volume2, Droplets
 } from "lucide-react";
+import { EnergyFlowInfographic } from "./EnergyFlowInfographic";
 
 const ESKOM_PROVINCIAL_SCHEDULES = [
   { province: "Eastern Cape", url: "https://www.eskom.co.za/distribution/customer-service/outages/municipal-loadshedding-schedules/eastern-cape/" },
@@ -310,6 +311,40 @@ export function LoadSheddingStages() {
                   </div>
                 </div>
               </div>
+
+              {/* Animated Infographics Grid */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Sun className="h-4 w-4 text-yellow-500" />
+                    Grid-Tied Solar
+                  </h4>
+                  <EnergyFlowInfographic systemType="grid-tied" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Battery className="h-4 w-4 text-emerald-500" />
+                    Hybrid Solar + Battery
+                  </h4>
+                  <EnergyFlowInfographic systemType="hybrid" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Fuel className="h-4 w-4 text-orange-500" />
+                    Generator Only
+                  </h4>
+                  <EnergyFlowInfographic systemType="generator" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Sun className="h-4 w-4 text-yellow-500" />
+                    <span className="text-muted-foreground">+</span>
+                    <Fuel className="h-4 w-4 text-orange-500" />
+                    Solar + Generator Hybrid
+                  </h4>
+                  <EnergyFlowInfographic systemType="solar-generator" />
+                </div>
+              </div>
             </TabsContent>
 
             <TabsContent value="solar" className="space-y-4">
@@ -325,6 +360,9 @@ export function LoadSheddingStages() {
                       <p className="text-xs text-muted-foreground">Without battery storage</p>
                     </div>
                   </div>
+                  
+                  {/* Animated Flow Diagram */}
+                  <EnergyFlowInfographic systemType="grid-tied" className="mb-4" />
                   
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
@@ -363,6 +401,9 @@ export function LoadSheddingStages() {
                     </div>
                   </div>
                   
+                  {/* Animated Flow Diagram */}
+                  <EnergyFlowInfographic systemType="hybrid" className="mb-4" />
+                  
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
                       <ShieldCheck className="h-5 w-5 text-emerald-500 mt-0.5" />
@@ -391,39 +432,49 @@ export function LoadSheddingStages() {
             </TabsContent>
 
             <TabsContent value="battery" className="space-y-4">
-              <div className="p-5 rounded-xl border bg-gradient-to-br from-emerald-500/5 to-transparent">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-lg bg-emerald-500/10">
-                    <Battery className="h-6 w-6 text-emerald-500" />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="p-5 rounded-xl border bg-gradient-to-br from-emerald-500/5 to-transparent">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-emerald-500/10">
+                      <Battery className="h-6 w-6 text-emerald-500" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold">Battery Energy Storage Systems (BESS)</h4>
+                      <p className="text-xs text-muted-foreground">Sizing guidelines for load shedding resilience</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-semibold">Battery Energy Storage Systems (BESS)</h4>
-                    <p className="text-xs text-muted-foreground">Sizing guidelines for load shedding resilience</p>
+                  
+                  <div className="grid gap-3 grid-cols-3 mb-4">
+                    <div className="p-3 rounded-lg bg-muted/30 text-center">
+                      <p className="text-xl font-bold text-emerald-500">2-4h</p>
+                      <p className="text-[10px] text-muted-foreground">Stage 1-2</p>
+                      <p className="text-[10px] font-medium">5-10 kWh</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/30 text-center">
+                      <p className="text-xl font-bold text-orange-500">4-8h</p>
+                      <p className="text-[10px] text-muted-foreground">Stage 3-4</p>
+                      <p className="text-[10px] font-medium">10-20 kWh</p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-muted/30 text-center">
+                      <p className="text-xl font-bold text-red-500">8-14h</p>
+                      <p className="text-[10px] text-muted-foreground">Stage 5+</p>
+                      <p className="text-[10px] font-medium">20-40 kWh</p>
+                    </div>
                   </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    Battery sizing depends on essential load requirements. A typical home needs 5-10 kWh for essential backup; 
+                    commercial sites may require 50-200+ kWh depending on critical load profile.
+                  </p>
                 </div>
                 
-                <div className="grid gap-4 md:grid-cols-3 mb-4">
-                  <div className="p-4 rounded-lg bg-muted/30 text-center">
-                    <p className="text-2xl font-bold text-emerald-500">2-4h</p>
-                    <p className="text-xs text-muted-foreground">Coverage for Stage 1-2</p>
-                    <p className="text-xs font-medium mt-1">5-10 kWh typical</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/30 text-center">
-                    <p className="text-2xl font-bold text-orange-500">4-8h</p>
-                    <p className="text-xs text-muted-foreground">Coverage for Stage 3-4</p>
-                    <p className="text-xs font-medium mt-1">10-20 kWh typical</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-muted/30 text-center">
-                    <p className="text-2xl font-bold text-red-500">8-14h</p>
-                    <p className="text-xs text-muted-foreground">Coverage for Stage 5+</p>
-                    <p className="text-xs font-medium mt-1">20-40 kWh typical</p>
-                  </div>
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Battery className="h-4 w-4 text-emerald-500" />
+                    Hybrid System Energy Flow
+                  </h4>
+                  <EnergyFlowInfographic systemType="hybrid" />
                 </div>
-
-                <p className="text-xs text-muted-foreground">
-                  Battery sizing depends on essential load requirements. A typical home needs 5-10 kWh for essential backup; 
-                  commercial sites may require 50-200+ kWh depending on critical load profile.
-                </p>
               </div>
             </TabsContent>
 
@@ -440,6 +491,9 @@ export function LoadSheddingStages() {
                       <p className="text-xs text-muted-foreground">Standalone backup power</p>
                     </div>
                   </div>
+                  
+                  {/* Animated Flow Diagram */}
+                  <EnergyFlowInfographic systemType="generator" className="mb-4" />
                   
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/30">
@@ -486,6 +540,9 @@ export function LoadSheddingStages() {
                     </div>
                     <Badge className="ml-auto bg-primary text-primary-foreground">Recommended</Badge>
                   </div>
+                  
+                  {/* Animated Flow Diagram */}
+                  <EnergyFlowInfographic systemType="solar-generator" className="mb-4" />
                   
                   <div className="space-y-3">
                     <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5">
