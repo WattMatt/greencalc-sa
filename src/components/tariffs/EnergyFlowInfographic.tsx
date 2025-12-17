@@ -277,7 +277,7 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
   const homeX = 100, homeY = 190;
   
   return (
-    <svg viewBox="0 0 200 240" className="w-full h-auto max-w-[200px] mx-auto">
+    <svg viewBox="0 0 200 255" className="w-full h-auto max-w-[200px] mx-auto">
       <style>{`
         @keyframes flowAnimation {
           0% { stroke-dashoffset: 40; }
@@ -288,25 +288,31 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
         }
       `}</style>
       
+      {/* System capacity label */}
+      <rect x="10" y="2" width="180" height="16" rx="3" className="fill-muted/50" />
+      <text x="100" y="13" className="text-[8px] font-semibold fill-muted-foreground" textAnchor="middle">
+        50kW Solar / 50kW Inverter
+      </text>
+      
       {/* Top: Solar + Grid side by side */}
-      <SolarIcon active={isNormal} x={solarX} y={solarY} />
-      <GridIcon active={isNormal} x={gridX} y={gridY} />
+      <SolarIcon active={isNormal} x={solarX} y={solarY + 15} />
+      <GridIcon active={isNormal} x={gridX} y={gridY + 15} />
       
       {/* Flow: Solar down to Inverter */}
       <FlowLine 
-        path={`M ${solarX} ${solarY + 15} L ${solarX} ${invY - 26} L ${invX} ${invY - 26} L ${invX} ${invY - 16}`} 
+        path={`M ${solarX} ${solarY + 30} L ${solarX} ${invY - 11} L ${invX} ${invY - 11} L ${invX} ${invY - 1}`} 
         active={isNormal} 
         color="#eab308" 
       />
-      <PowerLabel x={solarX} y={solarY + 32} value="50 kW" color="#eab308" active={isNormal} />
+      <PowerLabel x={solarX} y={solarY + 47} value="50 kW" color="#eab308" active={isNormal} />
       
       {/* Flow: Grid down to Inverter */}
       <FlowLine 
-        path={`M ${gridX} ${gridY + 18} L ${gridX} ${invY - 26} L ${invX} ${invY - 26}`} 
+        path={`M ${gridX} ${gridY + 33} L ${gridX} ${invY - 11} L ${invX} ${invY - 11}`} 
         active={isNormal} 
         color="#6b7280" 
       />
-      <PowerLabel x={gridX} y={gridY + 35} value="20 kW" color="#6b7280" active={isNormal} />
+      <PowerLabel x={gridX} y={gridY + 50} value="20 kW" color="#6b7280" active={isNormal} />
       
       {/* Middle: Inverter */}
       <InverterIcon active={isNormal} x={invX} y={invY} />
@@ -323,10 +329,10 @@ function GridTiedFlow({ mode }: { mode: OperationMode }) {
       <HomeIcon active={isNormal} x={homeX} y={homeY} />
       
       {/* Status indicator */}
-      <rect x="10" y="210" width="180" height="24" rx="4" 
+      <rect x="10" y="225" width="180" height="24" rx="4" 
         className={cn("transition-all duration-500", isNormal ? "fill-emerald-500/10 stroke-emerald-500/30" : "fill-red-500/10 stroke-red-500/30")} 
         strokeWidth="1" />
-      <text x="100" y="226" className={cn("text-[9px] font-semibold", isNormal ? "fill-emerald-600" : "fill-red-600")} textAnchor="middle">
+      <text x="100" y="241" className={cn("text-[9px] font-semibold", isNormal ? "fill-emerald-600" : "fill-red-600")} textAnchor="middle">
         {isNormal ? "✓ Solar powers loads, excess to grid" : "✗ Anti-islanding shuts down system"}
       </text>
     </svg>
@@ -344,7 +350,7 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
   const homeX = 100, homeY = 195;
   
   return (
-    <svg viewBox="0 0 200 260" className="w-full h-auto max-w-[200px] mx-auto">
+    <svg viewBox="0 0 200 275" className="w-full h-auto max-w-[200px] mx-auto">
       <style>{`
         @keyframes flowAnimation {
           0% { stroke-dashoffset: 40; }
@@ -355,9 +361,15 @@ function HybridFlow({ mode }: { mode: OperationMode }) {
         }
       `}</style>
       
+      {/* System capacity label */}
+      <rect x="10" y="2" width="180" height="16" rx="3" className="fill-muted/50" />
+      <text x="100" y="13" className="text-[8px] font-semibold fill-muted-foreground" textAnchor="middle">
+        50kW Solar / 50kW Inverter / 100kWh Battery
+      </text>
+      
       {/* Top: Solar + Grid */}
-      <SolarIcon active={true} x={solarX} y={solarY} />
-      <GridIcon active={isNormal} x={gridX} y={gridY} />
+      <SolarIcon active={true} x={solarX} y={solarY + 15} />
+      <GridIcon active={isNormal} x={gridX} y={gridY + 15} />
       
       {/* Flow: Solar to Inverter */}
       <FlowLine 
@@ -422,7 +434,7 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
   const homeX = 100, homeY = 195;
   
   return (
-    <svg viewBox="0 0 200 260" className="w-full h-auto max-w-[200px] mx-auto">
+    <svg viewBox="0 0 200 275" className="w-full h-auto max-w-[200px] mx-auto">
       <style>{`
         @keyframes flowAnimation {
           0% { stroke-dashoffset: 40; }
@@ -433,9 +445,15 @@ function GeneratorFlow({ mode }: { mode: OperationMode }) {
         }
       `}</style>
       
+      {/* System capacity label */}
+      <rect x="10" y="2" width="180" height="16" rx="3" className="fill-muted/50" />
+      <text x="100" y="13" className="text-[8px] font-semibold fill-muted-foreground" textAnchor="middle">
+        100kW Grid Connection / 80kW Generator
+      </text>
+      
       {/* Top: Grid + Generator */}
-      <GridIcon active={isNormal} x={gridX} y={gridY} />
-      <GeneratorIcon active={!isNormal} x={genX} y={genY} />
+      <GridIcon active={isNormal} x={gridX} y={gridY + 15} />
+      <GeneratorIcon active={!isNormal} x={genX} y={genY + 15} />
       
       {/* Flow: Grid to ATS */}
       <FlowLine 
@@ -490,7 +508,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
   const homeX = 110, homeY = 195;
   
   return (
-    <svg viewBox="0 0 220 260" className="w-full h-auto max-w-[220px] mx-auto">
+    <svg viewBox="0 0 220 275" className="w-full h-auto max-w-[220px] mx-auto">
       <style>{`
         @keyframes flowAnimation {
           0% { stroke-dashoffset: 40; }
@@ -501,10 +519,16 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
         }
       `}</style>
       
+      {/* System capacity label */}
+      <rect x="10" y="2" width="200" height="16" rx="3" className="fill-muted/50" />
+      <text x="110" y="13" className="text-[8px] font-semibold fill-muted-foreground" textAnchor="middle">
+        50kW Solar / 50kW Inverter / 80kW Generator
+      </text>
+      
       {/* Top row: Solar, Grid, Generator */}
-      <SolarIcon active={true} x={solarX} y={solarY} />
-      <GridIcon active={isNormal} x={gridX} y={gridY} />
-      <GeneratorIcon active={!isNormal} x={genX} y={genY} />
+      <SolarIcon active={true} x={solarX} y={solarY + 15} />
+      <GridIcon active={isNormal} x={gridX} y={gridY + 15} />
+      <GeneratorIcon active={!isNormal} x={genX} y={genY + 15} />
       
       {/* Flow: Solar to Inverter */}
       <FlowLine 
@@ -577,7 +601,7 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
   const homeX = 110, homeY = 245;
   
   return (
-    <svg viewBox="0 0 200 300" className="w-full h-auto max-w-[200px] mx-auto">
+    <svg viewBox="0 0 200 315" className="w-full h-auto max-w-[200px] mx-auto">
       <style>{`
         @keyframes flowAnimation {
           0% { stroke-dashoffset: 40; }
@@ -588,10 +612,16 @@ function FullHybridFlow({ mode }: { mode: OperationMode }) {
         }
       `}</style>
       
+      {/* System capacity label */}
+      <rect x="10" y="2" width="180" height="16" rx="3" className="fill-muted/50" />
+      <text x="100" y="13" className="text-[7px] font-semibold fill-muted-foreground" textAnchor="middle">
+        50kW Solar / 100kWh Battery / 80kW Generator
+      </text>
+      
       {/* Top row: Solar, Grid, Generator */}
-      <SolarIcon active={true} x={solarX} y={solarY} />
-      <GridIcon active={isNormal} x={gridX} y={gridY} />
-      <GeneratorIcon active={!isNormal} x={genX} y={genY} />
+      <SolarIcon active={true} x={solarX} y={solarY + 15} />
+      <GridIcon active={isNormal} x={gridX} y={gridY + 15} />
+      <GeneratorIcon active={!isNormal} x={genX} y={genY + 15} />
       
       {/* Flow: Solar to Inverter */}
       <FlowLine 
