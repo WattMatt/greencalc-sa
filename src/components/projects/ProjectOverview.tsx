@@ -7,7 +7,7 @@ import {
   Users, BarChart3, DollarSign, Zap, Sun, MapPin, Plug, 
   CheckCircle2, AlertCircle, ArrowRight, Building2, TrendingDown, Wallet, TrendingUp
 } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line, Legend, CartesianGrid, ReferenceLine } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line, Legend, CartesianGrid, ReferenceLine, PieChart, Pie, Cell } from "recharts";
 
 interface Tenant {
   id: string;
@@ -134,6 +134,37 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
       savingsPercent
     };
   }, [maxSolarKva, dailyTotal, annualConsumption]);
+
+  // Calculate energy ratios for pie charts
+  const energyRatios = useMemo(() => {
+    if (!solarFinancials || dailyTotal === 0 || dailyPvGeneration === 0) return null;
+    
+    const dailySelfConsumed = Math.min(dailyPvGeneration * 0.7, dailyTotal); // 70% self-consumption
+    const dailyGridExport = dailyPvGeneration - dailySelfConsumed;
+    const dailyGridImport = Math.max(0, dailyTotal - dailySelfConsumed);
+    
+    const selfConsumptionRate = (dailySelfConsumed / dailyPvGeneration) * 100;
+    const solarCoverageRate = (dailySelfConsumed / dailyTotal) * 100;
+    const gridDependencyRate = (dailyGridImport / dailyTotal) * 100;
+    
+    return {
+      selfConsumptionRate,
+      solarCoverageRate,
+      gridDependencyRate,
+      dailySelfConsumed,
+      dailyGridExport,
+      dailyGridImport,
+      // Pie chart data
+      energySourceData: [
+        { name: 'Solar', value: dailySelfConsumed, color: 'hsl(45 93% 47%)' },
+        { name: 'Grid', value: dailyGridImport, color: 'hsl(var(--destructive))' }
+      ],
+      pvUsageData: [
+        { name: 'Self-consumed', value: dailySelfConsumed, color: 'hsl(142 76% 36%)' },
+        { name: 'Exported', value: dailyGridExport, color: 'hsl(var(--primary))' }
+      ]
+    };
+  }, [solarFinancials, dailyTotal, dailyPvGeneration]);
 
   // Generate savings breakdown chart data (10-year projection)
   const savingsChartData = useMemo(() => {
@@ -452,6 +483,147 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
               </CardContent>
             </Card>
           )}
+        </div>
+      )}
+
+      {/* Energy Ratio Charts */}
+      {energyRatios && (
+        <div className="grid gap-4 md:grid-cols-3">
+          {/* Energy Source Breakdown */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Zap className="h-4 w-4" />
+                Energy Source
+              </CardTitle>
+              <CardDescription className="text-xs">Where your energy comes from</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="h-32 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={energyRatios.energySourceData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={35}
+                      outerRadius={50}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {energyRatios.energySourceData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="rounded-lg border bg-background px-3 py-2 shadow-sm">
+                              <p className="text-xs font-medium">{payload[0].name}</p>
+                              <p className="text-sm">{Number(payload[0].value).toFixed(1)} kWh</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex justify-center gap-4 text-xs mt-1">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'hsl(45 93% 47%)' }} />
+                  <span>Solar {energyRatios.solarCoverageRate.toFixed(0)}%</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-destructive" />
+                  <span>Grid {energyRatios.gridDependencyRate.toFixed(0)}%</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Solar Self-Consumption */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Sun className="h-4 w-4 text-amber-500" />
+                PV Utilization
+              </CardTitle>
+              <CardDescription className="text-xs">How solar generation is used</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="h-32 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={energyRatios.pvUsageData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={35}
+                      outerRadius={50}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {energyRatios.pvUsageData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="rounded-lg border bg-background px-3 py-2 shadow-sm">
+                              <p className="text-xs font-medium">{payload[0].name}</p>
+                              <p className="text-sm">{Number(payload[0].value).toFixed(1)} kWh</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex justify-center gap-4 text-xs mt-1">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'hsl(142 76% 36%)' }} />
+                  <span>Used {energyRatios.selfConsumptionRate.toFixed(0)}%</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-primary" />
+                  <span>Export {(100 - energyRatios.selfConsumptionRate).toFixed(0)}%</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Grid Independence */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <TrendingDown className="h-4 w-4 text-green-500" />
+                Grid Independence
+              </CardTitle>
+              <CardDescription className="text-xs">Reduced grid dependency</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="h-32 flex flex-col items-center justify-center">
+                <div className="text-4xl font-bold text-green-600">
+                  {energyRatios.solarCoverageRate.toFixed(0)}%
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">of load from solar</p>
+                <div className="w-full mt-3">
+                  <Progress value={energyRatios.solarCoverageRate} className="h-2" />
+                </div>
+              </div>
+              <div className="flex justify-between text-xs mt-2 text-muted-foreground">
+                <span>Grid: {energyRatios.dailyGridImport.toFixed(0)} kWh/day</span>
+                <span>Solar: {energyRatios.dailySelfConsumed.toFixed(0)} kWh/day</span>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
