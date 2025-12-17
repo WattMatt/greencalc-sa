@@ -462,7 +462,7 @@ function SolarGeneratorFlow({ mode }: { mode: OperationMode }) {
 
 export function EnergyFlowInfographic({ systemType, className }: EnergyFlowInfographicProps) {
   const [mode, setMode] = useState<OperationMode>("normal");
-  const [isAnimating, setIsAnimating] = useState(true);
+  const [isAnimating, setIsAnimating] = useState(true); // Always start with auto-play
 
   // Auto-cycle between modes
   useEffect(() => {
@@ -502,41 +502,16 @@ export function EnergyFlowInfographic({ systemType, className }: EnergyFlowInfog
         }
       `}</style>
 
-      {/* Mode toggle */}
-      <div className="flex items-center justify-center gap-1">
-        <button
-          onClick={() => { setMode("normal"); setIsAnimating(false); }}
-          className={cn(
-            "px-2.5 py-1 text-[10px] font-medium rounded-l-md border transition-all",
-            mode === "normal" && !isAnimating
-              ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" 
-              : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
-          )}
-        >
-          Normal
-        </button>
-        <button
-          onClick={() => { setMode("loadshedding"); setIsAnimating(false); }}
-          className={cn(
-            "px-2.5 py-1 text-[10px] font-medium border-y transition-all",
-            mode === "loadshedding" && !isAnimating
-              ? "bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30" 
-              : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
-          )}
-        >
-          Load Shedding
-        </button>
-        <button
-          onClick={() => setIsAnimating(true)}
-          className={cn(
-            "px-2.5 py-1 text-[10px] font-medium rounded-r-md border transition-all",
-            isAnimating 
-              ? "bg-primary/20 text-primary border-primary/30" 
-              : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
-          )}
-        >
-          ▶ Auto
-        </button>
+      {/* Mode indicator */}
+      <div className="flex items-center justify-center">
+        <div className={cn(
+          "px-3 py-1 text-[10px] font-medium rounded-full border transition-all",
+          mode === "normal" 
+            ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" 
+            : "bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30"
+        )}>
+          {mode === "normal" ? "● Normal Operation" : "● Load Shedding"}
+        </div>
       </div>
 
       {/* Flow diagram */}
