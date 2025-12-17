@@ -473,8 +473,20 @@ export function TOUClockLegend() {
   );
 }
 
-// Comparison component showing pre-2025 vs 2025/2026 side-by-side
+// Comparison component showing pre-2025 vs 2025/2026 with animated toggle
 export function TOUComparisonView() {
+  const [showNew, setShowNew] = useState(true);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [viewMode, setViewMode] = useState<'toggle' | 'sideBySide'>('toggle');
+
+  const handleToggle = () => {
+    setIsAnimating(true);
+    setTimeout(() => {
+      setShowNew(!showNew);
+      setTimeout(() => setIsAnimating(false), 300);
+    }, 150);
+  };
+
   const changes = [
     { label: "Morning Peak", old: "06:00-09:00 (3h)", new: "07:00-09:00 (2h)", impact: "reduced", description: "1 hour shorter" },
     { label: "Evening Peak", old: "17:00-19:00 (2h)", new: "17:00-20:00 (3h)", impact: "increased", description: "1 hour longer" },
@@ -484,82 +496,197 @@ export function TOUComparisonView() {
 
   return (
     <div className="space-y-6">
+      {/* View Mode Toggle */}
+      <div className="flex justify-center gap-2">
+        <button
+          onClick={() => setViewMode('toggle')}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
+            viewMode === 'toggle' 
+              ? 'bg-primary text-primary-foreground' 
+              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+          }`}
+        >
+          Animated Toggle
+        </button>
+        <button
+          onClick={() => setViewMode('sideBySide')}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
+            viewMode === 'sideBySide' 
+              ? 'bg-primary text-primary-foreground' 
+              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+          }`}
+        >
+          Side by Side
+        </button>
+      </div>
+
       {/* Key Changes Summary */}
       <div className="grid gap-3">
-        {changes.map((change) => (
+        {changes.map((change, index) => (
           <div 
             key={change.label}
-            className={`p-3 rounded-lg border flex items-center justify-between ${
+            className={`p-3 rounded-lg border flex items-center justify-between transition-all duration-300 animate-fade-in ${
               change.impact === 'new' 
                 ? 'border-amber-500/30 bg-amber-500/10' 
                 : change.impact === 'increased'
                 ? 'border-red-500/30 bg-red-500/10'
                 : 'border-green-500/30 bg-green-500/10'
             }`}
+            style={{ animationDelay: `${index * 50}ms` }}
           >
             <div>
               <div className="font-medium text-sm">{change.label}</div>
               <div className="text-xs text-muted-foreground">{change.description}</div>
             </div>
             <div className="flex items-center gap-3 text-sm">
-              <span className="text-muted-foreground line-through">{change.old}</span>
-              <span className="text-foreground">→</span>
-              <span className={`font-medium ${
-                change.impact === 'new' 
-                  ? 'text-amber-600 dark:text-amber-400' 
-                  : change.impact === 'increased'
-                  ? 'text-red-600 dark:text-red-400'
-                  : 'text-green-600 dark:text-green-400'
+              <span className={`transition-all duration-300 ${
+                viewMode === 'toggle' && showNew ? 'text-muted-foreground line-through opacity-50' : 'text-foreground font-medium'
+              }`}>{change.old}</span>
+              <span className="text-muted-foreground">→</span>
+              <span className={`transition-all duration-300 ${
+                viewMode === 'toggle' && !showNew ? 'opacity-50' : `font-medium ${
+                  change.impact === 'new' 
+                    ? 'text-amber-600 dark:text-amber-400' 
+                    : change.impact === 'increased'
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-green-600 dark:text-green-400'
+                }`
               }`}>{change.new}</span>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Side-by-side clock comparison */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Pre-2025 */}
-        <div className="p-4 rounded-lg border border-muted bg-muted/30">
-          <div className="flex items-center gap-2 mb-4 justify-center">
-            <span className="px-2 py-1 rounded text-xs font-medium bg-muted text-muted-foreground">Pre-2025</span>
-            <span className="text-sm font-semibold text-muted-foreground">Previous Structure</span>
-          </div>
-          <div className="flex justify-center">
-            <TOUClockDiagram 
-              title="High-Demand (Pre-2025)" 
-              periods={ESKOM_PRE_2025_HIGH_DEMAND_PERIODS} 
-              size={240}
-              showAnnotations={false}
-            />
-          </div>
-          <div className="mt-4 text-xs text-center text-muted-foreground space-y-1">
-            <p>• 3-hour morning peak (06:00-09:00)</p>
-            <p>• 2-hour evening peak (17:00-19:00)</p>
-            <p>• Sunday entirely Off-Peak</p>
-          </div>
-        </div>
+      {viewMode === 'toggle' ? (
+        <>
+          {/* Animated Toggle View */}
+          <div className="flex flex-col items-center gap-4">
+            {/* Toggle Button */}
+            <button
+              onClick={handleToggle}
+              className="group relative flex items-center gap-3 px-6 py-3 rounded-full bg-gradient-to-r from-muted to-muted/50 hover:from-primary/20 hover:to-primary/10 border border-border hover:border-primary/30 transition-all duration-300 hover:scale-105"
+            >
+              <span className={`text-sm font-medium transition-all duration-300 ${!showNew ? 'text-foreground' : 'text-muted-foreground'}`}>
+                Pre-2025
+              </span>
+              <div className="relative w-14 h-7 bg-muted rounded-full border border-border overflow-hidden">
+                <div 
+                  className={`absolute top-0.5 w-6 h-6 rounded-full transition-all duration-300 ease-out ${
+                    showNew 
+                      ? 'left-[calc(100%-1.625rem)] bg-primary shadow-lg shadow-primary/30' 
+                      : 'left-0.5 bg-muted-foreground'
+                  }`}
+                />
+              </div>
+              <span className={`text-sm font-medium transition-all duration-300 ${showNew ? 'text-foreground' : 'text-muted-foreground'}`}>
+                2025/2026
+              </span>
+            </button>
 
-        {/* 2025/2026 */}
-        <div className="p-4 rounded-lg border border-primary/30 bg-primary/5">
-          <div className="flex items-center gap-2 mb-4 justify-center">
-            <span className="px-2 py-1 rounded text-xs font-medium bg-primary text-primary-foreground">2025/2026</span>
-            <span className="text-sm font-semibold">Current Structure</span>
+            {/* Animated Clock Container */}
+            <div className="relative">
+              <div 
+                className={`transition-all duration-300 ease-out ${
+                  isAnimating ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+                }`}
+              >
+                <div className={`p-6 rounded-xl border-2 transition-all duration-500 ${
+                  showNew 
+                    ? 'border-primary/40 bg-primary/5 shadow-lg shadow-primary/10' 
+                    : 'border-muted bg-muted/30'
+                }`}>
+                  <div className="flex items-center gap-2 mb-4 justify-center">
+                    <span className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 ${
+                      showNew 
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'bg-muted text-muted-foreground'
+                    }`}>
+                      {showNew ? '2025/2026' : 'Pre-2025'}
+                    </span>
+                    <span className={`text-sm font-semibold transition-colors duration-300 ${
+                      showNew ? 'text-foreground' : 'text-muted-foreground'
+                    }`}>
+                      {showNew ? 'Current Structure' : 'Previous Structure'}
+                    </span>
+                  </div>
+                  <div className="flex justify-center">
+                    <TOUClockDiagram 
+                      title={showNew ? "High-Demand (2025/2026)" : "High-Demand (Pre-2025)"} 
+                      periods={showNew ? ESKOM_HIGH_DEMAND_PERIODS : ESKOM_PRE_2025_HIGH_DEMAND_PERIODS} 
+                      size={280}
+                      showAnnotations={showNew}
+                    />
+                  </div>
+                  <div className="mt-4 text-xs text-center space-y-1">
+                    {showNew ? (
+                      <>
+                        <p className="text-muted-foreground">• 2-hour morning peak (07:00-09:00)</p>
+                        <p className="text-muted-foreground">• 3-hour evening peak (17:00-20:00)</p>
+                        <p className="text-amber-600 dark:text-amber-400 font-medium animate-pulse">• NEW: Sunday 18:00-20:00 Standard</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-muted-foreground">• 3-hour morning peak (06:00-09:00)</p>
+                        <p className="text-muted-foreground">• 2-hour evening peak (17:00-19:00)</p>
+                        <p className="text-muted-foreground">• Sunday entirely Off-Peak</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground text-center">
+              Click the toggle to compare the TOU period changes
+            </p>
           </div>
-          <div className="flex justify-center">
-            <TOUClockDiagram 
-              title="High-Demand (2025/2026)" 
-              periods={ESKOM_HIGH_DEMAND_PERIODS} 
-              size={240}
-              showAnnotations={false}
-            />
+        </>
+      ) : (
+        /* Side-by-side clock comparison */
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Pre-2025 */}
+          <div className="p-4 rounded-lg border border-muted bg-muted/30 transition-all duration-300 hover:border-muted-foreground/30 animate-fade-in">
+            <div className="flex items-center gap-2 mb-4 justify-center">
+              <span className="px-2 py-1 rounded text-xs font-medium bg-muted text-muted-foreground">Pre-2025</span>
+              <span className="text-sm font-semibold text-muted-foreground">Previous Structure</span>
+            </div>
+            <div className="flex justify-center">
+              <TOUClockDiagram 
+                title="High-Demand (Pre-2025)" 
+                periods={ESKOM_PRE_2025_HIGH_DEMAND_PERIODS} 
+                size={240}
+                showAnnotations={false}
+              />
+            </div>
+            <div className="mt-4 text-xs text-center text-muted-foreground space-y-1">
+              <p>• 3-hour morning peak (06:00-09:00)</p>
+              <p>• 2-hour evening peak (17:00-19:00)</p>
+              <p>• Sunday entirely Off-Peak</p>
+            </div>
           </div>
-          <div className="mt-4 text-xs text-center text-muted-foreground space-y-1">
-            <p>• 2-hour morning peak (07:00-09:00)</p>
-            <p>• 3-hour evening peak (17:00-20:00)</p>
-            <p className="text-amber-600 dark:text-amber-400 font-medium">• NEW: Sunday 18:00-20:00 Standard</p>
+
+          {/* 2025/2026 */}
+          <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 transition-all duration-300 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 animate-fade-in" style={{ animationDelay: '100ms' }}>
+            <div className="flex items-center gap-2 mb-4 justify-center">
+              <span className="px-2 py-1 rounded text-xs font-medium bg-primary text-primary-foreground">2025/2026</span>
+              <span className="text-sm font-semibold">Current Structure</span>
+            </div>
+            <div className="flex justify-center">
+              <TOUClockDiagram 
+                title="High-Demand (2025/2026)" 
+                periods={ESKOM_HIGH_DEMAND_PERIODS} 
+                size={240}
+                showAnnotations={false}
+              />
+            </div>
+            <div className="mt-4 text-xs text-center text-muted-foreground space-y-1">
+              <p>• 2-hour morning peak (07:00-09:00)</p>
+              <p>• 3-hour evening peak (17:00-20:00)</p>
+              <p className="text-amber-600 dark:text-amber-400 font-medium">• NEW: Sunday 18:00-20:00 Standard</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <TOUClockLegend />
     </div>
