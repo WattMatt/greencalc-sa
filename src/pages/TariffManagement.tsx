@@ -10,6 +10,7 @@ import { AISheetImport } from "@/components/tariffs/AISheetImport";
 import { FileUploadImport } from "@/components/tariffs/FileUploadImport";
 import { MunicipalityMap } from "@/components/tariffs/MunicipalityMap";
 import { ProvinceFilesManager } from "@/components/tariffs/ProvinceFilesManager";
+import { LoadSheddingStages } from "@/components/tariffs/LoadSheddingStages";
 
 export default function TariffManagement() {
   const [activeTab, setActiveTab] = useState("tariffs");
@@ -43,6 +44,7 @@ export default function TariffManagement() {
           <TabsTrigger value="municipalities">Municipalities</TabsTrigger>
           <TabsTrigger value="builder">Tariff Builder</TabsTrigger>
           <TabsTrigger value="tou-reference">TOU Reference</TabsTrigger>
+          <TabsTrigger value="loadshedding">Load Shedding</TabsTrigger>
           <TabsTrigger value="nersa-guidelines">NERSA Guidelines</TabsTrigger>
         </TabsList>
 
@@ -74,6 +76,10 @@ export default function TariffManagement() {
 
         <TabsContent value="tou-reference" className="space-y-4">
           <TOUReference />
+        </TabsContent>
+
+        <TabsContent value="loadshedding" className="space-y-4">
+          <LoadSheddingStages />
         </TabsContent>
 
         <TabsContent value="nersa-guidelines" className="space-y-4">
