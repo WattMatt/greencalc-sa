@@ -13,7 +13,7 @@ import { TariffSelector } from "@/components/projects/TariffSelector";
 import { SimulationModes } from "@/components/projects/SimulationModes";
 import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { SolarForecastCard } from "@/components/projects/SolarForecastCard";
-import { ReportsRoadmap } from "@/components/reports/ReportsRoadmap";
+import { ReportBuilder } from "@/components/reports/builder";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -230,7 +230,7 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6">
-          <ReportsRoadmap />
+          <ReportBuilder projectId={id!} />
         </TabsContent>
       </Tabs>
     </div>
