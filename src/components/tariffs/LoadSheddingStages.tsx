@@ -25,7 +25,7 @@ const LOAD_SHEDDING_STAGES = [
   { stage: 5, name: "Stage 5", hoursPerDay: 8, description: "6-8 hours per day", mwShed: 5000, slots: 4 },
   { stage: 6, name: "Stage 6", hoursPerDay: 10, description: "8-10 hours per day", mwShed: 6000, slots: 5 },
   { stage: 7, name: "Stage 7", hoursPerDay: 12, description: "10-12 hours per day", mwShed: 7000, slots: 6 },
-  { stage: 8, name: "Stage 8", hoursPerDay: 12, description: "12+ hours per day", mwShed: 8000, slots: 6 },
+  { stage: 8, name: "Stage 8", hoursPerDay: 14, description: "12-14 hours per day", mwShed: 8000, slots: 7 },
 ];
 
 // Typical outage blocks per stage (start hour, duration in hours)
@@ -39,7 +39,7 @@ const STAGE_OUTAGE_BLOCKS: Record<number, [number, number][]> = {
   5: [[2, 2], [6, 2], [14, 2], [22, 2]], // 4 x 2hr slots
   6: [[2, 2], [6, 2], [10, 2], [18, 2], [22, 2]], // 5 x 2hr slots
   7: [[0, 2], [4, 2], [8, 2], [14, 2], [18, 2], [22, 2]], // 6 x 2hr slots
-  8: [[0, 2], [4, 2], [8, 2], [12, 2], [16, 2], [20, 2]], // 6 x 2hr slots (evenly spread)
+  8: [[0, 2], [4, 2], [8, 2], [12, 2], [16, 2], [20, 2], [22, 2]], // 7 x 2hr slots (14 hours)
 };
 
 // Get severity color classes based on stage
