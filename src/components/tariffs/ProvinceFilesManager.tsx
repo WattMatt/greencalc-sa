@@ -82,6 +82,7 @@ export function ProvinceFilesManager() {
   
   // Extraction workflow state
   const [selectedFile, setSelectedFile] = useState<ProvinceFile | null>(null);
+  const [availableFiles, setAvailableFiles] = useState<ProvinceFile[]>([]);
   const [extractionPhase, setExtractionPhase] = useState<"idle" | "analyzing" | "extracting-munis" | "ready" | "extracting">("idle");
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [analysisInfo, setAnalysisInfo] = useState<{ sheets?: string[]; analysis?: string } | null>(null);
@@ -366,8 +367,9 @@ export function ProvinceFilesManager() {
     return 'unknown';
   };
 
-  const startExtraction = async (file: ProvinceFile, province: string) => {
+  const startExtraction = async (file: ProvinceFile, province: string, allFiles?: ProvinceFile[]) => {
     setSelectedFile(file);
+    setAvailableFiles(allFiles || [file]);
     setSelectedProvince(province);
     setAnalysisInfo(null);
     setExtractionOpen(true);
@@ -1061,7 +1063,7 @@ export function ProvinceFilesManager() {
                         variant="default"
                         size="sm"
                         className="h-8"
-                        onClick={() => startExtraction(stats.files[0], stats.province)}
+                        onClick={() => startExtraction(stats.files[0], stats.province, stats.files)}
                       >
                         <Zap className="h-4 w-4 mr-1" />
                         Extract
@@ -1136,14 +1138,40 @@ export function ProvinceFilesManager() {
         <Dialog open={extractionOpen} onOpenChange={setExtractionOpen}>
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
             <DialogHeader className="flex flex-row items-start justify-between">
-              <div>
+              <div className="flex-1">
                 <DialogTitle className="flex items-center gap-2">
                   <Zap className="h-5 w-5" />
                   Extract Tariffs - {selectedProvince}
                 </DialogTitle>
-                <DialogDescription>
-                  {selectedFile?.name}
-                </DialogDescription>
+                {availableFiles.length > 1 ? (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-sm text-muted-foreground">Source file:</span>
+                    <select
+                      value={selectedFile?.name || ''}
+                      onChange={(e) => {
+                        const file = availableFiles.find(f => f.name === e.target.value);
+                        if (file) {
+                          setSelectedFile(file);
+                          setAnalysisInfo(null);
+                        }
+                      }}
+                      className="text-sm border rounded px-2 py-1 bg-background"
+                    >
+                      {availableFiles.map((file) => (
+                        <option key={file.name} value={file.name}>
+                          {file.name} ({getFileType(file.name).toUpperCase()})
+                        </option>
+                      ))}
+                    </select>
+                    <Badge variant="outline" className="text-xs">
+                      {availableFiles.length} files
+                    </Badge>
+                  </div>
+                ) : (
+                  <DialogDescription>
+                    {selectedFile?.name}
+                  </DialogDescription>
+                )}
               </div>
               {municipalities.length > 0 && (
                 <Button variant="outline" size="sm" onClick={handleRefreshExtractionData}>
