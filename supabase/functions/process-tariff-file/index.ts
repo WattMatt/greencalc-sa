@@ -569,15 +569,22 @@ Correct extraction:
   ]
 }
 
-=== TOU TARIFF EXTRACTION (CRITICAL - MOST COMMONLY MISSED) ===
+=== TOU TARIFF EXTRACTION (CRITICAL - RATES ARE MANDATORY!) ===
 
-TOU tariffs MUST have energy rates for EACH combination:
-- Seasons: "High/Winter" (June-Aug) AND "Low/Summer" (Sep-May)
+**CRITICAL**: TOU tariffs MUST have energy rates in the rates array! A TOU tariff with empty rates is INVALID and will be rejected!
+
+TOU tariffs require energy rates (c/kWh converted to R/kWh) for EACH combination:
+- Seasons: "High/Winter" (June-Aug) AND "Low/Summer" (Sep-May)  
 - Periods: "Peak", "Standard", "Off-Peak"
 
 That's 6 rate entries minimum for a complete TOU tariff!
 
-Example TOU rates array:
+Look for these patterns in Eskom/source data:
+- "Active Energy" tables with c/kWh rates by season and TOU period
+- "Peak", "Standard", "Off-Peak" column headers
+- "High Demand Season" vs "Low Demand Season" sections
+
+Example TOU rates array (REQUIRED - not optional!):
 [
   { "rate_per_kwh": 3.50, "season": "High/Winter", "time_of_use": "Peak" },
   { "rate_per_kwh": 1.80, "season": "High/Winter", "time_of_use": "Standard" },
@@ -587,32 +594,34 @@ Example TOU rates array:
   { "rate_per_kwh": 0.75, "season": "Low/Summer", "time_of_use": "Off-Peak" }
 ]
 
-=== VOLTAGE LEVEL DETECTION (OFTEN MISSED) ===
-- "Medium Voltage" or "MV" or "11kV/22kV" → voltage_level: "MV"
-- "High Voltage" or "HV" or "132kV/66kV" → voltage_level: "HV"  
-- "Low Voltage" or "LV" or domestic/small business → voltage_level: "LV"
-- Scale 40T/40R/40X tariffs are typically "MV"
-- Bulk supply >100kVA is typically "MV" or "HV"
+**VALIDATION**: If you extract a TOU tariff, it MUST have at least 3 rates. If you cannot find energy rates, DO NOT mark it as TOU!
 
-=== PHASE TYPE RULES (OFTEN INCORRECT) ===
-- Bulk supply tariffs → phase_type: "Three Phase"
-- >50kVA tariffs → phase_type: "Three Phase"
+=== ESKOM TARIFF SPECIFICS (FOR PDF EXTRACTION) ===
+Eskom tariffs (Megaflex, Miniflex, Nightsave, Ruraflex) have:
+- **Active Energy charges** (c/kWh) - THESE ARE THE RATES TO EXTRACT!
+- Network Access Charge (R/kVA/month) → demand_charge_per_kva  
+- Service charge (R/account/day) → fixed_monthly_charge (convert to monthly)
+
+Find the Active Energy table showing Peak/Standard/Off-Peak by High/Low Demand Season!
+
+=== VOLTAGE LEVEL DETECTION ===
+- "Medium Voltage" or "MV" or "11kV/22kV" → voltage_level: "MV"
+- "High Voltage" or "HV" or ">66kV" → voltage_level: "HV"  
+- "Low Voltage" or "LV" or "<500V" → voltage_level: "LV"
+
+=== PHASE TYPE RULES ===
+- Bulk supply/MV/HV tariffs → phase_type: "Three Phase"
 - "Three Phase" in name → phase_type: "Three Phase"
 - Domestic ≤60A → phase_type: "Single Phase"
 
-=== WHEELING CHARGES (OFTEN MISSED) ===
-If you see "Wheeling" tariffs/charges, extract them as SEPARATE tariffs.
-
 === DEMAND CHARGE HANDLING ===
-- "R/kVA" charges → demand_charge_per_kva
-- "R/A/month" (per-Amp) → Calculate for the stated amperage OR leave as demand_charge_per_kva
-- "Capacity Charge" → demand_charge_per_kva if it's per-kVA
+- "Network Access Charge" or "R/kVA" → demand_charge_per_kva
 
 === PRECISION RULE ===
-Preserve EXACT values from source - do NOT round! 
-If source says 3.9275, extract 3.9275 (not 3.93)
+Preserve EXACT values - convert c/kWh to R/kWh by dividing by 100.
+If source says 392.75 c/kWh → extract as 3.9275 R/kWh
 
-Extract ALL tariffs found. Be thorough and accurate.`;
+Extract ALL tariffs with their COMPLETE rate data!`;
 
       // Retry logic for AI call - handles connection timeouts and empty responses
       const MAX_RETRIES = 3;
@@ -1065,17 +1074,25 @@ ${JSON.stringify(currentSummary, null, 2)}
 === YOUR TASK ===
 Compare the source data CAREFULLY against the current extraction and identify:
 
-1. MISSED TARIFFS: Any tariffs in the source that are completely missing from the extraction
-2. INCORRECT VALUES: Any rates, charges, or values that don't match the source
-3. MISSING BLOCKS: IBT tariffs that should have multiple blocks but don't
-4. WRONG TARIFF TYPE: Tariffs misclassified (e.g., IBT classified as Fixed)
-5. MISSING DETAILS: Phase type, amperage limits, prepaid status that should be set
+1. **TOU TARIFFS WITH EMPTY RATES** (CRITICAL!): Any TOU tariff in the extraction that has empty or missing rates array. TOU tariffs MUST have Peak/Standard/Off-Peak energy rates for both High/Winter and Low/Summer seasons. This is the MOST COMMON issue!
+2. MISSED TARIFFS: Any tariffs in the source that are completely missing from the extraction
+3. INCORRECT VALUES: Any rates, charges, or values that don't match the source
+4. MISSING BLOCKS: IBT tariffs that should have multiple blocks but don't
+5. WRONG TARIFF TYPE: Tariffs misclassified (e.g., IBT classified as Fixed)
+6. MISSING DETAILS: Phase type, voltage level, amperage limits that should be set
 
-For each issue found, provide the CORRECTED tariff data. Only return tariffs that need to be ADDED or CORRECTED.
+For each issue found, provide the CORRECTED tariff data with COMPLETE rates.
 
-If the extraction is accurate and complete, return an empty tariffs array.
+If the extraction is accurate and complete (all TOU tariffs have rates!), return an empty tariffs array.
 
-CRITICAL: Check block ranges for IBT tariffs especially carefully. 
+=== CRITICAL CHECK: TOU RATES ===
+For Eskom tariffs (Megaflex, Miniflex, Nightsave, Ruraflex), find the "Active Energy" rates in c/kWh.
+Each TOU tariff MUST have rates like:
+- High Demand Season: Peak, Standard, Off-Peak (3 rates)
+- Low Demand Season: Peak, Standard, Off-Peak (3 rates)
+Convert c/kWh to R/kWh by dividing by 100.
+
+=== IBT BLOCK CHECK ===
 - "<500kWh" should be block 0-500
 - ">500kWh" should be block 500-null
 - Each block needs its own rate entry`;
