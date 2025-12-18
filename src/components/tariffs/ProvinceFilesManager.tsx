@@ -1262,7 +1262,7 @@ export function ProvinceFilesManager() {
                       )}
                       <Button
                         onClick={handleExtractAll}
-                        disabled={extractionPhase === "extracting" || municipalities.every(m => m.status === "done" || m.status === "error")}
+                        disabled={extractionPhase === "extracting"}
                       >
                         {extractionPhase === "extracting" ? (
                           <Loader2 className="h-4 w-4 animate-spin mr-1" />
