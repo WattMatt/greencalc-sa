@@ -138,6 +138,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
   const { data: tariffs, isLoading } = useQuery({
     queryKey: ["tariffs"],
     queryFn: async () => {
+      // Fetch all tariffs - need to override default 1000 row limit
       const { data, error } = await supabase
         .from("tariffs")
         .select(`
@@ -146,7 +147,8 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
           category:tariff_categories(name),
           rates:tariff_rates(*)
         `)
-        .order("name");
+        .order("name")
+        .limit(10000); // Override default 1000 row limit
       if (error) throw error;
       return data as unknown as Tariff[];
     },
