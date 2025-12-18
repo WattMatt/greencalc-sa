@@ -960,6 +960,8 @@ Extract ALL tariffs found. Be thorough and accurate.`;
       await supabase
         .from("municipalities")
         .update({
+          extraction_status: "done",
+          extraction_error: null,
           extraction_score: Math.round((inserted + updated) / Math.max(extractedTariffs.length, 1) * 100),
           ai_confidence: confidenceScore,
           total_tariffs: totalTariffs || 0,
