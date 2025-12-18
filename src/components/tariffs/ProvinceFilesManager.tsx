@@ -1070,7 +1070,7 @@ export function ProvinceFilesManager() {
                     <Input
                       id={`upload-${stats.province}`}
                       type="file"
-                      accept=".xlsx,.xls,.xlsm,.pdf"
+                      accept=".xlsx,.xls,.xlsm,.pdf,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                       className="hidden"
                       onChange={(e) => handleFileUpload(e, stats.province)}
                     />
