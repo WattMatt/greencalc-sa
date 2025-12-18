@@ -452,22 +452,50 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
       // SPECIAL CASE: Check if this is Eskom extraction
       const isEskomExtraction = municipality.toLowerCase() === "eskom direct";
       
-      // Get data for this specific municipality (or all data for Eskom)
+      // Get data for this specific municipality (or selective data for Eskom)
       let municipalityText = "";
       if (isEskomExtraction) {
-        // For Eskom, use ALL sheets data - it's a tariff calculator, not municipality-based
-        console.log("Eskom extraction - using all sheets data");
-        for (const sheetName of sheetNames) {
+        // For Eskom, use selective sheets - the .xlsm is a calculator with many sheets
+        // Focus on sheets that likely contain tariff rate data
+        console.log("Eskom extraction - using selective sheets. Available:", sheetNames);
+        
+        // Filter to relevant sheets - look for tariff-related names
+        const relevantSheets = sheetNames.filter(name => {
+          const lower = name.toLowerCase();
+          return lower.includes('tariff') || 
+                 lower.includes('rate') || 
+                 lower.includes('megaflex') || 
+                 lower.includes('miniflex') || 
+                 lower.includes('nightsave') || 
+                 lower.includes('ruraflex') ||
+                 lower.includes('businessrate') ||
+                 lower.includes('homepower') ||
+                 lower.includes('homelight') ||
+                 lower.includes('power') ||
+                 lower.includes('small') ||
+                 lower.includes('rural') ||
+                 lower.includes('domestic') ||
+                 lower.includes('summary') ||
+                 lower.includes('charges');
+        });
+        
+        // If no relevant sheets found, use first 5 sheets as fallback
+        const sheetsToUse = relevantSheets.length > 0 ? relevantSheets : sheetNames.slice(0, 5);
+        console.log("Using sheets:", sheetsToUse);
+        
+        for (const sheetName of sheetsToUse) {
           if (sheetData[sheetName]) {
             municipalityText += `\n=== SHEET: ${sheetName} ===\n`;
-            municipalityText += sheetData[sheetName].slice(0, 150).map(row => 
+            // Limit rows per sheet to prevent memory issues
+            municipalityText += sheetData[sheetName].slice(0, 80).map(row => 
               row.filter(cell => cell != null && cell !== "").join(" | ")
             ).filter(row => row.trim()).join("\n");
           }
         }
-        // Also include PDF text if available
-        if (extractedText && !municipalityText.includes(extractedText.slice(0, 100))) {
-          municipalityText += "\n\n=== PDF CONTENT ===\n" + extractedText;
+        
+        // For PDF, append limited content
+        if (extractedText && fileType === "pdf") {
+          municipalityText = extractedText.slice(0, 15000);
         }
       } else if (fileType === "xlsx" || fileType === "xls") {
         // Find the sheet matching this municipality
