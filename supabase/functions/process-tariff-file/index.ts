@@ -92,20 +92,16 @@ Deno.serve(async (req) => {
       console.log("Processing PDF file - using AI vision...");
       console.log("PDF size:", fileData.size, "bytes");
       
-      // Convert to base64 safely without stack overflow
+      // Convert to base64 using Deno's built-in encoding (fast and safe)
       const uint8Array = new Uint8Array(await fileData.arrayBuffer());
       console.log("Uint8Array length:", uint8Array.length);
       
-      // Build base64 string in small chunks to avoid call stack issues
-      let binaryString = '';
-      for (let i = 0; i < uint8Array.length; i++) {
-        binaryString += String.fromCharCode(uint8Array[i]);
-      }
-      console.log("Binary string length:", binaryString.length);
-      
-      const base64 = btoa(binaryString);
+      // Use Deno's standard base64 encoding - much faster than manual conversion
+      const { encode } = await import("https://deno.land/std@0.208.0/encoding/base64.ts");
+      const base64 = encode(uint8Array);
       console.log("Base64 length:", base64.length);
       
+      console.log("Sending PDF to AI vision...");
       const visionRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -132,12 +128,22 @@ Deno.serve(async (req) => {
         }),
       });
 
+      console.log("AI vision response status:", visionRes.status);
+      
       if (visionRes.ok) {
-        const visionData = await visionRes.json();
-        extractedText = visionData.choices?.[0]?.message?.content || "";
-        console.log("PDF text extracted, length:", extractedText.length);
+        try {
+          const responseText = await visionRes.text();
+          console.log("Raw response length:", responseText.length);
+          const visionData = JSON.parse(responseText);
+          extractedText = visionData.choices?.[0]?.message?.content || "";
+          console.log("PDF text extracted, length:", extractedText.length);
+        } catch (parseError) {
+          console.error("Failed to parse AI response:", parseError);
+          extractedText = "PDF extraction failed - AI response was invalid";
+        }
       } else {
-        console.error("PDF extraction failed:", await visionRes.text());
+        const errorText = await visionRes.text();
+        console.error("PDF extraction failed:", visionRes.status, errorText);
         extractedText = "PDF extraction failed - please try Excel format";
       }
     }
