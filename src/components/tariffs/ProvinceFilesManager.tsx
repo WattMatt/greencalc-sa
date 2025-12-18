@@ -1262,14 +1262,11 @@ export function ProvinceFilesManager() {
                       )}
                       <Button
                         onClick={handleExtractAll}
-                        disabled={extractionPhase === "extracting" || municipalities.every(m => m.status === "done" || m.status === "error")}
+                        disabled={true}
+                        title="Temporarily unavailable - extraction under maintenance"
                       >
-                        {extractionPhase === "extracting" ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                        ) : (
-                          <Zap className="h-4 w-4 mr-1" />
-                        )}
-                        Extract All Tariffs
+                        <Zap className="h-4 w-4 mr-1" />
+                        Extract All Tariffs (Unavailable)
                       </Button>
                       {doneCount > 0 && (
                         <Button
