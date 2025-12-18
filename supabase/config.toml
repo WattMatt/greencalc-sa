@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.export-to-google-sheets]
 verify_jwt = false
+
+[functions.upload-tariff-file]
+verify_jwt = false
