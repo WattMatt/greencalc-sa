@@ -412,35 +412,58 @@ export function ProvinceFilesManager() {
   const handleRefreshExtractionData = async () => {
     if (!selectedProvince) return;
     
-    // Refetch the main data
+    // Invalidate cache first to ensure fresh data
+    await queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+    
+    // Refetch with fresh data from server
     const result = await refetchProvincesData();
     const freshData = result.data;
     
     // Find province and rebuild municipalities list
     const provinceData = freshData?.provinces?.find(p => p.name === selectedProvince);
     if (provinceData) {
-      const existingMunis = freshData?.municipalities?.filter(
-        m => m.province_id === provinceData.id
-      ) || [];
+      // Fetch municipalities directly from database to ensure accuracy
+      const { data: freshMunis } = await supabase
+        .from("municipalities")
+        .select("id, name, province_id, extraction_status, extraction_error, total_tariffs, ai_confidence, reprise_count")
+        .eq("province_id", provinceData.id);
 
-      if (existingMunis.length > 0) {
-        const muniWithStatus: Municipality[] = existingMunis.map(m => {
-          const tariffCount = (m as any).total_tariffs || 0;
-          const dbStatus = (m as any).extraction_status || 'pending';
-          const dbError = (m as any).extraction_error;
+      if (freshMunis && freshMunis.length > 0) {
+        // Also fetch actual tariff counts to verify accuracy
+        const muniIds = freshMunis.map(m => m.id);
+        const { data: tariffCounts } = await supabase
+          .from("tariffs")
+          .select("municipality_id")
+          .in("municipality_id", muniIds);
+        
+        // Count tariffs per municipality
+        const countMap = new Map<string, number>();
+        tariffCounts?.forEach(t => {
+          countMap.set(t.municipality_id, (countMap.get(t.municipality_id) || 0) + 1);
+        });
+        
+        const muniWithStatus: Municipality[] = freshMunis.map(m => {
+          const actualCount = countMap.get(m.id) || 0;
+          const cachedCount = m.total_tariffs || 0;
+          
+          // Use actual count if different from cached (more accurate)
+          const tariffCount = actualCount > 0 ? actualCount : cachedCount;
           
           return {
             id: m.id,
             name: m.name,
-            status: dbStatus as "pending" | "done" | "error",
+            status: (m.extraction_status || 'pending') as "pending" | "done" | "error",
             tariffCount,
-            confidence: (m as any).ai_confidence || undefined,
-            repriseCount: (m as any).reprise_count || undefined,
-            error: dbError || undefined
+            confidence: m.ai_confidence || undefined,
+            repriseCount: m.reprise_count || undefined,
+            error: m.extraction_error || undefined
           };
         });
         
         setMunicipalities(muniWithStatus);
+        console.log("Refreshed municipalities:", muniWithStatus);
+      } else {
+        setMunicipalities([]);
       }
     }
     
