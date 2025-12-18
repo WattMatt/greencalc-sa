@@ -49,7 +49,7 @@ interface Tariff {
   municipality_id: string;
   municipality: { name: string; province_id: string } | null;
   category: { name: string } | null;
-  rates: TariffRate[];
+  rates?: TariffRate[]; // Optional - loaded on demand
 }
 
 interface Province {
@@ -135,24 +135,50 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
     return counts;
   }, [municipalities]);
 
+  // State for lazily loaded rates
+  const [tariffRates, setTariffRates] = useState<Record<string, TariffRate[]>>({});
+  const [loadingRates, setLoadingRates] = useState<Set<string>>(new Set());
+
   const { data: tariffs, isLoading } = useQuery({
     queryKey: ["tariffs"],
     queryFn: async () => {
-      // Fetch all tariffs - need to override default 1000 row limit
+      // Fetch tariffs WITHOUT rates to avoid massive payload
       const { data, error } = await supabase
         .from("tariffs")
         .select(`
           *,
           municipality:municipalities(name, province_id, source_file_path),
-          category:tariff_categories(name),
-          rates:tariff_rates(*)
+          category:tariff_categories(name)
         `)
         .order("name")
-        .limit(10000); // Override default 1000 row limit
+        .limit(10000);
       if (error) throw error;
       return data as unknown as Tariff[];
     },
   });
+
+  // Lazy load rates when tariff is expanded
+  const loadRatesForTariff = async (tariffId: string) => {
+    if (tariffRates[tariffId] || loadingRates.has(tariffId)) return;
+    
+    setLoadingRates(prev => new Set(prev).add(tariffId));
+    try {
+      const { data, error } = await supabase
+        .from("tariff_rates")
+        .select("*")
+        .eq("tariff_id", tariffId);
+      
+      if (!error && data) {
+        setTariffRates(prev => ({ ...prev, [tariffId]: data }));
+      }
+    } finally {
+      setLoadingRates(prev => {
+        const next = new Set(prev);
+        next.delete(tariffId);
+        return next;
+      });
+    }
+  };
 
   // Function to open preview with raw data fetching
   const handleOpenPreview = async (municipalityName: string, municipalityTariffs: Tariff[]) => {
@@ -344,6 +370,8 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
         next.delete(id);
       } else {
         next.add(id);
+        // Load rates when expanding
+        loadRatesForTariff(id);
       }
       return next;
     });
@@ -634,8 +662,10 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                                     </div>
                                   </div>
 
-                                  {/* Rates Table */}
-                                  {tariff.rates?.length > 0 && (
+                                  {/* Rates Table - lazy loaded */}
+                                  {loadingRates.has(tariff.id) ? (
+                                    <div className="text-xs text-muted-foreground py-2">Loading rates...</div>
+                                  ) : tariffRates[tariff.id]?.length > 0 ? (
                                     <div>
                                       <div className="text-xs font-medium mb-2 text-foreground">Energy Rates</div>
                                       <div className="rounded border overflow-hidden">
@@ -658,7 +688,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                                             </TableRow>
                                           </TableHeader>
                                           <TableBody>
-                                            {tariff.rates.map((rate) => (
+                                            {tariffRates[tariff.id].map((rate) => (
                                               <TableRow key={rate.id}>
                                                 {tariff.has_seasonal_rates && (
                                                   <TableCell className="text-xs py-1.5">{rate.season}</TableCell>
@@ -685,7 +715,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                                         </Table>
                                       </div>
                                     </div>
-                                  )}
+                                  ) : null}
                                 </div>
                               </CollapsibleContent>
                             </div>
@@ -869,9 +899,19 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                                       variant="ghost"
                                       size="sm"
                                       className="h-6 px-2 text-xs gap-1"
-                                      onClick={() => {
+                                      onClick={async () => {
+                                        // Load rates if not already loaded
+                                        let rates = tariffRates[tariff.id];
+                                        if (!rates) {
+                                          const { data } = await supabase
+                                            .from("tariff_rates")
+                                            .select("*")
+                                            .eq("tariff_id", tariff.id);
+                                          rates = data || [];
+                                          setTariffRates(prev => ({ ...prev, [tariff.id]: rates }));
+                                        }
                                         setEditingTariffId(tariff.id);
-                                        setEditedTariff({ ...tariff, rates: [...tariff.rates] });
+                                        setEditedTariff({ ...tariff, rates: rates });
                                       }}
                                     >
                                       <Pencil className="h-3 w-3" />
