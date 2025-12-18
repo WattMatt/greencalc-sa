@@ -94,7 +94,7 @@ export function FileUploadImport() {
 
   const getFileType = (filename: string): string => {
     const ext = filename.split('.').pop()?.toLowerCase();
-    if (ext === 'xlsx' || ext === 'xls') return 'xlsx';
+    if (ext === 'xlsx' || ext === 'xls' || ext === 'xlsm') return 'xlsx';
     if (ext === 'pdf') return 'pdf';
     return 'unknown';
   };
