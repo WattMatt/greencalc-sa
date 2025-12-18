@@ -198,11 +198,18 @@ Be specific and concise.`;
     if (action === "extract-municipalities") {
       console.log("Extracting municipalities for province:", province);
       
+      // SPECIAL CASE: Eskom is a national utility, not bound by municipalities
+      const isEskom = province.toLowerCase() === "eskom";
+      
       // For Excel files, sheet names are often municipality names
       let municipalityNames: string[] = [];
       const sheetNameToMuni: Record<string, string> = {};
       
-      if (fileType === "xlsx" || fileType === "xls") {
+      if (isEskom) {
+        // Eskom gets a single "Eskom Direct" entry - all tariffs go under it
+        municipalityNames = ["Eskom Direct"];
+        console.log("Eskom detected - using single 'Eskom Direct' entity");
+      } else if (fileType === "xlsx" || fileType === "xls") {
         // Use sheet names as municipality names (common pattern)
         for (const sheetName of sheetNames) {
           const cleanName = sheetName.replace(/\s*-\s*\d+\.?\d*%$/, '').trim();
@@ -442,9 +449,27 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
 
       console.log(`Found ${existingTariffSummary.length} existing tariffs for ${municipality}`);
 
-      // Get data for this specific municipality
+      // SPECIAL CASE: Check if this is Eskom extraction
+      const isEskomExtraction = municipality.toLowerCase() === "eskom direct";
+      
+      // Get data for this specific municipality (or all data for Eskom)
       let municipalityText = "";
-      if (fileType === "xlsx" || fileType === "xls") {
+      if (isEskomExtraction) {
+        // For Eskom, use ALL sheets data - it's a tariff calculator, not municipality-based
+        console.log("Eskom extraction - using all sheets data");
+        for (const sheetName of sheetNames) {
+          if (sheetData[sheetName]) {
+            municipalityText += `\n=== SHEET: ${sheetName} ===\n`;
+            municipalityText += sheetData[sheetName].slice(0, 150).map(row => 
+              row.filter(cell => cell != null && cell !== "").join(" | ")
+            ).filter(row => row.trim()).join("\n");
+          }
+        }
+        // Also include PDF text if available
+        if (extractedText && !municipalityText.includes(extractedText.slice(0, 100))) {
+          municipalityText += "\n\n=== PDF CONTENT ===\n" + extractedText;
+        }
+      } else if (fileType === "xlsx" || fileType === "xls") {
         // Find the sheet matching this municipality
         const matchingSheet = sheetNames.find(name => 
           name.toLowerCase().includes(municipality.toLowerCase()) ||
@@ -485,7 +510,83 @@ INCREMENTAL EXTRACTION RULES:
 - Focus on finding MISSING tariffs that weren't extracted before`
         : "";
 
-      const extractPrompt = `TASK: Extract electricity tariffs for "${municipality}" municipality.
+      // Use different extraction prompt for Eskom vs regular municipalities
+      const extractPrompt = isEskomExtraction 
+        ? `TASK: Extract ALL Eskom electricity tariffs from this tariff calculator/document.
+
+SOURCE DATA:
+${municipalityText.slice(0, 20000)}
+${existingContext}
+
+=== ESKOM TARIFF CATEGORIES TO EXTRACT ===
+
+Eskom is South Africa's national utility. Extract ALL tariffs from these categories:
+
+1. **MEGAFLEX** (Large Power Users TOU) - Mandatory TOU tariff
+   - Variants: LV, MV (<500V, 500V-66kV, >66kV transmission zones)
+   - Each has 6 TOU energy rates: Peak/Standard/Off-Peak × High Demand Season/Low Demand Season
+   - Network Access Charge (R/kVA/month) → demand_charge_per_kva
+   - Service/Admin charge → fixed_monthly_charge
+
+2. **MINIFLEX** (Medium Power Users TOU) - Mandatory TOU tariff
+   - Similar structure to Megaflex but different rates
+   - LV/MV variants with transmission zones
+
+3. **NIGHTSAVE** (Off-Peak focused) - TOU tariff
+   - Urban and Rural variants
+   - MV and HV voltage levels
+   - Transmission zone variants (0-300km, 300-600km, 600-900km, >900km)
+
+4. **RURAFLEX** (Rural TOU) - TOU tariff
+   - LV and MV variants
+   - For rural/agricultural customers
+
+5. **BUSINESSRATE** (Small Power Users) - Fixed rate tariff
+   - Single Phase and Three Phase variants
+   - Multiple amperage options (20A, 60A, 80A, etc.)
+   - IBT block structure OR flat rate
+
+6. **HOMEPOWER/HOMELIGHT** (Domestic) - IBT tariff
+   - Single Phase prepaid/conventional options
+   - Block-based consumption rates
+
+=== EXTRACTION RULES FOR ESKOM ===
+
+1. **TOU TARIFFS (Megaflex, Miniflex, Nightsave, Ruraflex)**:
+   MUST extract 6 energy rates per tariff:
+   - Peak + High/Winter, Peak + Low/Summer
+   - Standard + High/Winter, Standard + Low/Summer  
+   - Off-Peak + High/Winter, Off-Peak + Low/Summer
+   
+   Look for "Active Energy" tables with c/kWh values!
+
+2. **CATEGORY NAMING**:
+   - Use tariff name as category (e.g., "Megaflex", "Businessrate")
+   - tariff_name should include variant (e.g., "Megaflex MV <500V Zone 1")
+
+3. **VOLTAGE LEVELS**:
+   - LV = Low Voltage (<500V)
+   - MV = Medium Voltage (500V to 66kV)
+   - HV = High Voltage (>66kV)
+
+4. **TRANSMISSION ZONES** (for Nightsave HV):
+   - Zone 1: 0-300km from power station
+   - Zone 2: 300-600km
+   - Zone 3: 600-900km
+   - Zone 4: >900km
+   Include zone in tariff_name!
+
+5. **RATE CONVERSION**:
+   c/kWh → R/kWh: divide by 100
+   If source says 392.75 c/kWh → extract as 3.9275 R/kWh
+
+6. **CHARGES**:
+   - Network Access Charge (R/kVA/month) → demand_charge_per_kva
+   - Service Charge (R/day) → fixed_monthly_charge (multiply by 30.4)
+   - Admin Charge (R/account/month) → add to fixed_monthly_charge
+
+Extract EVERY tariff variant you can find!`
+        : `TASK: Extract electricity tariffs for "${municipality}" municipality.
 
 SOURCE DATA:
 ${municipalityText.slice(0, 15000)}
