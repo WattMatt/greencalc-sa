@@ -1044,34 +1044,27 @@ export function ProvinceFilesManager() {
                         Extract
                       </Button>
                     )}
-                    <Label
-                      htmlFor={`upload-${stats.province}`}
-                      className="cursor-pointer"
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      disabled={isUploading && uploadingProvince === stats.province}
+                      onClick={() => document.getElementById(`upload-${stats.province}`)?.click()}
                     >
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8"
-                        disabled={isUploading && uploadingProvince === stats.province}
-                        asChild
-                      >
-                        <span>
-                          {isUploading && uploadingProvince === stats.province ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <>
-                              <Upload className="h-4 w-4 mr-1" />
-                              Upload
-                            </>
-                          )}
-                        </span>
-                      </Button>
-                    </Label>
-                    <Input
+                      {isUploading && uploadingProvince === stats.province ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4 mr-1" />
+                          Upload
+                        </>
+                      )}
+                    </Button>
+                    <input
                       id={`upload-${stats.province}`}
                       type="file"
-                      accept="*/*"
-                      className="hidden"
+                      accept=".xlsx,.xls,.xlsm,.pdf"
+                      style={{ display: 'none' }}
                       onChange={(e) => handleFileUpload(e, stats.province)}
                     />
                     {stats.isCustom && stats.provinceId && (
