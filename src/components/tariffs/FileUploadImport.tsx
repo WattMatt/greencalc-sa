@@ -107,7 +107,7 @@ export function FileUploadImport() {
     if (fileType === 'unknown') {
       toast({
         title: "Invalid File",
-        description: "Please upload an Excel (.xlsx, .xls) or PDF file",
+        description: "Please upload an Excel (.xlsx, .xls, .xlsm) or PDF file",
         variant: "destructive",
       });
       return;
