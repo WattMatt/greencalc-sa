@@ -288,10 +288,14 @@ export function ProvinceFilesManager() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, province: string) => {
     const file = e.target.files?.[0];
+    console.log("File upload triggered:", file?.name, "Extension:", file?.name.split('.').pop()?.toLowerCase());
     if (!file) return;
 
     const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'xlsm' && ext !== 'pdf') {
+    console.log("Validating extension:", ext);
+    const validExtensions = ['xlsx', 'xls', 'xlsm', 'pdf'];
+    if (!validExtensions.includes(ext || '')) {
+      console.log("Invalid extension rejected:", ext);
       toast({
         title: "Invalid File",
         description: "Please upload an Excel (.xlsx, .xls, .xlsm) or PDF file",
@@ -299,6 +303,7 @@ export function ProvinceFilesManager() {
       });
       return;
     }
+    console.log("Extension valid, proceeding with upload");
 
     setIsUploading(true);
     setUploadingProvince(province);
