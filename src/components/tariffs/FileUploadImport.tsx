@@ -568,7 +568,7 @@ export function FileUploadImport() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".xlsx,.xls,.pdf"
+                  accept=".xlsx,.xls,.xlsm,.pdf"
                   onChange={handleFileSelect}
                   className="hidden"
                 />

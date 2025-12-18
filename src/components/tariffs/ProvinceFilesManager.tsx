@@ -356,7 +356,7 @@ export function ProvinceFilesManager() {
 
   const getFileType = (filename: string): string => {
     const ext = filename.split('.').pop()?.toLowerCase();
-    if (ext === 'xlsx' || ext === 'xls') return 'xlsx';
+    if (ext === 'xlsx' || ext === 'xls' || ext === 'xlsm') return 'xlsx';
     if (ext === 'pdf') return 'pdf';
     return 'unknown';
   };
@@ -1065,7 +1065,7 @@ export function ProvinceFilesManager() {
                     <Input
                       id={`upload-${stats.province}`}
                       type="file"
-                      accept=".xlsx,.xls,.pdf"
+                      accept=".xlsx,.xls,.xlsm,.pdf"
                       className="hidden"
                       onChange={(e) => handleFileUpload(e, stats.province)}
                     />
