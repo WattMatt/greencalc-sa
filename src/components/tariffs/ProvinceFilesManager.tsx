@@ -784,9 +784,11 @@ export function ProvinceFilesManager() {
   const handleExtractAll = async () => {
     setExtractionPhase("extracting");
     for (let i = 0; i < municipalities.length; i++) {
-      if (municipalities[i].status === "pending") {
-        await handleExtractTariffs(i);
-      }
+      // Reset all to pending first, then extract (allows re-extraction)
+      setMunicipalities(prev => prev.map((m, idx) => 
+        idx === i ? { ...m, status: "pending" as const, error: undefined } : m
+      ));
+      await handleExtractTariffs(i);
     }
     setExtractionPhase("ready");
   };
