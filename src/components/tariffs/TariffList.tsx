@@ -98,17 +98,42 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
     },
   });
 
-  // Fetch municipalities with source_file_path
+  // Fetch municipalities with source_file_path and total_tariffs for accurate counts
   const { data: municipalities } = useQuery({
-    queryKey: ["municipalities-with-source"],
+    queryKey: ["municipalities-with-counts"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("municipalities")
-        .select("id, name, source_file_path");
+        .select("id, name, source_file_path, total_tariffs, province_id");
       if (error) throw error;
       return data;
     },
   });
+
+  // Pre-compute province-level counts from municipalities table (avoids 1000 row limit issue)
+  const provinceCounts = useMemo(() => {
+    if (!municipalities) return new Map<string, { municipalities: number; tariffs: number }>();
+    const counts = new Map<string, { municipalities: number; tariffs: number }>();
+    municipalities.forEach((m) => {
+      if (!m.province_id) return;
+      const current = counts.get(m.province_id) || { municipalities: 0, tariffs: 0 };
+      counts.set(m.province_id, {
+        municipalities: current.municipalities + 1,
+        tariffs: current.tariffs + (m.total_tariffs || 0),
+      });
+    });
+    return counts;
+  }, [municipalities]);
+
+  // Pre-compute municipality-level tariff counts
+  const municipalityCounts = useMemo(() => {
+    if (!municipalities) return new Map<string, number>();
+    const counts = new Map<string, number>();
+    municipalities.forEach((m) => {
+      counts.set(m.name, m.total_tariffs || 0);
+    });
+    return counts;
+  }, [municipalities]);
 
   const { data: tariffs, isLoading } = useQuery({
     queryKey: ["tariffs"],
@@ -399,8 +424,8 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                 {filterMunicipalityName 
                   ? `Showing tariffs for ${filterMunicipalityName}`
                   : selectedProvince === "all" 
-                    ? `${tariffs.length} tariffs across ${groupedData.length} provinces`
-                    : `${filteredTariffCount} tariffs in ${filteredData[0]?.province.name || "selected province"}`
+                    ? `${Array.from(provinceCounts.values()).reduce((sum, p) => sum + p.tariffs, 0) || tariffs?.length || 0} tariffs across ${provinceCounts.size || groupedData.length} provinces`
+                    : `${provinceCounts.get(selectedProvince)?.tariffs || filteredTariffCount} tariffs in ${filteredData[0]?.province.name || "selected province"}`
                 }
               </CardDescription>
             </div>
@@ -464,7 +489,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                   <div className="text-left">
                     <div className="font-semibold text-foreground">{provinceData.province.name}</div>
                     <div className="text-sm text-muted-foreground">
-                      {provinceData.municipalities.length} municipalities • {getTariffCount(provinceData)} tariffs
+                      {provinceCounts.get(provinceData.province.id)?.municipalities || provinceData.municipalities.length} municipalities • {provinceCounts.get(provinceData.province.id)?.tariffs || getTariffCount(provinceData)} tariffs
                     </div>
                   </div>
                 </div>
@@ -496,7 +521,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                           <Building2 className="h-4 w-4 text-muted-foreground" />
                           <span className="font-medium">{municipality.name}</span>
                           <Badge variant="secondary" className="ml-2">
-                            {municipality.tariffs.length} tariffs
+                            {municipalityCounts.get(municipality.name) || municipality.tariffs.length} tariffs
                           </Badge>
                         </div>
                       </AccordionTrigger>
