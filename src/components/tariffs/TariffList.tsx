@@ -139,10 +139,20 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
   const [tariffRates, setTariffRates] = useState<Record<string, TariffRate[]>>({});
   const [loadingRates, setLoadingRates] = useState<Set<string>>(new Set());
 
-  const { data: tariffs, isLoading } = useQuery({
-    queryKey: ["tariffs"],
-    queryFn: async () => {
-      // Fetch tariffs WITHOUT rates to avoid massive payload
+  // State for lazily loaded municipality tariffs
+  const [municipalityTariffs, setMunicipalityTariffs] = useState<Record<string, Tariff[]>>({});
+  const [loadingMunicipalities, setLoadingMunicipalities] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Load tariffs for a specific municipality on demand
+  const loadTariffsForMunicipality = async (municipalityName: string) => {
+    if (municipalityTariffs[municipalityName] || loadingMunicipalities.has(municipalityName)) return;
+    
+    const muni = municipalities?.find(m => m.name === municipalityName);
+    if (!muni) return;
+    
+    setLoadingMunicipalities(prev => new Set(prev).add(municipalityName));
+    try {
       const { data, error } = await supabase
         .from("tariffs")
         .select(`
@@ -150,12 +160,20 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
           municipality:municipalities(name, province_id, source_file_path),
           category:tariff_categories(name)
         `)
-        .order("name")
-        .limit(10000);
-      if (error) throw error;
-      return data as unknown as Tariff[];
-    },
-  });
+        .eq("municipality_id", muni.id)
+        .order("name");
+      
+      if (!error && data) {
+        setMunicipalityTariffs(prev => ({ ...prev, [municipalityName]: data as unknown as Tariff[] }));
+      }
+    } finally {
+      setLoadingMunicipalities(prev => {
+        const next = new Set(prev);
+        next.delete(municipalityName);
+        return next;
+      });
+    }
+  };
 
   // Lazy load rates when tariff is expanded
   const loadRatesForTariff = async (tariffId: string) => {
@@ -282,6 +300,17 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
     },
     onSuccess: (_, target) => {
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+      queryClient.invalidateQueries({ queryKey: ["municipalities-with-counts"] });
+      // Clear cached municipality tariffs to force reload
+      if (target.type === "municipality") {
+        setMunicipalityTariffs(prev => {
+          const next = { ...prev };
+          delete next[target.name];
+          return next;
+        });
+      } else {
+        setMunicipalityTariffs({});
+      }
       const message = target.type === "all" 
         ? "All tariffs deleted" 
         : target.type === "province" 
@@ -296,44 +325,48 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
     },
   });
 
-  // Group tariffs by province → municipality
+  // Group municipalities by province (no tariffs upfront - they're loaded on demand)
   const groupedData = useMemo(() => {
-    if (!tariffs || !provinces) return [];
+    if (!municipalities || !provinces) return [];
 
     const provinceMap = new Map<string, Province>();
     provinces.forEach((p) => provinceMap.set(p.id, p));
 
-    const grouped: Record<string, Record<string, Tariff[]>> = {};
+    const grouped: Record<string, { name: string; id: string; total_tariffs: number }[]> = {};
 
-    tariffs.forEach((tariff) => {
-      const provinceId = tariff.municipality?.province_id;
-      const municipalityName = tariff.municipality?.name || "Unknown";
-
-      if (!provinceId) return;
-
-      if (!grouped[provinceId]) {
-        grouped[provinceId] = {};
+    municipalities.forEach((muni) => {
+      if (!muni.province_id) return;
+      
+      if (!grouped[muni.province_id]) {
+        grouped[muni.province_id] = [];
       }
-      if (!grouped[provinceId][municipalityName]) {
-        grouped[provinceId][municipalityName] = [];
-      }
-      grouped[provinceId][municipalityName].push(tariff);
+      grouped[muni.province_id].push({
+        name: muni.name,
+        id: muni.id,
+        total_tariffs: muni.total_tariffs || 0
+      });
     });
 
     const result: GroupedData[] = [];
-    Object.entries(grouped).forEach(([provinceId, municipalities]) => {
+    Object.entries(grouped).forEach(([provinceId, muniList]) => {
       const province = provinceMap.get(provinceId);
       if (!province) return;
 
-      const municipalityList = Object.entries(municipalities)
-        .map(([name, tariffs]) => ({ name, tariffs }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const municipalityList = muniList
+        .filter(m => m.total_tariffs > 0) // Only show municipalities with tariffs
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(m => ({ 
+          name: m.name, 
+          tariffs: municipalityTariffs[m.name] || [] 
+        }));
 
-      result.push({ province, municipalities: municipalityList });
+      if (municipalityList.length > 0) {
+        result.push({ province, municipalities: municipalityList });
+      }
     });
 
     return result.sort((a, b) => a.province.name.localeCompare(b.province.name));
-  }, [tariffs, provinces]);
+  }, [municipalities, provinces, municipalityTariffs]);
 
   // Filter grouped data by selected province and municipality
   const filteredData = useMemo(() => {
@@ -392,7 +425,8 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
 
   const getDeleteDescription = () => {
     if (!deleteTarget) return "";
-    if (deleteTarget.type === "all") return `This will permanently delete all ${tariffs?.length || 0} tariffs.`;
+    const totalTariffs = Array.from(provinceCounts.values()).reduce((sum, p) => sum + p.tariffs, 0);
+    if (deleteTarget.type === "all") return `This will permanently delete all ${totalTariffs} tariffs.`;
     if (deleteTarget.type === "province") return `This will delete all tariffs in ${deleteTarget.name}.`;
     if (deleteTarget.type === "municipality") return `This will delete all ${deleteTarget.tariffIds.length} tariffs in ${deleteTarget.name}.`;
     return "";
@@ -408,7 +442,9 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
     );
   }
 
-  if (!tariffs?.length) {
+  const totalTariffCount = Array.from(provinceCounts.values()).reduce((sum, p) => sum + p.tariffs, 0);
+  
+  if (!totalTariffCount) {
     return (
       <Card className="bg-card border-border">
         <CardContent className="py-8">
@@ -454,7 +490,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                 {filterMunicipalityName 
                   ? `Showing tariffs for ${filterMunicipalityName}`
                   : selectedProvince === "all" 
-                    ? `${Array.from(provinceCounts.values()).reduce((sum, p) => sum + p.tariffs, 0) || tariffs?.length || 0} tariffs across ${provinceCounts.size || groupedData.length} provinces`
+                    ? `${totalTariffCount} tariffs across ${provinceCounts.size || groupedData.length} provinces`
                     : `${provinceCounts.get(selectedProvince)?.tariffs || filteredTariffCount} tariffs in ${filteredData[0]?.province.name || "selected province"}`
                 }
               </CardDescription>
@@ -538,7 +574,12 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
               {/* Municipality Level Accordion */}
-              <Accordion type="multiple" className="space-y-2">
+              <Accordion type="multiple" className="space-y-2" onValueChange={(values) => {
+                // Load tariffs for any newly expanded municipalities
+                values.forEach((municipalityName) => {
+                  loadTariffsForMunicipality(municipalityName);
+                });
+              }}>
                 {provinceData.municipalities.map((municipality) => (
                   <AccordionItem
                     key={municipality.name}
@@ -553,6 +594,9 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                           <Badge variant="secondary" className="ml-2">
                             {municipalityCounts.get(municipality.name) || municipality.tariffs.length} tariffs
                           </Badge>
+                          {loadingMunicipalities.has(municipality.name) && (
+                            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                          )}
                         </div>
                       </AccordionTrigger>
                       <div className="flex items-center gap-1 ml-2">
@@ -562,7 +606,9 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                           className="h-7 text-xs gap-1"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleOpenPreview(municipality.name, municipality.tariffs);
+                            // Load tariffs first if not loaded
+                            loadTariffsForMunicipality(municipality.name);
+                            handleOpenPreview(municipality.name, municipalityTariffs[municipality.name] || []);
                           }}
                         >
                           <Eye className="h-3 w-3" />
@@ -574,10 +620,11 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                           className="h-7 text-destructive hover:text-destructive hover:bg-destructive/10"
                           onClick={(e) => {
                             e.stopPropagation();
+                            const tariffs = municipalityTariffs[municipality.name] || [];
                             setDeleteTarget({
                               type: "municipality",
                               name: municipality.name,
-                              tariffIds: municipality.tariffs.map((t) => t.id),
+                              tariffIds: tariffs.map((t) => t.id),
                             });
                           }}
                         >
@@ -588,7 +635,17 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                     <AccordionContent className="px-3 pb-3">
                       {/* Tariffs within Municipality */}
                       <div className="space-y-2 mt-2">
-                        {municipality.tariffs.map((tariff) => (
+                        {loadingMunicipalities.has(municipality.name) ? (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
+                            <span className="text-sm text-muted-foreground">Loading tariffs...</span>
+                          </div>
+                        ) : municipality.tariffs.length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-4">
+                            No tariffs loaded. Click to expand and load tariffs.
+                          </p>
+                        ) : (
+                        municipality.tariffs.map((tariff) => (
                           <Collapsible key={tariff.id} open={expandedTariffs.has(tariff.id)}>
                             <div className="border rounded bg-background">
                               <div className="flex items-center justify-between p-3">
@@ -720,7 +777,8 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                               </CollapsibleContent>
                             </div>
                           </Collapsible>
-                        ))}
+                        ))
+                        )}
                       </div>
                     </AccordionContent>
                   </AccordionItem>
