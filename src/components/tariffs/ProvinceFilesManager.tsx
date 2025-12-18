@@ -291,10 +291,10 @@ export function ProvinceFilesManager() {
     if (!file) return;
 
     const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'pdf') {
+    if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'xlsm' && ext !== 'pdf') {
       toast({
         title: "Invalid File",
-        description: "Please upload an Excel (.xlsx, .xls) or PDF file",
+        description: "Please upload an Excel (.xlsx, .xls, .xlsm) or PDF file",
         variant: "destructive",
       });
       return;
