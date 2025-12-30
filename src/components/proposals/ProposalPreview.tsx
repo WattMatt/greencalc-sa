@@ -11,9 +11,11 @@ interface ProposalPreviewProps {
   proposal: Partial<Proposal>;
   project: any;
   simulation?: SimulationData;
+  tenants?: any[];
+  shopTypes?: any[];
 }
 
-export function ProposalPreview({ proposal, project, simulation }: ProposalPreviewProps) {
+export function ProposalPreview({ proposal, project, simulation, tenants, shopTypes }: ProposalPreviewProps) {
   const branding = proposal.branding as ProposalBranding;
   const primaryColor = branding?.primary_color || "#22c55e";
   const secondaryColor = branding?.secondary_color || "#0f172a";
