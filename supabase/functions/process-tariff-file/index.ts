@@ -407,10 +407,10 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
 
       console.log("Extracting tariffs for municipality:", municipality);
 
-      // Get municipality ID and existing tariffs first
+      // Get municipality ID, reprise count and existing tariffs first
       const { data: muniData } = await supabase
         .from("municipalities")
-        .select("id")
+        .select("id, reprise_count")
         .ilike("name", municipality)
         .single();
 
@@ -420,6 +420,9 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      
+      // Get current reprise count for batch selection
+      const repriseCount = muniData.reprise_count || 0;
 
       // Fetch existing tariffs with their rates for comparison
       const { data: existingTariffs } = await supabase
@@ -454,64 +457,100 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
       
       // Get data for this specific municipality (or selective data for Eskom)
       let municipalityText = "";
+      
+      // For Eskom, we'll do BATCHED extraction by category to avoid WORKER_LIMIT errors
+      // Each batch processes specific sheets for one category
+      const eskomBatches = isEskomExtraction ? [
+        { 
+          name: "Megaflex", 
+          sheets: ["megaflex", "lpu", "key customer"],
+          description: "Large Power Users TOU - LV, MV, HV variants with transmission zones"
+        },
+        { 
+          name: "Miniflex", 
+          sheets: ["miniflex"],
+          description: "Medium Power Users TOU - similar to Megaflex"
+        },
+        { 
+          name: "Nightsave", 
+          sheets: ["nightsave", "urban", "rural"],
+          description: "Off-peak focused TOU - Urban and Rural MV/HV variants"
+        },
+        { 
+          name: "Ruraflex", 
+          sheets: ["ruraflex"],
+          description: "Rural TOU - LV and MV for agricultural customers"
+        },
+        { 
+          name: "Businessrate", 
+          sheets: ["businessrate", "spu", "small power"],
+          description: "Small Power Users - Single/Three Phase with amperage options"
+        },
+        { 
+          name: "WEPS", 
+          sheets: ["weps"],
+          description: "Wholesale Electricity Pricing System - Local/Non-local authority"
+        },
+        { 
+          name: "Transflex", 
+          sheets: ["transflex", "transmission"],
+          description: "Transmission connected customers"
+        },
+        { 
+          name: "Homepower", 
+          sheets: ["homepower", "homelight", "domestic", "landrate", "landlight"],
+          description: "Domestic/Residential - prepaid and conventional IBT"
+        }
+      ] : [];
+      
+      // Determine which batch to process based on reprise count
+      let currentBatchIndex = 0;
+      if (isEskomExtraction && repriseCount > 0) {
+        // Use reprise count to cycle through batches
+        currentBatchIndex = repriseCount % eskomBatches.length;
+        console.log(`Eskom reprise #${repriseCount} - processing batch ${currentBatchIndex + 1}/${eskomBatches.length}: ${eskomBatches[currentBatchIndex]?.name}`);
+      }
+      
       if (isEskomExtraction) {
-        // For Eskom, use selective sheets - the .xlsm is a calculator with many sheets
-        // Focus on sheets that likely contain tariff rate data
-        console.log("Eskom extraction - using selective sheets. Available:", sheetNames.join(", "));
+        // For Eskom, use selective sheets based on current batch
+        console.log("Eskom extraction - available sheets:", sheetNames.join(", "));
         
-        // Filter to relevant sheets - look for tariff-related names
-        // EXPANDED list to capture ALL Eskom tariff categories
-        const relevantSheets = sheetNames.filter(name => {
+        const currentBatch = eskomBatches[currentBatchIndex];
+        
+        // Filter sheets for this batch
+        const batchSheets = sheetNames.filter(name => {
           const lower = name.toLowerCase();
-          return lower.includes('tariff') || 
-                 lower.includes('rate') || 
-                 lower.includes('megaflex') || 
-                 lower.includes('miniflex') || 
-                 lower.includes('nightsave') || 
-                 lower.includes('ruraflex') ||
-                 lower.includes('businessrate') ||
-                 lower.includes('homepower') ||
-                 lower.includes('homelight') ||
-                 lower.includes('landrate') ||
-                 lower.includes('landlight') ||
-                 lower.includes('power') ||
-                 lower.includes('small') ||
-                 lower.includes('rural') ||
-                 lower.includes('domestic') ||
-                 lower.includes('summary') ||
-                 lower.includes('charges') ||
-                 lower.includes('spu') ||
-                 lower.includes('lpu') ||
-                 lower.includes('energy') ||
-                 lower.includes('weps') ||
-                 lower.includes('transflex') ||
-                 lower.includes('local') ||
-                 lower.includes('non-local') ||
-                 lower.includes('key customer') ||
-                 lower.includes('urban') ||
-                 lower.includes('transmission');
+          return currentBatch.sheets.some(keyword => lower.includes(keyword));
         });
         
-        // If no relevant sheets found, use first 10 sheets as fallback
-        const sheetsToUse = relevantSheets.length > 0 ? relevantSheets.slice(0, 15) : sheetNames.slice(0, 10);
-        console.log("Using sheets:", sheetsToUse.join(", "));
+        // If no specific sheets found, use general tariff/rate sheets
+        const sheetsToUse = batchSheets.length > 0 
+          ? batchSheets.slice(0, 5) 
+          : sheetNames.filter(name => {
+              const lower = name.toLowerCase();
+              return lower.includes('tariff') || lower.includes('rate') || lower.includes('energy') || lower.includes('charges');
+            }).slice(0, 3);
         
-        // Build comprehensive text from sheets - increase row limit for Eskom
+        console.log(`Batch "${currentBatch.name}" - using sheets:`, sheetsToUse.join(", "));
+        
+        // Build text from selected sheets - limit to 60 rows per sheet
         for (const sheetName of sheetsToUse) {
           if (sheetData[sheetName]) {
             municipalityText += `\n=== SHEET: ${sheetName} ===\n`;
-            // Increase row limit to 150 per sheet for Eskom to capture all tariff data
-            municipalityText += sheetData[sheetName].slice(0, 150).map(row => 
+            municipalityText += sheetData[sheetName].slice(0, 60).map(row => 
               row.filter(cell => cell != null && cell !== "").join(" | ")
             ).filter(row => row.trim()).join("\n");
           }
         }
         
-        console.log("Eskom text length:", municipalityText.length);
+        // Add batch context to help AI focus
+        municipalityText = `BATCH FOCUS: ${currentBatch.name} tariffs\n${currentBatch.description}\n\n${municipalityText}`;
+        
+        console.log("Eskom batch text length:", municipalityText.length);
         
         // For PDF, append limited content
         if (extractedText && fileType === "pdf") {
-          municipalityText = extractedText.slice(0, 25000);
+          municipalityText = extractedText.slice(0, 12000);
         }
       } else if (fileType === "xlsx" || fileType === "xls") {
         // Find the sheet matching this municipality
@@ -554,82 +593,42 @@ INCREMENTAL EXTRACTION RULES:
 - Focus on finding MISSING tariffs that weren't extracted before`
         : "";
 
+      // Get current batch info for Eskom
+      const currentBatch = isEskomExtraction ? eskomBatches[currentBatchIndex] : null;
+      
       // Use different extraction prompt for Eskom vs regular municipalities
       const extractPrompt = isEskomExtraction 
-        ? `TASK: Extract ALL Eskom electricity tariffs from this tariff calculator/document.
+        ? `TASK: Extract ${currentBatch?.name || "Eskom"} tariffs from this data.
 
-SOURCE DATA (process ALL sheets thoroughly):
-${municipalityText.slice(0, 35000)}
+BATCH FOCUS: ${currentBatch?.name || "All"} - ${currentBatch?.description || "Extract all tariffs"}
+Reprise #${repriseCount} - Batch ${currentBatchIndex + 1}/${eskomBatches.length}
+
+SOURCE DATA:
+${municipalityText.slice(0, 15000)}
 ${existingContext}
 
-=== ESKOM TARIFF CATEGORIES TO EXTRACT ===
+=== EXTRACTION FOCUS: ${currentBatch?.name?.toUpperCase() || "ESKOM TARIFFS"} ===
 
-Eskom is South Africa's national utility. Extract ALL tariffs from these categories:
+Extract ALL variants of ${currentBatch?.name || "Eskom"} tariffs you can find in the data.
 
-1. **MEGAFLEX** (Large Power Users TOU) - Mandatory TOU tariff
-   - Variants: LV, MV (<500V, 500V-66kV, >66kV transmission zones)
-   - Each has 6 TOU energy rates: Peak/Standard/Off-Peak × High Demand Season/Low Demand Season
-   - Network Access Charge (R/kVA/month) → demand_charge_per_kva
-   - Service/Admin charge → fixed_monthly_charge
+For TOU tariffs (Megaflex, Miniflex, Nightsave, Ruraflex, WEPS, Transflex):
+- Extract 6 energy rates: Peak/Standard/Off-Peak × High Demand/Low Demand seasons
+- Look for "Active Energy" tables with c/kWh values
+- Network Access Charge → demand_charge_per_kva
+- Service/Admin charges → fixed_monthly_charge
 
-2. **MINIFLEX** (Medium Power Users TOU) - Mandatory TOU tariff
-   - Similar structure to Megaflex but different rates
-   - LV/MV variants with transmission zones
+For Fixed/IBT tariffs (Businessrate, Homepower, Homelight, Landrate):
+- Extract block-based rates if present
+- Single/Three Phase variants with amperage options
 
-3. **NIGHTSAVE** (Off-Peak focused) - TOU tariff
-   - Urban and Rural variants
-   - MV and HV voltage levels
-   - Transmission zone variants (0-300km, 300-600km, 600-900km, >900km)
+=== KEY RULES ===
+1. RATE CONVERSION: c/kWh → R/kWh (divide by 100). If 392.75 c/kWh → 3.9275 R/kWh
+2. VOLTAGE LEVELS: LV (<500V), MV (500V-66kV), HV (>66kV)
+3. Include transmission zones in tariff_name if present (≤300km, >300km, etc.)
+4. Include Local/Non-local authority variants
+5. Include Key Customer variants if present
 
-4. **RURAFLEX** (Rural TOU) - TOU tariff
-   - LV and MV variants
-   - For rural/agricultural customers
-
-5. **BUSINESSRATE** (Small Power Users) - Fixed rate tariff
-   - Single Phase and Three Phase variants
-   - Multiple amperage options (20A, 60A, 80A, etc.)
-   - IBT block structure OR flat rate
-
-6. **HOMEPOWER/HOMELIGHT** (Domestic) - IBT tariff
-   - Single Phase prepaid/conventional options
-   - Block-based consumption rates
-
-=== EXTRACTION RULES FOR ESKOM ===
-
-1. **TOU TARIFFS (Megaflex, Miniflex, Nightsave, Ruraflex)**:
-   MUST extract 6 energy rates per tariff:
-   - Peak + High/Winter, Peak + Low/Summer
-   - Standard + High/Winter, Standard + Low/Summer  
-   - Off-Peak + High/Winter, Off-Peak + Low/Summer
-   
-   Look for "Active Energy" tables with c/kWh values!
-
-2. **CATEGORY NAMING**:
-   - Use tariff name as category (e.g., "Megaflex", "Businessrate")
-   - tariff_name should include variant (e.g., "Megaflex MV <500V Zone 1")
-
-3. **VOLTAGE LEVELS**:
-   - LV = Low Voltage (<500V)
-   - MV = Medium Voltage (500V to 66kV)
-   - HV = High Voltage (>66kV)
-
-4. **TRANSMISSION ZONES** (for Nightsave HV):
-   - Zone 1: 0-300km from power station
-   - Zone 2: 300-600km
-   - Zone 3: 600-900km
-   - Zone 4: >900km
-   Include zone in tariff_name!
-
-5. **RATE CONVERSION**:
-   c/kWh → R/kWh: divide by 100
-   If source says 392.75 c/kWh → extract as 3.9275 R/kWh
-
-6. **CHARGES**:
-   - Network Access Charge (R/kVA/month) → demand_charge_per_kva
-   - Service Charge (R/day) → fixed_monthly_charge (multiply by 30.4)
-   - Admin Charge (R/account/month) → add to fixed_monthly_charge
-
-Extract EVERY tariff variant you can find!`
+Extract EVERY ${currentBatch?.name || ""} variant you can find!`
         : `TASK: Extract electricity tariffs for "${municipality}" municipality.
 
 SOURCE DATA:
