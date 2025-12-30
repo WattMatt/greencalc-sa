@@ -6,18 +6,25 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface ColumnAnalysis {
-  timestampColumn: string | null;
-  dateColumn?: string | null;
-  timeColumn?: string | null;
-  powerColumns: string[];
-  ignoredColumns: string[];
-  confidence: number;
+interface ColumnMapping {
+  dateColumn: string; // Index as string
+  timeColumn: string; // Index as string, or "-1"
+  valueColumn: string; // Index as string
+  kvaColumn: string; // Index as string, or "-1"
+  dateFormat: string;
+  timeFormat: string;
+  dateTimeFormat?: string;
+  renamedHeaders?: Record<string, string>;
+  columnDataTypes?: Record<string, 'datetime' | 'float' | 'int' | 'string' | 'boolean'>;
 }
 
 interface RawDataPoint {
   timestamp: string;
-  values: Record<string, number>;
+  date: string;
+  time: string;
+  value: number;
+  kva?: number;
+  originalLine: number;
 }
 
 interface ProcessedProfile {
@@ -30,36 +37,49 @@ interface ProcessedProfile {
   rawData: RawDataPoint[];
 }
 
-// Detect delimiter (comma, tab, semicolon)
-function detectDelimiter(content: string): string {
-  const firstLines = content.split('\n').slice(0, 5).join('\n');
-  const tabCount = (firstLines.match(/\t/g) || []).length;
-  const commaCount = (firstLines.match(/,/g) || []).length;
-  const semicolonCount = (firstLines.match(/;/g) || []).length;
+// Robust Date Parser
+function parseDate(dateStr: string, timeStr: string | null): Date | null {
+  if (!dateStr) return null;
 
-  if (tabCount > commaCount && tabCount > semicolonCount) return '\t';
-  if (semicolonCount > commaCount) return ';';
-  return ',';
-}
+  const dateTimeStr = timeStr ? `${dateStr} ${timeStr}` : dateStr;
+  let date = new Date(dateTimeStr);
 
-// Parse a line with the detected delimiter
-function parseLine(line: string, delimiter: string): string[] {
-  return line.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''));
-}
+  if (!isNaN(date.getTime())) return date;
 
-// Identify power-related columns
-function isPowerColumn(header: string): boolean {
-  const h = header.toLowerCase();
-  return (
-    h.includes('kwh') ||
-    h.includes('kvarh') ||
-    h.includes('kvah') ||
-    h.includes('kva') ||
-    /^p\d+$/.test(h) ||
-    /^q\d+$/.test(h) ||
-    /^s$/.test(h) ||
-    (h.includes('(kwh)') || h.includes('(kvarh)') || h.includes('(kvah)') || h.includes('(kva)'))
-  );
+  // Manual Parsing for common formats that Date() misses
+  // DD/MM/YYYY
+  const ddmmyyyy = dateTimeStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (ddmmyyyy) {
+    const [, day, month, year, hour, min, sec] = ddmmyyyy;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day),
+      parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
+  }
+
+  // YYYY/MM/DD
+  const yyyymmdd = dateTimeStr.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (yyyymmdd) {
+    const [, year, month, day, hour, min, sec] = yyyymmdd;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day),
+      parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
+  }
+
+  // DD-MMM-YY (01-Jan-24)
+  const ddmmmyy = dateTimeStr.match(/(\d{1,2})[\/\-]([A-Za-z]{3})[\/\-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (ddmmmyy) {
+    const months: Record<string, number> = {
+      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+      jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+    };
+    const [, day, monthStr, year, hour, min, sec] = ddmmmyy;
+    const monthValid = months[monthStr.toLowerCase()];
+    if (monthValid !== undefined) {
+      const fullYear = year.length === 2 ? 2000 + parseInt(year) : parseInt(year);
+      return new Date(fullYear, monthValid, parseInt(day),
+        parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
+    }
+  }
+
+  return null;
 }
 
 serve(async (req) => {
@@ -68,415 +88,141 @@ serve(async (req) => {
   }
 
   try {
-    const { csvContent, action, timestampColumn, powerColumn, dateColumn, timeColumn } = await req.json();
+    const {
+      csvContent,
+      action,
+      separator = 'comma',
+      headerRowNumber = 1,
+      dateColumn,
+      timeColumn,
+      valueColumn,
+      kvaColumn
+    } = await req.json();
 
     if (!csvContent) {
       throw new Error("CSV content is required");
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
-    // Detect delimiter
-    const delimiter = detectDelimiter(csvContent);
-    console.log(`Detected delimiter: ${delimiter === '\t' ? 'TAB' : delimiter}`);
-
-    // Filter out empty lines
-    const lines = csvContent.split('\n').filter((l: string) => {
-      const trimmed = l.trim();
-      return trimmed && !trimmed.toLowerCase().startsWith('sep=');
-    });
-
-    if (lines.length < 2) {
-      throw new Error("CSV must have a header and at least one data row");
-    }
-
-    // Detect and skip metadata rows (e.g., "pnpscada.com  34978407")
-    let headerLineIdx = 0;
-    for (let i = 0; i < Math.min(5, lines.length); i++) {
-      const cols = parseLine(lines[i], delimiter);
-      const lowerCols = cols.map((c: string) => c.toLowerCase());
-
-      // Check for header keywords
-      const hasHeaderKeywords = lowerCols.some((c: string) =>
-        c.includes('time') || c === 'date' || c.includes('kwh') ||
-        c.includes('kw') || c.includes('power') || c.includes('energy') ||
-        c.includes('status') || c.includes('kva') || c.includes('kvar') ||
-        /^p\d+$/.test(c) || /^q\d+$/.test(c) // matches p1, q1, etc.
-      );
-
-      if (cols.length >= 2 && hasHeaderKeywords) {
-        headerLineIdx = i;
-        break;
-      }
-    }
-
-    const headers = parseLine(lines[headerLineIdx], delimiter);
-    const dataStartIdx = headerLineIdx + 1;
-    console.log(`CSV Headers (line ${headerLineIdx + 1}):`, headers);
-    console.log(`Data starts at line ${dataStartIdx + 1}, total lines: ${lines.length}`);
-
-    if (action === "analyze") {
-      // Sample data rows
-      const sampleRows = lines.slice(dataStartIdx, dataStartIdx + 10).map((line: string) =>
-        parseLine(line, delimiter)
-      );
-
-      // Identify all power columns automatically
-      const powerColumns = headers.filter(h => isPowerColumn(h));
-      console.log("Detected power columns:", powerColumns);
-
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            {
-              role: "system",
-              content: `You are analyzing a SCADA/meter data file to identify columns for energy consumption analysis.
-
-IMPORTANT: The data may have separate Date and Time columns (e.g., "Time" column with dates like "2025/03/01" and values like "00:30:00").
-In PNPSCADA exports, "Time" column often contains DATES (like 2025/03/01) and the next column contains the actual time (like 00:30:00).
-
-Identify:
-1. Timestamp handling - either:
-   - A single timestampColumn with combined datetime
-   - OR separate dateColumn and timeColumn if date and time are in different columns
-2. ALL power/energy columns that should be captured for analysis:
-   - P1, P2 (active power in kWh)
-   - Q1, Q2, Q3, Q4 (reactive power in kvarh)
-   - S (apparent power in kVAh or kVA)
-   - Include all columns with (kWh), (kvarh), (kVAh), (kVA) in the name
-3. The PRIMARY power column for load profile calculation (usually P1 or first kWh column)
-4. Columns to ignore (Status, etc.)
-
-Return JSON with:
-{
-  "timestampColumn": "column name if combined datetime, null if separate",
-  "dateColumn": "column name with dates (if separate), null otherwise",
-  "timeColumn": "column name with times (if separate), null otherwise",
-  "powerColumns": ["list of ALL power/energy columns to capture"],
-  "primaryPowerColumn": "main kWh column for profile calculation",
-  "ignoredColumns": ["list of ignored columns"],
-  "confidence": 0-100,
-  "explanation": "Brief explanation"
-}`
-            },
-            {
-              role: "user",
-              content: `Headers: ${JSON.stringify(headers)}\n\nSample data rows:\n${sampleRows.map((r: string[]) => JSON.stringify(r)).join('\n')}`
-            }
-          ],
-          tools: [{
-            type: "function",
-            function: {
-              name: "analyze_columns",
-              description: "Return the column analysis results",
-              parameters: {
-                type: "object",
-                properties: {
-                  timestampColumn: { type: "string", nullable: true },
-                  dateColumn: { type: "string", nullable: true },
-                  timeColumn: { type: "string", nullable: true },
-                  powerColumns: { type: "array", items: { type: "string" } },
-                  primaryPowerColumn: { type: "string", nullable: true },
-                  ignoredColumns: { type: "array", items: { type: "string" } },
-                  confidence: { type: "number" },
-                  explanation: { type: "string" }
-                },
-                required: ["powerColumns", "primaryPowerColumn", "ignoredColumns", "confidence", "explanation"]
-              }
-            }
-          }],
-          tool_choice: { type: "function", function: { name: "analyze_columns" } }
-        }),
-      });
-
-      if (!aiResponse.ok) {
-        const errorText = await aiResponse.text();
-        console.error("AI Gateway error:", aiResponse.status, errorText);
-        throw new Error("Failed to analyze CSV columns");
-      }
-
-      const aiData = await aiResponse.json();
-      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-
-      if (!toolCall) {
-        throw new Error("AI did not return column analysis");
-      }
-
-      const analysis = JSON.parse(toolCall.function.arguments);
-      console.log("Column analysis:", analysis);
-
-      // Backwards compatibility - set powerColumn to primaryPowerColumn
-      analysis.powerColumn = analysis.primaryPowerColumn;
-
-      return new Response(JSON.stringify({
-        success: true,
-        headers,
-        rowCount: lines.length - dataStartIdx,
-        delimiter: delimiter === '\t' ? 'tab' : delimiter,
-        analysis
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     if (action === "process") {
-      // Determine how to get timestamp
-      const usesSeparateDateTime = dateColumn && timeColumn;
+      const delimiter = separator === 'tab' ? '\t' :
+        separator === 'semicolon' ? ';' :
+          separator === 'space' ? ' ' : ',';
 
-      let timestampIdx = -1;
-      let dateIdx = -1;
-      let timeIdx = -1;
-      let powerIdx = -1;
+      const lines = csvContent.split('\n');
+      const headerIdx = Math.max(0, parseInt(headerRowNumber.toString()) - 1);
+      const dataLines = lines.slice(headerIdx + 1).filter((l: string) => l.trim().length > 0);
 
-      if (usesSeparateDateTime) {
-        dateIdx = headers.findIndex(h => h.toLowerCase() === dateColumn.toLowerCase());
-        timeIdx = headers.findIndex(h => h.toLowerCase() === timeColumn.toLowerCase());
-        if (dateIdx === -1 || timeIdx === -1) {
-          throw new Error(`Could not find date/time columns: ${dateColumn}, ${timeColumn}`);
-        }
-      } else if (timestampColumn) {
-        timestampIdx = headers.findIndex(h => h.toLowerCase() === timestampColumn.toLowerCase());
-        if (timestampIdx === -1) {
-          throw new Error(`Could not find timestamp column: ${timestampColumn}`);
-        }
-      } else {
-        throw new Error("Timestamp or date/time columns are required for processing");
-      }
+      const rawData: RawDataPoint[] = [];
+      const dateSet = new Set<string>();
 
-      // Try exact match first
-      powerIdx = headers.findIndex(h => h.toLowerCase() === powerColumn.toLowerCase());
-      
-      // If no exact match, try partial match (e.g., "p14" matches "p14 (kWh)" or vice versa)
-      if (powerIdx === -1) {
-        const powerColLower = powerColumn.toLowerCase().replace(/\s*\([^)]*\)\s*/g, '').trim();
-        powerIdx = headers.findIndex(h => {
-          const headerLower = h.toLowerCase().replace(/\s*\([^)]*\)\s*/g, '').trim();
-          return headerLower === powerColLower || headerLower.includes(powerColLower) || powerColLower.includes(headerLower);
-        });
-      }
-      
-      if (powerIdx === -1) {
-        console.error(`Available headers:`, headers);
-        console.error(`Looking for power column:`, powerColumn);
-        throw new Error(`Could not find power column: ${powerColumn}. Available headers: ${headers.join(', ')}`);
-      }
-      console.log(`Found power column "${powerColumn}" at index ${powerIdx} (header: "${headers[powerIdx]}")`)
 
-      // Find ALL power column indices for raw data capture
-      const allPowerColumns: { name: string; idx: number }[] = [];
-      headers.forEach((h, idx) => {
-        if (isPowerColumn(h)) {
-          allPowerColumns.push({ name: h, idx });
-        }
-      });
-      console.log(`Processing with: timestamp=${timestampIdx}, date=${dateIdx}, time=${timeIdx}, power=${powerIdx}`);
-      console.log(`Capturing all power columns:`, allPowerColumns.map(c => c.name));
-
-      // Parse all data rows
       const hourlyData: { weekday: number[][]; weekend: number[][] } = {
         weekday: Array.from({ length: 24 }, () => []),
         weekend: Array.from({ length: 24 }, () => []),
       };
 
-      const rawData: RawDataPoint[] = [];
-      const dates = new Set<string>();
       let weekdayDays = 0;
       let weekendDays = 0;
       const seenDates: Record<string, boolean> = {};
-      let parsedCount = 0;
+
+      // Column Indices
+      const dateColIdx = parseInt(dateColumn);
+      const timeColIdx = parseInt(timeColumn);
+      const valColIdx = parseInt(valueColumn);
+      const kvaColIdx = parseInt(kvaColumn || "-1");
+
       let skippedCount = 0;
 
-      for (let i = dataStartIdx; i < lines.length; i++) {
-        const cols = parseLine(lines[i], delimiter);
-
-        let timestampStr: string;
-        if (usesSeparateDateTime) {
-          const dateStr = cols[dateIdx];
-          const timeStr = cols[timeIdx];
-          if (!dateStr || !timeStr) {
-            skippedCount++;
-            continue;
-          }
-          // Combine date and time - handle various formats
-          timestampStr = `${dateStr} ${timeStr}`;
+      for (let i = 0; i < dataLines.length; i++) {
+        const line = dataLines[i];
+        // Handle CSV parsing considering quotes
+        let cols: string[];
+        if (delimiter === ' ') {
+          cols = line.trim().split(/\s+/);
         } else {
-          timestampStr = cols[timestampIdx];
+          // Simple split for now, robust CSV splitting handles quotes better but is heavier
+          cols = line.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''));
         }
 
-        const powerStr = cols[powerIdx];
-
-        if (!timestampStr || !powerStr) {
+        if (cols.length <= Math.max(dateColIdx, valColIdx)) {
           skippedCount++;
           continue;
         }
 
-        // Parse timestamp - try various formats
-        let date: Date | null = null;
+        const dateStr = cols[dateColIdx];
+        const timeStr = timeColIdx >= 0 ? cols[timeColIdx] : null;
+        const valStr = cols[valColIdx];
+        const kvaStr = kvaColIdx >= 0 ? cols[kvaColIdx] : undefined;
 
-        // Try ISO format first
-        date = new Date(timestampStr);
+        const dateObj = parseDate(dateStr, timeStr);
+        const val = parseFloat(valStr?.replace(',', '.') || '0'); // Handle comma decimals
 
-        // If invalid, try common formats
-        if (isNaN(date.getTime())) {
-          // Try YYYY/MM/DD HH:mm:ss or YYYY-MM-DD HH:mm:ss
-          const isoishMatch = timestampStr.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-          if (isoishMatch) {
-            const [, year, month, day, hour, minute, second = '00'] = isoishMatch;
-            date = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:${second}`);
+        if (dateObj && !isNaN(dateObj.getTime()) && !isNaN(val)) {
+          const dayKey = dateObj.toISOString().split('T')[0];
+          const hour = dateObj.getHours();
+          const dayOfWeek = dateObj.getDay();
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+          if (!seenDates[dayKey]) {
+            seenDates[dayKey] = true;
+            if (isWeekend) weekendDays++; else weekdayDays++;
+            dateSet.add(dayKey);
           }
-        }
 
-        if (isNaN(date?.getTime() || NaN)) {
-          // Try DD/MM/YYYY HH:mm or similar
-          const ddmmMatch = timestampStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-          if (ddmmMatch) {
-            const [, day, month, year, hour, minute, second = '00'] = ddmmMatch;
-            const fullYear = year.length === 2 ? `20${year}` : year;
-            date = new Date(`${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:${second}`);
-          }
-        }
+          if (isWeekend) hourlyData.weekend[hour].push(val);
+          else hourlyData.weekday[hour].push(val);
 
-        if (isNaN(date?.getTime() || NaN)) {
-          // Try DD-MMM-YY HH:mm (e.g. 01-Jan-24 00:00)
-          const ddMmmyyMatch = timestampStr.match(/(\d{1,2})[\/\-]([A-Za-z]{3})[\/\-](\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-          if (ddMmmyyMatch) {
-            const months: Record<string, string> = {
-              jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
-              jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
-            };
-            const [, day, monthStr, year, hour, minute, second = '00'] = ddMmmyyMatch;
-            const month = months[monthStr.toLowerCase()];
-            if (month) {
-              const fullYear = year.length === 2 ? `20${year}` : year;
-              date = new Date(`${fullYear}-${month}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute}:${second}`);
-            }
-          }
-        }
-
-        if (!date || isNaN(date.getTime())) {
-          skippedCount++;
-          continue;
-        }
-
-        const power = parseFloat(powerStr);
-        if (isNaN(power)) {
-          skippedCount++;
-          continue;
-        }
-
-        parsedCount++;
-        const hour = date.getHours();
-        const dayOfWeek = date.getDay();
-        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-        const dateKey = date.toISOString().split('T')[0];
-
-        dates.add(dateKey);
-
-        if (!seenDates[dateKey]) {
-          seenDates[dateKey] = true;
-          if (isWeekend) weekendDays++;
-          else weekdayDays++;
-        }
-
-        if (isWeekend) {
-          hourlyData.weekend[hour].push(power);
+          rawData.push({
+            timestamp: dateObj.toISOString(),
+            date: dayKey,
+            time: dateObj.toTimeString().split(' ')[0],
+            value: val,
+            kva: kvaStr ? parseFloat(kvaStr.replace(',', '.')) : undefined,
+            originalLine: i + headerRowNumber + 1
+          });
         } else {
-          hourlyData.weekday[hour].push(power);
+          skippedCount++;
         }
-
-        // Capture ALL power column values for raw data
-        const values: Record<string, number> = {};
-        allPowerColumns.forEach(({ name, idx }) => {
-          const val = parseFloat(cols[idx]);
-          if (!isNaN(val)) {
-            values[name] = val;
-          }
-        });
-
-        rawData.push({
-          timestamp: date.toISOString(),
-          values
-        });
       }
 
-      console.log(`Parsed ${parsedCount} readings, skipped ${skippedCount}`);
-      console.log(`Raw data captured: ${rawData.length} points with ${allPowerColumns.length} columns each`);
-
-      if (parsedCount === 0) {
-        throw new Error("No valid data points could be parsed from the file");
-      }
-
-      // Log readings per hour for debugging
-      console.log("Weekday readings per hour:", hourlyData.weekday.map(arr => arr.length));
-      console.log("Weekend readings per hour:", hourlyData.weekend.map(arr => arr.length));
-
-      // Calculate averages for each hour
-      const weekdayAvg = hourlyData.weekday.map(arr =>
-        arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
-      );
-      const weekendAvg = hourlyData.weekend.map(arr =>
-        arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0
-      );
-
-      console.log("Weekday hourly averages (kWh):", weekdayAvg.map(v => v.toFixed(3)));
-      console.log("Weekend hourly averages (kWh):", weekendAvg.map(v => v.toFixed(3)));
-
-      // Normalize to percentages summing to 100
-      const normalize = (arr: number[]): number[] => {
-        const sum = arr.reduce((a, b) => a + b, 0);
-        if (sum === 0) return Array(24).fill(100 / 24);
-        return arr.map(v => Math.round((v / sum) * 100 * 100) / 100);
+      // Normalize Profiles (Percentages)
+      const calculateProfile = (buckets: number[][]) => {
+        const avgs = buckets.map(b => b.length ? b.reduce((s, v) => s + v, 0) / b.length : 0);
+        const total = avgs.reduce((s, v) => s + v, 0);
+        return total === 0 ? Array(24).fill(0) : avgs.map(v => (v / total) * 100);
       };
 
-      const weekdayProfile = normalize(weekdayAvg);
-      const weekendProfile = normalize(weekendAvg);
+      const weekdayProfile = calculateProfile(hourlyData.weekday);
+      const weekendProfile = calculateProfile(hourlyData.weekend);
 
-      console.log("Normalized weekday profile (%):", weekdayProfile);
-      console.log("Normalized weekend profile (%):", weekendProfile);
+      const sortedDates = Array.from(dateSet).sort();
 
-      const sortedDates = Array.from(dates).sort();
-
-      const result: ProcessedProfile = {
-        weekdayProfile,
-        weekendProfile,
-        dataPoints: parsedCount,
-        dateRange: {
-          start: sortedDates[0] || '',
-          end: sortedDates[sortedDates.length - 1] || ''
-        },
-        weekdayDays,
-        weekendDays,
-        rawData
-      };
-
-      console.log("Processed profile:", {
-        dataPoints: result.dataPoints,
-        dateRange: result.dateRange,
-        weekdayDays: result.weekdayDays,
-        weekendDays: result.weekendDays,
-        rawDataPoints: result.rawData.length
-      });
+      console.log(`Processed ${rawData.length} points, skipped ${skippedCount}`);
 
       return new Response(JSON.stringify({
         success: true,
-        ...result
+        dataPoints: rawData.length,
+        dateRange: {
+          start: sortedDates[0] || null,
+          end: sortedDates[sortedDates.length - 1] || null
+        },
+        weekdayDays,
+        weekendDays,
+        rawData,
+        weekdayProfile,
+        weekendProfile
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    throw new Error("Invalid action. Use 'analyze' or 'process'");
+    return new Response(JSON.stringify({ success: false, error: "Invalid action" }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
   } catch (error) {
-    console.error("process-scada-profile error:", error);
+    console.error("Error processing SCADA:", error);
     return new Response(JSON.stringify({
       success: false,
       error: error instanceof Error ? error.message : "Unknown error"
