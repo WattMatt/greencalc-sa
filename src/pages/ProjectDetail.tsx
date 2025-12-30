@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText } from "lucide-react";
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
@@ -15,6 +15,7 @@ import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { SolarForecastCard } from "@/components/projects/SolarForecastCard";
 import { ReportBuilder } from "@/components/reports/builder";
 import { ProjectOverview } from "@/components/projects/ProjectOverview";
+import { ProposalManager } from "@/components/projects/ProposalManager";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -121,7 +122,7 @@ export default function ProjectDetail() {
             {connectionSize && ` • ${connectionSize} kVA connection`}
           </p>
         </div>
-        
+
         {/* Connection Size Card */}
         <Card className="ml-auto">
           <CardContent className="py-3 px-4">
@@ -185,6 +186,10 @@ export default function ProjectDetail() {
             <CloudSun className="h-4 w-4 mr-2" />
             Solar Forecast
           </TabsTrigger>
+          <TabsTrigger value="proposals">
+            <ScrollText className="h-4 w-4 mr-2" />
+            Proposals
+          </TabsTrigger>
           <TabsTrigger value="reports">
             <FileText className="h-4 w-4 mr-2" />
             Reports
@@ -192,9 +197,9 @@ export default function ProjectDetail() {
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
-          <ProjectOverview 
-            project={project} 
-            tenants={tenants || []} 
+          <ProjectOverview
+            project={project}
+            tenants={tenants || []}
             onNavigateTab={setActiveTab}
           />
         </TabsContent>
@@ -208,9 +213,9 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="load-profile" className="mt-6">
-          <LoadProfileChart 
-            tenants={tenants || []} 
-            shopTypes={shopTypes || []} 
+          <LoadProfileChart
+            tenants={tenants || []}
+            shopTypes={shopTypes || []}
             connectionSizeKva={project.connection_size_kva}
             latitude={-33.9249} // Cape Town default - TODO: Add project coordinates
             longitude={18.4241}
@@ -240,6 +245,10 @@ export default function ProjectDetail() {
 
         <TabsContent value="solar-forecast" className="mt-6">
           <SolarForecastCard projectLocation={project.location || undefined} />
+        </TabsContent>
+
+        <TabsContent value="proposals" className="mt-6">
+          <ProposalManager projectId={id!} />
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6">

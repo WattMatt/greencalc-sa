@@ -7,17 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const SOUTH_AFRICAN_PROVINCES = [
-  "Eastern Cape",
-  "Free State",
-  "Gauteng",
-  "KwaZulu-Natal",
-  "Limpopo",
-  "Mpumalanga",
-  "Northern Cape",
-  "North West",
-  "Western Cape",
-] as const;
+import { SOUTH_AFRICAN_PROVINCES } from "@/lib/constants";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -86,10 +76,10 @@ export function AISheetImport() {
       toast({ title: "Analysis Complete", description: `Found ${data.tabs.length} tabs in the sheet` });
     } catch (err) {
       console.error("Analysis error:", err);
-      toast({ 
-        title: "Analysis Failed", 
+      toast({
+        title: "Analysis Failed",
         description: err instanceof Error ? err.message : "Failed to analyze sheet",
-        variant: "destructive" 
+        variant: "destructive"
       });
     } finally {
       setIsAnalyzing(false);
@@ -112,7 +102,7 @@ export function AISheetImport() {
       if (data.error) throw new Error(data.error);
 
       setImportResult(data);
-      
+
       if (data.imported > 0) {
         toast({ title: "Import Successful", description: `Imported ${data.imported} tariffs` });
         queryClient.invalidateQueries({ queryKey: ["tariffs"] });
@@ -122,10 +112,10 @@ export function AISheetImport() {
       }
     } catch (err) {
       console.error("Import error:", err);
-      toast({ 
-        title: "Import Failed", 
+      toast({
+        title: "Import Failed",
         description: err instanceof Error ? err.message : "Failed to import data",
-        variant: "destructive" 
+        variant: "destructive"
       });
     } finally {
       setIsImporting(false);
@@ -168,8 +158,8 @@ export function AISheetImport() {
                 placeholder="https://docs.google.com/spreadsheets/d/..."
                 className="flex-1"
               />
-              <Button 
-                onClick={handleAnalyze} 
+              <Button
+                onClick={handleAnalyze}
                 disabled={isAnalyzing || !sheetUrl.trim()}
                 variant="secondary"
                 className="gap-2"
@@ -236,8 +226,8 @@ export function AISheetImport() {
                 </div>
 
                 {/* Import Button */}
-                <Button 
-                  onClick={handleImport} 
+                <Button
+                  onClick={handleImport}
                   disabled={isImporting}
                   className="w-full gap-2"
                 >

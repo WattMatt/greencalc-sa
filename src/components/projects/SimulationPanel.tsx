@@ -11,11 +11,12 @@ import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Clo
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { useSolcastForecast } from "@/hooks/useSolcastForecast";
+import { ReportToggle } from "@/components/reports/ReportToggle";
 import { SavedSimulations } from "./SavedSimulations";
-import { 
-  PVSystemConfig, 
-  PVSystemConfigData, 
-  getDefaultPVConfig, 
+import {
+  PVSystemConfig,
+  PVSystemConfigData,
+  getDefaultPVConfig,
   generateSolarProfile,
   generateAverageSolcastProfile,
   SA_SOLAR_LOCATIONS,
@@ -93,9 +94,9 @@ function DifferenceIndicator({ baseValue, compareValue, suffix = "", invert = fa
   const diff = compareValue - baseValue;
   const pct = baseValue !== 0 ? (diff / baseValue) * 100 : 0;
   const isPositive = invert ? diff < 0 : diff > 0;
-  
+
   if (Math.abs(pct) < 0.5) return null;
-  
+
   return (
     <span className={`text-xs ml-1 ${isPositive ? "text-green-600" : "text-amber-600"}`}>
       ({pct > 0 ? "+" : ""}{pct.toFixed(1)}%{suffix})
@@ -111,14 +112,14 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [useSolcast, setUseSolcast] = useState(false);
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
-  
+
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, fetchForecast } = useSolcastForecast();
 
   // Get location coordinates from PV config location
   const selectedLocation = SA_SOLAR_LOCATIONS[pvConfig.location];
   const hasCoordinates = selectedLocation?.lat !== undefined;
-  
+
   // Fetch Solcast data when enabled and location is available
   useEffect(() => {
     if (useSolcast && hasCoordinates && !solcastData && !solcastLoading) {
@@ -130,7 +131,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
       });
     }
   }, [useSolcast, hasCoordinates, pvConfig.location]);
-  
+
   // Process Solcast data into hourly average profile
   const solcastHourlyProfile = useMemo<HourlyIrradianceData[] | undefined>(() => {
     if (!solcastData?.hourly || solcastData.hourly.length === 0) return undefined;
@@ -179,7 +180,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
       const tenantProfile = shopType?.load_profile_weekday?.length === 24
         ? shopType.load_profile_weekday.map(Number)
         : DEFAULT_PROFILE;
-      
+
       for (let h = 0; h < 24; h++) {
         profile[h] += dailyKwh * (tenantProfile[h] / 100);
       }
@@ -209,17 +210,17 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
     batteryPower,
   }), [solarCapacity, batteryCapacity, batteryPower]);
 
-  const energyResults = useMemo(() => 
+  const energyResults = useMemo(() =>
     runEnergySimulation(loadProfile, solarProfile, energyConfig),
     [loadProfile, solarProfile, energyConfig]
   );
 
-  const energyResultsGeneric = useMemo(() => 
+  const energyResultsGeneric = useMemo(() =>
     runEnergySimulation(loadProfile, solarProfileGeneric, energyConfig),
     [loadProfile, solarProfileGeneric, energyConfig]
   );
 
-  const energyResultsSolcast = useMemo(() => 
+  const energyResultsSolcast = useMemo(() =>
     solarProfileSolcast ? runEnergySimulation(loadProfile, solarProfileSolcast, energyConfig) : null,
     [loadProfile, solarProfileSolcast, energyConfig]
   );
@@ -237,18 +238,18 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
     exportRatePerKwh: 0, // No feed-in tariff by default
   }), [tariff, tariffRates]);
 
-  const financialResults = useMemo(() => 
+  const financialResults = useMemo(() =>
     calculateFinancials(energyResults, tariffData, DEFAULT_SYSTEM_COSTS, solarCapacity, batteryCapacity),
     [energyResults, tariffData, solarCapacity, batteryCapacity]
   );
 
-  const financialResultsGeneric = useMemo(() => 
+  const financialResultsGeneric = useMemo(() =>
     calculateFinancials(energyResultsGeneric, tariffData, DEFAULT_SYSTEM_COSTS, solarCapacity, batteryCapacity),
     [energyResultsGeneric, tariffData, solarCapacity, batteryCapacity]
   );
 
-  const financialResultsSolcast = useMemo(() => 
-    energyResultsSolcast 
+  const financialResultsSolcast = useMemo(() =>
+    energyResultsSolcast
       ? calculateFinancials(energyResultsSolcast, tariffData, DEFAULT_SYSTEM_COSTS, solarCapacity, batteryCapacity)
       : null,
     [energyResultsSolcast, tariffData, solarCapacity, batteryCapacity]
@@ -261,7 +262,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const hasFinancialData = !!project.tariff_id;
 
   // Check if any advanced features are enabled
-  const isAdvancedEnabled = 
+  const isAdvancedEnabled =
     advancedConfig.seasonal.enabled ||
     advancedConfig.degradation.enabled ||
     advancedConfig.financial.enabled ||
@@ -271,7 +272,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   // Run advanced simulation when enabled
   const advancedResults = useMemo<AdvancedFinancialResults | null>(() => {
     if (!isAdvancedEnabled || !hasFinancialData) return null;
-    
+
     return runAdvancedSimulation(
       energyResults,
       tariffData,
@@ -314,7 +315,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
         <div>
           <h2 className="text-lg font-semibold">Energy Simulation</h2>
           <p className="text-sm text-muted-foreground">
-            Model solar and battery energy flows • {selectedLocation.name} 
+            Model solar and battery energy flows • {selectedLocation.name}
             {usingRealData ? (
               <span className="text-primary"> (Solcast: {avgDailyGhi?.toFixed(1)} kWh/m²/day)</span>
             ) : (
@@ -385,7 +386,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-4">
-          <PVSystemConfig 
+          <PVSystemConfig
             config={pvConfig}
             onChange={setPvConfig}
             maxSolarKva={maxSolarKva}
@@ -658,8 +659,17 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
         <TabsContent value="energy" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Hourly Energy Flow</CardTitle>
-              <CardDescription>Load, solar generation, and grid import by hour (kWh)</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Hourly Energy Flow</CardTitle>
+                  <CardDescription>Load, solar generation, and grid import by hour (kWh)</CardDescription>
+                </div>
+                <ReportToggle
+                  id="energy-flow-chart"
+                  segmentType="energy_flow"
+                  label="Energy Flow Chart"
+                />
+              </div>
             </CardHeader>
             <CardContent>
               <div className="h-[350px]">
@@ -912,9 +922,9 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                       <p className="text-xs text-muted-foreground">Daily Solar</p>
                       <p className="text-lg font-semibold">
                         {energyResultsSolcast.totalDailySolar.toFixed(0)} kWh
-                        <DifferenceIndicator 
-                          baseValue={energyResultsGeneric.totalDailySolar} 
-                          compareValue={energyResultsSolcast.totalDailySolar} 
+                        <DifferenceIndicator
+                          baseValue={energyResultsGeneric.totalDailySolar}
+                          compareValue={energyResultsSolcast.totalDailySolar}
                         />
                       </p>
                     </div>
@@ -922,8 +932,8 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                       <p className="text-xs text-muted-foreground">Grid Import</p>
                       <p className="text-lg font-semibold">
                         {energyResultsSolcast.totalGridImport.toFixed(0)} kWh
-                        <DifferenceIndicator 
-                          baseValue={energyResultsGeneric.totalGridImport} 
+                        <DifferenceIndicator
+                          baseValue={energyResultsGeneric.totalGridImport}
                           compareValue={energyResultsSolcast.totalGridImport}
                           invert
                         />
@@ -944,9 +954,9 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                         <span className="text-muted-foreground">Annual Savings</span>
                         <span className="text-green-600">
                           R{Math.round(financialResultsSolcast.annualSavings).toLocaleString()}
-                          <DifferenceIndicator 
-                            baseValue={financialResultsGeneric.annualSavings} 
-                            compareValue={financialResultsSolcast.annualSavings} 
+                          <DifferenceIndicator
+                            baseValue={financialResultsGeneric.annualSavings}
+                            compareValue={financialResultsSolcast.annualSavings}
                           />
                         </span>
                       </div>
@@ -954,8 +964,8 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                         <span className="text-muted-foreground">Payback</span>
                         <span>
                           {financialResultsSolcast.paybackYears.toFixed(1)} yrs
-                          <DifferenceIndicator 
-                            baseValue={financialResultsGeneric.paybackYears} 
+                          <DifferenceIndicator
+                            baseValue={financialResultsGeneric.paybackYears}
                             compareValue={financialResultsSolcast.paybackYears}
                             invert
                           />
@@ -979,21 +989,19 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                 <div className="grid gap-4 md:grid-cols-4">
                   <div className="text-center p-3 rounded-lg bg-muted/50">
                     <p className="text-xs text-muted-foreground mb-1">Solar Output</p>
-                    <p className={`text-lg font-semibold ${
-                      energyResultsSolcast.totalDailySolar >= energyResultsGeneric.totalDailySolar 
+                    <p className={`text-lg font-semibold ${energyResultsSolcast.totalDailySolar >= energyResultsGeneric.totalDailySolar
                         ? "text-green-600" : "text-amber-600"
-                    }`}>
-                      {((energyResultsSolcast.totalDailySolar - energyResultsGeneric.totalDailySolar) / 
+                      }`}>
+                      {((energyResultsSolcast.totalDailySolar - energyResultsGeneric.totalDailySolar) /
                         energyResultsGeneric.totalDailySolar * 100).toFixed(1)}%
                     </p>
                   </div>
                   <div className="text-center p-3 rounded-lg bg-muted/50">
                     <p className="text-xs text-muted-foreground mb-1">Grid Import</p>
-                    <p className={`text-lg font-semibold ${
-                      energyResultsSolcast.totalGridImport <= energyResultsGeneric.totalGridImport 
+                    <p className={`text-lg font-semibold ${energyResultsSolcast.totalGridImport <= energyResultsGeneric.totalGridImport
                         ? "text-green-600" : "text-amber-600"
-                    }`}>
-                      {((energyResultsSolcast.totalGridImport - energyResultsGeneric.totalGridImport) / 
+                      }`}>
+                      {((energyResultsSolcast.totalGridImport - energyResultsGeneric.totalGridImport) /
                         energyResultsGeneric.totalGridImport * 100).toFixed(1)}%
                     </p>
                   </div>
@@ -1001,21 +1009,19 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                     <>
                       <div className="text-center p-3 rounded-lg bg-muted/50">
                         <p className="text-xs text-muted-foreground mb-1">Savings</p>
-                        <p className={`text-lg font-semibold ${
-                          financialResultsSolcast.annualSavings >= financialResultsGeneric.annualSavings 
+                        <p className={`text-lg font-semibold ${financialResultsSolcast.annualSavings >= financialResultsGeneric.annualSavings
                             ? "text-green-600" : "text-amber-600"
-                        }`}>
-                          {((financialResultsSolcast.annualSavings - financialResultsGeneric.annualSavings) / 
+                          }`}>
+                          {((financialResultsSolcast.annualSavings - financialResultsGeneric.annualSavings) /
                             financialResultsGeneric.annualSavings * 100).toFixed(1)}%
                         </p>
                       </div>
                       <div className="text-center p-3 rounded-lg bg-muted/50">
                         <p className="text-xs text-muted-foreground mb-1">Payback</p>
-                        <p className={`text-lg font-semibold ${
-                          financialResultsSolcast.paybackYears <= financialResultsGeneric.paybackYears 
+                        <p className={`text-lg font-semibold ${financialResultsSolcast.paybackYears <= financialResultsGeneric.paybackYears
                             ? "text-green-600" : "text-amber-600"
-                        }`}>
-                          {((financialResultsSolcast.paybackYears - financialResultsGeneric.paybackYears) / 
+                          }`}>
+                          {((financialResultsSolcast.paybackYears - financialResultsGeneric.paybackYears) /
                             financialResultsGeneric.paybackYears * 100).toFixed(1)}%
                         </p>
                       </div>

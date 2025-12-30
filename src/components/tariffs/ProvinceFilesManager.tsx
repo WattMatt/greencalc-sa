@@ -13,14 +13,14 @@ import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
-import { 
-  Upload, 
-  FileSpreadsheet, 
-  MapPin, 
-  Building2, 
-  Trash2, 
-  Play, 
-  CheckCircle2, 
+import {
+  Upload,
+  FileSpreadsheet,
+  MapPin,
+  Building2,
+  Trash2,
+  Play,
+  CheckCircle2,
   Clock,
   FolderOpen,
   RefreshCw,
@@ -41,17 +41,7 @@ interface Municipality {
   error?: string;
 }
 
-const SOUTH_AFRICAN_PROVINCES = [
-  "Eastern Cape",
-  "Free State",
-  "Gauteng",
-  "KwaZulu-Natal",
-  "Limpopo",
-  "Mpumalanga",
-  "Northern Cape",
-  "North West",
-  "Western Cape",
-] as const;
+import { SOUTH_AFRICAN_PROVINCES } from "@/lib/constants";
 
 interface ProvinceFile {
   name: string;
@@ -79,7 +69,7 @@ export function ProvinceFilesManager() {
   const [selectedProvince, setSelectedProvince] = useState<string | null>(null);
   const [extractionOpen, setExtractionOpen] = useState(false);
   const [newProvince, setNewProvince] = useState("");
-  
+
   // Extraction workflow state
   const [selectedFile, setSelectedFile] = useState<ProvinceFile | null>(null);
   const [availableFiles, setAvailableFiles] = useState<ProvinceFile[]>([]);
@@ -87,7 +77,7 @@ export function ProvinceFilesManager() {
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [analysisInfo, setAnalysisInfo] = useState<{ sheets?: string[]; analysis?: string } | null>(null);
   const [autoReprise, setAutoReprise] = useState(true);
-  
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -161,18 +151,18 @@ export function ProvinceFilesManager() {
   // Build province stats - include predefined + custom provinces
   const buildProvinceStats = (): ProvinceStats[] => {
     const stats: ProvinceStats[] = [];
-    
+
     // Add predefined provinces
     SOUTH_AFRICAN_PROVINCES.forEach((provinceName) => {
       const provinceRecord = provincesData?.provinces?.find(p => p.name === provinceName);
       const provinceId = provinceRecord?.id || null;
-      
+
       const provinceMunicipalities = provincesData?.municipalities?.filter(
         m => m.province_id === provinceId
       ) || [];
 
       const municipalityIds = provinceMunicipalities.map(m => m.id);
-      
+
       // Calculate extraction status per municipality using DB status
       let extractedCount = 0;
       let pendingCount = 0;
@@ -187,7 +177,7 @@ export function ProvinceFilesManager() {
           pendingCount++;
         }
       });
-      
+
       const tariffCount = provinceMunicipalities.reduce(
         (sum, m) => sum + ((m as any).total_tariffs || 0), 0
       );
@@ -227,7 +217,7 @@ export function ProvinceFilesManager() {
         ) || [];
 
         const municipalityIds = provinceMunicipalities.map(m => m.id);
-        
+
         // Calculate extraction status per municipality using DB status
         let extractedCount = 0;
         let pendingCount = 0;
@@ -242,7 +232,7 @@ export function ProvinceFilesManager() {
             pendingCount++;
           }
         });
-        
+
         const tariffCount = provinceMunicipalities.reduce(
           (sum, m) => sum + ((m as any).total_tariffs || 0), 0
         );
@@ -320,9 +310,9 @@ export function ProvinceFilesManager() {
 
       if (uploadError) throw uploadError;
 
-      toast({ 
-        title: "File Uploaded", 
-        description: `${file.name} uploaded for ${province}` 
+      toast({
+        title: "File Uploaded",
+        description: `${file.name} uploaded for ${province}`
       });
 
       refetchFiles();
@@ -387,7 +377,7 @@ export function ProvinceFilesManager() {
           const tariffCount = (m as any).total_tariffs || 0;
           const dbStatus = (m as any).extraction_status || 'pending';
           const dbError = (m as any).extraction_error;
-          
+
           return {
             id: m.id,
             name: m.name,
@@ -398,7 +388,7 @@ export function ProvinceFilesManager() {
             error: dbError || undefined
           };
         });
-        
+
         setMunicipalities(muniWithStatus);
         setExtractionPhase("ready"); // Skip directly to tariff extraction
         return;
@@ -413,14 +403,14 @@ export function ProvinceFilesManager() {
   // Refresh extraction dialog data from database
   const handleRefreshExtractionData = async () => {
     if (!selectedProvince) return;
-    
+
     // Invalidate cache first to ensure fresh data
     await queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
-    
+
     // Refetch with fresh data from server
     const result = await refetchProvincesData();
     const freshData = result.data;
-    
+
     // Find province and rebuild municipalities list
     const provinceData = freshData?.provinces?.find(p => p.name === selectedProvince);
     if (provinceData) {
@@ -437,20 +427,20 @@ export function ProvinceFilesManager() {
           .from("tariffs")
           .select("municipality_id")
           .in("municipality_id", muniIds);
-        
+
         // Count tariffs per municipality
         const countMap = new Map<string, number>();
         tariffCounts?.forEach(t => {
           countMap.set(t.municipality_id, (countMap.get(t.municipality_id) || 0) + 1);
         });
-        
+
         const muniWithStatus: Municipality[] = freshMunis.map(m => {
           const actualCount = countMap.get(m.id) || 0;
           const cachedCount = m.total_tariffs || 0;
-          
+
           // Use actual count if different from cached (more accurate)
           const tariffCount = actualCount > 0 ? actualCount : cachedCount;
-          
+
           return {
             id: m.id,
             name: m.name,
@@ -461,14 +451,14 @@ export function ProvinceFilesManager() {
             error: m.extraction_error || undefined
           };
         });
-        
+
         setMunicipalities(muniWithStatus);
         console.log("Refreshed municipalities:", muniWithStatus);
       } else {
         setMunicipalities([]);
       }
     }
-    
+
     sonnerToast.success("Data refreshed");
   };
 
@@ -561,17 +551,17 @@ export function ProvinceFilesManager() {
       if (existingCount && existingCount > 0) {
         sonnerToast.info(`${muni.name} has ${existingCount} existing tariffs - switching to reprise mode`, { duration: 3000 });
         await handleRepriseInternal(muniIndex, true);
-        
+
         // Update status to done
         await supabase
           .from("municipalities")
           .update({ extraction_status: "done", extraction_error: null })
           .eq("id", muni.id);
-        
+
         setMunicipalities(prev => prev.map((m, i) =>
           i === muniIndex ? { ...m, status: "done" as const, tariffCount: existingCount } : m
         ));
-        
+
         queryClient.invalidateQueries({ queryKey: ["tariffs"] });
         queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
         return;
@@ -600,9 +590,9 @@ export function ProvinceFilesManager() {
       setMunicipalities(prev => prev.map((m, i) => {
         if (i !== muniIndex) return m;
         const totalChanged = (data.inserted || 0) + (data.updated || 0);
-        return { 
-          ...m, 
-          status: "done" as const, 
+        return {
+          ...m,
+          status: "done" as const,
           tariffCount: totalChanged,
           confidence: data.confidence ?? m.confidence
         };
@@ -629,25 +619,25 @@ export function ProvinceFilesManager() {
         let repriseAttempt = 0;
         const maxRepriseAttempts = 5; // Safety limit
         let currentConfidence = 0;
-        
+
         while (currentConfidence < 100 && repriseAttempt < maxRepriseAttempts) {
           repriseAttempt++;
           sonnerToast.info(`Running reprise ${repriseAttempt} for ${muni.name}...`, { duration: 2000 });
-          
+
           const repriseResult = await handleRepriseInternalWithResult(muniIndex);
           currentConfidence = repriseResult?.confidence ?? 100;
-          
+
           // If no corrections were made and confidence is 100, we're done
           if (repriseResult?.corrections === 0 && currentConfidence >= 100) {
             break;
           }
-          
+
           // Small delay between reprise attempts
           if (currentConfidence < 100 && repriseAttempt < maxRepriseAttempts) {
             await new Promise(r => setTimeout(r, 1000));
           }
         }
-        
+
         if (currentConfidence >= 100) {
           sonnerToast.success(`${muni.name} reached 100% confidence after ${repriseAttempt} reprise(s)`, { duration: 3000 });
         } else {
@@ -658,7 +648,7 @@ export function ProvinceFilesManager() {
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed";
-      
+
       // Persist error status to database
       await supabase
         .from("municipalities")
@@ -673,7 +663,7 @@ export function ProvinceFilesManager() {
         description: errorMessage,
         variant: "destructive",
       });
-      
+
       queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
     }
   };
@@ -700,8 +690,8 @@ export function ProvinceFilesManager() {
       // Update municipality state with new confidence
       setMunicipalities(prev => prev.map((m, i) => {
         if (i !== muniIndex) return m;
-        return { 
-          ...m, 
+        return {
+          ...m,
           confidence: data.confidence ?? m.confidence,
           repriseCount: (m.repriseCount || 0) + 1
         };
@@ -750,8 +740,8 @@ export function ProvinceFilesManager() {
       // Update municipality state with new confidence
       setMunicipalities(prev => prev.map((m, i) => {
         if (i !== muniIndex) return m;
-        return { 
-          ...m, 
+        return {
+          ...m,
           confidence: data.confidence ?? m.confidence,
           repriseCount: (m.repriseCount || 0) + 1
         };
@@ -765,8 +755,8 @@ export function ProvinceFilesManager() {
       if (showFullToast) {
         toast({
           title: `${muni.name} Reprise Complete`,
-          description: data.corrections === 0 
-            ? `Verified accurate (${data.confidence || '?'}% confidence)` 
+          description: data.corrections === 0
+            ? `Verified accurate (${data.confidence || '?'}% confidence)`
             : parts.join(", ")
         });
       } else if (data.corrections > 0) {
@@ -783,7 +773,7 @@ export function ProvinceFilesManager() {
       queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Reprise failed";
-      
+
       if (showFullToast) {
         toast({
           title: `${muni.name} Reprise Failed`,
@@ -815,7 +805,7 @@ export function ProvinceFilesManager() {
     setExtractionPhase("extracting");
     for (let i = 0; i < municipalities.length; i++) {
       // Reset all to pending first, then extract (allows re-extraction)
-      setMunicipalities(prev => prev.map((m, idx) => 
+      setMunicipalities(prev => prev.map((m, idx) =>
         idx === i ? { ...m, status: "pending" as const, error: undefined } : m
       ));
       await handleExtractTariffs(i);
@@ -828,7 +818,7 @@ export function ProvinceFilesManager() {
     for (let i = 0; i < municipalities.length; i++) {
       if (municipalities[i].status === "error") {
         // Reset status to pending before retry
-        setMunicipalities(prev => prev.map((m, idx) => 
+        setMunicipalities(prev => prev.map((m, idx) =>
           idx === i ? { ...m, status: "pending" as const, error: undefined } : m
         ));
         await handleExtractTariffs(i);
@@ -843,13 +833,13 @@ export function ProvinceFilesManager() {
 
     setExtractionPhase("extracting");
     sonnerToast.info(`Running reprise on ${doneCount} municipalities...`);
-    
+
     for (let i = 0; i < municipalities.length; i++) {
       if (municipalities[i].status === "done") {
         await handleRepriseInternal(i, false);
       }
     }
-    
+
     setExtractionPhase("ready");
     toast({ title: "Reprise All Complete", description: `Verified ${doneCount} municipalities` });
   };
@@ -950,471 +940,471 @@ export function ProvinceFilesManager() {
             </Button>
           </div>
         </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Province</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Files</TableHead>
-              <TableHead>Municipalities</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {provinceStats.map((stats) => (
-              <TableRow key={stats.province}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">{stats.province}</span>
-                  </div>
-                </TableCell>
-                <TableCell>{getStatusBadge(stats)}</TableCell>
-                <TableCell>
-                  {stats.files.length > 0 ? (
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-7 px-2">
-                          <FileSpreadsheet className="h-4 w-4 mr-1" />
-                          {stats.files.length} file{stats.files.length !== 1 ? "s" : ""}
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                          <DialogTitle>{stats.province} - Uploaded Files</DialogTitle>
-                          <DialogDescription>
-                            Manage tariff files for this province
-                          </DialogDescription>
-                        </DialogHeader>
-                        <ScrollArea className="max-h-[400px]">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>File Name</TableHead>
-                                <TableHead>Uploaded</TableHead>
-                                <TableHead>Size</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {stats.files.map((file) => (
-                                <TableRow key={file.path}>
-                                  <TableCell className="font-mono text-sm">
-                                    {file.name}
-                                  </TableCell>
-                                  <TableCell>{formatDate(file.uploadedAt)}</TableCell>
-                                  <TableCell>{formatFileSize(file.size)}</TableCell>
-                                  <TableCell className="text-right">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-destructive"
-                                      onClick={() => handleDeleteFile(file.path)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </ScrollArea>
-                      </DialogContent>
-                    </Dialog>
-                  ) : (
-                    <span className="text-muted-foreground text-sm">No files</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {stats.municipalityCount > 0 ? (
-                    <div className="flex items-center gap-2 text-sm">
-                      <div className="flex items-center gap-1">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">{stats.municipalityCount}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="flex items-center gap-0.5 text-green-600">
-                          <CheckCircle2 className="h-3 w-3" />
-                          {stats.extractedCount}
-                        </span>
-                        {stats.pendingCount > 0 && (
-                          <span className="flex items-center gap-0.5 text-amber-600">
-                            <Clock className="h-3 w-3" />
-                            {stats.pendingCount}
-                          </span>
-                        )}
-                        {stats.errorCount > 0 && (
-                          <span className="flex items-center gap-0.5 text-destructive">
-                            <AlertCircle className="h-3 w-3" />
-                            {stats.errorCount}
-                          </span>
-                        )}
-                      </div>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Province</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Files</TableHead>
+                <TableHead>Municipalities</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {provinceStats.map((stats) => (
+                <TableRow key={stats.province}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">{stats.province}</span>
                     </div>
-                  ) : (
-                    <span className="text-muted-foreground text-sm">—</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    {stats.files.length > 0 && (
+                  </TableCell>
+                  <TableCell>{getStatusBadge(stats)}</TableCell>
+                  <TableCell>
+                    {stats.files.length > 0 ? (
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-7 px-2">
+                            <FileSpreadsheet className="h-4 w-4 mr-1" />
+                            {stats.files.length} file{stats.files.length !== 1 ? "s" : ""}
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>{stats.province} - Uploaded Files</DialogTitle>
+                            <DialogDescription>
+                              Manage tariff files for this province
+                            </DialogDescription>
+                          </DialogHeader>
+                          <ScrollArea className="max-h-[400px]">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>File Name</TableHead>
+                                  <TableHead>Uploaded</TableHead>
+                                  <TableHead>Size</TableHead>
+                                  <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {stats.files.map((file) => (
+                                  <TableRow key={file.path}>
+                                    <TableCell className="font-mono text-sm">
+                                      {file.name}
+                                    </TableCell>
+                                    <TableCell>{formatDate(file.uploadedAt)}</TableCell>
+                                    <TableCell>{formatFileSize(file.size)}</TableCell>
+                                    <TableCell className="text-right">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive"
+                                        onClick={() => handleDeleteFile(file.path)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </ScrollArea>
+                        </DialogContent>
+                      </Dialog>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">No files</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {stats.municipalityCount > 0 ? (
+                      <div className="flex items-center gap-2 text-sm">
+                        <div className="flex items-center gap-1">
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">{stats.municipalityCount}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span className="flex items-center gap-0.5 text-green-600">
+                            <CheckCircle2 className="h-3 w-3" />
+                            {stats.extractedCount}
+                          </span>
+                          {stats.pendingCount > 0 && (
+                            <span className="flex items-center gap-0.5 text-amber-600">
+                              <Clock className="h-3 w-3" />
+                              {stats.pendingCount}
+                            </span>
+                          )}
+                          {stats.errorCount > 0 && (
+                            <span className="flex items-center gap-0.5 text-destructive">
+                              <AlertCircle className="h-3 w-3" />
+                              {stats.errorCount}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      {stats.files.length > 0 && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="h-8"
+                          onClick={() => startExtraction(stats.files[0], stats.province, stats.files)}
+                        >
+                          <Zap className="h-4 w-4 mr-1" />
+                          Extract
+                        </Button>
+                      )}
                       <Button
-                        variant="default"
+                        variant="outline"
                         size="sm"
                         className="h-8"
-                        onClick={() => startExtraction(stats.files[0], stats.province, stats.files)}
+                        disabled={isUploading && uploadingProvince === stats.province}
+                        onClick={() => document.getElementById(`upload-${stats.province}`)?.click()}
                       >
-                        <Zap className="h-4 w-4 mr-1" />
-                        Extract
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8"
-                      disabled={isUploading && uploadingProvince === stats.province}
-                      onClick={() => document.getElementById(`upload-${stats.province}`)?.click()}
-                    >
-                      {isUploading && uploadingProvince === stats.province ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Upload className="h-4 w-4 mr-1" />
-                          Upload
-                        </>
-                      )}
-                    </Button>
-                    <input
-                      id={`upload-${stats.province}`}
-                      type="file"
-                      accept=".xlsx,.xls,.xlsm,.pdf"
-                      style={{ display: 'none' }}
-                      onChange={(e) => handleFileUpload(e, stats.province)}
-                    />
-                    {stats.isCustom && stats.provinceId && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive"
-                        onClick={() => deleteProvince.mutate(stats.provinceId!)}
-                        disabled={deleteProvince.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-
-        {/* Summary stats */}
-        <div className="mt-6 pt-4 border-t flex items-center justify-between text-sm">
-          <div className="flex items-center gap-6 text-muted-foreground">
-            <span>
-              <strong className="text-foreground">
-                {storageFiles?.length || 0}
-              </strong>{" "}
-              files uploaded
-            </span>
-            <span>
-              <strong className="text-foreground">
-                {provincesData?.municipalities?.length || 0}
-              </strong>{" "}
-              municipalities
-            </span>
-            <span>
-              <strong className="text-foreground">
-                {provincesData?.tariffCount || 0}
-              </strong>{" "}
-              tariffs
-            </span>
-          </div>
-        </div>
-
-        {/* Extraction Dialog */}
-        <Dialog open={extractionOpen} onOpenChange={setExtractionOpen}>
-          <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
-            <DialogHeader className="flex flex-row items-start justify-between">
-              <div className="flex-1">
-                <DialogTitle className="flex items-center gap-2">
-                  <Zap className="h-5 w-5" />
-                  Extract Tariffs - {selectedProvince}
-                </DialogTitle>
-                {availableFiles.length > 1 ? (
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-sm text-muted-foreground">Source file:</span>
-                    <select
-                      value={selectedFile?.name || ''}
-                      onChange={(e) => {
-                        const file = availableFiles.find(f => f.name === e.target.value);
-                        if (file) {
-                          setSelectedFile(file);
-                          setAnalysisInfo(null);
-                        }
-                      }}
-                      className="text-sm border rounded px-2 py-1 bg-background"
-                    >
-                      {availableFiles.map((file) => (
-                        <option key={file.name} value={file.name}>
-                          {file.name} ({getFileType(file.name).toUpperCase()})
-                        </option>
-                      ))}
-                    </select>
-                    <Badge variant="outline" className="text-xs">
-                      {availableFiles.length} files
-                    </Badge>
-                  </div>
-                ) : (
-                  <DialogDescription>
-                    {selectedFile?.name}
-                  </DialogDescription>
-                )}
-              </div>
-              {municipalities.length > 0 && (
-                <Button variant="outline" size="sm" onClick={handleRefreshExtractionData}>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  Refresh
-                </Button>
-              )}
-            </DialogHeader>
-
-            <div className="flex-1 overflow-auto space-y-4">
-              {/* Step 1 & 2: Only show if no municipalities loaded */}
-              {extractionPhase !== "ready" && municipalities.length === 0 && (
-                <>
-                  {/* Step 1: Analyze */}
-                  <div className="p-4 border rounded-lg space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">Step 1: Analyze File</h4>
-                        <p className="text-sm text-muted-foreground">Review the file structure before extracting</p>
-                      </div>
-                      <Button
-                        onClick={handleAnalyzeFile}
-                        disabled={extractionPhase === "analyzing"}
-                        variant="outline"
-                      >
-                        {extractionPhase === "analyzing" ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        {isUploading && uploadingProvince === stats.province ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <Play className="h-4 w-4 mr-1" />
+                          <>
+                            <Upload className="h-4 w-4 mr-1" />
+                            Upload
+                          </>
                         )}
-                        Analyze
                       </Button>
+                      <input
+                        id={`upload-${stats.province}`}
+                        type="file"
+                        accept=".xlsx,.xls,.xlsm,.pdf"
+                        style={{ display: 'none' }}
+                        onChange={(e) => handleFileUpload(e, stats.province)}
+                      />
+                      {stats.isCustom && stats.provinceId && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive"
+                          onClick={() => deleteProvince.mutate(stats.provinceId!)}
+                          disabled={deleteProvince.isPending}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
-                    {analysisInfo?.sheets && (
-                      <div className="text-sm bg-muted/50 p-3 rounded">
-                        <strong>Sheets found:</strong> {analysisInfo.sheets.length}
-                        <div className="mt-1 text-muted-foreground">
-                          {analysisInfo.sheets.slice(0, 10).join(", ")}
-                          {analysisInfo.sheets.length > 10 && "..."}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+
+          {/* Summary stats */}
+          <div className="mt-6 pt-4 border-t flex items-center justify-between text-sm">
+            <div className="flex items-center gap-6 text-muted-foreground">
+              <span>
+                <strong className="text-foreground">
+                  {storageFiles?.length || 0}
+                </strong>{" "}
+                files uploaded
+              </span>
+              <span>
+                <strong className="text-foreground">
+                  {provincesData?.municipalities?.length || 0}
+                </strong>{" "}
+                municipalities
+              </span>
+              <span>
+                <strong className="text-foreground">
+                  {provincesData?.tariffCount || 0}
+                </strong>{" "}
+                tariffs
+              </span>
+            </div>
+          </div>
+
+          {/* Extraction Dialog */}
+          <Dialog open={extractionOpen} onOpenChange={setExtractionOpen}>
+            <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+              <DialogHeader className="flex flex-row items-start justify-between">
+                <div className="flex-1">
+                  <DialogTitle className="flex items-center gap-2">
+                    <Zap className="h-5 w-5" />
+                    Extract Tariffs - {selectedProvince}
+                  </DialogTitle>
+                  {availableFiles.length > 1 ? (
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-sm text-muted-foreground">Source file:</span>
+                      <select
+                        value={selectedFile?.name || ''}
+                        onChange={(e) => {
+                          const file = availableFiles.find(f => f.name === e.target.value);
+                          if (file) {
+                            setSelectedFile(file);
+                            setAnalysisInfo(null);
+                          }
+                        }}
+                        className="text-sm border rounded px-2 py-1 bg-background"
+                      >
+                        {availableFiles.map((file) => (
+                          <option key={file.name} value={file.name}>
+                            {file.name} ({getFileType(file.name).toUpperCase()})
+                          </option>
+                        ))}
+                      </select>
+                      <Badge variant="outline" className="text-xs">
+                        {availableFiles.length} files
+                      </Badge>
+                    </div>
+                  ) : (
+                    <DialogDescription>
+                      {selectedFile?.name}
+                    </DialogDescription>
+                  )}
+                </div>
+                {municipalities.length > 0 && (
+                  <Button variant="outline" size="sm" onClick={handleRefreshExtractionData}>
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                    Refresh
+                  </Button>
+                )}
+              </DialogHeader>
+
+              <div className="flex-1 overflow-auto space-y-4">
+                {/* Step 1 & 2: Only show if no municipalities loaded */}
+                {extractionPhase !== "ready" && municipalities.length === 0 && (
+                  <>
+                    {/* Step 1: Analyze */}
+                    <div className="p-4 border rounded-lg space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-medium">Step 1: Analyze File</h4>
+                          <p className="text-sm text-muted-foreground">Review the file structure before extracting</p>
+                        </div>
+                        <Button
+                          onClick={handleAnalyzeFile}
+                          disabled={extractionPhase === "analyzing"}
+                          variant="outline"
+                        >
+                          {extractionPhase === "analyzing" ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                          ) : (
+                            <Play className="h-4 w-4 mr-1" />
+                          )}
+                          Analyze
+                        </Button>
+                      </div>
+                      {analysisInfo?.sheets && (
+                        <div className="text-sm bg-muted/50 p-3 rounded">
+                          <strong>Sheets found:</strong> {analysisInfo.sheets.length}
+                          <div className="mt-1 text-muted-foreground">
+                            {analysisInfo.sheets.slice(0, 10).join(", ")}
+                            {analysisInfo.sheets.length > 10 && "..."}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Step 2: Extract Municipalities */}
+                    <div className="p-4 border rounded-lg space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-medium">Step 2: Extract Municipalities</h4>
+                          <p className="text-sm text-muted-foreground">Identify and save municipalities from the file</p>
+                        </div>
+                        <Button
+                          onClick={handleExtractMunicipalities}
+                          disabled={extractionPhase === "extracting-munis"}
+                        >
+                          {extractionPhase === "extracting-munis" ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                          ) : (
+                            <Building2 className="h-4 w-4 mr-1" />
+                          )}
+                          Extract Municipalities
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Municipality Extraction Status Summary */}
+                {municipalities.length > 0 && (
+                  <div className="p-4 border rounded-lg bg-muted/30 space-y-3">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Building2 className="h-4 w-4 text-primary" />
+                      <span className="font-medium">
+                        {municipalities.length} municipalities in {selectedProvince}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="flex items-center gap-2 p-2 rounded bg-green-500/10 border border-green-500/20">
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        <div className="text-sm">
+                          <div className="font-semibold text-green-700">{municipalities.filter(m => m.status === "done").length}</div>
+                          <div className="text-xs text-muted-foreground">Extracted</div>
                         </div>
                       </div>
-                    )}
+                      <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                        <Clock className="h-4 w-4 text-amber-600" />
+                        <div className="text-sm">
+                          <div className="font-semibold text-amber-700">{municipalities.filter(m => m.status === "pending" || m.status === "extracting").length}</div>
+                          <div className="text-xs text-muted-foreground">Pending</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 p-2 rounded bg-destructive/10 border border-destructive/20">
+                        <AlertCircle className="h-4 w-4 text-destructive" />
+                        <div className="text-sm">
+                          <div className="font-semibold text-destructive">{municipalities.filter(m => m.status === "error").length}</div>
+                          <div className="text-xs text-muted-foreground">Errors</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
+                )}
 
-                  {/* Step 2: Extract Municipalities */}
+                {/* Step 3: Extract Tariffs */}
+                {municipalities.length > 0 && (
                   <div className="p-4 border rounded-lg space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="font-medium">Step 2: Extract Municipalities</h4>
-                        <p className="text-sm text-muted-foreground">Identify and save municipalities from the file</p>
+                        <h4 className="font-medium">Step 3: Extract Tariffs</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {municipalities.filter(m => m.status === "done").length} of {municipalities.length} complete
+                        </p>
                       </div>
-                      <Button
-                        onClick={handleExtractMunicipalities}
-                        disabled={extractionPhase === "extracting-munis"}
-                      >
-                        {extractionPhase === "extracting-munis" ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                        ) : (
-                          <Building2 className="h-4 w-4 mr-1" />
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id="auto-reprise"
+                            checked={autoReprise}
+                            onCheckedChange={setAutoReprise}
+                          />
+                          <Label htmlFor="auto-reprise" className="text-sm flex items-center gap-1 cursor-pointer">
+                            <Sparkles className="h-3 w-3" />
+                            Auto-reprise
+                          </Label>
+                        </div>
+                        {failedCount > 0 && (
+                          <Button
+                            onClick={handleRetryAllFailed}
+                            disabled={extractionPhase === "extracting"}
+                            variant="outline"
+                            className="border-destructive/50 text-destructive hover:bg-destructive/10"
+                          >
+                            {extractionPhase === "extracting" ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4 mr-1" />
+                            )}
+                            Retry All Failed ({failedCount})
+                          </Button>
                         )}
-                        Extract Municipalities
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Municipality Extraction Status Summary */}
-              {municipalities.length > 0 && (
-                <div className="p-4 border rounded-lg bg-muted/30 space-y-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Building2 className="h-4 w-4 text-primary" />
-                    <span className="font-medium">
-                      {municipalities.length} municipalities in {selectedProvince}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="flex items-center gap-2 p-2 rounded bg-green-500/10 border border-green-500/20">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <div className="text-sm">
-                        <div className="font-semibold text-green-700">{municipalities.filter(m => m.status === "done").length}</div>
-                        <div className="text-xs text-muted-foreground">Extracted</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
-                      <Clock className="h-4 w-4 text-amber-600" />
-                      <div className="text-sm">
-                        <div className="font-semibold text-amber-700">{municipalities.filter(m => m.status === "pending" || m.status === "extracting").length}</div>
-                        <div className="text-xs text-muted-foreground">Pending</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 p-2 rounded bg-destructive/10 border border-destructive/20">
-                      <AlertCircle className="h-4 w-4 text-destructive" />
-                      <div className="text-sm">
-                        <div className="font-semibold text-destructive">{municipalities.filter(m => m.status === "error").length}</div>
-                        <div className="text-xs text-muted-foreground">Errors</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 3: Extract Tariffs */}
-              {municipalities.length > 0 && (
-                <div className="p-4 border rounded-lg space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">Step 3: Extract Tariffs</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {municipalities.filter(m => m.status === "done").length} of {municipalities.length} complete
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id="auto-reprise"
-                          checked={autoReprise}
-                          onCheckedChange={setAutoReprise}
-                        />
-                        <Label htmlFor="auto-reprise" className="text-sm flex items-center gap-1 cursor-pointer">
-                          <Sparkles className="h-3 w-3" />
-                          Auto-reprise
-                        </Label>
-                      </div>
-                      {failedCount > 0 && (
                         <Button
-                          onClick={handleRetryAllFailed}
+                          onClick={handleExtractAll}
                           disabled={extractionPhase === "extracting"}
-                          variant="outline"
-                          className="border-destructive/50 text-destructive hover:bg-destructive/10"
                         >
                           {extractionPhase === "extracting" ? (
                             <Loader2 className="h-4 w-4 animate-spin mr-1" />
                           ) : (
-                            <RefreshCw className="h-4 w-4 mr-1" />
+                            <Zap className="h-4 w-4 mr-1" />
                           )}
-                          Retry All Failed ({failedCount})
+                          Extract All Tariffs
                         </Button>
-                      )}
-                      <Button
-                        onClick={handleExtractAll}
-                        disabled={extractionPhase === "extracting"}
-                      >
-                        {extractionPhase === "extracting" ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                        ) : (
-                          <Zap className="h-4 w-4 mr-1" />
+                        {doneCount > 0 && (
+                          <Button
+                            onClick={handleRepriseAll}
+                            disabled={extractionPhase === "extracting"}
+                            variant="outline"
+                          >
+                            {extractionPhase === "extracting" ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                            ) : (
+                              <Sparkles className="h-4 w-4 mr-1" />
+                            )}
+                            Reprise All ({doneCount})
+                          </Button>
                         )}
-                        Extract All Tariffs
-                      </Button>
-                      {doneCount > 0 && (
-                        <Button
-                          onClick={handleRepriseAll}
-                          disabled={extractionPhase === "extracting"}
-                          variant="outline"
-                        >
-                          {extractionPhase === "extracting" ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                          ) : (
-                            <Sparkles className="h-4 w-4 mr-1" />
-                          )}
-                          Reprise All ({doneCount})
-                        </Button>
-                      )}
+                      </div>
                     </div>
-                  </div>
 
-                  <Progress value={getExtractionProgress()} className="h-2" />
+                    <Progress value={getExtractionProgress()} className="h-2" />
 
-                  <ScrollArea className="h-[200px]">
-                    <div className="space-y-1">
-                      {municipalities.map((muni, index) => (
-                        <div
-                          key={muni.id}
-                          className={`flex items-center justify-between py-2 px-3 rounded hover:bg-muted/50 ${muni.status === "error" ? "bg-destructive/5 border border-destructive/20" : ""}`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              {muni.status === "done" && <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />}
-                              {muni.status === "extracting" && <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />}
-                              {muni.status === "error" && <AlertCircle className="h-4 w-4 text-destructive shrink-0" />}
-                              {muni.status === "pending" && <Clock className="h-4 w-4 text-muted-foreground shrink-0" />}
-                              <span className={muni.status === "done" ? "text-foreground" : muni.status === "error" ? "text-destructive" : "text-muted-foreground"}>
-                                {muni.name}
-                              </span>
-                              {muni.tariffCount !== undefined && muni.status === "done" && (
-                                <Badge variant="secondary" className="ml-2">{muni.tariffCount} tariffs</Badge>
-                              )}
-                              {muni.confidence !== undefined && muni.status === "done" && (
-                                <Badge 
-                                  variant="outline" 
-                                  className={`ml-1 ${muni.confidence >= 80 ? 'border-green-500 text-green-600' : muni.confidence >= 50 ? 'border-amber-500 text-amber-600' : 'border-red-500 text-red-600'}`}
-                                >
-                                  {muni.confidence}% conf
-                                </Badge>
-                              )}
-                              {muni.repriseCount !== undefined && muni.repriseCount > 0 && (
-                                <Badge variant="outline" className="ml-1 text-xs">
-                                  {muni.repriseCount}x reprised
-                                </Badge>
+                    <ScrollArea className="h-[200px]">
+                      <div className="space-y-1">
+                        {municipalities.map((muni, index) => (
+                          <div
+                            key={muni.id}
+                            className={`flex items-center justify-between py-2 px-3 rounded hover:bg-muted/50 ${muni.status === "error" ? "bg-destructive/5 border border-destructive/20" : ""}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                {muni.status === "done" && <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />}
+                                {muni.status === "extracting" && <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />}
+                                {muni.status === "error" && <AlertCircle className="h-4 w-4 text-destructive shrink-0" />}
+                                {muni.status === "pending" && <Clock className="h-4 w-4 text-muted-foreground shrink-0" />}
+                                <span className={muni.status === "done" ? "text-foreground" : muni.status === "error" ? "text-destructive" : "text-muted-foreground"}>
+                                  {muni.name}
+                                </span>
+                                {muni.tariffCount !== undefined && muni.status === "done" && (
+                                  <Badge variant="secondary" className="ml-2">{muni.tariffCount} tariffs</Badge>
+                                )}
+                                {muni.confidence !== undefined && muni.status === "done" && (
+                                  <Badge
+                                    variant="outline"
+                                    className={`ml-1 ${muni.confidence >= 80 ? 'border-green-500 text-green-600' : muni.confidence >= 50 ? 'border-amber-500 text-amber-600' : 'border-red-500 text-red-600'}`}
+                                  >
+                                    {muni.confidence}% conf
+                                  </Badge>
+                                )}
+                                {muni.repriseCount !== undefined && muni.repriseCount > 0 && (
+                                  <Badge variant="outline" className="ml-1 text-xs">
+                                    {muni.repriseCount}x reprised
+                                  </Badge>
+                                )}
+                              </div>
+                              {muni.status === "error" && muni.error && (
+                                <p className="text-xs text-destructive/80 mt-1 ml-6 truncate" title={muni.error}>
+                                  {muni.error}
+                                </p>
                               )}
                             </div>
-                            {muni.status === "error" && muni.error && (
-                              <p className="text-xs text-destructive/80 mt-1 ml-6 truncate" title={muni.error}>
-                                {muni.error}
-                              </p>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {muni.status === "done" && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleReprise(index)}
+                                  title="Run second AI pass to catch nuances"
+                                >
+                                  <Sparkles className="h-3 w-3 mr-1" />
+                                  Reprise
+                                </Button>
+                              )}
+                              {(muni.status === "pending" || muni.status === "error") && (
+                                <Button
+                                  size="sm"
+                                  variant={muni.status === "error" ? "outline" : "ghost"}
+                                  onClick={() => handleExtractTariffs(index)}
+                                  className={muni.status === "error" ? "border-destructive/50 text-destructive hover:bg-destructive/10" : ""}
+                                >
+                                  <RefreshCw className={`h-3 w-3 ${muni.status === "error" ? "mr-1" : ""}`} />
+                                  {muni.status === "error" && "Retry"}
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            {muni.status === "done" && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleReprise(index)}
-                                title="Run second AI pass to catch nuances"
-                              >
-                                <Sparkles className="h-3 w-3 mr-1" />
-                                Reprise
-                              </Button>
-                            )}
-                            {(muni.status === "pending" || muni.status === "error") && (
-                              <Button
-                                size="sm"
-                                variant={muni.status === "error" ? "outline" : "ghost"}
-                                onClick={() => handleExtractTariffs(index)}
-                                className={muni.status === "error" ? "border-destructive/50 text-destructive hover:bg-destructive/10" : ""}
-                              >
-                                <RefreshCw className={`h-3 w-3 ${muni.status === "error" ? "mr-1" : ""}`} />
-                                {muni.status === "error" && "Retry"}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      </CardContent>
-    </Card>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </CardContent>
+      </Card>
     </div>
   );
 }

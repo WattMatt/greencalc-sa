@@ -14,17 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Trash2, Eye, Pencil, Save } from "lucide-react";
 
-const SOUTH_AFRICAN_PROVINCES = [
-  "Eastern Cape",
-  "Free State",
-  "Gauteng",
-  "KwaZulu-Natal",
-  "Limpopo",
-  "Mpumalanga",
-  "Northern Cape",
-  "North West",
-  "Western Cape",
-] as const;
+import { SOUTH_AFRICAN_PROVINCES } from "@/lib/constants";
 
 interface Municipality {
   id: string;
@@ -123,7 +113,7 @@ export function FileUploadImport() {
     try {
       const timestamp = Date.now();
       const filePath = `${timestamp}-${selectedFile.name}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from("tariff-uploads")
         .upload(filePath, selectedFile);
@@ -153,10 +143,10 @@ export function FileUploadImport() {
 
     try {
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: { 
-          filePath: uploadedPath, 
+        body: {
+          filePath: uploadedPath,
           fileType: getFileType(file.name),
-          action: "analyze" 
+          action: "analyze"
         },
       });
 
@@ -184,11 +174,11 @@ export function FileUploadImport() {
 
     try {
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: { 
-          filePath: uploadedPath, 
+        body: {
+          filePath: uploadedPath,
           fileType: getFileType(file.name),
           province: province,
-          action: "extract-municipalities" 
+          action: "extract-municipalities"
         },
       });
 
@@ -204,12 +194,12 @@ export function FileUploadImport() {
 
       setMunicipalities(munis);
       setPhase(2);
-      
-      toast({ 
-        title: "Municipalities Extracted", 
-        description: `Found ${munis.length} municipalities in ${province}` 
+
+      toast({
+        title: "Municipalities Extracted",
+        description: `Found ${munis.length} municipalities in ${province}`
       });
-      
+
       queryClient.invalidateQueries({ queryKey: ["municipalities"] });
       queryClient.invalidateQueries({ queryKey: ["provinces"] });
     } catch (err) {
@@ -228,18 +218,18 @@ export function FileUploadImport() {
     const muni = municipalities[muniIndex];
     if (!muni || !uploadedPath || !file) return;
 
-    setMunicipalities(prev => prev.map((m, i) => 
+    setMunicipalities(prev => prev.map((m, i) =>
       i === muniIndex ? { ...m, status: "extracting" as const } : m
     ));
 
     try {
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: { 
-          filePath: uploadedPath, 
+        body: {
+          filePath: uploadedPath,
           fileType: getFileType(file.name),
           province: province,
           municipality: muni.name,
-          action: "extract-tariffs" 
+          action: "extract-tariffs"
         },
       });
 
@@ -247,7 +237,7 @@ export function FileUploadImport() {
       if (data.error) throw new Error(data.error);
 
       const totalChanged = (data.inserted || 0) + (data.updated || 0);
-      setMunicipalities(prev => prev.map((m, i) => 
+      setMunicipalities(prev => prev.map((m, i) =>
         i === muniIndex ? { ...m, status: "done" as const, tariffCount: totalChanged } : m
       ));
 
@@ -255,16 +245,16 @@ export function FileUploadImport() {
       if (data.inserted > 0) parts.push(`${data.inserted} new`);
       if (data.updated > 0) parts.push(`${data.updated} updated`);
       if (data.skipped > 0) parts.push(`${data.skipped} skipped`);
-      
-      toast({ 
-        title: `${muni.name} Complete`, 
+
+      toast({
+        title: `${muni.name} Complete`,
         description: parts.length > 0 ? parts.join(", ") : "No changes needed"
       });
-      
+
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
     } catch (err) {
       console.error("Tariff extraction error:", err);
-      setMunicipalities(prev => prev.map((m, i) => 
+      setMunicipalities(prev => prev.map((m, i) =>
         i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m
       ));
       toast({
@@ -288,7 +278,7 @@ export function FileUploadImport() {
     if (!muni || !uploadedPath || !file) return;
 
     // Set to extracting state
-    setMunicipalities(prev => prev.map((m, i) => 
+    setMunicipalities(prev => prev.map((m, i) =>
       i === muniIndex ? { ...m, status: "extracting" as const } : m
     ));
 
@@ -309,26 +299,26 @@ export function FileUploadImport() {
 
         if (existingTariffs && existingTariffs.length > 0) {
           const tariffIds = existingTariffs.map(t => t.id);
-          
+
           // Delete related rates first
           await supabase.from("tariff_rates").delete().in("tariff_id", tariffIds);
           await supabase.from("tou_periods").delete().in("tariff_id", tariffIds);
-          
+
           // Then delete the tariffs
           await supabase.from("tariffs").delete().eq("municipality_id", muniData.id);
-          
+
           console.log(`Deleted ${existingTariffs.length} tariffs for ${muni.name}`);
         }
       }
 
       // Now extract fresh tariffs
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: { 
-          filePath: uploadedPath, 
+        body: {
+          filePath: uploadedPath,
           fileType: getFileType(file.name),
           province: province,
           municipality: muni.name,
-          action: "extract-tariffs" 
+          action: "extract-tariffs"
         },
       });
 
@@ -336,19 +326,19 @@ export function FileUploadImport() {
       if (data.error) throw new Error(data.error);
 
       const totalChanged = (data.inserted || 0) + (data.updated || 0);
-      setMunicipalities(prev => prev.map((m, i) => 
+      setMunicipalities(prev => prev.map((m, i) =>
         i === muniIndex ? { ...m, status: "done" as const, tariffCount: totalChanged } : m
       ));
 
-      toast({ 
-        title: `${muni.name} Re-extracted`, 
-        description: `Imported ${totalChanged} tariffs (previous data replaced)` 
+      toast({
+        title: `${muni.name} Re-extracted`,
+        description: `Imported ${totalChanged} tariffs (previous data replaced)`
       });
-      
+
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
     } catch (err) {
       console.error("Re-extraction error:", err);
-      setMunicipalities(prev => prev.map((m, i) => 
+      setMunicipalities(prev => prev.map((m, i) =>
         i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m
       ));
       toast({
@@ -361,7 +351,7 @@ export function FileUploadImport() {
 
   const handlePreview = async (muniName: string) => {
     if (!uploadedPath || !file) return;
-    
+
     setIsLoadingPreview(true);
     setPreviewData(null);
     setExtractedTariffs([]);
@@ -370,11 +360,11 @@ export function FileUploadImport() {
     try {
       // Fetch raw document data
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: { 
-          filePath: uploadedPath, 
+        body: {
+          filePath: uploadedPath,
           fileType: getFileType(file.name),
           municipality: muniName,
-          action: "preview" 
+          action: "preview"
         },
       });
 
@@ -463,7 +453,7 @@ export function FileUploadImport() {
 
   const saveEditedTariff = async () => {
     if (!editedTariff) return;
-    
+
     setIsSaving(true);
     try {
       // Update tariff main fields
@@ -481,7 +471,7 @@ export function FileUploadImport() {
 
       // Update rates - delete old and insert new
       await supabase.from("tariff_rates").delete().eq("tariff_id", editedTariff.id);
-      
+
       if (editedTariff.rates.length > 0) {
         const ratesToInsert = editedTariff.rates.map(rate => ({
           tariff_id: editedTariff.id,
@@ -490,13 +480,13 @@ export function FileUploadImport() {
           block_start_kwh: rate.block_start_kwh,
           block_end_kwh: rate.block_end_kwh,
         }));
-        
+
         const { error: ratesError } = await supabase.from("tariff_rates").insert(ratesToInsert);
         if (ratesError) throw ratesError;
       }
 
       // Update local state
-      setExtractedTariffs(prev => prev.map(t => 
+      setExtractedTariffs(prev => prev.map(t =>
         t.id === editedTariff.id ? editedTariff : t
       ));
 
@@ -553,7 +543,7 @@ export function FileUploadImport() {
           <div className="space-y-2">
             <Label>Select File</Label>
             {!file ? (
-              <div 
+              <div
                 className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -616,8 +606,8 @@ export function FileUploadImport() {
           {uploadedPath && phase === 1 && (
             <div className="space-y-3">
               {!analysis ? (
-                <Button 
-                  onClick={handleAnalyze} 
+                <Button
+                  onClick={handleAnalyze}
                   disabled={isAnalyzing}
                   variant="secondary"
                   className="w-full gap-2"
@@ -660,15 +650,15 @@ export function FileUploadImport() {
                         </div>
                       </div>
                     )}
-                    
+
                     <ScrollArea className="h-24">
                       <div className="text-xs whitespace-pre-wrap text-muted-foreground">
                         {analysis.analysis}
                       </div>
                     </ScrollArea>
 
-                    <Button 
-                      onClick={handleExtractMunicipalities} 
+                    <Button
+                      onClick={handleExtractMunicipalities}
                       disabled={isExtractingMunis}
                       className="w-full gap-2"
                     >
@@ -706,7 +696,7 @@ export function FileUploadImport() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {pendingCount > 0 && (
-                  <Button 
+                  <Button
                     onClick={handleExtractAll}
                     variant="default"
                     size="sm"
@@ -720,8 +710,8 @@ export function FileUploadImport() {
                 <ScrollArea className="h-64">
                   <div className="space-y-2">
                     {municipalities.map((muni, index) => (
-                      <div 
-                        key={muni.id} 
+                      <div
+                        key={muni.id}
                         className="flex items-center justify-between p-2 rounded border bg-background"
                       >
                         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -729,9 +719,9 @@ export function FileUploadImport() {
                           {muni.status === "error" && <AlertCircle className="h-4 w-4 text-destructive shrink-0" />}
                           {muni.status === "extracting" && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
                           {muni.status === "pending" && <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />}
-                          
+
                           <span className="text-sm truncate">{muni.name}</span>
-                          
+
                           {muni.tariffCount !== undefined && (
                             <Badge variant="secondary" className="text-xs shrink-0">
                               {muni.tariffCount} tariffs
@@ -760,7 +750,7 @@ export function FileUploadImport() {
                             </Button>
                           </div>
                         )}
-                        
+
                         {muni.status === "done" && (
                           <div className="flex items-center gap-1">
                             <Button
@@ -785,7 +775,7 @@ export function FileUploadImport() {
                             </Button>
                           </div>
                         )}
-                        
+
                         {muni.status === "error" && (
                           <div className="flex items-center gap-1">
                             <Button
@@ -807,7 +797,7 @@ export function FileUploadImport() {
                             </Button>
                           </div>
                         )}
-                        
+
                         {muni.status === "extracting" && (
                           <Button
                             variant="ghost"
@@ -850,7 +840,7 @@ export function FileUploadImport() {
               Side-by-side comparison of raw document data and extracted tariffs for verification.
             </DialogDescription>
           </DialogHeader>
-          
+
           {isLoadingPreview ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -924,7 +914,7 @@ export function FileUploadImport() {
                         {extractedTariffs.map((tariff) => {
                           const isEditing = editingTariffId === tariff.id;
                           const displayTariff = isEditing && editedTariff ? editedTariff : tariff;
-                          
+
                           return (
                             <Card key={tariff.id} className={`text-xs ${isEditing ? "ring-2 ring-primary" : ""}`}>
                               <CardHeader className="py-2 px-3">
@@ -1089,13 +1079,12 @@ export function FileUploadImport() {
                                         <div className="space-y-0.5">
                                           {displayTariff.rates.map((rate, idx) => (
                                             <div key={idx} className="flex items-center justify-between bg-muted/50 px-2 py-0.5 rounded">
-                                              <span className={`font-medium ${
-                                                rate.time_of_use === "High Demand" ? "text-orange-600" :
-                                                rate.time_of_use === "Low Demand" ? "text-blue-600" :
-                                                rate.time_of_use === "Peak" ? "text-red-600" :
-                                                rate.time_of_use === "Off-Peak" ? "text-green-600" :
-                                                "text-foreground"
-                                              }`}>
+                                              <span className={`font-medium ${rate.time_of_use === "High Demand" ? "text-orange-600" :
+                                                  rate.time_of_use === "Low Demand" ? "text-blue-600" :
+                                                    rate.time_of_use === "Peak" ? "text-red-600" :
+                                                      rate.time_of_use === "Off-Peak" ? "text-green-600" :
+                                                        "text-foreground"
+                                                }`}>
                                                 {rate.time_of_use}
                                                 {rate.block_start_kwh !== null && rate.block_end_kwh !== null && (
                                                   <span className="text-muted-foreground ml-1">

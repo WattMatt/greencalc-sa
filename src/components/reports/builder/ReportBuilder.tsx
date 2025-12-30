@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,8 @@ import {
   Download,
   Save,
   Settings,
-  Eye
+  Eye,
+  CheckSquare
 } from "lucide-react";
 import { SegmentSelector, defaultSegments, Segment } from "./SegmentSelector";
 import { TemplateSelector } from "./TemplateSelector";
@@ -20,6 +21,7 @@ import { ReportPreview } from "./ReportPreview";
 import { VersionHistory } from "./VersionHistory";
 import { InfographicGenerator } from "../infographics";
 import { ReportTemplate } from "../types";
+import { useReportSelection } from "@/hooks/useReportSelection";
 
 interface ReportBuilderProps {
   projectName?: string;
@@ -53,6 +55,26 @@ export function ReportBuilder({
     notes?: string;
   }>>([]);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Hook for workflow-selected items
+  const { selectedItems } = useReportSelection();
+
+  // Sync segments with selected items from workflow
+  useEffect(() => {
+    if (selectedItems.length > 0) {
+      setSegments(prev => prev.map(seg => {
+        // If this segment type corresponds to any selected item, enable it
+        const hasSelection = selectedItems.some(item => item.segmentType === seg.id);
+        if (hasSelection) {
+          return { ...seg, enabled: true };
+        }
+        return seg;
+      }));
+
+      // If we have custom selections, switch template to custom
+      setSelectedTemplate("custom");
+    }
+  }, [selectedItems]);
 
   // Fetch latest simulation if not provided
   const { data: latestSimulation } = useQuery({
@@ -142,6 +164,7 @@ export function ReportBuilder({
             />
             <p className="text-sm text-muted-foreground">
               {segments.filter(s => s.enabled).length} segments selected
+              {selectedItems.length > 0 && ` (${selectedItems.length} from workflow)`}
             </p>
           </div>
         </div>
@@ -189,6 +212,25 @@ export function ReportBuilder({
                   setSelectedTemplate("custom");
                 }}
               />
+
+              {selectedItems.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <CheckSquare className="h-4 w-4 text-green-600" />
+                      Workflow Selections
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs space-y-2">
+                    {selectedItems.map(item => (
+                      <div key={item.id} className="flex items-center gap-2 text-muted-foreground">
+                        <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                        {item.label}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {/* Middle Column - Preview */}

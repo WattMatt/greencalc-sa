@@ -7,17 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const SOUTH_AFRICAN_PROVINCES = [
-  "Eastern Cape",
-  "Free State",
-  "Gauteng",
-  "KwaZulu-Natal",
-  "Limpopo",
-  "Mpumalanga",
-  "Northern Cape",
-  "North West",
-  "Western Cape",
-] as const;
+import { SOUTH_AFRICAN_PROVINCES } from "@/lib/constants";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { FileSpreadsheet, Upload, AlertCircle, CheckCircle2, Info } from "lucide-react";
@@ -44,7 +34,7 @@ export function GoogleSheetsImport() {
       /\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/,
       /^([a-zA-Z0-9-_]+)$/,
     ];
-    
+
     for (const pattern of patterns) {
       const match = url.match(pattern);
       if (match) return match[1];
@@ -54,7 +44,7 @@ export function GoogleSheetsImport() {
 
   const handleImport = async () => {
     const sheetId = extractSheetId(sheetUrl.trim());
-    
+
     if (!sheetId) {
       toast({
         title: "Invalid URL",
@@ -88,7 +78,7 @@ export function GoogleSheetsImport() {
           tabs: data.tabs || [],
           errors: data.errors || [],
         });
-        
+
         if (data.imported > 0) {
           toast({
             title: "Import Successful",

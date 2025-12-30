@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sun, Settings2, ChevronDown, Info, MapPin, Compass, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ReportToggle } from "@/components/reports/ReportToggle";
 
 // South African cities with solar resource data (GHI in kWh/m²/day, DNI in kWh/m²/day)
 // Based on PVGIS and NREL data for South Africa
@@ -116,16 +117,16 @@ export function calculateSystemEfficiency(config: PVSystemConfigData): number {
   const arrayMod = ARRAY_TYPES[config.arrayType].modifier;
   const inverterEff = config.inverterEfficiency / 100;
   const lossMultiplier = 1 - config.totalLossPercent / 100;
-  
+
   // Tilt factor (simplified - optimal when tilt ≈ latitude)
   const location = SA_SOLAR_LOCATIONS[config.location];
   const optimalTilt = Math.abs(location.lat);
   const tiltDiff = Math.abs(config.tilt - optimalTilt);
   const tiltFactor = 1 - (tiltDiff / 90) * 0.15; // Max 15% loss for 90° deviation
-  
+
   // Azimuth factor (optimal = 0° for N-facing in S hemisphere)
   const azimuthFactor = 1 - (Math.abs(config.azimuth) / 180) * 0.25; // Max 25% loss for E/W facing
-  
+
   return moduleEff * arrayMod * inverterEff * lossMultiplier * tiltFactor * azimuthFactor;
 }
 
@@ -140,21 +141,21 @@ export interface HourlyIrradianceData {
 // Generate hourly solar profile based on location and configuration
 // If hourlyGhi is provided (from Solcast), use real irradiance data instead of Gaussian model
 export function generateSolarProfile(
-  config: PVSystemConfigData, 
+  config: PVSystemConfigData,
   capacityKwp: number,
   hourlyGhi?: HourlyIrradianceData[]
 ): number[] {
   const location = SA_SOLAR_LOCATIONS[config.location];
   const efficiency = calculateSystemEfficiency(config);
-  
+
   // If we have real Solcast hourly data, use it
   if (hourlyGhi && hourlyGhi.length === 24) {
     const profile: number[] = [];
-    
+
     for (let hour = 0; hour < 24; hour++) {
       const hourData = hourlyGhi.find(h => h.hour === hour);
       const ghiWm2 = hourData?.ghi ?? 0;
-      
+
       // Convert W/m² to kWh output for this hour
       // GHI in W/m² × 1 hour = Wh/m², divide by 1000 = kWh/m²
       // Then multiply by capacity and efficiency
@@ -162,29 +163,29 @@ export function generateSolarProfile(
       const hourlyOutput = capacityKwp * ghiKwhM2 * efficiency;
       profile.push(Math.max(0, hourlyOutput));
     }
-    
+
     return profile;
   }
-  
+
   // Fallback: Base solar curve (Gaussian-like, peak at solar noon)
   const profile: number[] = [];
   const peakHour = 12.5; // Solar noon slightly after 12:00
   const sigma = 3.5; // Width of the curve (hours)
-  
+
   // Tracking arrays have wider effective curves
-  const trackingBonus = config.arrayType.includes("tracking") 
-    ? (config.arrayType === "tracking_2axis" ? 2.5 : 1.5) 
+  const trackingBonus = config.arrayType.includes("tracking")
+    ? (config.arrayType === "tracking_2axis" ? 2.5 : 1.5)
     : 0;
   const effectiveSigma = sigma + trackingBonus;
-  
+
   for (let hour = 0; hour < 24; hour++) {
     const hourMid = hour + 0.5;
     // Gaussian curve for solar intensity
     const intensity = Math.exp(-Math.pow(hourMid - peakHour, 2) / (2 * effectiveSigma * effectiveSigma));
-    
+
     // Only generate during daylight (roughly 5am - 7pm)
     const daylight = hour >= 5 && hour <= 19;
-    
+
     if (daylight && intensity > 0.01) {
       // Convert GHI to hourly kWh output
       // Daily GHI spread across peak sun hours (approximately 5-6 hours equivalent)
@@ -195,12 +196,12 @@ export function generateSolarProfile(
       profile.push(0);
     }
   }
-  
+
   // Normalize to match expected daily generation
   const totalGenerated = profile.reduce((a, b) => a + b, 0);
   const expectedDaily = capacityKwp * location.ghi * efficiency * 0.9; // 0.9 for realistic factor
   const scaleFactor = expectedDaily / (totalGenerated || 1);
-  
+
   return profile.map(v => v * scaleFactor);
 }
 
@@ -209,12 +210,12 @@ export function generateAverageSolcastProfile(
   hourlyForecasts: Array<{ period_end: string; ghi: number; dni?: number; dhi?: number }>
 ): HourlyIrradianceData[] {
   const hourlyTotals: { [hour: number]: { sum: number; count: number } } = {};
-  
+
   // Initialize all hours
   for (let h = 0; h < 24; h++) {
     hourlyTotals[h] = { sum: 0, count: 0 };
   }
-  
+
   // Aggregate by hour of day
   hourlyForecasts.forEach(forecast => {
     const date = new Date(forecast.period_end);
@@ -224,7 +225,7 @@ export function generateAverageSolcastProfile(
       hourlyTotals[hour].count += 1;
     }
   });
-  
+
   // Calculate averages
   const result: HourlyIrradianceData[] = [];
   for (let h = 0; h < 24; h++) {
@@ -234,7 +235,7 @@ export function generateAverageSolcastProfile(
       ghi: data.count > 0 ? data.sum / data.count : 0
     });
   }
-  
+
   return result;
 }
 
@@ -269,13 +270,21 @@ export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity }:
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Settings2 className="h-4 w-4" />
-          PV System Configuration
-          <Badge variant="outline" className="ml-auto text-xs font-normal">
-            {(efficiency * 100).toFixed(1)}% system efficiency
-          </Badge>
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Settings2 className="h-4 w-4" />
+            PV System Configuration
+            <Badge variant="outline" className="ml-auto text-xs font-normal">
+              {(efficiency * 100).toFixed(1)}% system efficiency
+            </Badge>
+          </CardTitle>
+          <ReportToggle
+            id="pv-config-dcac"
+            segmentType="dcac_comparison"
+            label="DC/AC Analysis"
+            variant="button"
+          />
+        </div>
         <CardDescription className="text-xs">
           Configure detailed system parameters (PVWatts-style)
         </CardDescription>
@@ -292,9 +301,9 @@ export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity }:
               value={config.location}
               onValueChange={(v: LocationKey) => {
                 const loc = SA_SOLAR_LOCATIONS[v];
-                updateConfig({ 
-                  location: v, 
-                  tilt: loc.optimalTilt 
+                updateConfig({
+                  location: v,
+                  tilt: loc.optimalTilt
                 });
               }}
             >
@@ -503,7 +512,7 @@ export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity }:
                 Reset to Defaults
               </Button>
             </div>
-            
+
             <div className="grid gap-3 md:grid-cols-2">
               {Object.entries(config.losses).map(([key, value]) => (
                 <LossSlider
@@ -545,15 +554,15 @@ export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity }:
   );
 }
 
-function LossSlider({ 
-  label, 
-  value, 
-  onChange, 
-  tooltip 
-}: { 
-  label: string; 
-  value: number; 
-  onChange: (v: number) => void; 
+function LossSlider({
+  label,
+  value,
+  onChange,
+  tooltip
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
   tooltip: string;
 }) {
   return (
