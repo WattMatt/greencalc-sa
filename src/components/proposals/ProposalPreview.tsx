@@ -1,9 +1,11 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sun, Battery, Zap, TrendingUp, Calendar, MapPin, Building2, ChevronDown, ChevronUp } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, Calendar, MapPin, Building2, ChevronDown, ChevronUp, LayoutDashboard, BarChart3 } from "lucide-react";
 import { useState } from "react";
 import type { Proposal, SimulationData, ProposalBranding } from "./types";
+import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
+import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 
 interface ProposalPreviewProps {
   proposal: Partial<Proposal>;
@@ -24,13 +26,13 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
     let cumulativeSavings = 0;
     const annualDegradation = 0.005; // 0.5% per year
     const tariffEscalation = 0.08; // 8% per year
-    
+
     for (let year = 1; year <= 25; year++) {
       const degradationFactor = Math.pow(1 - annualDegradation, year - 1);
       const escalationFactor = Math.pow(1 + tariffEscalation, year - 1);
       const yearSavings = simulation.annualSavings * degradationFactor * escalationFactor;
       cumulativeSavings += yearSavings;
-      
+
       rows.push({
         year,
         generation: simulation.annualSolarGeneration * degradationFactor,
@@ -49,7 +51,7 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
   return (
     <div className="bg-background border rounded-lg overflow-hidden" id="proposal-preview">
       {/* Header with branding */}
-      <div 
+      <div
         className="p-6 text-white"
         style={{ backgroundColor: secondaryColor }}
       >
@@ -68,17 +70,17 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
             </div>
           </div>
           <div className="text-right">
-            <Badge 
+            <Badge
               className="text-white border-white/30"
               style={{ backgroundColor: primaryColor }}
             >
               Version {proposal.version || 1}
             </Badge>
             <p className="text-sm text-white/70 mt-1">
-              {new Date().toLocaleDateString('en-ZA', { 
-                day: 'numeric', 
-                month: 'long', 
-                year: 'numeric' 
+              {new Date().toLocaleDateString('en-ZA', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
               })}
             </p>
           </div>
@@ -92,7 +94,7 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
           Executive Summary
         </h2>
         <p className="text-muted-foreground">
-          {proposal.executive_summary || 
+          {proposal.executive_summary ||
             `This proposal outlines a ${simulation?.solarCapacity || 0} kWp solar PV system installation for ${project?.name}. ` +
             `The system is projected to generate ${(simulation?.annualSolarGeneration || 0).toLocaleString()} kWh annually, ` +
             `resulting in estimated annual savings of R${(simulation?.annualSavings || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} ` +
@@ -136,6 +138,36 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
           </div>
         </div>
       </div>
+
+      {/* System Design */}
+      <div className="p-6 border-b">
+        <h2 className="text-lg font-semibold mb-3 flex items-center gap-2" style={{ color: primaryColor }}>
+          <LayoutDashboard className="h-5 w-5" />
+          System Design
+        </h2>
+        <div className="rounded-lg border overflow-hidden">
+          <FloorPlanMarkup projectId={project?.id} readOnly={true} />
+        </div>
+      </div>
+
+      {/* Load Analysis */}
+      {tenants && shopTypes && (
+        <div className="p-6 border-b">
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2" style={{ color: primaryColor }}>
+            <BarChart3 className="h-5 w-5" />
+            Load Analysis
+          </h2>
+          <div className="grid gap-6">
+            <LoadProfileChart
+              tenants={tenants}
+              shopTypes={shopTypes}
+              connectionSizeKva={project?.connection_size_kva}
+              latitude={-33.9249} // Default or project data
+              longitude={18.4241}
+            />
+          </div>
+        </div>
+      )}
 
       {/* System Specification */}
       <div className="p-6 border-b">
@@ -184,7 +216,7 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
           <TrendingUp className="h-5 w-5" />
           Financial Analysis
         </h2>
-        
+
         {/* Key Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="p-4 rounded-lg" style={{ backgroundColor: primaryColor + "10" }}>
@@ -219,8 +251,8 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
             </thead>
             <tbody>
               {displayedProjection.map((row) => (
-                <tr 
-                  key={row.year} 
+                <tr
+                  key={row.year}
                   className={`border-b ${row.year === paybackYear ? 'bg-primary/5 font-medium' : ''}`}
                 >
                   <td className="py-2 px-2">
@@ -241,10 +273,10 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
               ))}
             </tbody>
           </table>
-          
+
           {projection.length > 10 && (
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               className="w-full mt-2 text-muted-foreground"
               onClick={() => setShowFullProjection(!showFullProjection)}
             >
@@ -377,7 +409,7 @@ export function ProposalPreview({ proposal, project, simulation }: ProposalPrevi
       )}
 
       {/* Footer with branding */}
-      <div 
+      <div
         className="p-4 text-white text-center text-sm"
         style={{ backgroundColor: secondaryColor }}
       >

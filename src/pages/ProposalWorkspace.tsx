@@ -19,10 +19,10 @@ import { ProposalPreview } from "@/components/proposals/ProposalPreview";
 import { ProposalExport } from "@/components/proposals/ProposalExport";
 import { SimulationSelector } from "@/components/proposals/SimulationSelector";
 import { ShareLinkButton } from "@/components/proposals/ShareLinkButton";
-import { 
-  Proposal, 
-  VerificationChecklist as VerificationChecklistType, 
-  ProposalBranding, 
+import {
+  Proposal,
+  VerificationChecklist as VerificationChecklistType,
+  ProposalBranding,
   SimulationData,
   STATUS_LABELS,
   STATUS_COLORS
@@ -43,7 +43,7 @@ export default function ProposalWorkspace() {
 
   // Auto-start tour for first-time visitors
   useAutoTour({ tour: proposalBuilderTour });
-  
+
   const [verificationChecklist, setVerificationChecklist] = useState<VerificationChecklistType>({
     site_coordinates_verified: false,
     consumption_data_source: null,
@@ -125,6 +125,32 @@ export default function ProposalWorkspace() {
       });
     },
     enabled: !!projectId,
+  });
+
+  // Fetch tenants for load profile
+  const { data: tenants } = useQuery({
+    queryKey: ["project-tenants", projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      const { data, error } = await supabase
+        .from("project_tenants")
+        .select(`*, shop_types(*), scada_imports(shop_name, area_sqm, load_profile_weekday, load_profile_weekend)`)
+        .eq("project_id", projectId)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId,
+  });
+
+  // Fetch shop types
+  const { data: shopTypes } = useQuery({
+    queryKey: ["shop-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("shop_types").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
   });
 
   // Fetch existing proposal if editing
@@ -230,8 +256,8 @@ export default function ProposalWorkspace() {
   }, [selectedSimulationId, selectedType, simulations, sandboxes, project]);
 
   // Get next version number
-  const nextVersion = proposalVersions && proposalVersions.length > 0 
-    ? Math.max(...proposalVersions.map(p => p.version)) + 1 
+  const nextVersion = proposalVersions && proposalVersions.length > 0
+    ? Math.max(...proposalVersions.map(p => p.version)) + 1
     : 1;
 
   // Build proposal object for components
@@ -311,12 +337,12 @@ export default function ProposalWorkspace() {
       toast.error("Save the proposal first");
       return;
     }
-    
+
     const { error } = await supabase
       .from("proposals")
       .update(updates as Record<string, unknown>)
       .eq("id", proposalId);
-    
+
     if (error) {
       toast.error("Failed to update");
     } else {
@@ -326,7 +352,7 @@ export default function ProposalWorkspace() {
     }
   };
 
-  const isVerificationComplete = 
+  const isVerificationComplete =
     verificationChecklist.site_coordinates_verified &&
     verificationChecklist.consumption_data_source !== null &&
     verificationChecklist.tariff_rates_confirmed &&
@@ -372,13 +398,14 @@ export default function ProposalWorkspace() {
               proposalId={proposalId}
               shareToken={existingProposal.share_token}
               status={existingProposal.status}
+              projectName={project?.name}
               onTokenGenerated={() => {
                 queryClient.invalidateQueries({ queryKey: ["proposal", proposalId] });
               }}
             />
           )}
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
           >
@@ -408,8 +435,8 @@ export default function ProposalWorkspace() {
                     onClick={() => navigate(`/projects/${projectId}/proposal?id=${v.id}`)}
                   >
                     v{v.version}
-                    <Badge 
-                      variant="outline" 
+                    <Badge
+                      variant="outline"
                       className={`ml-1 text-xs ${STATUS_COLORS[v.status as Proposal["status"]]}`}
                     >
                       {v.status}
@@ -470,7 +497,7 @@ export default function ProposalWorkspace() {
                 onChange={setBranding}
                 disabled={existingProposal?.status !== "draft" && !!existingProposal}
               />
-              
+
               {/* Additional text fields */}
               <Card>
                 <CardHeader className="pb-3">
@@ -539,10 +566,12 @@ export default function ProposalWorkspace() {
                 proposal={proposalForComponents}
                 project={project}
                 simulation={simulationData || undefined}
+                tenants={tenants || undefined}
+                shopTypes={shopTypes || undefined}
               />
             </CardContent>
           </Card>
-          
+
           {/* Export Section */}
           {simulationData && (
             <ProposalExport

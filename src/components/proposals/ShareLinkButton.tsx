@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -9,7 +9,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Share2, Copy, Check, Loader2, Link } from "lucide-react";
+import { Share2, Copy, Check, Loader2, Link, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -17,20 +17,23 @@ interface ShareLinkButtonProps {
   proposalId: string;
   shareToken: string | null;
   status: string;
+  projectName?: string;
   onTokenGenerated: (token: string) => void;
 }
 
-export function ShareLinkButton({ 
-  proposalId, 
-  shareToken, 
+export function ShareLinkButton({
+  proposalId,
+  shareToken,
   status,
-  onTokenGenerated 
+  projectName,
+  onTokenGenerated
 }: ShareLinkButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [clientEmail, setClientEmail] = useState("");
 
-  const shareUrl = shareToken 
+  const shareUrl = shareToken
     ? `${window.location.origin}/portal/${shareToken}`
     : null;
 
@@ -48,7 +51,7 @@ export function ShareLinkButton({
         .eq("id", proposalId);
 
       if (error) throw error;
-      
+
       onTokenGenerated(token);
       toast.success("Share link generated");
     } catch (error) {
@@ -61,7 +64,7 @@ export function ShareLinkButton({
 
   const copyToClipboard = async () => {
     if (!shareUrl) return;
-    
+
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
@@ -70,6 +73,18 @@ export function ShareLinkButton({
     } catch (error) {
       toast.error("Failed to copy link");
     }
+  };
+
+  const handleGmailShare = () => {
+    if (!shareUrl) return;
+
+    const subject = encodeURIComponent(`Solar Proposal: ${projectName || 'New Proposal'}`);
+    const body = encodeURIComponent(
+      `Hi,\n\nPlease view your solar proposal here:\n${shareUrl}\n\nLet me know if you have any questions.\n\nBest regards,`
+    );
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${clientEmail}&su=${subject}&body=${body}`;
+
+    window.open(gmailUrl, '_blank');
   };
 
   const canShare = status === "approved" || status === "sent";
@@ -110,8 +125,25 @@ export function ShareLinkButton({
                   )}
                 </Button>
               </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Send via Gmail</p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="client@example.com"
+                    value={clientEmail}
+                    onChange={(e) => setClientEmail(e.target.value)}
+                    type="email"
+                  />
+                  <Button onClick={handleGmailShare} variant="secondary">
+                    <Mail className="mr-2 h-4 w-4" />
+                    Open Gmail
+                  </Button>
+                </div>
+              </div>
+
               <p className="text-sm text-muted-foreground">
-                This link allows anyone with access to view and sign the proposal. 
+                This link allows anyone with access to view and sign the proposal.
                 Only share with intended recipients.
               </p>
             </>

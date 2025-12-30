@@ -24,7 +24,7 @@ interface FloorPlanMarkupProps {
   projectId: string;
 }
 
-export function FloorPlanMarkup({ projectId }: FloorPlanMarkupProps) {
+export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkupProps & { readOnly?: boolean }) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<Tool>(Tool.PAN);
@@ -45,12 +45,13 @@ export function FloorPlanMarkup({ projectId }: FloorPlanMarkupProps) {
   const canRedo = historyIndex < history.length - 1;
 
   const commitState = useCallback((newState: DesignState) => {
+    if (readOnly) return;
     const newHistory = history.slice(0, historyIndex + 1);
     newHistory.push(newState);
     setHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
     setHasUnsavedChanges(true);
-  }, [history, historyIndex]);
+  }, [history, historyIndex, readOnly]);
 
   const setEquipment = (updater: (prev: typeof equipment) => typeof equipment) => 
     commitState({ ...currentDesign, equipment: updater(equipment) });
@@ -61,8 +62,8 @@ export function FloorPlanMarkup({ projectId }: FloorPlanMarkupProps) {
   const setPvArrays = (updater: (prev: typeof pvArrays) => typeof pvArrays) => 
     commitState({ ...currentDesign, pvArrays: updater(pvArrays) });
 
-  const handleUndo = () => historyIndex > 0 && setHistoryIndex(historyIndex - 1);
-  const handleRedo = () => historyIndex < history.length - 1 && setHistoryIndex(historyIndex + 1);
+  const handleUndo = () => !readOnly && historyIndex > 0 && setHistoryIndex(historyIndex - 1);
+  const handleRedo = () => !readOnly && historyIndex < history.length - 1 && setHistoryIndex(historyIndex + 1);
 
   // Scale & Config
   const [scaleInfo, setScaleInfo] = useState<ScaleInfo>({ pixelDistance: null, realDistance: null, ratio: null });
@@ -148,6 +149,7 @@ export function FloorPlanMarkup({ projectId }: FloorPlanMarkupProps) {
 
   // Save layout to database
   const handleSave = async () => {
+    if (readOnly) return;
     setIsSaving(true);
     try {
       const layoutData: any = {
@@ -193,6 +195,7 @@ export function FloorPlanMarkup({ projectId }: FloorPlanMarkupProps) {
 
   // Keyboard shortcuts
   useEffect(() => {
+    if (readOnly) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'r' || e.key === 'R') {
         setPlacementRotation(r => (r + 45) % 360);
@@ -216,9 +219,10 @@ export function FloorPlanMarkup({ projectId }: FloorPlanMarkupProps) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [historyIndex, history.length, handleSave]);
+  }, [historyIndex, history.length, handleSave, readOnly]);
 
   const handleLoadPdf = async (file: File) => {
+    if (readOnly) return;
     try {
       const arrayBuffer = await file.arrayBuffer();
       
@@ -249,6 +253,7 @@ export function FloorPlanMarkup({ projectId }: FloorPlanMarkupProps) {
   }
 
   const handleScaleComplete = (pixelDistance: number) => {
+    if (readOnly) return;
     setPendingScalePixels(pixelDistance);
     setIsScaleModalOpen(true);
   };
@@ -262,6 +267,7 @@ export function FloorPlanMarkup({ projectId }: FloorPlanMarkupProps) {
   };
 
   const handleRoofMaskComplete = (points: Point[], area: number) => {
+    if (readOnly) return;
     setPendingRoofMask({ points, area });
     setIsRoofMaskModalOpen(true);
   };
@@ -290,50 +296,52 @@ export function FloorPlanMarkup({ projectId }: FloorPlanMarkupProps) {
 
   return (
     <div className="flex h-[calc(100vh-200px)] min-h-[600px] rounded-lg overflow-hidden border">
-      <Toolbar
-        activeTool={activeTool}
-        setActiveTool={(tool) => {
-          if (tool === Tool.PV_ARRAY && pvPanelConfig) {
-            setIsPVArrayModalOpen(true);
-          } else {
-            setActiveTool(tool);
-          }
-        }}
-        scaleInfo={scaleInfo}
-        pvPanelConfig={pvPanelConfig}
-        pvArrays={pvArrays}
-        onLoadPdf={handleLoadPdf}
-        onOpenPVConfig={() => setIsPVConfigModalOpen(true)}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        onSave={handleSave}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        isSaving={isSaving}
-        hasUnsavedChanges={hasUnsavedChanges}
-        placementRotation={placementRotation}
-        setPlacementRotation={setPlacementRotation}
-        pdfLoaded={!!pdfDoc}
-      />
+      {!readOnly && (
+        <Toolbar
+          activeTool={activeTool}
+          setActiveTool={(tool) => {
+            if (tool === Tool.PV_ARRAY && pvPanelConfig) {
+              setIsPVArrayModalOpen(true);
+            } else {
+              setActiveTool(tool);
+            }
+          }}
+          scaleInfo={scaleInfo}
+          pvPanelConfig={pvPanelConfig}
+          pvArrays={pvArrays}
+          onLoadPdf={handleLoadPdf}
+          onOpenPVConfig={() => setIsPVConfigModalOpen(true)}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onSave={handleSave}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          isSaving={isSaving}
+          hasUnsavedChanges={hasUnsavedChanges}
+          placementRotation={placementRotation}
+          setPlacementRotation={setPlacementRotation}
+          pdfLoaded={!!pdfDoc}
+        />
+      )}
       
       <Canvas
         pdfDoc={pdfDoc}
-        activeTool={activeTool}
+        activeTool={readOnly ? Tool.PAN : activeTool}
         viewState={viewState}
         setViewState={setViewState}
         scaleInfo={scaleInfo}
         scaleLine={scaleLine}
-        setScaleLine={setScaleLine}
+        setScaleLine={readOnly ? (() => {}) : setScaleLine}
         onScaleComplete={handleScaleComplete}
         pvPanelConfig={pvPanelConfig}
         roofMasks={roofMasks}
-        setRoofMasks={setRoofMasks}
+        setRoofMasks={readOnly ? (() => {}) : setRoofMasks}
         pvArrays={pvArrays}
-        setPvArrays={setPvArrays}
+        setPvArrays={readOnly ? (() => {}) : setPvArrays}
         equipment={equipment}
-        setEquipment={setEquipment}
+        setEquipment={readOnly ? (() => {}) : setEquipment}
         lines={lines}
-        setLines={setLines}
+        setLines={readOnly ? (() => {}) : setLines}
         selectedItemId={selectedItemId}
         setSelectedItemId={setSelectedItemId}
         placementRotation={placementRotation}
@@ -353,34 +361,38 @@ export function FloorPlanMarkup({ projectId }: FloorPlanMarkupProps) {
         onSelectItem={setSelectedItemId}
       />
 
-      <ScaleModal
-        isOpen={isScaleModalOpen}
-        onClose={() => { setIsScaleModalOpen(false); setScaleLine(null); }}
-        pixelDistance={pendingScalePixels}
-        onConfirm={handleScaleConfirm}
-      />
+      {!readOnly && (
+        <>
+          <ScaleModal
+            isOpen={isScaleModalOpen}
+            onClose={() => { setIsScaleModalOpen(false); setScaleLine(null); }}
+            pixelDistance={pendingScalePixels}
+            onConfirm={handleScaleConfirm}
+          />
 
-      <PVConfigModal
-        isOpen={isPVConfigModalOpen}
-        onClose={() => setIsPVConfigModalOpen(false)}
-        currentConfig={pvPanelConfig}
-        onConfirm={(config) => { setPvPanelConfig(config); setIsPVConfigModalOpen(false); toast.success('Panel config saved'); }}
-      />
+          <PVConfigModal
+            isOpen={isPVConfigModalOpen}
+            onClose={() => setIsPVConfigModalOpen(false)}
+            currentConfig={pvPanelConfig}
+            onConfirm={(config) => { setPvPanelConfig(config); setIsPVConfigModalOpen(false); toast.success('Panel config saved'); }}
+          />
 
-      <RoofMaskModal
-        isOpen={isRoofMaskModalOpen}
-        onClose={() => { setIsRoofMaskModalOpen(false); setPendingRoofMask(null); }}
-        area={pendingRoofMask?.area || 0}
-        onConfirm={handleRoofMaskConfirm}
-      />
+          <RoofMaskModal
+            isOpen={isRoofMaskModalOpen}
+            onClose={() => { setIsRoofMaskModalOpen(false); setPendingRoofMask(null); }}
+            area={pendingRoofMask?.area || 0}
+            onConfirm={handleRoofMaskConfirm}
+          />
 
-      {pvPanelConfig && (
-        <PVArrayModal
-          isOpen={isPVArrayModalOpen}
-          onClose={() => setIsPVArrayModalOpen(false)}
-          pvPanelConfig={pvPanelConfig}
-          onConfirm={handlePVArrayConfirm}
-        />
+          {pvPanelConfig && (
+            <PVArrayModal
+              isOpen={isPVArrayModalOpen}
+              onClose={() => setIsPVArrayModalOpen(false)}
+              pvPanelConfig={pvPanelConfig}
+              onConfirm={handlePVArrayConfirm}
+            />
+          )}
+        </>
       )}
     </div>
   );

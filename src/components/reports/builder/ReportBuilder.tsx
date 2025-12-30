@@ -1,13 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { 
-  FileText, 
-  Download, 
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  FileText,
+  Download,
   Save,
   Settings,
   Eye
@@ -34,11 +36,11 @@ interface ReportBuilderProps {
   className?: string;
 }
 
-export function ReportBuilder({ 
+export function ReportBuilder({
   projectName = "Solar Project",
   projectId,
-  simulationData,
-  className 
+  simulationData: initialSimulationData,
+  className
 }: ReportBuilderProps) {
   const [reportName, setReportName] = useState(`${projectName} Report`);
   const [segments, setSegments] = useState<Segment[]>(defaultSegments);
@@ -51,6 +53,44 @@ export function ReportBuilder({
     notes?: string;
   }>>([]);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch latest simulation if not provided
+  const { data: latestSimulation } = useQuery({
+    queryKey: ["latest-simulation", projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const { data, error } = await supabase
+        .from("project_simulations")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId && !initialSimulationData,
+  });
+
+  // Merge provided data with fetched data
+  const simulationData = useMemo(() => {
+    if (initialSimulationData) return initialSimulationData;
+    if (!latestSimulation) return undefined;
+
+    const results = latestSimulation.results_json as any;
+    const pvConfig = results?.pvConfig || {};
+
+    return {
+      solarCapacityKwp: latestSimulation.solar_capacity_kwp || 0,
+      batteryCapacityKwh: latestSimulation.battery_capacity_kwh || 0,
+      annualSavings: latestSimulation.annual_solar_savings || 0,
+      paybackYears: latestSimulation.payback_years || 0,
+      roiPercent: latestSimulation.roi_percentage || 0,
+      co2AvoidedTons: (latestSimulation.solar_capacity_kwp || 0) * 1.2, // Approximated
+      dcAcRatio: pvConfig.dcAcRatio || 1.3,
+    };
+  }, [initialSimulationData, latestSimulation]);
 
   const handleTemplateSelect = (template: ReportTemplate, templateSegments: string[]) => {
     setSelectedTemplate(template);
@@ -156,6 +196,7 @@ export function ReportBuilder({
               <ReportPreview
                 segments={segments}
                 projectName={projectName}
+                simulationData={simulationData}
               />
             </div>
 
@@ -180,6 +221,7 @@ export function ReportBuilder({
             <ReportPreview
               segments={segments}
               projectName={projectName}
+              simulationData={simulationData}
               className="min-h-[600px]"
             />
           </div>

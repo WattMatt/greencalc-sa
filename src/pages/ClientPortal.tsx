@@ -26,13 +26,13 @@ export default function ClientPortal() {
     queryKey: ["proposal-by-token", token],
     queryFn: async () => {
       if (!token) throw new Error("No token provided");
-      
+
       const { data, error } = await supabase
         .from("proposals")
         .select("*")
         .eq("share_token", token)
         .single();
-      
+
       if (error) throw error;
       return data;
     },
@@ -53,6 +53,32 @@ export default function ClientPortal() {
       return data;
     },
     enabled: !!proposal?.project_id,
+  });
+
+  // Fetch tenants for load profile
+  const { data: tenants } = useQuery({
+    queryKey: ["project-tenants", proposal?.project_id],
+    queryFn: async () => {
+      if (!proposal?.project_id) return [];
+      const { data, error } = await supabase
+        .from("project_tenants")
+        .select(`*, shop_types(*), scada_imports(shop_name, area_sqm, load_profile_weekday, load_profile_weekend)`)
+        .eq("project_id", proposal.project_id)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!proposal?.project_id,
+  });
+
+  // Fetch shop types
+  const { data: shopTypes } = useQuery({
+    queryKey: ["shop-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("shop_types").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
   });
 
   // Sign proposal mutation
@@ -143,7 +169,7 @@ export default function ClientPortal() {
   return (
     <div className="min-h-screen bg-muted/30">
       {/* Header */}
-      <div 
+      <div
         className="py-6 text-white"
         style={{ backgroundColor: branding?.secondary_color || "#0f172a" }}
       >
@@ -162,8 +188,8 @@ export default function ClientPortal() {
                 </p>
               </div>
             </div>
-            <Badge 
-              variant="outline" 
+            <Badge
+              variant="outline"
               className="text-white border-white/30"
               style={{ backgroundColor: branding?.primary_color || "#22c55e" }}
             >
@@ -181,6 +207,8 @@ export default function ClientPortal() {
               proposal={proposalForPreview}
               project={project}
               simulation={simulation || undefined}
+              tenants={tenants || undefined}
+              shopTypes={shopTypes || undefined}
             />
           </div>
 
@@ -317,7 +345,7 @@ export default function ClientPortal() {
       </div>
 
       {/* Footer */}
-      <div 
+      <div
         className="py-4 text-white/70 text-center text-sm mt-8"
         style={{ backgroundColor: branding?.secondary_color || "#0f172a" }}
       >

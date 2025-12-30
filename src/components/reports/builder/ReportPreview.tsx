@@ -5,12 +5,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  FileText, 
-  BarChart3, 
-  Sparkles, 
-  DollarSign, 
-  Leaf, 
+import {
+  FileText,
+  BarChart3,
+  Sparkles,
+  DollarSign,
+  Leaf,
   Settings2,
   Image,
   Sun,
@@ -24,6 +24,15 @@ import { Segment } from "./SegmentSelector";
 interface ReportPreviewProps {
   segments: Segment[];
   projectName?: string;
+  simulationData?: {
+    solarCapacityKwp?: number;
+    batteryCapacityKwh?: number;
+    annualSavings?: number;
+    paybackYears?: number;
+    roiPercent?: number;
+    co2AvoidedTons?: number;
+    dcAcRatio?: number;
+  };
   className?: string;
 }
 
@@ -39,7 +48,7 @@ const segmentIcons: Record<string, React.ElementType> = {
   ai_infographics: Sparkles,
 };
 
-// Sample data for previews
+// Sample data for previews (fallback)
 const sampleData = {
   solarCapacity: 100,
   batteryCapacity: 50,
@@ -51,7 +60,7 @@ const sampleData = {
   dcAcRatio: 1.3,
 };
 
-function AIInfographicSegment({ projectName }: { projectName: string }) {
+function AIInfographicSegment({ projectName, data }: { projectName: string, data: any }) {
   const [generating, setGenerating] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,31 +68,25 @@ function AIInfographicSegment({ projectName }: { projectName: string }) {
   useEffect(() => {
     const generateInfographic = async () => {
       if (imageUrl || generating) return;
-      
+
       setGenerating(true);
       setError(null);
-      
+
       try {
-        const { data, error: fnError } = await supabase.functions.invoke("generate-report-infographic", {
-          body: { 
-            type: "executive", 
+        const { data: fnData, error: fnError } = await supabase.functions.invoke("generate-report-infographic", {
+          body: {
+            type: "executive",
             data: {
               projectName,
-              solarCapacityKwp: sampleData.solarCapacity,
-              batteryCapacityKwh: sampleData.batteryCapacity,
-              annualSavings: sampleData.annualSavings,
-              paybackYears: sampleData.paybackYears,
-              co2AvoidedTons: sampleData.co2Avoided,
-              selfConsumptionPercent: sampleData.selfConsumption,
-              dcAcRatio: sampleData.dcAcRatio,
+              ...data
             }
           },
         });
 
         if (fnError) throw fnError;
-        if (data?.error) throw new Error(data.error);
-        
-        setImageUrl(data?.imageUrl);
+        if (fnData?.error) throw new Error(fnData.error);
+
+        setImageUrl(fnData?.imageUrl);
       } catch (err) {
         console.error("Failed to generate infographic:", err);
         setError(err instanceof Error ? err.message : "Generation failed");
@@ -93,7 +96,7 @@ function AIInfographicSegment({ projectName }: { projectName: string }) {
     };
 
     generateInfographic();
-  }, [projectName, imageUrl, generating]);
+  }, [projectName, imageUrl, generating, data]);
 
   if (generating) {
     return (
@@ -120,9 +123,9 @@ function AIInfographicSegment({ projectName }: { projectName: string }) {
   if (imageUrl) {
     return (
       <div className="space-y-2">
-        <img 
-          src={imageUrl} 
-          alt="AI Generated Infographic" 
+        <img
+          src={imageUrl}
+          alt="AI Generated Infographic"
           className="w-full rounded border object-cover"
         />
         <p className="text-[8px] text-center text-muted-foreground">
@@ -140,78 +143,93 @@ function AIInfographicSegment({ projectName }: { projectName: string }) {
   );
 }
 
-function SegmentContent({ segmentId, projectName }: { segmentId: string; projectName: string }) {
+function SegmentContent({ segmentId, projectName, data }: { segmentId: string; projectName: string; data: any }) {
+  // Use provided data or fallback to sample
+  const solarCapacity = data?.solarCapacityKwp ?? sampleData.solarCapacity;
+  const batteryCapacity = data?.batteryCapacityKwh ?? sampleData.batteryCapacity;
+  const annualSavings = data?.annualSavings ?? sampleData.annualSavings;
+  const paybackYears = data?.paybackYears ?? sampleData.paybackYears;
+  const co2Avoided = data?.co2AvoidedTons ?? sampleData.co2Avoided;
+  const dcAcRatio = data?.dcAcRatio ?? sampleData.dcAcRatio;
+
   switch (segmentId) {
     case "ai_infographics":
-      return <AIInfographicSegment projectName={projectName} />;
-      
+      return <AIInfographicSegment projectName={projectName} data={data} />;
+
     case "executive_summary":
       return (
         <div className="space-y-3 text-xs">
           <div className="grid grid-cols-2 gap-2">
-            <MetricBox icon={<Sun className="h-3 w-3" />} label="Solar Capacity" value="100 kWp" />
-            <MetricBox icon={<Battery className="h-3 w-3" />} label="Battery" value="50 kWh" />
-            <MetricBox icon={<DollarSign className="h-3 w-3" />} label="Annual Savings" value="R450,000" />
-            <MetricBox icon={<TrendingUp className="h-3 w-3" />} label="Payback" value="5.2 years" />
+            <MetricBox icon={<Sun className="h-3 w-3" />} label="Solar Capacity" value={`${solarCapacity} kWp`} />
+            <MetricBox icon={<Battery className="h-3 w-3" />} label="Battery" value={`${batteryCapacity} kWh`} />
+            <MetricBox icon={<DollarSign className="h-3 w-3" />} label="Annual Savings" value={`R${Math.round(annualSavings).toLocaleString()}`} />
+            <MetricBox icon={<TrendingUp className="h-3 w-3" />} label="Payback" value={`${paybackYears.toFixed(1)} years`} />
           </div>
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            This proposal outlines a comprehensive solar PV solution designed to reduce grid dependency 
+            This proposal outlines a comprehensive solar PV solution designed to reduce grid dependency
             and achieve significant cost savings through renewable energy generation.
           </p>
         </div>
       );
-    
+
     case "dcac_comparison":
+      const ratioPos = Math.min(100, Math.max(0, (dcAcRatio - 1) * 100)); // Scale 1.0 to 2.0 maps to 0-100%
       return (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-[10px]">
             <span>DC/AC Ratio</span>
-            <span className="font-bold text-primary">1.3:1</span>
+            <span className="font-bold text-primary">{dcAcRatio.toFixed(2)}:1</span>
           </div>
           <div className="h-2 bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500 rounded-full relative">
-            <div className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-background border border-primary rounded-full" style={{ left: "30%" }} />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-background border border-primary rounded-full transition-all duration-500"
+              style={{ left: `${ratioPos}%` }}
+            />
           </div>
           <div className="grid grid-cols-3 gap-1 text-[9px] text-center mt-2">
             <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded p-1">
-              <p className="font-bold text-emerald-600">+12%</p>
-              <p className="text-muted-foreground">Yield Gain</p>
+              <p className="font-bold text-emerald-600">Optimal</p>
+              <p className="text-muted-foreground">Range: 1.1-1.3</p>
             </div>
             <div className="bg-amber-50 dark:bg-amber-950/30 rounded p-1">
-              <p className="font-bold text-amber-600">0.9%</p>
-              <p className="text-muted-foreground">Clipping</p>
+              <p className="font-bold text-amber-600">{dcAcRatio > 1.4 ? "High" : "Normal"}</p>
+              <p className="text-muted-foreground">Clipping Risk</p>
             </div>
             <div className="bg-primary/10 rounded p-1">
-              <p className="font-bold text-primary">+11.1%</p>
-              <p className="text-muted-foreground">Net Benefit</p>
+              <p className="font-bold text-primary">Maximize</p>
+              <p className="text-muted-foreground">ROI</p>
             </div>
           </div>
+          <p className="text-[9px] text-muted-foreground mt-2 italic">
+            Visual explanation of system sizing: A higher DC/AC ratio (oversizing) increases early morning and late afternoon production, improving ROI despite minor clipping losses.
+          </p>
         </div>
       );
-    
+
     case "energy_flow":
       return (
         <div className="space-y-2">
           <div className="flex justify-between items-center">
-            <EnergyNode icon={<Sun />} label="Solar" value="186 MWh" color="text-amber-500" />
+            <EnergyNode icon={<Sun />} label="Solar" value={`${Math.round(solarCapacity * 1500 / 1000)} MWh`} color="text-amber-500" />
             <div className="flex-1 mx-2 border-t border-dashed" />
-            <EnergyNode icon={<Zap />} label="Load" value="258 MWh" color="text-blue-500" />
+            <EnergyNode icon={<Zap />} label="Load" value="-" color="text-blue-500" />
           </div>
           <div className="flex justify-center">
-            <EnergyNode icon={<Battery />} label="Battery" value="50 kWh" color="text-emerald-500" />
+            <EnergyNode icon={<Battery />} label="Battery" value={`${batteryCapacity} kWh`} color="text-emerald-500" />
           </div>
           <div className="text-[9px] text-center text-muted-foreground">
-            Self-consumption: 72% | Grid import: 28%
+            Self-consumption optimized system
           </div>
         </div>
       );
-    
+
     case "monthly_yield":
       return (
         <div className="space-y-2">
           <div className="flex items-end justify-between h-16 gap-0.5">
             {[65, 70, 85, 90, 100, 95, 92, 88, 80, 75, 68, 62].map((h, i) => (
-              <div 
-                key={i} 
+              <div
+                key={i}
                 className="flex-1 bg-primary/60 rounded-t"
                 style={{ height: `${h}%` }}
               />
@@ -220,84 +238,85 @@ function SegmentContent({ segmentId, projectName }: { segmentId: string; project
           <div className="flex justify-between text-[8px] text-muted-foreground">
             <span>Jan</span><span>Jun</span><span>Dec</span>
           </div>
-          <p className="text-[9px] text-center">Annual Yield: 186,400 kWh (1,864 kWh/kWp)</p>
+          <p className="text-[9px] text-center">Estimated Annual Yield</p>
         </div>
       );
-    
+
     case "payback_timeline":
+      const pct = Math.min(100, (paybackYears / 25) * 100);
       return (
         <div className="space-y-2">
-          <div className="relative h-8 bg-muted rounded">
-            <div className="absolute left-0 top-0 h-full w-[52%] bg-emerald-500/60 rounded-l" />
-            <div className="absolute left-[52%] top-1/2 -translate-y-1/2 w-1 h-4 bg-primary" />
+          <div className="relative h-8 bg-muted rounded overflow-hidden">
+            <div className="absolute left-0 top-0 h-full bg-emerald-500/60 rounded-l" style={{ width: `${pct}%` }} />
+            <div className="absolute top-1/2 -translate-y-1/2 w-1 h-8 bg-primary z-10" style={{ left: `${pct}%` }} />
+            <div className="absolute w-full h-full flex items-center justify-between px-2 text-[9px] z-20 pointer-events-none">
+              <span>Start</span>
+              <span>25 Yrs</span>
+            </div>
           </div>
-          <div className="flex justify-between text-[9px]">
-            <span>Year 0</span>
-            <span className="font-bold text-emerald-600">Payback: 5.2 yrs</span>
-            <span>Year 25</span>
+          <div className="flex justify-center text-[9px]">
+            <span className="font-bold text-emerald-600">Break-even: Year {paybackYears.toFixed(1)}</span>
           </div>
           <div className="grid grid-cols-2 gap-1 text-[9px]">
             <div className="bg-muted/50 rounded p-1 text-center">
-              <p className="font-bold">R2.1M</p>
+              <p className="font-bold">Invest</p>
               <p className="text-muted-foreground">System Cost</p>
             </div>
             <div className="bg-muted/50 rounded p-1 text-center">
-              <p className="font-bold text-emerald-600">R11.25M</p>
-              <p className="text-muted-foreground">25-yr Savings</p>
+              <p className="font-bold text-emerald-600">Save</p>
+              <p className="text-muted-foreground">Long-term</p>
             </div>
           </div>
         </div>
       );
-    
+
     case "savings_breakdown":
       return (
         <div className="space-y-2">
           <div className="space-y-1">
-            <SavingsBar label="Peak savings" value={45} amount="R202k" color="bg-red-400" />
-            <SavingsBar label="Standard savings" value={35} amount="R157k" color="bg-amber-400" />
-            <SavingsBar label="Off-peak savings" value={20} amount="R90k" color="bg-emerald-400" />
+            <SavingsBar label="Energy Savings" value={80} amount={`R${Math.round(annualSavings).toLocaleString()}`} color="bg-emerald-400" />
+            <SavingsBar label="Tax Incentives" value={20} amount="-" color="bg-amber-400" />
           </div>
           <Separator />
           <div className="flex justify-between text-[10px] font-bold">
             <span>Total Annual Savings</span>
-            <span className="text-emerald-600">R450,000</span>
+            <span className="text-emerald-600">R{Math.round(annualSavings).toLocaleString()}</span>
           </div>
         </div>
       );
-    
+
     case "environmental_impact":
       return (
         <div className="space-y-2 text-center">
           <div className="flex justify-center gap-4">
             <div>
               <Leaf className="h-8 w-8 mx-auto text-emerald-500 mb-1" />
-              <p className="text-lg font-bold text-emerald-600">120</p>
+              <p className="text-lg font-bold text-emerald-600">{Math.round(co2Avoided)}</p>
               <p className="text-[9px] text-muted-foreground">tonnes CO₂/yr</p>
             </div>
             <div>
               <span className="text-2xl">🌳</span>
-              <p className="text-lg font-bold">5,454</p>
+              <p className="text-lg font-bold">{Math.round(co2Avoided * 45)}</p>
               <p className="text-[9px] text-muted-foreground">trees equivalent</p>
             </div>
           </div>
           <p className="text-[9px] text-muted-foreground">
-            25-year impact: 3,000 tonnes CO₂ avoided
+            25-year impact: {Math.round(co2Avoided * 25).toLocaleString()} tonnes CO₂ avoided
           </p>
         </div>
       );
-    
+
     case "engineering_specs":
       return (
         <div className="space-y-1 text-[9px]">
-          <SpecRow label="PV Modules" value="250 × 400W panels" />
-          <SpecRow label="Inverter" value="3 × 33kW SMA Tripower" />
-          <SpecRow label="DC/AC Ratio" value="1.30:1" />
-          <SpecRow label="Tilt / Azimuth" value="25° / 0° (North)" />
-          <SpecRow label="Battery" value="50kWh LFP @ 25kW" />
+          <SpecRow label="PV Modules" value={`${solarCapacity} kWp Total`} />
+          <SpecRow label="Inverter" value="Grid-tied" />
+          <SpecRow label="DC/AC Ratio" value={`${dcAcRatio.toFixed(2)}:1`} />
+          <SpecRow label="Battery" value={`${batteryCapacity} kWh`} />
           <SpecRow label="Expected PR" value="80%" />
         </div>
       );
-    
+
     default:
       return (
         <div className="text-center text-muted-foreground">
@@ -353,9 +372,13 @@ function SpecRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function ReportPreview({ segments, projectName = "Demo Solar Project", className }: ReportPreviewProps) {
+export function ReportPreview({ segments, projectName = "Demo Solar Project", simulationData, className }: ReportPreviewProps) {
   const enabledSegments = segments.filter(s => s.enabled);
   const totalPages = Math.ceil(enabledSegments.length / 2) + 1;
+
+  // Use simulation data for cover page too
+  const capacity = simulationData?.solarCapacityKwp ?? sampleData.solarCapacity;
+  const battery = simulationData?.batteryCapacityKwh ?? sampleData.batteryCapacity;
 
   return (
     <Card className={className}>
@@ -379,11 +402,11 @@ export function ReportPreview({ segments, projectName = "Demo Solar Project", cl
                 <Separator className="my-4 w-24" />
                 <div className="grid grid-cols-2 gap-3 mt-2 text-xs">
                   <div>
-                    <p className="font-semibold">100 kWp</p>
+                    <p className="font-semibold">{capacity} kWp</p>
                     <p className="text-muted-foreground">Solar Capacity</p>
                   </div>
                   <div>
-                    <p className="font-semibold">50 kWh</p>
+                    <p className="font-semibold">{battery} kWh</p>
                     <p className="text-muted-foreground">Battery Storage</p>
                   </div>
                 </div>
@@ -400,9 +423,9 @@ export function ReportPreview({ segments, projectName = "Demo Solar Project", cl
             {enabledSegments.map((segment, index) => {
               const Icon = segmentIcons[segment.id] || FileText;
               const pageNum = Math.floor(index / 2) + 2;
-              
+
               return (
-                <div 
+                <div
                   key={segment.id}
                   className="aspect-[8.5/11] bg-background rounded-lg border p-4 flex flex-col"
                 >
@@ -410,11 +433,11 @@ export function ReportPreview({ segments, projectName = "Demo Solar Project", cl
                     <Icon className="h-4 w-4 text-primary" />
                     <h4 className="font-semibold text-sm">{segment.label}</h4>
                   </div>
-                  
+
                   <div className="flex-1">
-                    <SegmentContent segmentId={segment.id} projectName={projectName} />
+                    <SegmentContent segmentId={segment.id} projectName={projectName} data={simulationData ?? sampleData} />
                   </div>
-                  
+
                   <div className="mt-3 pt-2 border-t text-center">
                     <p className="text-xs text-muted-foreground">Page {pageNum} of {totalPages}</p>
                   </div>
