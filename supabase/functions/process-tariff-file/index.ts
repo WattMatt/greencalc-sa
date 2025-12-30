@@ -457,9 +457,10 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
       if (isEskomExtraction) {
         // For Eskom, use selective sheets - the .xlsm is a calculator with many sheets
         // Focus on sheets that likely contain tariff rate data
-        console.log("Eskom extraction - using selective sheets. Available:", sheetNames);
+        console.log("Eskom extraction - using selective sheets. Available:", sheetNames.join(", "));
         
         // Filter to relevant sheets - look for tariff-related names
+        // EXPANDED list to capture ALL Eskom tariff categories
         const relevantSheets = sheetNames.filter(name => {
           const lower = name.toLowerCase();
           return lower.includes('tariff') || 
@@ -471,31 +472,46 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
                  lower.includes('businessrate') ||
                  lower.includes('homepower') ||
                  lower.includes('homelight') ||
+                 lower.includes('landrate') ||
+                 lower.includes('landlight') ||
                  lower.includes('power') ||
                  lower.includes('small') ||
                  lower.includes('rural') ||
                  lower.includes('domestic') ||
                  lower.includes('summary') ||
-                 lower.includes('charges');
+                 lower.includes('charges') ||
+                 lower.includes('spu') ||
+                 lower.includes('lpu') ||
+                 lower.includes('energy') ||
+                 lower.includes('weps') ||
+                 lower.includes('transflex') ||
+                 lower.includes('local') ||
+                 lower.includes('non-local') ||
+                 lower.includes('key customer') ||
+                 lower.includes('urban') ||
+                 lower.includes('transmission');
         });
         
-        // If no relevant sheets found, use first 5 sheets as fallback
-        const sheetsToUse = relevantSheets.length > 0 ? relevantSheets : sheetNames.slice(0, 5);
-        console.log("Using sheets:", sheetsToUse);
+        // If no relevant sheets found, use first 10 sheets as fallback
+        const sheetsToUse = relevantSheets.length > 0 ? relevantSheets.slice(0, 15) : sheetNames.slice(0, 10);
+        console.log("Using sheets:", sheetsToUse.join(", "));
         
+        // Build comprehensive text from sheets - increase row limit for Eskom
         for (const sheetName of sheetsToUse) {
           if (sheetData[sheetName]) {
             municipalityText += `\n=== SHEET: ${sheetName} ===\n`;
-            // Limit rows per sheet to prevent memory issues
-            municipalityText += sheetData[sheetName].slice(0, 80).map(row => 
+            // Increase row limit to 150 per sheet for Eskom to capture all tariff data
+            municipalityText += sheetData[sheetName].slice(0, 150).map(row => 
               row.filter(cell => cell != null && cell !== "").join(" | ")
             ).filter(row => row.trim()).join("\n");
           }
         }
         
+        console.log("Eskom text length:", municipalityText.length);
+        
         // For PDF, append limited content
         if (extractedText && fileType === "pdf") {
-          municipalityText = extractedText.slice(0, 15000);
+          municipalityText = extractedText.slice(0, 25000);
         }
       } else if (fileType === "xlsx" || fileType === "xls") {
         // Find the sheet matching this municipality
@@ -542,8 +558,8 @@ INCREMENTAL EXTRACTION RULES:
       const extractPrompt = isEskomExtraction 
         ? `TASK: Extract ALL Eskom electricity tariffs from this tariff calculator/document.
 
-SOURCE DATA:
-${municipalityText.slice(0, 20000)}
+SOURCE DATA (process ALL sheets thoroughly):
+${municipalityText.slice(0, 35000)}
 ${existingContext}
 
 === ESKOM TARIFF CATEGORIES TO EXTRACT ===
