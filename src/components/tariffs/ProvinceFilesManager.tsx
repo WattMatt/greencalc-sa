@@ -542,13 +542,17 @@ export function ProvinceFilesManager() {
     ));
 
     try {
-      // Check if municipality already has tariffs - if so, switch to reprise mode
+      // Check if municipality already has tariffs
       const { count: existingCount } = await supabase
         .from("tariffs")
         .select("*", { count: "exact", head: true })
         .eq("municipality_id", muni.id);
 
-      if (existingCount && existingCount > 0) {
+      // For Eskom Direct: always proceed with extraction (has 17 batched categories)
+      // For other municipalities with existing tariffs: switch to reprise mode
+      const isEskom = muni.name.toLowerCase().includes("eskom");
+      
+      if (existingCount && existingCount > 0 && !isEskom) {
         sonnerToast.info(`${muni.name} has ${existingCount} existing tariffs - switching to reprise mode`, { duration: 3000 });
         await handleRepriseInternal(muniIndex, true);
 
@@ -567,7 +571,12 @@ export function ProvinceFilesManager() {
         return;
       }
 
-      // No existing tariffs - proceed with full extraction
+      // For Eskom: show info about existing tariffs but proceed with batched extraction
+      if (isEskom && existingCount && existingCount > 0) {
+        sonnerToast.info(`${muni.name} has ${existingCount} tariffs - continuing batched extraction`, { duration: 3000 });
+      }
+
+      // Proceed with extraction
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
         body: {
           filePath: selectedFile.path,
