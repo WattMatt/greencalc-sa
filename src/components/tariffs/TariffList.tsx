@@ -650,36 +650,30 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                           const isEskom = provinceData.province.name?.toLowerCase() === 'eskom';
                           
                           if (isEskom && municipality.tariffs.length > 5) {
-                            // Eskom tariff families
-                            const eskomFamilies = [
-                              { prefix: 'Megaflex', label: 'Urban LPU - Megaflex' },
-                              { prefix: 'Miniflex', label: 'Urban LPU - Miniflex' },
-                              { prefix: 'Nightsave', label: 'Urban LPU - Nightsave' },
-                              { prefix: 'Businessrate', label: 'Urban SPU - Businessrate' },
-                              { prefix: 'Public Lighting', label: 'Urban SPU - Public Lighting' },
-                              { prefix: 'Homepower', label: 'Residential - Homepower' },
-                              { prefix: 'Homeflex', label: 'Residential - Homeflex' },
-                              { prefix: 'Homelight', label: 'Residential - Homelight' },
-                              { prefix: 'Ruraflex', label: 'Rural - Ruraflex' },
-                              { prefix: 'Landrate', label: 'Rural - Landrate' },
-                              { prefix: 'Landlight', label: 'Rural - Landlight' },
-                              { prefix: 'Municflex', label: 'Municipal - Municflex' },
-                              { prefix: 'Municrate', label: 'Municipal - Municrate' },
-                              { prefix: 'WEPS', label: 'Wholesale - WEPS' },
-                              { prefix: 'Gen', label: 'Generator Tariffs' },
-                              { prefix: 'Excess', label: 'Excess NCC' },
+                            // Eskom tariff categories (combined grouping as per user request)
+                            const eskomCategories = [
+                              { label: 'Urban LPU', prefixes: ['Megaflex', 'Miniflex', 'Nightsave'] },
+                              { label: 'Urban SPU', prefixes: ['Businessrate', 'Public Lighting'] },
+                              { label: 'Residential', prefixes: ['Homepower', 'Homeflex', 'Homelight'] },
+                              { label: 'Rural', prefixes: ['Ruraflex', 'Landrate', 'Landlight'] },
+                              { label: 'Municipal', prefixes: ['Municflex', 'Municrate'] },
+                              { label: 'Wholesale', prefixes: ['WEPS'] },
+                              { label: 'Generator Tariffs', prefixes: ['Gen-', 'Gen ', 'TUoS', 'DUoS'] },
+                              { label: 'Excess NCC', prefixes: ['Excess'] },
                             ];
                             
-                            // Group tariffs by family
+                            // Group tariffs by combined categories
                             const groupedTariffs: { label: string; tariffs: Tariff[] }[] = [];
                             const ungrouped: Tariff[] = [];
                             
-                            eskomFamilies.forEach(family => {
+                            eskomCategories.forEach(category => {
                               const matching = municipality.tariffs.filter(t => 
-                                t.name.toLowerCase().startsWith(family.prefix.toLowerCase())
+                                category.prefixes.some(prefix => 
+                                  t.name.toLowerCase().startsWith(prefix.toLowerCase())
+                                )
                               );
                               if (matching.length > 0) {
-                                groupedTariffs.push({ label: family.label, tariffs: matching });
+                                groupedTariffs.push({ label: category.label, tariffs: matching });
                               }
                             });
                             

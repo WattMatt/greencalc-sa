@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      eskom_batch_status: {
+        Row: {
+          batch_index: number
+          batch_name: string
+          created_at: string | null
+          error_message: string | null
+          id: string
+          municipality_id: string
+          status: string
+          tariffs_extracted: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          batch_index: number
+          batch_name: string
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          municipality_id: string
+          status?: string
+          tariffs_extracted?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          batch_index?: number
+          batch_name?: string
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          municipality_id?: string
+          status?: string
+          tariffs_extracted?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eskom_batch_status_municipality_id_fkey"
+            columns: ["municipality_id"]
+            isOneToOne: false
+            referencedRelation: "municipalities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       extraction_runs: {
         Row: {
           ai_analysis: string | null
