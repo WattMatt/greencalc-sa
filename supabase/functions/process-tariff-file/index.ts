@@ -548,12 +548,74 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
         }
       ] : [];
       
-      // Determine which batch to process based on reprise count
+      // Determine which batch to process using database tracking
       let currentBatchIndex = 0;
-      if (isEskomExtraction && repriseCount > 0) {
-        // Use reprise count to cycle through batches
-        currentBatchIndex = repriseCount % eskomBatches.length;
-        console.log(`Eskom reprise #${repriseCount} - processing batch ${currentBatchIndex + 1}/${eskomBatches.length}: ${eskomBatches[currentBatchIndex]?.name}`);
+      
+      if (isEskomExtraction) {
+        // Initialize batch status records if not exist
+        const { data: existingBatches } = await supabase
+          .from("eskom_batch_status")
+          .select("batch_index, status")
+          .eq("municipality_id", muniData.id)
+          .order("batch_index");
+        
+        if (!existingBatches || existingBatches.length === 0) {
+          // Create batch status records for all 15 batches
+          const batchRecords = eskomBatches.map((batch, index) => ({
+            municipality_id: muniData.id,
+            batch_index: index,
+            batch_name: batch.name,
+            status: "pending"
+          }));
+          
+          await supabase.from("eskom_batch_status").insert(batchRecords);
+          console.log(`Created ${batchRecords.length} batch status records for Eskom`);
+        }
+        
+        // Find first incomplete batch
+        const { data: nextBatch } = await supabase
+          .from("eskom_batch_status")
+          .select("batch_index, batch_name, status")
+          .eq("municipality_id", muniData.id)
+          .neq("status", "completed")
+          .order("batch_index")
+          .limit(1)
+          .single();
+        
+        if (nextBatch) {
+          currentBatchIndex = nextBatch.batch_index;
+          console.log(`Eskom batch tracking - processing batch ${currentBatchIndex + 1}/${eskomBatches.length}: ${nextBatch.batch_name}`);
+          
+          // Mark as in_progress
+          await supabase
+            .from("eskom_batch_status")
+            .update({ status: "in_progress", updated_at: new Date().toISOString() })
+            .eq("municipality_id", muniData.id)
+            .eq("batch_index", currentBatchIndex);
+        } else {
+          // All batches complete
+          console.log("All Eskom batches already completed");
+          
+          // Get completion summary
+          const { data: completedBatches } = await supabase
+            .from("eskom_batch_status")
+            .select("batch_name, tariffs_extracted")
+            .eq("municipality_id", muniData.id)
+            .eq("status", "completed");
+          
+          const totalTariffs = completedBatches?.reduce((sum, b) => sum + (b.tariffs_extracted || 0), 0) || 0;
+          
+          return new Response(
+            JSON.stringify({ 
+              allComplete: true,
+              message: "All 15 Eskom batches have been extracted",
+              totalBatches: eskomBatches.length,
+              completedBatches: eskomBatches.length,
+              totalTariffs
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
       
       if (isEskomExtraction) {
@@ -1203,6 +1265,55 @@ Extract ALL tariffs with their COMPLETE rate data!`;
         })
         .eq("id", muniData.id);
 
+      // Update Eskom batch status if applicable
+      const isEskomMuni = municipality.toLowerCase() === "eskom direct";
+      let batchProgress = null;
+      
+      if (isEskomMuni) {
+        // Get current batch info from tracking table
+        const { data: currentBatchInfo } = await supabase
+          .from("eskom_batch_status")
+          .select("batch_index, batch_name")
+          .eq("municipality_id", muniData.id)
+          .eq("status", "in_progress")
+          .single();
+        
+        if (currentBatchInfo) {
+          // Mark current batch as completed
+          await supabase
+            .from("eskom_batch_status")
+            .update({ 
+              status: "completed", 
+              tariffs_extracted: inserted + updated,
+              updated_at: new Date().toISOString() 
+            })
+            .eq("municipality_id", muniData.id)
+            .eq("batch_index", currentBatchInfo.batch_index);
+          
+          console.log(`Marked batch ${currentBatchInfo.batch_index + 1} (${currentBatchInfo.batch_name}) as completed with ${inserted + updated} tariffs`);
+          
+          // Get overall progress
+          const { count: completedCount } = await supabase
+            .from("eskom_batch_status")
+            .select("*", { count: "exact", head: true })
+            .eq("municipality_id", muniData.id)
+            .eq("status", "completed");
+          
+          const { count: totalBatches } = await supabase
+            .from("eskom_batch_status")
+            .select("*", { count: "exact", head: true })
+            .eq("municipality_id", muniData.id);
+          
+          batchProgress = {
+            currentBatch: currentBatchInfo.batch_index + 1,
+            currentBatchName: currentBatchInfo.batch_name,
+            completedBatches: completedCount || 0,
+            totalBatches: totalBatches || 15,
+            allComplete: (completedCount || 0) >= (totalBatches || 15)
+          };
+        }
+      }
+
       return new Response(
         JSON.stringify({ 
           success: true,
@@ -1214,7 +1325,8 @@ Extract ALL tariffs with their COMPLETE rate data!`;
           existingCount: existingTariffSummary.length,
           confidence: confidenceScore,
           runId: runRecord?.id,
-          errors: errors.slice(0, 20)
+          errors: errors.slice(0, 20),
+          ...(batchProgress && { batchProgress })
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

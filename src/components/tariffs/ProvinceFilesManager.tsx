@@ -77,6 +77,21 @@ export function ProvinceFilesManager() {
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [analysisInfo, setAnalysisInfo] = useState<{ sheets?: string[]; analysis?: string } | null>(null);
   const [autoReprise, setAutoReprise] = useState(true);
+  
+  // Eskom batch tracking state
+  const [eskomBatchStatus, setEskomBatchStatus] = useState<{
+    currentBatch: number;
+    currentBatchName: string;
+    completedBatches: number;
+    totalBatches: number;
+    isExtracting: boolean;
+  } | null>(null);
+  
+  const ESKOM_BATCH_NAMES = [
+    "Megaflex", "Miniflex", "Nightsave", "Businessrate", "Public Lighting",
+    "Homepower", "Homeflex", "Homelight", "Ruraflex", "Landrate",
+    "Municflex", "Municrate", "WEPS", "Generator Tariffs", "Excess NCC"
+  ];
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -548,11 +563,107 @@ export function ProvinceFilesManager() {
         .select("*", { count: "exact", head: true })
         .eq("municipality_id", muni.id);
 
-      // For Eskom Direct: always proceed with extraction (has 17 batched categories)
+      // For Eskom Direct: run all 15 batches sequentially
       // For other municipalities with existing tariffs: switch to reprise mode
       const isEskom = muni.name.toLowerCase().includes("eskom");
       
-      if (existingCount && existingCount > 0 && !isEskom) {
+      if (isEskom) {
+        // Eskom uses batched extraction - run all batches sequentially
+        sonnerToast.info(`Starting Eskom extraction - 15 batches to process`, { duration: 3000 });
+        
+        let totalInserted = 0;
+        let totalUpdated = 0;
+        let batchIndex = 0;
+        
+        // Loop until all batches are complete
+        while (true) {
+          setEskomBatchStatus({
+            currentBatch: batchIndex + 1,
+            currentBatchName: ESKOM_BATCH_NAMES[batchIndex] || `Batch ${batchIndex + 1}`,
+            completedBatches: batchIndex,
+            totalBatches: 15,
+            isExtracting: true
+          });
+          
+          const { data, error } = await supabase.functions.invoke("process-tariff-file", {
+            body: {
+              filePath: selectedFile.path,
+              fileType: getFileType(selectedFile.name),
+              province: selectedProvince,
+              municipality: muni.name,
+              action: "extract-tariffs"
+            },
+          });
+          
+          if (error) throw error;
+          if (data.error) throw new Error(data.error);
+          
+          // Check if all batches are complete
+          if (data.allComplete) {
+            sonnerToast.success(`All 15 Eskom batches complete! ${data.totalTariffs || 0} total tariffs`, { duration: 5000 });
+            setEskomBatchStatus(null);
+            break;
+          }
+          
+          // Update progress
+          totalInserted += data.inserted || 0;
+          totalUpdated += data.updated || 0;
+          
+          if (data.batchProgress) {
+            setEskomBatchStatus({
+              currentBatch: data.batchProgress.currentBatch,
+              currentBatchName: data.batchProgress.currentBatchName,
+              completedBatches: data.batchProgress.completedBatches,
+              totalBatches: data.batchProgress.totalBatches,
+              isExtracting: true
+            });
+            
+            sonnerToast.success(
+              `Batch ${data.batchProgress.currentBatch}/15: ${data.batchProgress.currentBatchName} - ${data.inserted || 0} new, ${data.updated || 0} updated`,
+              { duration: 2000 }
+            );
+            
+            if (data.batchProgress.allComplete) {
+              sonnerToast.success(`All Eskom batches complete! Total: ${totalInserted} new, ${totalUpdated} updated`, { duration: 5000 });
+              setEskomBatchStatus(null);
+              break;
+            }
+          }
+          
+          batchIndex++;
+          
+          // Safety limit
+          if (batchIndex >= 20) {
+            sonnerToast.warning("Reached batch limit - stopping extraction", { duration: 3000 });
+            break;
+          }
+          
+          // Small delay between batches
+          await new Promise(r => setTimeout(r, 500));
+        }
+        
+        // Update municipality status
+        const { count: finalCount } = await supabase
+          .from("tariffs")
+          .select("*", { count: "exact", head: true })
+          .eq("municipality_id", muni.id);
+        
+        await supabase
+          .from("municipalities")
+          .update({ extraction_status: "done", extraction_error: null, total_tariffs: finalCount || 0 })
+          .eq("id", muni.id);
+        
+        setMunicipalities(prev => prev.map((m, i) =>
+          i === muniIndex ? { ...m, status: "done" as const, tariffCount: finalCount || 0 } : m
+        ));
+        
+        setEskomBatchStatus(null);
+        queryClient.invalidateQueries({ queryKey: ["tariffs"] });
+        queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+        return;
+      }
+      
+      if (existingCount && existingCount > 0) {
         sonnerToast.info(`${muni.name} has ${existingCount} existing tariffs - switching to reprise mode`, { duration: 3000 });
         await handleRepriseInternal(muniIndex, true);
 
@@ -569,11 +680,6 @@ export function ProvinceFilesManager() {
         queryClient.invalidateQueries({ queryKey: ["tariffs"] });
         queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
         return;
-      }
-
-      // For Eskom: show info about existing tariffs but proceed with batched extraction
-      if (isEskom && existingCount && existingCount > 0) {
-        sonnerToast.info(`${muni.name} has ${existingCount} tariffs - continuing batched extraction`, { duration: 3000 });
       }
 
       // Proceed with extraction
@@ -1339,6 +1445,76 @@ export function ProvinceFilesManager() {
                     </div>
 
                     <Progress value={getExtractionProgress()} className="h-2" />
+
+                    {/* Eskom Batch Progress Panel */}
+                    {eskomBatchStatus && (
+                      <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                            <span className="font-medium text-sm">
+                              Processing: {eskomBatchStatus.currentBatchName}
+                            </span>
+                          </div>
+                          <Badge variant="secondary">
+                            {eskomBatchStatus.completedBatches}/{eskomBatchStatus.totalBatches} batches
+                          </Badge>
+                        </div>
+                        <Progress 
+                          value={(eskomBatchStatus.completedBatches / eskomBatchStatus.totalBatches) * 100} 
+                          className="h-1.5" 
+                        />
+                        <div className="flex flex-wrap gap-1">
+                          {ESKOM_BATCH_NAMES.map((name, index) => (
+                            <Badge 
+                              key={name}
+                              variant={
+                                index < eskomBatchStatus.completedBatches 
+                                  ? "default" 
+                                  : index === eskomBatchStatus.currentBatch - 1 
+                                    ? "secondary" 
+                                    : "outline"
+                              }
+                              className={`text-xs ${
+                                index < eskomBatchStatus.completedBatches 
+                                  ? "bg-green-600" 
+                                  : index === eskomBatchStatus.currentBatch - 1 
+                                    ? "animate-pulse" 
+                                    : "opacity-50"
+                              }`}
+                            >
+                              {name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Eskom Reset Button (when applicable) */}
+                    {selectedProvince?.toLowerCase() === 'eskom' && !eskomBatchStatus && municipalities.some(m => m.name.toLowerCase().includes('eskom')) && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            const eskomMuni = municipalities.find(m => m.name.toLowerCase().includes('eskom'));
+                            if (!eskomMuni) return;
+                            
+                            if (!confirm('This will delete all Eskom batch tracking and reset extraction progress. Continue?')) return;
+                            
+                            // Delete batch status records
+                            await supabase.from("eskom_batch_status").delete().eq("municipality_id", eskomMuni.id);
+                            
+                            sonnerToast.success("Eskom batch tracking reset - ready to re-extract");
+                            queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+                          }}
+                          className="text-amber-600 border-amber-500/50 hover:bg-amber-500/10"
+                        >
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                          Reset Eskom Batches
+                        </Button>
+                      </div>
+                    )}
 
                     <ScrollArea className="h-[200px]">
                       <div className="space-y-1">
