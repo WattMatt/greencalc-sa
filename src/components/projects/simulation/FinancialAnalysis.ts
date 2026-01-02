@@ -11,15 +11,23 @@
 import { EnergySimulationResults } from "./EnergySimulationEngine";
 
 export interface TariffData {
-  fixedMonthlyCharge: number; // R/month
-  demandChargePerKva: number; // R/kVA
-  networkAccessCharge: number; // R/month
+  // 2025/2026 Unbundled Structure
+  fixedMonthlyCharge: number; // R/month - Retail/Service charge
+  demandChargePerKva: number; // R/kVA - Network demand charge
+  networkAccessCharge: number; // R/month - Distribution access
+  
+  // NEW: Generation Capacity Charge (GCC) - unbundled from energy
+  generationCapacityCharge?: number; // R/kVA/month or R/POD/day
+  transmissionCharge?: number; // R/kVA/month - for MV/HV customers
   
   // Energy rates - can be simple average or TOU
-  averageRatePerKwh: number; // R/kWh
+  averageRatePerKwh: number; // R/kWh - Legacy energy charge
   
-  // Optional: Export tariff (feed-in)
-  exportRatePerKwh?: number; // R/kWh for grid export
+  // Optional: Export tariff (feed-in / Gen-offset)
+  exportRatePerKwh?: number; // R/kWh for grid export (WEPS-based credit)
+  
+  // Reactive energy for power factor penalty
+  reactiveEnergyCharge?: number; // R/kVArh
 }
 
 export interface SystemCosts {
@@ -199,11 +207,31 @@ export function compareTariffs(
 }
 
 /**
- * Default system costs for South Africa (2024/2025)
+ * Default system costs for South Africa (2025/2026)
+ * Updated to reflect current market pricing
  */
 export const DEFAULT_SYSTEM_COSTS: SystemCosts = {
-  solarCostPerKwp: 12000, // R12,000 per kWp installed
-  batteryCostPerKwh: 8000, // R8,000 per kWh
+  solarCostPerKwp: 11000, // R11,000 per kWp installed (prices declining)
+  batteryCostPerKwh: 7500, // R7,500 per kWh (LFP battery costs declining)
   installationCost: 0, // Included in per-unit costs
   maintenancePerYear: 0, // Often minimal for first years
 };
+
+/**
+ * Eskom 2025/2026 Tariff Reference
+ * All tariffs except Homelight are unbundled with separate GCC
+ */
+export const ESKOM_TARIFF_CATEGORIES = {
+  // Urban Large Power Users (NMD > 1 MVA)
+  LPU: ['Megaflex', 'Miniflex', 'Nightsave Urban'],
+  // Urban Small Power Users (up to 100kVA)
+  SPU: ['Businessrate', 'Public Lighting'],
+  // Residential
+  RESIDENTIAL: ['Homepower', 'Homeflex', 'Homelight'],
+  // Rural & Agricultural
+  RURAL: ['Ruraflex', 'Landrate', 'Landlight', 'Nightsave Rural'],
+  // Municipal (Consolidated for 2025/2026)
+  MUNICIPAL: ['Municflex', 'Municrate'],
+  // Generator & Wheeling
+  GENERATOR: ['Gen-wheeling', 'Gen-offset', 'WEPS', 'Transflex'],
+} as const;
