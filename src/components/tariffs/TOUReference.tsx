@@ -316,18 +316,36 @@ export function TOUReference() {
                 </div>
               </AccordionTrigger>
               <AccordionContent>
-                <div className="pt-2">
-                  <p className="text-sm text-muted-foreground mb-3">
-                    The TOU periods shown apply to the following Eskom tariffs:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {["Megaflex", "Megaflex Gen", "Municflex", "Miniflex", "Homeflex", "Ruraflex", "Ruraflex Gen", "WEPS"].map((tariff) => (
-                      <Badge key={tariff} variant="secondary">{tariff}</Badge>
-                    ))}
+                <div className="pt-2 space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      TOU tariffs applicable for 2025/2026 (all use same Peak/Standard/Off-Peak periods):
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {["Megaflex", "Megaflex Gen", "Miniflex", "Homeflex", "Ruraflex", "Ruraflex Gen", "Municflex", "WEPS", "Transflex"].map((tariff) => (
+                        <Badge key={tariff} variant="secondary">{tariff}</Badge>
+                      ))}
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-3">
-                    Note: Nightsave tariffs (Urban Large, Urban Small, Rural) have different TOU periods - Peak and Off-Peak only.
-                  </p>
+                  
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Nightsave tariffs (Peak and Off-Peak only):
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {["Nightsave Urban Large", "Nightsave Urban Small", "Nightsave Rural"].map((tariff) => (
+                        <Badge key={tariff} variant="outline">{tariff}</Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-muted">
+                    <p className="text-sm font-medium mb-1">Grid-Tied Generation Requirements</p>
+                    <p className="text-xs text-muted-foreground">
+                      Customers with grid-tied generation must use TOU tariffs (Homeflex for residential, standard TOU for commercial). 
+                      Homeflex supports net-billing (Gen-offset) for export credits.
+                    </p>
+                  </div>
                 </div>
               </AccordionContent>
             </AccordionItem>

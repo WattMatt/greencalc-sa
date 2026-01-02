@@ -18,39 +18,55 @@ export function NERSAGuidelines() {
         </CardHeader>
         <CardContent>
           <Accordion type="multiple" className="w-full">
-            {/* Section 1: Universal Mandatory Components */}
+            {/* Section 1: Universal Mandatory Components - 2025/2026 Unbundled Structure */}
             <AccordionItem value="mandatory-components">
               <AccordionTrigger className="text-left">
                 <div className="flex items-center gap-2">
                   <Badge variant="default">1</Badge>
-                  Universal Mandatory Components (Charges)
+                  Unbundled Tariff Components (2025/2026)
                 </div>
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-4 pt-2">
-                  <p className="text-sm text-muted-foreground">
-                    All compliant tariffs must recover the following costs through specific charge components:
-                  </p>
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30 mb-4">
+                    <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                      2025-2026 Unbundled Structure
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Eskom has unbundled all tariffs (except Homelight) into separate components for cost transparency. 
+                      The previously all-inclusive energy rate is now split into Legacy Energy + Generation Capacity Charge (GCC).
+                    </p>
+                  </div>
                   <div className="grid gap-3">
                     <ChargeCard
-                      title="Energy Charge"
-                      unit="c/kWh or R/kWh"
-                      description="Charged based on volumetric consumption. Found across all tariff scales."
+                      title="Legacy Energy Charge"
+                      unit="c/kWh"
+                      description="Traditional volumetric energy consumption charge. Now separated from capacity costs for transparency."
                     />
                     <ChargeCard
-                      title="Fixed/Basic Charges"
-                      unit="R/month or R/day"
-                      description="Recovers customer service charges and point of supply costs, levied irrespective of consumption."
+                      title="Generation Capacity Charge (GCC)"
+                      unit="R/kVA or R/POD/day"
+                      description="NEW: Recovered separately from energy. Covers generation capacity costs. Applied to all tariffs except Homelight."
                     />
                     <ChargeCard
-                      title="Demand Charges"
-                      unit="R/kVA or R/Amp"
-                      description="Levied on capacity utilized/reserved (Network Demand and Capacity Charges). Applied primarily to Commercial, Industrial, and Bulk users."
+                      title="Transmission Network Charge"
+                      unit="R/kVA/month"
+                      description="For MV/HV customers. Covers transmission infrastructure costs with zone-based pricing (≤300km, 300-600km, 600-900km, >900km)."
                     />
                     <ChargeCard
-                      title="Reactive Energy Charges"
+                      title="Distribution Network Charge"
+                      unit="R/kVA/month"
+                      description="Covers local distribution infrastructure. Varies by voltage level (LV/MV/HV)."
+                    />
+                    <ChargeCard
+                      title="Retail/Service Charge"
+                      unit="R/day or R/month"
+                      description="Administration and customer service costs. Fixed regardless of consumption."
+                    />
+                    <ChargeCard
+                      title="Reactive Energy Charge"
                       unit="R/kVArh"
-                      description="Charged to compensate for poor power factor. Included in specialized bulk and TOU tariffs."
+                      description="Power factor penalty during high-demand season. Applies to TOU tariffs for poor power factor compensation."
                     />
                   </div>
                 </div>
@@ -136,55 +152,144 @@ export function NERSAGuidelines() {
               </AccordionContent>
             </AccordionItem>
 
-            {/* Section 3: Allocation Mechanisms */}
-            <AccordionItem value="allocation-mechanisms">
+            {/* Section 3: Eskom 2025/2026 Tariff Categories */}
+            <AccordionItem value="eskom-tariff-categories">
               <AccordionTrigger className="text-left">
                 <div className="flex items-center gap-2">
                   <Badge variant="default">3</Badge>
-                  Allocation Mechanisms (IBT & TOU Structures)
+                  Eskom Tariff Categories (2025/2026)
                 </div>
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-6 pt-2">
-                  {/* IBT */}
+                  {/* Urban LPU */}
                   <div>
-                    <h4 className="font-semibold mb-2">A. Inclining Block Tariffs (IBT) for Residential</h4>
-                    <div className="text-sm space-y-2">
-                      <p className="text-muted-foreground">Energy recovery segmented by fixed, consecutive volume blocks:</p>
-                      <div className="grid grid-cols-4 gap-2">
-                        <div className="p-2 rounded bg-green-500/20 text-center">
-                          <div className="font-medium">Block 1</div>
-                          <div className="text-xs text-muted-foreground">0-50 kWh</div>
-                          <div className="text-xs">Life-line/Subsidized</div>
-                        </div>
-                        <div className="p-2 rounded bg-yellow-500/20 text-center">
-                          <div className="font-medium">Block 2</div>
-                          <div className="text-xs text-muted-foreground">51-350 kWh</div>
-                          <div className="text-xs">Standard</div>
-                        </div>
-                        <div className="p-2 rounded bg-orange-500/20 text-center">
-                          <div className="font-medium">Block 3</div>
-                          <div className="text-xs text-muted-foreground">351-600 kWh</div>
-                          <div className="text-xs">Higher</div>
-                        </div>
-                        <div className="p-2 rounded bg-red-500/20 text-center">
-                          <div className="font-medium">Block 4</div>
-                          <div className="text-xs text-muted-foreground">&gt;600 kWh</div>
-                          <div className="text-xs">Highest</div>
-                        </div>
+                    <h4 className="font-semibold mb-2">A. Urban Large Power Users (LPU) - NMD &gt; 1 MVA</h4>
+                    <div className="grid gap-2 text-sm">
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Megaflex:</span>
+                        <p className="text-muted-foreground">Urban TOU for large customers. Seasonally differentiated energy + GCC (R/kVA) + Transmission/Distribution network charges. Reactive energy charge for poor power factor.</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Miniflex:</span>
+                        <p className="text-muted-foreground">High-load factor urban customers 25kVA-5MVA NMD. For customers without grid-tied generation (TOU mandatory for generators).</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Nightsave Urban:</span>
+                        <p className="text-muted-foreground">Seasonally differentiated with energy demand charges based on peak period chargeable demand.</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* TOU */}
+                  {/* Urban SPU */}
+                  <div>
+                    <h4 className="font-semibold mb-2">B. Urban Small Power Users (SPU) & Commercial</h4>
+                    <div className="grid gap-2 text-sm">
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Businessrate:</span>
+                        <p className="text-muted-foreground">Urban commercial/non-commercial up to 100kVA NMD. Single c/kWh + daily fixed charges for network capacity and retail.</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Public Lighting:</span>
+                        <p className="text-muted-foreground">Non-metered. Fixed charges based on light count and wattage (All Night = 333.3 hours/month).</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Residential */}
+                  <div>
+                    <h4 className="font-semibold mb-2">C. Residential (No IBT for 2025/2026)</h4>
+                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 mb-2">
+                      <p className="text-sm text-amber-600 dark:text-amber-400 font-medium">
+                        Important: Eskom removed IBT structure for FY2026 - customers no longer pay higher rates for higher consumption.
+                      </p>
+                    </div>
+                    <div className="grid gap-2 text-sm">
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Homepower:</span>
+                        <p className="text-muted-foreground">Standard urban residential up to 100kVA. Unbundled: energy + network + retail charges.</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Homeflex:</span>
+                        <p className="text-muted-foreground">Residential TOU mandatory for grid-tied generation. Supports net-billing (Gen-offset) for export credits.</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Homelight:</span>
+                        <p className="text-muted-foreground">Subsidized for low-usage. ONLY tariff with all-inclusive single c/kWh rate (no separate GCC).</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rural */}
+                  <div>
+                    <h4 className="font-semibold mb-2">D. Rural & Agricultural</h4>
+                    <div className="grid gap-2 text-sm">
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Ruraflex:</span>
+                        <p className="text-muted-foreground">Rural TOU from 16kVA NMD, supply voltage ≤22kV (or 33kV in specific areas).</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Landrate:</span>
+                        <p className="text-muted-foreground">Conventional rural up to 100kVA at &lt;500V. Single energy + daily network/retail charges.</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Landlight:</span>
+                        <p className="text-muted-foreground">Subsidized rural prepaid. No fixed charges - single c/kWh only.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Municipal */}
+                  <div>
+                    <h4 className="font-semibold mb-2">E. Municipal (Local Authority) - Consolidated</h4>
+                    <div className="grid gap-2 text-sm">
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Municflex:</span>
+                        <p className="text-muted-foreground">NEW bulk TOU for local authorities from 16kVA NMD. Replaces previous Megaflex/Miniflex for municipalities.</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Municrate:</span>
+                        <p className="text-muted-foreground">NEW bulk tariff up to 100kVA. Consolidates previous commercial/residential bulk rates.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Generator */}
+                  <div>
+                    <h4 className="font-semibold mb-2">F. Generator & Wheeling</h4>
+                    <div className="grid gap-2 text-sm">
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Gen-wheeling:</span>
+                        <p className="text-muted-foreground">Use-of-System for third-party generator wheeling. Credit based on WEPS energy rate excluding losses.</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted">
+                        <span className="font-medium">Gen-offset:</span>
+                        <p className="text-muted-foreground">Net-billing/offset reconciliation for customers consuming self-generated energy.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* Section 4: TOU Structure */}
+            <AccordionItem value="allocation-mechanisms">
+              <AccordionTrigger className="text-left">
+                <div className="flex items-center gap-2">
+                  <Badge variant="default">4</Badge>
+                  Time of Use (TOU) & Seasonality
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-6 pt-2">
                   <div>
                     <h4 className="font-semibold flex items-center gap-2 mb-2">
                       <Clock className="h-4 w-4" />
-                      B. Time of Use (TOU) and Seasonality
+                      TOU Periods (2025/2026 Updated)
                     </h4>
                     <div className="text-sm space-y-3">
                       <p className="text-muted-foreground">
-                        Mandatory for customers above 100 kVA. Multi-part, seasonally differentiated scales.
+                        Mandatory for customers above 100 kVA and those with grid-tied generation.
                       </p>
                       
                       <div className="grid md:grid-cols-2 gap-3">
@@ -203,18 +308,18 @@ export function NERSAGuidelines() {
                       <div className="grid grid-cols-3 gap-2 mt-3">
                         <div className="p-2 rounded bg-red-500/20 text-center">
                           <div className="font-medium">Peak</div>
-                          <div className="text-xs text-muted-foreground">Highest cost</div>
-                          <div className="text-xs">Maximum system stress</div>
+                          <div className="text-xs text-muted-foreground">07:00-09:00, 17:00-20:00</div>
+                          <div className="text-xs">Weekdays only</div>
                         </div>
                         <div className="p-2 rounded bg-yellow-500/20 text-center">
                           <div className="font-medium">Standard</div>
-                          <div className="text-xs text-muted-foreground">Intermediate</div>
-                          <div className="text-xs">Normal operations</div>
+                          <div className="text-xs text-muted-foreground">Daytime</div>
+                          <div className="text-xs">+ Sunday 18:00-20:00</div>
                         </div>
                         <div className="p-2 rounded bg-green-500/20 text-center">
                           <div className="font-medium">Off-Peak</div>
-                          <div className="text-xs text-muted-foreground">Lowest cost</div>
-                          <div className="text-xs">Load shifting incentive</div>
+                          <div className="text-xs text-muted-foreground">22:00-06:00</div>
+                          <div className="text-xs">All nights + weekends</div>
                         </div>
                       </div>
                     </div>
