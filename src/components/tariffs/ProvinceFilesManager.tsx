@@ -569,77 +569,79 @@ export function ProvinceFilesManager() {
       
       if (isEskom) {
         // Eskom uses batched extraction - run all batches sequentially
+        // The backend tracks which batch to process next via eskom_batch_status table
         sonnerToast.info(`Starting Eskom extraction - 15 batches to process`, { duration: 3000 });
         
         let totalInserted = 0;
         let totalUpdated = 0;
-        let batchIndex = 0;
+        let attempts = 0;
+        const maxAttempts = 20; // Safety limit
         
-        // Loop until all batches are complete
-        while (true) {
-          setEskomBatchStatus({
-            currentBatch: batchIndex + 1,
-            currentBatchName: ESKOM_BATCH_NAMES[batchIndex] || `Batch ${batchIndex + 1}`,
-            completedBatches: batchIndex,
-            totalBatches: 15,
-            isExtracting: true
-          });
+        // Keep calling until backend reports allComplete
+        while (attempts < maxAttempts) {
+          attempts++;
           
-          const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-            body: {
-              filePath: selectedFile.path,
-              fileType: getFileType(selectedFile.name),
-              province: selectedProvince,
-              municipality: muni.name,
-              action: "extract-tariffs"
-            },
-          });
-          
-          if (error) throw error;
-          if (data.error) throw new Error(data.error);
-          
-          // Check if all batches are complete
-          if (data.allComplete) {
-            sonnerToast.success(`All 15 Eskom batches complete! ${data.totalTariffs || 0} total tariffs`, { duration: 5000 });
-            setEskomBatchStatus(null);
-            break;
-          }
-          
-          // Update progress
-          totalInserted += data.inserted || 0;
-          totalUpdated += data.updated || 0;
-          
-          if (data.batchProgress) {
-            setEskomBatchStatus({
-              currentBatch: data.batchProgress.currentBatch,
-              currentBatchName: data.batchProgress.currentBatchName,
-              completedBatches: data.batchProgress.completedBatches,
-              totalBatches: data.batchProgress.totalBatches,
-              isExtracting: true
+          try {
+            const { data, error } = await supabase.functions.invoke("process-tariff-file", {
+              body: {
+                filePath: selectedFile.path,
+                fileType: getFileType(selectedFile.name),
+                province: selectedProvince,
+                municipality: muni.name,
+                action: "extract-tariffs"
+              },
             });
             
-            sonnerToast.success(
-              `Batch ${data.batchProgress.currentBatch}/15: ${data.batchProgress.currentBatchName} - ${data.inserted || 0} new, ${data.updated || 0} updated`,
-              { duration: 2000 }
-            );
+            if (error) {
+              console.error("Eskom batch error:", error);
+              throw error;
+            }
+            if (data.error) throw new Error(data.error);
             
-            if (data.batchProgress.allComplete) {
-              sonnerToast.success(`All Eskom batches complete! Total: ${totalInserted} new, ${totalUpdated} updated`, { duration: 5000 });
+            // Check if all batches are complete
+            if (data.allComplete) {
+              sonnerToast.success(`All 15 Eskom batches complete! ${data.totalTariffs || 0} total tariffs`, { duration: 5000 });
               setEskomBatchStatus(null);
               break;
             }
+            
+            // Update progress from backend response
+            totalInserted += data.inserted || 0;
+            totalUpdated += data.updated || 0;
+            
+            if (data.batchProgress) {
+              setEskomBatchStatus({
+                currentBatch: data.batchProgress.currentBatch,
+                currentBatchName: data.batchProgress.currentBatchName,
+                completedBatches: data.batchProgress.completedBatches,
+                totalBatches: data.batchProgress.totalBatches,
+                isExtracting: true
+              });
+              
+              sonnerToast.success(
+                `Batch ${data.batchProgress.completedBatches}/15: ${data.batchProgress.currentBatchName} complete - ${data.inserted || 0} new`,
+                { duration: 2000 }
+              );
+              
+              if (data.batchProgress.allComplete) {
+                sonnerToast.success(`All Eskom batches complete! Total: ${totalInserted} new, ${totalUpdated} updated`, { duration: 5000 });
+                setEskomBatchStatus(null);
+                break;
+              }
+            }
+            
+            // Small delay between batches to avoid overwhelming the API
+            await new Promise(r => setTimeout(r, 1000));
+          } catch (batchError) {
+            console.error(`Eskom batch ${attempts} failed:`, batchError);
+            // Continue to next batch instead of failing completely
+            sonnerToast.error(`Batch ${attempts} failed - continuing to next...`, { duration: 2000 });
+            await new Promise(r => setTimeout(r, 2000));
           }
-          
-          batchIndex++;
-          
-          // Safety limit
-          if (batchIndex >= 20) {
-            sonnerToast.warning("Reached batch limit - stopping extraction", { duration: 3000 });
-            break;
-          }
-          
-          // Small delay between batches
-          await new Promise(r => setTimeout(r, 500));
+        }
+        
+        if (attempts >= maxAttempts) {
+          sonnerToast.warning("Reached maximum attempts - some batches may not be extracted", { duration: 4000 });
         }
         
         // Update municipality status
