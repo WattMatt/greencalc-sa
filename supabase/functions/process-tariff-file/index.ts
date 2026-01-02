@@ -461,98 +461,90 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
       // For Eskom, we'll do BATCHED extraction by category to avoid WORKER_LIMIT errors
       // Each batch processes specific sheets for one category
       // ESKOM 2025-2026 TARIFF CATEGORIES (unbundled structure with GCC)
+      // Sheet names in file have "NLA" (Non-Local Authority) and "Munic" suffixes
       const eskomBatches = isEskomExtraction ? [
         // 1. Urban Large Power User (LPU) Tariffs - NMD > 1 MVA
         { 
           name: "Megaflex", 
-          sheets: ["megaflex", "lpu", "key customer", "large power"],
+          sheets: ["megaflex nla", "megaflex gen", "megaflex"],
           description: "Urban TOU for large customers >1MVA NMD. Seasonally differentiated energy + GCC (R/kVA) + Transmission/Distribution network charges + reactive energy charge."
         },
         { 
           name: "Miniflex", 
-          sheets: ["miniflex"],
+          sheets: ["miniflex nla", "miniflex"],
           description: "Urban TOU for high-load factor customers 25kVA-5MVA NMD. For customers without grid-tied generation."
         },
         { 
-          name: "Nightsave Urban", 
-          sheets: ["nightsave", "urban"],
-          description: "Urban seasonally differentiated TOU. Energy demand charges based on peak period chargeable demand."
+          name: "Nightsave", 
+          sheets: ["nightsave urban", "nightsave rural", "nightsave"],
+          description: "Urban/Rural seasonally differentiated TOU. Energy demand charges based on peak period chargeable demand."
         },
         // 2. Urban Small Power User (SPU) and Commercial
         { 
           name: "Businessrate", 
-          sheets: ["businessrate", "spu", "small power", "commercial"],
+          sheets: ["businessrate nla", "businessrate"],
           description: "Urban commercial/non-commercial (schools, clinics) up to 100kVA NMD. Single c/kWh + daily fixed charges for network capacity and retail services."
         },
         { 
           name: "Public Lighting", 
-          sheets: ["public lighting", "street light", "lighting"],
+          sheets: ["public lighting nla", "public lighting munic", "public lighting"],
           description: "Non-metered urban tariff. Fixed charges based on light count and wattage (All Night = 333.3 hours/month)."
         },
         // 3. Residential Tariffs (No IBT structure for FY2026)
         { 
           name: "Homepower", 
-          sheets: ["homepower", "residential", "domestic"],
+          sheets: ["homepower nla", "homepower"],
           description: "Standard urban residential up to 100kVA. Unbundled: energy + network + retail (service/admin) charges. No IBT for 2025-2026."
         },
         { 
           name: "Homeflex", 
-          sheets: ["homeflex", "home flex"],
+          sheets: ["homeflex nla", "homeflex"],
           description: "Residential TOU mandatory for grid-tied generation. Supports net-billing (Gen-offset) for export credits."
         },
         { 
           name: "Homelight", 
-          sheets: ["homelight", "home light", "subsidized"],
+          sheets: ["homelight nla", "homelight"],
           description: "Subsidized tariff for low-usage households. ONLY tariff with all-inclusive single c/kWh rate (no separate GCC)."
         },
         // 4. Rural and Agricultural Tariffs
         { 
           name: "Ruraflex", 
-          sheets: ["ruraflex", "rural flex"],
+          sheets: ["ruraflex nla", "ruraflex gen", "ruraflex"],
           description: "Rural TOU from 16kVA NMD, supply voltage ≤22kV (or 33kV in specific areas). For agricultural customers."
         },
         { 
           name: "Landrate", 
-          sheets: ["landrate", "land rate", "rural conventional"],
+          sheets: ["landrate nla", "landrate"],
           description: "Conventional rural tariff up to 100kVA at <500V. Single energy charge + daily network/retail charges."
-        },
-        { 
-          name: "Landlight", 
-          sheets: ["landlight", "land light", "rural prepaid"],
-          description: "Subsidized rural prepaid. No fixed charges - single c/kWh active energy rate only."
-        },
-        { 
-          name: "Nightsave Rural", 
-          sheets: ["nightsave rural", "rural nightsave"],
-          description: "Rural off-peak focused TOU - MV/HV variants for agricultural operations."
         },
         // 5. Municipal (Local Authority) Bulk Tariffs - Consolidated for 2025-2026
         { 
           name: "Municflex", 
-          sheets: ["municflex", "munic flex", "local authority", "municipality bulk"],
+          sheets: ["municflex"],
           description: "NEW bulk TOU for local authorities from 16kVA NMD. Replaces Megaflex/Miniflex for municipalities."
         },
         { 
           name: "Municrate", 
-          sheets: ["municrate", "munic rate"],
+          sheets: ["municrate"],
           description: "NEW bulk tariff for local authority up to 100kVA. Consolidates previous commercial/residential bulk rates."
         },
-        // 6. Generator and Wheeling Tariffs
-        { 
-          name: "Generator Tariffs", 
-          sheets: ["gen-wheeling", "gen-offset", "wheeling", "generator", "uos", "use of system"],
-          description: "Use-of-System charges for generators (Transmission/Distribution). Gen-wheeling for third-party wheeling transactions. Gen-offset for net-billing/offset."
-        },
-        // 7. Transmission and Wholesale
-        { 
-          name: "Transflex", 
-          sheets: ["transflex", "transmission", "trans flex"],
-          description: "Transmission-connected customer tariffs. High voltage grid connection charges."
-        },
+        // 6. WEPS (Wholesale)
         { 
           name: "WEPS", 
-          sheets: ["weps", "wholesale"],
+          sheets: ["weps nla", "weps munic", "weps"],
           description: "Wholesale Electricity Pricing System. Local/Non-local authority variants for bulk energy purchase."
+        },
+        // 7. Generator and Wheeling Tariffs
+        { 
+          name: "Generator Tariffs", 
+          sheets: ["gen-offset", "gen reconcil", "tuos nla", "duos nla"],
+          description: "Use-of-System charges for generators (TUoS/DUoS). Gen-offset for net-billing/offset. Includes excess NCC charges."
+        },
+        // 8. Excess NCC
+        { 
+          name: "Excess NCC", 
+          sheets: ["excess ncc nla", "excess ncc munic", "excess ncc"],
+          description: "Excess Network Capacity Charges for NLA and Municipal customers."
         }
       ] : [];
       
@@ -570,27 +562,40 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
         
         const currentBatch = eskomBatches[currentBatchIndex];
         
-        // Filter sheets for this batch
+        // Filter sheets for this batch - more flexible matching
         const batchSheets = sheetNames.filter(name => {
-          const lower = name.toLowerCase();
-          return currentBatch.sheets.some(keyword => lower.includes(keyword));
+          const lower = name.toLowerCase().trim();
+          return currentBatch.sheets.some(keyword => {
+            const keyLower = keyword.toLowerCase();
+            return lower.includes(keyLower);
+          });
         });
         
-        // If no specific sheets found, use general tariff/rate sheets
-        const sheetsToUse = batchSheets.length > 0 
-          ? batchSheets.slice(0, 5) 
-          : sheetNames.filter(name => {
-              const lower = name.toLowerCase();
-              return lower.includes('tariff') || lower.includes('rate') || lower.includes('energy') || lower.includes('charges');
-            }).slice(0, 3);
+        console.log(`Batch "${currentBatch.name}" - matched sheets:`, batchSheets.join(", ") || "none");
         
+        // If no specific sheets found, skip this batch
+        if (batchSheets.length === 0) {
+          console.log(`No sheets match batch "${currentBatch.name}" - skipping`);
+          return new Response(
+            JSON.stringify({ 
+              inserted: 0, 
+              updated: 0, 
+              skipped: 0, 
+              confidence: 100,
+              message: `No sheets found for ${currentBatch.name} batch`
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        const sheetsToUse = batchSheets.slice(0, 5);
         console.log(`Batch "${currentBatch.name}" - using sheets:`, sheetsToUse.join(", "));
         
-        // Build text from selected sheets - limit to 60 rows per sheet
+        // Build text from selected sheets - increase to 100 rows per sheet
         for (const sheetName of sheetsToUse) {
           if (sheetData[sheetName]) {
             municipalityText += `\n=== SHEET: ${sheetName} ===\n`;
-            municipalityText += sheetData[sheetName].slice(0, 60).map(row => 
+            municipalityText += sheetData[sheetName].slice(0, 100).map(row => 
               row.filter(cell => cell != null && cell !== "").join(" | ")
             ).filter(row => row.trim()).join("\n");
           }
