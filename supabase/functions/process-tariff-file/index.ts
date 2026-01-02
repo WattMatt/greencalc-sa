@@ -460,46 +460,99 @@ Return ONLY municipality names, one per line. Remove any percentages like "- 12.
       
       // For Eskom, we'll do BATCHED extraction by category to avoid WORKER_LIMIT errors
       // Each batch processes specific sheets for one category
+      // ESKOM 2025-2026 TARIFF CATEGORIES (unbundled structure with GCC)
       const eskomBatches = isEskomExtraction ? [
+        // 1. Urban Large Power User (LPU) Tariffs - NMD > 1 MVA
         { 
           name: "Megaflex", 
-          sheets: ["megaflex", "lpu", "key customer"],
-          description: "Large Power Users TOU - LV, MV, HV variants with transmission zones"
+          sheets: ["megaflex", "lpu", "key customer", "large power"],
+          description: "Urban TOU for large customers >1MVA NMD. Seasonally differentiated energy + GCC (R/kVA) + Transmission/Distribution network charges + reactive energy charge."
         },
         { 
           name: "Miniflex", 
           sheets: ["miniflex"],
-          description: "Medium Power Users TOU - similar to Megaflex"
+          description: "Urban TOU for high-load factor customers 25kVA-5MVA NMD. For customers without grid-tied generation."
         },
         { 
-          name: "Nightsave", 
-          sheets: ["nightsave", "urban", "rural"],
-          description: "Off-peak focused TOU - Urban and Rural MV/HV variants"
+          name: "Nightsave Urban", 
+          sheets: ["nightsave", "urban"],
+          description: "Urban seasonally differentiated TOU. Energy demand charges based on peak period chargeable demand."
         },
-        { 
-          name: "Ruraflex", 
-          sheets: ["ruraflex"],
-          description: "Rural TOU - LV and MV for agricultural customers"
-        },
+        // 2. Urban Small Power User (SPU) and Commercial
         { 
           name: "Businessrate", 
-          sheets: ["businessrate", "spu", "small power"],
-          description: "Small Power Users - Single/Three Phase with amperage options"
+          sheets: ["businessrate", "spu", "small power", "commercial"],
+          description: "Urban commercial/non-commercial (schools, clinics) up to 100kVA NMD. Single c/kWh + daily fixed charges for network capacity and retail services."
+        },
+        { 
+          name: "Public Lighting", 
+          sheets: ["public lighting", "street light", "lighting"],
+          description: "Non-metered urban tariff. Fixed charges based on light count and wattage (All Night = 333.3 hours/month)."
+        },
+        // 3. Residential Tariffs (No IBT structure for FY2026)
+        { 
+          name: "Homepower", 
+          sheets: ["homepower", "residential", "domestic"],
+          description: "Standard urban residential up to 100kVA. Unbundled: energy + network + retail (service/admin) charges. No IBT for 2025-2026."
+        },
+        { 
+          name: "Homeflex", 
+          sheets: ["homeflex", "home flex"],
+          description: "Residential TOU mandatory for grid-tied generation. Supports net-billing (Gen-offset) for export credits."
+        },
+        { 
+          name: "Homelight", 
+          sheets: ["homelight", "home light", "subsidized"],
+          description: "Subsidized tariff for low-usage households. ONLY tariff with all-inclusive single c/kWh rate (no separate GCC)."
+        },
+        // 4. Rural and Agricultural Tariffs
+        { 
+          name: "Ruraflex", 
+          sheets: ["ruraflex", "rural flex"],
+          description: "Rural TOU from 16kVA NMD, supply voltage ≤22kV (or 33kV in specific areas). For agricultural customers."
+        },
+        { 
+          name: "Landrate", 
+          sheets: ["landrate", "land rate", "rural conventional"],
+          description: "Conventional rural tariff up to 100kVA at <500V. Single energy charge + daily network/retail charges."
+        },
+        { 
+          name: "Landlight", 
+          sheets: ["landlight", "land light", "rural prepaid"],
+          description: "Subsidized rural prepaid. No fixed charges - single c/kWh active energy rate only."
+        },
+        { 
+          name: "Nightsave Rural", 
+          sheets: ["nightsave rural", "rural nightsave"],
+          description: "Rural off-peak focused TOU - MV/HV variants for agricultural operations."
+        },
+        // 5. Municipal (Local Authority) Bulk Tariffs - Consolidated for 2025-2026
+        { 
+          name: "Municflex", 
+          sheets: ["municflex", "munic flex", "local authority", "municipality bulk"],
+          description: "NEW bulk TOU for local authorities from 16kVA NMD. Replaces Megaflex/Miniflex for municipalities."
+        },
+        { 
+          name: "Municrate", 
+          sheets: ["municrate", "munic rate"],
+          description: "NEW bulk tariff for local authority up to 100kVA. Consolidates previous commercial/residential bulk rates."
+        },
+        // 6. Generator and Wheeling Tariffs
+        { 
+          name: "Generator Tariffs", 
+          sheets: ["gen-wheeling", "gen-offset", "wheeling", "generator", "uos", "use of system"],
+          description: "Use-of-System charges for generators (Transmission/Distribution). Gen-wheeling for third-party wheeling transactions. Gen-offset for net-billing/offset."
+        },
+        // 7. Transmission and Wholesale
+        { 
+          name: "Transflex", 
+          sheets: ["transflex", "transmission", "trans flex"],
+          description: "Transmission-connected customer tariffs. High voltage grid connection charges."
         },
         { 
           name: "WEPS", 
-          sheets: ["weps"],
-          description: "Wholesale Electricity Pricing System - Local/Non-local authority"
-        },
-        { 
-          name: "Transflex", 
-          sheets: ["transflex", "transmission"],
-          description: "Transmission connected customers"
-        },
-        { 
-          name: "Homepower", 
-          sheets: ["homepower", "homelight", "domestic", "landrate", "landlight"],
-          description: "Domestic/Residential - prepaid and conventional IBT"
+          sheets: ["weps", "wholesale"],
+          description: "Wholesale Electricity Pricing System. Local/Non-local authority variants for bulk energy purchase."
         }
       ] : [];
       
@@ -598,7 +651,7 @@ INCREMENTAL EXTRACTION RULES:
       
       // Use different extraction prompt for Eskom vs regular municipalities
       const extractPrompt = isEskomExtraction 
-        ? `TASK: Extract ${currentBatch?.name || "Eskom"} tariffs from this data.
+        ? `TASK: Extract ${currentBatch?.name || "Eskom"} tariffs from Eskom 2025-2026 tariff data.
 
 BATCH FOCUS: ${currentBatch?.name || "All"} - ${currentBatch?.description || "Extract all tariffs"}
 Reprise #${repriseCount} - Batch ${currentBatchIndex + 1}/${eskomBatches.length}
@@ -607,28 +660,51 @@ SOURCE DATA:
 ${municipalityText.slice(0, 15000)}
 ${existingContext}
 
+=== ESKOM 2025-2026 TARIFF STRUCTURE (CRITICAL UNDERSTANDING) ===
+
+Eskom's 2025-2026 tariffs are UNBUNDLED with these components:
+1. **Legacy Energy Charge (c/kWh)** - The traditional energy rate
+2. **Generation Capacity Charge (GCC)** - Recovered as R/kVA or R/POD/day (NOT for Homelight)
+3. **Transmission Network Charges** - For MV/HV tariffs
+4. **Distribution Network Charges** - For all tariffs
+5. **Retail/Service Charges** - Admin fees (R/day or R/month)
+
 === EXTRACTION FOCUS: ${currentBatch?.name?.toUpperCase() || "ESKOM TARIFFS"} ===
 
-Extract ALL variants of ${currentBatch?.name || "Eskom"} tariffs you can find in the data.
+Extract ALL variants of ${currentBatch?.name || "Eskom"} tariffs:
 
-For TOU tariffs (Megaflex, Miniflex, Nightsave, Ruraflex, WEPS, Transflex):
-- Extract 6 energy rates: Peak/Standard/Off-Peak × High Demand/Low Demand seasons
+**For TOU tariffs (Megaflex, Miniflex, Nightsave Urban/Rural, Ruraflex, Municflex, Transflex):**
+- Extract 6 energy rates: Peak/Standard/Off-Peak × High Demand(Winter)/Low Demand(Summer)
 - Look for "Active Energy" tables with c/kWh values
-- Network Access Charge → demand_charge_per_kva
-- Service/Admin charges → fixed_monthly_charge
+- GCC or Network Access Charge → demand_charge_per_kva
+- Service/Admin/Retail charges → fixed_monthly_charge
+- Reactive energy charge (kVArh) for power factor during high demand season
 
-For Fixed/IBT tariffs (Businessrate, Homepower, Homelight, Landrate):
-- Extract block-based rates if present
-- Single/Three Phase variants with amperage options
+**For Fixed tariffs (Businessrate, Homepower, Landrate, Municrate):**
+- Single energy rate + daily fixed charges
+- Extract network capacity and retail service charges separately
+
+**For Subsidized tariffs (Homelight, Landlight):**
+- All-inclusive single c/kWh rate (NO separate GCC)
+- No fixed charges for prepaid variants
+
+**For Generator tariffs (Gen-wheeling, Gen-offset):**
+- WEPS energy rate credits for wheeling transactions
+- Net-billing reconciliation tariffs for self-generation
+
+**For Residential TOU (Homeflex):**
+- Mandatory for grid-tied generation
+- Net-billing (Gen-offset) credit for exports
 
 === KEY RULES ===
-1. RATE CONVERSION: c/kWh → R/kWh (divide by 100). If 392.75 c/kWh → 3.9275 R/kWh
+1. RATE CONVERSION: c/kWh → R/kWh (divide by 100). 392.75 c/kWh → 3.9275 R/kWh
 2. VOLTAGE LEVELS: LV (<500V), MV (500V-66kV), HV (>66kV)
-3. Include transmission zones in tariff_name if present (≤300km, >300km, etc.)
-4. Include Local/Non-local authority variants
-5. Include Key Customer variants if present
+3. Include transmission zones in name if present (≤300km, 300-600km, 600-900km, >900km)
+4. Include Local/Non-local authority variants for municipal tariffs
+5. Include Key Customer variants for large power users
+6. Note NMD (Notified Maximum Demand) requirements in tariff_name
 
-Extract EVERY ${currentBatch?.name || ""} variant you can find!`
+Extract EVERY ${currentBatch?.name || ""} variant!`
         : `TASK: Extract electricity tariffs for "${municipality}" municipality.
 
 SOURCE DATA:
