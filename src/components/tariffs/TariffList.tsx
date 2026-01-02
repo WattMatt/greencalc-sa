@@ -645,7 +645,90 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                             No tariffs loaded. Click to expand and load tariffs.
                           </p>
                         ) : (
-                        municipality.tariffs.map((tariff) => (
+                        (() => {
+                          // Group tariffs by family for Eskom
+                          const isEskom = provinceData.province.name?.toLowerCase() === 'eskom';
+                          
+                          if (isEskom && municipality.tariffs.length > 5) {
+                            // Eskom tariff families
+                            const eskomFamilies = [
+                              { prefix: 'Megaflex', label: 'Urban LPU - Megaflex' },
+                              { prefix: 'Miniflex', label: 'Urban LPU - Miniflex' },
+                              { prefix: 'Nightsave', label: 'Urban LPU - Nightsave' },
+                              { prefix: 'Businessrate', label: 'Urban SPU - Businessrate' },
+                              { prefix: 'Public Lighting', label: 'Urban SPU - Public Lighting' },
+                              { prefix: 'Homepower', label: 'Residential - Homepower' },
+                              { prefix: 'Homeflex', label: 'Residential - Homeflex' },
+                              { prefix: 'Homelight', label: 'Residential - Homelight' },
+                              { prefix: 'Ruraflex', label: 'Rural - Ruraflex' },
+                              { prefix: 'Landrate', label: 'Rural - Landrate' },
+                              { prefix: 'Landlight', label: 'Rural - Landlight' },
+                              { prefix: 'Municflex', label: 'Municipal - Municflex' },
+                              { prefix: 'Municrate', label: 'Municipal - Municrate' },
+                              { prefix: 'WEPS', label: 'Wholesale - WEPS' },
+                              { prefix: 'Gen', label: 'Generator Tariffs' },
+                              { prefix: 'Excess', label: 'Excess NCC' },
+                            ];
+                            
+                            // Group tariffs by family
+                            const groupedTariffs: { label: string; tariffs: Tariff[] }[] = [];
+                            const ungrouped: Tariff[] = [];
+                            
+                            eskomFamilies.forEach(family => {
+                              const matching = municipality.tariffs.filter(t => 
+                                t.name.toLowerCase().startsWith(family.prefix.toLowerCase())
+                              );
+                              if (matching.length > 0) {
+                                groupedTariffs.push({ label: family.label, tariffs: matching });
+                              }
+                            });
+                            
+                            // Find any tariffs that didn't match a family
+                            const matched = new Set(groupedTariffs.flatMap(g => g.tariffs.map(t => t.id)));
+                            municipality.tariffs.forEach(t => {
+                              if (!matched.has(t.id)) ungrouped.push(t);
+                            });
+                            if (ungrouped.length > 0) {
+                              groupedTariffs.push({ label: 'Other', tariffs: ungrouped });
+                            }
+                            
+                            return (
+                              <Accordion type="multiple" className="space-y-2">
+                                {groupedTariffs.map((group) => (
+                                  <AccordionItem key={group.label} value={group.label} className="border rounded bg-muted/30">
+                                    <AccordionTrigger className="px-3 py-2 hover:no-underline">
+                                      <div className="flex items-center gap-2">
+                                        <Zap className="h-4 w-4 text-primary" />
+                                        <span className="font-medium text-sm">{group.label}</span>
+                                        <Badge variant="outline" className="text-xs">{group.tariffs.length}</Badge>
+                                      </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="px-3 pb-3 space-y-2">
+                                      {group.tariffs.map((tariff) => (
+                                        <div key={tariff.id} className="flex items-center justify-between p-2 rounded border bg-background hover:bg-accent/20">
+                                          <div className="flex items-center gap-2 flex-1" onClick={() => toggleExpanded(tariff.id)}>
+                                            {expandedTariffs.has(tariff.id) ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                            <span className="text-sm font-medium">{tariff.name}</span>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <Badge variant={tariff.tariff_type === "TOU" ? "secondary" : tariff.tariff_type === "IBT" ? "default" : "outline"} className="text-xs">
+                                              {tariff.tariff_type}
+                                            </Badge>
+                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteTariff.mutate(tariff.id)}>
+                                              <Trash2 className="h-3 w-3 text-destructive" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </AccordionContent>
+                                  </AccordionItem>
+                                ))}
+                              </Accordion>
+                            );
+                          }
+                          
+                          // Default flat list for non-Eskom
+                          return municipality.tariffs.map((tariff) => (
                           <Collapsible key={tariff.id} open={expandedTariffs.has(tariff.id)}>
                             <div className="border rounded bg-background">
                               <div className="flex items-center justify-between p-3">
@@ -778,6 +861,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                             </div>
                           </Collapsible>
                         ))
+                        })()
                         )}
                       </div>
                     </AccordionContent>
