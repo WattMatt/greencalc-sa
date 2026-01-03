@@ -29,6 +29,7 @@ interface ReportExportProps {
   segments: ReportSegment[];
   branding?: ReportBranding;
   reportData: ReportData;
+  projectId?: string;
   disabled?: boolean;
 }
 
@@ -160,6 +161,7 @@ export function ReportExport({
   segments, 
   branding, 
   reportData,
+  projectId,
   disabled 
 }: ReportExportProps) {
   const [exporting, setExporting] = useState<string | null>(null);
@@ -204,6 +206,33 @@ export function ReportExport({
     }
   }, []);
 
+  // Fetch cached infographics from storage
+  const fetchCachedInfographics = async (): Promise<Map<string, string>> => {
+    const infographics = new Map<string, string>();
+    if (!projectId) return infographics;
+
+    const types = ["executive", "system", "savings", "environmental", "engineering"];
+    const cacheKey = `${reportData.simulation.solar_capacity_kwp}-${reportData.simulation.battery_capacity_kwh}-${reportData.financials.annual_savings}`.replace(/\./g, '_');
+
+    for (const type of types) {
+      const filePath = `${projectId}/${cacheKey}-${type}.png`;
+      const { data: urlData } = supabase.storage
+        .from('report-infographics')
+        .getPublicUrl(filePath);
+
+      try {
+        const response = await fetch(urlData.publicUrl, { method: 'HEAD' });
+        if (response.ok) {
+          infographics.set(type, urlData.publicUrl);
+        }
+      } catch {
+        // Infographic not cached, skip
+      }
+    }
+
+    return infographics;
+  };
+
   const exportToPDF = async () => {
     setExporting("pdf");
     try {
@@ -212,12 +241,13 @@ export function ReportExport({
       const primary = hexToRgb(primaryColor);
       const secondary = hexToRgb(secondaryColor);
       
-      // Capture charts first
-      toast.info("Capturing charts...");
-      const [dcAcImage, monthlyImage, paybackImage] = await Promise.all([
+      // Capture charts and fetch infographics in parallel
+      toast.info("Preparing report assets...");
+      const [dcAcImage, monthlyImage, paybackImage, cachedInfographics] = await Promise.all([
         captureChart(dcAcChartRef),
         captureChart(monthlyChartRef),
         captureChart(paybackChartRef),
+        fetchCachedInfographics(),
       ]);
 
       const chartImages: Record<string, string | null> = {
@@ -350,6 +380,9 @@ export function ReportExport({
             break;
           case "monthly_yield":
             renderMonthlyYield(doc, reportData, primary, yPos);
+            break;
+          case "ai_infographics":
+            await renderAIInfographics(doc, cachedInfographics, primary, yPos);
             break;
           default:
             doc.setFontSize(11);
@@ -564,6 +597,79 @@ export function ReportExport({
       styles: { fontSize: 10 },
       margin: { left: 20, right: 20 },
     });
+  };
+
+  const renderAIInfographics = async (
+    doc: jsPDF, 
+    infographics: Map<string, string>, 
+    primary: { r: number; g: number; b: number }, 
+    yPos: number
+  ) => {
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    if (infographics.size === 0) {
+      doc.setFontSize(11);
+      doc.setTextColor(100, 100, 100);
+      doc.text("AI Infographics are being generated. Please regenerate report later.", 20, yPos);
+      return;
+    }
+
+    const infographicLabels: Record<string, string> = {
+      executive: "Executive Summary",
+      system: "System Overview", 
+      savings: "Savings Breakdown",
+      environmental: "Environmental Impact",
+      engineering: "Engineering Specs"
+    };
+
+    let currentY = yPos;
+    const imgWidth = (pageWidth - 50) / 2;
+    const imgHeight = imgWidth * 0.6;
+    let col = 0;
+
+    for (const [type, url] of infographics) {
+      try {
+        // Fetch image and convert to base64
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+
+        const x = 20 + col * (imgWidth + 10);
+        
+        // Add image
+        doc.addImage(base64, 'PNG', x, currentY, imgWidth, imgHeight);
+        
+        // Add label below image
+        doc.setFontSize(9);
+        doc.setTextColor(primary.r, primary.g, primary.b);
+        doc.setFont("helvetica", "bold");
+        doc.text(infographicLabels[type] || type, x + imgWidth / 2, currentY + imgHeight + 5, { align: 'center' });
+
+        col++;
+        if (col >= 2) {
+          col = 0;
+          currentY += imgHeight + 20;
+          
+          // Check if we need a new page
+          if (currentY + imgHeight > doc.internal.pageSize.getHeight() - 30) {
+            doc.addPage();
+            doc.setFillColor(primary.r, primary.g, primary.b);
+            doc.rect(0, 0, pageWidth, 25, 'F');
+            doc.setFontSize(16);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(255, 255, 255);
+            doc.text("AI Infographics (continued)", 20, 16);
+            currentY = 40;
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to add infographic ${type}:`, error);
+      }
+    }
   };
 
   const exportToExcel = () => {
