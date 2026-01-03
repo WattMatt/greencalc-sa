@@ -14,6 +14,7 @@ import { useState, useMemo } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EskomTariffMatrix } from "./EskomTariffMatrix";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,16 +34,28 @@ interface TariffRate {
   block_end_kwh: number | null;
   rate_per_kwh: number;
   demand_charge_per_kva: number | null;
+  network_charge_per_kwh: number | null;
+  ancillary_charge_per_kwh: number | null;
+  energy_charge_per_kwh: number | null;
 }
 
 interface Tariff {
   id: string;
   name: string;
   tariff_type: string;
+  tariff_family: string | null;
+  voltage_level: string | null;
+  transmission_zone: string | null;
+  customer_category: string | null;
   is_prepaid: boolean | null;
   fixed_monthly_charge: number | null;
   demand_charge_per_kva: number | null;
   network_access_charge: number | null;
+  service_charge_per_day: number | null;
+  administration_charge_per_day: number | null;
+  generation_capacity_charge: number | null;
+  legacy_charge_per_kwh: number | null;
+  reactive_energy_charge: number | null;
   phase_type: string | null;
   amperage_limit: string | null;
   has_seasonal_rates: boolean | null;
@@ -649,162 +662,16 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                           // Group tariffs by family for Eskom
                           const isEskom = provinceData.province.name?.toLowerCase() === 'eskom';
                           
-                          if (isEskom && municipality.tariffs.length > 5) {
-                            // Eskom tariff categories (combined grouping as per user request)
-                            const eskomCategories = [
-                              { label: 'Urban LPU', prefixes: ['Megaflex', 'Miniflex', 'Nightsave'] },
-                              { label: 'Urban SPU', prefixes: ['Businessrate', 'Public Lighting'] },
-                              { label: 'Residential', prefixes: ['Homepower', 'Homeflex', 'Homelight'] },
-                              { label: 'Rural', prefixes: ['Ruraflex', 'Landrate', 'Landlight'] },
-                              { label: 'Municipal', prefixes: ['Municflex', 'Municrate'] },
-                              { label: 'Wholesale', prefixes: ['WEPS'] },
-                              { label: 'Generator Tariffs', prefixes: ['Gen-', 'Gen ', 'TUoS', 'DUoS'] },
-                              { label: 'Excess NCC', prefixes: ['Excess'] },
-                            ];
-                            
-                            // Group tariffs by combined categories
-                            const groupedTariffs: { label: string; tariffs: Tariff[] }[] = [];
-                            const ungrouped: Tariff[] = [];
-                            
-                            eskomCategories.forEach(category => {
-                              const matching = municipality.tariffs.filter(t => 
-                                category.prefixes.some(prefix => 
-                                  t.name.toLowerCase().startsWith(prefix.toLowerCase())
-                                )
-                              );
-                              if (matching.length > 0) {
-                                groupedTariffs.push({ label: category.label, tariffs: matching });
-                              }
-                            });
-                            
-                            // Find any tariffs that didn't match a family
-                            const matched = new Set(groupedTariffs.flatMap(g => g.tariffs.map(t => t.id)));
-                            municipality.tariffs.forEach(t => {
-                              if (!matched.has(t.id)) ungrouped.push(t);
-                            });
-                            if (ungrouped.length > 0) {
-                              groupedTariffs.push({ label: 'Other', tariffs: ungrouped });
-                            }
-                            
+                          if (isEskom) {
+                            // Use dedicated Eskom matrix component
                             return (
-                              <Accordion type="multiple" className="space-y-2">
-                                {groupedTariffs.map((group) => (
-                                  <AccordionItem key={group.label} value={group.label} className="border rounded bg-muted/30">
-                                    <AccordionTrigger className="px-3 py-2 hover:no-underline">
-                                      <div className="flex items-center gap-2">
-                                        <Zap className="h-4 w-4 text-primary" />
-                                        <span className="font-medium text-sm">{group.label}</span>
-                                        <Badge variant="outline" className="text-xs">{group.tariffs.length}</Badge>
-                                      </div>
-                                    </AccordionTrigger>
-                                    <AccordionContent className="px-3 pb-3 space-y-2">
-                                      {group.tariffs.map((tariff) => (
-                                        <Collapsible key={tariff.id} open={expandedTariffs.has(tariff.id)}>
-                                          <div className="border rounded bg-background">
-                                            <div className="flex items-center justify-between p-2">
-                                              <CollapsibleTrigger
-                                                className="flex items-center gap-2 hover:opacity-80 flex-1"
-                                                onClick={() => toggleExpanded(tariff.id)}
-                                              >
-                                                {expandedTariffs.has(tariff.id) ? (
-                                                  <ChevronDown className="h-3 w-3" />
-                                                ) : (
-                                                  <ChevronRight className="h-3 w-3" />
-                                                )}
-                                                <span className="text-sm font-medium">{tariff.name}</span>
-                                              </CollapsibleTrigger>
-                                              <div className="flex items-center gap-2">
-                                                <Badge variant={tariff.tariff_type === "TOU" ? "secondary" : tariff.tariff_type === "IBT" ? "default" : "outline"} className="text-xs">
-                                                  {tariff.tariff_type}
-                                                </Badge>
-                                                {tariff.is_prepaid && (
-                                                  <Badge variant="outline" className="text-xs">Prepaid</Badge>
-                                                )}
-                                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteTariff.mutate(tariff.id)}>
-                                                  <Trash2 className="h-3 w-3 text-destructive" />
-                                                </Button>
-                                              </div>
-                                            </div>
-
-                                            <CollapsibleContent>
-                                              <div className="px-3 pb-3 pt-1 border-t space-y-3">
-                                                {/* Fixed Charges */}
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                                                  <div className="bg-accent/30 rounded p-2">
-                                                    <div className="text-muted-foreground">Basic Charge</div>
-                                                    <div className="font-medium">{formatCurrency(tariff.fixed_monthly_charge)}</div>
-                                                  </div>
-                                                  <div className="bg-accent/30 rounded p-2">
-                                                    <div className="text-muted-foreground">Demand Charge</div>
-                                                    <div className="font-medium">{formatCurrency(tariff.demand_charge_per_kva)}/kVA</div>
-                                                  </div>
-                                                  <div className="bg-accent/30 rounded p-2">
-                                                    <div className="text-muted-foreground">Phase</div>
-                                                    <div className="font-medium">{tariff.phase_type || "-"}</div>
-                                                  </div>
-                                                  <div className="bg-accent/30 rounded p-2">
-                                                    <div className="text-muted-foreground">Amperage</div>
-                                                    <div className="font-medium">{tariff.amperage_limit || "-"}</div>
-                                                  </div>
-                                                </div>
-
-                                                {/* Rates Table - lazy loaded */}
-                                                {loadingRates.has(tariff.id) ? (
-                                                  <div className="text-xs text-muted-foreground py-2">Loading rates...</div>
-                                                ) : tariffRates[tariff.id]?.length > 0 ? (
-                                                  <div>
-                                                    <div className="text-xs font-medium mb-2 text-foreground">Energy Rates</div>
-                                                    <div className="rounded border overflow-hidden">
-                                                      <Table>
-                                                        <TableHeader>
-                                                          <TableRow className="bg-muted/50">
-                                                            {tariff.has_seasonal_rates && (
-                                                              <TableHead className="text-xs py-2">Season</TableHead>
-                                                            )}
-                                                            {tariff.tariff_type === "TOU" && (
-                                                              <TableHead className="text-xs py-2">Time of Use</TableHead>
-                                                            )}
-                                                            {tariff.tariff_type === "IBT" && (
-                                                              <>
-                                                                <TableHead className="text-xs py-2">From (kWh)</TableHead>
-                                                                <TableHead className="text-xs py-2">To (kWh)</TableHead>
-                                                              </>
-                                                            )}
-                                                            <TableHead className="text-xs py-2">Rate</TableHead>
-                                                          </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                          {tariffRates[tariff.id].map((rate) => (
-                                                            <TableRow key={rate.id}>
-                                                              {tariff.has_seasonal_rates && (
-                                                                <TableCell className="text-xs py-1.5">{rate.season}</TableCell>
-                                                              )}
-                                                              {tariff.tariff_type === "TOU" && (
-                                                                <TableCell className="text-xs py-1.5">{rate.time_of_use}</TableCell>
-                                                              )}
-                                                              {tariff.tariff_type === "IBT" && (
-                                                                <>
-                                                                  <TableCell className="text-xs py-1.5">{rate.block_start_kwh}</TableCell>
-                                                                  <TableCell className="text-xs py-1.5">{rate.block_end_kwh ?? "∞"}</TableCell>
-                                                                </>
-                                                              )}
-                                                              <TableCell className="text-xs py-1.5 font-medium">{formatRate(rate.rate_per_kwh)}</TableCell>
-                                                            </TableRow>
-                                                          ))}
-                                                        </TableBody>
-                                                      </Table>
-                                                    </div>
-                                                  </div>
-                                                ) : null}
-                                              </div>
-                                            </CollapsibleContent>
-                                          </div>
-                                        </Collapsible>
-                                      ))}
-                                    </AccordionContent>
-                                  </AccordionItem>
-                                ))}
-                              </Accordion>
+                              <EskomTariffMatrix
+                                tariffs={municipality.tariffs as any}
+                                tariffRates={tariffRates}
+                                loadRatesForTariff={loadRatesForTariff}
+                                loadingRates={loadingRates}
+                                onDeleteTariff={(id) => deleteTariff.mutate(id)}
+                              />
                             );
                           }
                           
