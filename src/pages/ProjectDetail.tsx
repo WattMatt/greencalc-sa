@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet } from "lucide-react";
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
@@ -16,6 +16,8 @@ import { SolarForecastCard } from "@/components/projects/SolarForecastCard";
 import { ReportBuilder } from "@/components/reports/builder";
 import { ProjectOverview } from "@/components/projects/ProjectOverview";
 import { ProposalManager } from "@/components/projects/ProposalManager";
+import { SystemCostsManager, SystemCostsData } from "@/components/projects/SystemCostsManager";
+import { DEFAULT_SYSTEM_COSTS } from "@/components/projects/simulation/FinancialAnalysis";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -24,6 +26,14 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
+  
+  // System costs state (for payback calculations)
+  const [systemCosts, setSystemCosts] = useState<SystemCostsData>({
+    solarCostPerKwp: DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
+    batteryCostPerKwh: DEFAULT_SYSTEM_COSTS.batteryCostPerKwh,
+    installationCost: DEFAULT_SYSTEM_COSTS.installationCost ?? 0,
+    maintenancePerYear: DEFAULT_SYSTEM_COSTS.maintenancePerYear ?? 0,
+  });
 
   const { data: project, isLoading } = useQuery({
     queryKey: ["project", id],
@@ -170,6 +180,10 @@ export default function ProjectDetail() {
             <BarChart3 className="h-4 w-4 mr-2" />
             Load Profile
           </TabsTrigger>
+          <TabsTrigger value="costs">
+            <Wallet className="h-4 w-4 mr-2" />
+            Costs
+          </TabsTrigger>
           <TabsTrigger value="tariff">
             <DollarSign className="h-4 w-4 mr-2" />
             Tariff
@@ -219,6 +233,15 @@ export default function ProjectDetail() {
             connectionSizeKva={project.connection_size_kva}
             latitude={-33.9249} // Cape Town default - TODO: Add project coordinates
             longitude={18.4241}
+          />
+        </TabsContent>
+
+        <TabsContent value="costs" className="mt-6">
+          <SystemCostsManager
+            costs={systemCosts}
+            onChange={setSystemCosts}
+            solarCapacity={100}
+            batteryCapacity={50}
           />
         </TabsContent>
 
