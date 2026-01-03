@@ -17,8 +17,14 @@ type PhaseType = Database["public"]["Enums"]["phase_type"];
 type SeasonType = Database["public"]["Enums"]["season_type"];
 type TimeOfUseType = Database["public"]["Enums"]["time_of_use_type"];
 type VoltageLevel = "LV" | "MV" | "HV";
+type TransmissionZone = "Zone 0-300km" | "Zone 300-600km" | "Zone 600-900km" | "Zone >900km";
 
 const CUSTOMER_CATEGORIES = ["Domestic", "Commercial", "Industrial", "Agriculture", "Street Lighting"] as const;
+const TARIFF_FAMILIES = [
+  "Megaflex", "Miniflex", "Homepower", "Homeflex", "Homelight",
+  "Nightsave Urban Large", "Nightsave Urban Small", "Ruraflex", "Landrate",
+  "Nightsave Rural", "Landlight", "Municflex", "Municrate", "Transit", "Gen-wheeling"
+] as const;
 
 interface RateRow {
   id: string;
@@ -53,6 +59,14 @@ export function TariffBuilder() {
   // Critical Peak Pricing
   const [criticalPeakRate, setCriticalPeakRate] = useState("");
   const [criticalPeakHours, setCriticalPeakHours] = useState("");
+  // Unbundled Eskom charges (2025-2026)
+  const [isUnbundled, setIsUnbundled] = useState(false);
+  const [tariffFamily, setTariffFamily] = useState("");
+  const [transmissionZone, setTransmissionZone] = useState<TransmissionZone | "">("");
+  const [generationCapacityCharge, setGenerationCapacityCharge] = useState("");
+  const [legacyChargePerKwh, setLegacyChargePerKwh] = useState("");
+  const [serviceChargePerDay, setServiceChargePerDay] = useState("");
+  const [administrationChargePerDay, setAdministrationChargePerDay] = useState("");
 
   const { data: municipalities } = useQuery({
     queryKey: ["municipalities"],
@@ -97,6 +111,14 @@ export function TariffBuilder() {
           // Critical Peak Pricing
           critical_peak_rate: criticalPeakRate ? parseFloat(criticalPeakRate) : null,
           critical_peak_hours_per_month: criticalPeakHours ? parseInt(criticalPeakHours) : 0,
+          // Unbundled Eskom charges
+          is_unbundled: isUnbundled,
+          tariff_family: tariffFamily || null,
+          transmission_zone: transmissionZone || null,
+          generation_capacity_charge: generationCapacityCharge ? parseFloat(generationCapacityCharge) : null,
+          legacy_charge_per_kwh: legacyChargePerKwh ? parseFloat(legacyChargePerKwh) : null,
+          service_charge_per_day: serviceChargePerDay ? parseFloat(serviceChargePerDay) : null,
+          administration_charge_per_day: administrationChargePerDay ? parseFloat(administrationChargePerDay) : null,
         })
         .select()
         .single();
@@ -170,6 +192,14 @@ export function TariffBuilder() {
     // Reset Critical Peak fields
     setCriticalPeakRate("");
     setCriticalPeakHours("");
+    // Reset unbundled fields
+    setIsUnbundled(false);
+    setTariffFamily("");
+    setTransmissionZone("");
+    setGenerationCapacityCharge("");
+    setLegacyChargePerKwh("");
+    setServiceChargePerDay("");
+    setAdministrationChargePerDay("");
   };
 
   const addRateRow = () => {
@@ -395,7 +425,7 @@ export function TariffBuilder() {
           </div>
 
           {/* Toggles */}
-          <div className="flex gap-8">
+          <div className="flex flex-wrap gap-8">
             <div className="flex items-center space-x-2">
               <Switch
                 id="seasonal"
@@ -412,7 +442,105 @@ export function TariffBuilder() {
               />
               <Label htmlFor="prepaid">Prepaid Tariff</Label>
             </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="unbundled"
+                checked={isUnbundled}
+                onCheckedChange={setIsUnbundled}
+              />
+              <Label htmlFor="unbundled">Unbundled Tariff (Eskom 2025-26)</Label>
+            </div>
           </div>
+
+          {/* Unbundled Eskom Charges (2025-2026) */}
+          {isUnbundled && (
+            <div className="space-y-4 p-4 rounded-lg border border-primary/20 bg-primary/5">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                Unbundled Charges (Eskom 2025-26)
+                <span className="text-xs font-normal text-muted-foreground">Separate cost components</span>
+              </h3>
+              
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Tariff Family</Label>
+                  <Select value={tariffFamily} onValueChange={setTariffFamily}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select family" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TARIFF_FAMILIES.map((family) => (
+                        <SelectItem key={family} value={family}>{family}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Transmission Zone</Label>
+                  <Select value={transmissionZone} onValueChange={(v) => setTransmissionZone(v as TransmissionZone)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Distance from JHB" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Zone 0-300km">Zone 0-300km</SelectItem>
+                      <SelectItem value="Zone 300-600km">Zone 300-600km</SelectItem>
+                      <SelectItem value="Zone 600-900km">Zone 600-900km</SelectItem>
+                      <SelectItem value="Zone >900km">Zone &gt;900km</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Generation Capacity Charge (R/kVA/month)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={generationCapacityCharge}
+                    onChange={(e) => setGenerationCapacityCharge(e.target.value)}
+                    placeholder="GCC - new Eskom capacity charge"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Legacy Charge (c/kWh)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={legacyChargePerKwh}
+                    onChange={(e) => setLegacyChargePerKwh(e.target.value)}
+                    placeholder="Government energy programs"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Service Charge (R/day)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={serviceChargePerDay}
+                    onChange={(e) => setServiceChargePerDay(e.target.value)}
+                    placeholder="Daily service fee"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Administration Charge (R/day)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={administrationChargePerDay}
+                    onChange={(e) => setAdministrationChargePerDay(e.target.value)}
+                    placeholder="Daily admin fee"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                The 2025-26 Eskom tariffs are fully unbundled: GCC covers generation capacity, Legacy covers IPP procurement costs, 
+                and Network/Retail charges are separated. Transmission zones affect network costs based on distance from Johannesburg.
+              </p>
+            </div>
+          )}
 
           {/* Critical Peak Pricing (TOU only) */}
           {tariffType === "TOU" && (
