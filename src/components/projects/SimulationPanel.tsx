@@ -114,6 +114,14 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const [useSolcast, setUseSolcast] = useState(false);
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
   const [inverterConfig, setInverterConfig] = useState<InverterConfig>(getDefaultInverterConfig);
+  
+  // Configurable system costs (user can override defaults)
+  const [systemCosts, setSystemCosts] = useState({
+    solarCostPerKwp: DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
+    batteryCostPerKwh: DEFAULT_SYSTEM_COSTS.batteryCostPerKwh,
+    installationCost: DEFAULT_SYSTEM_COSTS.installationCost ?? 0,
+    maintenancePerYear: DEFAULT_SYSTEM_COSTS.maintenancePerYear ?? 0,
+  });
 
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, fetchForecast } = useSolcastForecast();
@@ -241,20 +249,20 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   }), [tariff, tariffRates]);
 
   const financialResults = useMemo(() =>
-    calculateFinancials(energyResults, tariffData, DEFAULT_SYSTEM_COSTS, solarCapacity, batteryCapacity),
-    [energyResults, tariffData, solarCapacity, batteryCapacity]
+    calculateFinancials(energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity),
+    [energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity]
   );
 
   const financialResultsGeneric = useMemo(() =>
-    calculateFinancials(energyResultsGeneric, tariffData, DEFAULT_SYSTEM_COSTS, solarCapacity, batteryCapacity),
-    [energyResultsGeneric, tariffData, solarCapacity, batteryCapacity]
+    calculateFinancials(energyResultsGeneric, tariffData, systemCosts, solarCapacity, batteryCapacity),
+    [energyResultsGeneric, tariffData, systemCosts, solarCapacity, batteryCapacity]
   );
 
   const financialResultsSolcast = useMemo(() =>
     energyResultsSolcast
-      ? calculateFinancials(energyResultsSolcast, tariffData, DEFAULT_SYSTEM_COSTS, solarCapacity, batteryCapacity)
+      ? calculateFinancials(energyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity)
       : null,
-    [energyResultsSolcast, tariffData, solarCapacity, batteryCapacity]
+    [energyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity]
   );
 
   // Annual scaling
@@ -278,7 +286,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
     return runAdvancedSimulation(
       energyResults,
       tariffData,
-      DEFAULT_SYSTEM_COSTS,
+      systemCosts,
       solarCapacity,
       batteryCapacity,
       advancedConfig
@@ -409,12 +417,130 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
           currentConfig={advancedConfig}
           energyResults={energyResults}
           tariffData={tariffData}
-          systemCosts={DEFAULT_SYSTEM_COSTS}
+          systemCosts={systemCosts}
           solarCapacity={solarCapacity}
           batteryCapacity={batteryCapacity}
           onApplyConfig={setAdvancedConfig}
         />
       )}
+
+      {/* System Costs Configuration */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" className="w-full justify-between">
+            <span className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              System Costs Configuration
+              <span className="text-xs text-muted-foreground ml-2">
+                R{systemCosts.solarCostPerKwp.toLocaleString()}/kWp • R{systemCosts.batteryCostPerKwh.toLocaleString()}/kWh
+              </span>
+            </span>
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">Cost Assumptions for Payback Calculation</CardTitle>
+              <CardDescription className="text-xs">
+                Enter your actual system costs to get accurate payback and ROI figures
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-2">
+                <Label className="text-xs">Solar Cost (R/kWp)</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground text-sm">R</span>
+                  <input
+                    type="number"
+                    value={systemCosts.solarCostPerKwp}
+                    onChange={(e) => setSystemCosts(prev => ({ ...prev, solarCostPerKwp: Number(e.target.value) || 0 }))}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    min={0}
+                    step={100}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Default: R{DEFAULT_SYSTEM_COSTS.solarCostPerKwp.toLocaleString()}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">Battery Cost (R/kWh)</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground text-sm">R</span>
+                  <input
+                    type="number"
+                    value={systemCosts.batteryCostPerKwh}
+                    onChange={(e) => setSystemCosts(prev => ({ ...prev, batteryCostPerKwh: Number(e.target.value) || 0 }))}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    min={0}
+                    step={100}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Default: R{DEFAULT_SYSTEM_COSTS.batteryCostPerKwh.toLocaleString()}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">Installation Cost (R)</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground text-sm">R</span>
+                  <input
+                    type="number"
+                    value={systemCosts.installationCost}
+                    onChange={(e) => setSystemCosts(prev => ({ ...prev, installationCost: Number(e.target.value) || 0 }))}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    min={0}
+                    step={1000}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Fixed installation cost
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">Annual Maintenance (R/year)</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground text-sm">R</span>
+                  <input
+                    type="number"
+                    value={systemCosts.maintenancePerYear}
+                    onChange={(e) => setSystemCosts(prev => ({ ...prev, maintenancePerYear: Number(e.target.value) || 0 }))}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    min={0}
+                    step={500}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Annual O&M costs
+                </p>
+              </div>
+            </CardContent>
+            <CardContent className="pt-0 pb-4">
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Total System Cost: </span>
+                  <span className="font-semibold">
+                    R{((solarCapacity * systemCosts.solarCostPerKwp) + (batteryCapacity * systemCosts.batteryCostPerKwh) + systemCosts.installationCost).toLocaleString()}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSystemCosts({
+                    solarCostPerKwp: DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
+                    batteryCostPerKwh: DEFAULT_SYSTEM_COSTS.batteryCostPerKwh,
+                    installationCost: DEFAULT_SYSTEM_COSTS.installationCost ?? 0,
+                    maintenancePerYear: DEFAULT_SYSTEM_COSTS.maintenancePerYear ?? 0,
+                  })}
+                >
+                  Reset to Defaults
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* System Configuration */}
       <div className="grid gap-6 md:grid-cols-3">
