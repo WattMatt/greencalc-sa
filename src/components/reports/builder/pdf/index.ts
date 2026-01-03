@@ -1,0 +1,1 @@
+export { generateProfessionalPDF } from "./generatePDF";
