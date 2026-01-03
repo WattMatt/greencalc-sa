@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -85,6 +86,7 @@ export function ReportBuilder({
   
   // AI Narrative state
   const [aiNarratives, setAiNarratives] = useState<AIProposalNarrative>({});
+  const [editedNarratives, setEditedNarratives] = useState<Partial<Record<SegmentType, string>>>({});
   const [isGeneratingNarrative, setIsGeneratingNarrative] = useState(false);
   const [aiNarrativeEnabled, setAiNarrativeEnabled] = useState(true);
 
@@ -367,9 +369,13 @@ export function ReportBuilder({
         
         let yPos = 40;
 
-        // Helper function to render AI narrative in PDF if available
+        // Helper function to render AI narrative in PDF if available (uses edited version if exists)
         const renderPDFNarrative = (sectionId: SegmentType, title: string, startY: number): number => {
-          const narrative = aiNarrativeEnabled && aiNarratives[sectionId]?.narrative;
+          const originalNarrative = aiNarrativeEnabled && aiNarratives[sectionId]?.narrative;
+          const editedNarrative = editedNarratives[sectionId];
+          const narrative = editedNarrative !== undefined ? editedNarrative : originalNarrative;
+          const isEdited = editedNarrative !== undefined && editedNarrative !== originalNarrative;
+          
           if (!narrative) return startY;
           
           // AI-Generated Professional Narrative box
@@ -381,12 +387,12 @@ export function ReportBuilder({
           pdf.setTextColor(22, 101, 52);
           pdf.text(title, margin + 4, startY + 6);
           
-          // AI badge
+          // AI badge (shows "Edited" if modified)
           pdf.setFillColor(220, 252, 231);
           pdf.roundedRect(pageWidth - margin - 28, startY + 2, 24, 6, 2, 2, "F");
           pdf.setFontSize(5);
           pdf.setTextColor(22, 101, 52);
-          pdf.text("AI-Generated", pageWidth - margin - 26, startY + 6);
+          pdf.text(isEdited ? "Edited" : "AI-Generated", pageWidth - margin - 26, startY + 6);
           
           pdf.setFontSize(8);
           pdf.setTextColor(60, 60, 60);
@@ -412,8 +418,11 @@ export function ReportBuilder({
             const connectionSize = projectDetails?.connection_size_kva;
             const location = projectDetails?.location;
 
-            // Check for AI-generated narrative
-            const aiSummary = aiNarrativeEnabled && aiNarratives.executive_summary?.narrative;
+            // Check for AI-generated narrative (use edited version if exists)
+            const originalAiSummary = aiNarrativeEnabled && aiNarratives.executive_summary?.narrative;
+            const editedSummary = editedNarratives.executive_summary;
+            const aiSummary = editedSummary !== undefined ? editedSummary : originalAiSummary;
+            const isSummaryEdited = editedSummary !== undefined && editedSummary !== originalAiSummary;
             
             if (aiSummary) {
               // AI-Generated Professional Narrative
@@ -425,12 +434,12 @@ export function ReportBuilder({
               pdf.setTextColor(22, 101, 52);
               pdf.text("Executive Summary", margin + 5, yPos + 8);
               
-              // AI badge
+              // AI badge (shows "Edited" if modified)
               pdf.setFillColor(220, 252, 231);
               pdf.roundedRect(pageWidth - margin - 35, yPos + 3, 30, 8, 2, 2, "F");
               pdf.setFontSize(6);
               pdf.setTextColor(22, 101, 52);
-              pdf.text("AI-Generated", pageWidth - margin - 33, yPos + 8);
+              pdf.text(isSummaryEdited ? "Edited" : "AI-Generated", pageWidth - margin - 33, yPos + 8);
               
               pdf.setFontSize(9);
               pdf.setTextColor(60, 60, 60);
@@ -1905,6 +1914,8 @@ export function ReportBuilder({
                         projectName={projectName}
                         aiNarratives={aiNarratives}
                         aiNarrativeEnabled={aiNarrativeEnabled}
+                        editedNarratives={editedNarratives}
+                        onEditNarrative={(id, val) => setEditedNarratives(prev => ({ ...prev, [id]: val }))}
                       />
                     </div>
 
@@ -1935,30 +1946,60 @@ export function ReportBuilder({
   );
 }
 
-// Reusable AI Narrative Block for preview
+// Reusable AI Narrative Block for preview with EDIT capability
 function AIPreviewNarrative({ 
   title, 
-  narrative, 
+  narrative,
+  editedNarrative,
+  onEdit,
+  segmentId,
   children 
 }: { 
   title: string; 
-  narrative?: string; 
+  narrative?: string;
+  editedNarrative?: string;
+  onEdit?: (segmentId: SegmentType, value: string) => void;
+  segmentId?: SegmentType;
   children?: React.ReactNode;
 }) {
-  if (!narrative) return null;
+  const [isEditing, setIsEditing] = useState(false);
+  const displayText = editedNarrative !== undefined ? editedNarrative : narrative;
+  
+  if (!narrative && !editedNarrative) return null;
   
   return (
     <div className="bg-emerald-50/50 dark:bg-emerald-950/20 rounded-lg p-2 space-y-1 border border-emerald-200/50 dark:border-emerald-800/50 mb-2">
       <div className="flex items-center justify-between">
         <p className="font-semibold text-[9px] text-emerald-700 dark:text-emerald-400">{title}</p>
-        <Badge variant="secondary" className="text-[6px] h-4 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300">
-          <Wand2 className="h-2 w-2 mr-0.5" />
-          AI
-        </Badge>
+        <div className="flex items-center gap-1">
+          {onEdit && segmentId && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-4 px-1 text-[6px]"
+              onClick={() => setIsEditing(!isEditing)}
+            >
+              {isEditing ? "Done" : "Edit"}
+            </Button>
+          )}
+          <Badge variant="secondary" className="text-[6px] h-4 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300">
+            <Wand2 className="h-2 w-2 mr-0.5" />
+            {editedNarrative !== undefined && editedNarrative !== narrative ? "Edited" : "AI"}
+          </Badge>
+        </div>
       </div>
-      <p className="text-[7px] text-muted-foreground leading-relaxed line-clamp-5">
-        {narrative}
-      </p>
+      {isEditing && onEdit && segmentId ? (
+        <Textarea
+          value={displayText || ""}
+          onChange={(e) => onEdit(segmentId, e.target.value)}
+          className="text-[7px] min-h-[60px] bg-background/50 border-emerald-200 dark:border-emerald-800"
+          placeholder="Edit the AI-generated narrative..."
+        />
+      ) : (
+        <p className="text-[7px] text-muted-foreground leading-relaxed line-clamp-5">
+          {displayText}
+        </p>
+      )}
       {children}
     </div>
   );
@@ -1971,7 +2012,9 @@ function SegmentPreviewContent({
   projectDetails,
   projectName,
   aiNarratives,
-  aiNarrativeEnabled
+  aiNarrativeEnabled,
+  editedNarratives,
+  onEditNarrative
 }: { 
   segmentId: SegmentType; 
   simulationData: any;
@@ -1979,9 +2022,12 @@ function SegmentPreviewContent({
   projectName?: string;
   aiNarratives?: AIProposalNarrative;
   aiNarrativeEnabled?: boolean;
+  editedNarratives?: Partial<Record<SegmentType, string>>;
+  onEditNarrative?: (segmentId: SegmentType, value: string) => void;
 }) {
   // Get AI narrative for this segment if available
   const aiNarrative = aiNarrativeEnabled ? aiNarratives?.[segmentId]?.narrative : undefined;
+  const editedNarrative = editedNarratives?.[segmentId];
   
   switch (segmentId) {
     case "executive_summary":
@@ -1994,25 +2040,21 @@ function SegmentPreviewContent({
       const connectionSize = projectDetails?.connection_size_kva;
       const location = projectDetails?.location;
       
-      // Check for AI narrative
-      const aiSummary = aiNarrativeEnabled && aiNarratives?.executive_summary?.narrative;
+      // Check for AI narrative (use edited version if exists)
+      const originalAiSummary = aiNarrativeEnabled && aiNarratives?.executive_summary?.narrative;
+      const hasAiSummary = originalAiSummary || editedNarratives?.executive_summary;
       
       return (
         <div className="space-y-2 text-xs">
           {/* Project Overview - AI or Static */}
-          {aiSummary ? (
-            <div className="bg-emerald-50/50 dark:bg-emerald-950/20 rounded-lg p-2 space-y-1 border border-emerald-200/50 dark:border-emerald-800/50">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-[9px] text-emerald-700 dark:text-emerald-400">Executive Summary</p>
-                <Badge variant="secondary" className="text-[6px] h-4 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300">
-                  <Wand2 className="h-2 w-2 mr-0.5" />
-                  AI
-                </Badge>
-              </div>
-              <p className="text-[7px] text-muted-foreground leading-relaxed line-clamp-6">
-                {aiSummary}
-              </p>
-            </div>
+          {hasAiSummary ? (
+            <AIPreviewNarrative 
+              title="Executive Summary" 
+              narrative={originalAiSummary || undefined}
+              editedNarrative={editedNarratives?.executive_summary}
+              onEdit={onEditNarrative}
+              segmentId="executive_summary"
+            />
           ) : (
             <div className="bg-muted/30 rounded-lg p-2 space-y-1">
               <p className="font-semibold text-[9px] text-foreground">Project Overview</p>
@@ -2073,7 +2115,7 @@ function SegmentPreviewContent({
     case "tariff_details":
       return (
         <div className="space-y-2 text-[9px]">
-          <AIPreviewNarrative title="Tariff Analysis" narrative={aiNarrative} />
+          <AIPreviewNarrative title="Tariff Analysis" narrative={aiNarrative} editedNarrative={editedNarrative} onEdit={onEditNarrative} segmentId={segmentId} />
           {/* TOU Clock Diagram */}
           <div className="flex items-center gap-3">
             <div className="relative w-16 h-16">
@@ -2168,7 +2210,7 @@ function SegmentPreviewContent({
       const ratioPosition = Math.min(100, Math.max(0, ((ratio - 1) / 0.6) * 100));
       return (
         <div className="space-y-3">
-          <AIPreviewNarrative title="DC/AC Analysis" narrative={aiNarrative} />
+          <AIPreviewNarrative title="DC/AC Analysis" narrative={aiNarrative} editedNarrative={editedNarrative} onEdit={onEditNarrative} segmentId={segmentId} />
           {/* Ratio scale with marker */}
           <div>
             <div className="flex items-center justify-between text-[9px] mb-1">
@@ -2230,7 +2272,7 @@ function SegmentPreviewContent({
       
       return (
         <div className="space-y-2">
-          <AIPreviewNarrative title="Financial Payback" narrative={aiNarrative} />
+          <AIPreviewNarrative title="Financial Payback" narrative={aiNarrative} editedNarrative={editedNarrative} onEdit={onEditNarrative} segmentId={segmentId} />
           {/* Cash flow chart */}
           <div className="relative h-14 bg-muted/30 rounded overflow-hidden">
             {/* Zero line */}
@@ -2318,7 +2360,7 @@ function SegmentPreviewContent({
       
       return (
         <div className="space-y-2">
-          <AIPreviewNarrative title="Sensitivity Analysis" narrative={aiNarrative} />
+          <AIPreviewNarrative title="Sensitivity Analysis" narrative={aiNarrative} editedNarrative={editedNarrative} onEdit={onEditNarrative} segmentId={segmentId} />
           <p className="text-[8px] text-muted-foreground">How payback changes with different scenarios</p>
           
           {/* Tariff Escalation */}
@@ -2378,7 +2420,7 @@ function SegmentPreviewContent({
       
       return (
         <div className="space-y-3">
-          <AIPreviewNarrative title="Environmental Impact" narrative={aiNarrative} />
+          <AIPreviewNarrative title="Environmental Impact" narrative={aiNarrative} editedNarrative={editedNarrative} onEdit={onEditNarrative} segmentId={segmentId} />
           {/* Main metrics with visual elements */}
           <div className="flex justify-around items-center">
             {/* CO2 donut */}
@@ -2423,7 +2465,7 @@ function SegmentPreviewContent({
       
       return (
         <div className="space-y-2">
-          <AIPreviewNarrative title="Energy Flow" narrative={aiNarrative} />
+          <AIPreviewNarrative title="Energy Flow" narrative={aiNarrative} editedNarrative={editedNarrative} onEdit={onEditNarrative} segmentId={segmentId} />
           <p className="text-[9px] font-medium">System Energy Distribution</p>
           
           {/* Simplified flow diagram */}
@@ -2480,7 +2522,7 @@ function SegmentPreviewContent({
       
       return (
         <div className="space-y-2">
-          <AIPreviewNarrative title="Monthly Yield" narrative={aiNarrative} />
+          <AIPreviewNarrative title="Monthly Yield" narrative={aiNarrative} editedNarrative={editedNarrative} onEdit={onEditNarrative} segmentId={segmentId} />
           <p className="text-[9px] font-medium">12-Month Solar Generation</p>
           
           {/* Mini bar chart */}
@@ -2523,7 +2565,7 @@ function SegmentPreviewContent({
       const inverterSize = Math.round((simulationData.solarCapacityKwp || 100) / (simulationData.dcAcRatio || 1.3));
       return (
         <div className="space-y-2">
-          <AIPreviewNarrative title="Engineering Specs" narrative={aiNarrative} />
+          <AIPreviewNarrative title="Engineering Specs" narrative={aiNarrative} editedNarrative={editedNarrative} onEdit={onEditNarrative} segmentId={segmentId} />
           {/* System diagram */}
           <div className="flex items-center justify-center gap-2 py-2">
             <div className="bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded px-2 py-1 text-center">
@@ -2582,7 +2624,7 @@ function SegmentPreviewContent({
 
       return (
         <div className="space-y-2">
-          <AIPreviewNarrative title="Sizing Alternatives" narrative={aiNarrative} />
+          <AIPreviewNarrative title="Sizing Alternatives" narrative={aiNarrative} editedNarrative={editedNarrative} onEdit={onEditNarrative} segmentId={segmentId} />
           <p className="text-[9px] font-medium">System Sizing Comparison</p>
           
           {/* Scenario comparison cards */}
