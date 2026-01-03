@@ -49,13 +49,21 @@ const infographicTypes: { type: InfographicType; label: string; icon: React.Elem
 
 interface InfographicGeneratorProps {
   data?: InfographicData;
+  projectId?: string;
   className?: string;
 }
 
-export function InfographicGenerator({ data, className }: InfographicGeneratorProps) {
+// Generate a cache key based on key simulation params
+const getCacheKey = (data: InfographicData, type: InfographicType): string => {
+  const keyParams = `${data.solarCapacityKwp}-${data.batteryCapacityKwh}-${data.annualSavings}-${type}`;
+  return keyParams.replace(/\./g, '_');
+};
+
+export function InfographicGenerator({ data, projectId, className }: InfographicGeneratorProps) {
   const [generated, setGenerated] = useState<Map<InfographicType, GeneratedInfographic>>(new Map());
   const [failed, setFailed] = useState<Set<InfographicType>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isLoadingCache, setIsLoadingCache] = useState(true);
   const [progress, setProgress] = useState({ current: 0, total: infographicTypes.length });
   const hasStartedGeneration = useRef(false);
 
@@ -72,14 +80,103 @@ export function InfographicGenerator({ data, className }: InfographicGeneratorPr
     ...data,
   };
 
-  // Auto-generate all infographics when data is available
+  // Load cached infographics on mount
+  useEffect(() => {
+    if (!projectId || !data?.solarCapacityKwp) {
+      setIsLoadingCache(false);
+      return;
+    }
+    loadCachedInfographics();
+  }, [projectId, data?.solarCapacityKwp]);
+
+  const loadCachedInfographics = async () => {
+    if (!projectId) return;
+    
+    setIsLoadingCache(true);
+    const cachedMap = new Map<InfographicType, GeneratedInfographic>();
+    
+    try {
+      for (const { type, label } of infographicTypes) {
+        const cacheKey = getCacheKey(defaultData, type);
+        const filePath = `${projectId}/${cacheKey}.png`;
+        
+        const { data: urlData } = supabase.storage
+          .from('report-infographics')
+          .getPublicUrl(filePath);
+        
+        // Check if file exists by making a HEAD request
+        const response = await fetch(urlData.publicUrl, { method: 'HEAD' });
+        if (response.ok) {
+          cachedMap.set(type, {
+            type,
+            imageUrl: urlData.publicUrl,
+            description: label,
+          });
+        }
+      }
+      
+      if (cachedMap.size > 0) {
+        setGenerated(cachedMap);
+        if (cachedMap.size === infographicTypes.length) {
+          hasStartedGeneration.current = true; // Prevent re-generation
+        }
+      }
+    } catch (error) {
+      console.error("Error loading cached infographics:", error);
+    } finally {
+      setIsLoadingCache(false);
+    }
+  };
+
+  const uploadToStorage = async (imageUrl: string, type: InfographicType): Promise<string | null> => {
+    if (!projectId) return imageUrl;
+    
+    try {
+      // Fetch the image as blob
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      
+      const cacheKey = getCacheKey(defaultData, type);
+      const filePath = `${projectId}/${cacheKey}.png`;
+      
+      // Upload to storage (upsert)
+      const { error: uploadError } = await supabase.storage
+        .from('report-infographics')
+        .upload(filePath, blob, { 
+          contentType: 'image/png',
+          upsert: true 
+        });
+      
+      if (uploadError) {
+        console.error("Error uploading infographic:", uploadError);
+        return imageUrl;
+      }
+      
+      // Return public URL
+      const { data: urlData } = supabase.storage
+        .from('report-infographics')
+        .getPublicUrl(filePath);
+      
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error("Error caching infographic:", error);
+      return imageUrl;
+    }
+  };
+
+  // Auto-generate missing infographics when data is available and cache is loaded
   useEffect(() => {
     if (hasStartedGeneration.current) return;
-    if (!data?.solarCapacityKwp) return; // Only generate when we have real simulation data
+    if (isLoadingCache) return;
+    if (!data?.solarCapacityKwp) return;
+    
+    // Check if we need to generate any infographics
+    const missingTypes = infographicTypes.filter(({ type }) => !generated.has(type));
+    if (missingTypes.length === 0) return;
     
     hasStartedGeneration.current = true;
-    generateAllInfographics();
-  }, [data?.solarCapacityKwp]);
+    generateMissingInfographics(missingTypes.map(t => t.type));
+  }, [data?.solarCapacityKwp, isLoadingCache, generated.size]);
 
   const generateSingleInfographic = async (type: InfographicType): Promise<boolean> => {
     try {
@@ -90,9 +187,12 @@ export function InfographicGenerator({ data, className }: InfographicGeneratorPr
       if (error) throw error;
       if (result.error) throw new Error(result.error);
 
+      // Cache to storage
+      const cachedUrl = await uploadToStorage(result.imageUrl, type);
+
       setGenerated(prev => new Map(prev).set(type, {
         type,
-        imageUrl: result.imageUrl,
+        imageUrl: cachedUrl || result.imageUrl,
         description: result.description,
       }));
       setFailed(prev => {
@@ -108,29 +208,28 @@ export function InfographicGenerator({ data, className }: InfographicGeneratorPr
     }
   };
 
-  const generateAllInfographics = async () => {
+  const generateMissingInfographics = async (types: InfographicType[]) => {
     setIsGenerating(true);
-    setProgress({ current: 0, total: infographicTypes.length });
+    setProgress({ current: 0, total: types.length });
     
     let successCount = 0;
-    for (let i = 0; i < infographicTypes.length; i++) {
-      const { type } = infographicTypes[i];
-      setProgress({ current: i + 1, total: infographicTypes.length });
-      const success = await generateSingleInfographic(type);
+    for (let i = 0; i < types.length; i++) {
+      setProgress({ current: i + 1, total: types.length });
+      const success = await generateSingleInfographic(types[i]);
       if (success) successCount++;
-      // Small delay between requests to avoid rate limiting
-      if (i < infographicTypes.length - 1) {
+      if (i < types.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
     
     setIsGenerating(false);
-    if (successCount === infographicTypes.length) {
-      toast.success("All infographics generated successfully");
+    if (successCount === types.length) {
+      toast.success("Infographics generated and cached");
     } else if (successCount > 0) {
-      toast.warning(`Generated ${successCount}/${infographicTypes.length} infographics`);
+      toast.warning(`Generated ${successCount}/${types.length} infographics`);
     }
   };
+
 
   const retryFailed = async () => {
     const failedTypes = Array.from(failed);

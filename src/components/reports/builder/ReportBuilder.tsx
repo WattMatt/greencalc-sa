@@ -375,6 +375,7 @@ export function ReportBuilder({
 
         <TabsContent value="infographics">
           <InfographicGenerator
+            projectId={projectId}
             data={{
               projectName,
               ...simulationData
