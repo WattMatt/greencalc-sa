@@ -699,20 +699,107 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                                     </AccordionTrigger>
                                     <AccordionContent className="px-3 pb-3 space-y-2">
                                       {group.tariffs.map((tariff) => (
-                                        <div key={tariff.id} className="flex items-center justify-between p-2 rounded border bg-background hover:bg-accent/20">
-                                          <div className="flex items-center gap-2 flex-1" onClick={() => toggleExpanded(tariff.id)}>
-                                            {expandedTariffs.has(tariff.id) ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                                            <span className="text-sm font-medium">{tariff.name}</span>
+                                        <Collapsible key={tariff.id} open={expandedTariffs.has(tariff.id)}>
+                                          <div className="border rounded bg-background">
+                                            <div className="flex items-center justify-between p-2">
+                                              <CollapsibleTrigger
+                                                className="flex items-center gap-2 hover:opacity-80 flex-1"
+                                                onClick={() => toggleExpanded(tariff.id)}
+                                              >
+                                                {expandedTariffs.has(tariff.id) ? (
+                                                  <ChevronDown className="h-3 w-3" />
+                                                ) : (
+                                                  <ChevronRight className="h-3 w-3" />
+                                                )}
+                                                <span className="text-sm font-medium">{tariff.name}</span>
+                                              </CollapsibleTrigger>
+                                              <div className="flex items-center gap-2">
+                                                <Badge variant={tariff.tariff_type === "TOU" ? "secondary" : tariff.tariff_type === "IBT" ? "default" : "outline"} className="text-xs">
+                                                  {tariff.tariff_type}
+                                                </Badge>
+                                                {tariff.is_prepaid && (
+                                                  <Badge variant="outline" className="text-xs">Prepaid</Badge>
+                                                )}
+                                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteTariff.mutate(tariff.id)}>
+                                                  <Trash2 className="h-3 w-3 text-destructive" />
+                                                </Button>
+                                              </div>
+                                            </div>
+
+                                            <CollapsibleContent>
+                                              <div className="px-3 pb-3 pt-1 border-t space-y-3">
+                                                {/* Fixed Charges */}
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                                                  <div className="bg-accent/30 rounded p-2">
+                                                    <div className="text-muted-foreground">Basic Charge</div>
+                                                    <div className="font-medium">{formatCurrency(tariff.fixed_monthly_charge)}</div>
+                                                  </div>
+                                                  <div className="bg-accent/30 rounded p-2">
+                                                    <div className="text-muted-foreground">Demand Charge</div>
+                                                    <div className="font-medium">{formatCurrency(tariff.demand_charge_per_kva)}/kVA</div>
+                                                  </div>
+                                                  <div className="bg-accent/30 rounded p-2">
+                                                    <div className="text-muted-foreground">Phase</div>
+                                                    <div className="font-medium">{tariff.phase_type || "-"}</div>
+                                                  </div>
+                                                  <div className="bg-accent/30 rounded p-2">
+                                                    <div className="text-muted-foreground">Amperage</div>
+                                                    <div className="font-medium">{tariff.amperage_limit || "-"}</div>
+                                                  </div>
+                                                </div>
+
+                                                {/* Rates Table - lazy loaded */}
+                                                {loadingRates.has(tariff.id) ? (
+                                                  <div className="text-xs text-muted-foreground py-2">Loading rates...</div>
+                                                ) : tariffRates[tariff.id]?.length > 0 ? (
+                                                  <div>
+                                                    <div className="text-xs font-medium mb-2 text-foreground">Energy Rates</div>
+                                                    <div className="rounded border overflow-hidden">
+                                                      <Table>
+                                                        <TableHeader>
+                                                          <TableRow className="bg-muted/50">
+                                                            {tariff.has_seasonal_rates && (
+                                                              <TableHead className="text-xs py-2">Season</TableHead>
+                                                            )}
+                                                            {tariff.tariff_type === "TOU" && (
+                                                              <TableHead className="text-xs py-2">Time of Use</TableHead>
+                                                            )}
+                                                            {tariff.tariff_type === "IBT" && (
+                                                              <>
+                                                                <TableHead className="text-xs py-2">From (kWh)</TableHead>
+                                                                <TableHead className="text-xs py-2">To (kWh)</TableHead>
+                                                              </>
+                                                            )}
+                                                            <TableHead className="text-xs py-2">Rate</TableHead>
+                                                          </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                          {tariffRates[tariff.id].map((rate) => (
+                                                            <TableRow key={rate.id}>
+                                                              {tariff.has_seasonal_rates && (
+                                                                <TableCell className="text-xs py-1.5">{rate.season}</TableCell>
+                                                              )}
+                                                              {tariff.tariff_type === "TOU" && (
+                                                                <TableCell className="text-xs py-1.5">{rate.time_of_use}</TableCell>
+                                                              )}
+                                                              {tariff.tariff_type === "IBT" && (
+                                                                <>
+                                                                  <TableCell className="text-xs py-1.5">{rate.block_start_kwh}</TableCell>
+                                                                  <TableCell className="text-xs py-1.5">{rate.block_end_kwh ?? "∞"}</TableCell>
+                                                                </>
+                                                              )}
+                                                              <TableCell className="text-xs py-1.5 font-medium">{formatRate(rate.rate_per_kwh)}</TableCell>
+                                                            </TableRow>
+                                                          ))}
+                                                        </TableBody>
+                                                      </Table>
+                                                    </div>
+                                                  </div>
+                                                ) : null}
+                                              </div>
+                                            </CollapsibleContent>
                                           </div>
-                                          <div className="flex items-center gap-2">
-                                            <Badge variant={tariff.tariff_type === "TOU" ? "secondary" : tariff.tariff_type === "IBT" ? "default" : "outline"} className="text-xs">
-                                              {tariff.tariff_type}
-                                            </Badge>
-                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteTariff.mutate(tariff.id)}>
-                                              <Trash2 className="h-3 w-3 text-destructive" />
-                                            </Button>
-                                          </div>
-                                        </div>
+                                        </Collapsible>
                                       ))}
                                     </AccordionContent>
                                   </AccordionItem>
