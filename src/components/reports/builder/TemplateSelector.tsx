@@ -33,7 +33,7 @@ const templates: TemplatePreset[] = [
     name: "Financial Report",
     description: "Complete financial analysis and projections",
     icon: FileText,
-    segments: ["executive_summary", "payback_timeline", "savings_breakdown", "monthly_yield"]
+    segments: ["executive_summary", "payback_timeline", "tariff_details", "savings_breakdown", "monthly_yield"]
   },
   {
     id: "custom",
