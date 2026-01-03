@@ -263,127 +263,577 @@ export function ReportBuilder({
         
         let yPos = 40;
 
-        // Render content based on segment type
+        // Render content based on segment type with INFOGRAPHICS
         switch (segment.id) {
           case "executive_summary":
-            pdf.setFontSize(12);
-            pdf.text("System Overview", margin, yPos);
-            yPos += 10;
+            // Draw metric cards infographic
+            const cardWidth = 50;
+            const cardHeight = 35;
+            const cardGap = 10;
+            const cardY = yPos;
             
-            autoTable(pdf, {
-              startY: yPos,
-              head: [["Metric", "Value"]],
-              body: [
-                ["Solar Capacity", `${simulationData.solarCapacityKwp} kWp`],
-                ["Battery Storage", `${simulationData.batteryCapacityKwh} kWh`],
-                ["DC/AC Ratio", `${(simulationData.dcAcRatio || 1.3).toFixed(2)}:1`],
-                ["Annual Savings", `R${Math.round(simulationData.annualSavings || 0).toLocaleString()}`],
-                ["Payback Period", `${(simulationData.paybackYears || 0).toFixed(1)} years`],
-                ["ROI", `${Math.round(simulationData.roiPercent || 0)}%`],
-              ],
-              theme: "striped",
-              headStyles: { fillColor: [34, 197, 94] },
-              margin: { left: margin, right: margin },
-            });
+            // Solar capacity card
+            pdf.setFillColor(240, 253, 244);
+            pdf.roundedRect(margin, cardY, cardWidth, cardHeight, 3, 3, "F");
+            pdf.setDrawColor(34, 197, 94);
+            pdf.roundedRect(margin, cardY, cardWidth, cardHeight, 3, 3, "S");
+            pdf.setFontSize(18);
+            pdf.setTextColor(34, 197, 94);
+            pdf.text(`${simulationData.solarCapacityKwp}`, margin + 5, cardY + 15);
+            pdf.setFontSize(10);
+            pdf.text("kWp", margin + 35, cardY + 15);
+            pdf.setFontSize(8);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("Solar Capacity", margin + 5, cardY + 28);
+
+            // Battery card
+            pdf.setFillColor(239, 246, 255);
+            pdf.roundedRect(margin + cardWidth + cardGap, cardY, cardWidth, cardHeight, 3, 3, "F");
+            pdf.setDrawColor(59, 130, 246);
+            pdf.roundedRect(margin + cardWidth + cardGap, cardY, cardWidth, cardHeight, 3, 3, "S");
+            pdf.setFontSize(18);
+            pdf.setTextColor(59, 130, 246);
+            pdf.text(`${simulationData.batteryCapacityKwh}`, margin + cardWidth + cardGap + 5, cardY + 15);
+            pdf.setFontSize(10);
+            pdf.text("kWh", margin + cardWidth + cardGap + 35, cardY + 15);
+            pdf.setFontSize(8);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("Battery Storage", margin + cardWidth + cardGap + 5, cardY + 28);
+
+            // Savings card
+            pdf.setFillColor(254, 252, 232);
+            pdf.roundedRect(margin + 2 * (cardWidth + cardGap), cardY, cardWidth, cardHeight, 3, 3, "F");
+            pdf.setDrawColor(234, 179, 8);
+            pdf.roundedRect(margin + 2 * (cardWidth + cardGap), cardY, cardWidth, cardHeight, 3, 3, "S");
+            pdf.setFontSize(14);
+            pdf.setTextColor(161, 98, 7);
+            pdf.text(`R${Math.round((simulationData.annualSavings || 0) / 1000)}k`, margin + 2 * (cardWidth + cardGap) + 5, cardY + 15);
+            pdf.setFontSize(8);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("Annual Savings", margin + 2 * (cardWidth + cardGap) + 5, cardY + 28);
+
+            yPos = cardY + cardHeight + 20;
+
+            // Draw ROI gauge infographic
+            pdf.setFontSize(12);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Return on Investment", margin, yPos);
+            yPos += 10;
+
+            // Semi-circle gauge for ROI
+            const gaugeX = pageWidth / 2;
+            const gaugeY = yPos + 40;
+            const gaugeRadius = 35;
+            const roiPct = Math.min(100, simulationData.roiPercent || 0);
+            
+            // Background arc
+            pdf.setDrawColor(230, 230, 230);
+            pdf.setLineWidth(8);
+            for (let angle = 180; angle <= 360; angle += 5) {
+              const rad = (angle * Math.PI) / 180;
+              const x = gaugeX + gaugeRadius * Math.cos(rad);
+              const y = gaugeY + gaugeRadius * Math.sin(rad);
+              if (angle === 180) {
+                pdf.moveTo(x, y);
+              }
+            }
+            
+            // Draw filled gauge background
+            pdf.setFillColor(240, 240, 240);
+            pdf.ellipse(gaugeX, gaugeY, gaugeRadius, gaugeRadius / 2, "F");
+            
+            // Draw colored progress arc
+            const progressAngle = 180 + (roiPct / 100) * 180;
+            pdf.setFillColor(34, 197, 94);
+            pdf.setDrawColor(34, 197, 94);
+            pdf.setLineWidth(6);
+            
+            // Draw arc segments
+            for (let angle = 180; angle < progressAngle; angle += 3) {
+              const rad1 = (angle * Math.PI) / 180;
+              const rad2 = ((angle + 3) * Math.PI) / 180;
+              const x1 = gaugeX + gaugeRadius * Math.cos(rad1);
+              const y1 = gaugeY + gaugeRadius * Math.sin(rad1) * 0.5;
+              const x2 = gaugeX + gaugeRadius * Math.cos(rad2);
+              const y2 = gaugeY + gaugeRadius * Math.sin(rad2) * 0.5;
+              pdf.line(x1, y1, x2, y2);
+            }
+
+            // Center value
+            pdf.setFontSize(24);
+            pdf.setTextColor(34, 197, 94);
+            pdf.text(`${Math.round(roiPct)}%`, gaugeX - 10, gaugeY + 5);
+            pdf.setFontSize(8);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("ROI", gaugeX - 5, gaugeY + 12);
+
+            yPos = gaugeY + 30;
+
+            // Payback timeline bar
+            pdf.setFontSize(10);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Payback Timeline", margin, yPos);
+            yPos += 8;
+            
+            const barWidth = pageWidth - 2 * margin;
+            const paybackPct = Math.min(100, ((simulationData.paybackYears || 5) / 25) * 100);
+            
+            pdf.setFillColor(240, 240, 240);
+            pdf.roundedRect(margin, yPos, barWidth, 10, 2, 2, "F");
+            
+            pdf.setFillColor(34, 197, 94);
+            pdf.roundedRect(margin, yPos, barWidth * (paybackPct / 100), 10, 2, 2, "F");
+            
+            // Marker
+            const markerX = margin + barWidth * (paybackPct / 100);
+            pdf.setFillColor(22, 163, 74);
+            pdf.circle(markerX, yPos + 5, 4, "F");
+            
+            pdf.setFontSize(8);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("0 yrs", margin, yPos + 18);
+            pdf.text(`${(simulationData.paybackYears || 5).toFixed(1)} yrs`, markerX - 8, yPos - 3);
+            pdf.text("25 yrs", margin + barWidth - 12, yPos + 18);
             break;
 
           case "tariff_details":
+            // TOU Clock Diagram
             pdf.setFontSize(12);
-            pdf.text("TOU Period Definitions (FY2026)", margin, yPos);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Time-of-Use Rate Periods (Weekday)", margin, yPos);
             yPos += 10;
             
-            autoTable(pdf, {
-              startY: yPos,
-              head: [["Period", "Weekday", "Saturday", "Sunday"]],
-              body: [
-                ["Peak", "06:00-08:00, 18:00-21:00", "07:00-12:00, 18:00-20:00", "—"],
-                ["Standard", "08:00-18:00, 21:00-22:00", "12:00-18:00, 20:00-22:00", "—"],
-                ["Off-Peak", "22:00-06:00", "22:00-07:00", "All Day"],
-              ],
-              theme: "striped",
-              headStyles: { fillColor: [34, 197, 94] },
-              margin: { left: margin, right: margin },
+            // Draw 24-hour clock
+            const clockX = pageWidth / 2;
+            const clockY = yPos + 50;
+            const clockRadius = 40;
+            
+            // Draw clock segments for each hour
+            for (let hour = 0; hour < 24; hour++) {
+              const startAngle = ((hour - 6) * 15 - 90) * Math.PI / 180;
+              const endAngle = ((hour - 5) * 15 - 90) * Math.PI / 180;
+              
+              // Determine period color
+              let color: [number, number, number];
+              if ((hour >= 6 && hour < 8) || (hour >= 18 && hour < 21)) {
+                color = [239, 68, 68]; // Peak - red
+              } else if ((hour >= 8 && hour < 18) || (hour >= 21 && hour < 22)) {
+                color = [245, 158, 11]; // Standard - amber
+              } else {
+                color = [34, 197, 94]; // Off-peak - green
+              }
+              
+              pdf.setFillColor(...color);
+              
+              // Draw pie segment
+              const innerRadius = clockRadius * 0.5;
+              pdf.setDrawColor(255, 255, 255);
+              pdf.setLineWidth(0.5);
+              
+              // Create wedge
+              const x1 = clockX + innerRadius * Math.cos(startAngle);
+              const y1 = clockY + innerRadius * Math.sin(startAngle);
+              const x2 = clockX + clockRadius * Math.cos(startAngle);
+              const y2 = clockY + clockRadius * Math.sin(startAngle);
+              const x3 = clockX + clockRadius * Math.cos(endAngle);
+              const y3 = clockY + clockRadius * Math.sin(endAngle);
+              const x4 = clockX + innerRadius * Math.cos(endAngle);
+              const y4 = clockY + innerRadius * Math.sin(endAngle);
+              
+              // Approximate wedge with triangle
+              pdf.triangle(x1, y1, x2, y2, x3, y3, "F");
+              pdf.triangle(x1, y1, x3, y3, x4, y4, "F");
+            }
+            
+            // Center circle
+            pdf.setFillColor(255, 255, 255);
+            pdf.circle(clockX, clockY, clockRadius * 0.4, "F");
+            
+            // Hour labels
+            pdf.setFontSize(6);
+            pdf.setTextColor(80, 80, 80);
+            [0, 6, 12, 18].forEach(hour => {
+              const angle = ((hour - 6) * 15 - 90) * Math.PI / 180;
+              const labelRadius = clockRadius + 8;
+              const x = clockX + labelRadius * Math.cos(angle);
+              const y = clockY + labelRadius * Math.sin(angle);
+              pdf.text(`${hour}:00`, x - 6, y + 2);
             });
             
-            yPos = (pdf as any).lastAutoTable.finalY + 15;
+            // Legend
+            yPos = clockY + clockRadius + 20;
+            
+            // Peak legend
+            pdf.setFillColor(239, 68, 68);
+            pdf.rect(margin, yPos, 8, 8, "F");
+            pdf.setFontSize(9);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Peak (06:00-08:00, 18:00-21:00)", margin + 12, yPos + 6);
+            
+            // Standard legend
+            pdf.setFillColor(245, 158, 11);
+            pdf.rect(margin + 80, yPos, 8, 8, "F");
+            pdf.text("Standard (08:00-18:00, 21:00-22:00)", margin + 92, yPos + 6);
+            
+            yPos += 15;
+            
+            // Off-peak legend
+            pdf.setFillColor(34, 197, 94);
+            pdf.rect(margin, yPos, 8, 8, "F");
+            pdf.text("Off-Peak (22:00-06:00)", margin + 12, yPos + 6);
+            
+            yPos += 20;
+            
+            // Seasonal calendar visual
+            pdf.setFontSize(12);
+            pdf.setTextColor(0, 0, 0);
             pdf.text("Seasonal Calendar", margin, yPos);
             yPos += 8;
-            pdf.setFontSize(10);
+            
+            const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+            const monthWidth = (pageWidth - 2 * margin) / 12;
+            
+            months.forEach((m, i) => {
+              const isWinter = i >= 5 && i <= 7;
+              pdf.setFillColor(isWinter ? 239 : 34, isWinter ? 68 : 197, isWinter ? 68 : 94);
+              pdf.roundedRect(margin + i * monthWidth, yPos, monthWidth - 2, 20, 2, 2, "F");
+              pdf.setFontSize(10);
+              pdf.setTextColor(255, 255, 255);
+              pdf.text(m, margin + i * monthWidth + monthWidth / 2 - 3, yPos + 13);
+            });
+            
+            yPos += 28;
+            pdf.setFontSize(8);
             pdf.setTextColor(100, 100, 100);
-            pdf.text("High Demand (Winter): June - August", margin, yPos);
-            yPos += 6;
-            pdf.text("Low Demand (Summer): September - May", margin, yPos);
+            pdf.setFillColor(239, 68, 68);
+            pdf.rect(margin, yPos, 8, 8, "F");
+            pdf.text("High Demand (Winter)", margin + 12, yPos + 6);
+            pdf.setFillColor(34, 197, 94);
+            pdf.rect(margin + 60, yPos, 8, 8, "F");
+            pdf.text("Low Demand (Summer)", margin + 72, yPos + 6);
             break;
 
           case "dcac_comparison":
-            pdf.setFontSize(12);
-            pdf.text(`DC/AC Ratio: ${(simulationData.dcAcRatio || 1.3).toFixed(2)}:1`, margin, yPos);
-            yPos += 10;
-            pdf.setFontSize(10);
-            pdf.setTextColor(100, 100, 100);
-            pdf.text("A higher DC/AC ratio (oversizing) captures more energy in morning", margin, yPos);
-            yPos += 5;
-            pdf.text("and afternoon hours, improving overall ROI despite minor clipping losses.", margin, yPos);
+            // DC/AC Ratio gauge
+            const dcacRatio = simulationData.dcAcRatio || 1.3;
             
+            pdf.setFontSize(12);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("DC/AC Oversizing Ratio Analysis", margin, yPos);
             yPos += 15;
-            autoTable(pdf, {
-              startY: yPos,
-              head: [["Ratio Range", "Classification", "Clipping Risk", "ROI Impact"]],
-              body: [
-                ["1.0 - 1.1", "Conservative", "None", "Baseline"],
-                ["1.1 - 1.3", "Optimal", "Minimal (<2%)", "Best ROI"],
-                ["1.3 - 1.5", "Aggressive", "Moderate (2-5%)", "Higher yield"],
-                [">1.5", "High", "Significant (>5%)", "Diminishing returns"],
-              ],
-              theme: "striped",
-              headStyles: { fillColor: [34, 197, 94] },
-              margin: { left: margin, right: margin },
-            });
+            
+            // Draw horizontal ratio scale
+            const scaleWidth = pageWidth - 2 * margin;
+            const scaleHeight = 20;
+            
+            // Gradient bar (green -> yellow -> red)
+            const segmentWidth = scaleWidth / 4;
+            
+            // Conservative (green)
+            pdf.setFillColor(34, 197, 94);
+            pdf.rect(margin, yPos, segmentWidth, scaleHeight, "F");
+            
+            // Optimal (lighter green)
+            pdf.setFillColor(74, 222, 128);
+            pdf.rect(margin + segmentWidth, yPos, segmentWidth, scaleHeight, "F");
+            
+            // Aggressive (yellow)
+            pdf.setFillColor(250, 204, 21);
+            pdf.rect(margin + 2 * segmentWidth, yPos, segmentWidth, scaleHeight, "F");
+            
+            // High (red)
+            pdf.setFillColor(239, 68, 68);
+            pdf.rect(margin + 3 * segmentWidth, yPos, segmentWidth, scaleHeight, "F");
+            
+            // Current ratio marker
+            const ratioPosition = Math.min(1, Math.max(0, (dcacRatio - 1) / 0.6));
+            const markerPosX = margin + ratioPosition * scaleWidth;
+            
+            pdf.setFillColor(0, 0, 0);
+            pdf.triangle(markerPosX - 5, yPos - 3, markerPosX + 5, yPos - 3, markerPosX, yPos + 3, "F");
+            pdf.setFontSize(10);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text(`${dcacRatio.toFixed(2)}:1`, markerPosX - 8, yPos - 8);
+            
+            // Scale labels
+            yPos += scaleHeight + 5;
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("1.0", margin, yPos + 5);
+            pdf.text("1.15", margin + segmentWidth - 5, yPos + 5);
+            pdf.text("1.3", margin + 2 * segmentWidth - 3, yPos + 5);
+            pdf.text("1.45", margin + 3 * segmentWidth - 5, yPos + 5);
+            pdf.text("1.6+", margin + scaleWidth - 8, yPos + 5);
+            
+            // Category labels
+            yPos += 12;
+            pdf.setFontSize(8);
+            pdf.text("Conservative", margin + segmentWidth / 2 - 15, yPos);
+            pdf.text("Optimal", margin + 1.5 * segmentWidth - 10, yPos);
+            pdf.text("Aggressive", margin + 2.5 * segmentWidth - 12, yPos);
+            pdf.text("High Risk", margin + 3.5 * segmentWidth - 12, yPos);
+            
+            yPos += 20;
+            
+            // Energy capture visualization
+            pdf.setFontSize(11);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Daily Energy Capture Profile", margin, yPos);
+            yPos += 10;
+            
+            // Draw sun path curve
+            const graphWidth = scaleWidth;
+            const graphHeight = 50;
+            
+            // Background
+            pdf.setFillColor(250, 250, 250);
+            pdf.rect(margin, yPos, graphWidth, graphHeight, "F");
+            
+            // Grid lines
+            pdf.setDrawColor(230, 230, 230);
+            pdf.setLineWidth(0.3);
+            for (let i = 1; i < 4; i++) {
+              pdf.line(margin, yPos + i * graphHeight / 4, margin + graphWidth, yPos + i * graphHeight / 4);
+            }
+            
+            // Inverter limit line
+            const inverterLimit = graphHeight * 0.7;
+            pdf.setDrawColor(239, 68, 68);
+            pdf.setLineWidth(1);
+            pdf.line(margin, yPos + graphHeight - inverterLimit, margin + graphWidth, yPos + graphHeight - inverterLimit);
+            
+            // Solar production curve
+            pdf.setDrawColor(34, 197, 94);
+            pdf.setLineWidth(2);
+            const points: Array<[number, number]> = [];
+            for (let x = 0; x <= graphWidth; x += 3) {
+              const hour = 5 + (x / graphWidth) * 14; // 5am to 7pm
+              const normalizedHour = (hour - 12) / 7;
+              const production = Math.max(0, 1 - normalizedHour * normalizedHour) * dcacRatio;
+              const y = yPos + graphHeight - production * graphHeight * 0.5;
+              points.push([margin + x, y]);
+            }
+            
+            for (let i = 1; i < points.length; i++) {
+              pdf.line(points[i - 1][0], points[i - 1][1], points[i][0], points[i][1]);
+            }
+            
+            // Clipping area shading
+            pdf.setFillColor(239, 68, 68, 0.3);
+            
+            yPos += graphHeight + 10;
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("5:00", margin, yPos);
+            pdf.text("12:00", margin + graphWidth / 2 - 8, yPos);
+            pdf.text("19:00", margin + graphWidth - 12, yPos);
+            
+            pdf.setFillColor(34, 197, 94);
+            pdf.rect(margin + graphWidth - 60, yPos - 8, 6, 6, "F");
+            pdf.text("Solar Output", margin + graphWidth - 50, yPos - 3);
+            
+            pdf.setFillColor(239, 68, 68);
+            pdf.rect(margin + graphWidth - 60, yPos + 2, 6, 6, "F");
+            pdf.text("Inverter Limit", margin + graphWidth - 50, yPos + 7);
             break;
 
           case "payback_timeline":
-            const payback = simulationData.paybackYears || 5;
+            const paybackYrs = simulationData.paybackYears || 5;
+            const annualSave = simulationData.annualSavings || 250000;
+            const systemCost = (simulationData.solarCapacityKwp || 100) * 12000;
+            
             pdf.setFontSize(12);
-            pdf.text(`Break-even: Year ${payback.toFixed(1)}`, margin, yPos);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Investment Payback Analysis", margin, yPos);
             yPos += 15;
             
-            autoTable(pdf, {
-              startY: yPos,
-              head: [["Year", "Cumulative Savings", "Net Position"]],
-              body: Array.from({ length: 10 }, (_, i) => {
-                const year = i + 1;
-                const savings = (simulationData.annualSavings || 250000) * year;
-                const cost = (simulationData.solarCapacityKwp || 100) * 12000;
-                return [
-                  `Year ${year}`,
-                  `R${savings.toLocaleString()}`,
-                  savings >= cost ? `+R${(savings - cost).toLocaleString()}` : `-R${(cost - savings).toLocaleString()}`
-                ];
-              }),
-              theme: "striped",
-              headStyles: { fillColor: [34, 197, 94] },
-              margin: { left: margin, right: margin },
-            });
+            // Draw cumulative cash flow chart
+            const chartWidth = pageWidth - 2 * margin;
+            const chartHeight = 80;
+            
+            // Background
+            pdf.setFillColor(250, 250, 250);
+            pdf.rect(margin, yPos, chartWidth, chartHeight, "F");
+            
+            // Zero line
+            const zeroY = yPos + chartHeight * 0.4;
+            pdf.setDrawColor(200, 200, 200);
+            pdf.setLineWidth(0.5);
+            pdf.line(margin, zeroY, margin + chartWidth, zeroY);
+            
+            // Draw cash flow curve
+            pdf.setDrawColor(34, 197, 94);
+            pdf.setLineWidth(2);
+            
+            const years = 10;
+            const yearWidth = chartWidth / years;
+            const maxValue = annualSave * years;
+            const minValue = -systemCost;
+            const valueRange = maxValue - minValue;
+            
+            let prevX = margin;
+            let prevY = zeroY + (systemCost / valueRange) * chartHeight * 0.5;
+            
+            for (let yr = 0; yr <= years; yr++) {
+              const cumulative = annualSave * yr - systemCost;
+              const x = margin + yr * yearWidth;
+              const y = zeroY - (cumulative / valueRange) * chartHeight * 0.8;
+              
+              if (yr > 0) {
+                pdf.line(prevX, prevY, x, y);
+              }
+              
+              // Mark payback point
+              if (yr === Math.ceil(paybackYrs)) {
+                pdf.setFillColor(34, 197, 94);
+                pdf.circle(x, y, 3, "F");
+                pdf.setFontSize(8);
+                pdf.setTextColor(34, 197, 94);
+                pdf.text(`Break-even: Year ${paybackYrs.toFixed(1)}`, x - 20, y - 8);
+              }
+              
+              prevX = x;
+              prevY = y;
+            }
+            
+            // Shade positive area
+            pdf.setFillColor(34, 197, 94);
+            for (let yr = Math.ceil(paybackYrs); yr <= years; yr++) {
+              const x = margin + yr * yearWidth;
+              pdf.setFillColor(220, 252, 231);
+              pdf.rect(x - yearWidth / 2, zeroY - 30, yearWidth, 30, "F");
+            }
+            
+            // Shade negative area
+            pdf.setFillColor(254, 226, 226);
+            for (let yr = 0; yr < Math.ceil(paybackYrs); yr++) {
+              const x = margin + yr * yearWidth;
+              pdf.rect(x, zeroY, yearWidth, 20, "F");
+            }
+            
+            // Y-axis labels
+            yPos += chartHeight + 8;
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            for (let yr = 0; yr <= years; yr += 2) {
+              pdf.text(`Y${yr}`, margin + yr * yearWidth - 3, yPos);
+            }
+            
+            yPos += 15;
+            
+            // Summary cards
+            const summaryY = yPos;
+            const summaryCardWidth = (chartWidth - 20) / 3;
+            
+            // Initial investment card
+            pdf.setFillColor(254, 226, 226);
+            pdf.roundedRect(margin, summaryY, summaryCardWidth, 30, 3, 3, "F");
+            pdf.setFontSize(10);
+            pdf.setTextColor(185, 28, 28);
+            pdf.text(`-R${(systemCost / 1000).toFixed(0)}k`, margin + 5, summaryY + 12);
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("Initial Investment", margin + 5, summaryY + 22);
+            
+            // Break-even card
+            pdf.setFillColor(254, 249, 195);
+            pdf.roundedRect(margin + summaryCardWidth + 10, summaryY, summaryCardWidth, 30, 3, 3, "F");
+            pdf.setFontSize(10);
+            pdf.setTextColor(161, 98, 7);
+            pdf.text(`${paybackYrs.toFixed(1)} Years`, margin + summaryCardWidth + 15, summaryY + 12);
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("Payback Period", margin + summaryCardWidth + 15, summaryY + 22);
+            
+            // 25-year returns card
+            const total25yr = annualSave * 25 - systemCost;
+            pdf.setFillColor(220, 252, 231);
+            pdf.roundedRect(margin + 2 * (summaryCardWidth + 10), summaryY, summaryCardWidth, 30, 3, 3, "F");
+            pdf.setFontSize(10);
+            pdf.setTextColor(22, 163, 74);
+            pdf.text(`+R${(total25yr / 1000000).toFixed(1)}M`, margin + 2 * (summaryCardWidth + 10) + 5, summaryY + 12);
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("25-Year Returns", margin + 2 * (summaryCardWidth + 10) + 5, summaryY + 22);
             break;
 
           case "environmental_impact":
-            const co2 = simulationData.co2AvoidedTons || 120;
+            const co2Tons = simulationData.co2AvoidedTons || 120;
+            
             pdf.setFontSize(12);
-            pdf.text("Environmental Benefits", margin, yPos);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Environmental Impact Visualization", margin, yPos);
+            yPos += 20;
+            
+            // CO2 circular infographic
+            const envCenterX = pageWidth / 3;
+            const envCenterY = yPos + 40;
+            const envRadius = 35;
+            
+            // Outer ring
+            pdf.setFillColor(220, 252, 231);
+            pdf.circle(envCenterX, envCenterY, envRadius, "F");
+            pdf.setFillColor(255, 255, 255);
+            pdf.circle(envCenterX, envCenterY, envRadius * 0.65, "F");
+            
+            // CO2 text
+            pdf.setFontSize(20);
+            pdf.setTextColor(22, 163, 74);
+            pdf.text(`${Math.round(co2Tons)}`, envCenterX - 15, envCenterY);
+            pdf.setFontSize(8);
+            pdf.text("tonnes CO₂/yr", envCenterX - 18, envCenterY + 10);
+            
+            // Trees visualization
+            const treeCenterX = pageWidth * 2 / 3;
+            const treeCenterY = envCenterY;
+            const treesEquiv = Math.round(co2Tons * 45);
+            
+            // Tree icons (simplified)
+            pdf.setFillColor(34, 197, 94);
+            for (let i = 0; i < 9; i++) {
+              const row = Math.floor(i / 3);
+              const col = i % 3;
+              const tx = treeCenterX - 20 + col * 20;
+              const ty = treeCenterY - 20 + row * 18;
+              
+              // Tree trunk
+              pdf.setFillColor(139, 69, 19);
+              pdf.rect(tx + 3, ty + 8, 4, 8, "F");
+              
+              // Tree foliage
+              pdf.setFillColor(34, 197, 94);
+              pdf.triangle(tx, ty + 10, tx + 10, ty + 10, tx + 5, ty - 2, "F");
+            }
+            
+            pdf.setFontSize(14);
+            pdf.setTextColor(22, 163, 74);
+            pdf.text(`${treesEquiv.toLocaleString()}`, treeCenterX - 15, treeCenterY + 40);
+            pdf.setFontSize(8);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("Trees Equivalent", treeCenterX - 18, treeCenterY + 48);
+            
+            yPos = envCenterY + 60;
+            
+            // 25-year impact bar
+            pdf.setFontSize(11);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("25-Year Lifetime Impact", margin, yPos);
             yPos += 10;
             
-            autoTable(pdf, {
-              startY: yPos,
-              head: [["Metric", "Annual", "25-Year Lifetime"]],
-              body: [
-                ["CO₂ Avoided", `${Math.round(co2)} tonnes`, `${Math.round(co2 * 25).toLocaleString()} tonnes`],
-                ["Trees Equivalent", `${Math.round(co2 * 45)}`, `${Math.round(co2 * 45 * 25).toLocaleString()}`],
-                ["Cars Off Road", `${Math.round(co2 / 4)}`, `${Math.round(co2 / 4 * 25)}`],
-              ],
-              theme: "striped",
-              headStyles: { fillColor: [34, 197, 94] },
-              margin: { left: margin, right: margin },
-            });
+            const impactBarWidth = pageWidth - 2 * margin;
+            const lifetime25 = co2Tons * 25;
+            
+            // Background bar
+            pdf.setFillColor(220, 252, 231);
+            pdf.roundedRect(margin, yPos, impactBarWidth, 25, 5, 5, "F");
+            
+            // Icon and text
+            pdf.setFontSize(16);
+            pdf.setTextColor(22, 163, 74);
+            pdf.text(`${lifetime25.toLocaleString()} tonnes CO₂`, margin + 10, yPos + 16);
+            pdf.setFontSize(9);
+            pdf.setTextColor(80, 80, 80);
+            pdf.text(`≈ ${Math.round(lifetime25 * 45).toLocaleString()} trees  •  ${Math.round(lifetime25 / 4).toLocaleString()} cars off the road`, margin + 100, yPos + 16);
             break;
 
           case "engineering_specs":
@@ -391,17 +841,76 @@ export function ReportBuilder({
             pdf.text("Technical Specifications", margin, yPos);
             yPos += 10;
             
+            // System diagram
+            const diagY = yPos;
+            const diagHeight = 60;
+            const boxWidth = 45;
+            const boxHeight = 30;
+            
+            // PV Array box
+            pdf.setFillColor(254, 249, 195);
+            pdf.roundedRect(margin, diagY + 15, boxWidth, boxHeight, 3, 3, "F");
+            pdf.setDrawColor(234, 179, 8);
+            pdf.roundedRect(margin, diagY + 15, boxWidth, boxHeight, 3, 3, "S");
+            pdf.setFontSize(8);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("PV Array", margin + 8, diagY + 28);
+            pdf.setFontSize(10);
+            pdf.setTextColor(161, 98, 7);
+            pdf.text(`${simulationData.solarCapacityKwp}kWp`, margin + 8, diagY + 38);
+            
+            // Arrow
+            pdf.setDrawColor(150, 150, 150);
+            pdf.setLineWidth(1);
+            pdf.line(margin + boxWidth + 5, diagY + 30, margin + boxWidth + 20, diagY + 30);
+            pdf.triangle(margin + boxWidth + 20, diagY + 27, margin + boxWidth + 20, diagY + 33, margin + boxWidth + 25, diagY + 30, "F");
+            
+            // Inverter box
+            const invX = margin + boxWidth + 30;
+            pdf.setFillColor(239, 246, 255);
+            pdf.roundedRect(invX, diagY + 15, boxWidth, boxHeight, 3, 3, "F");
+            pdf.setDrawColor(59, 130, 246);
+            pdf.roundedRect(invX, diagY + 15, boxWidth, boxHeight, 3, 3, "S");
+            pdf.setFontSize(8);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Inverter", invX + 10, diagY + 28);
+            pdf.setFontSize(10);
+            pdf.setTextColor(37, 99, 235);
+            const inverterSize = Math.round((simulationData.solarCapacityKwp || 100) / (simulationData.dcAcRatio || 1.3));
+            pdf.text(`${inverterSize}kW`, invX + 12, diagY + 38);
+            
+            // Arrow to grid/battery
+            pdf.setDrawColor(150, 150, 150);
+            pdf.line(invX + boxWidth + 5, diagY + 30, invX + boxWidth + 20, diagY + 30);
+            
+            // Battery box (if applicable)
+            if (simulationData.batteryCapacityKwh > 0) {
+              const batX = invX + boxWidth + 25;
+              pdf.setFillColor(240, 253, 244);
+              pdf.roundedRect(batX, diagY + 15, boxWidth, boxHeight, 3, 3, "F");
+              pdf.setDrawColor(34, 197, 94);
+              pdf.roundedRect(batX, diagY + 15, boxWidth, boxHeight, 3, 3, "S");
+              pdf.setFontSize(8);
+              pdf.setTextColor(0, 0, 0);
+              pdf.text("Battery", batX + 10, diagY + 28);
+              pdf.setFontSize(10);
+              pdf.setTextColor(22, 163, 74);
+              pdf.text(`${simulationData.batteryCapacityKwh}kWh`, batX + 6, diagY + 38);
+            }
+            
+            yPos = diagY + diagHeight + 15;
+            
+            // Specs table with visual highlights
             autoTable(pdf, {
               startY: yPos,
-              head: [["Component", "Specification"]],
+              head: [["Component", "Specification", "Notes"]],
               body: [
-                ["PV Array Size", `${simulationData.solarCapacityKwp} kWp`],
-                ["DC/AC Ratio", `${(simulationData.dcAcRatio || 1.3).toFixed(2)}:1`],
-                ["Inverter Size", `${Math.round((simulationData.solarCapacityKwp || 100) / (simulationData.dcAcRatio || 1.3))} kW`],
-                ["Battery Capacity", `${simulationData.batteryCapacityKwh} kWh`],
-                ["Battery Power", `${Math.round((simulationData.batteryCapacityKwh || 50) / 2)} kW`],
-                ["Expected Performance Ratio", "80-82%"],
-                ["Specific Yield", "~1,600 kWh/kWp/year"],
+                ["PV Array Size", `${simulationData.solarCapacityKwp} kWp`, "DC capacity"],
+                ["DC/AC Ratio", `${(simulationData.dcAcRatio || 1.3).toFixed(2)}:1`, "Oversizing factor"],
+                ["Inverter Capacity", `${inverterSize} kW`, "AC capacity"],
+                ["Battery Storage", `${simulationData.batteryCapacityKwh} kWh`, "Usable capacity"],
+                ["Performance Ratio", "80-82%", "Expected annual"],
+                ["Specific Yield", "~1,600 kWh/kWp/yr", "South Africa avg"],
               ],
               theme: "striped",
               headStyles: { fillColor: [34, 197, 94] },
