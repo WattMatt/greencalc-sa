@@ -726,127 +726,115 @@ export function ReportBuilder({
           case "dcac_comparison":
             // Render AI narrative if available
             yPos = renderPDFNarrative("dcac_comparison", "DC/AC Analysis", yPos);
-            // DC/AC Ratio gauge
             const dcacRatio = simulationData.dcAcRatio || 1.3;
             
             pdf.setFontSize(12);
             pdf.setTextColor(0, 0, 0);
-            pdf.text("DC/AC Oversizing Ratio Analysis", margin, yPos);
+            pdf.text("DC/AC Oversizing Ratio Comparison", margin, yPos);
             yPos += 15;
             
-            // Draw horizontal ratio scale
-            const scaleWidth = pageWidth - 2 * margin;
-            const scaleHeight = 20;
+            // Calculate energy yields for comparison
+            const calcYield = (r: number) => Math.round((1 + (r - 1) * 0.6) * 100);
+            const ratios = [
+              { ratio: 1.0, label: "1.0:1 (No Oversize)", yield: calcYield(1.0), color: [150, 150, 150] },
+              { ratio: dcacRatio, label: `${dcacRatio.toFixed(2)}:1 (Current)`, yield: calcYield(dcacRatio), color: [34, 197, 94], isCurrent: true },
+              { ratio: 1.5, label: "1.5:1 (Aggressive)", yield: calcYield(1.5), color: [245, 158, 11] },
+            ];
             
-            // Gradient bar (green -> yellow -> red)
-            const segmentWidth = scaleWidth / 4;
+            const dcCardWidth = (pageWidth - 2 * margin - 10) / 3;
+            const dcCardHeight = 70;
             
-            // Conservative (green)
-            pdf.setFillColor(34, 197, 94);
-            pdf.rect(margin, yPos, segmentWidth, scaleHeight, "F");
+            // Draw three comparison cards
+            ratios.forEach((config, idx) => {
+              const cardX = margin + idx * (dcCardWidth + 5);
+              
+              // Card background
+              if (config.isCurrent) {
+                pdf.setFillColor(220, 252, 231);
+                pdf.setDrawColor(34, 197, 94);
+                pdf.setLineWidth(1);
+                pdf.roundedRect(cardX, yPos, dcCardWidth, dcCardHeight, 3, 3, "FD");
+              } else {
+                pdf.setFillColor(250, 250, 250);
+                pdf.roundedRect(cardX, yPos, dcCardWidth, dcCardHeight, 3, 3, "F");
+              }
+              
+              // Ratio label
+              pdf.setFontSize(10);
+              pdf.setTextColor(config.color[0], config.color[1], config.color[2]);
+              pdf.text(config.ratio.toFixed(2) + ":1", cardX + dcCardWidth / 2 - 8, yPos + 12);
+              
+              // Draw mini energy curve
+              const curveY = yPos + 20;
+              const curveHeight = 25;
+              const curveWidth = dcCardWidth - 10;
+              
+              // Curve background
+              pdf.setFillColor(255, 255, 255);
+              pdf.rect(cardX + 5, curveY, curveWidth, curveHeight, "F");
+              
+              // Inverter limit line
+              pdf.setDrawColor(239, 68, 68);
+              pdf.setLineWidth(0.5);
+              const limitY = curveY + curveHeight * 0.35;
+              pdf.line(cardX + 5, limitY, cardX + 5 + curveWidth, limitY);
+              
+              // Solar curve
+              pdf.setDrawColor(config.color[0], config.color[1], config.color[2]);
+              pdf.setLineWidth(1.5);
+              const curvePoints: Array<[number, number]> = [];
+              for (let x = 0; x <= curveWidth; x += 2) {
+                const normalizedX = (x / curveWidth - 0.5) * 2;
+                const production = Math.max(0, 1 - normalizedX * normalizedX) * config.ratio;
+                const y = curveY + curveHeight - production * curveHeight * 0.55;
+                curvePoints.push([cardX + 5 + x, y]);
+              }
+              for (let i = 1; i < curvePoints.length; i++) {
+                pdf.line(curvePoints[i - 1][0], curvePoints[i - 1][1], curvePoints[i][0], curvePoints[i][1]);
+              }
+              
+              // Yield percentage
+              pdf.setFontSize(14);
+              pdf.setTextColor(config.color[0], config.color[1], config.color[2]);
+              pdf.text(config.yield + "%", cardX + dcCardWidth / 2 - 10, yPos + dcCardHeight - 8);
+              
+              pdf.setFontSize(7);
+              pdf.setTextColor(100, 100, 100);
+              pdf.text("yield", cardX + dcCardWidth / 2 + 8, yPos + dcCardHeight - 8);
+            });
             
-            // Optimal (lighter green)
-            pdf.setFillColor(74, 222, 128);
-            pdf.rect(margin + segmentWidth, yPos, segmentWidth, scaleHeight, "F");
+            yPos += dcCardHeight + 10;
             
-            // Aggressive (yellow)
-            pdf.setFillColor(250, 204, 21);
-            pdf.rect(margin + 2 * segmentWidth, yPos, segmentWidth, scaleHeight, "F");
+            // Energy gain highlight box
+            const gainPct = calcYield(dcacRatio) - calcYield(1.0);
+            pdf.setFillColor(220, 252, 231);
+            pdf.roundedRect(margin, yPos, pageWidth - 2 * margin, 20, 3, 3, "F");
             
-            // High (red)
-            pdf.setFillColor(239, 68, 68);
-            pdf.rect(margin + 3 * segmentWidth, yPos, segmentWidth, scaleHeight, "F");
-            
-            // Current ratio marker
-            const ratioPosition = Math.min(1, Math.max(0, (dcacRatio - 1) / 0.6));
-            const markerPosX = margin + ratioPosition * scaleWidth;
-            
-            pdf.setFillColor(0, 0, 0);
-            pdf.triangle(markerPosX - 5, yPos - 3, markerPosX + 5, yPos - 3, markerPosX, yPos + 3, "F");
             pdf.setFontSize(10);
-            pdf.setTextColor(0, 0, 0);
-            pdf.text(`${dcacRatio.toFixed(2)}:1`, markerPosX - 8, yPos - 8);
+            pdf.setTextColor(22, 101, 52);
+            pdf.text("Energy Gain vs 1:1 Sizing:", margin + 10, yPos + 13);
             
-            // Scale labels
-            yPos += scaleHeight + 5;
-            pdf.setFontSize(7);
-            pdf.setTextColor(100, 100, 100);
-            pdf.text("1.0", margin, yPos + 5);
-            pdf.text("1.15", margin + segmentWidth - 5, yPos + 5);
-            pdf.text("1.3", margin + 2 * segmentWidth - 3, yPos + 5);
-            pdf.text("1.45", margin + 3 * segmentWidth - 5, yPos + 5);
-            pdf.text("1.6+", margin + scaleWidth - 8, yPos + 5);
+            pdf.setFontSize(16);
+            pdf.setTextColor(34, 197, 94);
+            pdf.text("+" + gainPct + "%", margin + 70, yPos + 14);
             
-            // Category labels
-            yPos += 12;
             pdf.setFontSize(8);
-            pdf.text("Conservative", margin + segmentWidth / 2 - 15, yPos);
-            pdf.text("Optimal", margin + 1.5 * segmentWidth - 10, yPos);
-            pdf.text("Aggressive", margin + 2.5 * segmentWidth - 12, yPos);
-            pdf.text("High Risk", margin + 3.5 * segmentWidth - 12, yPos);
+            pdf.setTextColor(22, 101, 52);
+            pdf.text("More annual energy captured in morning & evening hours", margin + 95, yPos + 13);
             
-            yPos += 20;
+            yPos += 30;
             
-            // Energy capture visualization
-            pdf.setFontSize(11);
-            pdf.setTextColor(0, 0, 0);
-            pdf.text("Daily Energy Capture Profile", margin, yPos);
-            yPos += 10;
-            
-            // Draw sun path curve
-            const graphWidth = scaleWidth;
-            const graphHeight = 50;
-            
-            // Background
-            pdf.setFillColor(250, 250, 250);
-            pdf.rect(margin, yPos, graphWidth, graphHeight, "F");
-            
-            // Grid lines
-            pdf.setDrawColor(230, 230, 230);
-            pdf.setLineWidth(0.3);
-            for (let i = 1; i < 4; i++) {
-              pdf.line(margin, yPos + i * graphHeight / 4, margin + graphWidth, yPos + i * graphHeight / 4);
-            }
-            
-            // Inverter limit line
-            const inverterLimit = graphHeight * 0.7;
-            pdf.setDrawColor(239, 68, 68);
-            pdf.setLineWidth(1);
-            pdf.line(margin, yPos + graphHeight - inverterLimit, margin + graphWidth, yPos + graphHeight - inverterLimit);
-            
-            // Solar production curve
-            pdf.setDrawColor(34, 197, 94);
-            pdf.setLineWidth(2);
-            const points: Array<[number, number]> = [];
-            for (let x = 0; x <= graphWidth; x += 3) {
-              const hour = 5 + (x / graphWidth) * 14; // 5am to 7pm
-              const normalizedHour = (hour - 12) / 7;
-              const production = Math.max(0, 1 - normalizedHour * normalizedHour) * dcacRatio;
-              const y = yPos + graphHeight - production * graphHeight * 0.5;
-              points.push([margin + x, y]);
-            }
-            
-            for (let i = 1; i < points.length; i++) {
-              pdf.line(points[i - 1][0], points[i - 1][1], points[i][0], points[i][1]);
-            }
-            
-            // Clipping area shading
-            pdf.setFillColor(239, 68, 68, 0.3);
-            
-            yPos += graphHeight + 10;
+            // Legend
             pdf.setFontSize(7);
             pdf.setTextColor(100, 100, 100);
-            pdf.text("5:00", margin, yPos);
-            pdf.text("12:00", margin + graphWidth / 2 - 8, yPos);
-            pdf.text("19:00", margin + graphWidth - 12, yPos);
-            
-            pdf.setFillColor(34, 197, 94);
-            pdf.rect(margin + graphWidth - 60, yPos - 8, 6, 6, "F");
-            pdf.text("Solar Output", margin + graphWidth - 50, yPos - 3);
             
             pdf.setFillColor(239, 68, 68);
-            pdf.rect(margin + graphWidth - 60, yPos + 2, 6, 6, "F");
-            pdf.text("Inverter Limit", margin + graphWidth - 50, yPos + 7);
+            pdf.rect(margin, yPos, 8, 3, "F");
+            pdf.text("Inverter AC limit - energy above this line is clipped", margin + 12, yPos + 3);
+            
+            pdf.setFillColor(34, 197, 94);
+            pdf.rect(margin + 90, yPos, 8, 3, "F");
+            pdf.text("Solar DC production curve", margin + 102, yPos + 3);
             break;
 
           case "payback_timeline":
@@ -2208,57 +2196,99 @@ function SegmentPreviewContent({
     case "dcac_comparison":
       const ratio = simulationData.dcAcRatio || 1.3;
       const ratioPosition = Math.min(100, Math.max(0, ((ratio - 1) / 0.6) * 100));
+      
+      // Calculate energy gains for different ratios
+      const baseRatio = 1.0;
+      const currentRatio = ratio;
+      const aggressiveRatio = 1.5;
+      
+      // Energy capture factor (higher ratio = more energy in morning/evening)
+      const calcEnergyGain = (r: number) => Math.round((1 + (r - 1) * 0.6) * 100);
+      const baseEnergy = calcEnergyGain(baseRatio);
+      const currentEnergy = calcEnergyGain(currentRatio);
+      const aggressiveEnergy = calcEnergyGain(aggressiveRatio);
+      
       return (
-        <div className="space-y-3">
+        <div className="space-y-2">
           <AIPreviewNarrative title="DC/AC Analysis" narrative={aiNarrative} editedNarrative={editedNarrative} onEdit={onEditNarrative} segmentId={segmentId} />
-          {/* Ratio scale with marker */}
-          <div>
-            <div className="flex items-center justify-between text-[9px] mb-1">
-              <span>DC/AC Ratio</span>
-              <span className="font-bold text-primary">{ratio.toFixed(2)}:1</span>
-            </div>
-            <div className="relative h-4 rounded-full overflow-hidden flex">
-              <div className="flex-1 bg-emerald-500" />
-              <div className="flex-1 bg-emerald-400" />
-              <div className="flex-1 bg-amber-400" />
-              <div className="flex-1 bg-red-500" />
-            </div>
-            {/* Marker */}
-            <div className="relative h-3">
-              <div 
-                className="absolute -top-1 w-0 h-0 border-l-[4px] border-r-[4px] border-b-[6px] border-l-transparent border-r-transparent border-b-foreground"
-                style={{ left: `${ratioPosition}%`, transform: "translateX(-50%)" }}
-              />
-            </div>
-            <div className="grid grid-cols-4 text-[7px] text-center text-muted-foreground">
-              <span>1.0</span>
-              <span>1.15</span>
-              <span>1.3</span>
-              <span>1.6+</span>
-            </div>
+          
+          {/* Comparison header */}
+          <div className="flex items-center justify-between text-[9px] mb-1">
+            <span className="font-medium">DC/AC Ratio Impact</span>
+            <span className="font-bold text-primary">{ratio.toFixed(2)}:1</span>
           </div>
           
-          {/* Energy capture curve */}
-          <div>
-            <p className="text-[9px] font-medium mb-1">Daily Energy Capture</p>
-            <div className="relative h-10 bg-muted/50 rounded overflow-hidden">
-              {/* Inverter limit line */}
-              <div className="absolute left-0 right-0 top-[30%] h-px bg-destructive" />
-              {/* Solar curve */}
-              <svg viewBox="0 0 100 40" className="w-full h-full" preserveAspectRatio="none">
-                <path
-                  d={`M 0 40 Q 25 ${40 - ratio * 25} 50 ${40 - ratio * 28} Q 75 ${40 - ratio * 25} 100 40`}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="text-primary"
-                />
-              </svg>
+          {/* Side-by-side comparison curves */}
+          <div className="grid grid-cols-3 gap-1">
+            {[
+              { label: "1.0:1", value: baseRatio, energy: baseEnergy, color: "text-muted-foreground", bgColor: "bg-muted/50" },
+              { label: `${currentRatio.toFixed(2)}:1`, value: currentRatio, energy: currentEnergy, color: "text-primary", bgColor: "bg-primary/10", isCurrent: true },
+              { label: "1.5:1", value: aggressiveRatio, energy: aggressiveEnergy, color: "text-amber-600", bgColor: "bg-amber-50 dark:bg-amber-950/30" },
+            ].map((config, idx) => (
+              <div key={idx} className={`rounded p-1.5 ${config.bgColor} ${config.isCurrent ? "ring-1 ring-primary" : ""}`}>
+                <p className={`text-[8px] font-bold text-center ${config.color}`}>{config.label}</p>
+                {/* Mini energy curve */}
+                <div className="relative h-8 mt-1">
+                  {/* Inverter limit */}
+                  <div className="absolute left-0 right-0 top-[35%] h-px bg-destructive/50" />
+                  <svg viewBox="0 0 40 24" className="w-full h-full" preserveAspectRatio="none">
+                    {/* Clipped area fill */}
+                    <defs>
+                      <clipPath id={`clip-${idx}`}>
+                        <rect x="0" y="0" width="40" height="8.5" />
+                      </clipPath>
+                    </defs>
+                    {/* Full curve area */}
+                    <path
+                      d={`M 0 24 Q 10 ${24 - config.value * 18} 20 ${24 - config.value * 20} Q 30 ${24 - config.value * 18} 40 24 Z`}
+                      fill="currentColor"
+                      className={`${config.color} opacity-20`}
+                    />
+                    {/* Clipped (lost) energy */}
+                    {config.value > 1.0 && (
+                      <path
+                        d={`M 0 24 Q 10 ${24 - config.value * 18} 20 ${24 - config.value * 20} Q 30 ${24 - config.value * 18} 40 24 Z`}
+                        fill="currentColor"
+                        className="text-destructive opacity-30"
+                        clipPath={`url(#clip-${idx})`}
+                      />
+                    )}
+                    {/* Curve line */}
+                    <path
+                      d={`M 0 24 Q 10 ${24 - config.value * 18} 20 ${24 - config.value * 20} Q 30 ${24 - config.value * 18} 40 24`}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      className={config.color}
+                    />
+                  </svg>
+                </div>
+                <p className="text-[7px] text-center mt-0.5">
+                  <span className="font-semibold">{config.energy}%</span>
+                  <span className="text-muted-foreground"> yield</span>
+                </p>
+              </div>
+            ))}
+          </div>
+          
+          {/* Gain indicator */}
+          <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded p-1.5 flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <TrendingUp className="h-3 w-3 text-emerald-600" />
+              <span className="text-[8px] font-medium text-emerald-700 dark:text-emerald-400">Energy Gain vs 1:1</span>
             </div>
-            <div className="flex justify-between text-[7px] text-muted-foreground mt-0.5">
-              <span>5:00</span>
-              <span>12:00</span>
-              <span>19:00</span>
+            <span className="text-[10px] font-bold text-emerald-600">+{currentEnergy - baseEnergy}%</span>
+          </div>
+          
+          {/* Legend */}
+          <div className="flex gap-2 text-[6px] text-muted-foreground justify-center">
+            <div className="flex items-center gap-0.5">
+              <div className="w-4 h-0.5 bg-destructive/50" />
+              <span>Inverter limit</span>
+            </div>
+            <div className="flex items-center gap-0.5">
+              <div className="w-2 h-2 bg-destructive/30 rounded-sm" />
+              <span>Clipped energy</span>
             </div>
           </div>
         </div>
