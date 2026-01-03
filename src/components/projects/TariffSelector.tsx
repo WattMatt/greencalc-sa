@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { EskomTariffSelector } from "./EskomTariffSelector";
 
 interface TariffSelectorProps {
   projectId: string;
@@ -25,6 +26,10 @@ export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffS
     },
   });
 
+  // Find Eskom province to check if selected
+  const eskomProvince = provinces?.find(p => p.name === "Eskom");
+  const isEskomSelected = provinceId === eskomProvince?.id;
+
   const { data: municipalities } = useQuery({
     queryKey: ["municipalities", provinceId],
     queryFn: async () => {
@@ -38,6 +43,16 @@ export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffS
     },
     enabled: !!provinceId,
   });
+
+  // Auto-select Eskom Direct when Eskom province is selected
+  useEffect(() => {
+    if (isEskomSelected && municipalities && municipalities.length > 0) {
+      const eskomDirect = municipalities.find(m => m.name === "Eskom Direct");
+      if (eskomDirect && municipalityId !== eskomDirect.id) {
+        setMunicipalityId(eskomDirect.id);
+      }
+    }
+  }, [isEskomSelected, municipalities, municipalityId]);
 
   const { data: tariffs } = useQuery({
     queryKey: ["tariffs", municipalityId],
@@ -54,7 +69,7 @@ export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffS
       if (error) throw error;
       return data;
     },
-    enabled: !!municipalityId,
+    enabled: !!municipalityId && !isEskomSelected,
   });
 
   const { data: selectedTariff } = useQuery({
@@ -73,7 +88,7 @@ export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffS
       if (error) throw error;
       return data;
     },
-    enabled: !!currentTariffId,
+    enabled: !!currentTariffId && !isEskomSelected,
   });
 
   return (
@@ -88,7 +103,10 @@ export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffS
       <div className="grid gap-4 md:grid-cols-3">
         <div className="space-y-2">
           <Label>Province</Label>
-          <Select value={provinceId} onValueChange={setProvinceId}>
+          <Select value={provinceId} onValueChange={(value) => {
+            setProvinceId(value);
+            setMunicipalityId("");
+          }}>
             <SelectTrigger>
               <SelectValue placeholder="Select province..." />
             </SelectTrigger>
@@ -122,28 +140,41 @@ export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffS
           </Select>
         </div>
 
-        <div className="space-y-2">
-          <Label>Tariff</Label>
-          <Select
-            value={currentTariffId || ""}
-            onValueChange={onSelect}
-            disabled={!municipalityId}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select tariff..." />
-            </SelectTrigger>
-            <SelectContent>
-              {tariffs?.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.name} ({t.tariff_type})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Only show regular tariff dropdown for non-Eskom */}
+        {!isEskomSelected && (
+          <div className="space-y-2">
+            <Label>Tariff</Label>
+            <Select
+              value={currentTariffId || ""}
+              onValueChange={onSelect}
+              disabled={!municipalityId}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select tariff..." />
+              </SelectTrigger>
+              <SelectContent>
+                {tariffs?.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name} ({t.tariff_type})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
-      {selectedTariff && (
+      {/* Eskom Matrix Selector */}
+      {isEskomSelected && municipalityId && (
+        <EskomTariffSelector
+          municipalityId={municipalityId}
+          currentTariffId={currentTariffId}
+          onSelect={onSelect}
+        />
+      )}
+
+      {/* Regular tariff display for non-Eskom */}
+      {!isEskomSelected && selectedTariff && (
         <Card>
           <CardHeader>
             <div className="flex items-start justify-between">
@@ -163,18 +194,6 @@ export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffS
             </div>
           </CardHeader>
           <CardContent>
-            {/* Check if this is an Eskom tariff for unbundled display */}
-            {(selectedTariff as any).municipalities?.provinces?.name === "Eskom" && (
-              <div className="mb-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                  2025/2026 Unbundled Tariff Structure
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Energy charges separated from Generation Capacity Charge (GCC) for cost transparency.
-                </p>
-              </div>
-            )}
-            
             <div className="grid gap-4 md:grid-cols-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Category</span>
@@ -183,21 +202,13 @@ export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffS
                 </p>
               </div>
               <div>
-                <span className="text-muted-foreground">
-                  {(selectedTariff as any).municipalities?.provinces?.name === "Eskom" 
-                    ? "Service Charge" 
-                    : "Fixed Charge"}
-                </span>
+                <span className="text-muted-foreground">Fixed Charge</span>
                 <p className="font-medium">
                   R{Number(selectedTariff.fixed_monthly_charge || 0).toFixed(2)}/month
                 </p>
               </div>
               <div>
-                <span className="text-muted-foreground">
-                  {(selectedTariff as any).municipalities?.provinces?.name === "Eskom" 
-                    ? "Network/GCC" 
-                    : "Demand Charge"}
-                </span>
+                <span className="text-muted-foreground">Demand Charge</span>
                 <p className="font-medium">
                   R{Number(selectedTariff.demand_charge_per_kva || 0).toFixed(2)}/kVA
                 </p>
@@ -212,17 +223,12 @@ export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffS
               <div className="mt-3 p-2 rounded bg-muted/50 text-sm">
                 <span className="text-muted-foreground">Reactive Energy: </span>
                 <span className="font-medium">R{Number(selectedTariff.reactive_energy_charge).toFixed(4)}/kVArh</span>
-                <span className="text-xs text-muted-foreground ml-2">(High-demand season power factor penalty)</span>
               </div>
             )}
 
             {selectedTariff.tariff_rates && selectedTariff.tariff_rates.length > 0 && (
               <div className="mt-4 pt-4 border-t">
-                <span className="text-sm text-muted-foreground">
-                  {(selectedTariff as any).municipalities?.provinces?.name === "Eskom" 
-                    ? "Legacy Energy Rates (c/kWh)" 
-                    : "Energy Rates"}
-                </span>
+                <span className="text-sm text-muted-foreground">Energy Rates</span>
                 <div className="mt-2 grid gap-2 md:grid-cols-3">
                   {selectedTariff.tariff_rates.map((rate: any) => (
                     <div
