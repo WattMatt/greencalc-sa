@@ -40,6 +40,7 @@ import { runAdvancedSimulation } from "./simulation/AdvancedSimulationEngine";
 import { AdvancedResultsDisplay } from "./simulation/AdvancedResultsDisplay";
 import { AdvancedConfigComparison } from "./simulation/AdvancedConfigComparison";
 import { LoadSheddingAnalysisPanel } from "./simulation/LoadSheddingAnalysisPanel";
+import { InverterSizing, InverterConfig, getDefaultInverterConfig } from "./InverterSizing";
 
 interface Tenant {
   id: string;
@@ -112,6 +113,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [useSolcast, setUseSolcast] = useState(false);
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
+  const [inverterConfig, setInverterConfig] = useState<InverterConfig>(getDefaultInverterConfig);
 
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, fetchForecast } = useSolcastForecast();
@@ -467,6 +469,15 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
             </div>
           </CardContent>
         </Card>
+
+        {/* Inverter-Based Sizing */}
+        <InverterSizing
+          config={inverterConfig}
+          onChange={setInverterConfig}
+          currentSolarCapacity={solarCapacity}
+          onSolarCapacityChange={setSolarCapacity}
+          maxSolarKva={maxSolarKva}
+        />
 
         <Card>
           <CardHeader className="pb-3">
