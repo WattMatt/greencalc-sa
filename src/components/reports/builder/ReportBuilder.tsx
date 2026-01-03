@@ -40,6 +40,7 @@ const SEGMENT_OPTIONS: Array<{
   { id: "energy_flow", label: "Energy Flow", description: "System energy distribution", icon: Sparkles },
   { id: "monthly_yield", label: "Monthly Yield", description: "12-month generation forecast", icon: BarChart3 },
   { id: "payback_timeline", label: "Payback Timeline", description: "Financial ROI projection", icon: DollarSign },
+  { id: "sensitivity_analysis", label: "Sensitivity Analysis", description: "ROI under different scenarios", icon: TrendingUp },
   { id: "environmental_impact", label: "Environmental Impact", description: "CO2 reduction metrics", icon: Leaf },
   { id: "engineering_specs", label: "Engineering Specs", description: "Technical specifications", icon: Settings2 },
 ];
@@ -1075,6 +1076,146 @@ export function ReportBuilder({
             pdf.text("Winter months (lower yield)", margin + 82, yPos + 5);
             break;
 
+          case "sensitivity_analysis":
+            // Sensitivity Analysis - ROI under different scenarios
+            const baseSysCost = (simulationData.solarCapacityKwp || 100) * 12000;
+            const baseAnnualSavings = simulationData.annualSavings || 250000;
+            const basePayback = simulationData.paybackYears || 5;
+            
+            pdf.setFontSize(12);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("ROI Sensitivity Analysis", margin, yPos);
+            yPos += 8;
+            pdf.setFontSize(9);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("How payback period changes with different electricity escalation rates and system costs", margin, yPos);
+            yPos += 15;
+
+            // Electricity Escalation Impact
+            pdf.setFontSize(11);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Electricity Tariff Escalation Impact", margin, yPos);
+            yPos += 10;
+
+            const escalationRates = [0, 5, 10, 15, 20];
+            const escBarWidth = (pageWidth - 2 * margin - 40) / escalationRates.length;
+            const escBarMaxHeight = 50;
+            
+            // Calculate payback for each escalation rate
+            const escPaybacks = escalationRates.map(rate => {
+              if (rate === 0) return basePayback;
+              // With escalation, savings grow each year, so payback is shorter
+              let cumSavings = 0;
+              let year = 0;
+              let annualSave = baseAnnualSavings;
+              while (cumSavings < baseSysCost && year < 25) {
+                year++;
+                cumSavings += annualSave;
+                annualSave *= (1 + rate / 100);
+              }
+              return year + (baseSysCost - (cumSavings - annualSave)) / annualSave;
+            });
+            const maxEscPayback = Math.max(...escPaybacks, basePayback);
+
+            // Draw bars
+            escalationRates.forEach((rate, i) => {
+              const paybackVal = escPaybacks[i];
+              const barHeight = (paybackVal / maxEscPayback) * escBarMaxHeight;
+              const barX = margin + i * escBarWidth;
+              const barY = yPos + escBarMaxHeight - barHeight;
+              
+              // Color gradient - green for lower payback
+              const greenIntensity = Math.max(0, 1 - paybackVal / maxEscPayback);
+              pdf.setFillColor(
+                Math.round(239 * (1 - greenIntensity) + 34 * greenIntensity),
+                Math.round(68 * (1 - greenIntensity) + 197 * greenIntensity),
+                Math.round(68 * (1 - greenIntensity) + 94 * greenIntensity)
+              );
+              pdf.roundedRect(barX + 5, barY, escBarWidth - 10, barHeight, 2, 2, "F");
+              
+              // Value on top
+              pdf.setFontSize(8);
+              pdf.setTextColor(0, 0, 0);
+              pdf.text(`${paybackVal.toFixed(1)}y`, barX + escBarWidth / 2 - 6, barY - 3);
+              
+              // Label below
+              pdf.setFontSize(7);
+              pdf.setTextColor(100, 100, 100);
+              pdf.text(`${rate}%`, barX + escBarWidth / 2 - 4, yPos + escBarMaxHeight + 8);
+            });
+
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("Annual tariff increase →", margin, yPos + escBarMaxHeight + 18);
+            
+            yPos += escBarMaxHeight + 30;
+
+            // System Cost Impact
+            pdf.setFontSize(11);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("System Cost Variation Impact", margin, yPos);
+            yPos += 10;
+
+            const costVariations = [-20, -10, 0, 10, 20];
+            const costBarWidth = (pageWidth - 2 * margin - 40) / costVariations.length;
+            
+            // Calculate payback for each cost variation
+            const costPaybacks = costVariations.map(pct => {
+              const adjustedCost = baseSysCost * (1 + pct / 100);
+              return adjustedCost / baseAnnualSavings;
+            });
+            const maxCostPayback = Math.max(...costPaybacks);
+
+            // Draw bars
+            costVariations.forEach((pct, i) => {
+              const paybackVal = costPaybacks[i];
+              const barHeight = (paybackVal / maxCostPayback) * escBarMaxHeight;
+              const barX = margin + i * costBarWidth;
+              const barY = yPos + escBarMaxHeight - barHeight;
+              
+              // Color - green for lower payback
+              const greenIntensity = Math.max(0, 1 - paybackVal / maxCostPayback);
+              pdf.setFillColor(
+                Math.round(239 * (1 - greenIntensity) + 34 * greenIntensity),
+                Math.round(68 * (1 - greenIntensity) + 197 * greenIntensity),
+                Math.round(68 * (1 - greenIntensity) + 94 * greenIntensity)
+              );
+              pdf.roundedRect(barX + 5, barY, costBarWidth - 10, barHeight, 2, 2, "F");
+              
+              // Value on top
+              pdf.setFontSize(8);
+              pdf.setTextColor(0, 0, 0);
+              pdf.text(`${paybackVal.toFixed(1)}y`, barX + costBarWidth / 2 - 6, barY - 3);
+              
+              // Label below
+              pdf.setFontSize(7);
+              pdf.setTextColor(pct === 0 ? 34 : 100, pct === 0 ? 197 : 100, pct === 0 ? 94 : 100);
+              const label = pct === 0 ? "Base" : `${pct > 0 ? "+" : ""}${pct}%`;
+              pdf.text(label, barX + costBarWidth / 2 - 8, yPos + escBarMaxHeight + 8);
+            });
+
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("System cost variation →", margin, yPos + escBarMaxHeight + 18);
+            
+            yPos += escBarMaxHeight + 30;
+
+            // Summary insight box
+            pdf.setFillColor(240, 253, 244);
+            pdf.roundedRect(margin, yPos, pageWidth - 2 * margin, 30, 3, 3, "F");
+            pdf.setDrawColor(34, 197, 94);
+            pdf.roundedRect(margin, yPos, pageWidth - 2 * margin, 30, 3, 3, "S");
+            
+            pdf.setFontSize(9);
+            pdf.setTextColor(22, 101, 52);
+            pdf.text("Key Insight", margin + 8, yPos + 10);
+            pdf.setFontSize(8);
+            pdf.setTextColor(60, 60, 60);
+            const escImpact = (escPaybacks[0] - escPaybacks[4]).toFixed(1);
+            const costImpact = (costPaybacks[4] - costPaybacks[0]).toFixed(1);
+            pdf.text(`A 20% tariff escalation reduces payback by ${escImpact} years. A 20% system cost reduction improves payback by ${costImpact} years.`, margin + 8, yPos + 22);
+            break;
+
           case "engineering_specs":
             pdf.setFontSize(12);
             pdf.text("Technical Specifications", margin, yPos);
@@ -1676,6 +1817,86 @@ function SegmentPreviewContent({
               <p className="text-[10px] font-bold text-emerald-600">+R{(total25yr / 1000000).toFixed(1)}M</p>
               <p className="text-[7px] text-muted-foreground">25yr Returns</p>
             </div>
+          </div>
+        </div>
+      );
+
+    case "sensitivity_analysis":
+      const baseSysCostPreview = (simulationData.solarCapacityKwp || 100) * 12000;
+      const baseAnnualSavingsPreview = simulationData.annualSavings || 250000;
+      const basePaybackPreview = simulationData.paybackYears || 5;
+      
+      // Calculate payback for different escalation rates
+      const escRatesPreview = [0, 10, 20];
+      const escPaybacksPreview = escRatesPreview.map(rate => {
+        if (rate === 0) return basePaybackPreview;
+        let cumSavings = 0;
+        let year = 0;
+        let annualSave = baseAnnualSavingsPreview;
+        while (cumSavings < baseSysCostPreview && year < 25) {
+          year++;
+          cumSavings += annualSave;
+          annualSave *= (1 + rate / 100);
+        }
+        return year + (baseSysCostPreview - (cumSavings - annualSave)) / annualSave;
+      });
+      
+      // Calculate payback for cost variations
+      const costVarsPreview = [-20, 0, 20];
+      const costPaybacksPreview = costVarsPreview.map(pct => 
+        (baseSysCostPreview * (1 + pct / 100)) / baseAnnualSavingsPreview
+      );
+      
+      return (
+        <div className="space-y-2">
+          <p className="text-[8px] text-muted-foreground">How payback changes with different scenarios</p>
+          
+          {/* Tariff Escalation */}
+          <div>
+            <p className="text-[9px] font-medium mb-1">Tariff Escalation</p>
+            <div className="flex items-end gap-1 h-8">
+              {escRatesPreview.map((rate, i) => {
+                const maxPb = Math.max(...escPaybacksPreview);
+                const height = (escPaybacksPreview[i] / maxPb) * 100;
+                return (
+                  <div key={rate} className="flex-1 flex flex-col items-center">
+                    <span className="text-[7px] font-medium">{escPaybacksPreview[i].toFixed(1)}y</span>
+                    <div 
+                      className="w-full rounded-t bg-gradient-to-t from-emerald-500 to-emerald-400"
+                      style={{ height: `${height}%` }}
+                    />
+                    <span className="text-[6px] text-muted-foreground">{rate}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          
+          {/* System Cost */}
+          <div>
+            <p className="text-[9px] font-medium mb-1">System Cost</p>
+            <div className="flex items-end gap-1 h-8">
+              {costVarsPreview.map((pct, i) => {
+                const maxPb = Math.max(...costPaybacksPreview);
+                const height = (costPaybacksPreview[i] / maxPb) * 100;
+                const label = pct === 0 ? "Base" : `${pct > 0 ? "+" : ""}${pct}%`;
+                return (
+                  <div key={pct} className="flex-1 flex flex-col items-center">
+                    <span className="text-[7px] font-medium">{costPaybacksPreview[i].toFixed(1)}y</span>
+                    <div 
+                      className={`w-full rounded-t ${pct === 0 ? "bg-primary" : "bg-muted-foreground/50"}`}
+                      style={{ height: `${height}%` }}
+                    />
+                    <span className="text-[6px] text-muted-foreground">{label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          
+          {/* Key insight */}
+          <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded p-1.5 text-center">
+            <p className="text-[7px] text-muted-foreground">Higher tariff escalation = shorter payback</p>
           </div>
         </div>
       );
