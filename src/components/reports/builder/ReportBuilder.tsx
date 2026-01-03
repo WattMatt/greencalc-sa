@@ -1154,7 +1154,7 @@ export function ReportBuilder({
   );
 }
 
-// Preview content for each segment type
+// Preview content for each segment type - matches PDF infographics
 function SegmentPreviewContent({ 
   segmentId, 
   simulationData 
@@ -1164,56 +1164,155 @@ function SegmentPreviewContent({
 }) {
   switch (segmentId) {
     case "executive_summary":
+      const roiPct = Math.min(100, simulationData.roiPercent || 0);
+      const paybackPctExec = Math.min(100, ((simulationData.paybackYears || 5) / 25) * 100);
       return (
         <div className="space-y-3 text-xs">
-          <div className="grid grid-cols-2 gap-2">
-            <MetricBox label="Solar Capacity" value={`${simulationData.solarCapacityKwp} kWp`} />
-            <MetricBox label="Battery" value={`${simulationData.batteryCapacityKwh} kWh`} />
-            <MetricBox label="Annual Savings" value={`R${Math.round(simulationData.annualSavings || 0).toLocaleString()}`} />
-            <MetricBox label="Payback" value={`${(simulationData.paybackYears || 0).toFixed(1)} years`} />
+          {/* Metric cards */}
+          <div className="grid grid-cols-3 gap-1.5">
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-2 text-center">
+              <p className="text-base font-bold text-emerald-600">{simulationData.solarCapacityKwp}</p>
+              <p className="text-[8px] text-muted-foreground">kWp Solar</p>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-2 text-center">
+              <p className="text-base font-bold text-blue-600">{simulationData.batteryCapacityKwh}</p>
+              <p className="text-[8px] text-muted-foreground">kWh Battery</p>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-2 text-center">
+              <p className="text-sm font-bold text-amber-700">R{Math.round((simulationData.annualSavings || 0) / 1000)}k</p>
+              <p className="text-[8px] text-muted-foreground">Annual Savings</p>
+            </div>
           </div>
-          <p className="text-[10px] text-muted-foreground leading-relaxed">
-            This proposal outlines a comprehensive solar PV solution designed to reduce grid dependency
-            and achieve significant cost savings through renewable energy generation.
-          </p>
+          
+          {/* ROI Gauge */}
+          <div className="flex items-center gap-3">
+            <div className="relative w-16 h-8">
+              <svg viewBox="0 0 100 50" className="w-full h-full">
+                {/* Background arc */}
+                <path
+                  d="M 10 50 A 40 40 0 0 1 90 50"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  className="text-muted"
+                />
+                {/* Progress arc */}
+                <path
+                  d="M 10 50 A 40 40 0 0 1 90 50"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  strokeDasharray={`${roiPct * 1.26} 126`}
+                  className="text-primary"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-end justify-center pb-0.5">
+                <span className="text-[10px] font-bold text-primary">{Math.round(roiPct)}%</span>
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="text-[9px] font-medium">ROI</p>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-1">
+                <div 
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${paybackPctExec}%` }}
+                />
+              </div>
+              <p className="text-[8px] text-muted-foreground mt-0.5">
+                Payback: {(simulationData.paybackYears || 0).toFixed(1)} yrs
+              </p>
+            </div>
+          </div>
         </div>
       );
 
     case "tariff_details":
       return (
         <div className="space-y-2 text-[9px]">
-          <p className="font-medium text-[10px]">TOU Periods (Weekday)</p>
-          <div className="grid grid-cols-3 gap-1 text-center">
-            <div className="bg-destructive/10 rounded p-1.5 border border-destructive/20">
-              <p className="font-bold text-destructive">Peak</p>
-              <p className="text-muted-foreground">06:00-08:00</p>
-              <p className="text-muted-foreground">18:00-21:00</p>
+          {/* TOU Clock Diagram */}
+          <div className="flex items-center gap-3">
+            <div className="relative w-16 h-16">
+              <svg viewBox="0 0 100 100" className="w-full h-full">
+                {/* Clock segments for 24 hours */}
+                {Array.from({ length: 24 }, (_, hour) => {
+                  const startAngle = ((hour - 6) * 15 - 90) * Math.PI / 180;
+                  const endAngle = ((hour - 5) * 15 - 90) * Math.PI / 180;
+                  const innerRadius = 25;
+                  const outerRadius = 45;
+                  
+                  const x1 = 50 + innerRadius * Math.cos(startAngle);
+                  const y1 = 50 + innerRadius * Math.sin(startAngle);
+                  const x2 = 50 + outerRadius * Math.cos(startAngle);
+                  const y2 = 50 + outerRadius * Math.sin(startAngle);
+                  const x3 = 50 + outerRadius * Math.cos(endAngle);
+                  const y3 = 50 + outerRadius * Math.sin(endAngle);
+                  const x4 = 50 + innerRadius * Math.cos(endAngle);
+                  const y4 = 50 + innerRadius * Math.sin(endAngle);
+                  
+                  let color = "#22c55e"; // Off-peak green
+                  if ((hour >= 6 && hour < 8) || (hour >= 18 && hour < 21)) {
+                    color = "#ef4444"; // Peak red
+                  } else if ((hour >= 8 && hour < 18) || (hour >= 21 && hour < 22)) {
+                    color = "#f59e0b"; // Standard amber
+                  }
+                  
+                  return (
+                    <path
+                      key={hour}
+                      d={`M ${x1} ${y1} L ${x2} ${y2} L ${x3} ${y3} L ${x4} ${y4} Z`}
+                      fill={color}
+                      stroke="white"
+                      strokeWidth="0.5"
+                    />
+                  );
+                })}
+                {/* Center circle */}
+                <circle cx="50" cy="50" r="20" fill="white" className="dark:fill-background" />
+                <text x="50" y="53" textAnchor="middle" className="text-[8px] fill-current font-medium">TOU</text>
+              </svg>
             </div>
-            <div className="bg-amber-500/10 rounded p-1.5 border border-amber-500/20">
-              <p className="font-bold text-amber-600">Standard</p>
-              <p className="text-muted-foreground">08:00-18:00</p>
-              <p className="text-muted-foreground">21:00-22:00</p>
-            </div>
-            <div className="bg-emerald-500/10 rounded p-1.5 border border-emerald-500/20">
-              <p className="font-bold text-emerald-600">Off-Peak</p>
-              <p className="text-muted-foreground">22:00-06:00</p>
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-destructive" />
+                <span className="text-[8px]">Peak (06-08, 18-21)</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-amber-500" />
+                <span className="text-[8px]">Standard (08-18, 21-22)</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-[8px]">Off-Peak (22-06)</span>
+              </div>
             </div>
           </div>
-          <div className="mt-2">
-            <p className="font-medium text-[10px]">Seasonal Calendar</p>
-            <div className="grid grid-cols-12 gap-0.5 mt-1">
-              {['J','F','M','A','M','J','J','A','S','O','N','D'].map((m, i) => (
+          
+          {/* Seasonal Calendar */}
+          <div>
+            <p className="font-medium text-[9px] mb-1">Seasonal Calendar</p>
+            <div className="grid grid-cols-12 gap-0.5">
+              {["J","F","M","A","M","J","J","A","S","O","N","D"].map((m, i) => (
                 <div 
                   key={m + i}
-                  className={`text-center rounded p-0.5 text-[7px] ${
+                  className={`text-center rounded py-1 text-[7px] font-medium text-white ${
                     i >= 5 && i <= 7 
-                      ? 'bg-destructive/20 text-destructive font-medium' 
-                      : 'bg-emerald-500/20 text-emerald-600'
+                      ? "bg-destructive" 
+                      : "bg-emerald-500"
                   }`}
                 >
                   {m}
                 </div>
               ))}
+            </div>
+            <div className="flex gap-3 mt-1 text-[7px]">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded bg-destructive" />
+                <span>High Demand</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded bg-emerald-500" />
+                <span>Low Demand</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1221,30 +1320,57 @@ function SegmentPreviewContent({
 
     case "dcac_comparison":
       const ratio = simulationData.dcAcRatio || 1.3;
+      const ratioPosition = Math.min(100, Math.max(0, ((ratio - 1) / 0.6) * 100));
       return (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-[10px]">
-            <span>DC/AC Ratio</span>
-            <span className="font-bold text-primary">{ratio.toFixed(2)}:1</span>
-          </div>
-          <div className="h-2 bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500 rounded-full relative">
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-background border-2 border-primary rounded-full"
-              style={{ left: `${Math.min(100, Math.max(0, (ratio - 1) * 100))}%` }}
-            />
-          </div>
-          <div className="grid grid-cols-3 gap-1 text-center text-[8px]">
-            <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded p-1">
-              <p className="font-bold text-emerald-600">Optimal</p>
-              <p className="text-muted-foreground">1.1-1.3</p>
+        <div className="space-y-3">
+          {/* Ratio scale with marker */}
+          <div>
+            <div className="flex items-center justify-between text-[9px] mb-1">
+              <span>DC/AC Ratio</span>
+              <span className="font-bold text-primary">{ratio.toFixed(2)}:1</span>
             </div>
-            <div className="bg-amber-50 dark:bg-amber-950/30 rounded p-1">
-              <p className="font-bold text-amber-600">High</p>
-              <p className="text-muted-foreground">1.3-1.5</p>
+            <div className="relative h-4 rounded-full overflow-hidden flex">
+              <div className="flex-1 bg-emerald-500" />
+              <div className="flex-1 bg-emerald-400" />
+              <div className="flex-1 bg-amber-400" />
+              <div className="flex-1 bg-red-500" />
             </div>
-            <div className="bg-red-50 dark:bg-red-950/30 rounded p-1">
-              <p className="font-bold text-red-600">Clipping</p>
-              <p className="text-muted-foreground">&gt;1.5</p>
+            {/* Marker */}
+            <div className="relative h-3">
+              <div 
+                className="absolute -top-1 w-0 h-0 border-l-[4px] border-r-[4px] border-b-[6px] border-l-transparent border-r-transparent border-b-foreground"
+                style={{ left: `${ratioPosition}%`, transform: "translateX(-50%)" }}
+              />
+            </div>
+            <div className="grid grid-cols-4 text-[7px] text-center text-muted-foreground">
+              <span>1.0</span>
+              <span>1.15</span>
+              <span>1.3</span>
+              <span>1.6+</span>
+            </div>
+          </div>
+          
+          {/* Energy capture curve */}
+          <div>
+            <p className="text-[9px] font-medium mb-1">Daily Energy Capture</p>
+            <div className="relative h-10 bg-muted/50 rounded overflow-hidden">
+              {/* Inverter limit line */}
+              <div className="absolute left-0 right-0 top-[30%] h-px bg-destructive" />
+              {/* Solar curve */}
+              <svg viewBox="0 0 100 40" className="w-full h-full" preserveAspectRatio="none">
+                <path
+                  d={`M 0 40 Q 25 ${40 - ratio * 25} 50 ${40 - ratio * 28} Q 75 ${40 - ratio * 25} 100 40`}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="text-primary"
+                />
+              </svg>
+            </div>
+            <div className="flex justify-between text-[7px] text-muted-foreground mt-0.5">
+              <span>5:00</span>
+              <span>12:00</span>
+              <span>19:00</span>
             </div>
           </div>
         </div>
@@ -1252,48 +1378,150 @@ function SegmentPreviewContent({
 
     case "payback_timeline":
       const payback = simulationData.paybackYears || 5;
-      const pct = Math.min(100, (payback / 25) * 100);
+      const annualSave = simulationData.annualSavings || 250000;
+      const systemCost = (simulationData.solarCapacityKwp || 100) * 12000;
+      const total25yr = annualSave * 25 - systemCost;
+      
       return (
         <div className="space-y-2">
-          <div className="relative h-6 bg-muted rounded overflow-hidden">
-            <div className="absolute left-0 top-0 h-full bg-emerald-500/40" style={{ width: `${pct}%` }} />
-            <div className="absolute top-0 w-0.5 h-full bg-primary" style={{ left: `${pct}%` }} />
+          {/* Cash flow chart */}
+          <div className="relative h-14 bg-muted/30 rounded overflow-hidden">
+            {/* Zero line */}
+            <div className="absolute left-0 right-0 top-[40%] h-px bg-muted-foreground/30" />
+            {/* Negative area */}
+            <div 
+              className="absolute left-0 bottom-[60%] h-[20%] bg-red-200 dark:bg-red-900/30"
+              style={{ width: `${(payback / 10) * 100}%` }}
+            />
+            {/* Positive area */}
+            <div 
+              className="absolute right-0 top-[40%] h-[30%] bg-emerald-200 dark:bg-emerald-900/30"
+              style={{ width: `${((10 - payback) / 10) * 100}%` }}
+            />
+            {/* Line chart */}
+            <svg viewBox="0 0 100 50" className="w-full h-full" preserveAspectRatio="none">
+              <polyline
+                points={Array.from({ length: 11 }, (_, yr) => {
+                  const cumulative = annualSave * yr - systemCost;
+                  const x = yr * 10;
+                  const y = 20 - (cumulative / (annualSave * 10)) * 30;
+                  return `${x},${y}`;
+                }).join(" ")}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-primary"
+              />
+            </svg>
+            {/* Break-even marker */}
+            <div 
+              className="absolute top-0 bottom-0 w-0.5 bg-primary"
+              style={{ left: `${(payback / 10) * 100}%` }}
+            />
           </div>
-          <div className="flex justify-between text-[9px]">
-            <span>Start</span>
-            <span className="font-bold text-emerald-600">Break-even: Year {payback.toFixed(1)}</span>
-            <span>25 Yrs</span>
+          <div className="flex justify-between text-[7px] text-muted-foreground">
+            <span>Year 0</span>
+            <span className="font-medium text-primary">Break-even: Y{payback.toFixed(1)}</span>
+            <span>Year 10</span>
+          </div>
+          
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-1 text-center">
+            <div className="bg-red-50 dark:bg-red-950/30 rounded p-1.5">
+              <p className="text-[10px] font-bold text-red-600">-R{(systemCost / 1000).toFixed(0)}k</p>
+              <p className="text-[7px] text-muted-foreground">Investment</p>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-950/30 rounded p-1.5">
+              <p className="text-[10px] font-bold text-amber-600">{payback.toFixed(1)} yrs</p>
+              <p className="text-[7px] text-muted-foreground">Payback</p>
+            </div>
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded p-1.5">
+              <p className="text-[10px] font-bold text-emerald-600">+R{(total25yr / 1000000).toFixed(1)}M</p>
+              <p className="text-[7px] text-muted-foreground">25yr Returns</p>
+            </div>
           </div>
         </div>
       );
 
     case "environmental_impact":
       const co2 = simulationData.co2AvoidedTons || 120;
+      const treesEquiv = Math.round(co2 * 45);
+      const lifetime25 = co2 * 25;
+      
       return (
-        <div className="text-center space-y-2">
-          <div className="flex justify-center gap-6">
-            <div>
-              <Leaf className="h-8 w-8 mx-auto text-emerald-500 mb-1" />
-              <p className="text-lg font-bold text-emerald-600">{Math.round(co2)}</p>
-              <p className="text-[9px] text-muted-foreground">tonnes CO₂/yr</p>
+        <div className="space-y-3">
+          {/* Main metrics with visual elements */}
+          <div className="flex justify-around items-center">
+            {/* CO2 donut */}
+            <div className="text-center">
+              <div className="relative w-14 h-14 mx-auto">
+                <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="12" className="text-muted" />
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="12" strokeDasharray="251" strokeDashoffset="63" className="text-emerald-500" />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Leaf className="h-5 w-5 text-emerald-500" />
+                </div>
+              </div>
+              <p className="text-sm font-bold text-emerald-600 mt-1">{Math.round(co2)}</p>
+              <p className="text-[8px] text-muted-foreground">tonnes CO₂/yr</p>
             </div>
-            <div>
-              <span className="text-2xl">🌳</span>
-              <p className="text-lg font-bold">{Math.round(co2 * 45)}</p>
-              <p className="text-[9px] text-muted-foreground">trees equivalent</p>
+            
+            {/* Trees */}
+            <div className="text-center">
+              <div className="grid grid-cols-3 gap-0.5 mb-1">
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <span key={i} className="text-[10px]">🌳</span>
+                ))}
+              </div>
+              <p className="text-sm font-bold text-emerald-600">{treesEquiv.toLocaleString()}</p>
+              <p className="text-[8px] text-muted-foreground">trees equiv.</p>
             </div>
+          </div>
+          
+          {/* 25-year impact bar */}
+          <div className="bg-emerald-100 dark:bg-emerald-950/40 rounded-lg p-2 text-center">
+            <p className="text-[8px] text-muted-foreground">25-Year Lifetime Impact</p>
+            <p className="text-sm font-bold text-emerald-600">{lifetime25.toLocaleString()} tonnes CO₂</p>
           </div>
         </div>
       );
 
     case "engineering_specs":
+      const inverterSize = Math.round((simulationData.solarCapacityKwp || 100) / (simulationData.dcAcRatio || 1.3));
       return (
-        <div className="space-y-1 text-[9px]">
-          <SpecRow label="PV Modules" value={`${simulationData.solarCapacityKwp} kWp`} />
-          <SpecRow label="DC/AC Ratio" value={`${(simulationData.dcAcRatio || 1.3).toFixed(2)}:1`} />
-          <SpecRow label="Battery" value={`${simulationData.batteryCapacityKwh} kWh`} />
-          <SpecRow label="Expected PR" value="80-82%" />
-          <SpecRow label="Specific Yield" value="~1,600 kWh/kWp/yr" />
+        <div className="space-y-2">
+          {/* System diagram */}
+          <div className="flex items-center justify-center gap-2 py-2">
+            <div className="bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded px-2 py-1 text-center">
+              <Sun className="h-3 w-3 mx-auto text-amber-600 mb-0.5" />
+              <p className="text-[8px] font-bold">{simulationData.solarCapacityKwp}kWp</p>
+              <p className="text-[6px] text-muted-foreground">PV Array</p>
+            </div>
+            <div className="text-muted-foreground">→</div>
+            <div className="bg-blue-100 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-700 rounded px-2 py-1 text-center">
+              <Zap className="h-3 w-3 mx-auto text-blue-600 mb-0.5" />
+              <p className="text-[8px] font-bold">{inverterSize}kW</p>
+              <p className="text-[6px] text-muted-foreground">Inverter</p>
+            </div>
+            {simulationData.batteryCapacityKwh > 0 && (
+              <>
+                <div className="text-muted-foreground">→</div>
+                <div className="bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded px-2 py-1 text-center">
+                  <Battery className="h-3 w-3 mx-auto text-emerald-600 mb-0.5" />
+                  <p className="text-[8px] font-bold">{simulationData.batteryCapacityKwh}kWh</p>
+                  <p className="text-[6px] text-muted-foreground">Battery</p>
+                </div>
+              </>
+            )}
+          </div>
+          
+          {/* Specs list */}
+          <div className="space-y-0.5 text-[8px]">
+            <SpecRow label="DC/AC Ratio" value={`${(simulationData.dcAcRatio || 1.3).toFixed(2)}:1`} />
+            <SpecRow label="Performance Ratio" value="80-82%" />
+            <SpecRow label="Specific Yield" value="~1,600 kWh/kWp/yr" />
+          </div>
         </div>
       );
 
