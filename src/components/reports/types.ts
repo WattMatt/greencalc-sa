@@ -70,6 +70,7 @@ export type SegmentType =
   | "environmental_impact"
   | "engineering_specs"
   | "ai_infographics"
+  | "tariff_details"
   | "custom_notes";
 
 export interface ReportSegment {
@@ -142,6 +143,12 @@ export const SEGMENT_DEFINITIONS: Record<SegmentType, { name: string; descriptio
     description: "Auto-generated professional visual summaries",
     icon: "Sparkles",
     category: "executive"
+  },
+  tariff_details: {
+    name: "Tariff Analysis",
+    description: "Detailed breakdown of selected electricity tariff",
+    icon: "Zap",
+    category: "financial"
   },
   custom_notes: {
     name: "Custom Notes",

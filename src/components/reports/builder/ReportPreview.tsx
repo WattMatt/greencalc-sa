@@ -46,6 +46,7 @@ const segmentIcons: Record<string, React.ElementType> = {
   environmental_impact: Leaf,
   engineering_specs: Settings2,
   ai_infographics: Sparkles,
+  tariff_details: Zap,
 };
 
 // Sample data for previews (fallback)
@@ -314,6 +315,33 @@ function SegmentContent({ segmentId, projectName, data }: { segmentId: string; p
           <SpecRow label="DC/AC Ratio" value={`${dcAcRatio.toFixed(2)}:1`} />
           <SpecRow label="Battery" value={`${batteryCapacity} kWh`} />
           <SpecRow label="Expected PR" value="80%" />
+        </div>
+      );
+
+    case "tariff_details":
+      return (
+        <div className="space-y-2 text-[9px]">
+          <div className="bg-muted/50 rounded p-2">
+            <p className="font-medium text-primary text-[10px]">Selected Tariff</p>
+            <p className="text-muted-foreground">TOU tariff with seasonal rates</p>
+          </div>
+          <div className="grid grid-cols-3 gap-1 text-center">
+            <div className="bg-red-100 dark:bg-red-950/30 rounded p-1">
+              <p className="font-bold text-red-600">Peak</p>
+              <p className="text-muted-foreground">Highest</p>
+            </div>
+            <div className="bg-amber-100 dark:bg-amber-950/30 rounded p-1">
+              <p className="font-bold text-amber-600">Standard</p>
+              <p className="text-muted-foreground">Medium</p>
+            </div>
+            <div className="bg-emerald-100 dark:bg-emerald-950/30 rounded p-1">
+              <p className="font-bold text-emerald-600">Off-Peak</p>
+              <p className="text-muted-foreground">Lowest</p>
+            </div>
+          </div>
+          <p className="text-[8px] text-muted-foreground italic">
+            ⚡ Solar offsets Peak hours for max savings
+          </p>
         </div>
       );
 

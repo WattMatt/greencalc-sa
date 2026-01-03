@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface InfographicRequest {
-  type: "executive" | "system" | "savings" | "environmental" | "engineering";
+  type: "executive" | "system" | "savings" | "environmental" | "engineering" | "tariff";
   data: {
     projectName?: string;
     solarCapacityKwp?: number;
@@ -18,9 +18,21 @@ interface InfographicRequest {
     selfConsumptionPercent?: number;
     dcAcRatio?: number;
   };
+  tariffData?: {
+    name?: string;
+    tariffType?: string;
+    tariffFamily?: string;
+    transmissionZone?: string;
+    voltageLevel?: string;
+    touRates?: Array<{
+      season: string;
+      period: string;
+      rate: number;
+    }>;
+  };
 }
 
-const prompts: Record<string, (data: InfographicRequest["data"]) => string> = {
+const prompts: Record<string, (data: InfographicRequest["data"], tariffData?: InfographicRequest["tariffData"]) => string> = {
   executive: (data) => `Create a professional executive summary infographic for a solar energy project called "${data.projectName || 'Solar Project'}". 
     Show key metrics: R${(data.annualSavings || 0).toLocaleString()} annual savings, ${data.paybackYears || 5} year payback, ${data.roiPercent || 18}% ROI.
     Use a clean corporate style with green and blue colors. Include icons for money savings, solar panels, and a graph trending upward.
@@ -44,7 +56,16 @@ const prompts: Record<string, (data: InfographicRequest["data"]) => string> = {
   engineering: (data) => `Create a technical engineering specifications panel for a solar PV system.
     DC Capacity: ${((data.solarCapacityKwp || 100) * (data.dcAcRatio || 1.3)).toFixed(0)} kWp, AC Capacity: ${data.solarCapacityKwp || 100} kW, DC/AC Ratio: ${data.dcAcRatio || 1.3}:1.
     Show technical diagram style with specifications table, electrical symbols.
-    Professional engineering drawing aesthetic, blueprint style with white/blue colors. 16:9 aspect ratio.`
+    Professional engineering drawing aesthetic, blueprint style with white/blue colors. 16:9 aspect ratio.`,
+    
+  tariff: (data, tariffData) => `Create a professional electricity tariff infographic explaining Time-of-Use (TOU) pricing.
+    Tariff: ${tariffData?.name || 'Electricity Tariff'} - ${tariffData?.tariffType || 'TOU'} type.
+    ${tariffData?.transmissionZone ? `Zone: ${tariffData.transmissionZone}` : ''}
+    ${tariffData?.voltageLevel ? `Voltage: ${tariffData.voltageLevel}` : ''}
+    Show a 24-hour clock diagram with colored segments for Peak (red/orange), Standard (yellow), and Off-Peak (green) periods.
+    Include a side panel showing seasonal variations (Winter high demand vs Summer low demand).
+    Add a note: "Solar generates during Peak hours = Maximum savings".
+    Professional utility company style, clean infographic design. 16:9 aspect ratio.`
 };
 
 serve(async (req) => {
@@ -53,7 +74,7 @@ serve(async (req) => {
   }
 
   try {
-    const { type, data } = await req.json() as InfographicRequest;
+    const { type, data, tariffData } = await req.json() as InfographicRequest;
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -65,7 +86,7 @@ serve(async (req) => {
       throw new Error(`Invalid infographic type: ${type}`);
     }
 
-    const prompt = promptFn(data);
+    const prompt = promptFn(data, tariffData);
     console.log(`Generating ${type} infographic with prompt:`, prompt.substring(0, 100) + "...");
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

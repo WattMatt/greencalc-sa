@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,25 +13,13 @@ import {
   PiggyBank, 
   Leaf, 
   Settings2,
+  Zap,
   Download,
   RefreshCw,
   CheckCircle2,
   AlertCircle
 } from "lucide-react";
-
-type InfographicType = "executive" | "system" | "savings" | "environmental" | "engineering";
-
-interface InfographicData {
-  projectName?: string;
-  solarCapacityKwp?: number;
-  batteryCapacityKwh?: number;
-  annualSavings?: number;
-  paybackYears?: number;
-  roiPercent?: number;
-  co2AvoidedTons?: number;
-  selfConsumptionPercent?: number;
-  dcAcRatio?: number;
-}
+import { useInfographicGeneration, getCacheKey, type InfographicType, type InfographicData } from "@/hooks/useInfographicGeneration";
 
 interface GeneratedInfographic {
   type: InfographicType;
@@ -45,6 +33,7 @@ const infographicTypes: { type: InfographicType; label: string; icon: React.Elem
   { type: "savings", label: "Savings Breakdown", icon: PiggyBank, description: "Financial savings visualization" },
   { type: "environmental", label: "Environmental Impact", icon: Leaf, description: "CO2 reduction and sustainability" },
   { type: "engineering", label: "Engineering Specs", icon: Settings2, description: "Technical specifications panel" },
+  { type: "tariff", label: "Tariff Explainer", icon: Zap, description: "TOU pricing visualization" },
 ];
 
 interface InfographicGeneratorProps {
@@ -53,19 +42,11 @@ interface InfographicGeneratorProps {
   className?: string;
 }
 
-// Generate a cache key based on key simulation params
-const getCacheKey = (data: InfographicData, type: InfographicType): string => {
-  const keyParams = `${data.solarCapacityKwp}-${data.batteryCapacityKwh}-${data.annualSavings}-${type}`;
-  return keyParams.replace(/\./g, '_');
-};
-
 export function InfographicGenerator({ data, projectId, className }: InfographicGeneratorProps) {
-  const [generated, setGenerated] = useState<Map<InfographicType, GeneratedInfographic>>(new Map());
-  const [failed, setFailed] = useState<Set<InfographicType>>(new Set());
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [cached, setCached] = useState<Map<InfographicType, GeneratedInfographic>>(new Map());
   const [isLoadingCache, setIsLoadingCache] = useState(true);
-  const [progress, setProgress] = useState({ current: 0, total: infographicTypes.length });
-  const hasStartedGeneration = useRef(false);
+  
+  const { generating, progress, generateInfographics } = useInfographicGeneration();
 
   const defaultData: InfographicData = {
     projectName: "Demo Solar Project",
@@ -115,12 +96,7 @@ export function InfographicGenerator({ data, projectId, className }: Infographic
         }
       }
       
-      if (cachedMap.size > 0) {
-        setGenerated(cachedMap);
-        if (cachedMap.size === infographicTypes.length) {
-          hasStartedGeneration.current = true; // Prevent re-generation
-        }
-      }
+      setCached(cachedMap);
     } catch (error) {
       console.error("Error loading cached infographics:", error);
     } finally {
@@ -128,123 +104,15 @@ export function InfographicGenerator({ data, projectId, className }: Infographic
     }
   };
 
-  const uploadToStorage = async (imageUrl: string, type: InfographicType): Promise<string | null> => {
-    if (!projectId) return imageUrl;
-    
-    try {
-      // Fetch the image as blob
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      
-      const cacheKey = getCacheKey(defaultData, type);
-      const filePath = `${projectId}/${cacheKey}.png`;
-      
-      // Upload to storage (upsert)
-      const { error: uploadError } = await supabase.storage
-        .from('report-infographics')
-        .upload(filePath, blob, { 
-          contentType: 'image/png',
-          upsert: true 
-        });
-      
-      if (uploadError) {
-        console.error("Error uploading infographic:", uploadError);
-        return imageUrl;
-      }
-      
-      // Return public URL
-      const { data: urlData } = supabase.storage
-        .from('report-infographics')
-        .getPublicUrl(filePath);
-      
-      return urlData.publicUrl;
-    } catch (error) {
-      console.error("Error caching infographic:", error);
-      return imageUrl;
-    }
-  };
-
-  // Auto-generate missing infographics when data is available and cache is loaded
-  useEffect(() => {
-    if (hasStartedGeneration.current) return;
-    if (isLoadingCache) return;
-    if (!data?.solarCapacityKwp) return;
-    
-    // Check if we need to generate any infographics
-    const missingTypes = infographicTypes.filter(({ type }) => !generated.has(type));
-    if (missingTypes.length === 0) return;
-    
-    hasStartedGeneration.current = true;
-    generateMissingInfographics(missingTypes.map(t => t.type));
-  }, [data?.solarCapacityKwp, isLoadingCache, generated.size]);
-
-  const generateSingleInfographic = async (type: InfographicType): Promise<boolean> => {
-    try {
-      const { data: result, error } = await supabase.functions.invoke("generate-report-infographic", {
-        body: { type, data: defaultData },
-      });
-
-      if (error) throw error;
-      if (result.error) throw new Error(result.error);
-
-      // Cache to storage
-      const cachedUrl = await uploadToStorage(result.imageUrl, type);
-
-      setGenerated(prev => new Map(prev).set(type, {
-        type,
-        imageUrl: cachedUrl || result.imageUrl,
-        description: result.description,
-      }));
-      setFailed(prev => {
-        const next = new Set(prev);
-        next.delete(type);
-        return next;
-      });
-      return true;
-    } catch (error) {
-      console.error(`Error generating ${type} infographic:`, error);
-      setFailed(prev => new Set(prev).add(type));
-      return false;
-    }
-  };
-
-  const generateMissingInfographics = async (types: InfographicType[]) => {
-    setIsGenerating(true);
-    setProgress({ current: 0, total: types.length });
-    
-    let successCount = 0;
-    for (let i = 0; i < types.length; i++) {
-      setProgress({ current: i + 1, total: types.length });
-      const success = await generateSingleInfographic(types[i]);
-      if (success) successCount++;
-      if (i < types.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+  const handleRegenerate = async () => {
+    if (!projectId || !data?.solarCapacityKwp) {
+      toast.error("Cannot regenerate: missing project or simulation data");
+      return;
     }
     
-    setIsGenerating(false);
-    if (successCount === types.length) {
-      toast.success("Infographics generated and cached");
-    } else if (successCount > 0) {
-      toast.warning(`Generated ${successCount}/${types.length} infographics`);
-    }
-  };
-
-
-  const retryFailed = async () => {
-    const failedTypes = Array.from(failed);
-    setIsGenerating(true);
-    setProgress({ current: 0, total: failedTypes.length });
-    
-    for (let i = 0; i < failedTypes.length; i++) {
-      setProgress({ current: i + 1, total: failedTypes.length });
-      await generateSingleInfographic(failedTypes[i]);
-      if (i < failedTypes.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-    }
-    
-    setIsGenerating(false);
+    await generateInfographics(defaultData, projectId);
+    // Reload cached after regeneration
+    await loadCachedInfographics();
   };
 
   const downloadImage = (imageUrl: string, filename: string) => {
@@ -257,15 +125,14 @@ export function InfographicGenerator({ data, projectId, className }: Infographic
   };
 
   const downloadAll = () => {
-    generated.forEach((infographic) => {
+    cached.forEach((infographic) => {
       downloadImage(infographic.imageUrl, `${infographic.type}-infographic`);
     });
     toast.success("Downloading all infographics");
   };
 
   const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
-  const allGenerated = generated.size === infographicTypes.length;
-  const hasFailed = failed.size > 0;
+  const allCached = cached.size === infographicTypes.length;
 
   return (
     <Card className={className}>
@@ -277,23 +144,26 @@ export function InfographicGenerator({ data, projectId, className }: Infographic
               Report Infographics
             </CardTitle>
             <CardDescription>
-              {isGenerating 
-                ? `Generating infographics... (${progress.current}/${progress.total})`
-                : allGenerated 
-                  ? "All infographics ready for your report"
-                  : hasFailed
-                    ? `${generated.size} generated, ${failed.size} failed`
-                    : "Preparing infographics..."}
+              {isLoadingCache 
+                ? "Loading cached infographics..."
+                : generating 
+                  ? `Generating... (${progress.current}/${progress.total})`
+                  : allCached 
+                    ? "All infographics ready for your report"
+                    : `${cached.size}/${infographicTypes.length} cached • Regenerate to create missing`}
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            {hasFailed && !isGenerating && (
-              <Button variant="outline" size="sm" onClick={retryFailed}>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Retry Failed
-              </Button>
-            )}
-            {generated.size > 0 && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleRegenerate}
+              disabled={generating || isLoadingCache || !data?.solarCapacityKwp}
+            >
+              <RefreshCw className={`h-4 w-4 mr-1 ${generating ? 'animate-spin' : ''}`} />
+              {generating ? "Generating..." : "Regenerate"}
+            </Button>
+            {cached.size > 0 && (
               <Button variant="outline" size="sm" onClick={downloadAll}>
                 <Download className="h-4 w-4 mr-1" />
                 Download All
@@ -301,29 +171,24 @@ export function InfographicGenerator({ data, projectId, className }: Infographic
             )}
           </div>
         </div>
-        {isGenerating && (
+        {generating && (
           <Progress value={progressPercent} className="mt-3" />
         )}
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Status Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           {infographicTypes.map(({ type, label, icon: Icon }) => {
-            const isGenerated = generated.has(type);
-            const isFailed = failed.has(type);
-            const isCurrentlyGenerating = isGenerating && 
-              progress.current > 0 && 
-              infographicTypes[progress.current - 1]?.type === type;
+            const isCached = cached.has(type);
+            const isCurrentlyGenerating = generating && progress.currentType === type;
             
             return (
               <div
                 key={type}
-                className={`relative p-4 rounded-lg border text-left transition-all ${
-                  isGenerated 
+                className={`relative p-3 rounded-lg border text-left transition-all ${
+                  isCached 
                     ? "border-primary bg-primary/5" 
-                    : isFailed
-                      ? "border-destructive bg-destructive/5"
-                      : "border-border bg-muted/30"
+                    : "border-border bg-muted/30"
                 }`}
               >
                 {isCurrentlyGenerating && (
@@ -333,19 +198,13 @@ export function InfographicGenerator({ data, projectId, className }: Infographic
                 )}
                 <div className="flex items-center gap-2 mb-1">
                   <Icon className="h-4 w-4 text-primary" />
-                  {isGenerated && <CheckCircle2 className="h-4 w-4 text-green-600" />}
-                  {isFailed && <AlertCircle className="h-4 w-4 text-destructive" />}
+                  {isCached && <CheckCircle2 className="h-3 w-3 text-green-600" />}
                 </div>
-                <p className="font-medium text-sm">{label}</p>
-                {isGenerated && (
-                  <Badge variant="outline" className="mt-2 text-xs">
-                    Ready
-                  </Badge>
-                )}
-                {isFailed && (
-                  <Badge variant="destructive" className="mt-2 text-xs">
-                    Failed
-                  </Badge>
+                <p className="font-medium text-xs">{label}</p>
+                {isCached ? (
+                  <Badge variant="outline" className="mt-1 text-[10px]">Ready</Badge>
+                ) : (
+                  <Badge variant="secondary" className="mt-1 text-[10px]">Not cached</Badge>
                 )}
               </div>
             );
@@ -353,11 +212,11 @@ export function InfographicGenerator({ data, projectId, className }: Infographic
         </div>
 
         {/* Generated Images */}
-        {generated.size > 0 && (
+        {cached.size > 0 && (
           <div className="space-y-4">
-            <h4 className="font-medium">Generated Infographics</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {Array.from(generated.values()).map((infographic) => (
+            <h4 className="font-medium">Cached Infographics</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from(cached.values()).map((infographic) => (
                 <div key={infographic.type} className="relative group rounded-lg border overflow-hidden">
                   <img 
                     src={infographic.imageUrl} 
@@ -386,20 +245,30 @@ export function InfographicGenerator({ data, projectId, className }: Infographic
         )}
 
         {/* Loading State */}
-        {isGenerating && generated.size === 0 && (
+        {isLoadingCache && (
           <div className="space-y-3">
             <Skeleton className="h-48 w-full rounded-lg" />
             <p className="text-sm text-center text-muted-foreground">
-              Generating infographics automatically...
+              Loading cached infographics...
             </p>
           </div>
         )}
 
         {/* No Data State */}
-        {!isGenerating && generated.size === 0 && !data?.solarCapacityKwp && (
+        {!isLoadingCache && !generating && cached.size === 0 && !data?.solarCapacityKwp && (
           <div className="text-center py-8 text-muted-foreground">
             <Sparkles className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p>Infographics will be generated automatically when simulation data is available</p>
+            <p>Run a simulation to generate infographics</p>
+            <p className="text-sm mt-1">Infographics are auto-generated when you save a simulation</p>
+          </div>
+        )}
+
+        {/* No cached but has data state */}
+        {!isLoadingCache && !generating && cached.size === 0 && data?.solarCapacityKwp && (
+          <div className="text-center py-8 text-muted-foreground">
+            <AlertCircle className="h-12 w-12 mx-auto mb-3 opacity-30" />
+            <p>No cached infographics found</p>
+            <p className="text-sm mt-1">Click "Regenerate" to create infographics for this simulation</p>
           </div>
         )}
       </CardContent>
