@@ -50,8 +50,9 @@ interface InfographicGeneratorProps {
 }
 
 export function InfographicGenerator({ data, className }: InfographicGeneratorProps) {
-  const [generating, setGenerating] = useState<InfographicType | null>(null);
+  const [generating, setGenerating] = useState<InfographicType | "all" | null>(null);
   const [generated, setGenerated] = useState<Map<InfographicType, GeneratedInfographic>>(new Map());
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
 
   const defaultData: InfographicData = {
     projectName: "Demo Solar Project",
@@ -66,33 +67,57 @@ export function InfographicGenerator({ data, className }: InfographicGeneratorPr
     ...data,
   };
 
-  const generateInfographic = async (type: InfographicType) => {
-    setGenerating(type);
-    
+  const generateSingleInfographic = async (type: InfographicType): Promise<boolean> => {
     try {
       const { data: result, error } = await supabase.functions.invoke("generate-report-infographic", {
         body: { type, data: defaultData },
       });
 
       if (error) throw error;
-
-      if (result.error) {
-        throw new Error(result.error);
-      }
+      if (result.error) throw new Error(result.error);
 
       setGenerated(prev => new Map(prev).set(type, {
         type,
         imageUrl: result.imageUrl,
         description: result.description,
       }));
-
-      toast.success(`${infographicTypes.find(t => t.type === type)?.label} generated!`);
+      return true;
     } catch (error) {
-      console.error("Error generating infographic:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to generate infographic");
-    } finally {
-      setGenerating(null);
+      console.error(`Error generating ${type} infographic:`, error);
+      return false;
     }
+  };
+
+  const generateInfographic = async (type: InfographicType) => {
+    setGenerating(type);
+    const success = await generateSingleInfographic(type);
+    if (success) {
+      toast.success(`${infographicTypes.find(t => t.type === type)?.label} generated!`);
+    } else {
+      toast.error("Failed to generate infographic");
+    }
+    setGenerating(null);
+  };
+
+  const generateAllInfographics = async () => {
+    setGenerating("all");
+    setProgress({ current: 0, total: infographicTypes.length });
+    
+    let successCount = 0;
+    for (let i = 0; i < infographicTypes.length; i++) {
+      const { type } = infographicTypes[i];
+      setProgress({ current: i + 1, total: infographicTypes.length });
+      const success = await generateSingleInfographic(type);
+      if (success) successCount++;
+      // Small delay between requests to avoid rate limiting
+      if (i < infographicTypes.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    setGenerating(null);
+    setProgress({ current: 0, total: 0 });
+    toast.success(`Generated ${successCount}/${infographicTypes.length} infographics`);
   };
 
   const downloadImage = (imageUrl: string, filename: string) => {
@@ -116,11 +141,32 @@ export function InfographicGenerator({ data, className }: InfographicGeneratorPr
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Generate All Button */}
+        <div className="flex justify-end">
+          <Button
+            onClick={generateAllInfographics}
+            disabled={generating !== null}
+            className="gap-2"
+          >
+            {generating === "all" ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Generating {progress.current}/{progress.total}...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                Generate All Infographics
+              </>
+            )}
+          </Button>
+        </div>
+
         {/* Type Selection */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {infographicTypes.map(({ type, label, icon: Icon, description }) => {
             const isGenerated = generated.has(type);
-            const isGenerating = generating === type;
+            const isGenerating = generating === type || (generating === "all" && progress.current > 0 && infographicTypes[progress.current - 1]?.type === type);
             
             return (
               <button
