@@ -35,7 +35,7 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    // Build the prompt based on section type
+    // Build the prompt based on section type - now supports ALL report sections
     const sectionPrompts: Record<string, string> = {
       executive_summary: `Generate an executive summary for a solar PV proposal with these details:
         
@@ -59,7 +59,7 @@ Write 3-4 paragraphs covering:
 
 Be specific to this project. Reference the actual numbers. Explain WHY this sizing makes sense.`,
 
-      tariff_analysis: `Generate a tariff analysis section explaining TOU optimization for this project:
+      tariff_details: `Generate a tariff analysis section explaining TOU optimization for this project:
 
 Tariff: ${projectData.tariffName || 'Standard commercial TOU'}
 Municipality: ${projectData.municipalityName || 'Not specified'}
@@ -67,27 +67,120 @@ Tariff Type: ${projectData.tariffType || 'TOU'}
 Solar Capacity: ${projectData.solarCapacityKwp} kWp
 Annual Savings: R${Math.round(projectData.annualSavings || 0).toLocaleString()}
 
-Write 2-3 paragraphs explaining:
-1. The tariff structure and peak/off-peak periods
-2. How solar generation aligns with expensive tariff periods
+Write 2-3 concise paragraphs explaining:
+1. The tariff structure and peak/off-peak periods relevant to this client
+2. How solar generation aligns with expensive tariff periods to maximize savings
 3. The savings optimization strategy (TOU arbitrage, demand reduction, etc.)
 
-Reference South African electricity market context (Eskom restructuring, municipal tariff increases, etc.)`,
+Reference South African electricity market context briefly.`,
 
-      sizing_methodology: `Generate a sizing methodology section for this solar installation:
+      dcac_comparison: `Generate a DC/AC ratio analysis section for this solar installation:
 
-Building Area: ${projectData.buildingArea ? `${projectData.buildingArea.toLocaleString()} m²` : 'Not specified'}
+Solar DC Capacity: ${projectData.solarCapacityKwp} kWp
+Inverter AC Capacity: ${Math.round((projectData.solarCapacityKwp || 100) / (projectData.dcAcRatio || 1.3))} kW
+DC/AC Ratio: ${projectData.dcAcRatio || 1.3}:1
+Location: ${projectData.location || 'South Africa'}
+
+Write 2 paragraphs explaining:
+1. What the DC/AC ratio means and why ${(projectData.dcAcRatio || 1.3).toFixed(2)}:1 was selected
+2. The trade-off between energy clipping and cost optimization - is this ratio aggressive, conservative, or balanced?
+
+Be technical but accessible. Reference that higher ratios harvest more morning/evening energy at the cost of midday clipping.`,
+
+      sizing_comparison: `Generate a sizing alternatives analysis for this solar project:
+
+Current Design: ${projectData.solarCapacityKwp} kWp / ${projectData.batteryCapacityKwh} kWh battery
+Conservative Option: ~${Math.round((projectData.solarCapacityKwp || 100) * 0.7)} kWp
+Aggressive Option: ~${Math.round((projectData.solarCapacityKwp || 100) * 1.4)} kWp
 Connection Size: ${projectData.connectionSize ? `${projectData.connectionSize} kVA` : 'Not specified'}
-Solar Capacity: ${projectData.solarCapacityKwp} kWp
-DC/AC Ratio: ${projectData.dcAcRatio || 1.3}
-Battery: ${projectData.batteryCapacityKwh} kWh
+Annual Savings (current): R${Math.round(projectData.annualSavings || 0).toLocaleString()}
 
 Write 2-3 paragraphs explaining:
-1. How the solar system size was determined relative to building load and connection capacity
-2. The DC/AC ratio selection and its implications for energy harvest vs clipping
-3. Battery sizing rationale (if applicable) for load shifting or backup
+1. Why we recommend the current design as the optimal balance
+2. When a conservative approach might be appropriate (budget constraints, phased approach)
+3. When a more aggressive sizing might make sense (future load growth, export opportunities)
 
-Be technical but accessible.`,
+Help the client understand the sizing decision with business rationale.`,
+
+      energy_flow: `Generate an energy flow analysis for this solar installation:
+
+Solar Capacity: ${projectData.solarCapacityKwp} kWp
+Estimated Annual Generation: ${Math.round((projectData.solarCapacityKwp || 100) * 1600)} kWh
+Battery: ${projectData.batteryCapacityKwh} kWh
+Building Type: Commercial facility
+
+Write 2 paragraphs explaining:
+1. How energy flows through the system - from solar generation to building consumption and grid interaction
+2. Expected self-consumption ratio and what happens to excess energy
+
+Keep it simple - help a non-technical executive understand the energy dynamics.`,
+
+      monthly_yield: `Generate a monthly yield analysis for this South African solar installation:
+
+Solar Capacity: ${projectData.solarCapacityKwp} kWp
+Location: ${projectData.location || 'South Africa'}
+Expected Annual Yield: ${Math.round((projectData.solarCapacityKwp || 100) * 1600)} kWh
+Specific Yield: ~1,600 kWh/kWp/year
+
+Write 2 paragraphs explaining:
+1. The seasonal variation in solar production (summer vs winter) and why
+2. How this affects the financial model - higher production months vs lower
+
+Reference South African solar irradiance patterns.`,
+
+      payback_timeline: `Generate a financial payback analysis for this solar investment:
+
+System Cost: R${Math.round((projectData.solarCapacityKwp || 100) * 12000).toLocaleString()} (estimated)
+Annual Savings: R${Math.round(projectData.annualSavings || 0).toLocaleString()}
+Payback Period: ${(projectData.paybackYears || 5).toFixed(1)} years
+ROI: ${projectData.roiPercent || 0}%
+25-Year Net Returns: R${Math.round((projectData.annualSavings || 0) * 25 - (projectData.solarCapacityKwp || 100) * 12000).toLocaleString()}
+
+Write 2-3 paragraphs covering:
+1. The investment profile - upfront cost, payback timeline, and break-even point
+2. Long-term value creation - what happens after payback
+3. How tariff escalation improves returns over time
+
+Present this as an investment case to a CFO.`,
+
+      sensitivity_analysis: `Generate a sensitivity analysis summary for this solar investment:
+
+Base Payback: ${(projectData.paybackYears || 5).toFixed(1)} years
+Annual Savings: R${Math.round(projectData.annualSavings || 0).toLocaleString()}
+System Cost: R${Math.round((projectData.solarCapacityKwp || 100) * 12000).toLocaleString()}
+
+Write 2 paragraphs explaining:
+1. How payback changes with tariff escalation scenarios (0%, 10%, 20% annual increases)
+2. How system cost variations affect the investment case
+
+Help the client understand the range of outcomes and which factors most influence returns.`,
+
+      environmental_impact: `Generate an environmental impact section for this solar installation:
+
+Solar Capacity: ${projectData.solarCapacityKwp} kWp
+Annual CO2 Avoided: ~${Math.round((projectData.solarCapacityKwp || 100) * 1.2)} tonnes
+25-Year CO2 Avoided: ~${Math.round((projectData.solarCapacityKwp || 100) * 1.2 * 25)} tonnes
+Trees Equivalent: ~${Math.round((projectData.solarCapacityKwp || 100) * 1.2 * 45)} trees
+
+Write 2 paragraphs covering:
+1. The annual environmental impact in terms of CO2 reduction
+2. The broader sustainability narrative - ESG reporting, corporate responsibility
+
+Make it impactful but not preachy.`,
+
+      engineering_specs: `Generate a technical specifications summary for this solar installation:
+
+PV Array: ${projectData.solarCapacityKwp} kWp DC
+Inverter Capacity: ${Math.round((projectData.solarCapacityKwp || 100) / (projectData.dcAcRatio || 1.3))} kW AC
+DC/AC Ratio: ${(projectData.dcAcRatio || 1.3).toFixed(2)}:1
+Battery: ${projectData.batteryCapacityKwh} kWh
+Connection Size: ${projectData.connectionSize ? `${projectData.connectionSize} kVA` : 'TBC'}
+
+Write 2 paragraphs explaining:
+1. The key technical specifications and how they work together
+2. Expected performance metrics (capacity factor, specific yield, performance ratio)
+
+Be technical but ensure a non-engineer can understand the headline specs.`,
 
       investment_recommendation: `Generate a professional investment recommendation section:
 
@@ -107,6 +200,8 @@ Conclude with a confident but measured recommendation.`
     };
 
     const prompt = sectionPrompts[sectionType] || sectionPrompts.executive_summary;
+
+    console.log(`Generating narrative for section: ${sectionType}`);
 
     // Use tool calling to get structured output
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -132,12 +227,12 @@ Conclude with a confident but measured recommendation.`
                 properties: {
                   narrative: {
                     type: 'string',
-                    description: 'The professional narrative text for this section, formatted with paragraphs separated by newlines'
+                    description: 'The professional narrative text for this section, formatted with paragraphs separated by newlines. Keep it concise - 2-4 paragraphs maximum.'
                   },
                   keyHighlights: {
                     type: 'array',
                     items: { type: 'string' },
-                    description: 'List of 3-5 key highlights or talking points from this section'
+                    description: 'List of 2-4 key highlights or talking points from this section'
                   }
                 },
                 required: ['narrative', 'keyHighlights'],

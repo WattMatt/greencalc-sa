@@ -49,13 +49,9 @@ const SEGMENT_OPTIONS: Array<{
   { id: "engineering_specs", label: "Engineering Specs", description: "Technical specifications", icon: Settings2 },
 ];
 
-// AI Narrative types
-interface AIProposalNarrative {
-  executive_summary?: { narrative: string; keyHighlights: string[] };
-  tariff_analysis?: { narrative: string; keyHighlights: string[] };
-  sizing_methodology?: { narrative: string; keyHighlights: string[] };
-  investment_recommendation?: { narrative: string; keyHighlights: string[] };
-}
+// AI Narrative types - supports ALL report sections
+type NarrativeContent = { narrative: string; keyHighlights: string[] };
+type AIProposalNarrative = Partial<Record<SegmentType, NarrativeContent>>;
 
 interface ReportBuilderProps {
   projectName?: string;
@@ -256,9 +252,10 @@ export function ReportBuilder({
         roiPercent: simulationData.roiPercent,
       };
 
+      // Generate for ALL enabled segments, not just a fixed list
       const sectionsToGenerate = sectionType 
         ? [sectionType] 
-        : ['executive_summary', 'tariff_analysis', 'sizing_methodology', 'investment_recommendation'];
+        : Array.from(selectedSegments);
 
       const results = await Promise.all(
         sectionsToGenerate.map(async (section) => {
@@ -369,6 +366,40 @@ export function ReportBuilder({
         pdf.text(segment.label, margin, 17);
         
         let yPos = 40;
+
+        // Helper function to render AI narrative in PDF if available
+        const renderPDFNarrative = (sectionId: SegmentType, title: string, startY: number): number => {
+          const narrative = aiNarrativeEnabled && aiNarratives[sectionId]?.narrative;
+          if (!narrative) return startY;
+          
+          // AI-Generated Professional Narrative box
+          pdf.setFillColor(248, 250, 252);
+          const narrativeBoxHeight = Math.min(60, 20 + narrative.length / 15);
+          pdf.roundedRect(margin, startY, pageWidth - 2 * margin, narrativeBoxHeight, 3, 3, "F");
+          
+          pdf.setFontSize(9);
+          pdf.setTextColor(22, 101, 52);
+          pdf.text(title, margin + 4, startY + 6);
+          
+          // AI badge
+          pdf.setFillColor(220, 252, 231);
+          pdf.roundedRect(pageWidth - margin - 28, startY + 2, 24, 6, 2, 2, "F");
+          pdf.setFontSize(5);
+          pdf.setTextColor(22, 101, 52);
+          pdf.text("AI-Generated", pageWidth - margin - 26, startY + 6);
+          
+          pdf.setFontSize(8);
+          pdf.setTextColor(60, 60, 60);
+          
+          // Wrap and render the AI narrative
+          const maxLineWidth = pageWidth - 2 * margin - 8;
+          const wrappedNarrative = pdf.splitTextToSize(narrative, maxLineWidth);
+          const maxLines = Math.floor((narrativeBoxHeight - 12) / 3.5);
+          const linesToRender = wrappedNarrative.slice(0, maxLines);
+          pdf.text(linesToRender, margin + 4, startY + 14);
+          
+          return startY + narrativeBoxHeight + 6;
+        };
 
         // Render content based on segment type with INFOGRAPHICS
         switch (segment.id) {
@@ -565,6 +596,8 @@ export function ReportBuilder({
             break;
 
           case "tariff_details":
+            // Render AI narrative if available
+            yPos = renderPDFNarrative("tariff_details", "Tariff Analysis", yPos);
             // TOU Clock Diagram
             pdf.setFontSize(12);
             pdf.setTextColor(0, 0, 0);
@@ -682,6 +715,8 @@ export function ReportBuilder({
             break;
 
           case "dcac_comparison":
+            // Render AI narrative if available
+            yPos = renderPDFNarrative("dcac_comparison", "DC/AC Analysis", yPos);
             // DC/AC Ratio gauge
             const dcacRatio = simulationData.dcAcRatio || 1.3;
             
@@ -806,6 +841,8 @@ export function ReportBuilder({
             break;
 
           case "payback_timeline":
+            // Render AI narrative if available
+            yPos = renderPDFNarrative("payback_timeline", "Financial Payback", yPos);
             const paybackYrs = simulationData.paybackYears || 5;
             const annualSave = simulationData.annualSavings || 250000;
             const systemCost = (simulationData.solarCapacityKwp || 100) * 12000;
@@ -927,6 +964,8 @@ export function ReportBuilder({
             break;
 
           case "environmental_impact":
+            // Render AI narrative if available
+            yPos = renderPDFNarrative("environmental_impact", "Environmental Impact", yPos);
             const co2Tons = simulationData.co2AvoidedTons || 120;
             
             pdf.setFontSize(12);
@@ -1026,6 +1065,8 @@ export function ReportBuilder({
             break;
 
           case "energy_flow":
+            // Render AI narrative if available
+            yPos = renderPDFNarrative("energy_flow", "Energy Flow", yPos);
             // Sankey-style energy flow diagram
             pdf.setFontSize(12);
             pdf.setTextColor(0, 0, 0);
@@ -1141,6 +1182,8 @@ export function ReportBuilder({
             break;
 
           case "monthly_yield":
+            // Render AI narrative if available
+            yPos = renderPDFNarrative("monthly_yield", "Monthly Yield", yPos);
             // 12-month generation forecast bar chart
             pdf.setFontSize(12);
             pdf.setTextColor(0, 0, 0);
@@ -1244,6 +1287,8 @@ export function ReportBuilder({
             break;
 
           case "sensitivity_analysis":
+            // Render AI narrative if available
+            yPos = renderPDFNarrative("sensitivity_analysis", "Sensitivity Analysis", yPos);
             // Sensitivity Analysis - ROI under different scenarios
             const baseSysCost = (simulationData.solarCapacityKwp || 100) * 12000;
             const baseAnnualSavings = simulationData.annualSavings || 250000;
@@ -1384,6 +1429,8 @@ export function ReportBuilder({
             break;
 
           case "engineering_specs":
+            // Render AI narrative if available
+            yPos = renderPDFNarrative("engineering_specs", "Engineering Specifications", yPos);
             pdf.setFontSize(12);
             pdf.text("Technical Specifications", margin, yPos);
             yPos += 10;
@@ -1466,6 +1513,8 @@ export function ReportBuilder({
             break;
 
           case "sizing_comparison":
+            // Render AI narrative if available
+            yPos = renderPDFNarrative("sizing_comparison", "Sizing Alternatives", yPos);
             // Sizing Alternatives Comparison Table
             pdf.setFontSize(12);
             pdf.setTextColor(0, 0, 0);
@@ -1886,6 +1935,35 @@ export function ReportBuilder({
   );
 }
 
+// Reusable AI Narrative Block for preview
+function AIPreviewNarrative({ 
+  title, 
+  narrative, 
+  children 
+}: { 
+  title: string; 
+  narrative?: string; 
+  children?: React.ReactNode;
+}) {
+  if (!narrative) return null;
+  
+  return (
+    <div className="bg-emerald-50/50 dark:bg-emerald-950/20 rounded-lg p-2 space-y-1 border border-emerald-200/50 dark:border-emerald-800/50 mb-2">
+      <div className="flex items-center justify-between">
+        <p className="font-semibold text-[9px] text-emerald-700 dark:text-emerald-400">{title}</p>
+        <Badge variant="secondary" className="text-[6px] h-4 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300">
+          <Wand2 className="h-2 w-2 mr-0.5" />
+          AI
+        </Badge>
+      </div>
+      <p className="text-[7px] text-muted-foreground leading-relaxed line-clamp-5">
+        {narrative}
+      </p>
+      {children}
+    </div>
+  );
+}
+
 // Preview content for each segment type - matches PDF infographics
 function SegmentPreviewContent({ 
   segmentId, 
@@ -1902,6 +1980,9 @@ function SegmentPreviewContent({
   aiNarratives?: AIProposalNarrative;
   aiNarrativeEnabled?: boolean;
 }) {
+  // Get AI narrative for this segment if available
+  const aiNarrative = aiNarrativeEnabled ? aiNarratives?.[segmentId]?.narrative : undefined;
+  
   switch (segmentId) {
     case "executive_summary":
       const roiPct = Math.min(100, simulationData.roiPercent || 0);
@@ -1992,6 +2073,7 @@ function SegmentPreviewContent({
     case "tariff_details":
       return (
         <div className="space-y-2 text-[9px]">
+          <AIPreviewNarrative title="Tariff Analysis" narrative={aiNarrative} />
           {/* TOU Clock Diagram */}
           <div className="flex items-center gap-3">
             <div className="relative w-16 h-16">
@@ -2086,6 +2168,7 @@ function SegmentPreviewContent({
       const ratioPosition = Math.min(100, Math.max(0, ((ratio - 1) / 0.6) * 100));
       return (
         <div className="space-y-3">
+          <AIPreviewNarrative title="DC/AC Analysis" narrative={aiNarrative} />
           {/* Ratio scale with marker */}
           <div>
             <div className="flex items-center justify-between text-[9px] mb-1">
@@ -2147,6 +2230,7 @@ function SegmentPreviewContent({
       
       return (
         <div className="space-y-2">
+          <AIPreviewNarrative title="Financial Payback" narrative={aiNarrative} />
           {/* Cash flow chart */}
           <div className="relative h-14 bg-muted/30 rounded overflow-hidden">
             {/* Zero line */}
@@ -2234,6 +2318,7 @@ function SegmentPreviewContent({
       
       return (
         <div className="space-y-2">
+          <AIPreviewNarrative title="Sensitivity Analysis" narrative={aiNarrative} />
           <p className="text-[8px] text-muted-foreground">How payback changes with different scenarios</p>
           
           {/* Tariff Escalation */}
@@ -2293,6 +2378,7 @@ function SegmentPreviewContent({
       
       return (
         <div className="space-y-3">
+          <AIPreviewNarrative title="Environmental Impact" narrative={aiNarrative} />
           {/* Main metrics with visual elements */}
           <div className="flex justify-around items-center">
             {/* CO2 donut */}
@@ -2337,6 +2423,7 @@ function SegmentPreviewContent({
       
       return (
         <div className="space-y-2">
+          <AIPreviewNarrative title="Energy Flow" narrative={aiNarrative} />
           <p className="text-[9px] font-medium">System Energy Distribution</p>
           
           {/* Simplified flow diagram */}
@@ -2393,6 +2480,7 @@ function SegmentPreviewContent({
       
       return (
         <div className="space-y-2">
+          <AIPreviewNarrative title="Monthly Yield" narrative={aiNarrative} />
           <p className="text-[9px] font-medium">12-Month Solar Generation</p>
           
           {/* Mini bar chart */}
@@ -2435,6 +2523,7 @@ function SegmentPreviewContent({
       const inverterSize = Math.round((simulationData.solarCapacityKwp || 100) / (simulationData.dcAcRatio || 1.3));
       return (
         <div className="space-y-2">
+          <AIPreviewNarrative title="Engineering Specs" narrative={aiNarrative} />
           {/* System diagram */}
           <div className="flex items-center justify-center gap-2 py-2">
             <div className="bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded px-2 py-1 text-center">
@@ -2493,6 +2582,7 @@ function SegmentPreviewContent({
 
       return (
         <div className="space-y-2">
+          <AIPreviewNarrative title="Sizing Alternatives" narrative={aiNarrative} />
           <p className="text-[9px] font-medium">System Sizing Comparison</p>
           
           {/* Scenario comparison cards */}
