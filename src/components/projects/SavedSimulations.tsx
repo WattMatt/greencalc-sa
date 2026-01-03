@@ -24,9 +24,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Save, Trash2, Download, BarChart3, Loader2 } from "lucide-react";
+import { Save, Trash2, Download, BarChart3, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useInfographicGeneration } from "@/hooks/useInfographicGeneration";
 
 interface SimulationResult {
   totalDailyLoad: number;
@@ -88,6 +89,9 @@ export function SavedSimulations({
   const [simulationName, setSimulationName] = useState("");
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
+  
+  // Infographic generation hook
+  const { generating: generatingInfographics, generateInfographics } = useInfographicGeneration();
 
   // Fetch saved simulations
   const { data: savedSimulations, isLoading } = useQuery({
@@ -127,11 +131,37 @@ export function SavedSimulations({
       });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["project-simulations", projectId] });
       toast.success("Simulation saved successfully");
       setSaveDialogOpen(false);
       setSimulationName("");
+      
+      // Trigger background infographic generation
+      toast.info("Generating report infographics in background...", { 
+        icon: <Sparkles className="h-4 w-4" />,
+        duration: 3000 
+      });
+      
+      // Prepare infographic data from current simulation results
+      const infographicData = {
+        projectName: simulationName || "Solar Project",
+        solarCapacityKwp: currentConfig.solarCapacity,
+        batteryCapacityKwh: currentConfig.batteryCapacity,
+        annualSavings: currentResults.annualSavings,
+        paybackYears: currentResults.paybackYears,
+        roiPercent: currentResults.roi,
+        co2AvoidedTons: Math.round((currentResults.totalDailySolar * 365 * 0.9) / 1000), // Rough CO2 estimate
+        selfConsumptionPercent: currentResults.totalDailySolar > 0 
+          ? (currentResults.totalSolarUsed / currentResults.totalDailySolar) * 100 
+          : 0,
+        dcAcRatio: 1.3, // Default if not available
+      };
+      
+      // Generate infographics in background (don't await)
+      generateInfographics(infographicData, projectId).catch(err => {
+        console.error("Background infographic generation failed:", err);
+      });
     },
     onError: (error: any) => {
       toast.error("Failed to save simulation: " + error.message);

@@ -323,6 +323,7 @@ export function ReportExport({
         environmental_impact: "Environmental Impact",
         engineering_specs: "Engineering Specifications",
         ai_infographics: "AI Infographics",
+        tariff_details: "Tariff Analysis",
         custom_notes: "Notes & Annotations"
       };
 
@@ -385,6 +386,9 @@ export function ReportExport({
             break;
           case "ai_infographics":
             await renderAIInfographics(doc, cachedInfographics, primary, yPos);
+            break;
+          case "tariff_details":
+            await renderTariffDetails(doc, reportData, primary, yPos, projectId);
             break;
           default:
             doc.setFontSize(11);
@@ -599,6 +603,162 @@ export function ReportExport({
       styles: { fontSize: 10 },
       margin: { left: 20, right: 20 },
     });
+  };
+
+  const renderTariffDetails = async (
+    doc: jsPDF, 
+    data: ReportData, 
+    primary: { r: number; g: number; b: number }, 
+    yPos: number,
+    pId?: string
+  ) => {
+    // Fetch tariff data from Supabase if we have project info
+    let tariffName = "Not specified";
+    let tariffType = "N/A";
+    let tariffFamily = "";
+    let transmissionZone = "";
+    let voltageLevel = "";
+    let fixedCharges: Array<[string, string]> = [];
+    let touRates: Array<[string, string, string, string]> = [];
+
+    if (pId) {
+      try {
+        // Fetch project to get tariff_id
+        const { data: project } = await supabase
+          .from("projects")
+          .select("tariff_id")
+          .eq("id", pId)
+          .single();
+
+        if (project?.tariff_id) {
+          // Fetch tariff details
+          const { data: tariff } = await supabase
+            .from("tariffs")
+            .select(`
+              name,
+              tariff_type,
+              tariff_family,
+              transmission_zone,
+              voltage_level,
+              generation_capacity_charge,
+              demand_charge_per_kva,
+              network_access_charge,
+              reactive_energy_charge,
+              fixed_monthly_charge
+            `)
+            .eq("id", project.tariff_id)
+            .single();
+
+          if (tariff) {
+            tariffName = tariff.name;
+            tariffType = tariff.tariff_type || "N/A";
+            tariffFamily = tariff.tariff_family || "";
+            transmissionZone = tariff.transmission_zone || "";
+            voltageLevel = tariff.voltage_level || "";
+
+            // Build fixed charges
+            if (tariff.generation_capacity_charge) {
+              fixedCharges.push(["Generation Capacity (GCC)", `R${tariff.generation_capacity_charge.toFixed(2)}/kVA`]);
+            }
+            if (tariff.demand_charge_per_kva) {
+              fixedCharges.push(["Demand Charge", `R${tariff.demand_charge_per_kva.toFixed(2)}/kVA`]);
+            }
+            if (tariff.network_access_charge) {
+              fixedCharges.push(["Network Access", `R${tariff.network_access_charge.toFixed(2)}`]);
+            }
+            if (tariff.reactive_energy_charge) {
+              fixedCharges.push(["Reactive Energy", `R${tariff.reactive_energy_charge.toFixed(2)}/kVArh`]);
+            }
+            if (tariff.fixed_monthly_charge) {
+              fixedCharges.push(["Fixed Monthly", `R${tariff.fixed_monthly_charge.toFixed(2)}`]);
+            }
+          }
+
+          // Fetch TOU periods
+          const { data: touPeriods } = await supabase
+            .from("tou_periods")
+            .select("season, time_of_use, rate_per_kwh, demand_charge_per_kva")
+            .eq("tariff_id", project.tariff_id)
+            .order("season")
+            .order("time_of_use");
+
+          if (touPeriods && touPeriods.length > 0) {
+            touRates = touPeriods.map(p => [
+              p.season,
+              p.time_of_use,
+              `${(p.rate_per_kwh * 100).toFixed(2)}c`,
+              p.demand_charge_per_kva ? `R${p.demand_charge_per_kva.toFixed(2)}` : "-"
+            ]);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching tariff data:", error);
+      }
+    }
+
+    // Render tariff header info
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(primary.r, primary.g, primary.b);
+    doc.text(`Selected Tariff: ${tariffName}`, 20, yPos);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(80, 80, 80);
+    const details = [tariffFamily, transmissionZone, voltageLevel].filter(Boolean).join(" • ");
+    doc.text(details || `Type: ${tariffType}`, 20, yPos + 8);
+    
+    yPos += 20;
+
+    // Fixed charges table
+    if (fixedCharges.length > 0) {
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(60, 60, 60);
+      doc.text("Fixed Monthly Charges", 20, yPos);
+      yPos += 5;
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Charge Type', 'Rate']],
+        body: fixedCharges,
+        theme: 'striped',
+        headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
+        styles: { fontSize: 10 },
+        margin: { left: 20, right: 20 },
+        tableWidth: 'auto',
+      });
+      
+      yPos = (doc as any).lastAutoTable.finalY + 15;
+    }
+
+    // TOU rates table
+    if (touRates.length > 0) {
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(60, 60, 60);
+      doc.text("Time-of-Use Energy Rates", 20, yPos);
+      yPos += 5;
+
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Season', 'Period', 'Energy Rate', 'Demand']],
+        body: touRates,
+        theme: 'striped',
+        headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
+        styles: { fontSize: 10 },
+        margin: { left: 20, right: 20 },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 15;
+    }
+
+    // Solar impact note
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(primary.r, primary.g, primary.b);
+    const impactNote = "⚡ Solar Impact: System generates during Peak/Standard hours, offsetting highest-cost energy periods.";
+    doc.text(impactNote, 20, yPos);
   };
 
   const renderAIInfographics = async (
