@@ -21,6 +21,14 @@ interface ExtractedTariff {
   reactive_energy_charge?: number;
   capacity_kva?: number;
   customer_category?: string;
+  // Unbundled Eskom 2025-2026 fields
+  is_unbundled?: boolean;
+  tariff_family?: string;
+  transmission_zone?: "Zone 0-300km" | "Zone 300-600km" | "Zone 600-900km" | "Zone >900km";
+  generation_capacity_charge?: number;
+  legacy_charge_per_kwh?: number;
+  service_charge_per_day?: number;
+  administration_charge_per_day?: number;
   rates: Array<{
     rate_per_kwh: number;
     block_start_kwh?: number;
@@ -28,6 +36,10 @@ interface ExtractedTariff {
     season?: string;
     time_of_use?: string;
     reactive_energy_charge?: number;
+    // Unbundled rate components
+    network_charge_per_kwh?: number;
+    ancillary_charge_per_kwh?: number;
+    energy_charge_per_kwh?: number;
   }>;
 }
 
@@ -727,24 +739,36 @@ SOURCE DATA:
 ${municipalityText.slice(0, 15000)}
 ${existingContext}
 
-=== ESKOM 2025-2026 TARIFF STRUCTURE (CRITICAL UNDERSTANDING) ===
+=== ESKOM 2025-2026 UNBUNDLED TARIFF STRUCTURE ===
 
-Eskom's 2025-2026 tariffs are UNBUNDLED with these components:
-1. **Legacy Energy Charge (c/kWh)** - The traditional energy rate
-2. **Generation Capacity Charge (GCC)** - Recovered as R/kVA or R/POD/day (NOT for Homelight)
-3. **Transmission Network Charges** - For MV/HV tariffs
-4. **Distribution Network Charges** - For all tariffs
-5. **Retail/Service Charges** - Admin fees (R/day or R/month)
+Eskom's 2025-2026 tariffs are FULLY UNBUNDLED. You MUST extract these components:
+
+**TARIFF-LEVEL UNBUNDLED FIELDS (REQUIRED for all Eskom tariffs):**
+- is_unbundled: true (ALWAYS set this for Eskom 2025-26)
+- tariff_family: "${currentBatch?.name || "Megaflex"}" (the tariff family being processed)
+- transmission_zone: "Zone 0-300km", "Zone 300-600km", "Zone 600-900km", or "Zone >900km" (based on distance from Johannesburg)
+- generation_capacity_charge: R/kVA/month (GCC - the new capacity charge, NOT for Homelight)
+- legacy_charge_per_kwh: R/kWh (government energy procurement charge - convert from c/kWh)
+- service_charge_per_day: R/day (daily service/retail fee)
+- administration_charge_per_day: R/day (daily admin fee)
+
+**RATE-LEVEL UNBUNDLED FIELDS (extract if available):**
+For each TOU rate, try to extract the separate components:
+- rate_per_kwh: Total combined energy rate in R/kWh
+- network_charge_per_kwh: Network component (Transmission + Distribution) in R/kWh
+- energy_charge_per_kwh: Pure energy component (excluding legacy, network) in R/kWh
+- ancillary_charge_per_kwh: Ancillary services component in R/kWh
 
 === EXTRACTION FOCUS: ${currentBatch?.name?.toUpperCase() || "ESKOM TARIFFS"} ===
 
 Extract ALL variants of ${currentBatch?.name || "Eskom"} tariffs:
 
-**For TOU tariffs (Megaflex, Miniflex, Nightsave Urban/Rural, Ruraflex, Municflex, Transflex):**
+**For TOU tariffs (Megaflex, Miniflex, Nightsave, Ruraflex, Municflex):**
 - Extract 6 energy rates: Peak/Standard/Off-Peak × High Demand(Winter)/Low Demand(Summer)
 - Look for "Active Energy" tables with c/kWh values
-- GCC or Network Access Charge → demand_charge_per_kva
-- Service/Admin/Retail charges → fixed_monthly_charge
+- GCC → generation_capacity_charge (R/kVA/month)
+- Network Access Charge → demand_charge_per_kva (R/kVA)
+- Service/Admin/Retail charges → service_charge_per_day and administration_charge_per_day
 - Reactive energy charge (kVArh) for power factor during high demand season
 
 **For Fixed tariffs (Businessrate, Homepower, Landrate, Municrate):**
@@ -752,26 +776,19 @@ Extract ALL variants of ${currentBatch?.name || "Eskom"} tariffs:
 - Extract network capacity and retail service charges separately
 
 **For Subsidized tariffs (Homelight, Landlight):**
-- All-inclusive single c/kWh rate (NO separate GCC)
+- All-inclusive single c/kWh rate (NO separate GCC - is_unbundled can still be true but no GCC)
 - No fixed charges for prepaid variants
-
-**For Generator tariffs (Gen-wheeling, Gen-offset):**
-- WEPS energy rate credits for wheeling transactions
-- Net-billing reconciliation tariffs for self-generation
-
-**For Residential TOU (Homeflex):**
-- Mandatory for grid-tied generation
-- Net-billing (Gen-offset) credit for exports
 
 === KEY RULES ===
 1. RATE CONVERSION: c/kWh → R/kWh (divide by 100). 392.75 c/kWh → 3.9275 R/kWh
 2. VOLTAGE LEVELS: LV (<500V), MV (500V-66kV), HV (>66kV)
-3. Include transmission zones in name if present (≤300km, 300-600km, 600-900km, >900km)
-4. Include Local/Non-local authority variants for municipal tariffs
+3. Include transmission zone in tariff name AND set transmission_zone field
+4. Include Local/Non-local authority variants
 5. Include Key Customer variants for large power users
 6. Note NMD (Notified Maximum Demand) requirements in tariff_name
+7. SET is_unbundled: true for ALL Eskom tariffs!
 
-Extract EVERY ${currentBatch?.name || ""} variant!`
+Extract EVERY ${currentBatch?.name || ""} variant with ALL unbundled components!`
         : `TASK: Extract electricity tariffs for "${municipality}" municipality.
 
 SOURCE DATA:
@@ -962,18 +979,30 @@ Extract ALL tariffs with their COMPLETE rate data!`;
                             fixed_monthly_charge: { type: "number", description: "Basic Charge per month in Rands (R/month). NOT an energy rate!" },
                             demand_charge_per_kva: { type: "number", description: "Per-amp or per-kVA charges in Rands (R/A/m or R/kVA). NOT an energy rate!" },
                             reactive_energy_charge: { type: "number", description: "Reactive energy charge in R/kVArh for power factor compensation" },
+                            // Unbundled Eskom 2025-2026 fields
+                            is_unbundled: { type: "boolean", description: "True for Eskom 2025-26 unbundled tariffs with separate GCC, legacy, network charges" },
+                            tariff_family: { type: "string", enum: ["Megaflex", "Miniflex", "Homepower", "Homeflex", "Homelight", "Nightsave Urban Large", "Nightsave Urban Small", "Ruraflex", "Landrate", "Nightsave Rural", "Landlight", "Municflex", "Municrate", "Transit", "Gen-wheeling"], description: "Eskom tariff family name" },
+                            transmission_zone: { type: "string", enum: ["Zone 0-300km", "Zone 300-600km", "Zone 600-900km", "Zone >900km"], description: "Distance from Johannesburg for transmission pricing" },
+                            generation_capacity_charge: { type: "number", description: "GCC in R/kVA/month - Eskom capacity charge" },
+                            legacy_charge_per_kwh: { type: "number", description: "Legacy charge in c/kWh for government energy programs (convert to R)" },
+                            service_charge_per_day: { type: "number", description: "Daily service charge in R/day" },
+                            administration_charge_per_day: { type: "number", description: "Daily administration charge in R/day" },
                             rates: {
                               type: "array",
                               description: "ONLY energy rates in R/kWh. Convert c/kWh to R/kWh by dividing by 100.",
                               items: {
                                 type: "object",
                                 properties: {
-                                  rate_per_kwh: { type: "number", description: "Energy rate in R/kWh (convert from c/kWh by dividing by 100)" },
+                                  rate_per_kwh: { type: "number", description: "Total energy rate in R/kWh (convert from c/kWh by dividing by 100)" },
                                   block_start_kwh: { type: "number", description: "For IBT: start of block. <500kWh→0, >500kWh→500, 0-50kWh→0" },
                                   block_end_kwh: { type: ["number", "null"], description: "For IBT: end of block. <500kWh→500, >500kWh→null, 0-50kWh→50" },
                                   season: { type: "string", enum: ["All Year", "High/Winter", "Low/Summer"] },
                                   time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"], description: "For IBT with blocks, use 'Any'" },
-                                  reactive_energy_charge: { type: "number", description: "Reactive energy charge for this TOU period if varies" }
+                                  reactive_energy_charge: { type: "number", description: "Reactive energy charge for this TOU period if varies" },
+                                  // Unbundled rate components
+                                  network_charge_per_kwh: { type: "number", description: "Network component in R/kWh (Transmission + Distribution)" },
+                                  ancillary_charge_per_kwh: { type: "number", description: "Ancillary services in R/kWh" },
+                                  energy_charge_per_kwh: { type: "number", description: "Pure energy component in R/kWh (excluding legacy, network)" }
                                 },
                                 required: ["rate_per_kwh"]
                               }
@@ -1168,6 +1197,14 @@ Extract ALL tariffs with their COMPLETE rate data!`;
             reactive_energy_charge: tariff.reactive_energy_charge || 0,
             capacity_kva: tariff.capacity_kva || null,
             customer_category: tariff.customer_category || tariff.category,
+            // Unbundled Eskom 2025-2026 fields
+            is_unbundled: tariff.is_unbundled || false,
+            tariff_family: tariff.tariff_family || null,
+            transmission_zone: tariff.transmission_zone || null,
+            generation_capacity_charge: tariff.generation_capacity_charge || null,
+            legacy_charge_per_kwh: tariff.legacy_charge_per_kwh || null,
+            service_charge_per_day: tariff.service_charge_per_day || null,
+            administration_charge_per_day: tariff.administration_charge_per_day || null,
           };
 
           let tariffId: string;
@@ -1221,6 +1258,10 @@ Extract ALL tariffs with their COMPLETE rate data!`;
                 season: rate.season || "All Year",
                 time_of_use: rate.time_of_use || "Any",
                 reactive_energy_charge: rate.reactive_energy_charge || null,
+                // Unbundled rate components
+                network_charge_per_kwh: rate.network_charge_per_kwh || null,
+                ancillary_charge_per_kwh: rate.ancillary_charge_per_kwh || null,
+                energy_charge_per_kwh: rate.energy_charge_per_kwh || null,
               });
             }
           }
