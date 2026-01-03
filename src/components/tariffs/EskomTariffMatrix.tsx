@@ -286,50 +286,49 @@ export function EskomTariffMatrix({
     const isLoading = loadingRates.has(tariff.id);
 
     return (
-      <Collapsible key={tariff.id} open={isExpanded}>
+      <Collapsible key={tariff.id} open={isExpanded} onOpenChange={() => toggleExpanded(tariff.id)}>
         <div className="border rounded bg-background">
-          <div className="flex items-center justify-between p-3">
-            <CollapsibleTrigger
-              className="flex items-center gap-2 hover:opacity-80 flex-1"
-              onClick={() => toggleExpanded(tariff.id)}
-            >
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-              <div className="text-left">
-                <span className="text-sm font-medium">{tariff.name}</span>
-                <div className="flex items-center gap-2 mt-1">
-                  {tariff.transmission_zone && (
-                    <Badge variant="outline" className="text-xs">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      {tariff.transmission_zone.replace('Zone ', '')}
-                    </Badge>
-                  )}
-                  {tariff.voltage_level && (
-                    <Badge variant="outline" className="text-xs">
-                      <Gauge className="h-3 w-3 mr-1" />
-                      {tariff.voltage_level}
-                    </Badge>
-                  )}
+          <CollapsibleTrigger asChild>
+            <div className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/50">
+              <div className="flex items-center gap-2 flex-1">
+                {isExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+                <div className="text-left">
+                  <span className="text-sm font-medium">{tariff.name}</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    {tariff.transmission_zone && (
+                      <Badge variant="outline" className="text-xs">
+                        <MapPin className="h-3 w-3 mr-1" />
+                        {tariff.transmission_zone.replace('Zone ', '')}
+                      </Badge>
+                    )}
+                    {tariff.voltage_level && (
+                      <Badge variant="outline" className="text-xs">
+                        <Gauge className="h-3 w-3 mr-1" />
+                        {tariff.voltage_level}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
-            </CollapsibleTrigger>
-            <div className="flex items-center gap-2">
-              <Badge variant={tariff.tariff_type === "TOU" ? "secondary" : "outline"} className="text-xs">
-                {tariff.tariff_type}
-              </Badge>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-7 w-7" 
-                onClick={() => onDeleteTariff(tariff.id)}
-              >
-                <Trash2 className="h-3 w-3 text-destructive" />
-              </Button>
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <Badge variant={tariff.tariff_type === "TOU" ? "secondary" : "outline"} className="text-xs">
+                  {tariff.tariff_type}
+                </Badge>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7" 
+                  onClick={() => onDeleteTariff(tariff.id)}
+                >
+                  <Trash2 className="h-3 w-3 text-destructive" />
+                </Button>
+              </div>
             </div>
-          </div>
+          </CollapsibleTrigger>
 
           <CollapsibleContent>
             <div className="px-3 pb-3 pt-1 border-t space-y-4">
