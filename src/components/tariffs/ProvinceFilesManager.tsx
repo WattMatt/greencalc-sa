@@ -96,6 +96,29 @@ export function ProvinceFilesManager() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Fetch Eskom batch statuses when Eskom province is selected
+  const { data: eskomBatches, refetch: refetchEskomBatches } = useQuery({
+    queryKey: ["eskom-batch-status", selectedProvince],
+    queryFn: async () => {
+      if (selectedProvince?.toLowerCase() !== 'eskom') return null;
+      
+      const eskomMuni = provincesData?.municipalities?.find(
+        m => m.name.toLowerCase().includes('eskom')
+      );
+      if (!eskomMuni) return null;
+
+      const { data, error } = await supabase
+        .from("eskom_batch_status")
+        .select("*")
+        .eq("municipality_id", eskomMuni.id)
+        .order("batch_index");
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: selectedProvince?.toLowerCase() === 'eskom' && extractionOpen,
+  });
+
   // Fetch provinces and their stats
   const { data: provincesData, isLoading: loadingProvinces, refetch: refetchProvincesData } = useQuery({
     queryKey: ["provinces-with-stats"],
@@ -472,6 +495,11 @@ export function ProvinceFilesManager() {
       } else {
         setMunicipalities([]);
       }
+    }
+
+    // Also refetch Eskom batch status if applicable
+    if (selectedProvince?.toLowerCase() === 'eskom') {
+      await refetchEskomBatches();
     }
 
     sonnerToast.success("Data refreshed");
@@ -1509,12 +1537,57 @@ export function ProvinceFilesManager() {
                             
                             sonnerToast.success("Eskom batch tracking reset - ready to re-extract");
                             queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });
+                            queryClient.invalidateQueries({ queryKey: ["eskom-batch-status"] });
                           }}
                           className="text-amber-600 border-amber-500/50 hover:bg-amber-500/10"
                         >
                           <RefreshCw className="h-3 w-3 mr-1" />
                           Reset Eskom Batches
                         </Button>
+                      </div>
+                    )}
+
+                    {/* Eskom Batch Status List */}
+                    {selectedProvince?.toLowerCase() === 'eskom' && eskomBatches && eskomBatches.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-sm font-medium">Batch Extraction Progress</h5>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3 text-green-600" />
+                              {eskomBatches.filter(b => b.status === 'completed').length}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {eskomBatches.filter(b => b.status === 'pending').length}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3 text-destructive" />
+                              {eskomBatches.filter(b => b.status === 'error').length}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {eskomBatches.map((batch) => (
+                            <Badge
+                              key={batch.id}
+                              variant={batch.status === 'completed' ? 'default' : batch.status === 'error' ? 'destructive' : 'outline'}
+                              className={`text-xs ${
+                                batch.status === 'completed' 
+                                  ? 'bg-green-600 hover:bg-green-700' 
+                                  : batch.status === 'error'
+                                    ? ''
+                                    : 'opacity-60'
+                              }`}
+                              title={batch.status === 'completed' ? `${batch.tariffs_extracted} tariffs extracted` : batch.error_message || undefined}
+                            >
+                              {batch.batch_name}
+                              {batch.status === 'completed' && batch.tariffs_extracted && (
+                                <span className="ml-1 opacity-75">({batch.tariffs_extracted})</span>
+                              )}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
                     )}
 
