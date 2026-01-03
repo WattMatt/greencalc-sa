@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -69,7 +69,10 @@ export function ReportBuilder({
   const [selectedSegments, setSelectedSegments] = useState<Set<SegmentType>>(
     new Set(["executive_summary", "tariff_details", "dcac_comparison", "payback_timeline", "engineering_specs"])
   );
+  const [segmentOrder, setSegmentOrder] = useState<SegmentType[]>(SEGMENT_OPTIONS.map(s => s.id));
   const [isGenerating, setIsGenerating] = useState(false);
+  const [draggedSegment, setDraggedSegment] = useState<SegmentType | null>(null);
+  const [dragOverSegment, setDragOverSegment] = useState<SegmentType | null>(null);
 
   // Fetch latest simulation if not provided
   const { data: latestSimulation } = useQuery({
@@ -137,7 +140,56 @@ export function ReportBuilder({
     setSelectedSegments(new Set());
   };
 
-  const enabledSegments = SEGMENT_OPTIONS.filter(s => selectedSegments.has(s.id));
+  // Drag and drop handlers
+  const handleDragStart = useCallback((segmentId: SegmentType) => {
+    setDraggedSegment(segmentId);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, segmentId: SegmentType) => {
+    e.preventDefault();
+    if (draggedSegment && draggedSegment !== segmentId) {
+      setDragOverSegment(segmentId);
+    }
+  }, [draggedSegment]);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverSegment(null);
+  }, []);
+
+  const handleDrop = useCallback((targetId: SegmentType) => {
+    if (!draggedSegment || draggedSegment === targetId) {
+      setDraggedSegment(null);
+      setDragOverSegment(null);
+      return;
+    }
+
+    setSegmentOrder(prev => {
+      const newOrder = [...prev];
+      const draggedIndex = newOrder.indexOf(draggedSegment);
+      const targetIndex = newOrder.indexOf(targetId);
+      
+      // Remove dragged item and insert at target position
+      newOrder.splice(draggedIndex, 1);
+      newOrder.splice(targetIndex, 0, draggedSegment);
+      
+      return newOrder;
+    });
+
+    setDraggedSegment(null);
+    setDragOverSegment(null);
+  }, [draggedSegment]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedSegment(null);
+    setDragOverSegment(null);
+  }, []);
+
+  // Get ordered segment options
+  const orderedSegmentOptions = useMemo(() => {
+    return segmentOrder.map(id => SEGMENT_OPTIONS.find(s => s.id === id)!).filter(Boolean);
+  }, [segmentOrder]);
+
+  const enabledSegments = orderedSegmentOptions.filter(s => selectedSegments.has(s.id));
   const totalPages = Math.ceil(enabledSegments.length / 2) + 1;
 
   // Generate PDF
@@ -434,21 +486,37 @@ export function ReportBuilder({
             </div>
           </div>
           
+          <p className="text-xs text-muted-foreground mb-2">
+            Drag to reorder sections in your PDF
+          </p>
           <div className="space-y-2">
-            {SEGMENT_OPTIONS.map((segment) => {
+            {orderedSegmentOptions.map((segment) => {
               const Icon = segment.icon;
               const isSelected = selectedSegments.has(segment.id);
+              const isDragging = draggedSegment === segment.id;
+              const isDragOver = dragOverSegment === segment.id;
               
               return (
-                <button
+                <div
                   key={segment.id}
+                  draggable
+                  onDragStart={() => handleDragStart(segment.id)}
+                  onDragOver={(e) => handleDragOver(e, segment.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={() => handleDrop(segment.id)}
+                  onDragEnd={handleDragEnd}
                   onClick={() => toggleSegment(segment.id)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-all ${
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-all cursor-grab active:cursor-grabbing ${
+                    isDragging ? "opacity-50 scale-95" : ""
+                  } ${
+                    isDragOver ? "ring-2 ring-primary ring-offset-2" : ""
+                  } ${
                     isSelected
                       ? "bg-primary/10 border border-primary/30"
                       : "bg-muted/30 border border-transparent hover:bg-muted/50"
                   }`}
                 >
+                  <GripVertical className="h-4 w-4 text-muted-foreground/50 flex-shrink-0" />
                   <Checkbox 
                     checked={isSelected}
                     onCheckedChange={() => toggleSegment(segment.id)}
@@ -461,7 +529,7 @@ export function ReportBuilder({
                     </p>
                     <p className="text-xs text-muted-foreground truncate">{segment.description}</p>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
