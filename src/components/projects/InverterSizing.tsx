@@ -39,7 +39,7 @@ export interface InverterConfig {
 export interface InverterSizingProps {
   config: InverterConfig;
   onChange: (config: InverterConfig) => void;
-  currentSolarCapacity: number;
+  currentSolarCapacity: number; // This is now AC capacity (kW)
   onSolarCapacityChange: (capacity: number) => void;
   maxSolarKva?: number | null;
 }
@@ -56,13 +56,13 @@ export function calculateValidSizes(
   inverterSize: number,
   dcAcRatio: number,
   maxInverters: number = 10
-): { inverterCount: number; dcCapacity: number; acCapacity: number }[] {
-  const sizes: { inverterCount: number; dcCapacity: number; acCapacity: number }[] = [];
+): { inverterCount: number; acCapacity: number; dcCapacity: number }[] {
+  const sizes: { inverterCount: number; acCapacity: number; dcCapacity: number }[] = [];
   
   for (let count = 1; count <= maxInverters; count++) {
-    const acCapacity = inverterSize * count;
-    const dcCapacity = Math.round(acCapacity * dcAcRatio);
-    sizes.push({ inverterCount: count, dcCapacity, acCapacity });
+    const acCapacity = inverterSize * count; // System size = AC capacity
+    const dcCapacity = Math.round(acCapacity * dcAcRatio); // Panel capacity for overpaneling
+    sizes.push({ inverterCount: count, acCapacity, dcCapacity });
   }
   
   return sizes;
@@ -81,43 +81,39 @@ export function InverterSizing({
   );
 
   const currentAcCapacity = config.inverterSize * config.inverterCount;
-  const recommendedDcCapacity = Math.round(currentAcCapacity * config.dcAcRatio);
+  const dcPanelCapacity = Math.round(currentAcCapacity * config.dcAcRatio);
   
-  // Check if current solar capacity matches a valid inverter configuration
-  const isValidConfig = validSizes.some(s => s.dcCapacity === currentSolarCapacity);
+  // Check if current solar capacity (AC) matches a valid inverter configuration
+  const isValidConfig = validSizes.some(s => s.acCapacity === currentSolarCapacity);
   const nearestValid = validSizes.reduce((prev, curr) => 
-    Math.abs(curr.dcCapacity - currentSolarCapacity) < Math.abs(prev.dcCapacity - currentSolarCapacity) 
+    Math.abs(curr.acCapacity - currentSolarCapacity) < Math.abs(prev.acCapacity - currentSolarCapacity) 
       ? curr 
       : prev
   );
 
-  // Check against connection limit
-  const exceedsConnectionLimit = maxSolarKva && currentSolarCapacity > maxSolarKva;
+  // Check against connection limit (AC capacity vs kVA limit)
+  const exceedsConnectionLimit = maxSolarKva && currentAcCapacity > maxSolarKva;
 
   const handleInverterSizeChange = (size: number) => {
     const newConfig = { ...config, inverterSize: size };
     onChange(newConfig);
-    // Auto-update solar capacity to match
-    const newAc = size * config.inverterCount;
-    const newDc = Math.round(newAc * config.dcAcRatio);
-    onSolarCapacityChange(newDc);
+    // Auto-update solar capacity (AC) to match
+    const newAcCapacity = size * config.inverterCount;
+    onSolarCapacityChange(newAcCapacity);
   };
 
   const handleInverterCountChange = (count: number) => {
     const newConfig = { ...config, inverterCount: count };
     onChange(newConfig);
-    // Auto-update solar capacity to match
-    const newAc = config.inverterSize * count;
-    const newDc = Math.round(newAc * config.dcAcRatio);
-    onSolarCapacityChange(newDc);
+    // Auto-update solar capacity (AC) to match
+    const newAcCapacity = config.inverterSize * count;
+    onSolarCapacityChange(newAcCapacity);
   };
 
   const handleDcAcRatioChange = (ratio: number) => {
     const newConfig = { ...config, dcAcRatio: ratio };
     onChange(newConfig);
-    // Auto-update solar capacity to match
-    const newDc = Math.round(currentAcCapacity * ratio);
-    onSolarCapacityChange(newDc);
+    // DC/AC ratio doesn't change the system size, only the panel capacity
   };
 
   const snapToNearest = () => {
@@ -234,12 +230,12 @@ export function InverterSizing({
           {/* Calculated System Size */}
           <div className="p-3 rounded-lg bg-muted/50 space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">AC Inverter Capacity</span>
-              <span className="font-medium">{currentAcCapacity} kW</span>
+              <span className="text-muted-foreground">System Size (AC)</span>
+              <span className="font-semibold text-primary">{currentAcCapacity} kW</span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Recommended DC Capacity</span>
-              <span className="font-semibold text-primary">{recommendedDcCapacity} kWp</span>
+              <span className="text-muted-foreground">DC Panel Capacity</span>
+              <span className="font-medium">{dcPanelCapacity} kWp</span>
             </div>
             {maxSolarKva && (
               <div className="flex items-center justify-between text-xs">
@@ -253,14 +249,14 @@ export function InverterSizing({
 
           {/* Valid Configurations Quick Select */}
           <div className="space-y-2">
-            <Label className="text-xs">Quick Select Valid Sizes</Label>
+            <Label className="text-xs">Quick Select System Size (AC)</Label>
             <div className="flex flex-wrap gap-1">
               {validSizes
-                .filter(s => !maxSolarKva || s.dcCapacity <= maxSolarKva * 1.2)
+                .filter(s => !maxSolarKva || s.acCapacity <= maxSolarKva * 1.2)
                 .slice(0, 6)
                 .map((size) => {
-                  const isSelected = currentSolarCapacity === size.dcCapacity;
-                  const exceedsLimit = maxSolarKva && size.dcCapacity > maxSolarKva;
+                  const isSelected = currentSolarCapacity === size.acCapacity;
+                  const exceedsLimit = maxSolarKva && size.acCapacity > maxSolarKva;
                   
                   return (
                     <Button
@@ -275,7 +271,7 @@ export function InverterSizing({
                         handleInverterCountChange(size.inverterCount);
                       }}
                     >
-                      {size.dcCapacity} kWp
+                      {size.acCapacity} kW
                       <span className="ml-1 text-[10px] opacity-70">
                         ({size.inverterCount}×{config.inverterSize})
                       </span>
@@ -291,7 +287,7 @@ export function InverterSizing({
               <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
               <div className="flex-1 text-xs">
                 <span className="text-amber-600 dark:text-amber-400">
-                  Current capacity ({currentSolarCapacity} kWp) doesn't match inverter grouping.
+                  Current capacity ({currentSolarCapacity} kW) doesn't match inverter grouping.
                 </span>
               </div>
               <Button
@@ -300,7 +296,7 @@ export function InverterSizing({
                 className="h-6 text-xs"
                 onClick={snapToNearest}
               >
-                Snap to {nearestValid.dcCapacity} kWp
+                Snap to {nearestValid.acCapacity} kW
               </Button>
             </div>
           )}
