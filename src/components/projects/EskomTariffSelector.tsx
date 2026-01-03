@@ -40,6 +40,8 @@ interface Tariff {
   generation_capacity_charge: number | null;
   network_access_charge: number | null;
   reactive_energy_charge: number | null;
+  administration_charge_per_day: number | null;
+  service_charge_per_day: number | null;
   tariff_rates?: TariffRate[];
 }
 
@@ -233,52 +235,100 @@ export function EskomTariffSelector({
                                   {voltageTariffs.map(tariff => {
                                     const isSelected = tariff.id === currentTariffId;
                                     
+                                    // Calculate totals for display
+                                    const hasServiceCharge = tariff.fixed_monthly_charge && Number(tariff.fixed_monthly_charge) > 0;
+                                    const hasNetworkAccess = tariff.network_access_charge && Number(tariff.network_access_charge) > 0;
+                                    const hasGCC = tariff.generation_capacity_charge && Number(tariff.generation_capacity_charge) > 0;
+                                    const hasReactive = tariff.reactive_energy_charge && Number(tariff.reactive_energy_charge) > 0;
+                                    const hasAdminCharge = tariff.administration_charge_per_day && Number(tariff.administration_charge_per_day) > 0;
+                                    
                                     return (
                                       <button
                                         key={tariff.id}
                                         onClick={() => handleSelectTariff(tariff.id)}
                                         className={cn(
-                                          "flex items-start justify-between p-3 rounded-lg border text-left transition-all",
+                                          "p-3 rounded-lg border text-left transition-all",
                                           "hover:border-primary hover:bg-primary/5",
                                           isSelected && "border-primary bg-primary/10 ring-1 ring-primary"
                                         )}
                                       >
-                                        <div className="flex-1">
+                                        <div className="flex items-start justify-between mb-2">
                                           <div className="flex items-center gap-2">
                                             <span className="font-medium text-sm">{tariff.name}</span>
                                             {isSelected && (
                                               <Check className="h-4 w-4 text-primary" />
                                             )}
                                           </div>
-                                          
-                                          {/* Show key rates */}
-                                          {tariff.tariff_rates && tariff.tariff_rates.length > 0 && (
-                                            <div className="mt-2 flex flex-wrap gap-2">
-                                              {tariff.tariff_rates
-                                                .filter((r, i, arr) => 
-                                                  arr.findIndex(x => x.time_of_use === r.time_of_use) === i
-                                                )
-                                                .slice(0, 3)
-                                                .map(rate => (
-                                                  <Badge 
-                                                    key={rate.id} 
-                                                    variant="secondary"
-                                                    className="text-xs font-normal"
-                                                  >
-                                                    {rate.time_of_use}: {(rate.rate_per_kwh * 100).toFixed(2)}c
-                                                  </Badge>
-                                                ))
-                                              }
+                                          <Badge 
+                                            variant={tariff.tariff_type === "TOU" ? "default" : "outline"}
+                                            className="shrink-0"
+                                          >
+                                            {tariff.tariff_type}
+                                          </Badge>
+                                        </div>
+
+                                        {/* Unbundled Charges Grid */}
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-xs">
+                                          {hasServiceCharge && (
+                                            <div className="p-1.5 rounded bg-muted/50">
+                                              <div className="text-muted-foreground">Service</div>
+                                              <div className="font-medium">R{Number(tariff.fixed_monthly_charge).toFixed(2)}/mo</div>
+                                            </div>
+                                          )}
+                                          {hasNetworkAccess && (
+                                            <div className="p-1.5 rounded bg-blue-500/10">
+                                              <div className="text-muted-foreground">Network</div>
+                                              <div className="font-medium">R{Number(tariff.network_access_charge).toFixed(2)}/kVA</div>
+                                            </div>
+                                          )}
+                                          {hasGCC && (
+                                            <div className="p-1.5 rounded bg-orange-500/10">
+                                              <div className="text-muted-foreground">GCC</div>
+                                              <div className="font-medium">R{Number(tariff.generation_capacity_charge).toFixed(2)}/kVA</div>
+                                            </div>
+                                          )}
+                                          {hasReactive && (
+                                            <div className="p-1.5 rounded bg-purple-500/10">
+                                              <div className="text-muted-foreground">Reactive</div>
+                                              <div className="font-medium">R{Number(tariff.reactive_energy_charge).toFixed(4)}/kVArh</div>
+                                            </div>
+                                          )}
+                                          {hasAdminCharge && (
+                                            <div className="p-1.5 rounded bg-muted/50">
+                                              <div className="text-muted-foreground">Admin</div>
+                                              <div className="font-medium">R{Number(tariff.administration_charge_per_day).toFixed(2)}/day</div>
                                             </div>
                                           )}
                                         </div>
-                                        
-                                        <Badge 
-                                          variant={tariff.tariff_type === "TOU" ? "default" : "outline"}
-                                          className="ml-2 shrink-0"
-                                        >
-                                          {tariff.tariff_type}
-                                        </Badge>
+                                          
+                                        {/* Energy Rates by Season/TOU */}
+                                        {tariff.tariff_rates && tariff.tariff_rates.length > 0 && (
+                                          <div className="mt-2 pt-2 border-t border-dashed">
+                                            <div className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
+                                              <Zap className="h-3 w-3" />
+                                              Energy Rates (c/kWh)
+                                            </div>
+                                            <div className="grid grid-cols-3 md:grid-cols-6 gap-1">
+                                              {tariff.tariff_rates.map(rate => (
+                                                <div 
+                                                  key={rate.id}
+                                                  className={cn(
+                                                    "p-1.5 rounded text-xs text-center",
+                                                    rate.time_of_use === "Peak" && "bg-red-500/10 text-red-700 dark:text-red-400",
+                                                    rate.time_of_use === "Standard" && "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+                                                    rate.time_of_use === "Off-Peak" && "bg-green-500/10 text-green-700 dark:text-green-400",
+                                                    !["Peak", "Standard", "Off-Peak"].includes(rate.time_of_use) && "bg-muted"
+                                                  )}
+                                                >
+                                                  <div className="font-semibold">{(rate.rate_per_kwh * 100).toFixed(1)}c</div>
+                                                  <div className="text-[10px] opacity-80 truncate">
+                                                    {rate.time_of_use} {rate.season?.includes("High") ? "H" : rate.season?.includes("Low") ? "L" : ""}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
                                       </button>
                                     );
                                   })}
