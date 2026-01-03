@@ -190,7 +190,7 @@ export function ReportBuilder({
   }, [segmentOrder]);
 
   const enabledSegments = orderedSegmentOptions.filter(s => selectedSegments.has(s.id));
-  const totalPages = Math.ceil(enabledSegments.length / 2) + 1;
+  const totalPages = enabledSegments.length + 1; // Cover page + one page per segment
 
   // Generate PDF
   const handleGeneratePDF = async () => {
@@ -661,55 +661,56 @@ export function ReportBuilder({
             pdf.setLineWidth(0.5);
             pdf.line(margin, zeroY, margin + chartWidth, zeroY);
             
-            // Draw cash flow curve
-            pdf.setDrawColor(34, 197, 94);
-            pdf.setLineWidth(2);
-            
+            // Shade areas first (behind the line)
             const years = 10;
             const yearWidth = chartWidth / years;
+            
+            // Shade negative area (investment payback period)
+            pdf.setFillColor(254, 226, 226);
+            const paybackX = margin + (paybackYrs / years) * chartWidth;
+            pdf.rect(margin, zeroY, paybackX - margin, 25, "F");
+            
+            // Shade positive area (profit period)
+            pdf.setFillColor(220, 252, 231);
+            pdf.rect(paybackX, yPos + 5, margin + chartWidth - paybackX, zeroY - yPos - 5, "F");
+            
+            // Draw cash flow curve
+            pdf.setDrawColor(34, 197, 94);
+            pdf.setLineWidth(2.5);
+            
             const maxValue = annualSave * years;
             const minValue = -systemCost;
             const valueRange = maxValue - minValue;
             
-            let prevX = margin;
-            let prevY = zeroY + (systemCost / valueRange) * chartHeight * 0.5;
+            let prevXPay = margin;
+            let prevYPay = zeroY + (systemCost / valueRange) * chartHeight * 0.4;
             
             for (let yr = 0; yr <= years; yr++) {
               const cumulative = annualSave * yr - systemCost;
               const x = margin + yr * yearWidth;
-              const y = zeroY - (cumulative / valueRange) * chartHeight * 0.8;
+              const y = zeroY - (cumulative / valueRange) * chartHeight * 0.6;
               
               if (yr > 0) {
-                pdf.line(prevX, prevY, x, y);
+                pdf.line(prevXPay, prevYPay, x, y);
               }
               
-              // Mark payback point
-              if (yr === Math.ceil(paybackYrs)) {
-                pdf.setFillColor(34, 197, 94);
-                pdf.circle(x, y, 3, "F");
-                pdf.setFontSize(8);
-                pdf.setTextColor(34, 197, 94);
-                pdf.text(`Break-even: Year ${paybackYrs.toFixed(1)}`, x - 20, y - 8);
-              }
-              
-              prevX = x;
-              prevY = y;
+              prevXPay = x;
+              prevYPay = y;
             }
             
-            // Shade positive area
+            // Break-even marker
+            const breakEvenY = zeroY;
             pdf.setFillColor(34, 197, 94);
-            for (let yr = Math.ceil(paybackYrs); yr <= years; yr++) {
-              const x = margin + yr * yearWidth;
-              pdf.setFillColor(220, 252, 231);
-              pdf.rect(x - yearWidth / 2, zeroY - 30, yearWidth, 30, "F");
-            }
+            pdf.circle(paybackX, breakEvenY, 4, "F");
             
-            // Shade negative area
-            pdf.setFillColor(254, 226, 226);
-            for (let yr = 0; yr < Math.ceil(paybackYrs); yr++) {
-              const x = margin + yr * yearWidth;
-              pdf.rect(x, zeroY, yearWidth, 20, "F");
-            }
+            // Break-even label - position to the right of the marker
+            pdf.setFontSize(9);
+            pdf.setTextColor(34, 197, 94);
+            const beText = `Year ${paybackYrs.toFixed(1)}`;
+            pdf.text(beText, paybackX + 8, breakEvenY + 3);
+            pdf.setFontSize(7);
+            pdf.setTextColor(80, 80, 80);
+            pdf.text("Break-even", paybackX + 8, breakEvenY + 11);
             
             // Y-axis labels
             yPos += chartHeight + 8;
@@ -728,33 +729,33 @@ export function ReportBuilder({
             // Initial investment card
             pdf.setFillColor(254, 226, 226);
             pdf.roundedRect(margin, summaryY, summaryCardWidth, 30, 3, 3, "F");
-            pdf.setFontSize(10);
+            pdf.setFontSize(11);
             pdf.setTextColor(185, 28, 28);
-            pdf.text(`-R${(systemCost / 1000).toFixed(0)}k`, margin + 5, summaryY + 12);
+            pdf.text(`-R${(systemCost / 1000).toFixed(0)}k`, margin + 8, summaryY + 13);
             pdf.setFontSize(7);
             pdf.setTextColor(100, 100, 100);
-            pdf.text("Initial Investment", margin + 5, summaryY + 22);
+            pdf.text("Initial Investment", margin + 8, summaryY + 23);
             
             // Break-even card
             pdf.setFillColor(254, 249, 195);
             pdf.roundedRect(margin + summaryCardWidth + 10, summaryY, summaryCardWidth, 30, 3, 3, "F");
-            pdf.setFontSize(10);
+            pdf.setFontSize(11);
             pdf.setTextColor(161, 98, 7);
-            pdf.text(`${paybackYrs.toFixed(1)} Years`, margin + summaryCardWidth + 15, summaryY + 12);
+            pdf.text(`${paybackYrs.toFixed(1)} Years`, margin + summaryCardWidth + 18, summaryY + 13);
             pdf.setFontSize(7);
             pdf.setTextColor(100, 100, 100);
-            pdf.text("Payback Period", margin + summaryCardWidth + 15, summaryY + 22);
+            pdf.text("Payback Period", margin + summaryCardWidth + 18, summaryY + 23);
             
             // 25-year returns card
             const total25yr = annualSave * 25 - systemCost;
             pdf.setFillColor(220, 252, 231);
             pdf.roundedRect(margin + 2 * (summaryCardWidth + 10), summaryY, summaryCardWidth, 30, 3, 3, "F");
-            pdf.setFontSize(10);
+            pdf.setFontSize(11);
             pdf.setTextColor(22, 163, 74);
-            pdf.text(`+R${(total25yr / 1000000).toFixed(1)}M`, margin + 2 * (summaryCardWidth + 10) + 5, summaryY + 12);
+            pdf.text(`+R${(total25yr / 1000000).toFixed(1)}M`, margin + 2 * (summaryCardWidth + 10) + 8, summaryY + 13);
             pdf.setFontSize(7);
             pdf.setTextColor(100, 100, 100);
-            pdf.text("25-Year Returns", margin + 2 * (summaryCardWidth + 10) + 5, summaryY + 22);
+            pdf.text("25-Year Returns", margin + 2 * (summaryCardWidth + 10) + 8, summaryY + 23);
             break;
 
           case "environmental_impact":
@@ -776,20 +777,22 @@ export function ReportBuilder({
             pdf.setFillColor(255, 255, 255);
             pdf.circle(envCenterX, envCenterY, envRadius * 0.65, "F");
             
-            // CO2 text
-            pdf.setFontSize(20);
+            // CO2 text - use plain text for compatibility
+            pdf.setFontSize(22);
             pdf.setTextColor(22, 163, 74);
-            pdf.text(`${Math.round(co2Tons)}`, envCenterX - 15, envCenterY);
-            pdf.setFontSize(8);
-            pdf.text("tonnes CO₂/yr", envCenterX - 18, envCenterY + 10);
+            pdf.text(`${Math.round(co2Tons)}`, envCenterX - 12, envCenterY + 2);
+            pdf.setFontSize(9);
+            pdf.setTextColor(80, 80, 80);
+            pdf.text("tonnes CO2", envCenterX - 16, envCenterY + 14);
+            pdf.setFontSize(7);
+            pdf.text("per year", envCenterX - 10, envCenterY + 22);
             
             // Trees visualization
             const treeCenterX = pageWidth * 2 / 3;
             const treeCenterY = envCenterY;
-            const treesEquiv = Math.round(co2Tons * 45);
+            const treesEquivEnv = Math.round(co2Tons * 45);
             
             // Tree icons (simplified)
-            pdf.setFillColor(34, 197, 94);
             for (let i = 0; i < 9; i++) {
               const row = Math.floor(i / 3);
               const col = i % 3;
@@ -805,35 +808,271 @@ export function ReportBuilder({
               pdf.triangle(tx, ty + 10, tx + 10, ty + 10, tx + 5, ty - 2, "F");
             }
             
-            pdf.setFontSize(14);
+            pdf.setFontSize(16);
             pdf.setTextColor(22, 163, 74);
-            pdf.text(`${treesEquiv.toLocaleString()}`, treeCenterX - 15, treeCenterY + 40);
-            pdf.setFontSize(8);
-            pdf.setTextColor(100, 100, 100);
-            pdf.text("Trees Equivalent", treeCenterX - 18, treeCenterY + 48);
+            pdf.text(`${treesEquivEnv.toLocaleString()}`, treeCenterX - 18, treeCenterY + 40);
+            pdf.setFontSize(9);
+            pdf.setTextColor(80, 80, 80);
+            pdf.text("Trees Equivalent", treeCenterX - 20, treeCenterY + 50);
             
-            yPos = envCenterY + 60;
+            yPos = envCenterY + 70;
             
-            // 25-year impact bar
+            // 25-year impact section with 3 cards
             pdf.setFontSize(11);
             pdf.setTextColor(0, 0, 0);
             pdf.text("25-Year Lifetime Impact", margin, yPos);
-            yPos += 10;
+            yPos += 12;
             
-            const impactBarWidth = pageWidth - 2 * margin;
-            const lifetime25 = co2Tons * 25;
+            const impactCardWidth = (pageWidth - 2 * margin - 20) / 3;
+            const lifetime25Env = co2Tons * 25;
             
-            // Background bar
+            // CO2 card
             pdf.setFillColor(220, 252, 231);
-            pdf.roundedRect(margin, yPos, impactBarWidth, 25, 5, 5, "F");
-            
-            // Icon and text
-            pdf.setFontSize(16);
+            pdf.roundedRect(margin, yPos, impactCardWidth, 35, 4, 4, "F");
+            pdf.setFontSize(14);
             pdf.setTextColor(22, 163, 74);
-            pdf.text(`${lifetime25.toLocaleString()} tonnes CO₂`, margin + 10, yPos + 16);
-            pdf.setFontSize(9);
+            pdf.text(`${Math.round(lifetime25Env / 1000).toLocaleString()}k`, margin + 8, yPos + 15);
+            pdf.setFontSize(8);
             pdf.setTextColor(80, 80, 80);
-            pdf.text(`≈ ${Math.round(lifetime25 * 45).toLocaleString()} trees  •  ${Math.round(lifetime25 / 4).toLocaleString()} cars off the road`, margin + 100, yPos + 16);
+            pdf.text("tonnes CO2", margin + 8, yPos + 25);
+
+            // Trees card
+            pdf.setFillColor(240, 253, 244);
+            pdf.roundedRect(margin + impactCardWidth + 10, yPos, impactCardWidth, 35, 4, 4, "F");
+            pdf.setFontSize(14);
+            pdf.setTextColor(22, 163, 74);
+            pdf.text(`${Math.round(lifetime25Env * 45 / 1000).toLocaleString()}k`, margin + impactCardWidth + 18, yPos + 15);
+            pdf.setFontSize(8);
+            pdf.setTextColor(80, 80, 80);
+            pdf.text("trees planted", margin + impactCardWidth + 18, yPos + 25);
+
+            // Cars card
+            pdf.setFillColor(239, 246, 255);
+            pdf.roundedRect(margin + 2 * (impactCardWidth + 10), yPos, impactCardWidth, 35, 4, 4, "F");
+            pdf.setFontSize(14);
+            pdf.setTextColor(37, 99, 235);
+            pdf.text(`${Math.round(lifetime25Env / 4).toLocaleString()}`, margin + 2 * (impactCardWidth + 10) + 8, yPos + 15);
+            pdf.setFontSize(8);
+            pdf.setTextColor(80, 80, 80);
+            pdf.text("cars off road", margin + 2 * (impactCardWidth + 10) + 8, yPos + 25);
+            break;
+
+          case "energy_flow":
+            // Sankey-style energy flow diagram
+            pdf.setFontSize(12);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("System Energy Distribution", margin, yPos);
+            yPos += 15;
+
+            const flowWidth = pageWidth - 2 * margin;
+            const flowHeight = 120;
+            const centerY = yPos + flowHeight / 2;
+            const nodeWidth = 45;
+            const nodeHeight = 50;
+            
+            // Calculate energy values
+            const annualGen = (simulationData.solarCapacityKwp || 100) * 1600; // kWh/year
+            const selfConsume = annualGen * 0.65; // 65% self-consumption
+            const gridExport = annualGen * 0.35;
+            const gridImport = annualGen * 0.15;
+            const totalConsumption = selfConsume + gridImport;
+
+            // Source node - Solar
+            const solarX = margin;
+            pdf.setFillColor(250, 204, 21);
+            pdf.roundedRect(solarX, centerY - 35, nodeWidth, 70, 4, 4, "F");
+            pdf.setFontSize(9);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Solar", solarX + 10, centerY - 20);
+            pdf.text("Generation", solarX + 5, centerY - 10);
+            pdf.setFontSize(14);
+            pdf.setTextColor(161, 98, 7);
+            pdf.text(`${Math.round(annualGen / 1000)}`, solarX + 10, centerY + 5);
+            pdf.setFontSize(8);
+            pdf.text("MWh/yr", solarX + 10, centerY + 15);
+
+            // Building/Load node - center
+            const buildingX = pageWidth / 2 - nodeWidth / 2;
+            pdf.setFillColor(219, 234, 254);
+            pdf.roundedRect(buildingX, centerY - 30, nodeWidth, 60, 4, 4, "F");
+            pdf.setFontSize(9);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Building", buildingX + 8, centerY - 15);
+            pdf.text("Load", buildingX + 13, centerY - 5);
+            pdf.setFontSize(14);
+            pdf.setTextColor(37, 99, 235);
+            pdf.text(`${Math.round(totalConsumption / 1000)}`, buildingX + 10, centerY + 10);
+            pdf.setFontSize(8);
+            pdf.text("MWh/yr", buildingX + 10, centerY + 20);
+
+            // Grid node - right
+            const gridX = pageWidth - margin - nodeWidth;
+            pdf.setFillColor(229, 231, 235);
+            pdf.roundedRect(gridX, centerY - 25, nodeWidth, 50, 4, 4, "F");
+            pdf.setFontSize(9);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Grid", gridX + 15, centerY - 10);
+            pdf.setFontSize(11);
+            pdf.setTextColor(107, 114, 128);
+            pdf.text(`${Math.round(gridExport / 1000)}`, gridX + 8, centerY + 8);
+            pdf.setFontSize(7);
+            pdf.text("MWh export", gridX + 6, centerY + 17);
+
+            // Flow arrows with curved paths
+            pdf.setLineWidth(3);
+            
+            // Solar to Building (self-consumption) - main flow
+            pdf.setDrawColor(34, 197, 94);
+            const flow1Width = (selfConsume / annualGen) * 30;
+            pdf.setLineWidth(Math.max(2, flow1Width / 5));
+            pdf.line(solarX + nodeWidth, centerY, buildingX, centerY);
+            // Arrow head
+            pdf.setFillColor(34, 197, 94);
+            pdf.triangle(buildingX - 2, centerY - 4, buildingX - 2, centerY + 4, buildingX + 3, centerY, "F");
+            
+            // Solar to Grid (export) - upper flow
+            pdf.setDrawColor(245, 158, 11);
+            pdf.setLineWidth(2);
+            const exportY = centerY - 20;
+            pdf.line(solarX + nodeWidth, centerY - 15, solarX + nodeWidth + 20, exportY);
+            pdf.line(solarX + nodeWidth + 20, exportY, gridX, exportY);
+            pdf.setFillColor(245, 158, 11);
+            pdf.triangle(gridX - 2, exportY - 3, gridX - 2, exportY + 3, gridX + 3, exportY, "F");
+            
+            // Grid to Building (import) - lower flow  
+            if (gridImport > 0) {
+              pdf.setDrawColor(156, 163, 175);
+              pdf.setLineWidth(1.5);
+              const importY = centerY + 20;
+              pdf.line(gridX, importY, buildingX + nodeWidth + 5, importY);
+              pdf.line(buildingX + nodeWidth + 5, importY, buildingX + nodeWidth, centerY + 10);
+              pdf.setFillColor(156, 163, 175);
+              pdf.triangle(buildingX + nodeWidth + 2, centerY + 7, buildingX + nodeWidth + 2, centerY + 13, buildingX + nodeWidth - 3, centerY + 10, "F");
+            }
+
+            yPos += flowHeight + 15;
+
+            // Flow legend
+            pdf.setLineWidth(0.5);
+            pdf.setFontSize(8);
+            
+            pdf.setFillColor(34, 197, 94);
+            pdf.rect(margin, yPos, 12, 4, "F");
+            pdf.setTextColor(0, 0, 0);
+            pdf.text(`Self-consumption: ${Math.round(selfConsume / 1000)} MWh (${Math.round(selfConsume / annualGen * 100)}%)`, margin + 16, yPos + 3);
+            
+            pdf.setFillColor(245, 158, 11);
+            pdf.rect(margin + 85, yPos, 12, 4, "F");
+            pdf.text(`Grid export: ${Math.round(gridExport / 1000)} MWh`, margin + 101, yPos + 3);
+            
+            if (gridImport > 0) {
+              pdf.setFillColor(156, 163, 175);
+              pdf.rect(margin + 150, yPos, 12, 4, "F");
+              pdf.text(`Grid import: ${Math.round(gridImport / 1000)} MWh`, margin + 166, yPos + 3);
+            }
+            break;
+
+          case "monthly_yield":
+            // 12-month generation forecast bar chart
+            pdf.setFontSize(12);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("12-Month Solar Generation Forecast", margin, yPos);
+            yPos += 15;
+
+            const chartW = pageWidth - 2 * margin;
+            const chartH = 90;
+            const barAreaH = 70;
+            
+            // Monthly generation profile (typical for South Africa)
+            const monthlyFactors = [1.1, 1.05, 0.95, 0.85, 0.75, 0.7, 0.72, 0.8, 0.9, 1.0, 1.05, 1.1];
+            const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const annualKwh = (simulationData.solarCapacityKwp || 100) * 1600;
+            const avgMonthly = annualKwh / 12;
+            const monthlyGen = monthlyFactors.map(f => avgMonthly * f);
+            const maxMonthly = Math.max(...monthlyGen);
+            
+            // Chart background
+            pdf.setFillColor(250, 250, 250);
+            pdf.rect(margin, yPos, chartW, barAreaH, "F");
+            
+            // Grid lines
+            pdf.setDrawColor(230, 230, 230);
+            pdf.setLineWidth(0.3);
+            for (let i = 1; i <= 4; i++) {
+              const gridY = yPos + barAreaH - (i / 4) * barAreaH;
+              pdf.line(margin, gridY, margin + chartW, gridY);
+            }
+
+            // Draw bars
+            const barW = (chartW - 24) / 12;
+            const barGap = 2;
+            
+            monthlyGen.forEach((gen, i) => {
+              const barH = (gen / maxMonthly) * (barAreaH - 10);
+              const barX = margin + i * barW + barGap;
+              const barY = yPos + barAreaH - barH;
+              
+              // Summer months (Oct-Mar) in green, winter (Apr-Sep) in lighter green
+              const isSummer = i >= 9 || i <= 2;
+              pdf.setFillColor(isSummer ? 34 : 74, isSummer ? 197 : 222, isSummer ? 94 : 128);
+              pdf.roundedRect(barX, barY, barW - barGap * 2, barH, 1, 1, "F");
+              
+              // Value label on top
+              if (i % 2 === 0) {
+                pdf.setFontSize(6);
+                pdf.setTextColor(100, 100, 100);
+                pdf.text(`${Math.round(gen / 1000)}k`, barX + 2, barY - 2);
+              }
+            });
+
+            // X-axis labels
+            yPos += barAreaH + 3;
+            pdf.setFontSize(7);
+            pdf.setTextColor(80, 80, 80);
+            monthNames.forEach((month, i) => {
+              pdf.text(month, margin + i * barW + barW / 2 - 5, yPos + 5);
+            });
+
+            yPos += 15;
+
+            // Summary stats
+            pdf.setFillColor(240, 253, 244);
+            pdf.roundedRect(margin, yPos, chartW / 3 - 5, 25, 3, 3, "F");
+            pdf.setFontSize(10);
+            pdf.setTextColor(22, 163, 74);
+            pdf.text(`${Math.round(annualKwh / 1000).toLocaleString()} MWh`, margin + 8, yPos + 10);
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("Annual Generation", margin + 8, yPos + 18);
+
+            pdf.setFillColor(254, 249, 195);
+            pdf.roundedRect(margin + chartW / 3, yPos, chartW / 3 - 5, 25, 3, 3, "F");
+            pdf.setFontSize(10);
+            pdf.setTextColor(161, 98, 7);
+            pdf.text(`${Math.round(avgMonthly / 1000)} MWh`, margin + chartW / 3 + 8, yPos + 10);
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("Monthly Average", margin + chartW / 3 + 8, yPos + 18);
+
+            pdf.setFillColor(239, 246, 255);
+            pdf.roundedRect(margin + 2 * chartW / 3, yPos, chartW / 3 - 5, 25, 3, 3, "F");
+            pdf.setFontSize(10);
+            pdf.setTextColor(37, 99, 235);
+            pdf.text("1,600 kWh/kWp", margin + 2 * chartW / 3 + 5, yPos + 10);
+            pdf.setFontSize(7);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("Specific Yield", margin + 2 * chartW / 3 + 8, yPos + 18);
+
+            yPos += 35;
+
+            // Legend
+            pdf.setFontSize(7);
+            pdf.setFillColor(34, 197, 94);
+            pdf.rect(margin, yPos, 8, 6, "F");
+            pdf.text("Summer months (higher yield)", margin + 12, yPos + 5);
+            pdf.setFillColor(74, 222, 128);
+            pdf.rect(margin + 70, yPos, 8, 6, "F");
+            pdf.text("Winter months (lower yield)", margin + 82, yPos + 5);
             break;
 
           case "engineering_specs":
@@ -918,8 +1157,6 @@ export function ReportBuilder({
             });
             break;
 
-          case "energy_flow":
-          case "monthly_yield":
           default:
             pdf.setFontSize(10);
             pdf.setTextColor(100, 100, 100);
@@ -1483,6 +1720,107 @@ function SegmentPreviewContent({
           <div className="bg-emerald-100 dark:bg-emerald-950/40 rounded-lg p-2 text-center">
             <p className="text-[8px] text-muted-foreground">25-Year Lifetime Impact</p>
             <p className="text-sm font-bold text-emerald-600">{lifetime25.toLocaleString()} tonnes CO₂</p>
+          </div>
+        </div>
+      );
+
+    case "energy_flow":
+      const annualGenFlow = (simulationData.solarCapacityKwp || 100) * 1600;
+      const selfConsumeFlow = annualGenFlow * 0.65;
+      const gridExportFlow = annualGenFlow * 0.35;
+      
+      return (
+        <div className="space-y-2">
+          <p className="text-[9px] font-medium">System Energy Distribution</p>
+          
+          {/* Simplified flow diagram */}
+          <div className="relative bg-muted/20 rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              {/* Solar */}
+              <div className="bg-amber-100 dark:bg-amber-950/40 rounded px-2 py-1 text-center">
+                <Sun className="h-4 w-4 mx-auto text-amber-600 mb-0.5" />
+                <p className="text-[8px] font-bold">{Math.round(annualGenFlow / 1000)} MWh</p>
+                <p className="text-[6px] text-muted-foreground">Solar</p>
+              </div>
+              
+              {/* Arrows */}
+              <div className="flex-1 mx-2 space-y-1">
+                <div className="flex items-center">
+                  <div className="h-0.5 flex-1 bg-emerald-500" />
+                  <span className="text-[6px] mx-1 text-emerald-600">{Math.round(selfConsumeFlow / annualGenFlow * 100)}%</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="h-0.5 flex-1 bg-amber-500" />
+                  <span className="text-[6px] mx-1 text-amber-600">{Math.round(gridExportFlow / annualGenFlow * 100)}%</span>
+                </div>
+              </div>
+              
+              {/* Building */}
+              <div className="bg-blue-100 dark:bg-blue-950/40 rounded px-2 py-1 text-center">
+                <Zap className="h-4 w-4 mx-auto text-blue-600 mb-0.5" />
+                <p className="text-[8px] font-bold">Load</p>
+                <p className="text-[6px] text-muted-foreground">Building</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Legend */}
+          <div className="flex gap-2 text-[7px]">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-1 bg-emerald-500 rounded" />
+              <span>Self-use</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-1 bg-amber-500 rounded" />
+              <span>Export</span>
+            </div>
+          </div>
+        </div>
+      );
+
+    case "monthly_yield":
+      const monthlyFactorsPreview = [1.1, 1.05, 0.95, 0.85, 0.75, 0.7, 0.72, 0.8, 0.9, 1.0, 1.05, 1.1];
+      const annualKwhPreview = (simulationData.solarCapacityKwp || 100) * 1600;
+      const avgMonthlyPreview = annualKwhPreview / 12;
+      const monthlyGenPreview = monthlyFactorsPreview.map(f => avgMonthlyPreview * f);
+      const maxMonthlyPreview = Math.max(...monthlyGenPreview);
+      
+      return (
+        <div className="space-y-2">
+          <p className="text-[9px] font-medium">12-Month Solar Generation</p>
+          
+          {/* Mini bar chart */}
+          <div className="flex items-end gap-0.5 h-12 bg-muted/20 rounded p-1">
+            {monthlyGenPreview.map((gen, i) => {
+              const height = (gen / maxMonthlyPreview) * 100;
+              const isSummer = i >= 9 || i <= 2;
+              return (
+                <div
+                  key={i}
+                  className={`flex-1 rounded-t ${isSummer ? "bg-emerald-500" : "bg-emerald-400"}`}
+                  style={{ height: `${height}%` }}
+                />
+              );
+            })}
+          </div>
+          
+          {/* Month labels */}
+          <div className="flex justify-between text-[6px] text-muted-foreground">
+            <span>Jan</span>
+            <span>Jul</span>
+            <span>Dec</span>
+          </div>
+          
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-1">
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded p-1 text-center">
+              <p className="text-[10px] font-bold text-emerald-600">{Math.round(annualKwhPreview / 1000)} MWh</p>
+              <p className="text-[6px] text-muted-foreground">Annual yield</p>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-950/30 rounded p-1 text-center">
+              <p className="text-[10px] font-bold text-amber-600">1,600</p>
+              <p className="text-[6px] text-muted-foreground">kWh/kWp/yr</p>
+            </div>
           </div>
         </div>
       );
