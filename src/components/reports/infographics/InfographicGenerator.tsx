@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { 
@@ -13,7 +14,9 @@ import {
   Leaf, 
   Settings2,
   Download,
-  RefreshCw
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle
 } from "lucide-react";
 
 type InfographicType = "executive" | "system" | "savings" | "environmental" | "engineering";
@@ -50,9 +53,11 @@ interface InfographicGeneratorProps {
 }
 
 export function InfographicGenerator({ data, className }: InfographicGeneratorProps) {
-  const [generating, setGenerating] = useState<InfographicType | "all" | null>(null);
   const [generated, setGenerated] = useState<Map<InfographicType, GeneratedInfographic>>(new Map());
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [failed, setFailed] = useState<Set<InfographicType>>(new Set());
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: infographicTypes.length });
+  const hasStartedGeneration = useRef(false);
 
   const defaultData: InfographicData = {
     projectName: "Demo Solar Project",
@@ -66,6 +71,15 @@ export function InfographicGenerator({ data, className }: InfographicGeneratorPr
     dcAcRatio: 1.3,
     ...data,
   };
+
+  // Auto-generate all infographics when data is available
+  useEffect(() => {
+    if (hasStartedGeneration.current) return;
+    if (!data?.solarCapacityKwp) return; // Only generate when we have real simulation data
+    
+    hasStartedGeneration.current = true;
+    generateAllInfographics();
+  }, [data?.solarCapacityKwp]);
 
   const generateSingleInfographic = async (type: InfographicType): Promise<boolean> => {
     try {
@@ -81,26 +95,21 @@ export function InfographicGenerator({ data, className }: InfographicGeneratorPr
         imageUrl: result.imageUrl,
         description: result.description,
       }));
+      setFailed(prev => {
+        const next = new Set(prev);
+        next.delete(type);
+        return next;
+      });
       return true;
     } catch (error) {
       console.error(`Error generating ${type} infographic:`, error);
+      setFailed(prev => new Set(prev).add(type));
       return false;
     }
   };
 
-  const generateInfographic = async (type: InfographicType) => {
-    setGenerating(type);
-    const success = await generateSingleInfographic(type);
-    if (success) {
-      toast.success(`${infographicTypes.find(t => t.type === type)?.label} generated!`);
-    } else {
-      toast.error("Failed to generate infographic");
-    }
-    setGenerating(null);
-  };
-
   const generateAllInfographics = async () => {
-    setGenerating("all");
+    setIsGenerating(true);
     setProgress({ current: 0, total: infographicTypes.length });
     
     let successCount = 0;
@@ -115,9 +124,28 @@ export function InfographicGenerator({ data, className }: InfographicGeneratorPr
       }
     }
     
-    setGenerating(null);
-    setProgress({ current: 0, total: 0 });
-    toast.success(`Generated ${successCount}/${infographicTypes.length} infographics`);
+    setIsGenerating(false);
+    if (successCount === infographicTypes.length) {
+      toast.success("All infographics generated successfully");
+    } else if (successCount > 0) {
+      toast.warning(`Generated ${successCount}/${infographicTypes.length} infographics`);
+    }
+  };
+
+  const retryFailed = async () => {
+    const failedTypes = Array.from(failed);
+    setIsGenerating(true);
+    setProgress({ current: 0, total: failedTypes.length });
+    
+    for (let i = 0; i < failedTypes.length; i++) {
+      setProgress({ current: i + 1, total: failedTypes.length });
+      await generateSingleInfographic(failedTypes[i]);
+      if (i < failedTypes.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    setIsGenerating(false);
   };
 
   const downloadImage = (imageUrl: string, filename: string) => {
@@ -129,70 +157,98 @@ export function InfographicGenerator({ data, className }: InfographicGeneratorPr
     document.body.removeChild(link);
   };
 
+  const downloadAll = () => {
+    generated.forEach((infographic) => {
+      downloadImage(infographic.imageUrl, `${infographic.type}-infographic`);
+    });
+    toast.success("Downloading all infographics");
+  };
+
+  const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+  const allGenerated = generated.size === infographicTypes.length;
+  const hasFailed = failed.size > 0;
+
   return (
     <Card className={className}>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5" />
-          AI Infographic Generator
-        </CardTitle>
-        <CardDescription>
-          Generate professional infographics for your solar project report
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Report Infographics
+            </CardTitle>
+            <CardDescription>
+              {isGenerating 
+                ? `Generating infographics... (${progress.current}/${progress.total})`
+                : allGenerated 
+                  ? "All infographics ready for your report"
+                  : hasFailed
+                    ? `${generated.size} generated, ${failed.size} failed`
+                    : "Preparing infographics..."}
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            {hasFailed && !isGenerating && (
+              <Button variant="outline" size="sm" onClick={retryFailed}>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Retry Failed
+              </Button>
+            )}
+            {generated.size > 0 && (
+              <Button variant="outline" size="sm" onClick={downloadAll}>
+                <Download className="h-4 w-4 mr-1" />
+                Download All
+              </Button>
+            )}
+          </div>
+        </div>
+        {isGenerating && (
+          <Progress value={progressPercent} className="mt-3" />
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Generate All Button */}
-        <div className="flex justify-end">
-          <Button
-            onClick={generateAllInfographics}
-            disabled={generating !== null}
-            className="gap-2"
-          >
-            {generating === "all" ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Generating {progress.current}/{progress.total}...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" />
-                Generate All Infographics
-              </>
-            )}
-          </Button>
-        </div>
-
-        {/* Type Selection */}
+        {/* Status Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {infographicTypes.map(({ type, label, icon: Icon, description }) => {
+          {infographicTypes.map(({ type, label, icon: Icon }) => {
             const isGenerated = generated.has(type);
-            const isGenerating = generating === type || (generating === "all" && progress.current > 0 && infographicTypes[progress.current - 1]?.type === type);
+            const isFailed = failed.has(type);
+            const isCurrentlyGenerating = isGenerating && 
+              progress.current > 0 && 
+              infographicTypes[progress.current - 1]?.type === type;
             
             return (
-              <button
+              <div
                 key={type}
-                onClick={() => generateInfographic(type)}
-                disabled={generating !== null}
                 className={`relative p-4 rounded-lg border text-left transition-all ${
                   isGenerated 
                     ? "border-primary bg-primary/5" 
-                    : "border-border hover:border-primary/50 hover:bg-muted/50"
-                } ${generating !== null && !isGenerating ? "opacity-50" : ""}`}
+                    : isFailed
+                      ? "border-destructive bg-destructive/5"
+                      : "border-border bg-muted/30"
+                }`}
               >
-                {isGenerating && (
+                {isCurrentlyGenerating && (
                   <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded-lg">
                     <RefreshCw className="h-5 w-5 animate-spin text-primary" />
                   </div>
                 )}
-                <Icon className="h-5 w-5 mb-2 text-primary" />
+                <div className="flex items-center gap-2 mb-1">
+                  <Icon className="h-4 w-4 text-primary" />
+                  {isGenerated && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                  {isFailed && <AlertCircle className="h-4 w-4 text-destructive" />}
+                </div>
                 <p className="font-medium text-sm">{label}</p>
-                <p className="text-xs text-muted-foreground mt-1">{description}</p>
                 {isGenerated && (
-                  <Badge variant="default" className="absolute top-2 right-2 text-xs">
-                    Done
+                  <Badge variant="outline" className="mt-2 text-xs">
+                    Ready
                   </Badge>
                 )}
-              </button>
+                {isFailed && (
+                  <Badge variant="destructive" className="mt-2 text-xs">
+                    Failed
+                  </Badge>
+                )}
+              </div>
             );
           })}
         </div>
@@ -218,15 +274,6 @@ export function InfographicGenerator({ data, className }: InfographicGeneratorPr
                       <Download className="h-4 w-4 mr-1" />
                       Download
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => generateInfographic(infographic.type)}
-                      disabled={generating !== null}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-1" />
-                      Regenerate
-                    </Button>
                   </div>
                   <div className="p-2 bg-muted">
                     <p className="text-sm font-medium">
@@ -239,21 +286,21 @@ export function InfographicGenerator({ data, className }: InfographicGeneratorPr
           </div>
         )}
 
-        {/* Empty State */}
-        {generated.size === 0 && generating === null && (
-          <div className="text-center py-8 text-muted-foreground">
-            <Sparkles className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p>Click any infographic type above to generate</p>
-          </div>
-        )}
-
         {/* Loading State */}
-        {generating && generated.size === 0 && (
+        {isGenerating && generated.size === 0 && (
           <div className="space-y-3">
             <Skeleton className="h-48 w-full rounded-lg" />
             <p className="text-sm text-center text-muted-foreground">
-              Generating {infographicTypes.find(t => t.type === generating)?.label}...
+              Generating infographics automatically...
             </p>
+          </div>
+        )}
+
+        {/* No Data State */}
+        {!isGenerating && generated.size === 0 && !data?.solarCapacityKwp && (
+          <div className="text-center py-8 text-muted-foreground">
+            <Sparkles className="h-12 w-12 mx-auto mb-3 opacity-30" />
+            <p>Infographics will be generated automatically when simulation data is available</p>
           </div>
         )}
       </CardContent>
