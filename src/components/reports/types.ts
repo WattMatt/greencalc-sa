@@ -72,6 +72,7 @@ export type SegmentType =
   | "engineering_specs"
   | "ai_infographics"
   | "tariff_details"
+  | "sizing_comparison"
   | "custom_notes";
 
 export interface ReportSegment {
@@ -156,6 +157,12 @@ export const SEGMENT_DEFINITIONS: Record<SegmentType, { name: string; descriptio
     description: "Detailed breakdown of selected electricity tariff",
     icon: "Zap",
     category: "financial"
+  },
+  sizing_comparison: {
+    name: "Sizing Alternatives",
+    description: "Comparison of conservative, current, and aggressive system sizes",
+    icon: "Scale",
+    category: "technical"
   },
   custom_notes: {
     name: "Custom Notes",
