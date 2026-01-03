@@ -984,11 +984,14 @@ export type Database = {
       }
       tariff_rates: {
         Row: {
+          ancillary_charge_per_kwh: number | null
           block_end_kwh: number | null
           block_start_kwh: number | null
           created_at: string
           demand_charge_per_kva: number | null
+          energy_charge_per_kwh: number | null
           id: string
+          network_charge_per_kwh: number | null
           rate_per_kwh: number
           reactive_energy_charge: number | null
           season: Database["public"]["Enums"]["season_type"]
@@ -996,11 +999,14 @@ export type Database = {
           time_of_use: Database["public"]["Enums"]["time_of_use_type"]
         }
         Insert: {
+          ancillary_charge_per_kwh?: number | null
           block_end_kwh?: number | null
           block_start_kwh?: number | null
           created_at?: string
           demand_charge_per_kva?: number | null
+          energy_charge_per_kwh?: number | null
           id?: string
+          network_charge_per_kwh?: number | null
           rate_per_kwh: number
           reactive_energy_charge?: number | null
           season?: Database["public"]["Enums"]["season_type"]
@@ -1008,11 +1014,14 @@ export type Database = {
           time_of_use?: Database["public"]["Enums"]["time_of_use_type"]
         }
         Update: {
+          ancillary_charge_per_kwh?: number | null
           block_end_kwh?: number | null
           block_start_kwh?: number | null
           created_at?: string
           demand_charge_per_kva?: number | null
+          energy_charge_per_kwh?: number | null
           id?: string
+          network_charge_per_kwh?: number | null
           rate_per_kwh?: number
           reactive_energy_charge?: number | null
           season?: Database["public"]["Enums"]["season_type"]
@@ -1031,6 +1040,7 @@ export type Database = {
       }
       tariffs: {
         Row: {
+          administration_charge_per_day: number | null
           amperage_limit: string | null
           capacity_kva: number | null
           category_id: string
@@ -1040,19 +1050,28 @@ export type Database = {
           customer_category: string | null
           demand_charge_per_kva: number | null
           fixed_monthly_charge: number | null
+          generation_capacity_charge: number | null
           has_seasonal_rates: boolean | null
           id: string
           is_prepaid: boolean | null
+          is_unbundled: boolean | null
+          legacy_charge_per_kwh: number | null
           municipality_id: string
           name: string
           network_access_charge: number | null
           phase_type: Database["public"]["Enums"]["phase_type"] | null
           reactive_energy_charge: number | null
+          service_charge_per_day: number | null
+          tariff_family: string | null
           tariff_type: Database["public"]["Enums"]["tariff_type"]
+          transmission_zone:
+            | Database["public"]["Enums"]["transmission_zone_type"]
+            | null
           updated_at: string
           voltage_level: Database["public"]["Enums"]["voltage_level"] | null
         }
         Insert: {
+          administration_charge_per_day?: number | null
           amperage_limit?: string | null
           capacity_kva?: number | null
           category_id: string
@@ -1062,19 +1081,28 @@ export type Database = {
           customer_category?: string | null
           demand_charge_per_kva?: number | null
           fixed_monthly_charge?: number | null
+          generation_capacity_charge?: number | null
           has_seasonal_rates?: boolean | null
           id?: string
           is_prepaid?: boolean | null
+          is_unbundled?: boolean | null
+          legacy_charge_per_kwh?: number | null
           municipality_id: string
           name: string
           network_access_charge?: number | null
           phase_type?: Database["public"]["Enums"]["phase_type"] | null
           reactive_energy_charge?: number | null
+          service_charge_per_day?: number | null
+          tariff_family?: string | null
           tariff_type?: Database["public"]["Enums"]["tariff_type"]
+          transmission_zone?:
+            | Database["public"]["Enums"]["transmission_zone_type"]
+            | null
           updated_at?: string
           voltage_level?: Database["public"]["Enums"]["voltage_level"] | null
         }
         Update: {
+          administration_charge_per_day?: number | null
           amperage_limit?: string | null
           capacity_kva?: number | null
           category_id?: string
@@ -1084,15 +1112,23 @@ export type Database = {
           customer_category?: string | null
           demand_charge_per_kva?: number | null
           fixed_monthly_charge?: number | null
+          generation_capacity_charge?: number | null
           has_seasonal_rates?: boolean | null
           id?: string
           is_prepaid?: boolean | null
+          is_unbundled?: boolean | null
+          legacy_charge_per_kwh?: number | null
           municipality_id?: string
           name?: string
           network_access_charge?: number | null
           phase_type?: Database["public"]["Enums"]["phase_type"] | null
           reactive_energy_charge?: number | null
+          service_charge_per_day?: number | null
+          tariff_family?: string | null
           tariff_type?: Database["public"]["Enums"]["tariff_type"]
+          transmission_zone?:
+            | Database["public"]["Enums"]["transmission_zone_type"]
+            | null
           updated_at?: string
           voltage_level?: Database["public"]["Enums"]["voltage_level"] | null
         }
@@ -1180,6 +1216,11 @@ export type Database = {
         | "High Demand"
         | "Low Demand"
         | "Critical Peak"
+      transmission_zone_type:
+        | "Zone 0-300km"
+        | "Zone 300-600km"
+        | "Zone 600-900km"
+        | "Zone >900km"
       voltage_level: "LV" | "MV" | "HV"
     }
     CompositeTypes: {
@@ -1320,6 +1361,12 @@ export const Constants = {
         "High Demand",
         "Low Demand",
         "Critical Peak",
+      ],
+      transmission_zone_type: [
+        "Zone 0-300km",
+        "Zone 300-600km",
+        "Zone 600-900km",
+        "Zone >900km",
       ],
       voltage_level: ["LV", "MV", "HV"],
     },
