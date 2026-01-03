@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Zap, Info, Plus, Minus, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,6 @@ export const INVERTER_SIZES = [
 ];
 
 export interface InverterConfig {
-  enabled: boolean;
   inverterSize: number; // kW AC
   inverterCount: number;
   dcAcRatio: number; // Typical 1.1-1.5
@@ -47,7 +46,6 @@ export interface InverterSizingProps {
 
 export function getDefaultInverterConfig(): InverterConfig {
   return {
-    enabled: false,
     inverterSize: 100,
     inverterCount: 1,
     dcAcRatio: 1.25,
@@ -129,23 +127,16 @@ export function InverterSizing({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Zap className="h-4 w-4" />
-            Inverter-Based Sizing
-          </CardTitle>
-          <Switch
-            checked={config.enabled}
-            onCheckedChange={(enabled) => onChange({ ...config, enabled })}
-          />
-        </div>
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <Zap className="h-4 w-4" />
+          Inverter-Based Sizing
+        </CardTitle>
         <CardDescription className="text-xs">
           Size system based on inverter capacity and grouping
         </CardDescription>
       </CardHeader>
 
-      {config.enabled && (
-        <CardContent className="space-y-4">
+      <CardContent className="space-y-4">
           {/* Inverter Size Selection */}
           <div className="space-y-2">
             <Label className="text-xs">Inverter Size (AC)</Label>
@@ -332,7 +323,6 @@ export function InverterSizing({
             </div>
           )}
         </CardContent>
-      )}
     </Card>
   );
 }
