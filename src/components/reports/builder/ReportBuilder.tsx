@@ -13,14 +13,16 @@ import {
   Save,
   Settings,
   Eye,
-  CheckSquare
+  CheckSquare,
+  Image
 } from "lucide-react";
 import { SegmentSelector, defaultSegments, Segment } from "./SegmentSelector";
 import { TemplateSelector } from "./TemplateSelector";
 import { ReportPreview } from "./ReportPreview";
+import { ReportExport } from "./ReportExport";
 import { VersionHistory } from "./VersionHistory";
 import { InfographicGenerator } from "../infographics";
-import { ReportTemplate } from "../types";
+import { ReportTemplate, ReportData, ReportSegment } from "../types";
 import { useReportSelection } from "@/hooks/useReportSelection";
 
 interface ReportBuilderProps {
@@ -109,10 +111,110 @@ export function ReportBuilder({
       annualSavings: latestSimulation.annual_solar_savings || 0,
       paybackYears: latestSimulation.payback_years || 0,
       roiPercent: latestSimulation.roi_percentage || 0,
-      co2AvoidedTons: (latestSimulation.solar_capacity_kwp || 0) * 1.2, // Approximated
+      co2AvoidedTons: (latestSimulation.solar_capacity_kwp || 0) * 1.2,
       dcAcRatio: pvConfig.dcAcRatio || 1.3,
     };
   }, [initialSimulationData, latestSimulation]);
+
+  // Build ReportData for export
+  const reportData: ReportData = useMemo(() => {
+    const solarKwp = simulationData?.solarCapacityKwp || 100;
+    const batteryKwh = simulationData?.batteryCapacityKwh || 50;
+    const annualGeneration = solarKwp * 1600; // Approximate kWh/kWp
+    const annualConsumption = annualGeneration * 1.3;
+    const selfConsumption = annualGeneration * 0.75;
+    const annualSavings = simulationData?.annualSavings || solarKwp * 2500;
+    const systemCost = solarKwp * 12000 + batteryKwh * 8000;
+    const paybackYears = simulationData?.paybackYears || systemCost / annualSavings;
+    const dcAcRatio = simulationData?.dcAcRatio || 1.3;
+
+    return {
+      project: {
+        name: projectName,
+        location: null,
+        total_area_sqm: 0,
+        connection_size_kva: null,
+        tenant_count: 0,
+      },
+      simulation: {
+        solar_capacity_kwp: solarKwp,
+        battery_capacity_kwh: batteryKwh,
+        battery_power_kw: batteryKwh / 2,
+        dc_ac_ratio: dcAcRatio,
+        annual_solar_generation_kwh: annualGeneration,
+        annual_consumption_kwh: annualConsumption,
+        self_consumption_kwh: selfConsumption,
+        grid_import_kwh: annualConsumption - selfConsumption,
+        grid_export_kwh: annualGeneration - selfConsumption,
+      },
+      kpis: {
+        specific_yield: 1600,
+        performance_ratio: 82,
+        capacity_factor: 18.3,
+        lcoe: 0.85,
+        self_consumption_rate: 75,
+        solar_coverage: 58,
+        grid_independence: 65,
+        peak_shaving_kw: solarKwp * 0.8,
+      },
+      dcAcAnalysis: {
+        baseline_annual_kwh: annualGeneration / dcAcRatio,
+        oversized_annual_kwh: annualGeneration,
+        clipping_loss_kwh: annualGeneration * 0.02,
+        additional_capture_kwh: annualGeneration * 0.12,
+        net_gain_kwh: annualGeneration * 0.10,
+        net_gain_percent: 10,
+        clipping_percent: 2,
+        hourly_comparison: Array.from({ length: 24 }, (_, h) => ({
+          hour: h,
+          baseline_kw: h >= 6 && h <= 18 ? Math.sin((h - 6) * Math.PI / 12) * solarKwp / dcAcRatio : 0,
+          oversized_dc_kw: h >= 6 && h <= 18 ? Math.sin((h - 6) * Math.PI / 12) * solarKwp : 0,
+          oversized_ac_kw: h >= 6 && h <= 18 ? Math.min(Math.sin((h - 6) * Math.PI / 12) * solarKwp, solarKwp / dcAcRatio) : 0,
+          clipping_kw: h >= 10 && h <= 14 ? Math.max(0, Math.sin((h - 6) * Math.PI / 12) * solarKwp - solarKwp / dcAcRatio) : 0,
+        })),
+        monthly_comparison: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(month => ({
+          month,
+          baseline_kwh: annualGeneration / dcAcRatio / 12,
+          oversized_kwh: annualGeneration / 12,
+          gain_kwh: annualGeneration * 0.10 / 12,
+          gain_percent: 10,
+        })),
+      },
+      financials: {
+        system_cost: systemCost,
+        annual_grid_cost_baseline: annualConsumption * 2.5,
+        annual_grid_cost_with_solar: (annualConsumption - selfConsumption) * 2.5,
+        annual_savings: annualSavings,
+        payback_years: paybackYears,
+        roi_percent: simulationData?.roiPercent || (annualSavings * 25 / systemCost - 1) * 100,
+        npv: annualSavings * 15 - systemCost,
+        irr: 18,
+        yearly_cashflows: Array.from({ length: 25 }, (_, i) => ({
+          year: i + 1,
+          cumulative_savings: annualSavings * (i + 1),
+          cumulative_cost: systemCost,
+          net_position: annualSavings * (i + 1) - systemCost,
+        })),
+      },
+      environmental: {
+        co2_avoided_tons: simulationData?.co2AvoidedTons || solarKwp * 1.2,
+        trees_equivalent: solarKwp * 50,
+        car_miles_avoided: solarKwp * 3000,
+        homes_powered_equivalent: solarKwp / 5,
+        grid_emission_factor: 0.92,
+      },
+    };
+  }, [projectName, simulationData]);
+
+  // Convert segments to ReportSegment format for export
+  const reportSegments: ReportSegment[] = useMemo(() => {
+    return segments.map((s, i) => ({
+      id: s.id,
+      type: s.id as any,
+      enabled: s.enabled,
+      order: i,
+    }));
+  }, [segments]);
 
   const handleTemplateSelect = (template: ReportTemplate, templateSegments: string[]) => {
     setSelectedTemplate(template);
@@ -144,9 +246,7 @@ export function ReportBuilder({
     }
   };
 
-  const handleExport = () => {
-    toast.info("Export functionality coming in Phase 5");
-  };
+  const [activeTab, setActiveTab] = useState("compose");
 
   return (
     <div className={className}>
@@ -169,7 +269,7 @@ export function ReportBuilder({
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport}>
+          <Button variant="outline" onClick={() => setActiveTab("export")}>
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
@@ -181,7 +281,7 @@ export function ReportBuilder({
       </div>
 
       {/* Main Content */}
-      <Tabs defaultValue="compose" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>
           <TabsTrigger value="compose" className="gap-2">
             <Settings className="h-4 w-4" />
@@ -192,8 +292,12 @@ export function ReportBuilder({
             Preview
           </TabsTrigger>
           <TabsTrigger value="infographics" className="gap-2">
-            <FileText className="h-4 w-4" />
+            <Image className="h-4 w-4" />
             Infographics
+          </TabsTrigger>
+          <TabsTrigger value="export" className="gap-2">
+            <Download className="h-4 w-4" />
+            Export
           </TabsTrigger>
         </TabsList>
 
@@ -275,6 +379,14 @@ export function ReportBuilder({
               projectName,
               ...simulationData
             }}
+          />
+        </TabsContent>
+
+        <TabsContent value="export">
+          <ReportExport
+            reportName={reportName}
+            segments={reportSegments}
+            reportData={reportData}
           />
         </TabsContent>
       </Tabs>
