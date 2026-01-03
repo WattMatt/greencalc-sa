@@ -206,16 +206,18 @@ export function ReportExport({
     }
   }, []);
 
-  // Fetch cached infographics from storage
+  // Fetch cached infographics from storage - cache key must match InfographicGenerator
   const fetchCachedInfographics = async (): Promise<Map<string, string>> => {
     const infographics = new Map<string, string>();
     if (!projectId) return infographics;
 
     const types = ["executive", "system", "savings", "environmental", "engineering"];
-    const cacheKey = `${reportData.simulation.solar_capacity_kwp}-${reportData.simulation.battery_capacity_kwh}-${reportData.financials.annual_savings}`.replace(/\./g, '_');
-
+    
     for (const type of types) {
-      const filePath = `${projectId}/${cacheKey}-${type}.png`;
+      // Cache key format matches InfographicGenerator: solarKwp-batteryKwh-savings-type
+      const cacheKey = `${reportData.simulation.solar_capacity_kwp}-${reportData.simulation.battery_capacity_kwh}-${reportData.financials.annual_savings}-${type}`.replace(/\./g, '_');
+      const filePath = `${projectId}/${cacheKey}.png`;
+      
       const { data: urlData } = supabase.storage
         .from('report-infographics')
         .getPublicUrl(filePath);
