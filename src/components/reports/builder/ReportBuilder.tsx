@@ -24,7 +24,11 @@ import {
   GripVertical,
   Wand2,
   RefreshCw,
-  Scale
+  Scale,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from "lucide-react";
 import { ReportSegment, SegmentType } from "../types";
 import { Separator } from "@/components/ui/separator";
@@ -87,6 +91,9 @@ export function ReportBuilder({
   const [aiNarratives, setAiNarratives] = useState<AIProposalNarrative>({});
   const [editedNarratives, setEditedNarratives] = useState<Partial<Record<SegmentType, string>>>({});
   const [isGeneratingNarrative, setIsGeneratingNarrative] = useState(false);
+  
+  // Page navigation state
+  const [currentPage, setCurrentPage] = useState(0);
   const [aiNarrativeEnabled, setAiNarrativeEnabled] = useState(true);
 
   // Fetch project details including tariff
@@ -230,6 +237,23 @@ export function ReportBuilder({
 
   const enabledSegments = orderedSegmentOptions.filter(s => selectedSegments.has(s.id));
   const totalPages = enabledSegments.length + 1; // Cover page + one page per segment
+
+  // Page navigation helpers
+  const goToPage = useCallback((page: number) => {
+    setCurrentPage(Math.max(0, Math.min(page, totalPages - 1)));
+  }, [totalPages]);
+
+  const goToFirstPage = useCallback(() => goToPage(0), [goToPage]);
+  const goToLastPage = useCallback(() => goToPage(totalPages - 1), [goToPage, totalPages]);
+  const goToPrevPage = useCallback(() => goToPage(currentPage - 1), [currentPage, goToPage]);
+  const goToNextPage = useCallback(() => goToPage(currentPage + 1), [currentPage, goToPage]);
+
+  // Reset to first page when segments change
+  React.useEffect(() => {
+    if (currentPage >= totalPages) {
+      setCurrentPage(Math.max(0, totalPages - 1));
+    }
+  }, [totalPages, currentPage]);
 
   // Generate AI Narrative
   const generateAINarrative = useCallback(async (sectionType?: string) => {
@@ -499,83 +523,209 @@ export function ReportBuilder({
           </div>
         </div>
 
-        {/* Right: WYSIWYG PDF Preview */}
+        {/* Right: WYSIWYG PDF Preview with Page Navigation */}
         <div className="lg:col-span-2">
+          {/* Preview Header with Navigation */}
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-sm">PDF Preview</h3>
-            <Badge variant="outline">{totalPages} pages</Badge>
+            <div className="flex items-center gap-2">
+              {/* Page Navigation Controls */}
+              <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={goToFirstPage}
+                  disabled={currentPage === 0 || totalPages === 0}
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={goToPrevPage}
+                  disabled={currentPage === 0 || totalPages === 0}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="px-3 py-1 text-sm font-medium min-w-[80px] text-center">
+                  {totalPages > 0 ? `${currentPage + 1} / ${totalPages}` : "0 / 0"}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={goToNextPage}
+                  disabled={currentPage >= totalPages - 1 || totalPages === 0}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={goToLastPage}
+                  disabled={currentPage >= totalPages - 1 || totalPages === 0}
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <Badge variant="outline">{totalPages} pages</Badge>
+            </div>
           </div>
           
-          <ScrollArea className="h-[600px] rounded-lg border bg-muted/20 p-4">
-            <div className="space-y-4 max-w-md mx-auto">
-              {/* Cover Page */}
-              <div className="aspect-[8.5/11] bg-background rounded-lg shadow-md overflow-hidden">
-                {/* Green header */}
-                <div className="bg-primary h-20 p-4">
-                  <h2 className="text-xl font-bold text-primary-foreground">{projectName}</h2>
-                  <p className="text-sm text-primary-foreground/80">Solar Energy Proposal</p>
-                </div>
+          {/* Page Thumbnails */}
+          <div className="mb-4">
+            <ScrollArea className="w-full">
+              <div className="flex gap-2 pb-2">
+                {/* Cover thumbnail */}
+                <button
+                  onClick={() => goToPage(0)}
+                  className={`flex-shrink-0 w-16 h-20 rounded border-2 transition-all overflow-hidden ${
+                    currentPage === 0 
+                      ? 'border-primary ring-2 ring-primary/20' 
+                      : 'border-muted hover:border-muted-foreground/50'
+                  }`}
+                >
+                  <div className="w-full h-full bg-background flex flex-col">
+                    <div className="h-3 bg-primary" />
+                    <div className="flex-1 flex items-center justify-center">
+                      <Sun className="h-4 w-4 text-primary/50" />
+                    </div>
+                    <div className="text-[6px] text-center text-muted-foreground pb-0.5">Cover</div>
+                  </div>
+                </button>
                 
-                <div className="p-4 space-y-4">
-                  {/* Metrics */}
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div>
-                      <Sun className="h-6 w-6 mx-auto text-primary mb-1" />
-                      <p className="text-lg font-bold">{simulationData.solarCapacityKwp}</p>
-                      <p className="text-[10px] text-muted-foreground">kWp Solar</p>
-                    </div>
-                    <div>
-                      <Battery className="h-6 w-6 mx-auto text-primary mb-1" />
-                      <p className="text-lg font-bold">{simulationData.batteryCapacityKwh}</p>
-                      <p className="text-[10px] text-muted-foreground">kWh Battery</p>
-                    </div>
-                    <div>
-                      <DollarSign className="h-6 w-6 mx-auto text-primary mb-1" />
-                      <p className="text-lg font-bold">R{Math.round((simulationData.annualSavings || 0) / 1000)}k</p>
-                      <p className="text-[10px] text-muted-foreground">Annual Savings</p>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Contents */}
-                  <div>
-                    <p className="text-xs font-medium mb-2">Contents</p>
-                    <div className="space-y-1">
-                      {enabledSegments.map((seg, i) => (
-                        <div key={seg.id} className="flex items-center gap-2 text-[10px]">
-                          <span className="text-muted-foreground">{i + 1}.</span>
-                          <span>{seg.label}</span>
+                {/* Segment thumbnails */}
+                {enabledSegments.map((segment, index) => {
+                  const Icon = segment.icon;
+                  const pageNum = index + 1;
+                  return (
+                    <button
+                      key={segment.id}
+                      onClick={() => goToPage(pageNum)}
+                      className={`flex-shrink-0 w-16 h-20 rounded border-2 transition-all overflow-hidden ${
+                        currentPage === pageNum 
+                          ? 'border-primary ring-2 ring-primary/20' 
+                          : 'border-muted hover:border-muted-foreground/50'
+                      }`}
+                    >
+                      <div className="w-full h-full bg-background flex flex-col">
+                        <div className="h-3 bg-muted/50 flex items-center justify-center">
+                          <Icon className="h-2 w-2 text-primary" />
                         </div>
-                      ))}
+                        <div className="flex-1 flex items-center justify-center p-1">
+                          <div className="w-full space-y-0.5">
+                            <div className="h-1 bg-muted rounded w-full" />
+                            <div className="h-1 bg-muted rounded w-3/4" />
+                            <div className="h-1 bg-muted rounded w-1/2" />
+                          </div>
+                        </div>
+                        <div className="text-[6px] text-center text-muted-foreground pb-0.5 truncate px-0.5">
+                          {segment.label.split(' ')[0]}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* Single Page Preview */}
+          <div className="rounded-lg border bg-muted/20 p-6">
+            <div className="max-w-md mx-auto">
+              {/* Cover Page */}
+              {currentPage === 0 && (
+                <div className="aspect-[8.5/11] bg-background rounded-lg shadow-lg overflow-hidden relative">
+                  {/* Page break indicator */}
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+                  
+                  {/* Green header */}
+                  <div className="bg-primary h-24 p-4">
+                    <h2 className="text-xl font-bold text-primary-foreground">{projectName}</h2>
+                    <p className="text-sm text-primary-foreground/80">Solar Energy Proposal</p>
+                  </div>
+                  
+                  <div className="p-6 space-y-6">
+                    {/* Metrics */}
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <Sun className="h-8 w-8 mx-auto text-primary mb-2" />
+                        <p className="text-xl font-bold">{simulationData.solarCapacityKwp}</p>
+                        <p className="text-xs text-muted-foreground">kWp Solar</p>
+                      </div>
+                      <div>
+                        <Battery className="h-8 w-8 mx-auto text-primary mb-2" />
+                        <p className="text-xl font-bold">{simulationData.batteryCapacityKwh}</p>
+                        <p className="text-xs text-muted-foreground">kWh Battery</p>
+                      </div>
+                      <div>
+                        <DollarSign className="h-8 w-8 mx-auto text-primary mb-2" />
+                        <p className="text-xl font-bold">R{Math.round((simulationData.annualSavings || 0) / 1000)}k</p>
+                        <p className="text-xs text-muted-foreground">Annual Savings</p>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Contents */}
+                    <div>
+                      <p className="text-sm font-medium mb-3">Table of Contents</p>
+                      <div className="space-y-2">
+                        {enabledSegments.map((seg, i) => (
+                          <div 
+                            key={seg.id} 
+                            className="flex items-center justify-between text-xs border-b border-dotted border-muted pb-1 cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => goToPage(i + 1)}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground w-4">{i + 1}.</span>
+                              <seg.icon className="h-3 w-3 text-primary" />
+                              <span>{seg.label}</span>
+                            </div>
+                            <span className="text-muted-foreground">Page {i + 2}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="absolute bottom-0 left-0 right-0 p-2 text-center">
-                  <p className="text-[9px] text-muted-foreground">
-                    Generated {new Date().toLocaleDateString()} • Page 1 of {totalPages}
-                  </p>
+                  {/* Footer */}
+                  <div className="absolute bottom-0 left-0 right-0 p-3 border-t bg-muted/30 text-center">
+                    <p className="text-[10px] text-muted-foreground">
+                      Generated {new Date().toLocaleDateString()} • Page 1 of {totalPages}
+                    </p>
+                  </div>
+                  
+                  {/* Page break indicator bottom */}
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
                 </div>
-              </div>
+              )}
 
               {/* Content Pages */}
-              {enabledSegments.map((segment, index) => {
+              {currentPage > 0 && currentPage <= enabledSegments.length && (() => {
+                const segment = enabledSegments[currentPage - 1];
+                if (!segment) return null;
                 const Icon = segment.icon;
                 
                 return (
-                  <div
-                    key={segment.id}
-                    className="aspect-[8.5/11] bg-background rounded-lg shadow-md overflow-hidden flex flex-col"
-                  >
+                  <div className="aspect-[8.5/11] bg-background rounded-lg shadow-lg overflow-hidden flex flex-col relative">
+                    {/* Page break indicator top */}
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+                    
                     {/* Page header */}
-                    <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-primary" />
-                      <h3 className="font-semibold text-sm">{segment.label}</h3>
+                    <div className="bg-muted/50 px-4 py-3 border-b flex items-center gap-2">
+                      <Icon className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold">{segment.label}</h3>
+                      <Badge variant="secondary" className="ml-auto text-[10px]">
+                        Section {currentPage} of {enabledSegments.length}
+                      </Badge>
                     </div>
 
                     {/* Page content */}
-                    <div className="flex-1 p-4">
+                    <div className="flex-1 p-4 overflow-auto">
                       <SegmentPreviewContent 
                         segmentId={segment.id} 
                         simulationData={simulationData}
@@ -589,15 +739,19 @@ export function ReportBuilder({
                     </div>
 
                     {/* Page footer */}
-                    <div className="px-4 py-2 border-t text-center">
-                      <p className="text-[9px] text-muted-foreground">
-                        Page {index + 2} of {totalPages}
+                    <div className="px-4 py-3 border-t bg-muted/30 text-center">
+                      <p className="text-[10px] text-muted-foreground">
+                        {projectName} • Page {currentPage + 1} of {totalPages}
                       </p>
                     </div>
+                    
+                    {/* Page break indicator bottom */}
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
                   </div>
                 );
-              })}
+              })()}
 
+              {/* Empty state */}
               {enabledSegments.length === 0 && (
                 <div className="aspect-[8.5/11] bg-muted/20 rounded-lg border-2 border-dashed flex items-center justify-center">
                   <div className="text-center text-muted-foreground">
@@ -608,7 +762,7 @@ export function ReportBuilder({
                 </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </div>
     </div>
