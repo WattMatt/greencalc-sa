@@ -612,6 +612,8 @@ export function ReportExport({
     yPos: number,
     pId?: string
   ) => {
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
     // Fetch tariff data from Supabase if we have project info
     let tariffName = "Not specified";
     let tariffType = "N/A";
@@ -753,12 +755,118 @@ export function ReportExport({
       yPos = (doc as any).lastAutoTable.finalY + 15;
     }
 
+    // TOU Period Hour Definitions (FY2026 Updated)
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(60, 60, 60);
+    doc.text("TOU Period Definitions (FY2026)", 20, yPos);
+    yPos += 5;
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Period', 'Weekday Hours', 'Saturday', 'Sunday']],
+      body: [
+        ['Peak', '06:00-08:00, 18:00-21:00', '07:00-12:00, 18:00-20:00', 'None'],
+        ['Standard', '08:00-18:00, 21:00-22:00', '12:00-18:00, 20:00-22:00', '18:00-21:00'],
+        ['Off-Peak', '22:00-06:00', '22:00-07:00', '21:00-18:00 (all other hours)'],
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
+      styles: { fontSize: 9 },
+      margin: { left: 20, right: 20 },
+      columnStyles: {
+        0: { cellWidth: 25, fontStyle: 'bold' },
+      },
+    });
+
+    yPos = (doc as any).lastAutoTable.finalY + 15;
+
+    // Cost Comparison: Grid-Only vs Solar+Battery
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(60, 60, 60);
+    doc.text("Cost Comparison by TOU Period", 20, yPos);
+    yPos += 5;
+
+    // Estimate costs per period (simplified for demonstration)
+    const peakRate = 849.20; // c/kWh High Season Peak
+    const standardRate = 246.83;
+    const offPeakRate = 145.74;
+    const solarOffset = 0.85; // 85% offset during peak/standard
+
+    autoTable(doc, {
+      startY: yPos,
+      head: [['TOU Period', 'Grid Only (c/kWh)', 'With Solar+Battery', 'Savings']],
+      body: [
+        ['Peak (High Season)', `${peakRate.toFixed(0)}c`, `${(peakRate * (1 - solarOffset)).toFixed(0)}c`, `${(solarOffset * 100).toFixed(0)}%`],
+        ['Standard (High Season)', `${standardRate.toFixed(0)}c`, `${(standardRate * (1 - solarOffset * 0.8)).toFixed(0)}c`, `${(solarOffset * 0.8 * 100).toFixed(0)}%`],
+        ['Off-Peak', `${offPeakRate.toFixed(0)}c`, `${(offPeakRate * 0.7).toFixed(0)}c`, '30% (battery)'],
+      ],
+      theme: 'striped',
+      headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
+      styles: { fontSize: 9 },
+      margin: { left: 20, right: 20 },
+      columnStyles: {
+        3: { textColor: [34, 197, 94] }, // Green for savings
+      },
+    });
+
+    yPos = (doc as any).lastAutoTable.finalY + 15;
+
+    // Seasonal Calendar
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(60, 60, 60);
+    doc.text("Seasonal Calendar", 20, yPos);
+    yPos += 8;
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const highDemandMonths = [5, 6, 7]; // June, July, August (0-indexed)
+    const boxWidth = (pageWidth - 40) / 12;
+    const boxHeight = 15;
+
+    months.forEach((month, i) => {
+      const x = 20 + i * boxWidth;
+      const isHighDemand = highDemandMonths.includes(i);
+      
+      // Draw box
+      if (isHighDemand) {
+        doc.setFillColor(254, 202, 202); // Red-ish for high demand
+      } else {
+        doc.setFillColor(187, 247, 208); // Green-ish for low demand
+      }
+      doc.rect(x, yPos, boxWidth - 1, boxHeight, 'F');
+      
+      // Draw month label
+      doc.setTextColor(isHighDemand ? 185 : 22, isHighDemand ? 28 : 163, isHighDemand ? 28 : 74);
+      doc.text(month, x + boxWidth / 2 - 4, yPos + 10);
+    });
+
+    yPos += boxHeight + 10;
+
+    // Legend
+    doc.setFillColor(254, 202, 202);
+    doc.rect(20, yPos, 10, 8, 'F');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text("High Demand Season (Jun-Aug) - Higher rates apply", 35, yPos + 6);
+
+    doc.setFillColor(187, 247, 208);
+    doc.rect(pageWidth / 2, yPos, 10, 8, 'F');
+    doc.text("Low Demand Season - Lower rates apply", pageWidth / 2 + 15, yPos + 6);
+
+    yPos += 20;
+
     // Solar impact note
     doc.setFontSize(10);
     doc.setFont("helvetica", "italic");
     doc.setTextColor(primary.r, primary.g, primary.b);
-    const impactNote = "⚡ Solar Impact: System generates during Peak/Standard hours, offsetting highest-cost energy periods.";
-    doc.text(impactNote, 20, yPos);
+    const impactNote = "⚡ Solar Impact: System generates during Peak hours (06:00-08:00, 18:00-21:00), offsetting the highest-cost energy periods.";
+    const splitNote = doc.splitTextToSize(impactNote, pageWidth - 40);
+    doc.text(splitNote, 20, yPos);
   };
 
   const renderAIInfographics = async (

@@ -321,27 +321,84 @@ function SegmentContent({ segmentId, projectName, data }: { segmentId: string; p
     case "tariff_details":
       return (
         <div className="space-y-2 text-[9px]">
+          {/* Tariff Header */}
           <div className="bg-muted/50 rounded p-2">
-            <p className="font-medium text-primary text-[10px]">Selected Tariff</p>
-            <p className="text-muted-foreground">TOU tariff with seasonal rates</p>
+            <p className="font-medium text-primary text-[10px]">Eskom TOU Tariff (FY2026)</p>
+            <p className="text-muted-foreground">Miniflex • Zone 600-900km • LV</p>
           </div>
-          <div className="grid grid-cols-3 gap-1 text-center">
-            <div className="bg-red-100 dark:bg-red-950/30 rounded p-1">
-              <p className="font-bold text-red-600">Peak</p>
-              <p className="text-muted-foreground">Highest</p>
-            </div>
-            <div className="bg-amber-100 dark:bg-amber-950/30 rounded p-1">
-              <p className="font-bold text-amber-600">Standard</p>
-              <p className="text-muted-foreground">Medium</p>
-            </div>
-            <div className="bg-emerald-100 dark:bg-emerald-950/30 rounded p-1">
-              <p className="font-bold text-emerald-600">Off-Peak</p>
-              <p className="text-muted-foreground">Lowest</p>
+          
+          {/* TOU Period Hours */}
+          <div className="space-y-1">
+            <p className="font-medium text-[10px]">TOU Periods (Weekday)</p>
+            <div className="grid grid-cols-3 gap-1 text-center">
+              <div className="bg-destructive/10 rounded p-1 border border-destructive/20">
+                <p className="font-bold text-destructive text-[10px]">Peak</p>
+                <p className="text-[8px] text-muted-foreground">06:00-08:00</p>
+                <p className="text-[8px] text-muted-foreground">18:00-21:00</p>
+              </div>
+              <div className="bg-amber-500/10 rounded p-1 border border-amber-500/20">
+                <p className="font-bold text-amber-600 text-[10px]">Standard</p>
+                <p className="text-[8px] text-muted-foreground">08:00-18:00</p>
+                <p className="text-[8px] text-muted-foreground">21:00-22:00</p>
+              </div>
+              <div className="bg-emerald-500/10 rounded p-1 border border-emerald-500/20">
+                <p className="font-bold text-emerald-600 text-[10px]">Off-Peak</p>
+                <p className="text-[8px] text-muted-foreground">22:00-06:00</p>
+              </div>
             </div>
           </div>
-          <p className="text-[8px] text-muted-foreground italic">
-            ⚡ Solar offsets Peak hours for max savings
-          </p>
+
+          {/* Cost Comparison Mini Chart */}
+          <div className="space-y-1">
+            <p className="font-medium text-[10px]">Grid vs Solar+Battery</p>
+            <div className="flex items-end gap-1 h-10">
+              <div className="flex-1 flex flex-col gap-0.5">
+                <div className="bg-destructive/60 rounded-t h-8 relative">
+                  <span className="absolute inset-0 flex items-center justify-center text-[7px] text-white font-medium">Grid</span>
+                </div>
+                <p className="text-[7px] text-center">Peak</p>
+              </div>
+              <div className="flex-1 flex flex-col gap-0.5">
+                <div className="bg-primary/60 rounded-t h-3 relative" />
+                <p className="text-[7px] text-center text-primary">-85%</p>
+              </div>
+              <div className="flex-1 flex flex-col gap-0.5">
+                <div className="bg-destructive/60 rounded-t h-5" />
+                <p className="text-[7px] text-center">Std</p>
+              </div>
+              <div className="flex-1 flex flex-col gap-0.5">
+                <div className="bg-primary/60 rounded-t h-2" />
+                <p className="text-[7px] text-center text-primary">-70%</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Seasonal Calendar */}
+          <div className="space-y-1">
+            <p className="font-medium text-[10px]">Seasonal Calendar</p>
+            <div className="grid grid-cols-12 gap-0.5">
+              {['J','F','M','A','M','J','J','A','S','O','N','D'].map((m, i) => (
+                <div 
+                  key={m + i}
+                  className={`text-center rounded p-0.5 text-[7px] ${
+                    i >= 5 && i <= 7 
+                      ? 'bg-destructive/20 text-destructive font-medium' 
+                      : 'bg-emerald-500/20 text-emerald-600'
+                  }`}
+                >
+                  {m}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between text-[7px] text-muted-foreground">
+              <span className="flex items-center gap-0.5">
+                <span className="w-2 h-2 rounded bg-destructive/20" /> High (Jun-Aug)
+              </span>
+              <span className="flex items-center gap-0.5">
+                <span className="w-2 h-2 rounded bg-emerald-500/20" /> Low
+              </span>
+            </div>
+          </div>
         </div>
       );
 
