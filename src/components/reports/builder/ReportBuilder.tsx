@@ -388,6 +388,7 @@ export function ReportBuilder({
             reportName={reportName}
             segments={reportSegments}
             reportData={reportData}
+            projectId={projectId}
           />
         </TabsContent>
       </Tabs>
