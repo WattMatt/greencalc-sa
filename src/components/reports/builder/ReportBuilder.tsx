@@ -22,7 +22,8 @@ import {
   Zap,
   GripVertical,
   Wand2,
-  RefreshCw
+  RefreshCw,
+  Scale
 } from "lucide-react";
 import { ReportData, ReportSegment, SegmentType } from "../types";
 import { Separator } from "@/components/ui/separator";
@@ -39,6 +40,7 @@ const SEGMENT_OPTIONS: Array<{
   { id: "executive_summary", label: "Executive Summary", description: "Key metrics overview", icon: FileText },
   { id: "tariff_details", label: "Tariff Analysis", description: "TOU rates & seasonal breakdown", icon: Zap },
   { id: "dcac_comparison", label: "DC/AC Analysis", description: "Oversizing ratio comparison", icon: BarChart3 },
+  { id: "sizing_comparison", label: "Sizing Alternatives", description: "Conservative vs aggressive options", icon: Scale },
   { id: "energy_flow", label: "Energy Flow", description: "System energy distribution", icon: Sparkles },
   { id: "monthly_yield", label: "Monthly Yield", description: "12-month generation forecast", icon: BarChart3 },
   { id: "payback_timeline", label: "Payback Timeline", description: "Financial ROI projection", icon: DollarSign },
@@ -1463,6 +1465,140 @@ export function ReportBuilder({
             });
             break;
 
+          case "sizing_comparison":
+            // Sizing Alternatives Comparison Table
+            pdf.setFontSize(12);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("System Sizing Alternatives Comparison", margin, yPos);
+            yPos += 8;
+            pdf.setFontSize(9);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text("Comparison of conservative, current, and aggressive system sizing options", margin, yPos);
+            yPos += 12;
+
+            // Calculate scenarios based on current system
+            const currentKwp = simulationData.solarCapacityKwp || 100;
+            const currentBattery = simulationData.batteryCapacityKwh || 50;
+            const currentSavings = simulationData.annualSavings || 250000;
+            const currentPayback = simulationData.paybackYears || 5;
+            const costPerKwp = 12000; // R/kWp
+            const batteryPerKwh = 6000; // R/kWh
+
+            // Define scenarios
+            const scenarios = [
+              {
+                name: "Conservative",
+                description: "Lower upfront cost, reduced risk",
+                solarKwp: Math.round(currentKwp * 0.7),
+                batteryKwh: Math.round(currentBattery * 0.5),
+                factor: 0.65,
+              },
+              {
+                name: "Current Design",
+                description: "Balanced performance and investment",
+                solarKwp: currentKwp,
+                batteryKwh: currentBattery,
+                factor: 1.0,
+              },
+              {
+                name: "Aggressive",
+                description: "Maximum energy independence",
+                solarKwp: Math.round(currentKwp * 1.35),
+                batteryKwh: Math.round(currentBattery * 2),
+                factor: 1.4,
+              },
+            ];
+
+            // Scenario cards at top
+            const scenarioCardWidth = (pageWidth - 2 * margin - 20) / 3;
+            scenarios.forEach((scenario, i) => {
+              const cardX = margin + i * (scenarioCardWidth + 10);
+              const isCurrentScenario = scenario.name === "Current Design";
+              
+              // Card background
+              pdf.setFillColor(isCurrentScenario ? 240 : 250, isCurrentScenario ? 253 : 250, isCurrentScenario ? 244 : 250);
+              pdf.roundedRect(cardX, yPos, scenarioCardWidth, 50, 4, 4, "F");
+              if (isCurrentScenario) {
+                pdf.setDrawColor(34, 197, 94);
+                pdf.setLineWidth(1.5);
+                pdf.roundedRect(cardX, yPos, scenarioCardWidth, 50, 4, 4, "S");
+              }
+              
+              // Scenario name
+              pdf.setFontSize(11);
+              pdf.setTextColor(isCurrentScenario ? 22 : 80, isCurrentScenario ? 163 : 80, isCurrentScenario ? 74 : 80);
+              pdf.text(scenario.name, cardX + 8, yPos + 14);
+              
+              // Description
+              pdf.setFontSize(7);
+              pdf.setTextColor(120, 120, 120);
+              pdf.text(scenario.description, cardX + 8, yPos + 24);
+              
+              // Solar capacity
+              pdf.setFontSize(14);
+              pdf.setTextColor(isCurrentScenario ? 34 : 100, isCurrentScenario ? 197 : 100, isCurrentScenario ? 94 : 100);
+              pdf.text(`${scenario.solarKwp} kWp`, cardX + 8, yPos + 42);
+            });
+
+            yPos += 60;
+
+            // Detailed comparison table
+            const scenarioData = scenarios.map((s) => {
+              const systemCost = s.solarKwp * costPerKwp + s.batteryKwh * batteryPerKwh;
+              const annualSavingsScenario = Math.round(currentSavings * s.factor);
+              const paybackYears = systemCost / annualSavingsScenario;
+              const roi25yr = ((annualSavingsScenario * 25 - systemCost) / systemCost) * 100;
+              const co2Avoided = Math.round(s.solarKwp * 1.2);
+              
+              return {
+                ...s,
+                systemCost,
+                annualSavings: annualSavingsScenario,
+                paybackYears,
+                roi25yr,
+                co2Avoided,
+              };
+            });
+
+            autoTable(pdf, {
+              startY: yPos,
+              head: [["Metric", "Conservative", "Current Design", "Aggressive"]],
+              body: [
+                ["Solar Capacity", `${scenarioData[0].solarKwp} kWp`, `${scenarioData[1].solarKwp} kWp`, `${scenarioData[2].solarKwp} kWp`],
+                ["Battery Storage", `${scenarioData[0].batteryKwh} kWh`, `${scenarioData[1].batteryKwh} kWh`, `${scenarioData[2].batteryKwh} kWh`],
+                ["System Cost", `R${Math.round(scenarioData[0].systemCost / 1000)}k`, `R${Math.round(scenarioData[1].systemCost / 1000)}k`, `R${Math.round(scenarioData[2].systemCost / 1000)}k`],
+                ["Annual Savings", `R${Math.round(scenarioData[0].annualSavings / 1000)}k`, `R${Math.round(scenarioData[1].annualSavings / 1000)}k`, `R${Math.round(scenarioData[2].annualSavings / 1000)}k`],
+                ["Payback Period", `${scenarioData[0].paybackYears.toFixed(1)} yrs`, `${scenarioData[1].paybackYears.toFixed(1)} yrs`, `${scenarioData[2].paybackYears.toFixed(1)} yrs`],
+                ["25-Year ROI", `${Math.round(scenarioData[0].roi25yr)}%`, `${Math.round(scenarioData[1].roi25yr)}%`, `${Math.round(scenarioData[2].roi25yr)}%`],
+                ["CO₂ Avoided/yr", `${scenarioData[0].co2Avoided} tonnes`, `${scenarioData[1].co2Avoided} tonnes`, `${scenarioData[2].co2Avoided} tonnes`],
+              ],
+              theme: "grid",
+              headStyles: { fillColor: [34, 197, 94], textColor: 255 },
+              columnStyles: {
+                0: { fontStyle: "bold", cellWidth: 35 },
+                1: { halign: "center" },
+                2: { halign: "center", fillColor: [240, 253, 244] },
+                3: { halign: "center" },
+              },
+              margin: { left: margin, right: margin },
+            });
+
+            // Get final Y position after table
+            const tableEndY = (pdf as any).lastAutoTable?.finalY || yPos + 70;
+
+            // Key insight box
+            pdf.setFillColor(239, 246, 255);
+            pdf.roundedRect(margin, tableEndY + 10, pageWidth - 2 * margin, 25, 4, 4, "F");
+            pdf.setFontSize(9);
+            pdf.setTextColor(37, 99, 235);
+            pdf.text("Recommendation", margin + 8, tableEndY + 22);
+            pdf.setFontSize(8);
+            pdf.setTextColor(60, 60, 60);
+            const recText = `The Current Design offers the optimal balance between investment (R${Math.round(scenarioData[1].systemCost / 1000)}k) and returns (${scenarioData[1].paybackYears.toFixed(1)}-year payback). Consider the Aggressive option for maximum energy independence.`;
+            const wrappedRec = pdf.splitTextToSize(recText, pageWidth - 2 * margin - 16);
+            pdf.text(wrappedRec, margin + 8, tableEndY + 30);
+            break;
+
           default:
             pdf.setFontSize(10);
             pdf.setTextColor(100, 100, 100);
@@ -2329,6 +2465,87 @@ function SegmentPreviewContent({
             <SpecRow label="DC/AC Ratio" value={`${(simulationData.dcAcRatio || 1.3).toFixed(2)}:1`} />
             <SpecRow label="Performance Ratio" value="80-82%" />
             <SpecRow label="Specific Yield" value="~1,600 kWh/kWp/yr" />
+          </div>
+        </div>
+      );
+
+    case "sizing_comparison":
+      const currentKwpPreview = simulationData.solarCapacityKwp || 100;
+      const currentBatteryPreview = simulationData.batteryCapacityKwh || 50;
+      const currentSavingsPreview = simulationData.annualSavings || 250000;
+      const costPerKwpPreview = 12000;
+      const batteryPerKwhPreview = 6000;
+
+      const scenariosPreview = [
+        { name: "Conservative", factor: 0.7, batteryFactor: 0.5 },
+        { name: "Current", factor: 1.0, batteryFactor: 1.0, isCurrent: true },
+        { name: "Aggressive", factor: 1.35, batteryFactor: 2.0 },
+      ];
+
+      const scenarioDataPreview = scenariosPreview.map((s) => {
+        const solarKwp = Math.round(currentKwpPreview * s.factor);
+        const batteryKwh = Math.round(currentBatteryPreview * s.batteryFactor);
+        const systemCost = solarKwp * costPerKwpPreview + batteryKwh * batteryPerKwhPreview;
+        const annualSavings = Math.round(currentSavingsPreview * (s.factor * 0.9 + 0.1));
+        const paybackYears = systemCost / annualSavings;
+        return { ...s, solarKwp, batteryKwh, systemCost, annualSavings, paybackYears };
+      });
+
+      return (
+        <div className="space-y-2">
+          <p className="text-[9px] font-medium">System Sizing Comparison</p>
+          
+          {/* Scenario comparison cards */}
+          <div className="grid grid-cols-3 gap-1">
+            {scenarioDataPreview.map((scenario) => (
+              <div 
+                key={scenario.name}
+                className={`rounded p-1.5 text-center ${
+                  scenario.isCurrent 
+                    ? "bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700" 
+                    : "bg-muted/50"
+                }`}
+              >
+                <p className={`text-[8px] font-medium ${scenario.isCurrent ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}`}>
+                  {scenario.name}
+                </p>
+                <p className={`text-[11px] font-bold ${scenario.isCurrent ? "text-emerald-600" : ""}`}>
+                  {scenario.solarKwp}kWp
+                </p>
+                <p className="text-[7px] text-muted-foreground">
+                  {scenario.paybackYears.toFixed(1)}yr payback
+                </p>
+              </div>
+            ))}
+          </div>
+          
+          {/* Quick comparison table */}
+          <div className="space-y-0.5 text-[7px]">
+            <div className="flex justify-between py-0.5 border-b border-dashed">
+              <span className="text-muted-foreground">Investment</span>
+              <div className="flex gap-2">
+                {scenarioDataPreview.map((s) => (
+                  <span key={s.name} className={`w-12 text-right ${s.isCurrent ? "font-bold text-emerald-600" : ""}`}>
+                    R{Math.round(s.systemCost / 1000)}k
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-between py-0.5 border-b border-dashed">
+              <span className="text-muted-foreground">Annual Savings</span>
+              <div className="flex gap-2">
+                {scenarioDataPreview.map((s) => (
+                  <span key={s.name} className={`w-12 text-right ${s.isCurrent ? "font-bold text-emerald-600" : ""}`}>
+                    R{Math.round(s.annualSavings / 1000)}k
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {/* Key insight */}
+          <div className="bg-blue-50 dark:bg-blue-950/30 rounded p-1.5 text-center">
+            <p className="text-[7px] text-muted-foreground">Current design balances cost and returns</p>
           </div>
         </div>
       );

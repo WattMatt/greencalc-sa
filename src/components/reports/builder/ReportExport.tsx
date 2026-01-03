@@ -325,6 +325,7 @@ export function ReportExport({
         engineering_specs: "Engineering Specifications",
         ai_infographics: "AI Infographics",
         tariff_details: "Tariff Analysis",
+        sizing_comparison: "Sizing Alternatives",
         custom_notes: "Notes & Annotations"
       };
 
