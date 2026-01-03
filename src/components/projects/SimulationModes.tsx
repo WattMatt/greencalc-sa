@@ -9,6 +9,7 @@ import { SimulationPanel } from "./SimulationPanel";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { SystemCostsData } from "./SystemCostsManager";
 
 interface Tenant {
   id: string;
@@ -35,9 +36,11 @@ interface SimulationModesProps {
   project: any;
   tenants: Tenant[];
   shopTypes: ShopType[];
+  systemCosts: SystemCostsData;
+  onSystemCostsChange: (costs: SystemCostsData) => void;
 }
 
-export function SimulationModes({ projectId, project, tenants, shopTypes }: SimulationModesProps) {
+export function SimulationModes({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange }: SimulationModesProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeMode, setActiveMode] = useState("profile-builder");
@@ -107,6 +110,8 @@ export function SimulationModes({ projectId, project, tenants, shopTypes }: Simu
           project={project}
           tenants={tenants}
           shopTypes={shopTypes}
+          systemCosts={systemCosts}
+          onSystemCostsChange={onSystemCostsChange}
         />
       </TabsContent>
 

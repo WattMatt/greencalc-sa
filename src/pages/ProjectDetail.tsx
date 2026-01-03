@@ -259,6 +259,8 @@ export default function ProjectDetail() {
             project={project}
             tenants={tenants || []}
             shopTypes={shopTypes || []}
+            systemCosts={systemCosts}
+            onSystemCostsChange={setSystemCosts}
           />
         </TabsContent>
 
