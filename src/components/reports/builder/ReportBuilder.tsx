@@ -20,7 +20,9 @@ import {
   Leaf,
   Settings2,
   Zap,
-  GripVertical
+  GripVertical,
+  Wand2,
+  RefreshCw
 } from "lucide-react";
 import { ReportData, ReportSegment, SegmentType } from "../types";
 import { Separator } from "@/components/ui/separator";
@@ -44,6 +46,14 @@ const SEGMENT_OPTIONS: Array<{
   { id: "environmental_impact", label: "Environmental Impact", description: "CO2 reduction metrics", icon: Leaf },
   { id: "engineering_specs", label: "Engineering Specs", description: "Technical specifications", icon: Settings2 },
 ];
+
+// AI Narrative types
+interface AIProposalNarrative {
+  executive_summary?: { narrative: string; keyHighlights: string[] };
+  tariff_analysis?: { narrative: string; keyHighlights: string[] };
+  sizing_methodology?: { narrative: string; keyHighlights: string[] };
+  investment_recommendation?: { narrative: string; keyHighlights: string[] };
+}
 
 interface ReportBuilderProps {
   projectName?: string;
@@ -74,6 +84,11 @@ export function ReportBuilder({
   const [isGenerating, setIsGenerating] = useState(false);
   const [draggedSegment, setDraggedSegment] = useState<SegmentType | null>(null);
   const [dragOverSegment, setDragOverSegment] = useState<SegmentType | null>(null);
+  
+  // AI Narrative state
+  const [aiNarratives, setAiNarratives] = useState<AIProposalNarrative>({});
+  const [isGeneratingNarrative, setIsGeneratingNarrative] = useState(false);
+  const [aiNarrativeEnabled, setAiNarrativeEnabled] = useState(true);
 
   // Fetch project details including tariff
   const { data: projectDetails } = useQuery({
@@ -217,6 +232,71 @@ export function ReportBuilder({
   const enabledSegments = orderedSegmentOptions.filter(s => selectedSegments.has(s.id));
   const totalPages = enabledSegments.length + 1; // Cover page + one page per segment
 
+  // Generate AI Narrative
+  const generateAINarrative = useCallback(async (sectionType?: string) => {
+    setIsGeneratingNarrative(true);
+    
+    try {
+      const tariffInfo = projectDetails?.tariffs;
+      const projectData = {
+        projectName,
+        location: projectDetails?.location,
+        buildingArea: projectDetails?.total_area_sqm,
+        connectionSize: projectDetails?.connection_size_kva,
+        solarCapacityKwp: simulationData.solarCapacityKwp,
+        batteryCapacityKwh: simulationData.batteryCapacityKwh,
+        dcAcRatio: simulationData.dcAcRatio,
+        tariffName: tariffInfo?.name,
+        tariffType: tariffInfo?.tariff_type,
+        municipalityName: tariffInfo?.municipalities?.name,
+        annualSavings: simulationData.annualSavings,
+        paybackYears: simulationData.paybackYears,
+        roiPercent: simulationData.roiPercent,
+      };
+
+      const sectionsToGenerate = sectionType 
+        ? [sectionType] 
+        : ['executive_summary', 'tariff_analysis', 'sizing_methodology', 'investment_recommendation'];
+
+      const results = await Promise.all(
+        sectionsToGenerate.map(async (section) => {
+          const { data, error } = await supabase.functions.invoke('generate-proposal-narrative', {
+            body: { sectionType: section, projectData }
+          });
+          
+          if (error) throw error;
+          return { section, data };
+        })
+      );
+
+      const newNarratives = { ...aiNarratives };
+      results.forEach(({ section, data }) => {
+        if (data?.narrative) {
+          newNarratives[section as keyof AIProposalNarrative] = {
+            narrative: data.narrative,
+            keyHighlights: data.keyHighlights || []
+          };
+        }
+      });
+
+      setAiNarratives(newNarratives);
+      toast.success("AI narrative generated successfully!");
+    } catch (error) {
+      console.error('AI narrative generation failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate narrative';
+      
+      if (errorMessage.includes('Rate limit')) {
+        toast.error("AI rate limit reached. Please try again in a moment.");
+      } else if (errorMessage.includes('credits')) {
+        toast.error("AI credits exhausted. Please add credits to continue.");
+      } else {
+        toast.error(errorMessage);
+      }
+    } finally {
+      setIsGeneratingNarrative(false);
+    }
+  }, [projectDetails, projectName, simulationData, aiNarratives]);
+
   // Generate PDF
   const handleGeneratePDF = async () => {
     if (enabledSegments.length === 0) {
@@ -299,39 +379,72 @@ export function ReportBuilder({
             const connectionSize = projectDetails?.connection_size_kva;
             const location = projectDetails?.location;
 
-            // Project Overview - Written Summary
-            pdf.setFillColor(248, 250, 252);
-            pdf.roundedRect(margin, yPos, pageWidth - 2 * margin, 42, 3, 3, "F");
-            pdf.setFontSize(10);
-            pdf.setTextColor(0, 0, 0);
-            pdf.text("Project Overview", margin + 5, yPos + 8);
+            // Check for AI-generated narrative
+            const aiSummary = aiNarrativeEnabled && aiNarratives.executive_summary?.narrative;
             
-            pdf.setFontSize(9);
-            pdf.setTextColor(80, 80, 80);
-            
-            // Build dynamic summary text
-            let summaryLine1 = `This proposal outlines a solar PV installation for ${projectName}`;
-            if (location) summaryLine1 += `, located in ${location}`;
-            if (buildingArea) summaryLine1 += `, covering ${Number(buildingArea).toLocaleString()} m² of building area`;
-            summaryLine1 += ".";
-            
-            let summaryLine2 = `The system has been sized at ${simulationData.solarCapacityKwp} kWp`;
-            if (connectionSize) summaryLine2 += ` against a ${connectionSize} kVA grid connection`;
-            if (tariffName) {
-              summaryLine2 += `, applying the ${tariffName} tariff`;
-              if (municipalityName) summaryLine2 += ` (${municipalityName})`;
-            }
-            summaryLine2 += ".";
+            if (aiSummary) {
+              // AI-Generated Professional Narrative
+              pdf.setFillColor(248, 250, 252);
+              const narrativeBoxHeight = Math.min(120, 30 + aiSummary.length / 10);
+              pdf.roundedRect(margin, yPos, pageWidth - 2 * margin, narrativeBoxHeight, 3, 3, "F");
+              
+              pdf.setFontSize(10);
+              pdf.setTextColor(22, 101, 52);
+              pdf.text("Executive Summary", margin + 5, yPos + 8);
+              
+              // AI badge
+              pdf.setFillColor(220, 252, 231);
+              pdf.roundedRect(pageWidth - margin - 35, yPos + 3, 30, 8, 2, 2, "F");
+              pdf.setFontSize(6);
+              pdf.setTextColor(22, 101, 52);
+              pdf.text("AI-Generated", pageWidth - margin - 33, yPos + 8);
+              
+              pdf.setFontSize(9);
+              pdf.setTextColor(60, 60, 60);
+              
+              // Wrap and render the AI narrative
+              const maxLineWidth = pageWidth - 2 * margin - 10;
+              const wrappedNarrative = pdf.splitTextToSize(aiSummary, maxLineWidth);
+              const maxLines = Math.floor((narrativeBoxHeight - 15) / 4);
+              const linesToRender = wrappedNarrative.slice(0, maxLines);
+              pdf.text(linesToRender, margin + 5, yPos + 18);
+              
+              yPos += narrativeBoxHeight + 8;
+            } else {
+              // Fallback: Static summary
+              pdf.setFillColor(248, 250, 252);
+              pdf.roundedRect(margin, yPos, pageWidth - 2 * margin, 42, 3, 3, "F");
+              pdf.setFontSize(10);
+              pdf.setTextColor(0, 0, 0);
+              pdf.text("Project Overview", margin + 5, yPos + 8);
+              
+              pdf.setFontSize(9);
+              pdf.setTextColor(80, 80, 80);
+              
+              // Build dynamic summary text
+              let summaryLine1 = `This proposal outlines a solar PV installation for ${projectName}`;
+              if (location) summaryLine1 += `, located in ${location}`;
+              if (buildingArea) summaryLine1 += `, covering ${Number(buildingArea).toLocaleString()} m² of building area`;
+              summaryLine1 += ".";
+              
+              let summaryLine2 = `The system has been sized at ${simulationData.solarCapacityKwp} kWp`;
+              if (connectionSize) summaryLine2 += ` against a ${connectionSize} kVA grid connection`;
+              if (tariffName) {
+                summaryLine2 += `, applying the ${tariffName} tariff`;
+                if (municipalityName) summaryLine2 += ` (${municipalityName})`;
+              }
+              summaryLine2 += ".";
 
-            // Wrap text for PDF
-            const maxLineWidth = pageWidth - 2 * margin - 10;
-            const wrappedLine1 = pdf.splitTextToSize(summaryLine1, maxLineWidth);
-            const wrappedLine2 = pdf.splitTextToSize(summaryLine2, maxLineWidth);
-            
-            pdf.text(wrappedLine1, margin + 5, yPos + 18);
-            pdf.text(wrappedLine2, margin + 5, yPos + 18 + wrappedLine1.length * 4.5);
-            
-            yPos += 50;
+              // Wrap text for PDF
+              const maxLineWidth = pageWidth - 2 * margin - 10;
+              const wrappedLine1 = pdf.splitTextToSize(summaryLine1, maxLineWidth);
+              const wrappedLine2 = pdf.splitTextToSize(summaryLine2, maxLineWidth);
+              
+              pdf.text(wrappedLine1, margin + 5, yPos + 18);
+              pdf.text(wrappedLine2, margin + 5, yPos + 18 + wrappedLine1.length * 4.5);
+              
+              yPos += 50;
+            }
 
             // Draw metric cards infographic
             const cardWidth = 50;
@@ -1394,24 +1507,73 @@ export function ReportBuilder({
             </p>
           </div>
         </div>
-        <Button 
-          onClick={handleGeneratePDF} 
-          disabled={isGenerating || selectedSegments.size === 0}
-          size="lg"
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <Download className="h-4 w-4 mr-2" />
-              Generate PDF
-            </>
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* AI Narrative Button */}
+          <Button
+            variant="outline"
+            onClick={() => generateAINarrative()}
+            disabled={isGeneratingNarrative}
+          >
+            {isGeneratingNarrative ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Generating...
+              </>
+            ) : aiNarratives.executive_summary ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Regenerate AI
+              </>
+            ) : (
+              <>
+                <Wand2 className="h-4 w-4 mr-2" />
+                Generate AI Narrative
+              </>
+            )}
+          </Button>
+          
+          <Button 
+            onClick={handleGeneratePDF} 
+            disabled={isGenerating || selectedSegments.size === 0}
+            size="lg"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                Generate PDF
+              </>
+            )}
+          </Button>
+        </div>
       </div>
+
+      {/* AI Narrative Status Banner */}
+      {aiNarratives.executive_summary && (
+        <div className="mb-4 p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wand2 className="h-4 w-4 text-emerald-600" />
+            <span className="text-sm text-emerald-700 dark:text-emerald-400">
+              AI-generated professional narrative active
+            </span>
+            <Badge variant="secondary" className="text-xs">
+              {Object.keys(aiNarratives).length} sections
+            </Badge>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAiNarrativeEnabled(!aiNarrativeEnabled)}
+            className="text-xs"
+          >
+            {aiNarrativeEnabled ? "Disable AI Text" : "Enable AI Text"}
+          </Button>
+        </div>
+      )}
 
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1556,6 +1718,8 @@ export function ReportBuilder({
                         simulationData={simulationData}
                         projectDetails={projectDetails}
                         projectName={projectName}
+                        aiNarratives={aiNarratives}
+                        aiNarrativeEnabled={aiNarrativeEnabled}
                       />
                     </div>
 
@@ -1591,12 +1755,16 @@ function SegmentPreviewContent({
   segmentId, 
   simulationData,
   projectDetails,
-  projectName
+  projectName,
+  aiNarratives,
+  aiNarrativeEnabled
 }: { 
   segmentId: SegmentType; 
   simulationData: any;
   projectDetails?: any;
   projectName?: string;
+  aiNarratives?: AIProposalNarrative;
+  aiNarrativeEnabled?: boolean;
 }) {
   switch (segmentId) {
     case "executive_summary":
@@ -1609,26 +1777,44 @@ function SegmentPreviewContent({
       const connectionSize = projectDetails?.connection_size_kva;
       const location = projectDetails?.location;
       
+      // Check for AI narrative
+      const aiSummary = aiNarrativeEnabled && aiNarratives?.executive_summary?.narrative;
+      
       return (
         <div className="space-y-2 text-xs">
-          {/* Project Overview - Written Summary */}
-          <div className="bg-muted/30 rounded-lg p-2 space-y-1">
-            <p className="font-semibold text-[9px] text-foreground">Project Overview</p>
-            <p className="text-[8px] text-muted-foreground leading-relaxed">
-              This proposal outlines a solar PV installation for <span className="font-medium text-foreground">{projectName || "the project"}</span>
-              {location && <>, located in <span className="font-medium text-foreground">{location}</span></>}
-              {buildingArea && <>, covering <span className="font-medium text-foreground">{buildingArea.toLocaleString()} m²</span> of building area</>}.
-            </p>
-            <p className="text-[8px] text-muted-foreground leading-relaxed">
-              The system has been sized at <span className="font-medium text-foreground">{simulationData.solarCapacityKwp} kWp</span>
-              {connectionSize && <> against a <span className="font-medium text-foreground">{connectionSize} kVA</span> grid connection</>}
-              {tariffName && (
-                <>, applying the <span className="font-medium text-foreground">{tariffName}</span> tariff
-                {municipalityName && <> ({municipalityName})</>}
-                </>
-              )}.
-            </p>
-          </div>
+          {/* Project Overview - AI or Static */}
+          {aiSummary ? (
+            <div className="bg-emerald-50/50 dark:bg-emerald-950/20 rounded-lg p-2 space-y-1 border border-emerald-200/50 dark:border-emerald-800/50">
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-[9px] text-emerald-700 dark:text-emerald-400">Executive Summary</p>
+                <Badge variant="secondary" className="text-[6px] h-4 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300">
+                  <Wand2 className="h-2 w-2 mr-0.5" />
+                  AI
+                </Badge>
+              </div>
+              <p className="text-[7px] text-muted-foreground leading-relaxed line-clamp-6">
+                {aiSummary}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-muted/30 rounded-lg p-2 space-y-1">
+              <p className="font-semibold text-[9px] text-foreground">Project Overview</p>
+              <p className="text-[8px] text-muted-foreground leading-relaxed">
+                This proposal outlines a solar PV installation for <span className="font-medium text-foreground">{projectName || "the project"}</span>
+                {location && <>, located in <span className="font-medium text-foreground">{location}</span></>}
+                {buildingArea && <>, covering <span className="font-medium text-foreground">{buildingArea.toLocaleString()} m²</span> of building area</>}.
+              </p>
+              <p className="text-[8px] text-muted-foreground leading-relaxed">
+                The system has been sized at <span className="font-medium text-foreground">{simulationData.solarCapacityKwp} kWp</span>
+                {connectionSize && <> against a <span className="font-medium text-foreground">{connectionSize} kVA</span> grid connection</>}
+                {tariffName && (
+                  <>, applying the <span className="font-medium text-foreground">{tariffName}</span> tariff
+                  {municipalityName && <> ({municipalityName})</>}
+                  </>
+                )}.
+              </p>
+            </div>
+          )}
 
           {/* Metric cards */}
           <div className="grid grid-cols-3 gap-1">

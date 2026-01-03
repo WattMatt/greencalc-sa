@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.upload-tariff-file]
 verify_jwt = false
+
+[functions.generate-proposal-narrative]
+verify_jwt = false
