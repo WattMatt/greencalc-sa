@@ -75,6 +75,30 @@ export function ReportBuilder({
   const [draggedSegment, setDraggedSegment] = useState<SegmentType | null>(null);
   const [dragOverSegment, setDragOverSegment] = useState<SegmentType | null>(null);
 
+  // Fetch project details including tariff
+  const { data: projectDetails } = useQuery({
+    queryKey: ["project-details", projectId],
+    queryFn: async () => {
+      if (!projectId) return null;
+      const { data, error } = await supabase
+        .from("projects")
+        .select(`
+          *,
+          tariffs:tariff_id (
+            name,
+            tariff_type,
+            municipalities:municipality_id (name)
+          )
+        `)
+        .eq("id", projectId)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId,
+  });
+
   // Fetch latest simulation if not provided
   const { data: latestSimulation } = useQuery({
     queryKey: ["latest-simulation", projectId],
@@ -267,9 +291,51 @@ export function ReportBuilder({
         // Render content based on segment type with INFOGRAPHICS
         switch (segment.id) {
           case "executive_summary":
+            // Extract project details
+            const tariffInfo = projectDetails?.tariffs;
+            const municipalityName = tariffInfo?.municipalities?.name;
+            const tariffName = tariffInfo?.name;
+            const buildingArea = projectDetails?.total_area_sqm;
+            const connectionSize = projectDetails?.connection_size_kva;
+            const location = projectDetails?.location;
+
+            // Project Overview - Written Summary
+            pdf.setFillColor(248, 250, 252);
+            pdf.roundedRect(margin, yPos, pageWidth - 2 * margin, 42, 3, 3, "F");
+            pdf.setFontSize(10);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text("Project Overview", margin + 5, yPos + 8);
+            
+            pdf.setFontSize(9);
+            pdf.setTextColor(80, 80, 80);
+            
+            // Build dynamic summary text
+            let summaryLine1 = `This proposal outlines a solar PV installation for ${projectName}`;
+            if (location) summaryLine1 += `, located in ${location}`;
+            if (buildingArea) summaryLine1 += `, covering ${Number(buildingArea).toLocaleString()} m² of building area`;
+            summaryLine1 += ".";
+            
+            let summaryLine2 = `The system has been sized at ${simulationData.solarCapacityKwp} kWp`;
+            if (connectionSize) summaryLine2 += ` against a ${connectionSize} kVA grid connection`;
+            if (tariffName) {
+              summaryLine2 += `, applying the ${tariffName} tariff`;
+              if (municipalityName) summaryLine2 += ` (${municipalityName})`;
+            }
+            summaryLine2 += ".";
+
+            // Wrap text for PDF
+            const maxLineWidth = pageWidth - 2 * margin - 10;
+            const wrappedLine1 = pdf.splitTextToSize(summaryLine1, maxLineWidth);
+            const wrappedLine2 = pdf.splitTextToSize(summaryLine2, maxLineWidth);
+            
+            pdf.text(wrappedLine1, margin + 5, yPos + 18);
+            pdf.text(wrappedLine2, margin + 5, yPos + 18 + wrappedLine1.length * 4.5);
+            
+            yPos += 50;
+
             // Draw metric cards infographic
             const cardWidth = 50;
-            const cardHeight = 35;
+            const cardHeight = 32;
             const cardGap = 10;
             const cardY = yPos;
             
@@ -278,66 +344,54 @@ export function ReportBuilder({
             pdf.roundedRect(margin, cardY, cardWidth, cardHeight, 3, 3, "F");
             pdf.setDrawColor(34, 197, 94);
             pdf.roundedRect(margin, cardY, cardWidth, cardHeight, 3, 3, "S");
-            pdf.setFontSize(18);
+            pdf.setFontSize(16);
             pdf.setTextColor(34, 197, 94);
-            pdf.text(`${simulationData.solarCapacityKwp}`, margin + 5, cardY + 15);
+            pdf.text(`${simulationData.solarCapacityKwp}`, margin + 5, cardY + 14);
             pdf.setFontSize(10);
-            pdf.text("kWp", margin + 35, cardY + 15);
+            pdf.text("kWp", margin + 32, cardY + 14);
             pdf.setFontSize(8);
             pdf.setTextColor(100, 100, 100);
-            pdf.text("Solar Capacity", margin + 5, cardY + 28);
+            pdf.text("Solar Capacity", margin + 5, cardY + 25);
 
             // Battery card
             pdf.setFillColor(239, 246, 255);
             pdf.roundedRect(margin + cardWidth + cardGap, cardY, cardWidth, cardHeight, 3, 3, "F");
             pdf.setDrawColor(59, 130, 246);
             pdf.roundedRect(margin + cardWidth + cardGap, cardY, cardWidth, cardHeight, 3, 3, "S");
-            pdf.setFontSize(18);
+            pdf.setFontSize(16);
             pdf.setTextColor(59, 130, 246);
-            pdf.text(`${simulationData.batteryCapacityKwh}`, margin + cardWidth + cardGap + 5, cardY + 15);
+            pdf.text(`${simulationData.batteryCapacityKwh}`, margin + cardWidth + cardGap + 5, cardY + 14);
             pdf.setFontSize(10);
-            pdf.text("kWh", margin + cardWidth + cardGap + 35, cardY + 15);
+            pdf.text("kWh", margin + cardWidth + cardGap + 32, cardY + 14);
             pdf.setFontSize(8);
             pdf.setTextColor(100, 100, 100);
-            pdf.text("Battery Storage", margin + cardWidth + cardGap + 5, cardY + 28);
+            pdf.text("Battery Storage", margin + cardWidth + cardGap + 5, cardY + 25);
 
             // Savings card
             pdf.setFillColor(254, 252, 232);
             pdf.roundedRect(margin + 2 * (cardWidth + cardGap), cardY, cardWidth, cardHeight, 3, 3, "F");
             pdf.setDrawColor(234, 179, 8);
             pdf.roundedRect(margin + 2 * (cardWidth + cardGap), cardY, cardWidth, cardHeight, 3, 3, "S");
-            pdf.setFontSize(14);
+            pdf.setFontSize(13);
             pdf.setTextColor(161, 98, 7);
-            pdf.text(`R${Math.round((simulationData.annualSavings || 0) / 1000)}k`, margin + 2 * (cardWidth + cardGap) + 5, cardY + 15);
+            pdf.text(`R${Math.round((simulationData.annualSavings || 0) / 1000)}k`, margin + 2 * (cardWidth + cardGap) + 5, cardY + 14);
             pdf.setFontSize(8);
             pdf.setTextColor(100, 100, 100);
-            pdf.text("Annual Savings", margin + 2 * (cardWidth + cardGap) + 5, cardY + 28);
+            pdf.text("Annual Savings", margin + 2 * (cardWidth + cardGap) + 5, cardY + 25);
 
-            yPos = cardY + cardHeight + 20;
+            yPos = cardY + cardHeight + 15;
 
             // Draw ROI gauge infographic
-            pdf.setFontSize(12);
+            pdf.setFontSize(11);
             pdf.setTextColor(0, 0, 0);
             pdf.text("Return on Investment", margin, yPos);
-            yPos += 10;
+            yPos += 8;
 
             // Semi-circle gauge for ROI
             const gaugeX = pageWidth / 2;
-            const gaugeY = yPos + 40;
-            const gaugeRadius = 35;
+            const gaugeY = yPos + 35;
+            const gaugeRadius = 30;
             const roiPct = Math.min(100, simulationData.roiPercent || 0);
-            
-            // Background arc
-            pdf.setDrawColor(230, 230, 230);
-            pdf.setLineWidth(8);
-            for (let angle = 180; angle <= 360; angle += 5) {
-              const rad = (angle * Math.PI) / 180;
-              const x = gaugeX + gaugeRadius * Math.cos(rad);
-              const y = gaugeY + gaugeRadius * Math.sin(rad);
-              if (angle === 180) {
-                pdf.moveTo(x, y);
-              }
-            }
             
             // Draw filled gauge background
             pdf.setFillColor(240, 240, 240);
@@ -345,11 +399,9 @@ export function ReportBuilder({
             
             // Draw colored progress arc
             const progressAngle = 180 + (roiPct / 100) * 180;
-            pdf.setFillColor(34, 197, 94);
             pdf.setDrawColor(34, 197, 94);
-            pdf.setLineWidth(6);
+            pdf.setLineWidth(5);
             
-            // Draw arc segments
             for (let angle = 180; angle < progressAngle; angle += 3) {
               const rad1 = (angle * Math.PI) / 180;
               const rad2 = ((angle + 3) * Math.PI) / 180;
@@ -361,40 +413,40 @@ export function ReportBuilder({
             }
 
             // Center value
-            pdf.setFontSize(24);
+            pdf.setFontSize(20);
             pdf.setTextColor(34, 197, 94);
-            pdf.text(`${Math.round(roiPct)}%`, gaugeX - 10, gaugeY + 5);
+            pdf.text(`${Math.round(roiPct)}%`, gaugeX - 8, gaugeY + 4);
             pdf.setFontSize(8);
             pdf.setTextColor(100, 100, 100);
-            pdf.text("ROI", gaugeX - 5, gaugeY + 12);
+            pdf.text("ROI", gaugeX - 5, gaugeY + 10);
 
-            yPos = gaugeY + 30;
+            yPos = gaugeY + 25;
 
             // Payback timeline bar
             pdf.setFontSize(10);
             pdf.setTextColor(0, 0, 0);
             pdf.text("Payback Timeline", margin, yPos);
-            yPos += 8;
+            yPos += 7;
             
             const barWidth = pageWidth - 2 * margin;
             const paybackPct = Math.min(100, ((simulationData.paybackYears || 5) / 25) * 100);
             
             pdf.setFillColor(240, 240, 240);
-            pdf.roundedRect(margin, yPos, barWidth, 10, 2, 2, "F");
+            pdf.roundedRect(margin, yPos, barWidth, 8, 2, 2, "F");
             
             pdf.setFillColor(34, 197, 94);
-            pdf.roundedRect(margin, yPos, barWidth * (paybackPct / 100), 10, 2, 2, "F");
+            pdf.roundedRect(margin, yPos, barWidth * (paybackPct / 100), 8, 2, 2, "F");
             
             // Marker
             const markerX = margin + barWidth * (paybackPct / 100);
             pdf.setFillColor(22, 163, 74);
-            pdf.circle(markerX, yPos + 5, 4, "F");
+            pdf.circle(markerX, yPos + 4, 3, "F");
             
-            pdf.setFontSize(8);
+            pdf.setFontSize(7);
             pdf.setTextColor(100, 100, 100);
-            pdf.text("0 yrs", margin, yPos + 18);
-            pdf.text(`${(simulationData.paybackYears || 5).toFixed(1)} yrs`, markerX - 8, yPos - 3);
-            pdf.text("25 yrs", margin + barWidth - 12, yPos + 18);
+            pdf.text("0 yrs", margin, yPos + 14);
+            pdf.text(`${(simulationData.paybackYears || 5).toFixed(1)} yrs`, markerX - 8, yPos - 2);
+            pdf.text("25 yrs", margin + barWidth - 10, yPos + 14);
             break;
 
           case "tariff_details":
@@ -1501,7 +1553,9 @@ export function ReportBuilder({
                     <div className="flex-1 p-4">
                       <SegmentPreviewContent 
                         segmentId={segment.id} 
-                        simulationData={simulationData} 
+                        simulationData={simulationData}
+                        projectDetails={projectDetails}
+                        projectName={projectName}
                       />
                     </div>
 
@@ -1535,70 +1589,79 @@ export function ReportBuilder({
 // Preview content for each segment type - matches PDF infographics
 function SegmentPreviewContent({ 
   segmentId, 
-  simulationData 
+  simulationData,
+  projectDetails,
+  projectName
 }: { 
   segmentId: SegmentType; 
   simulationData: any;
+  projectDetails?: any;
+  projectName?: string;
 }) {
   switch (segmentId) {
     case "executive_summary":
       const roiPct = Math.min(100, simulationData.roiPercent || 0);
       const paybackPctExec = Math.min(100, ((simulationData.paybackYears || 5) / 25) * 100);
+      const tariffInfo = projectDetails?.tariffs;
+      const municipalityName = tariffInfo?.municipalities?.name;
+      const tariffName = tariffInfo?.name;
+      const buildingArea = projectDetails?.total_area_sqm;
+      const connectionSize = projectDetails?.connection_size_kva;
+      const location = projectDetails?.location;
+      
       return (
-        <div className="space-y-3 text-xs">
+        <div className="space-y-2 text-xs">
+          {/* Project Overview - Written Summary */}
+          <div className="bg-muted/30 rounded-lg p-2 space-y-1">
+            <p className="font-semibold text-[9px] text-foreground">Project Overview</p>
+            <p className="text-[8px] text-muted-foreground leading-relaxed">
+              This proposal outlines a solar PV installation for <span className="font-medium text-foreground">{projectName || "the project"}</span>
+              {location && <>, located in <span className="font-medium text-foreground">{location}</span></>}
+              {buildingArea && <>, covering <span className="font-medium text-foreground">{buildingArea.toLocaleString()} m²</span> of building area</>}.
+            </p>
+            <p className="text-[8px] text-muted-foreground leading-relaxed">
+              The system has been sized at <span className="font-medium text-foreground">{simulationData.solarCapacityKwp} kWp</span>
+              {connectionSize && <> against a <span className="font-medium text-foreground">{connectionSize} kVA</span> grid connection</>}
+              {tariffName && (
+                <>, applying the <span className="font-medium text-foreground">{tariffName}</span> tariff
+                {municipalityName && <> ({municipalityName})</>}
+                </>
+              )}.
+            </p>
+          </div>
+
           {/* Metric cards */}
-          <div className="grid grid-cols-3 gap-1.5">
-            <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-2 text-center">
-              <p className="text-base font-bold text-emerald-600">{simulationData.solarCapacityKwp}</p>
-              <p className="text-[8px] text-muted-foreground">kWp Solar</p>
+          <div className="grid grid-cols-3 gap-1">
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded p-1.5 text-center">
+              <p className="text-sm font-bold text-emerald-600">{simulationData.solarCapacityKwp}</p>
+              <p className="text-[7px] text-muted-foreground">kWp Solar</p>
             </div>
-            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-2 text-center">
-              <p className="text-base font-bold text-blue-600">{simulationData.batteryCapacityKwh}</p>
-              <p className="text-[8px] text-muted-foreground">kWh Battery</p>
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded p-1.5 text-center">
+              <p className="text-sm font-bold text-blue-600">{simulationData.batteryCapacityKwh}</p>
+              <p className="text-[7px] text-muted-foreground">kWh Battery</p>
             </div>
-            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-2 text-center">
-              <p className="text-sm font-bold text-amber-700">R{Math.round((simulationData.annualSavings || 0) / 1000)}k</p>
-              <p className="text-[8px] text-muted-foreground">Annual Savings</p>
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded p-1.5 text-center">
+              <p className="text-xs font-bold text-amber-700">R{Math.round((simulationData.annualSavings || 0) / 1000)}k</p>
+              <p className="text-[7px] text-muted-foreground">Annual Savings</p>
             </div>
           </div>
           
           {/* ROI Gauge */}
-          <div className="flex items-center gap-3">
-            <div className="relative w-16 h-8">
+          <div className="flex items-center gap-2">
+            <div className="relative w-12 h-6">
               <svg viewBox="0 0 100 50" className="w-full h-full">
-                {/* Background arc */}
-                <path
-                  d="M 10 50 A 40 40 0 0 1 90 50"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="8"
-                  className="text-muted"
-                />
-                {/* Progress arc */}
-                <path
-                  d="M 10 50 A 40 40 0 0 1 90 50"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="8"
-                  strokeDasharray={`${roiPct * 1.26} 126`}
-                  className="text-primary"
-                />
+                <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="currentColor" strokeWidth="8" className="text-muted" />
+                <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="currentColor" strokeWidth="8" strokeDasharray={`${roiPct * 1.26} 126`} className="text-primary" />
               </svg>
               <div className="absolute inset-0 flex items-end justify-center pb-0.5">
-                <span className="text-[10px] font-bold text-primary">{Math.round(roiPct)}%</span>
+                <span className="text-[8px] font-bold text-primary">{Math.round(roiPct)}%</span>
               </div>
             </div>
             <div className="flex-1">
-              <p className="text-[9px] font-medium">ROI</p>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-1">
-                <div 
-                  className="h-full bg-primary rounded-full transition-all"
-                  style={{ width: `${paybackPctExec}%` }}
-                />
+              <p className="text-[8px] font-medium">ROI • Payback: {(simulationData.paybackYears || 0).toFixed(1)} yrs</p>
+              <div className="h-1 bg-muted rounded-full overflow-hidden mt-0.5">
+                <div className="h-full bg-primary rounded-full" style={{ width: `${paybackPctExec}%` }} />
               </div>
-              <p className="text-[8px] text-muted-foreground mt-0.5">
-                Payback: {(simulationData.paybackYears || 0).toFixed(1)} yrs
-              </p>
             </div>
           </div>
         </div>
