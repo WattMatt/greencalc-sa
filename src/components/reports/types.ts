@@ -66,6 +66,7 @@ export type SegmentType =
   | "energy_flow"
   | "monthly_yield"
   | "payback_timeline"
+  | "sensitivity_analysis"
   | "savings_breakdown"
   | "environmental_impact"
   | "engineering_specs"
@@ -117,6 +118,12 @@ export const SEGMENT_DEFINITIONS: Record<SegmentType, { name: string; descriptio
   payback_timeline: {
     name: "Payback Timeline",
     description: "Financial projection with breakeven point",
+    icon: "TrendingUp",
+    category: "financial"
+  },
+  sensitivity_analysis: {
+    name: "Sensitivity Analysis",
+    description: "ROI impact from tariff escalation and system cost changes",
     icon: "TrendingUp",
     category: "financial"
   },

@@ -319,6 +319,7 @@ export function ReportExport({
         energy_flow: "Energy Flow Diagram",
         monthly_yield: "Monthly Yield Analysis",
         payback_timeline: "Payback Timeline",
+        sensitivity_analysis: "Sensitivity Analysis",
         savings_breakdown: "Savings Breakdown",
         environmental_impact: "Environmental Impact",
         engineering_specs: "Engineering Specifications",
