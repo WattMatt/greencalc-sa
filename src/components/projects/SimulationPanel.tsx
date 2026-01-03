@@ -41,6 +41,7 @@ import { AdvancedResultsDisplay } from "./simulation/AdvancedResultsDisplay";
 import { AdvancedConfigComparison } from "./simulation/AdvancedConfigComparison";
 import { LoadSheddingAnalysisPanel } from "./simulation/LoadSheddingAnalysisPanel";
 import { InverterSizing, InverterConfig, getDefaultInverterConfig } from "./InverterSizing";
+import { SystemCostsData } from "./SystemCostsManager";
 
 interface Tenant {
   id: string;
@@ -67,6 +68,8 @@ interface SimulationPanelProps {
   project: any;
   tenants: Tenant[];
   shopTypes: ShopType[];
+  systemCosts: SystemCostsData;
+  onSystemCostsChange: (costs: SystemCostsData) => void;
 }
 
 const DEFAULT_PROFILE = Array(24).fill(4.17);
@@ -105,7 +108,7 @@ function DifferenceIndicator({ baseValue, compareValue, suffix = "", invert = fa
   );
 }
 
-export function SimulationPanel({ projectId, project, tenants, shopTypes }: SimulationPanelProps) {
+export function SimulationPanel({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange }: SimulationPanelProps) {
   const [solarCapacity, setSolarCapacity] = useState(100);
   const [batteryCapacity, setBatteryCapacity] = useState(50);
   const [batteryPower, setBatteryPower] = useState(25);
@@ -114,14 +117,6 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
   const [useSolcast, setUseSolcast] = useState(false);
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
   const [inverterConfig, setInverterConfig] = useState<InverterConfig>(getDefaultInverterConfig);
-  
-  // Configurable system costs (user can override defaults)
-  const [systemCosts, setSystemCosts] = useState({
-    solarCostPerKwp: DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
-    batteryCostPerKwh: DEFAULT_SYSTEM_COSTS.batteryCostPerKwh,
-    installationCost: DEFAULT_SYSTEM_COSTS.installationCost ?? 0,
-    maintenancePerYear: DEFAULT_SYSTEM_COSTS.maintenancePerYear ?? 0,
-  });
 
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, fetchForecast } = useSolcastForecast();
@@ -454,7 +449,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                   <input
                     type="number"
                     value={systemCosts.solarCostPerKwp}
-                    onChange={(e) => setSystemCosts(prev => ({ ...prev, solarCostPerKwp: Number(e.target.value) || 0 }))}
+                    onChange={(e) => onSystemCostsChange({ ...systemCosts, solarCostPerKwp: Number(e.target.value) || 0 })}
                     className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     min={0}
                     step={100}
@@ -471,7 +466,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                   <input
                     type="number"
                     value={systemCosts.batteryCostPerKwh}
-                    onChange={(e) => setSystemCosts(prev => ({ ...prev, batteryCostPerKwh: Number(e.target.value) || 0 }))}
+                    onChange={(e) => onSystemCostsChange({ ...systemCosts, batteryCostPerKwh: Number(e.target.value) || 0 })}
                     className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     min={0}
                     step={100}
@@ -488,7 +483,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                   <input
                     type="number"
                     value={systemCosts.installationCost}
-                    onChange={(e) => setSystemCosts(prev => ({ ...prev, installationCost: Number(e.target.value) || 0 }))}
+                    onChange={(e) => onSystemCostsChange({ ...systemCosts, installationCost: Number(e.target.value) || 0 })}
                     className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     min={0}
                     step={1000}
@@ -505,7 +500,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                   <input
                     type="number"
                     value={systemCosts.maintenancePerYear}
-                    onChange={(e) => setSystemCosts(prev => ({ ...prev, maintenancePerYear: Number(e.target.value) || 0 }))}
+                    onChange={(e) => onSystemCostsChange({ ...systemCosts, maintenancePerYear: Number(e.target.value) || 0 })}
                     className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     min={0}
                     step={500}
@@ -527,7 +522,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes }: Simu
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setSystemCosts({
+                  onClick={() => onSystemCostsChange({
                     solarCostPerKwp: DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
                     batteryCostPerKwh: DEFAULT_SYSTEM_COSTS.batteryCostPerKwh,
                     installationCost: DEFAULT_SYSTEM_COSTS.installationCost ?? 0,
