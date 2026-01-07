@@ -57,6 +57,18 @@ const SEGMENT_OPTIONS: Array<{
 type NarrativeContent = { narrative: string; keyHighlights: string[] };
 type AIProposalNarrative = Partial<Record<SegmentType, NarrativeContent>>;
 
+interface ReportBranding {
+  company_name?: string | null;
+  logo_url?: string | null;
+  primary_color?: string;
+  secondary_color?: string;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  website?: string | null;
+  address?: string | null;
+  client_logo_url?: string | null;
+}
+
 interface ReportBuilderProps {
   projectName?: string;
   projectId?: string;
@@ -69,6 +81,7 @@ interface ReportBuilderProps {
     co2AvoidedTons?: number;
     dcAcRatio?: number;
   };
+  branding?: ReportBranding;
   className?: string;
 }
 
@@ -76,6 +89,7 @@ export function ReportBuilder({
   projectName = "Solar Project",
   projectId,
   simulationData: initialSimulationData,
+  branding,
   className
 }: ReportBuilderProps) {
   const [reportName, setReportName] = useState(`${projectName} Report`);
@@ -361,6 +375,17 @@ export function ReportBuilder({
             municipalities: projectDetails.tariffs.municipalities || undefined,
           } : undefined,
         } : undefined,
+        branding: branding ? {
+          company_name: branding.company_name,
+          logo_url: branding.logo_url,
+          client_logo_url: branding.client_logo_url,
+          primary_color: branding.primary_color,
+          secondary_color: branding.secondary_color,
+          contact_email: branding.contact_email,
+          contact_phone: branding.contact_phone,
+          website: branding.website,
+          address: branding.address,
+        } : undefined,
         aiNarratives,
         aiNarrativeEnabled,
         editedNarratives,
@@ -642,10 +667,34 @@ export function ReportBuilder({
                   {/* Page break indicator */}
                   <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
                   
-                  {/* Green header */}
+                  {/* Green header with logos */}
                   <div className="bg-primary h-24 p-4">
-                    <h2 className="text-xl font-bold text-primary-foreground">{projectName}</h2>
+                    {/* Logo row */}
+                    {(branding?.logo_url || branding?.client_logo_url) && (
+                      <div className="flex items-center justify-between mb-2">
+                        {branding?.logo_url ? (
+                          <img 
+                            src={branding.logo_url} 
+                            alt="Company Logo" 
+                            className="h-6 max-w-[80px] object-contain bg-white/10 rounded px-1"
+                          />
+                        ) : <div />}
+                        {branding?.client_logo_url ? (
+                          <img 
+                            src={branding.client_logo_url} 
+                            alt="Client Logo" 
+                            className="h-6 max-w-[80px] object-contain bg-white/10 rounded px-1"
+                          />
+                        ) : <div />}
+                      </div>
+                    )}
+                    <h2 className={`text-xl font-bold text-primary-foreground ${(branding?.logo_url || branding?.client_logo_url) ? '' : 'mt-2'}`}>
+                      {projectName}
+                    </h2>
                     <p className="text-sm text-primary-foreground/80">Solar Energy Proposal</p>
+                    {branding?.company_name && (
+                      <p className="text-[10px] text-primary-foreground/60 mt-1">Prepared by {branding.company_name}</p>
+                    )}
                   </div>
                   
                   <div className="p-6 space-y-6">
@@ -696,6 +745,7 @@ export function ReportBuilder({
                   <div className="absolute bottom-0 left-0 right-0 p-3 border-t bg-muted/30 text-center">
                     <p className="text-[10px] text-muted-foreground">
                       Generated {new Date().toLocaleDateString()} • Page 1 of {totalPages}
+                      {branding?.company_name && ` • ${branding.company_name}`}
                     </p>
                   </div>
                   
