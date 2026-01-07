@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet, CheckCircle2, AlertCircle, Lock, Circle } from "lucide-react";
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
@@ -19,7 +19,57 @@ import { ProposalManager } from "@/components/projects/ProposalManager";
 import { SystemCostsManager, SystemCostsData } from "@/components/projects/SystemCostsManager";
 import { DEFAULT_SYSTEM_COSTS } from "@/components/projects/simulation/FinancialAnalysis";
 import { toast } from "sonner";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
+type TabStatus = "complete" | "partial" | "pending" | "blocked";
+
+const TabStatusBadge = ({ status }: { status: TabStatus }) => {
+  const styles = {
+    complete: "bg-green-500",
+    partial: "bg-amber-500",
+    pending: "bg-muted-foreground/40",
+    blocked: "bg-destructive/60"
+  };
+  
+  return (
+    <span className={cn(
+      "absolute -top-1 -right-1 h-2 w-2 rounded-full",
+      styles[status]
+    )} />
+  );
+};
+
+const TabWithStatus = ({ 
+  value, 
+  children, 
+  status, 
+  tooltip 
+}: { 
+  value: string; 
+  children: React.ReactNode; 
+  status: TabStatus;
+  tooltip: string;
+}) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <TabsTrigger value={value} className="relative">
+        {children}
+        <TabStatusBadge status={status} />
+      </TabsTrigger>
+    </TooltipTrigger>
+    <TooltipContent side="bottom" className="max-w-xs">
+      <div className="flex items-center gap-2">
+        {status === "complete" && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+        {status === "partial" && <AlertCircle className="h-3 w-3 text-amber-500" />}
+        {status === "blocked" && <Lock className="h-3 w-3 text-destructive" />}
+        {status === "pending" && <Circle className="h-3 w-3 text-muted-foreground" />}
+        <span>{tooltip}</span>
+      </div>
+    </TooltipContent>
+  </Tooltip>
+);
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -92,6 +142,49 @@ export default function ProjectDetail() {
     enabled: !!id,
   });
 
+  // Fetch simulation count for status tracking
+  const { data: simulationCount = 0 } = useQuery({
+    queryKey: ["project-simulations-count", id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("project_simulations")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", id);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!id,
+  });
+
+  // Fetch PV layout for status tracking
+  const { data: pvLayout } = useQuery({
+    queryKey: ["project-pv-layout", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pv_layouts")
+        .select("id, pv_arrays")
+        .eq("project_id", id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+
+  // Fetch proposal count for status tracking
+  const { data: proposalCount = 0 } = useQuery({
+    queryKey: ["project-proposals-count", id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("proposals")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", id);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!id,
+  });
+
   const updateProject = useMutation({
     mutationFn: async (updates: { tariff_id?: string; total_area_sqm?: number; connection_size_kva?: number }) => {
       const { error } = await supabase.from("projects").update(updates).eq("id", id);
@@ -135,6 +228,87 @@ export default function ProjectDetail() {
 
   // Count tenants with assigned SCADA profiles
   const assignedCount = tenants?.filter(t => t.scada_import_id).length || 0;
+  const tenantCount = tenants?.length || 0;
+
+  // Calculate tab statuses
+  const hasTariff = !!project.tariff_id;
+  const hasSimulations = simulationCount > 0;
+  const hasPVLayout = !!pvLayout?.pv_arrays && Array.isArray(pvLayout.pv_arrays) && pvLayout.pv_arrays.length > 0;
+  const hasProposals = proposalCount > 0;
+  const hasLocation = !!project.location;
+
+  const tabStatuses: Record<string, { status: TabStatus; tooltip: string }> = {
+    overview: { 
+      status: "complete", 
+      tooltip: "Project summary dashboard" 
+    },
+    tenants: {
+      status: tenantCount === 0 ? "pending" 
+        : assignedCount === tenantCount ? "complete" 
+        : "partial",
+      tooltip: tenantCount === 0 
+        ? "Add tenants to get started"
+        : assignedCount < tenantCount 
+          ? `${assignedCount}/${tenantCount} tenants have load profiles`
+          : `${tenantCount} tenants configured`
+    },
+    "load-profile": {
+      status: assignedCount === 0 ? "blocked" 
+        : assignedCount === tenantCount ? "complete" 
+        : "partial",
+      tooltip: assignedCount === 0 
+        ? "Assign load profiles to tenants first"
+        : `Showing data from ${assignedCount} tenant profiles`
+    },
+    costs: {
+      status: "complete",
+      tooltip: "System costs configured"
+    },
+    tariff: {
+      status: hasTariff ? "complete" : "pending",
+      tooltip: hasTariff 
+        ? "Tariff selected"
+        : "Select a tariff for simulation"
+    },
+    simulation: {
+      status: (!hasTariff || assignedCount === 0) ? "blocked"
+        : hasSimulations ? "complete" 
+        : "pending",
+      tooltip: !hasTariff 
+        ? "Needs: Select a tariff first"
+        : assignedCount === 0 
+          ? "Needs: Assign tenant load profiles"
+          : hasSimulations 
+            ? `${simulationCount} simulation${simulationCount > 1 ? 's' : ''} saved`
+            : "Ready to run simulations"
+    },
+    "pv-layout": {
+      status: hasPVLayout ? "complete" : "pending",
+      tooltip: hasPVLayout 
+        ? "PV layout configured"
+        : "Design your PV array layout"
+    },
+    "solar-forecast": {
+      status: hasLocation ? "complete" : "pending",
+      tooltip: hasLocation 
+        ? "Location set for forecasting"
+        : "Set project location for forecasts"
+    },
+    proposals: {
+      status: !hasSimulations ? "blocked"
+        : hasProposals ? "complete" 
+        : "pending",
+      tooltip: !hasSimulations 
+        ? "Needs: Run a simulation first"
+        : hasProposals 
+          ? `${proposalCount} proposal${proposalCount > 1 ? 's' : ''} created`
+          : "Ready to create proposals"
+    },
+    reports: {
+      status: "complete",
+      tooltip: "Generate project reports"
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -199,48 +373,50 @@ export default function ProjectDetail() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="overview">
-            <LayoutDashboard className="h-4 w-4 mr-2" />
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="tenants">
-            <Users className="h-4 w-4 mr-2" />
-            Tenants & Profiles
-          </TabsTrigger>
-          <TabsTrigger value="load-profile">
-            <BarChart3 className="h-4 w-4 mr-2" />
-            Load Profile
-          </TabsTrigger>
-          <TabsTrigger value="costs">
-            <Wallet className="h-4 w-4 mr-2" />
-            Costs
-          </TabsTrigger>
-          <TabsTrigger value="tariff">
-            <DollarSign className="h-4 w-4 mr-2" />
-            Tariff
-          </TabsTrigger>
-          <TabsTrigger value="simulation">
-            <Zap className="h-4 w-4 mr-2" />
-            Simulation
-          </TabsTrigger>
-          <TabsTrigger value="pv-layout">
-            <Sun className="h-4 w-4 mr-2" />
-            PV Layout
-          </TabsTrigger>
-          <TabsTrigger value="solar-forecast">
-            <CloudSun className="h-4 w-4 mr-2" />
-            Solar Forecast
-          </TabsTrigger>
-          <TabsTrigger value="proposals">
-            <ScrollText className="h-4 w-4 mr-2" />
-            Proposals
-          </TabsTrigger>
-          <TabsTrigger value="reports">
-            <FileText className="h-4 w-4 mr-2" />
-            Reports
-          </TabsTrigger>
-        </TabsList>
+        <TooltipProvider delayDuration={300}>
+          <TabsList className="flex-wrap h-auto gap-1">
+            <TabWithStatus value="overview" status={tabStatuses.overview.status} tooltip={tabStatuses.overview.tooltip}>
+              <LayoutDashboard className="h-4 w-4 mr-2" />
+              Overview
+            </TabWithStatus>
+            <TabWithStatus value="tenants" status={tabStatuses.tenants.status} tooltip={tabStatuses.tenants.tooltip}>
+              <Users className="h-4 w-4 mr-2" />
+              Tenants & Profiles
+            </TabWithStatus>
+            <TabWithStatus value="load-profile" status={tabStatuses["load-profile"].status} tooltip={tabStatuses["load-profile"].tooltip}>
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Load Profile
+            </TabWithStatus>
+            <TabWithStatus value="costs" status={tabStatuses.costs.status} tooltip={tabStatuses.costs.tooltip}>
+              <Wallet className="h-4 w-4 mr-2" />
+              Costs
+            </TabWithStatus>
+            <TabWithStatus value="tariff" status={tabStatuses.tariff.status} tooltip={tabStatuses.tariff.tooltip}>
+              <DollarSign className="h-4 w-4 mr-2" />
+              Tariff
+            </TabWithStatus>
+            <TabWithStatus value="simulation" status={tabStatuses.simulation.status} tooltip={tabStatuses.simulation.tooltip}>
+              <Zap className="h-4 w-4 mr-2" />
+              Simulation
+            </TabWithStatus>
+            <TabWithStatus value="pv-layout" status={tabStatuses["pv-layout"].status} tooltip={tabStatuses["pv-layout"].tooltip}>
+              <Sun className="h-4 w-4 mr-2" />
+              PV Layout
+            </TabWithStatus>
+            <TabWithStatus value="solar-forecast" status={tabStatuses["solar-forecast"].status} tooltip={tabStatuses["solar-forecast"].tooltip}>
+              <CloudSun className="h-4 w-4 mr-2" />
+              Solar Forecast
+            </TabWithStatus>
+            <TabWithStatus value="proposals" status={tabStatuses.proposals.status} tooltip={tabStatuses.proposals.tooltip}>
+              <ScrollText className="h-4 w-4 mr-2" />
+              Proposals
+            </TabWithStatus>
+            <TabWithStatus value="reports" status={tabStatuses.reports.status} tooltip={tabStatuses.reports.tooltip}>
+              <FileText className="h-4 w-4 mr-2" />
+              Reports
+            </TabWithStatus>
+          </TabsList>
+        </TooltipProvider>
 
         <TabsContent value="overview" className="mt-6">
           <ProjectOverview
