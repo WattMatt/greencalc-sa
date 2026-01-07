@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Building2, Trash2, ArrowRight, RefreshCw, Search, X, LayoutGrid, List } from "lucide-react";
+import { Plus, Building2, Trash2, ArrowRight, RefreshCw, Search, X, LayoutGrid, List, ArrowUpDown } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -24,6 +24,7 @@ export default function Projects() {
   const [locationFilter, setLocationFilter] = useState<string>("all");
   const [tariffFilter, setTariffFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [sortBy, setSortBy] = useState<string>("date-desc");
 
   const handleSyncExternal = async () => {
     setIsSyncing(true);
@@ -71,11 +72,12 @@ export default function Projects() {
     return [...new Set(locations)].sort();
   }, [projects]);
 
-  // Filter projects based on search and filters
+  // Filter and sort projects
   const filteredProjects = useMemo(() => {
     if (!projects) return [];
     
-    return projects.filter(project => {
+    // First filter
+    const filtered = projects.filter(project => {
       // Search filter - match name, location, or description
       const searchLower = searchQuery.toLowerCase();
       const matchesSearch = !searchQuery || 
@@ -94,7 +96,27 @@ export default function Projects() {
       
       return matchesSearch && matchesLocation && matchesTariff;
     });
-  }, [projects, searchQuery, locationFilter, tariffFilter]);
+    
+    // Then sort
+    return [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case "name-asc":
+          return a.name.localeCompare(b.name);
+        case "name-desc":
+          return b.name.localeCompare(a.name);
+        case "date-asc":
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case "date-desc":
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case "tenants-asc":
+          return ((a as any).project_tenants?.[0]?.count || 0) - ((b as any).project_tenants?.[0]?.count || 0);
+        case "tenants-desc":
+          return ((b as any).project_tenants?.[0]?.count || 0) - ((a as any).project_tenants?.[0]?.count || 0);
+        default:
+          return 0;
+      }
+    });
+  }, [projects, searchQuery, locationFilter, tariffFilter, sortBy]);
 
   const hasActiveFilters = searchQuery || locationFilter !== "all" || tariffFilter !== "all";
 
@@ -228,6 +250,21 @@ export default function Projects() {
             <SelectItem value="all">All Tariffs</SelectItem>
             <SelectItem value="set">Tariff Set</SelectItem>
             <SelectItem value="not-set">No Tariff</SelectItem>
+          </SelectContent>
+        </Select>
+        
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="w-[160px]">
+            <ArrowUpDown className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="date-desc">Newest First</SelectItem>
+            <SelectItem value="date-asc">Oldest First</SelectItem>
+            <SelectItem value="name-asc">Name A-Z</SelectItem>
+            <SelectItem value="name-desc">Name Z-A</SelectItem>
+            <SelectItem value="tenants-desc">Most Tenants</SelectItem>
+            <SelectItem value="tenants-asc">Least Tenants</SelectItem>
           </SelectContent>
         </Select>
         
