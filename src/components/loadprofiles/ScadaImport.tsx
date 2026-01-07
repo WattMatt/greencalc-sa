@@ -54,26 +54,76 @@ export function ScadaImport({ categories }: ScadaImportProps) {
   const [area, setArea] = useState("");
   const [categoryId, setCategoryId] = useState("");
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setFileName(file.name);
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const content = event.target?.result as string;
       setCsvContent(content);
       setRowCount(content.split('\n').filter(l => l.trim()).length);
       setProcessedData(null);
-      toast.success(`Loaded ${file.name}`);
-      // Auto-open dialog
-      setDialogOpen(true);
 
-      // Auto-set defaults
+      // Auto-set site name from file name
       if (!siteName) {
         const suggestedName = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
         setSiteName(suggestedName);
+      }
+
+      // Try auto-processing first
+      setIsProcessing(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("process-scada-profile", {
+          body: {
+            csvContent: content,
+            action: "process",
+            autoDetect: true // Enable auto-detection
+          },
+        });
+
+        if (error) throw error;
+        if (!data.success) throw new Error(data.error);
+
+        // Check if we got meaningful results
+        if (data.dataPoints > 0) {
+          // Transform raw data for chart
+          const chartData: MeterChartDataPoint[] = [];
+          for (let i = 0; i < 24; i++) {
+            chartData.push({
+              period: `${i}:00`,
+              amount: data.weekdayProfile[i],
+              meterReading: data.weekendProfile[i],
+            });
+          }
+
+          setProcessedData({
+            dataPoints: data.dataPoints,
+            dateRange: data.dateRange,
+            weekdayDays: data.weekdayDays,
+            weekendDays: data.weekendDays,
+            rawData: data.rawData,
+            weekdayProfile: data.weekdayProfile,
+            weekendProfile: data.weekendProfile,
+            hourlyProfile: chartData
+          });
+
+          toast.success(`Auto-detected and processed ${data.dataPoints.toLocaleString()} readings`, {
+            description: `Date column: "${data.detectedColumns?.headers?.[data.detectedColumns?.dateColumn] || 'Column 1'}", Value column: "${data.detectedColumns?.headers?.[data.detectedColumns?.valueColumn] || 'Column 2'}"`
+          });
+        } else {
+          // No data found, open dialog for manual configuration
+          toast.info("Could not auto-detect columns. Please configure manually.");
+          setDialogOpen(true);
+        }
+      } catch (error) {
+        console.error("Auto-process failed:", error);
+        toast.info("Please configure the CSV columns manually.");
+        setDialogOpen(true);
+      } finally {
+        setIsProcessing(false);
       }
     };
     reader.readAsText(file);
