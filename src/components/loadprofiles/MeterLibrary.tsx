@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -41,6 +42,11 @@ export function MeterLibrary() {
   const [editArea, setEditArea] = useState("");
   const [editSiteName, setEditSiteName] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [siteFilter, setSiteFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("date-desc");
 
   const { data: meters, isLoading } = useQuery({
     queryKey: ["meter-library"],
@@ -112,6 +118,65 @@ export function MeterLibrary() {
     return meter.site_name;
   };
 
+  // Get unique site names for filter
+  const uniqueSites = useMemo(() => {
+    if (!meters) return [];
+    const sites = meters.map(m => m.site_name).filter(Boolean);
+    return [...new Set(sites)].sort();
+  }, [meters]);
+
+  // Filter and sort meters
+  const filteredMeters = useMemo(() => {
+    if (!meters) return [];
+    
+    // First filter
+    const filtered = meters.filter(meter => {
+      // Search filter
+      const searchLower = searchQuery.toLowerCase();
+      const matchesSearch = !searchQuery || 
+        meter.site_name?.toLowerCase().includes(searchLower) ||
+        meter.shop_name?.toLowerCase().includes(searchLower) ||
+        meter.shop_number?.toLowerCase().includes(searchLower) ||
+        meter.meter_label?.toLowerCase().includes(searchLower);
+      
+      // Site filter
+      const matchesSite = siteFilter === "all" || meter.site_name === siteFilter;
+      
+      return matchesSearch && matchesSite;
+    });
+    
+    // Then sort
+    return [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case "name-asc":
+          return getMeterDisplayName(a).localeCompare(getMeterDisplayName(b));
+        case "name-desc":
+          return getMeterDisplayName(b).localeCompare(getMeterDisplayName(a));
+        case "date-asc":
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case "date-desc":
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case "area-asc":
+          return (a.area_sqm || 0) - (b.area_sqm || 0);
+        case "area-desc":
+          return (b.area_sqm || 0) - (a.area_sqm || 0);
+        case "points-desc":
+          return (b.data_points || 0) - (a.data_points || 0);
+        case "points-asc":
+          return (a.data_points || 0) - (b.data_points || 0);
+        default:
+          return 0;
+      }
+    });
+  }, [meters, searchQuery, siteFilter, sortBy]);
+
+  const hasActiveFilters = searchQuery || siteFilter !== "all";
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setSiteFilter("all");
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -134,35 +199,94 @@ export function MeterLibrary() {
             Global reference meters - used to build project load profiles
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Filter controls */}
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search meters..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            
+            <Select value={siteFilter} onValueChange={setSiteFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All Sites" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sites</SelectItem>
+                {uniqueSites.map(site => (
+                  <SelectItem key={site} value={site}>{site}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-[160px]">
+                <ArrowUpDown className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date-desc">Newest First</SelectItem>
+                <SelectItem value="date-asc">Oldest First</SelectItem>
+                <SelectItem value="name-asc">Name A-Z</SelectItem>
+                <SelectItem value="name-desc">Name Z-A</SelectItem>
+                <SelectItem value="area-desc">Largest Area</SelectItem>
+                <SelectItem value="area-asc">Smallest Area</SelectItem>
+                <SelectItem value="points-desc">Most Data</SelectItem>
+                <SelectItem value="points-asc">Least Data</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                <X className="h-4 w-4 mr-1" />
+                Clear
+              </Button>
+            )}
+          </div>
+
           {!meters?.length ? (
             <div className="text-center py-8 text-muted-foreground">
               <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No meters imported yet</p>
               <p className="text-sm">Use the "New SCADA Import" tab to add meters</p>
             </div>
+          ) : filteredMeters.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No meters match your filters</p>
+              <Button variant="link" onClick={clearFilters}>Clear filters</Button>
+            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-8">Color</TableHead>
-                  <TableHead>Meter / Label</TableHead>
-                  <TableHead>Area (m²)</TableHead>
-                  <TableHead>Date Range</TableHead>
-                  <TableHead>Data Points</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {meters.map(meter => (
-                  <TableRow key={meter.id}>
-                    <TableCell>
-                      <div
-                        className="w-4 h-4 rounded-full border"
-                        style={{ backgroundColor: meter.meter_color || "#3b82f6" }}
-                      />
-                    </TableCell>
-                    <TableCell>
+            <>
+              <div className="text-sm text-muted-foreground">
+                Showing {filteredMeters.length} of {meters.length} meters
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8">Color</TableHead>
+                    <TableHead>Meter / Label</TableHead>
+                    <TableHead>Area (m²)</TableHead>
+                    <TableHead>Date Range</TableHead>
+                    <TableHead>Data Points</TableHead>
+                    <TableHead className="w-24">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredMeters.map(meter => (
+                    <TableRow key={meter.id}>
+                      <TableCell>
+                        <div
+                          className="w-4 h-4 rounded-full border"
+                          style={{ backgroundColor: meter.meter_color || "#3b82f6" }}
+                        />
+                      </TableCell>
+                      <TableCell>
                       <div>
                         <div className="font-medium">{getMeterDisplayName(meter)}</div>
                         {meter.meter_label && (
@@ -215,8 +339,9 @@ export function MeterLibrary() {
                     </TableCell>
                   </TableRow>
                 ))}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </>
           )}
         </CardContent>
       </Card>
