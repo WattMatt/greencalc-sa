@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Building2, Trash2, ArrowRight, RefreshCw } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Building2, Trash2, ArrowRight, RefreshCw, Search, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -16,6 +17,11 @@ export default function Projects() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [newProject, setNewProject] = useState({ name: "", description: "", location: "" });
+  
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [locationFilter, setLocationFilter] = useState<string>("all");
+  const [tariffFilter, setTariffFilter] = useState<string>("all");
 
   const handleSyncExternal = async () => {
     setIsSyncing(true);
@@ -53,6 +59,48 @@ export default function Projects() {
       return data;
     },
   });
+
+  // Get unique locations for filter dropdown
+  const uniqueLocations = useMemo(() => {
+    if (!projects) return [];
+    const locations = projects
+      .map(p => p.location)
+      .filter((loc): loc is string => !!loc && loc.trim() !== "");
+    return [...new Set(locations)].sort();
+  }, [projects]);
+
+  // Filter projects based on search and filters
+  const filteredProjects = useMemo(() => {
+    if (!projects) return [];
+    
+    return projects.filter(project => {
+      // Search filter - match name, location, or description
+      const searchLower = searchQuery.toLowerCase();
+      const matchesSearch = !searchQuery || 
+        project.name.toLowerCase().includes(searchLower) ||
+        project.location?.toLowerCase().includes(searchLower) ||
+        project.description?.toLowerCase().includes(searchLower);
+      
+      // Location filter
+      const matchesLocation = locationFilter === "all" || project.location === locationFilter;
+      
+      // Tariff filter
+      const hasTariff = !!(project as any).tariffs?.name;
+      const matchesTariff = tariffFilter === "all" || 
+        (tariffFilter === "set" && hasTariff) ||
+        (tariffFilter === "not-set" && !hasTariff);
+      
+      return matchesSearch && matchesLocation && matchesTariff;
+    });
+  }, [projects, searchQuery, locationFilter, tariffFilter]);
+
+  const hasActiveFilters = searchQuery || locationFilter !== "all" || tariffFilter !== "all";
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setLocationFilter("all");
+    setTariffFilter("all");
+  };
 
   const createProject = useMutation({
     mutationFn: async (project: typeof newProject) => {
@@ -146,6 +194,56 @@ export default function Projects() {
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search projects..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        
+        <Select value={locationFilter} onValueChange={setLocationFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="All Locations" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Locations</SelectItem>
+            {uniqueLocations.map(location => (
+              <SelectItem key={location} value={location}>{location}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        
+        <Select value={tariffFilter} onValueChange={setTariffFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="All Tariffs" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Tariffs</SelectItem>
+            <SelectItem value="set">Tariff Set</SelectItem>
+            <SelectItem value="not-set">No Tariff</SelectItem>
+          </SelectContent>
+        </Select>
+        
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <X className="h-4 w-4 mr-1" />
+            Clear
+          </Button>
+        )}
+        
+        {projects && filteredProjects && (
+          <span className="text-sm text-muted-foreground ml-auto">
+            {filteredProjects.length} of {projects.length} projects
+          </span>
+        )}
+      </div>
+
+
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
@@ -160,6 +258,20 @@ export default function Projects() {
             </Card>
           ))}
         </div>
+      ) : filteredProjects?.length === 0 && hasActiveFilters ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Search className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium">No matching projects</h3>
+            <p className="text-muted-foreground text-center max-w-sm mt-1">
+              Try adjusting your filters or search query.
+            </p>
+            <Button className="mt-4" variant="outline" onClick={clearFilters}>
+              <X className="h-4 w-4 mr-2" />
+              Clear Filters
+            </Button>
+          </CardContent>
+        </Card>
       ) : projects?.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
@@ -176,7 +288,7 @@ export default function Projects() {
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {projects?.map((project) => (
+          {filteredProjects?.map((project) => (
             <Card key={project.id} className="group hover:shadow-md transition-shadow">
               <CardHeader>
                 <div className="flex items-start justify-between">
