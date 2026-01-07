@@ -180,7 +180,7 @@ export default function Projects() {
             <Card key={project.id} className="group hover:shadow-md transition-shadow">
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex-1 min-w-0">
                     <CardTitle className="text-lg">{project.name}</CardTitle>
                     {project.location && (
                       <CardDescription>{project.location}</CardDescription>
@@ -189,7 +189,7 @@ export default function Projects() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive flex-shrink-0"
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteProject.mutate(project.id);
@@ -200,6 +200,21 @@ export default function Projects() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Project Logo */}
+                {project.logo_url && (
+                  <div className="flex justify-center py-2">
+                    <img 
+                      src={project.logo_url} 
+                      alt={`${project.name} logo`}
+                      className="h-12 max-w-[160px] object-contain"
+                      onError={(e) => {
+                        // Hide broken images
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
+                
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-muted-foreground">Tenants</span>

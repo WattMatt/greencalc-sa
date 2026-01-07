@@ -345,6 +345,7 @@ export type Database = {
           description: string | null
           id: string
           location: string | null
+          logo_url: string | null
           name: string
           tariff_id: string | null
           total_area_sqm: number | null
@@ -356,6 +357,7 @@ export type Database = {
           description?: string | null
           id?: string
           location?: string | null
+          logo_url?: string | null
           name: string
           tariff_id?: string | null
           total_area_sqm?: number | null
@@ -367,6 +369,7 @@ export type Database = {
           description?: string | null
           id?: string
           location?: string | null
+          logo_url?: string | null
           name?: string
           tariff_id?: string | null
           total_area_sqm?: number | null

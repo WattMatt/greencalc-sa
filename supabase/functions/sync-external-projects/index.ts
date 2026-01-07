@@ -53,6 +53,7 @@ serve(async (req) => {
         location: project.city && project.province 
           ? `${project.city}, ${project.province}` 
           : project.city || project.province || null,
+        logo_url: project.logo_url || project.client_logo_url || null,
         updated_at: new Date().toISOString(),
       };
 
