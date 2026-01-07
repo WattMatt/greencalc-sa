@@ -105,38 +105,51 @@ function autoDetectColumns(headers: string[], sampleRows: string[][]): { dateCol
   let timeCol = -1;
   let valueCol = -1;
   
-  // First, try to find by header names
-  headers.forEach((h, idx) => {
-    const lower = h.toLowerCase();
-    if (dateCol === -1 && (lower.includes('date') || lower.includes('timestamp') || lower === 'time')) {
-      dateCol = idx;
-    }
-    if (valueCol === -1 && (lower.includes('kwh') || lower.includes('value') || lower.includes('active') || lower.includes('reading') || lower.includes('energy'))) {
-      valueCol = idx;
-    }
-  });
+  console.log(`Auto-detecting from ${headers.length} headers: ${JSON.stringify(headers)}`);
   
-  // If not found by name, detect by content
-  if (sampleRows.length > 0) {
-    headers.forEach((_, idx) => {
-      const sampleValues = sampleRows.slice(0, 5).map(row => row[idx]).filter(Boolean);
-      
-      if (dateCol === -1 && sampleValues.every(v => looksLikeDateTime(v))) {
-        dateCol = idx;
-      }
-      
-      if (valueCol === -1 && idx !== dateCol && sampleValues.every(v => looksLikeNumber(v))) {
-        // Prefer numeric columns that aren't the first column (often date)
-        valueCol = idx;
-      }
-    });
+  // First, try to find by header names
+  for (let idx = 0; idx < headers.length; idx++) {
+    const lower = (headers[idx] || '').toLowerCase().trim();
+    
+    // Date column detection
+    if (dateCol === -1 && (lower.includes('date') || lower.includes('timestamp') || lower === 'time' || lower === 'datetime')) {
+      dateCol = idx;
+      console.log(`Found date column by header name: ${idx} (${headers[idx]})`);
+    }
+    
+    // Value column detection
+    if (valueCol === -1 && (lower.includes('kwh') || lower.includes('value') || lower.includes('active') || lower.includes('reading') || lower.includes('energy') || lower.includes('power') || lower.includes('consumption'))) {
+      valueCol = idx;
+      console.log(`Found value column by header name: ${idx} (${headers[idx]})`);
+    }
   }
   
-  // Fallbacks
-  if (dateCol === -1) dateCol = 0;
-  if (valueCol === -1) valueCol = headers.length > 1 ? 1 : 0;
+  // If value not found by name, look for first numeric column that isn't the date
+  if (valueCol === -1 && sampleRows.length > 0) {
+    for (let idx = 0; idx < headers.length; idx++) {
+      if (idx === dateCol) continue;
+      
+      const sampleValues = sampleRows.slice(0, 5).map(row => row[idx]).filter(v => v !== undefined && v !== null && v !== '');
+      
+      if (sampleValues.length > 0 && sampleValues.every(v => looksLikeNumber(v))) {
+        valueCol = idx;
+        console.log(`Found value column by content analysis: ${idx} (${headers[idx]}), samples: ${sampleValues.slice(0, 3).join(', ')}`);
+        break;
+      }
+    }
+  }
   
-  console.log(`Auto-detected columns - Date: ${dateCol} (${headers[dateCol]}), Value: ${valueCol} (${headers[valueCol]})`);
+  // Fallbacks - for simple 2-column CSVs, column 0 is date, column 1 is value
+  if (dateCol === -1) {
+    dateCol = 0;
+    console.log(`Defaulting date column to 0`);
+  }
+  if (valueCol === -1) {
+    valueCol = headers.length > 1 ? 1 : 0;
+    console.log(`Defaulting value column to ${valueCol}`);
+  }
+  
+  console.log(`Final auto-detected columns - Date: ${dateCol}, Value: ${valueCol}, Time: ${timeCol}`);
   
   return { dateCol, valueCol, timeCol };
 }
