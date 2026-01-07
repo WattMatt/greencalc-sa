@@ -142,6 +142,21 @@ export default function ProjectDetail() {
         <Button variant="ghost" size="icon" onClick={() => navigate("/projects")}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
+        
+        {/* Project Logo */}
+        {project.logo_url && (
+          <div className="h-14 w-14 rounded-lg border bg-background flex items-center justify-center overflow-hidden flex-shrink-0">
+            <img 
+              src={project.logo_url} 
+              alt={`${project.name} logo`}
+              className="h-12 w-12 object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).parentElement!.style.display = 'none';
+              }}
+            />
+          </div>
+        )}
+        
         <div>
           <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
           <p className="text-muted-foreground">
