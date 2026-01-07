@@ -200,15 +200,14 @@ export default function Projects() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Project Logo */}
-                {project.logo_url && (
+                {/* Project Logo - only show if valid URL exists */}
+                {project.logo_url && project.logo_url.trim() !== '' && (
                   <div className="flex justify-center py-2">
                     <img 
                       src={project.logo_url} 
                       alt={`${project.name} logo`}
                       className="h-12 max-w-[160px] object-contain"
                       onError={(e) => {
-                        // Hide broken images
                         (e.target as HTMLImageElement).style.display = 'none';
                       }}
                     />
