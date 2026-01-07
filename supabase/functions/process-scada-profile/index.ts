@@ -141,7 +141,7 @@ serve(async (req) => {
           cols = line.trim().split(/\s+/);
         } else {
           // Simple split for now, robust CSV splitting handles quotes better but is heavier
-          cols = line.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''));
+          cols = line.split(delimiter).map((c: string) => c.trim().replace(/^["']|["']$/g, ''));
         }
 
         if (cols.length <= Math.max(dateColIdx, valColIdx)) {

@@ -75,6 +75,23 @@ export default function ProjectDetail() {
     },
   });
 
+  // Fetch latest proposal for branding
+  const { data: latestProposal } = useQuery({
+    queryKey: ["latest-proposal-branding", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("proposals")
+        .select("branding")
+        .eq("project_id", id)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+
   const updateProject = useMutation({
     mutationFn: async (updates: { tariff_id?: string; total_area_sqm?: number; connection_size_kva?: number }) => {
       const { error } = await supabase.from("projects").update(updates).eq("id", id);
@@ -277,7 +294,11 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="reports" className="mt-6">
-          <ReportBuilder projectId={id!} />
+          <ReportBuilder 
+            projectId={id!} 
+            projectName={project.name}
+            branding={latestProposal?.branding as any}
+          />
         </TabsContent>
       </Tabs>
     </div>
