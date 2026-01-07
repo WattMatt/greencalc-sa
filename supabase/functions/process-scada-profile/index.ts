@@ -108,13 +108,27 @@ serve(async (req) => {
         separator === 'semicolon' ? ';' :
           separator === 'space' ? ' ' : ',';
 
-      const lines = csvContent.split('\n');
+      // Split and filter lines, removing BOM, sep= declarations, and empty lines
+      let lines = csvContent.split('\n')
+        .map((l: string) => l.replace(/^\uFEFF/, '').trim()) // Remove BOM
+        .filter((l: string) => {
+          if (!l) return false;
+          // Skip separator declarations like "sep=," or "sep=;"
+          if (l.toLowerCase().startsWith('sep=')) return false;
+          return true;
+        });
+
+      console.log(`Total lines after filtering: ${lines.length}`);
+      console.log(`First 3 lines:`, lines.slice(0, 3));
+
       const headerIdx = Math.max(0, parseInt(headerRowNumber.toString()) - 1);
       const dataLines = lines.slice(headerIdx + 1).filter((l: string) => l.trim().length > 0);
 
+      console.log(`Header index: ${headerIdx}, Data lines: ${dataLines.length}`);
+      console.log(`First data line:`, dataLines[0]);
+
       const rawData: RawDataPoint[] = [];
       const dateSet = new Set<string>();
-
 
       const hourlyData: { weekday: number[][]; weekend: number[][] } = {
         weekday: Array.from({ length: 24 }, () => []),
