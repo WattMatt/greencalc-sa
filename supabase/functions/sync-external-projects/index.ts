@@ -32,6 +32,19 @@ serve(async (req) => {
 
     const externalData = await externalResponse.json();
     console.log(`Fetched ${externalData.total_projects} projects with ${externalData.total_tenants} tenants from external API`);
+    
+    // Log the first project's fields to see available logo fields
+    if (externalData.projects && externalData.projects.length > 0) {
+      const sampleProject = externalData.projects[0];
+      console.log("Sample project fields:", JSON.stringify(Object.keys(sampleProject)));
+      console.log("Sample project logo fields:", JSON.stringify({
+        logo_url: sampleProject.logo_url,
+        client_logo_url: sampleProject.client_logo_url,
+        logo: sampleProject.logo,
+        image_url: sampleProject.image_url,
+        image: sampleProject.image,
+      }));
+    }
 
     // Local Supabase connection
     const localUrl = Deno.env.get("SUPABASE_URL")!;
