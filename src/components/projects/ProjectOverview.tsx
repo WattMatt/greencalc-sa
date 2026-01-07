@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { 
   Users, BarChart3, DollarSign, Zap, Sun, MapPin, Plug, 
-  CheckCircle2, AlertCircle, ArrowRight, Building2, TrendingDown, Wallet, TrendingUp
+  CheckCircle2, AlertCircle, ArrowRight, Building2, TrendingDown, Wallet, TrendingUp,
+  ChevronRight, Lock, CloudSun, ScrollText, FileText, GitBranch
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line, Legend, CartesianGrid, ReferenceLine, PieChart, Pie, Cell } from "recharts";
+import { cn } from "@/lib/utils";
 
 interface Tenant {
   id: string;
@@ -223,6 +225,155 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
   const completedSteps = setupSteps.filter(s => s.done).length;
   const setupProgress = (completedSteps / setupSteps.length) * 100;
 
+  // Workflow steps for the visual diagram
+  type WorkflowStatus = "complete" | "partial" | "pending" | "blocked";
+  
+  const workflowSteps: Array<{
+    id: string;
+    label: string;
+    icon: any;
+    status: WorkflowStatus;
+    statusText: string;
+    dependsOn: string[];
+  }> = useMemo(() => [
+    {
+      id: "tenants",
+      label: "Tenants",
+      icon: Users,
+      status: tenants.length === 0 ? "pending" 
+        : assignedProfiles === tenants.length ? "complete" 
+        : "partial",
+      statusText: tenants.length === 0 
+        ? "Add tenants"
+        : `${assignedProfiles}/${tenants.length} profiles`,
+      dependsOn: []
+    },
+    {
+      id: "load-profile",
+      label: "Load Profile",
+      icon: BarChart3,
+      status: assignedProfiles === 0 ? "blocked" 
+        : assignedProfiles === tenants.length ? "complete" 
+        : "partial",
+      statusText: assignedProfiles === 0 
+        ? "Needs tenants"
+        : `${dailyTotal.toFixed(0)} kWh/day`,
+      dependsOn: ["tenants"]
+    },
+    {
+      id: "tariff",
+      label: "Tariff",
+      icon: DollarSign,
+      status: hasTariff ? "complete" : "pending",
+      statusText: hasTariff ? "Selected" : "Not set",
+      dependsOn: []
+    },
+    {
+      id: "costs",
+      label: "Costs",
+      icon: Wallet,
+      status: "complete",
+      statusText: "Configured",
+      dependsOn: []
+    },
+    {
+      id: "simulation",
+      label: "Simulation",
+      icon: Zap,
+      status: (!hasTariff || assignedProfiles === 0) ? "blocked" : "pending",
+      statusText: (!hasTariff || assignedProfiles === 0) 
+        ? "Needs setup"
+        : "Ready to run",
+      dependsOn: ["load-profile", "tariff", "costs"]
+    },
+    {
+      id: "pv-layout",
+      label: "PV Layout",
+      icon: Sun,
+      status: "pending",
+      statusText: maxSolarKva ? `Max ${maxSolarKva.toFixed(0)} kVA` : "Optional",
+      dependsOn: []
+    },
+    {
+      id: "solar-forecast",
+      label: "Forecast",
+      icon: CloudSun,
+      status: project.location ? "complete" : "pending",
+      statusText: project.location ? "Location set" : "Set location",
+      dependsOn: []
+    },
+    {
+      id: "proposals",
+      label: "Proposals",
+      icon: ScrollText,
+      status: "pending",
+      statusText: "Create proposal",
+      dependsOn: ["simulation"]
+    },
+    {
+      id: "reports",
+      label: "Reports",
+      icon: FileText,
+      status: "complete",
+      statusText: "Generate reports",
+      dependsOn: []
+    }
+  ], [tenants.length, assignedProfiles, hasTariff, dailyTotal, maxSolarKva, project.location]);
+
+  const completedWorkflowSteps = workflowSteps.filter(s => s.status === "complete").length;
+
+  // Workflow node component
+  const WorkflowNode = ({ step, onClick }: { step: typeof workflowSteps[0]; onClick: () => void }) => {
+    const statusStyles = {
+      complete: "border-green-500 bg-green-500/10 text-green-700 dark:text-green-400",
+      partial: "border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+      blocked: "border-muted-foreground/30 bg-muted/30 text-muted-foreground opacity-60",
+      pending: "border-muted-foreground/40 bg-muted/20 text-muted-foreground"
+    };
+    
+    const IconComponent = step.icon;
+    
+    return (
+      <button
+        onClick={onClick}
+        className={cn(
+          "relative flex flex-col items-center p-3 rounded-lg border-2 min-w-[80px] transition-all hover:scale-105 hover:shadow-md cursor-pointer",
+          statusStyles[step.status]
+        )}
+      >
+        {/* Status indicator */}
+        <div className="absolute -top-2 -right-2">
+          {step.status === "complete" && <CheckCircle2 className="h-4 w-4 text-green-500 bg-background rounded-full" />}
+          {step.status === "blocked" && <Lock className="h-4 w-4 text-muted-foreground bg-background rounded-full" />}
+          {step.status === "partial" && <AlertCircle className="h-4 w-4 text-amber-500 bg-background rounded-full" />}
+        </div>
+        
+        {/* Icon */}
+        <IconComponent className="h-5 w-5 mb-1" />
+        
+        {/* Label */}
+        <span className="text-xs font-medium text-center leading-tight">{step.label}</span>
+        
+        {/* Status text */}
+        <span className="text-[10px] opacity-70 mt-0.5 text-center">{step.statusText}</span>
+      </button>
+    );
+  };
+
+  // Workflow connector
+  const WorkflowConnector = ({ isComplete }: { isComplete: boolean }) => (
+    <div className="flex items-center px-1">
+      <div className={cn(
+        "w-4 h-0.5",
+        isComplete ? "bg-green-500" : "bg-muted-foreground/30"
+      )} />
+      <ChevronRight className={cn(
+        "h-4 w-4 -ml-1",
+        isComplete ? "text-green-500" : "text-muted-foreground/30"
+      )} />
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Setup Progress */}
@@ -256,6 +407,70 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
           </CardContent>
         </Card>
       )}
+
+      {/* Visual Workflow Diagram */}
+      <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <GitBranch className="h-5 w-5 text-primary" />
+                Project Workflow
+              </CardTitle>
+              <CardDescription>
+                Click any step to navigate • {completedWorkflowSteps}/{workflowSteps.length} complete
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-green-500" />
+                <span className="text-muted-foreground">Complete</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                <span className="text-muted-foreground">Partial</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                <span className="text-muted-foreground">Pending</span>
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Main workflow - primary flow */}
+          <div className="space-y-4">
+            {/* Row 1: Tenants → Load Profile → Tariff → Costs → Simulation */}
+            <div className="flex items-center justify-center gap-1 overflow-x-auto pb-2">
+              <WorkflowNode step={workflowSteps[0]} onClick={() => onNavigateTab("tenants")} />
+              <WorkflowConnector isComplete={workflowSteps[0].status === "complete" || workflowSteps[0].status === "partial"} />
+              <WorkflowNode step={workflowSteps[1]} onClick={() => onNavigateTab("load-profile")} />
+              <WorkflowConnector isComplete={workflowSteps[1].status === "complete"} />
+              <WorkflowNode step={workflowSteps[2]} onClick={() => onNavigateTab("tariff")} />
+              <WorkflowConnector isComplete={workflowSteps[2].status === "complete"} />
+              <WorkflowNode step={workflowSteps[3]} onClick={() => onNavigateTab("costs")} />
+              <WorkflowConnector isComplete={workflowSteps[3].status === "complete"} />
+              <WorkflowNode step={workflowSteps[4]} onClick={() => onNavigateTab("simulation")} />
+              <WorkflowConnector isComplete={workflowSteps[4].status === "complete"} />
+              <WorkflowNode step={workflowSteps[7]} onClick={() => onNavigateTab("proposals")} />
+              <WorkflowConnector isComplete={workflowSteps[7].status === "complete"} />
+              <WorkflowNode step={workflowSteps[8]} onClick={() => onNavigateTab("reports")} />
+            </div>
+            
+            {/* Row 2: Supporting tools (PV Layout, Solar Forecast) */}
+            <div className="flex items-center justify-center gap-6 pt-2 border-t border-dashed border-muted-foreground/20">
+              <div className="flex items-center gap-2">
+                <WorkflowNode step={workflowSteps[5]} onClick={() => onNavigateTab("pv-layout")} />
+                <span className="text-[10px] text-muted-foreground">Affects capacity</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <WorkflowNode step={workflowSteps[6]} onClick={() => onNavigateTab("solar-forecast")} />
+                <span className="text-[10px] text-muted-foreground">Improves accuracy</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
