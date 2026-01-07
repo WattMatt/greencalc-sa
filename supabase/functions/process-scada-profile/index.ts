@@ -6,18 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface ColumnMapping {
-  dateColumn: string; // Index as string
-  timeColumn: string; // Index as string, or "-1"
-  valueColumn: string; // Index as string
-  kvaColumn: string; // Index as string, or "-1"
-  dateFormat: string;
-  timeFormat: string;
-  dateTimeFormat?: string;
-  renamedHeaders?: Record<string, string>;
-  columnDataTypes?: Record<string, 'datetime' | 'float' | 'int' | 'string' | 'boolean'>;
-}
-
 interface RawDataPoint {
   timestamp: string;
   date: string;
@@ -27,27 +15,17 @@ interface RawDataPoint {
   originalLine: number;
 }
 
-interface ProcessedProfile {
-  weekdayProfile: number[];
-  weekendProfile: number[];
-  dataPoints: number;
-  dateRange: { start: string; end: string };
-  weekdayDays: number;
-  weekendDays: number;
-  rawData: RawDataPoint[];
-}
-
-// Robust Date Parser
+// Robust Date Parser - handles many common formats
 function parseDate(dateStr: string, timeStr: string | null): Date | null {
   if (!dateStr) return null;
 
   const dateTimeStr = timeStr ? `${dateStr} ${timeStr}` : dateStr;
+  
+  // Try native parsing first
   let date = new Date(dateTimeStr);
-
   if (!isNaN(date.getTime())) return date;
 
-  // Manual Parsing for common formats that Date() misses
-  // DD/MM/YYYY
+  // DD/MM/YYYY HH:mm:ss or DD-MM-YYYY HH:mm:ss
   const ddmmyyyy = dateTimeStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (ddmmyyyy) {
     const [, day, month, year, hour, min, sec] = ddmmyyyy;
@@ -55,7 +33,7 @@ function parseDate(dateStr: string, timeStr: string | null): Date | null {
       parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
   }
 
-  // YYYY/MM/DD
+  // YYYY/MM/DD HH:mm:ss or YYYY-MM-DD HH:mm:ss
   const yyyymmdd = dateTimeStr.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (yyyymmdd) {
     const [, year, month, day, hour, min, sec] = yyyymmdd;
@@ -63,7 +41,7 @@ function parseDate(dateStr: string, timeStr: string | null): Date | null {
       parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
   }
 
-  // DD-MMM-YY (01-Jan-24)
+  // DD-MMM-YY HH:mm:ss (01-Jan-24)
   const ddmmmyy = dateTimeStr.match(/(\d{1,2})[\/\-]([A-Za-z]{3})[\/\-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (ddmmmyy) {
     const months: Record<string, number> = {
@@ -82,54 +60,166 @@ function parseDate(dateStr: string, timeStr: string | null): Date | null {
   return null;
 }
 
+// Auto-detect separator from content
+function detectSeparator(content: string): string {
+  const firstLines = content.split('\n').slice(0, 5).join('\n');
+  
+  // Count occurrences of each separator
+  const counts = {
+    '\t': (firstLines.match(/\t/g) || []).length,
+    ';': (firstLines.match(/;/g) || []).length,
+    ',': (firstLines.match(/,/g) || []).length,
+  };
+  
+  // Return the most common separator
+  if (counts['\t'] > counts[';'] && counts['\t'] > counts[',']) return '\t';
+  if (counts[';'] > counts[',']) return ';';
+  return ',';
+}
+
+// Check if a string looks like a date/datetime
+function looksLikeDateTime(value: string): boolean {
+  if (!value) return false;
+  const v = value.trim();
+  
+  // Common datetime patterns
+  const patterns = [
+    /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/, // DD/MM/YYYY or MM/DD/YYYY
+    /^\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/, // YYYY-MM-DD
+    /^\d{1,2}[\/\-][A-Za-z]{3}[\/\-]\d{2,4}/, // DD-MMM-YY
+  ];
+  
+  return patterns.some(p => p.test(v));
+}
+
+// Check if a string looks like a number
+function looksLikeNumber(value: string): boolean {
+  if (!value) return false;
+  const v = value.trim().replace(',', '.');
+  return !isNaN(parseFloat(v)) && isFinite(parseFloat(v));
+}
+
+// Auto-detect columns from headers and sample data
+function autoDetectColumns(headers: string[], sampleRows: string[][]): { dateCol: number; valueCol: number; timeCol: number } {
+  let dateCol = -1;
+  let timeCol = -1;
+  let valueCol = -1;
+  
+  // First, try to find by header names
+  headers.forEach((h, idx) => {
+    const lower = h.toLowerCase();
+    if (dateCol === -1 && (lower.includes('date') || lower.includes('timestamp') || lower === 'time')) {
+      dateCol = idx;
+    }
+    if (valueCol === -1 && (lower.includes('kwh') || lower.includes('value') || lower.includes('active') || lower.includes('reading') || lower.includes('energy'))) {
+      valueCol = idx;
+    }
+  });
+  
+  // If not found by name, detect by content
+  if (sampleRows.length > 0) {
+    headers.forEach((_, idx) => {
+      const sampleValues = sampleRows.slice(0, 5).map(row => row[idx]).filter(Boolean);
+      
+      if (dateCol === -1 && sampleValues.every(v => looksLikeDateTime(v))) {
+        dateCol = idx;
+      }
+      
+      if (valueCol === -1 && idx !== dateCol && sampleValues.every(v => looksLikeNumber(v))) {
+        // Prefer numeric columns that aren't the first column (often date)
+        valueCol = idx;
+      }
+    });
+  }
+  
+  // Fallbacks
+  if (dateCol === -1) dateCol = 0;
+  if (valueCol === -1) valueCol = headers.length > 1 ? 1 : 0;
+  
+  console.log(`Auto-detected columns - Date: ${dateCol} (${headers[dateCol]}), Value: ${valueCol} (${headers[valueCol]})`);
+  
+  return { dateCol, valueCol, timeCol };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    const body = await req.json();
     const {
       csvContent,
       action,
-      separator = 'comma',
+      separator: manualSeparator,
       headerRowNumber = 1,
-      dateColumn,
-      timeColumn,
-      valueColumn,
-      kvaColumn
-    } = await req.json();
+      dateColumn: manualDateColumn,
+      timeColumn: manualTimeColumn,
+      valueColumn: manualValueColumn,
+      kvaColumn,
+      autoDetect = true // New flag to enable auto-detection
+    } = body;
 
     if (!csvContent) {
       throw new Error("CSV content is required");
     }
 
     if (action === "process") {
-      const delimiter = separator === 'tab' ? '\t' :
-        separator === 'semicolon' ? ';' :
-          separator === 'space' ? ' ' : ',';
-
-      // Split and filter lines, removing BOM, sep= declarations, and empty lines
+      // Clean and filter lines
       let lines = csvContent.split('\n')
-        .map((l: string) => l.replace(/^\uFEFF/, '').trim()) // Remove BOM
+        .map((l: string) => l.replace(/^\uFEFF/, '').trim())
         .filter((l: string) => {
           if (!l) return false;
-          // Skip separator declarations like "sep=," or "sep=;"
           if (l.toLowerCase().startsWith('sep=')) return false;
           return true;
         });
 
+      // Auto-detect or use manual separator
+      const delimiter = manualSeparator 
+        ? (manualSeparator === 'tab' ? '\t' : manualSeparator === 'semicolon' ? ';' : manualSeparator === 'space' ? ' ' : ',')
+        : detectSeparator(lines.join('\n'));
+
+      console.log(`Using delimiter: "${delimiter === '\t' ? 'TAB' : delimiter}"`);
       console.log(`Total lines after filtering: ${lines.length}`);
-      console.log(`First 3 lines:`, lines.slice(0, 3));
 
       const headerIdx = Math.max(0, parseInt(headerRowNumber.toString()) - 1);
-      const dataLines = lines.slice(headerIdx + 1).filter((l: string) => l.trim().length > 0);
+      
+      // Parse all rows
+      const allRows = lines.map((line: string) => {
+        if (delimiter === ' ') {
+          return line.split(/\s+/);
+        }
+        return line.split(delimiter).map((c: string) => c.trim().replace(/^["']|["']$/g, ''));
+      });
+      
+      const headers = allRows[headerIdx] || [];
+      const dataRows = allRows.slice(headerIdx + 1).filter((row: string[]) => row.some(cell => cell.trim()));
 
-      console.log(`Header index: ${headerIdx}, Data lines: ${dataLines.length}`);
-      console.log(`First data line:`, dataLines[0]);
+      console.log(`Headers: ${JSON.stringify(headers)}`);
+      console.log(`Data rows: ${dataRows.length}`);
+
+      // Determine column indices
+      let dateColIdx: number;
+      let timeColIdx: number;
+      let valColIdx: number;
+      
+      if (autoDetect && (manualDateColumn === undefined || manualValueColumn === undefined)) {
+        const detected = autoDetectColumns(headers, dataRows.slice(0, 10));
+        dateColIdx = manualDateColumn !== undefined ? parseInt(manualDateColumn) : detected.dateCol;
+        timeColIdx = manualTimeColumn !== undefined ? parseInt(manualTimeColumn) : detected.timeCol;
+        valColIdx = manualValueColumn !== undefined ? parseInt(manualValueColumn) : detected.valueCol;
+      } else {
+        dateColIdx = parseInt(manualDateColumn || '0');
+        timeColIdx = parseInt(manualTimeColumn || '-1');
+        valColIdx = parseInt(manualValueColumn || '1');
+      }
+      
+      const kvaColIdx = parseInt(kvaColumn || '-1');
+
+      console.log(`Using columns - Date: ${dateColIdx}, Time: ${timeColIdx}, Value: ${valColIdx}`);
 
       const rawData: RawDataPoint[] = [];
       const dateSet = new Set<string>();
-
       const hourlyData: { weekday: number[][]; weekend: number[][] } = {
         weekday: Array.from({ length: 24 }, () => []),
         weekend: Array.from({ length: 24 }, () => []),
@@ -138,25 +228,11 @@ serve(async (req) => {
       let weekdayDays = 0;
       let weekendDays = 0;
       const seenDates: Record<string, boolean> = {};
-
-      // Column Indices
-      const dateColIdx = parseInt(dateColumn);
-      const timeColIdx = parseInt(timeColumn);
-      const valColIdx = parseInt(valueColumn);
-      const kvaColIdx = parseInt(kvaColumn || "-1");
-
       let skippedCount = 0;
+      let parseErrors: string[] = [];
 
-      for (let i = 0; i < dataLines.length; i++) {
-        const line = dataLines[i];
-        // Handle CSV parsing considering quotes
-        let cols: string[];
-        if (delimiter === ' ') {
-          cols = line.trim().split(/\s+/);
-        } else {
-          // Simple split for now, robust CSV splitting handles quotes better but is heavier
-          cols = line.split(delimiter).map((c: string) => c.trim().replace(/^["']|["']$/g, ''));
-        }
+      for (let i = 0; i < dataRows.length; i++) {
+        const cols = dataRows[i];
 
         if (cols.length <= Math.max(dateColIdx, valColIdx)) {
           skippedCount++;
@@ -169,7 +245,7 @@ serve(async (req) => {
         const kvaStr = kvaColIdx >= 0 ? cols[kvaColIdx] : undefined;
 
         const dateObj = parseDate(dateStr, timeStr);
-        const val = parseFloat(valStr?.replace(',', '.') || '0'); // Handle comma decimals
+        const val = parseFloat(valStr?.replace(',', '.') || '0');
 
         if (dateObj && !isNaN(dateObj.getTime()) && !isNaN(val)) {
           const dayKey = dateObj.toISOString().split('T')[0];
@@ -196,10 +272,13 @@ serve(async (req) => {
           });
         } else {
           skippedCount++;
+          if (parseErrors.length < 5) {
+            parseErrors.push(`Line ${i + 2}: Could not parse date "${dateStr}" or value "${valStr}"`);
+          }
         }
       }
 
-      // Normalize Profiles (Percentages)
+      // Calculate normalized profiles
       const calculateProfile = (buckets: number[][]) => {
         const avgs = buckets.map(b => b.length ? b.reduce((s, v) => s + v, 0) / b.length : 0);
         const total = avgs.reduce((s, v) => s + v, 0);
@@ -208,10 +287,12 @@ serve(async (req) => {
 
       const weekdayProfile = calculateProfile(hourlyData.weekday);
       const weekendProfile = calculateProfile(hourlyData.weekend);
-
       const sortedDates = Array.from(dateSet).sort();
 
       console.log(`Processed ${rawData.length} points, skipped ${skippedCount}`);
+      if (parseErrors.length > 0) {
+        console.log(`Sample parse errors: ${parseErrors.join('; ')}`);
+      }
 
       return new Response(JSON.stringify({
         success: true,
@@ -224,7 +305,14 @@ serve(async (req) => {
         weekendDays,
         rawData,
         weekdayProfile,
-        weekendProfile
+        weekendProfile,
+        detectedColumns: {
+          dateColumn: dateColIdx,
+          valueColumn: valColIdx,
+          headers
+        },
+        skippedRows: skippedCount,
+        parseErrors: parseErrors.slice(0, 5)
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
