@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Building2, Trash2, ArrowRight, RefreshCw, Search, X } from "lucide-react";
+import { Plus, Building2, Trash2, ArrowRight, RefreshCw, Search, X, LayoutGrid, List } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -22,6 +23,7 @@ export default function Projects() {
   const [searchQuery, setSearchQuery] = useState("");
   const [locationFilter, setLocationFilter] = useState<string>("all");
   const [tariffFilter, setTariffFilter] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   const handleSyncExternal = async () => {
     setIsSyncing(true);
@@ -237,10 +239,21 @@ export default function Projects() {
         )}
         
         {projects && filteredProjects && (
-          <span className="text-sm text-muted-foreground ml-auto">
+          <span className="text-sm text-muted-foreground">
             {filteredProjects.length} of {projects.length} projects
           </span>
         )}
+        
+        <div className="ml-auto">
+          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as "grid" | "list")}>
+            <ToggleGroupItem value="grid" aria-label="Grid view" size="sm">
+              <LayoutGrid className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="list" aria-label="List view" size="sm">
+              <List className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
       </div>
 
 
@@ -286,7 +299,7 @@ export default function Projects() {
             </Button>
           </CardContent>
         </Card>
-      ) : (
+      ) : viewMode === "grid" ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredProjects?.map((project) => (
             <Card key={project.id} className="group hover:shadow-md transition-shadow">
@@ -347,6 +360,77 @@ export default function Projects() {
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filteredProjects?.map((project) => (
+            <Card key={project.id} className="group hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-4 p-4">
+                {/* Logo */}
+                {project.logo_url && project.logo_url.trim() !== '' ? (
+                  <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center">
+                    <img 
+                      src={project.logo_url} 
+                      alt={`${project.name} logo`}
+                      className="h-10 max-w-[48px] object-contain"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex-shrink-0 w-12 h-12 bg-muted rounded-md flex items-center justify-center">
+                    <Building2 className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                )}
+                
+                {/* Project Info */}
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-medium truncate">{project.name}</h3>
+                  {project.location && (
+                    <p className="text-sm text-muted-foreground truncate">{project.location}</p>
+                  )}
+                </div>
+                
+                {/* Stats */}
+                <div className="hidden sm:flex items-center gap-6 text-sm">
+                  <div className="text-center">
+                    <span className="text-muted-foreground block">Tenants</span>
+                    <span className="font-medium">{(project as any).project_tenants?.[0]?.count || 0}</span>
+                  </div>
+                  <div className="text-center min-w-[100px]">
+                    <span className="text-muted-foreground block">Tariff</span>
+                    <span className="font-medium truncate block">
+                      {(project as any).tariffs?.name || "Not set"}
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Actions */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/projects/${project.id}`)}
+                  >
+                    Open
+                    <ArrowRight className="h-4 w-4 ml-1" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteProject.mutate(project.id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </Card>
           ))}
         </div>
