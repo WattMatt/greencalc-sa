@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar } from "lucide-react";
+import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Play, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
 
@@ -31,6 +31,9 @@ interface Meter {
   date_range_start: string | null;
   date_range_end: string | null;
   created_at: string;
+  raw_data: unknown;
+  load_profile_weekday: number[] | null;
+  load_profile_weekend: number[] | null;
 }
 
 export function SitesTab() {
@@ -39,6 +42,7 @@ export function SitesTab() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [editingSite, setEditingSite] = useState<Site | null>(null);
+  const [processingMeterId, setProcessingMeterId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     site_type: "",
@@ -79,7 +83,7 @@ export function SitesTab() {
       if (!selectedSite) return [];
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, site_name, shop_name, file_name, data_points, date_range_start, date_range_end, created_at")
+        .select("id, site_name, shop_name, file_name, data_points, date_range_start, date_range_end, created_at, raw_data, load_profile_weekday, load_profile_weekend")
         .eq("site_id", selectedSite.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -147,6 +151,72 @@ export function SitesTab() {
     onError: (error) => toast.error(error.message),
   });
 
+  const processMeter = async (meter: Meter) => {
+    if (!meter.raw_data) {
+      toast.error("No raw data available to process");
+      return;
+    }
+
+    setProcessingMeterId(meter.id);
+
+    try {
+      // Extract CSV content from raw_data
+      const rawDataArray = meter.raw_data as Array<{ csvContent?: string }>;
+      const csvContent = rawDataArray?.[0]?.csvContent;
+
+      if (!csvContent) {
+        toast.error("No CSV content found in raw data");
+        return;
+      }
+
+      // Call the edge function to process
+      const { data, error } = await supabase.functions.invoke("process-scada-profile", {
+        body: {
+          csvContent,
+          action: "process",
+          autoDetect: true,
+        },
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || "Processing failed");
+
+      // Update the meter with processed data
+      const { error: updateError } = await supabase
+        .from("scada_imports")
+        .update({
+          load_profile_weekday: data.weekdayProfile,
+          load_profile_weekend: data.weekendProfile,
+          date_range_start: data.dateRange.start,
+          date_range_end: data.dateRange.end,
+          weekday_days: data.weekdayDays,
+          weekend_days: data.weekendDays,
+          data_points: data.dataPoints,
+          raw_data: data.rawData, // Update with parsed raw data
+        })
+        .eq("id", meter.id);
+
+      if (updateError) throw updateError;
+
+      queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
+      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+      toast.success(`Processed ${meter.shop_name || meter.site_name}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to process meter");
+    } finally {
+      setProcessingMeterId(null);
+    }
+  };
+
+  const isProcessed = (meter: Meter) => {
+    // A meter is processed if it has valid load profiles (not all zeros)
+    const weekday = meter.load_profile_weekday || [];
+    const weekend = meter.load_profile_weekend || [];
+    const hasWeekdayData = weekday.some(v => v > 0);
+    const hasWeekendData = weekend.some(v => v > 0);
+    return hasWeekdayData || hasWeekendData;
+  };
+
   const resetForm = () => {
     setFormData({ name: "", site_type: "", location: "" });
     setEditingSite(null);
@@ -178,6 +248,9 @@ export function SitesTab() {
 
   // Show site meters view when a site is selected
   if (selectedSite) {
+    const processedCount = siteMeters?.filter(m => isProcessed(m)).length || 0;
+    const unprocessedCount = (siteMeters?.length || 0) - processedCount;
+
     return (
       <div className="space-y-6">
         {/* Header with back button */}
@@ -205,13 +278,36 @@ export function SitesTab() {
         {/* Meters List */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5" />
-              Uploaded Meters
-            </CardTitle>
-            <CardDescription>
-              {siteMeters?.length || 0} meter{(siteMeters?.length || 0) !== 1 ? "s" : ""} uploaded to this site
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="h-5 w-5" />
+                  Uploaded Meters
+                </CardTitle>
+                <CardDescription>
+                  {siteMeters?.length || 0} meter{(siteMeters?.length || 0) !== 1 ? "s" : ""} uploaded
+                  {unprocessedCount > 0 && (
+                    <span className="ml-2 text-orange-600">• {unprocessedCount} need processing</span>
+                  )}
+                </CardDescription>
+              </div>
+              {unprocessedCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const unprocessed = siteMeters?.filter(m => !isProcessed(m)) || [];
+                    for (const meter of unprocessed) {
+                      await processMeter(meter);
+                    }
+                  }}
+                  disabled={!!processingMeterId}
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Process All ({unprocessedCount})
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {isLoadingMeters ? (
@@ -231,50 +327,79 @@ export function SitesTab() {
                   <TableRow>
                     <TableHead>Meter Name</TableHead>
                     <TableHead>File</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Data Points</TableHead>
                     <TableHead>Date Range</TableHead>
-                    <TableHead>Uploaded</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {siteMeters.map((meter) => (
-                    <TableRow key={meter.id}>
-                      <TableCell className="font-medium">
-                        {meter.shop_name || meter.site_name}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {meter.file_name || "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {meter.data_points?.toLocaleString() || 0}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        <div className="flex items-center gap-1 text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
-                          {formatDate(meter.date_range_start)} — {formatDate(meter.date_range_end)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatDate(meter.created_at)}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            if (confirm("Delete this meter?")) {
-                              deleteMeter.mutate(meter.id);
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {siteMeters.map((meter) => {
+                    const processed = isProcessed(meter);
+                    const isProcessing = processingMeterId === meter.id;
+
+                    return (
+                      <TableRow key={meter.id}>
+                        <TableCell className="font-medium">
+                          {meter.shop_name || meter.site_name}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {meter.file_name || "-"}
+                        </TableCell>
+                        <TableCell>
+                          {processed ? (
+                            <Badge variant="default" className="bg-green-600">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Processed
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">Pending</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {meter.data_points?.toLocaleString() || 0}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <Calendar className="h-3 w-3" />
+                            {formatDate(meter.date_range_start)} — {formatDate(meter.date_range_end)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {!processed && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => processMeter(meter)}
+                                disabled={isProcessing}
+                                title="Process meter"
+                              >
+                                {isProcessing ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Play className="h-4 w-4 text-primary" />
+                                )}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                if (confirm("Delete this meter?")) {
+                                  deleteMeter.mutate(meter.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
