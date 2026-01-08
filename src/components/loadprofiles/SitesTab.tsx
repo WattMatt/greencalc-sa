@@ -293,7 +293,7 @@ export function SitesTab() {
                   }}
                 >
                   <Upload className="h-4 w-4 mr-2" />
-                  Import Meters
+                  Upload Meters
                 </Button>
               </CardContent>
             </Card>
@@ -307,7 +307,7 @@ export function SitesTab() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5" />
-              Import Meters to {selectedSiteForImport?.name}
+              Upload Meters to {selectedSiteForImport?.name}
             </DialogTitle>
             <DialogDescription>
               Upload SCADA data or manually add meters to this site
