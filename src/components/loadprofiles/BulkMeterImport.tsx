@@ -4,11 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Upload, Loader2, Check, FileUp, Trash2, Play, AlertCircle, X, CheckCircle2
+  Upload, Loader2, FileUp, Trash2, Save, X, FileText
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,9 +16,6 @@ interface PendingFile {
   fileName: string;
   content: string;
   rowCount: number;
-  status: "pending" | "processing" | "success" | "error";
-  error?: string;
-  meterName?: string;
 }
 
 interface BulkMeterImportProps {
@@ -33,8 +29,7 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
 
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Fetch existing site name if siteId provided
   const { data: site } = useQuery({
@@ -56,24 +51,17 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
     const files = e.target.files;
     if (!files?.length) return;
 
-    const newFiles: PendingFile[] = [];
-
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
       reader.onload = (event) => {
         const content = event.target?.result as string;
         const rowCount = content.split('\n').filter(l => l.trim()).length;
-        
-        // Extract meter name from file name
-        const meterName = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
 
         const newFile: PendingFile = {
           id: crypto.randomUUID(),
           fileName: file.name,
           content,
           rowCount,
-          status: "pending",
-          meterName,
         };
 
         setPendingFiles((prev) => [...prev, newFile]);
@@ -106,124 +94,64 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
   };
 
   const toggleSelectAll = () => {
-    const pendingIds = pendingFiles.filter(f => f.status === "pending").map(f => f.id);
-    if (pendingIds.every(id => selectedIds.has(id))) {
+    if (pendingFiles.every(f => selectedIds.has(f.id))) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(pendingIds));
+      setSelectedIds(new Set(pendingFiles.map(f => f.id)));
     }
   };
 
-  const processAndSaveFiles = async () => {
-    const filesToProcess = pendingFiles.filter(f => selectedIds.has(f.id) && f.status === "pending");
+  const saveSelectedFiles = async () => {
+    const filesToSave = pendingFiles.filter(f => selectedIds.has(f.id));
     
-    if (filesToProcess.length === 0) {
-      toast.error("No files selected to process");
+    if (filesToSave.length === 0) {
+      toast.error("No files selected");
       return;
     }
 
-    setIsProcessing(true);
-    setProgress(0);
+    setIsSaving(true);
 
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (let i = 0; i < filesToProcess.length; i++) {
-      const file = filesToProcess[i];
-      
-      // Update status to processing
-      setPendingFiles((prev) =>
-        prev.map((f) => (f.id === file.id ? { ...f, status: "processing" as const } : f))
-      );
-
-      try {
-        // Process the CSV
-        const { data, error } = await supabase.functions.invoke("process-scada-profile", {
-          body: {
-            csvContent: file.content,
-            action: "process",
-            autoDetect: true,
-          },
-        });
-
-        if (error) throw error;
-        if (!data.success) throw new Error(data.error || "Processing failed");
-
-        if (data.dataPoints === 0) {
-          throw new Error("No data points detected");
-        }
-
-        // Save to database
-        const { error: insertError } = await supabase.from("scada_imports").insert([
-          {
-            site_name: file.meterName || file.fileName,
-            site_id: siteId || null,
-            shop_name: file.meterName || null,
-            file_name: file.fileName,
-            raw_data: data.rawData,
-            data_points: data.dataPoints,
-            date_range_start: data.dateRange.start,
-            date_range_end: data.dateRange.end,
-            weekday_days: data.weekdayDays,
-            weekend_days: data.weekendDays,
-            load_profile_weekday: data.weekdayProfile,
-            load_profile_weekend: data.weekendProfile,
-          },
-        ]);
-
-        if (insertError) throw insertError;
-
-        // Update status to success
-        setPendingFiles((prev) =>
-          prev.map((f) => (f.id === file.id ? { ...f, status: "success" as const } : f))
-        );
-        successCount++;
-      } catch (err) {
-        // Update status to error
-        setPendingFiles((prev) =>
-          prev.map((f) =>
-            f.id === file.id
-              ? { ...f, status: "error" as const, error: err instanceof Error ? err.message : "Unknown error" }
-              : f
-          )
-        );
-        errorCount++;
-      }
-
-      setProgress(((i + 1) / filesToProcess.length) * 100);
-    }
-
-    // Invalidate queries
-    queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
-    queryClient.invalidateQueries({ queryKey: ["sites"] });
-    queryClient.invalidateQueries({ queryKey: ["meter-library"] });
-    queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
-
-    setIsProcessing(false);
-    setSelectedIds(new Set());
-
-    if (successCount > 0) {
-      toast.success(`Successfully imported ${successCount} meter${successCount !== 1 ? "s" : ""}`, {
-        description: errorCount > 0 ? `${errorCount} failed` : undefined,
+    try {
+      // Save each file as a raw scada_import (unprocessed)
+      const inserts = filesToSave.map(file => {
+        const meterName = file.fileName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+        return {
+          site_name: meterName,
+          site_id: siteId || null,
+          shop_name: meterName,
+          file_name: file.fileName,
+          raw_data: [{ csvContent: file.content }], // Store raw CSV for later processing
+          data_points: file.rowCount,
+          load_profile_weekday: Array(24).fill(0),
+          load_profile_weekend: Array(24).fill(0),
+          weekday_days: 0,
+          weekend_days: 0,
+        };
       });
-    } else if (errorCount > 0) {
-      toast.error(`All ${errorCount} imports failed`);
-    }
 
-    // Call callback if all processed
-    if (errorCount === 0 && successCount > 0) {
+      const { error } = await supabase.from("scada_imports").insert(inserts);
+      if (error) throw error;
+
+      // Remove saved files from pending list
+      setPendingFiles((prev) => prev.filter(f => !selectedIds.has(f.id)));
+      setSelectedIds(new Set());
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+      queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
+
+      toast.success(`Saved ${filesToSave.length} file${filesToSave.length !== 1 ? "s" : ""}`);
       onImportComplete?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save files");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const clearCompleted = () => {
-    setPendingFiles((prev) => prev.filter((f) => f.status === "pending" || f.status === "error"));
-  };
-
-  const pendingCount = pendingFiles.filter(f => f.status === "pending").length;
-  const selectedCount = Array.from(selectedIds).filter(id => 
-    pendingFiles.find(f => f.id === id)?.status === "pending"
-  ).length;
+  const selectedCount = selectedIds.size;
 
   return (
     <div className="space-y-6">
@@ -231,10 +159,10 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Bulk Meter Import
+            Bulk Upload Meters
           </CardTitle>
           <CardDescription>
-            Upload multiple CSV files at once. Files will be auto-processed and saved.
+            Upload multiple CSV files. Files are saved raw and can be processed afterward.
             {site && <span className="font-medium"> Importing to: {site.name}</span>}
           </CardDescription>
         </CardHeader>
@@ -261,53 +189,34 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
             </div>
           </div>
 
-          {/* Progress Bar */}
-          {isProcessing && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span>Processing files...</span>
-                <span>{Math.round(progress)}%</span>
-              </div>
-              <Progress value={progress} />
-            </div>
-          )}
-
           {/* Files Table */}
           {pendingFiles.length > 0 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <span className="text-sm text-muted-foreground">
-                    {pendingFiles.length} file{pendingFiles.length !== 1 ? "s" : ""} uploaded
+                    {pendingFiles.length} file{pendingFiles.length !== 1 ? "s" : ""} ready
                   </span>
-                  {pendingCount > 0 && selectedCount > 0 && (
+                  {selectedCount > 0 && (
                     <Badge variant="secondary">{selectedCount} selected</Badge>
                   )}
                 </div>
-                <div className="flex gap-2">
-                  {pendingFiles.some(f => f.status === "success") && (
-                    <Button variant="outline" size="sm" onClick={clearCompleted}>
-                      Clear Completed
-                    </Button>
+                <Button
+                  onClick={saveSelectedFiles}
+                  disabled={isSaving || selectedCount === 0}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Selected ({selectedCount})
+                    </>
                   )}
-                  <Button
-                    size="sm"
-                    onClick={processAndSaveFiles}
-                    disabled={isProcessing || selectedCount === 0}
-                  >
-                    {isProcessing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4 mr-2" />
-                        Process & Save ({selectedCount})
-                      </>
-                    )}
-                  </Button>
-                </div>
+                </Button>
               </div>
 
               <Table>
@@ -315,15 +224,13 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                   <TableRow>
                     <TableHead className="w-12">
                       <Checkbox
-                        checked={pendingCount > 0 && pendingFiles.filter(f => f.status === "pending").every(f => selectedIds.has(f.id))}
+                        checked={pendingFiles.length > 0 && pendingFiles.every(f => selectedIds.has(f.id))}
                         onCheckedChange={toggleSelectAll}
-                        disabled={isProcessing || pendingCount === 0}
+                        disabled={isSaving}
                       />
                     </TableHead>
                     <TableHead>File Name</TableHead>
-                    <TableHead>Meter Name</TableHead>
                     <TableHead>Rows</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -334,69 +241,32 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                         <Checkbox
                           checked={selectedIds.has(file.id)}
                           onCheckedChange={() => toggleSelect(file.id)}
-                          disabled={isProcessing || file.status !== "pending"}
+                          disabled={isSaving}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{file.fileName}</TableCell>
-                      <TableCell className="text-muted-foreground">{file.meterName}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">{file.fileName}</span>
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline">{file.rowCount.toLocaleString()}</Badge>
                       </TableCell>
                       <TableCell>
-                        {file.status === "pending" && (
-                          <Badge variant="secondary">Pending</Badge>
-                        )}
-                        {file.status === "processing" && (
-                          <Badge variant="default" className="flex items-center gap-1 w-fit">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            Processing
-                          </Badge>
-                        )}
-                        {file.status === "success" && (
-                          <Badge variant="default" className="bg-green-600 flex items-center gap-1 w-fit">
-                            <CheckCircle2 className="h-3 w-3" />
-                            Imported
-                          </Badge>
-                        )}
-                        {file.status === "error" && (
-                          <Badge variant="destructive" className="flex items-center gap-1 w-fit" title={file.error}>
-                            <AlertCircle className="h-3 w-3" />
-                            Failed
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {file.status === "pending" && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeFile(file.id)}
-                            disabled={isProcessing}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeFile(file.id)}
+                          disabled={isSaving}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-
-              {/* Error details */}
-              {pendingFiles.some(f => f.status === "error") && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-destructive">Failed Imports</h4>
-                  {pendingFiles
-                    .filter(f => f.status === "error")
-                    .map(f => (
-                      <div key={f.id} className="text-sm text-muted-foreground flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 text-destructive" />
-                        <span className="font-medium">{f.fileName}:</span>
-                        <span>{f.error}</span>
-                      </div>
-                    ))}
-                </div>
-              )}
             </div>
           )}
         </CardContent>
