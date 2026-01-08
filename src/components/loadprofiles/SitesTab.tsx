@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
 
@@ -21,12 +22,22 @@ interface Site {
   meter_count?: number;
 }
 
+interface Meter {
+  id: string;
+  site_name: string;
+  shop_name: string | null;
+  file_name: string | null;
+  data_points: number | null;
+  date_range_start: string | null;
+  date_range_end: string | null;
+  created_at: string;
+}
 
 export function SitesTab() {
   const queryClient = useQueryClient();
   const [siteDialogOpen, setSiteDialogOpen] = useState(false);
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [selectedSiteForImport, setSelectedSiteForImport] = useState<Site | null>(null);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [formData, setFormData] = useState({
     name: "",
@@ -61,6 +72,21 @@ export function SitesTab() {
     },
   });
 
+  // Fetch meters for selected site
+  const { data: siteMeters, isLoading: isLoadingMeters } = useQuery({
+    queryKey: ["site-meters", selectedSite?.id],
+    queryFn: async () => {
+      if (!selectedSite) return [];
+      const { data, error } = await supabase
+        .from("scada_imports")
+        .select("id, site_name, shop_name, file_name, data_points, date_range_start, date_range_end, created_at")
+        .eq("site_id", selectedSite.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as Meter[];
+    },
+    enabled: !!selectedSite,
+  });
 
   const saveSite = useMutation({
     mutationFn: async (data: {
@@ -103,6 +129,20 @@ export function SitesTab() {
       queryClient.invalidateQueries({ queryKey: ["sites"] });
       queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
       toast.success("Site deleted");
+      setSelectedSite(null);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const deleteMeter = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("scada_imports").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      toast.success("Meter deleted");
     },
     onError: (error) => toast.error(error.message),
   });
@@ -123,11 +163,6 @@ export function SitesTab() {
     setSiteDialogOpen(true);
   };
 
-  const openImportDialog = (site: Site) => {
-    setSelectedSiteForImport(site);
-    setImportDialogOpen(true);
-  };
-
   const handleSubmit = () => {
     saveSite.mutate({
       name: formData.name,
@@ -136,6 +171,146 @@ export function SitesTab() {
     });
   };
 
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "-";
+    return new Date(dateStr).toLocaleDateString();
+  };
+
+  // Show site meters view when a site is selected
+  if (selectedSite) {
+    return (
+      <div className="space-y-6">
+        {/* Header with back button */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => setSelectedSite(null)}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-primary" />
+                {selectedSite.name}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {selectedSite.location || "No location"} • {selectedSite.site_type || "No type"}
+              </p>
+            </div>
+          </div>
+          <Button onClick={() => setUploadDialogOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Meters
+          </Button>
+        </div>
+
+        {/* Meters List */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Uploaded Meters
+            </CardTitle>
+            <CardDescription>
+              {siteMeters?.length || 0} meter{(siteMeters?.length || 0) !== 1 ? "s" : ""} uploaded to this site
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingMeters ? (
+              <div className="text-center py-8 text-muted-foreground">Loading meters...</div>
+            ) : !siteMeters?.length ? (
+              <div className="text-center py-8">
+                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-muted-foreground mb-4">No meters uploaded yet</p>
+                <Button onClick={() => setUploadDialogOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Meters
+                </Button>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Meter Name</TableHead>
+                    <TableHead>File</TableHead>
+                    <TableHead>Data Points</TableHead>
+                    <TableHead>Date Range</TableHead>
+                    <TableHead>Uploaded</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {siteMeters.map((meter) => (
+                    <TableRow key={meter.id}>
+                      <TableCell className="font-medium">
+                        {meter.shop_name || meter.site_name}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {meter.file_name || "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {meter.data_points?.toLocaleString() || 0}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex items-center gap-1 text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
+                          {formatDate(meter.date_range_start)} — {formatDate(meter.date_range_end)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(meter.created_at)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (confirm("Delete this meter?")) {
+                              deleteMeter.mutate(meter.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Upload Dialog */}
+        <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Upload Meters to {selectedSite.name}
+              </DialogTitle>
+              <DialogDescription>
+                Upload CSV files containing meter data
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <BulkMeterImport 
+                siteId={selectedSite.id}
+                onImportComplete={() => {
+                  setUploadDialogOpen(false);
+                  queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite.id] });
+                  queryClient.invalidateQueries({ queryKey: ["sites"] });
+                  queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+                  queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
+                }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -143,7 +318,7 @@ export function SitesTab() {
         <div>
           <h2 className="text-lg font-semibold">Sites</h2>
           <p className="text-sm text-muted-foreground">
-            Manage sites and import meter data for each location
+            Manage sites and upload meter data for each location
           </p>
         </div>
         <Dialog
@@ -212,7 +387,7 @@ export function SitesTab() {
             <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p className="text-muted-foreground mb-4">No sites yet</p>
             <p className="text-sm text-muted-foreground mb-4">
-              Create a site to start importing meter data
+              Create a site to start uploading meter data
             </p>
             <Button onClick={() => setSiteDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
@@ -226,7 +401,7 @@ export function SitesTab() {
             <Card 
               key={site.id} 
               className="cursor-pointer hover:border-primary transition-colors"
-              onClick={() => openImportDialog(site)}
+              onClick={() => setSelectedSite(site)}
             >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -284,48 +459,11 @@ export function SitesTab() {
                     </div>
                   )}
                 </div>
-                <Button 
-                  className="w-full mt-4" 
-                  variant="outline"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openImportDialog(site);
-                  }}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Meters
-                </Button>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
-
-      {/* Import Dialog */}
-      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" />
-              Upload Meters to {selectedSiteForImport?.name}
-            </DialogTitle>
-            <DialogDescription>
-              Upload SCADA data or manually add meters to this site
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <BulkMeterImport 
-              siteId={selectedSiteForImport?.id || null}
-              onImportComplete={() => {
-                setImportDialogOpen(false);
-                queryClient.invalidateQueries({ queryKey: ["sites"] });
-                queryClient.invalidateQueries({ queryKey: ["meter-library"] });
-                queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
-              }}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
