@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Upload, Trash2, Edit2, Database } from "lucide-react";
+import { Plus, Upload, Trash2, Edit2, Database, Building2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { LoadProfileEditor } from "@/components/loadprofiles/LoadProfileEditor";
@@ -19,6 +19,8 @@ import { ScadaImport } from "@/components/loadprofiles/ScadaImport";
 import { ScadaImportsList } from "@/components/loadprofiles/ScadaImportsList";
 import { MeterLibrary } from "@/components/loadprofiles/MeterLibrary";
 import { MeterAnalysis } from "@/components/loadprofiles/MeterAnalysis";
+import { SiteManager } from "@/components/loadprofiles/SiteManager";
+
 interface ShopType {
   id: string;
   name: string;
@@ -43,6 +45,7 @@ export default function LoadProfiles() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingType, setEditingType] = useState<ShopType | null>(null);
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -402,28 +405,41 @@ export default function LoadProfiles() {
         </Card>
       </div>
 
-      <Tabs defaultValue="meter-library" className="space-y-4">
-        <TabsList className="flex-wrap h-auto gap-1">
-          <TabsTrigger value="meter-library">
-            <Database className="h-4 w-4 mr-2" />
-            Meter Library
-          </TabsTrigger>
-          <TabsTrigger value="import">
-            <Upload className="h-4 w-4 mr-2" />
-            Import
-          </TabsTrigger>
-        </TabsList>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Site Manager - Left Sidebar */}
+        <div className="lg:col-span-1">
+          <SiteManager
+            selectedSiteId={selectedSiteId}
+            onSelectSite={setSelectedSiteId}
+          />
+        </div>
 
-        <TabsContent value="meter-library" className="space-y-6">
-          <MeterAnalysis />
-          <MeterLibrary />
-        </TabsContent>
+        {/* Main Content */}
+        <div className="lg:col-span-3">
+          <Tabs defaultValue="meter-library" className="space-y-4">
+            <TabsList className="flex-wrap h-auto gap-1">
+              <TabsTrigger value="meter-library">
+                <Database className="h-4 w-4 mr-2" />
+                Meter Library
+              </TabsTrigger>
+              <TabsTrigger value="import">
+                <Upload className="h-4 w-4 mr-2" />
+                Import
+              </TabsTrigger>
+            </TabsList>
 
-        <TabsContent value="import" className="space-y-6">
-          <ScadaImport categories={categories || []} />
-          <ScadaImportsList />
-        </TabsContent>
-      </Tabs>
+            <TabsContent value="meter-library" className="space-y-6">
+              <MeterAnalysis siteId={selectedSiteId} />
+              <MeterLibrary siteId={selectedSiteId} />
+            </TabsContent>
+
+            <TabsContent value="import" className="space-y-6">
+              <ScadaImport categories={categories || []} siteId={selectedSiteId} />
+              <ScadaImportsList siteId={selectedSiteId} />
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
     </div>
   );
 }

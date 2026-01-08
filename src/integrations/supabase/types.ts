@@ -759,6 +759,7 @@ export type Database = {
           raw_data: Json | null
           shop_name: string | null
           shop_number: string | null
+          site_id: string | null
           site_name: string
           updated_at: string
           weekday_days: number | null
@@ -781,6 +782,7 @@ export type Database = {
           raw_data?: Json | null
           shop_name?: string | null
           shop_number?: string | null
+          site_id?: string | null
           site_name: string
           updated_at?: string
           weekday_days?: number | null
@@ -803,6 +805,7 @@ export type Database = {
           raw_data?: Json | null
           shop_name?: string | null
           shop_number?: string | null
+          site_id?: string | null
           site_name?: string
           updated_at?: string
           weekday_days?: number | null
@@ -821,6 +824,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scada_imports_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
             referencedColumns: ["id"]
           },
         ]
@@ -923,6 +933,36 @@ export type Database = {
           name?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      sites: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          location: string | null
+          name: string
+          total_area_sqm: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          name: string
+          total_area_sqm?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          name?: string
+          total_area_sqm?: number | null
+          updated_at?: string
         }
         Relationships: []
       }
