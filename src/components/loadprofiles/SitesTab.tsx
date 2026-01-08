@@ -31,7 +31,6 @@ interface Meter {
   date_range_start: string | null;
   date_range_end: string | null;
   created_at: string;
-  raw_data: unknown;
   load_profile_weekday: number[] | null;
   load_profile_weekend: number[] | null;
 }
@@ -83,7 +82,7 @@ export function SitesTab() {
       if (!selectedSite) return [];
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, site_name, shop_name, file_name, data_points, date_range_start, date_range_end, created_at, raw_data, load_profile_weekday, load_profile_weekend")
+        .select("id, site_name, shop_name, file_name, data_points, date_range_start, date_range_end, created_at, load_profile_weekday, load_profile_weekend")
         .eq("site_id", selectedSite.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -152,20 +151,31 @@ export function SitesTab() {
   });
 
   const processMeter = async (meter: Meter) => {
-    if (!meter.raw_data) {
-      toast.error("No raw data available to process");
-      return;
-    }
-
     setProcessingMeterId(meter.id);
 
     try {
+      // Fetch fresh raw_data directly from the database since it might not be included in the list query
+      const { data: meterData, error: fetchError } = await supabase
+        .from("scada_imports")
+        .select("raw_data")
+        .eq("id", meter.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      if (!meterData?.raw_data) {
+        toast.error("No raw data available to process");
+        setProcessingMeterId(null);
+        return;
+      }
+
       // Extract CSV content from raw_data
-      const rawDataArray = meter.raw_data as Array<{ csvContent?: string }>;
+      const rawDataArray = meterData.raw_data as Array<{ csvContent?: string }>;
       const csvContent = rawDataArray?.[0]?.csvContent;
 
       if (!csvContent) {
         toast.error("No CSV content found in raw data");
+        setProcessingMeterId(null);
         return;
       }
 
