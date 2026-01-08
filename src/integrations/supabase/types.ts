@@ -943,6 +943,7 @@ export type Database = {
           id: string
           location: string | null
           name: string
+          site_type: string | null
           total_area_sqm: number | null
           updated_at: string
         }
@@ -952,6 +953,7 @@ export type Database = {
           id?: string
           location?: string | null
           name: string
+          site_type?: string | null
           total_area_sqm?: number | null
           updated_at?: string
         }
@@ -961,6 +963,7 @@ export type Database = {
           id?: string
           location?: string | null
           name?: string
+          site_type?: string | null
           total_area_sqm?: number | null
           updated_at?: string
         }
