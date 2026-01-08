@@ -14,7 +14,7 @@ import { ScadaImport } from "@/components/loadprofiles/ScadaImport";
 interface Site {
   id: string;
   name: string;
-  description: string | null;
+  site_type: string | null;
   location: string | null;
   total_area_sqm: number | null;
   created_at: string;
@@ -36,9 +36,8 @@ export function SitesTab() {
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [formData, setFormData] = useState({
     name: "",
-    description: "",
+    site_type: "",
     location: "",
-    total_area_sqm: "",
   });
 
   const { data: sites, isLoading } = useQuery({
@@ -83,9 +82,8 @@ export function SitesTab() {
   const saveSite = useMutation({
     mutationFn: async (data: {
       name: string;
-      description: string | null;
+      site_type: string | null;
       location: string | null;
-      total_area_sqm: number | null;
     }) => {
       if (editingSite) {
         const { error } = await supabase
@@ -127,7 +125,7 @@ export function SitesTab() {
   });
 
   const resetForm = () => {
-    setFormData({ name: "", description: "", location: "", total_area_sqm: "" });
+    setFormData({ name: "", site_type: "", location: "" });
     setEditingSite(null);
   };
 
@@ -136,9 +134,8 @@ export function SitesTab() {
     setEditingSite(site);
     setFormData({
       name: site.name,
-      description: site.description || "",
+      site_type: site.site_type || "",
       location: site.location || "",
-      total_area_sqm: site.total_area_sqm?.toString() || "",
     });
     setSiteDialogOpen(true);
   };
@@ -151,9 +148,8 @@ export function SitesTab() {
   const handleSubmit = () => {
     saveSite.mutate({
       name: formData.name,
-      description: formData.description || null,
+      site_type: formData.site_type || null,
       location: formData.location || null,
-      total_area_sqm: formData.total_area_sqm ? parseFloat(formData.total_area_sqm) : null,
     });
   };
 
@@ -205,20 +201,11 @@ export function SitesTab() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Total Area (m²)</Label>
+                <Label>Site Type</Label>
                 <Input
-                  type="number"
-                  placeholder="e.g., 50000"
-                  value={formData.total_area_sqm}
-                  onChange={(e) => setFormData({ ...formData, total_area_sqm: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Input
-                  placeholder="Brief description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="e.g., Shopping Centre, Office Park, Industrial"
+                  value={formData.site_type}
+                  onChange={(e) => setFormData({ ...formData, site_type: e.target.value })}
                 />
               </div>
               <Button
@@ -288,8 +275,8 @@ export function SitesTab() {
                     </Button>
                   </div>
                 </div>
-                {site.description && (
-                  <CardDescription className="line-clamp-2">{site.description}</CardDescription>
+                {site.site_type && (
+                  <Badge variant="outline" className="mt-1">{site.site_type}</Badge>
                 )}
               </CardHeader>
               <CardContent>
