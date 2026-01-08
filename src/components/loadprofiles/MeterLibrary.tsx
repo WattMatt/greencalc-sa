@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -51,6 +52,9 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [siteFilter, setSiteFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("date-desc");
+  
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { data: meters, isLoading } = useQuery({
     queryKey: ["meter-library", siteId],
@@ -108,6 +112,47 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const bulkDeleteMeters = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from("scada_imports").delete().in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: (_, ids) => {
+      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+      queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
+      queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      setSelectedIds(new Set());
+      toast.success(`${ids.length} meters deleted`);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredMeters.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredMeters.map(m => m.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (confirm(`Delete ${selectedIds.size} meter(s)?`)) {
+      bulkDeleteMeters.mutate(Array.from(selectedIds));
+    }
+  };
 
   const openEditDialog = (meter: ScadaImport) => {
     setEditingMeter(meter);
@@ -256,6 +301,18 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                 Clear
               </Button>
             )}
+            
+            {selectedIds.size > 0 && (
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                onClick={handleBulkDelete}
+                disabled={bulkDeleteMeters.isPending}
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete {selectedIds.size} selected
+              </Button>
+            )}
           </div>
 
           {!meters?.length ? (
@@ -278,6 +335,12 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={filteredMeters.length > 0 && selectedIds.size === filteredMeters.length}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead className="w-8">Color</TableHead>
                     <TableHead>Meter / Label</TableHead>
                     <TableHead>Area (m²)</TableHead>
@@ -288,7 +351,13 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                 </TableHeader>
                 <TableBody>
                   {filteredMeters.map(meter => (
-                    <TableRow key={meter.id}>
+                    <TableRow key={meter.id} className={selectedIds.has(meter.id) ? "bg-muted/50" : ""}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(meter.id)}
+                          onCheckedChange={() => toggleSelect(meter.id)}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div
                           className="w-4 h-4 rounded-full border"
