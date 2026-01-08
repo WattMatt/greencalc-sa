@@ -154,6 +154,8 @@ export function SitesTab() {
     setProcessingMeterId(meter.id);
 
     try {
+      console.log("Processing meter:", meter.id, meter.shop_name);
+      
       // Fetch fresh raw_data directly from the database since it might not be included in the list query
       const { data: meterData, error: fetchError } = await supabase
         .from("scada_imports")
@@ -161,7 +163,13 @@ export function SitesTab() {
         .eq("id", meter.id)
         .single();
 
-      if (fetchError) throw fetchError;
+      console.log("Fetch result:", { hasData: !!meterData, error: fetchError?.message });
+
+      if (fetchError) {
+        toast.error(`Failed to fetch data: ${fetchError.message}`);
+        setProcessingMeterId(null);
+        return;
+      }
 
       if (!meterData?.raw_data) {
         toast.error("No raw data available to process");
