@@ -255,9 +255,9 @@ export function SitesTab() {
 
       if (updateError) throw updateError;
 
-      await queryClient.refetchQueries({ queryKey: ["site-meters", selectedSite?.id] });
-      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
       toast.success(`Processed ${meter.shop_name || meter.site_name} (${rawDataArray.length} readings)`);
+      queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
+      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to process meter");
     } finally {
