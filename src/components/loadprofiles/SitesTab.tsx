@@ -169,40 +169,87 @@ export function SitesTab() {
         return;
       }
 
-      // Extract CSV content from raw_data
-      const rawDataArray = meterData.raw_data as Array<{ csvContent?: string }>;
-      const csvContent = rawDataArray?.[0]?.csvContent;
+      // raw_data is already an array of parsed data points: {date, time, value, timestamp, originalLine}
+      const rawDataArray = meterData.raw_data as Array<{
+        date?: string;
+        time?: string;
+        timestamp?: string;
+        value?: number;
+      }>;
 
-      if (!csvContent) {
-        toast.error("No CSV content found in raw data");
+      if (!Array.isArray(rawDataArray) || rawDataArray.length === 0) {
+        toast.error("No data points found in raw data");
         setProcessingMeterId(null);
         return;
       }
 
-      // Call the edge function to process
-      const { data, error } = await supabase.functions.invoke("process-scada-profile", {
-        body: {
-          csvContent,
-          action: "process",
-          autoDetect: true,
-        },
-      });
+      // Process the data points to calculate hourly profiles
+      const weekdayHours: number[][] = Array.from({ length: 24 }, () => []);
+      const weekendHours: number[][] = Array.from({ length: 24 }, () => []);
+      const weekdayDates = new Set<string>();
+      const weekendDates = new Set<string>();
+      let minDate: string | null = null;
+      let maxDate: string | null = null;
 
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error || "Processing failed");
+      for (const point of rawDataArray) {
+        const dateStr = point.date || (point.timestamp ? point.timestamp.split("T")[0] : null);
+        const timeStr = point.time || (point.timestamp ? point.timestamp.split("T")[1]?.substring(0, 8) : null);
+        const value = typeof point.value === "number" ? point.value : parseFloat(String(point.value));
+
+        if (!dateStr || !timeStr || isNaN(value)) continue;
+
+        // Track date range
+        if (!minDate || dateStr < minDate) minDate = dateStr;
+        if (!maxDate || dateStr > maxDate) maxDate = dateStr;
+
+        // Parse hour from time
+        const hour = parseInt(timeStr.split(":")[0], 10);
+        if (isNaN(hour) || hour < 0 || hour > 23) continue;
+
+        // Determine day of week
+        const date = new Date(dateStr);
+        const dayOfWeek = date.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+        if (isWeekend) {
+          weekendHours[hour].push(value);
+          weekendDates.add(dateStr);
+        } else {
+          weekdayHours[hour].push(value);
+          weekdayDates.add(dateStr);
+        }
+      }
+
+      // Calculate average for each hour and normalize
+      const weekdayAvg = weekdayHours.map((vals) =>
+        vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+      );
+      const weekendAvg = weekendHours.map((vals) =>
+        vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+      );
+
+      // Normalize to percentages (sum to 100)
+      const weekdaySum = weekdayAvg.reduce((a, b) => a + b, 0);
+      const weekendSum = weekendAvg.reduce((a, b) => a + b, 0);
+
+      const weekdayProfile = weekdaySum > 0
+        ? weekdayAvg.map((v) => Math.round((v / weekdaySum) * 100 * 100) / 100)
+        : weekdayAvg;
+      const weekendProfile = weekendSum > 0
+        ? weekendAvg.map((v) => Math.round((v / weekendSum) * 100 * 100) / 100)
+        : weekendAvg;
 
       // Update the meter with processed data
       const { error: updateError } = await supabase
         .from("scada_imports")
         .update({
-          load_profile_weekday: data.weekdayProfile,
-          load_profile_weekend: data.weekendProfile,
-          date_range_start: data.dateRange.start,
-          date_range_end: data.dateRange.end,
-          weekday_days: data.weekdayDays,
-          weekend_days: data.weekendDays,
-          data_points: data.dataPoints,
-          raw_data: data.rawData, // Update with parsed raw data
+          load_profile_weekday: weekdayProfile,
+          load_profile_weekend: weekendProfile,
+          date_range_start: minDate,
+          date_range_end: maxDate,
+          weekday_days: weekdayDates.size,
+          weekend_days: weekendDates.size,
+          data_points: rawDataArray.length,
         })
         .eq("id", meter.id);
 
@@ -210,7 +257,7 @@ export function SitesTab() {
 
       queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
       queryClient.invalidateQueries({ queryKey: ["meter-library"] });
-      toast.success(`Processed ${meter.shop_name || meter.site_name}`);
+      toast.success(`Processed ${meter.shop_name || meter.site_name} (${rawDataArray.length} readings)`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to process meter");
     } finally {
