@@ -33,9 +33,10 @@ interface ProcessedData {
 interface ScadaImportProps {
   categories: Category[];
   siteId?: string | null;
+  onImportComplete?: () => void;
 }
 
-export function ScadaImport({ categories, siteId }: ScadaImportProps) {
+export function ScadaImport({ categories, siteId, onImportComplete }: ScadaImportProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -223,8 +224,12 @@ export function ScadaImport({ categories, siteId }: ScadaImportProps) {
       queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });
       queryClient.invalidateQueries({ queryKey: ["sites"] });
       queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+      queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
 
       toast.success("Meter data imported successfully");
+      
+      // Call the callback if provided
+      onImportComplete?.();
 
       // Reset state
       setCsvContent(null);
