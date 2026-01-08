@@ -255,7 +255,7 @@ export function SitesTab() {
 
       if (updateError) throw updateError;
 
-      queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
+      await queryClient.refetchQueries({ queryKey: ["site-meters", selectedSite?.id] });
       queryClient.invalidateQueries({ queryKey: ["meter-library"] });
       toast.success(`Processed ${meter.shop_name || meter.site_name} (${rawDataArray.length} readings)`);
     } catch (err) {
