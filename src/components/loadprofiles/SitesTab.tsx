@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database } from "lucide-react";
 import { toast } from "sonner";
-import { ScadaImport } from "@/components/loadprofiles/ScadaImport";
+import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
 
 interface Site {
   id: string;
@@ -21,12 +21,6 @@ interface Site {
   meter_count?: number;
 }
 
-interface Category {
-  id: string;
-  name: string;
-  description: string | null;
-  sort_order: number;
-}
 
 export function SitesTab() {
   const queryClient = useQueryClient();
@@ -67,17 +61,6 @@ export function SitesTab() {
     },
   });
 
-  const { data: categories } = useQuery({
-    queryKey: ["shop-type-categories"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("shop_type_categories")
-        .select("*")
-        .order("sort_order");
-      if (error) throw error;
-      return data as Category[];
-    },
-  });
 
   const saveSite = useMutation({
     mutationFn: async (data: {
@@ -331,8 +314,7 @@ export function SitesTab() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <ScadaImport 
-              categories={categories || []} 
+            <BulkMeterImport 
               siteId={selectedSiteForImport?.id || null}
               onImportComplete={() => {
                 setImportDialogOpen(false);
