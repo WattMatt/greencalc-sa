@@ -63,7 +63,11 @@ const getQuantityColor = (quantity: string, index: number): string => {
   return fallbackColors[index % fallbackColors.length];
 };
 
-export function MeterAnalysis() {
+interface MeterAnalysisProps {
+  siteId?: string | null;
+}
+
+export function MeterAnalysis({ siteId }: MeterAnalysisProps) {
   const [selectedMeter, setSelectedMeter] = useState<string>("");
   const [selectedQuantities, setSelectedQuantities] = useState<Set<string>>(new Set());
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
@@ -81,12 +85,18 @@ export function MeterAnalysis() {
 
   // Fetch all SCADA imports with raw data
   const { data: imports, isLoading } = useQuery({
-    queryKey: ["scada-imports-raw"],
+    queryKey: ["scada-imports-raw", siteId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("scada_imports")
-        .select("id, site_name, shop_number, shop_name, date_range_start, date_range_end, data_points, raw_data")
+        .select("id, site_name, site_id, shop_number, shop_name, date_range_start, date_range_end, data_points, raw_data")
         .order("created_at", { ascending: false });
+      
+      if (siteId) {
+        query = query.eq("site_id", siteId);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return (data as ScadaImportRow[]).map(row => ({
         ...row,
@@ -95,7 +105,6 @@ export function MeterAnalysis() {
       })) as ScadaImport[];
     },
   });
-
   // Get selected meter data
   const selectedImport = useMemo(() => {
     return imports?.find(imp => imp.id === selectedMeter);

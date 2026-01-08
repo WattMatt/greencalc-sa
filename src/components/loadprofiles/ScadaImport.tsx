@@ -32,9 +32,10 @@ interface ProcessedData {
 
 interface ScadaImportProps {
   categories: Category[];
+  siteId?: string | null;
 }
 
-export function ScadaImport({ categories }: ScadaImportProps) {
+export function ScadaImport({ categories, siteId }: ScadaImportProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -200,6 +201,7 @@ export function ScadaImport({ categories }: ScadaImportProps) {
       const { error } = await supabase.from("scada_imports").insert([
         {
           site_name: siteName,
+          site_id: siteId || null,
           shop_name: shopName || null,
           area_sqm: area ? parseFloat(area) : null,
           file_name: fileName,
@@ -219,6 +221,8 @@ export function ScadaImport({ categories }: ScadaImportProps) {
 
       queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
       queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
 
       toast.success("Meter data imported successfully");
 

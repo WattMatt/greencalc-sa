@@ -32,7 +32,11 @@ const METER_COLORS = [
   "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1"
 ];
 
-export function MeterLibrary() {
+interface MeterLibraryProps {
+  siteId?: string | null;
+}
+
+export function MeterLibrary({ siteId }: MeterLibraryProps) {
   const queryClient = useQueryClient();
   const [editingMeter, setEditingMeter] = useState<ScadaImport | null>(null);
   const [editLabel, setEditLabel] = useState("");
@@ -49,17 +53,22 @@ export function MeterLibrary() {
   const [sortBy, setSortBy] = useState<string>("date-desc");
 
   const { data: meters, isLoading } = useQuery({
-    queryKey: ["meter-library"],
+    queryKey: ["meter-library", siteId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("scada_imports")
-        .select("id, site_name, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at")
+        .select("id, site_name, site_id, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at")
         .order("created_at", { ascending: false });
+      
+      if (siteId) {
+        query = query.eq("site_id", siteId);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data as ScadaImport[];
     },
   });
-
   const updateMeter = useMutation({
     mutationFn: async (params: { id: string; meter_label: string; meter_color: string; shop_number: string | null; shop_name: string | null; area_sqm: number | null; site_name: string }) => {
       const { error } = await supabase

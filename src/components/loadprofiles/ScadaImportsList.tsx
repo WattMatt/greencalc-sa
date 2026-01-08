@@ -87,24 +87,33 @@ interface ScadaImport {
   raw_data?: unknown;
 }
 
-export function ScadaImportsList() {
+interface ScadaImportsListProps {
+  siteId?: string | null;
+}
+
+export function ScadaImportsList({ siteId }: ScadaImportsListProps) {
   const queryClient = useQueryClient();
   const [selectedImport, setSelectedImport] = useState<ScadaImport | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [isRecalculating, setIsRecalculating] = useState(false);
 
   const { data: imports, isLoading } = useQuery({
-    queryKey: ["scada-imports"],
+    queryKey: ["scada-imports", siteId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("scada_imports")
         .select("*, shop_type_categories(name)")
         .order("created_at", { ascending: false });
+      
+      if (siteId) {
+        query = query.eq("site_id", siteId);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return data as ScadaImport[];
     },
   });
-
   // Check if any imports have raw data for recalculation
   const importsWithRawData = imports?.filter(imp => 
     imp.raw_data && Array.isArray(imp.raw_data) && imp.raw_data.length > 0
