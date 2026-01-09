@@ -1,13 +1,14 @@
-import { useState, useRef, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useRef, useCallback, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Upload, Loader2, FileUp, Trash2, Save, X, FileText
+  Upload, Loader2, FileUp, Save, X, FileText, Link2, AlertCircle, CheckCircle2
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,11 +17,72 @@ interface PendingFile {
   fileName: string;
   content: string;
   rowCount: number;
+  matchedMeterId?: string; // ID of matched existing meter placeholder
+  matchType?: "auto" | "manual" | "new"; // How the match was determined
+}
+
+interface ExistingMeter {
+  id: string;
+  shop_name: string | null;
+  area_sqm: number | null;
+  file_name: string | null;
 }
 
 interface BulkMeterImportProps {
   siteId: string | null;
   onImportComplete?: () => void;
+}
+
+// Normalize string for matching
+function normalizeForMatch(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/\.[^/.]+$/, "") // Remove file extension
+    .replace(/[_\-\.]/g, " ") // Replace separators with space
+    .replace(/\s+/g, " ") // Collapse multiple spaces
+    .trim();
+}
+
+// Find best match for a filename among existing meters
+function findBestMatch(fileName: string, meters: ExistingMeter[]): { meter: ExistingMeter; score: number } | null {
+  const normalizedFileName = normalizeForMatch(fileName);
+  
+  let bestMatch: { meter: ExistingMeter; score: number } | null = null;
+  
+  for (const meter of meters) {
+    if (!meter.shop_name || meter.file_name) continue; // Skip if no shop name or already has file
+    
+    const normalizedShopName = normalizeForMatch(meter.shop_name);
+    
+    // Exact match after normalization
+    if (normalizedFileName === normalizedShopName) {
+      return { meter, score: 100 };
+    }
+    
+    // Check if one contains the other
+    if (normalizedFileName.includes(normalizedShopName) || normalizedShopName.includes(normalizedFileName)) {
+      const score = Math.min(normalizedFileName.length, normalizedShopName.length) / 
+                   Math.max(normalizedFileName.length, normalizedShopName.length) * 80;
+      if (!bestMatch || score > bestMatch.score) {
+        bestMatch = { meter, score };
+      }
+    }
+    
+    // Check word overlap
+    const fileWords = normalizedFileName.split(" ").filter(w => w.length > 2);
+    const shopWords = normalizedShopName.split(" ").filter(w => w.length > 2);
+    const commonWords = fileWords.filter(w => shopWords.includes(w));
+    
+    if (commonWords.length > 0) {
+      const score = (commonWords.length / Math.max(fileWords.length, shopWords.length)) * 60;
+      if (!bestMatch || score > bestMatch.score) {
+        bestMatch = { meter, score };
+      }
+    }
+  }
+  
+  // Only return if score is above threshold
+  return bestMatch && bestMatch.score >= 40 ? bestMatch : null;
 }
 
 export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportProps) {
@@ -47,6 +109,40 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
     enabled: !!siteId,
   });
 
+  // Fetch existing meter placeholders for this site (meters without processed data)
+  const { data: existingMeters = [] } = useQuery({
+    queryKey: ["site-meter-placeholders", siteId],
+    queryFn: async () => {
+      if (!siteId) return [];
+      const { data, error } = await supabase
+        .from("scada_imports")
+        .select("id, shop_name, area_sqm, file_name")
+        .eq("site_id", siteId)
+        .order("shop_name");
+      if (error) throw error;
+      return data as ExistingMeter[];
+    },
+    enabled: !!siteId,
+  });
+
+  // Get unassigned meters (placeholders without file data)
+  const unassignedMeters = useMemo(() => 
+    existingMeters.filter(m => !m.file_name),
+    [existingMeters]
+  );
+
+  // Get meters that are already used for matching
+  const usedMeterIds = useMemo(() => 
+    new Set(pendingFiles.filter(f => f.matchedMeterId).map(f => f.matchedMeterId!)),
+    [pendingFiles]
+  );
+
+  // Available meters for manual selection (not already matched)
+  const availableMeters = useMemo(() =>
+    unassignedMeters.filter(m => !usedMeterIds.has(m.id)),
+    [unassignedMeters, usedMeterIds]
+  );
+
   const handleFilesUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
@@ -57,11 +153,16 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
         const content = event.target?.result as string;
         const rowCount = content.split('\n').filter(l => l.trim()).length;
 
+        // Try to auto-match with existing meter placeholder
+        const match = findBestMatch(file.name, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
+
         const newFile: PendingFile = {
           id: crypto.randomUUID(),
           fileName: file.name,
           content,
           rowCount,
+          matchedMeterId: match?.meter.id,
+          matchType: match ? "auto" : "new",
         };
 
         setPendingFiles((prev) => [...prev, newFile]);
@@ -70,7 +171,7 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
     });
 
     e.target.value = "";
-  }, []);
+  }, [unassignedMeters, usedMeterIds]);
 
   const removeFile = (id: string) => {
     setPendingFiles((prev) => prev.filter((f) => f.id !== id));
@@ -79,6 +180,16 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
       next.delete(id);
       return next;
     });
+  };
+
+  const updateFileMatch = (fileId: string, meterId: string | null) => {
+    setPendingFiles((prev) =>
+      prev.map((f) =>
+        f.id === fileId
+          ? { ...f, matchedMeterId: meterId || undefined, matchType: meterId ? "manual" : "new" }
+          : f
+      )
+    );
   };
 
   const toggleSelect = (id: string) => {
@@ -112,25 +223,47 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
     setIsSaving(true);
 
     try {
-      // Save each file as a raw scada_import (unprocessed)
-      const inserts = filesToSave.map(file => {
-        const meterName = file.fileName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
-        return {
-          site_name: meterName,
-          site_id: siteId || null,
-          shop_name: meterName,
-          file_name: file.fileName,
-          raw_data: [{ csvContent: file.content }], // Store raw CSV for later processing
-          data_points: file.rowCount,
-          load_profile_weekday: Array(24).fill(0),
-          load_profile_weekend: Array(24).fill(0),
-          weekday_days: 0,
-          weekend_days: 0,
-        };
-      });
+      let updatedCount = 0;
+      let createdCount = 0;
 
-      const { error } = await supabase.from("scada_imports").insert(inserts);
-      if (error) throw error;
+      for (const file of filesToSave) {
+        if (file.matchedMeterId) {
+          // Update existing meter placeholder with CSV data
+          const { error } = await supabase
+            .from("scada_imports")
+            .update({
+              file_name: file.fileName,
+              raw_data: [{ csvContent: file.content }],
+              data_points: file.rowCount,
+              load_profile_weekday: Array(24).fill(0),
+              load_profile_weekend: Array(24).fill(0),
+              weekday_days: 0,
+              weekend_days: 0,
+            })
+            .eq("id", file.matchedMeterId);
+
+          if (error) throw error;
+          updatedCount++;
+        } else {
+          // Create new meter record
+          const meterName = file.fileName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+          const { error } = await supabase.from("scada_imports").insert({
+            site_name: site?.name || meterName,
+            site_id: siteId || null,
+            shop_name: meterName,
+            file_name: file.fileName,
+            raw_data: [{ csvContent: file.content }],
+            data_points: file.rowCount,
+            load_profile_weekday: Array(24).fill(0),
+            load_profile_weekend: Array(24).fill(0),
+            weekday_days: 0,
+            weekend_days: 0,
+          });
+
+          if (error) throw error;
+          createdCount++;
+        }
+      }
 
       // Remove saved files from pending list
       setPendingFiles((prev) => prev.filter(f => !selectedIds.has(f.id)));
@@ -139,10 +272,15 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
       queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["site-meter-placeholders"] });
       queryClient.invalidateQueries({ queryKey: ["meter-library"] });
       queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
 
-      toast.success(`Saved ${filesToSave.length} file${filesToSave.length !== 1 ? "s" : ""}`);
+      const messages = [];
+      if (updatedCount > 0) messages.push(`${updatedCount} assigned to existing shops`);
+      if (createdCount > 0) messages.push(`${createdCount} created as new`);
+      toast.success(messages.join(", "));
+      
       onImportComplete?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save files");
@@ -151,7 +289,13 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
     }
   };
 
+  const getMatchedMeterName = (meterId: string) => {
+    const meter = existingMeters.find(m => m.id === meterId);
+    return meter?.shop_name || "Unknown";
+  };
+
   const selectedCount = selectedIds.size;
+  const matchedCount = pendingFiles.filter(f => f.matchedMeterId).length;
 
   return (
     <div className="space-y-6">
@@ -162,8 +306,11 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
             Bulk Upload Meters
           </CardTitle>
           <CardDescription>
-            Upload multiple CSV files. Files are saved raw and can be processed afterward.
+            Upload CSV files to assign to existing shop placeholders or create new meters.
             {site && <span className="font-medium"> Importing to: {site.name}</span>}
+            {unassignedMeters.length > 0 && (
+              <span className="ml-2 text-primary">({unassignedMeters.length} unassigned shops available)</span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -197,6 +344,12 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                   <span className="text-sm text-muted-foreground">
                     {pendingFiles.length} file{pendingFiles.length !== 1 ? "s" : ""} ready
                   </span>
+                  {matchedCount > 0 && (
+                    <Badge variant="default" className="gap-1">
+                      <Link2 className="h-3 w-3" />
+                      {matchedCount} matched
+                    </Badge>
+                  )}
                   {selectedCount > 0 && (
                     <Badge variant="secondary">{selectedCount} selected</Badge>
                   )}
@@ -231,6 +384,7 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                     </TableHead>
                     <TableHead>File Name</TableHead>
                     <TableHead>Rows</TableHead>
+                    <TableHead>Assign to Shop</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -252,6 +406,59 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{file.rowCount.toLocaleString()}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {unassignedMeters.length > 0 ? (
+                          <div className="flex items-center gap-2">
+                            <Select
+                              value={file.matchedMeterId || "new"}
+                              onValueChange={(value) => updateFileMatch(file.id, value === "new" ? null : value)}
+                            >
+                              <SelectTrigger className="w-[250px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="new">
+                                  <span className="flex items-center gap-2">
+                                    <AlertCircle className="h-3 w-3 text-muted-foreground" />
+                                    Create new meter
+                                  </span>
+                                </SelectItem>
+                                {file.matchedMeterId && (
+                                  <SelectItem value={file.matchedMeterId}>
+                                    <span className="flex items-center gap-2">
+                                      <CheckCircle2 className="h-3 w-3 text-green-500" />
+                                      {getMatchedMeterName(file.matchedMeterId)}
+                                      {file.matchType === "auto" && <Badge variant="secondary" className="ml-1 text-xs">auto</Badge>}
+                                    </span>
+                                  </SelectItem>
+                                )}
+                                {availableMeters
+                                  .filter(m => m.id !== file.matchedMeterId)
+                                  .map((meter) => (
+                                    <SelectItem key={meter.id} value={meter.id}>
+                                      <span className="flex items-center gap-2">
+                                        {meter.shop_name}
+                                        {meter.area_sqm && (
+                                          <span className="text-muted-foreground text-xs">
+                                            ({meter.area_sqm}m²)
+                                          </span>
+                                        )}
+                                      </span>
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                            {file.matchType === "auto" && (
+                              <Badge variant="outline" className="text-green-600 border-green-200">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Auto
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">Will create new meter</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Button
