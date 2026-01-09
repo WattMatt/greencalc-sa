@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Play, Loader2, CheckCircle2 } from "lucide-react";
+import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Play, Loader2, CheckCircle2, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
+import { SheetImport } from "@/components/loadprofiles/SheetImport";
 
 interface Site {
   id: string;
@@ -40,6 +41,7 @@ export function SitesTab() {
   const queryClient = useQueryClient();
   const [siteDialogOpen, setSiteDialogOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [sheetImportOpen, setSheetImportOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [processingMeterId, setProcessingMeterId] = useState<string | null>(null);
@@ -581,62 +583,92 @@ export function SitesTab() {
             Manage sites and upload meter data for each location
           </p>
         </div>
-        <Dialog
-          open={siteDialogOpen}
-          onOpenChange={(open) => {
-            setSiteDialogOpen(open);
-            if (!open) resetForm();
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Site
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{editingSite ? "Edit" : "Add"} Site</DialogTitle>
-              <DialogDescription>
-                {editingSite ? "Update site details" : "Create a new site to organize meter data"}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Site Name *</Label>
-                <Input
-                  placeholder="e.g., Clearwater Mall, Sandton City"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Location</Label>
-                <Input
-                  placeholder="e.g., Johannesburg, South Africa"
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Site Type</Label>
-                <Input
-                  placeholder="e.g., Shopping Centre, Office Park, Industrial"
-                  value={formData.site_type}
-                  onChange={(e) => setFormData({ ...formData, site_type: e.target.value })}
-                />
-              </div>
-              <Button
-                className="w-full"
-                onClick={handleSubmit}
-                disabled={!formData.name || saveSite.isPending}
-              >
-                {editingSite ? "Update" : "Create"} Site
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setSheetImportOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Import Sheet
+          </Button>
+          <Dialog
+            open={siteDialogOpen}
+            onOpenChange={(open) => {
+              setSiteDialogOpen(open);
+              if (!open) resetForm();
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Site
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingSite ? "Edit" : "Add"} Site</DialogTitle>
+                <DialogDescription>
+                  {editingSite ? "Update site details" : "Create a new site to organize meter data"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Site Name *</Label>
+                  <Input
+                    placeholder="e.g., Clearwater Mall, Sandton City"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Location</Label>
+                  <Input
+                    placeholder="e.g., Johannesburg, South Africa"
+                    value={formData.location}
+                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Site Type</Label>
+                  <Input
+                    placeholder="e.g., Shopping Centre, Office Park, Industrial"
+                    value={formData.site_type}
+                    onChange={(e) => setFormData({ ...formData, site_type: e.target.value })}
+                  />
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={handleSubmit}
+                  disabled={!formData.name || saveSite.isPending}
+                >
+                  {editingSite ? "Update" : "Create"} Site
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      {/* Sheet Import Dialog */}
+      <Dialog open={sheetImportOpen} onOpenChange={setSheetImportOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5" />
+              Import Sites & Shops from Excel
+            </DialogTitle>
+            <DialogDescription>
+              Upload an Excel file to create sites and meter placeholders
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <SheetImport
+              onImportComplete={() => {
+                setSheetImportOpen(false);
+                queryClient.invalidateQueries({ queryKey: ["sites"] });
+                queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
+              }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Sites Grid */}
       {isLoading ? (
