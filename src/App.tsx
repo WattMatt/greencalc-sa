@@ -27,7 +27,7 @@ const Auth = lazy(() => import("./pages/Auth"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
 const Install = lazy(() => import("./pages/Install"));
-const TestLanding = lazy(() => import("./pages/TestLanding"));
+
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Loading fallback component
@@ -83,7 +83,7 @@ function AppRoutes() {
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/profile" element={<ProfileSettings />} />
                     <Route path="/install" element={<Install />} />
-                    <Route path="/test-landing" element={<TestLanding />} />
+                    
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>
