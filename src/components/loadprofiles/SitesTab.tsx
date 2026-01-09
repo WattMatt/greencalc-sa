@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Play, Loader2, CheckCircle2 } from "lucide-react";
@@ -42,6 +43,7 @@ export function SitesTab() {
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [processingMeterId, setProcessingMeterId] = useState<string | null>(null);
+  const [selectedMeterIds, setSelectedMeterIds] = useState<Set<string>>(new Set());
   const [formData, setFormData] = useState({
     name: "",
     site_type: "",
@@ -149,6 +151,49 @@ export function SitesTab() {
     },
     onError: (error) => toast.error(error.message),
   });
+
+  const bulkDeleteMeters = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from("scada_imports").delete().in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: (_, ids) => {
+      queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
+      setSelectedMeterIds(new Set());
+      toast.success(`Deleted ${ids.length} meter(s)`);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const toggleMeterSelection = (id: string) => {
+    setSelectedMeterIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllMeters = () => {
+    if (!siteMeters) return;
+    if (selectedMeterIds.size === siteMeters.length) {
+      setSelectedMeterIds(new Set());
+    } else {
+      setSelectedMeterIds(new Set(siteMeters.map(m => m.id)));
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedMeterIds.size === 0) return;
+    if (confirm(`Delete ${selectedMeterIds.size} selected meter(s)?`)) {
+      bulkDeleteMeters.mutate(Array.from(selectedMeterIds));
+    }
+  };
 
   const processMeter = async (meter: Meter) => {
     setProcessingMeterId(meter.id);
@@ -356,22 +401,35 @@ export function SitesTab() {
                   )}
                 </CardDescription>
               </div>
-              {unprocessedCount > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    const unprocessed = siteMeters?.filter(m => !isProcessed(m)) || [];
-                    for (const meter of unprocessed) {
-                      await processMeter(meter);
-                    }
-                  }}
-                  disabled={!!processingMeterId}
-                >
-                  <Play className="h-4 w-4 mr-2" />
-                  Process All ({unprocessedCount})
-                </Button>
-              )}
+              <div className="flex gap-2">
+                {selectedMeterIds.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleteMeters.isPending}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Selected ({selectedMeterIds.size})
+                  </Button>
+                )}
+                {unprocessedCount > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const unprocessed = siteMeters?.filter(m => !isProcessed(m)) || [];
+                      for (const meter of unprocessed) {
+                        await processMeter(meter);
+                      }
+                    }}
+                    disabled={!!processingMeterId}
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Process All ({unprocessedCount})
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -390,6 +448,12 @@ export function SitesTab() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={siteMeters.length > 0 && selectedMeterIds.size === siteMeters.length}
+                        onCheckedChange={toggleAllMeters}
+                      />
+                    </TableHead>
                     <TableHead>Meter Name</TableHead>
                     <TableHead>File</TableHead>
                     <TableHead>Status</TableHead>
@@ -404,7 +468,13 @@ export function SitesTab() {
                     const isProcessing = processingMeterId === meter.id;
 
                     return (
-                      <TableRow key={meter.id}>
+                      <TableRow key={meter.id} className={selectedMeterIds.has(meter.id) ? "bg-muted/50" : ""}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedMeterIds.has(meter.id)}
+                            onCheckedChange={() => toggleMeterSelection(meter.id)}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">
                           {meter.shop_name || meter.site_name}
                         </TableCell>
