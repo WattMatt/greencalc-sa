@@ -18,6 +18,7 @@ const Calculator = lazy(() => import("./pages/Calculator"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Projects = lazy(() => import("./pages/Projects"));
 const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
+const ProjectDashboard = lazy(() => import("./pages/ProjectDashboard"));
 
 const QuickEstimate = lazy(() => import("./pages/QuickEstimate"));
 const SandboxWorkspace = lazy(() => import("./pages/SandboxWorkspace"));
@@ -76,6 +77,7 @@ function AppRoutes() {
                     <Route path="/load-profiles" element={<LoadProfiles />} />
                     <Route path="/projects" element={<Projects />} />
                     <Route path="/projects/:id" element={<ProjectDetail />} />
+                    <Route path="/projects/:id/dashboard" element={<ProjectDashboard />} />
                     <Route path="/projects/:id/quick-estimate" element={<QuickEstimate />} />
                     <Route path="/projects/:projectId/sandbox/:id" element={<SandboxWorkspace />} />
                     <Route path="/projects/:projectId/proposal" element={<ProposalWorkspace />} />

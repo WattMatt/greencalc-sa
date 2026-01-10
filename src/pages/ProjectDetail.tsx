@@ -372,6 +372,17 @@ export default function ProjectDetail() {
         </Card>
       </div>
 
+      <div className="flex items-center gap-3 mb-4">
+        <Button 
+          variant="outline" 
+          onClick={() => navigate(`/projects/${id}/dashboard`)}
+          className="gap-2"
+        >
+          <LayoutDashboard className="h-4 w-4" />
+          Project Dashboard
+        </Button>
+      </div>
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TooltipProvider delayDuration={300}>
           <TabsList className="flex-wrap h-auto gap-1">
