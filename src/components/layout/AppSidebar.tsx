@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Settings, Calculator, Database, Zap, Building2, Activity, LogOut, Sun, Moon } from "lucide-react";
+import { useLocation, useParams } from "react-router-dom";
+import { LayoutDashboard, Settings, Calculator, Database, Zap, Building2, Activity, LogOut, Sun, Moon, LayoutGrid } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,11 @@ export function AppSidebar() {
   const { theme, setTheme } = useTheme();
   const [profile, setProfile] = useState<Profile | null>(null);
   const isCollapsed = state === "collapsed";
+  const location = useLocation();
+  
+  // Extract project ID from current path if on a project page
+  const projectIdMatch = location.pathname.match(/\/projects\/([a-f0-9-]+)/);
+  const currentProjectId = projectIdMatch ? projectIdMatch[1] : null;
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -163,6 +169,20 @@ export function AppSidebar() {
           <SidebarGroupLabel>Modeling</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              {currentProjectId && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Project Dashboard">
+                    <NavLink
+                      to={`/projects/${currentProjectId}/dashboard`}
+                      className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent"
+                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                    >
+                      <LayoutGrid className="h-5 w-5 shrink-0" />
+                      {!isCollapsed && <span>Project Dashboard</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
               {projectItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
