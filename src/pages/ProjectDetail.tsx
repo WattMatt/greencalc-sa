@@ -430,11 +430,16 @@ export default function ProjectDetail() {
         </TooltipProvider>
 
         <TabsContent value="overview" className="mt-6">
-          <ProjectOverview
-            project={project}
-            tenants={tenants || []}
-            onNavigateTab={setActiveTab}
-          />
+          <div className="flex flex-col items-center justify-center py-12 space-y-4">
+            <LayoutDashboard className="h-12 w-12 text-muted-foreground" />
+            <h3 className="text-lg font-medium">Project Dashboard</h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              Access the full project dashboard with workflow tracking, KPIs, and project parameters.
+            </p>
+            <Button onClick={() => navigate(`/projects/${id}/dashboard`)}>
+              Open Project Dashboard
+            </Button>
+          </div>
         </TabsContent>
 
         <TabsContent value="tenants" className="mt-6">
