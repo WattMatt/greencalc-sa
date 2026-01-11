@@ -9,10 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Play, Loader2, CheckCircle2, FileSpreadsheet } from "lucide-react";
+import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Play, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
 import { SheetImport } from "@/components/loadprofiles/SheetImport";
+import { MeterReimportDialog } from "@/components/loadprofiles/MeterReimportDialog";
 
 interface Site {
   id: string;
@@ -46,6 +47,7 @@ export function SitesTab() {
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [processingMeterId, setProcessingMeterId] = useState<string | null>(null);
   const [selectedMeterIds, setSelectedMeterIds] = useState<Set<string>>(new Set());
+  const [reimportMeter, setReimportMeter] = useState<Meter | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     site_type: "",
@@ -507,19 +509,29 @@ export function SitesTab() {
                         <TableCell>
                           <div className="flex gap-1">
                             {!processed && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => processMeter(meter)}
-                                disabled={isProcessing}
-                                title="Process meter"
-                              >
-                                {isProcessing ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Play className="h-4 w-4 text-primary" />
-                                )}
-                              </Button>
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => processMeter(meter)}
+                                  disabled={isProcessing}
+                                  title="Process meter"
+                                >
+                                  {isProcessing ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Play className="h-4 w-4 text-primary" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setReimportMeter(meter)}
+                                  title="Re-import CSV with correct columns"
+                                >
+                                  <RefreshCw className="h-4 w-4 text-orange-500" />
+                                </Button>
+                              </>
                             )}
                             <Button
                               variant="ghost"
@@ -569,6 +581,16 @@ export function SitesTab() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Re-import Dialog */}
+        <MeterReimportDialog
+          isOpen={!!reimportMeter}
+          onClose={() => setReimportMeter(null)}
+          meterId={reimportMeter?.id || ""}
+          meterName={reimportMeter?.shop_name || reimportMeter?.site_name || ""}
+          originalFileName={reimportMeter?.file_name || null}
+          siteId={selectedSite?.id}
+        />
       </div>
     );
   }
