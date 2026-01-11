@@ -188,21 +188,55 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
           sitesCreated++;
         }
 
-        // Create meter entries for each shop
+        // Create or update meter entries for each shop
         for (const shop of selectedShops) {
-          const { error: meterError } = await supabase.from("scada_imports").insert({
-            site_id: siteId,
-            site_name: siteGroup.siteName,
-            shop_name: shop.shopName,
-            shop_number: shop.breaker,
-            area_sqm: shop.areaSqm,
-            file_name: shop.fileName || null,
+          // Check if meter already exists for this site with similar shop name
+          const { data: existingMeters } = await supabase
+            .from("scada_imports")
+            .select("id, shop_name")
+            .eq("site_id", siteId);
+          
+          // Try to find an existing meter with matching shop name
+          const normalizedShopName = shop.shopName.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const existingMeter = existingMeters?.find(m => {
+            const existingNormalized = (m.shop_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return existingNormalized === normalizedShopName || 
+                   existingNormalized.includes(normalizedShopName) || 
+                   normalizedShopName.includes(existingNormalized);
           });
 
-          if (meterError) {
-            console.error("Error creating meter:", meterError);
+          if (existingMeter) {
+            // Update existing meter with new info (area, breaker, etc.)
+            const { error: updateError } = await supabase
+              .from("scada_imports")
+              .update({
+                shop_number: shop.breaker || undefined,
+                area_sqm: shop.areaSqm || undefined,
+                file_name: shop.fileName || undefined,
+              })
+              .eq("id", existingMeter.id);
+
+            if (updateError) {
+              console.error("Error updating meter:", updateError);
+            } else {
+              metersCreated++; // Count as processed
+            }
           } else {
-            metersCreated++;
+            // Create new meter entry
+            const { error: meterError } = await supabase.from("scada_imports").insert({
+              site_id: siteId,
+              site_name: siteGroup.siteName,
+              shop_name: shop.shopName,
+              shop_number: shop.breaker,
+              area_sqm: shop.areaSqm,
+              file_name: shop.fileName || null,
+            });
+
+            if (meterError) {
+              console.error("Error creating meter:", meterError);
+            } else {
+              metersCreated++;
+            }
           }
 
           imported++;
