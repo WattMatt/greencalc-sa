@@ -201,58 +201,90 @@ export function SitesTab() {
 
   // Helper function to parse CSV content into data points
   const parseCsvContent = (csvContent: string): Array<{ date: string; time: string; value: number }> => {
-    const lines = csvContent.split('\n').filter(l => l.trim());
+    // Split by newlines and filter empty lines, also handle \r\n
+    let lines = csvContent.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return [];
     
-    // Detect separator
-    const firstLine = lines[0];
+    // Skip Excel separator directive lines like "sep=,"
+    let headerIndex = 0;
+    while (headerIndex < lines.length && (
+      lines[headerIndex].toLowerCase().startsWith('sep=') || 
+      !lines[headerIndex].includes(',') && !lines[headerIndex].includes('\t') && !lines[headerIndex].includes(';')
+    )) {
+      headerIndex++;
+    }
+    
+    if (headerIndex >= lines.length) return [];
+    
+    // Detect separator from header line
+    const headerLine = lines[headerIndex];
     let separator = ',';
-    if (firstLine.includes('\t')) separator = '\t';
-    else if (firstLine.includes(';')) separator = ';';
+    if (headerLine.includes('\t')) separator = '\t';
+    else if (headerLine.includes(';') && !headerLine.includes(',')) separator = ';';
     
     // Parse header to find columns
-    const headers = firstLine.split(separator).map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    const headers = headerLine.split(separator).map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    console.log("CSV Headers detected:", headers, "separator:", JSON.stringify(separator));
     
     // Find date, time, and value columns by name patterns
     let dateCol = -1, timeCol = -1, valueCol = -1;
     
     headers.forEach((h, i) => {
-      if (dateCol === -1 && (h.includes('date') || h.includes('datum'))) dateCol = i;
-      if (timeCol === -1 && (h.includes('time') || h.includes('tyd') || h === 'hour')) timeCol = i;
+      if (dateCol === -1 && (h.includes('date') || h.includes('datum') || h.includes('datetime'))) dateCol = i;
+      if (timeCol === -1 && (h.includes('time') && !h.includes('datetime') || h.includes('tyd') || h === 'hour')) timeCol = i;
       if (valueCol === -1 && (h.includes('kwh') || h.includes('kw') || h.includes('value') || h.includes('energy') || h.includes('consumption') || h.includes('reading'))) valueCol = i;
     });
     
-    // If value column not found by name, find first numeric column (after date/time)
+    // If value column not found by name, find first numeric column (not the date column)
     if (valueCol === -1) {
-      const sampleRow = lines[1]?.split(separator) || [];
-      for (let i = 0; i < sampleRow.length; i++) {
-        if (i === dateCol || i === timeCol) continue;
-        const val = sampleRow[i]?.trim().replace(/['"]/g, '');
-        if (val && !isNaN(parseFloat(val))) {
-          valueCol = i;
-          break;
+      const dataLines = lines.slice(headerIndex + 1);
+      for (let lineIdx = 0; lineIdx < Math.min(5, dataLines.length); lineIdx++) {
+        const sampleRow = dataLines[lineIdx]?.split(separator) || [];
+        for (let i = 0; i < sampleRow.length; i++) {
+          if (i === dateCol || i === timeCol) continue;
+          const val = sampleRow[i]?.trim().replace(/['"]/g, '');
+          // Check if it looks like a number and has non-zero values
+          if (val && !isNaN(parseFloat(val)) && parseFloat(val) !== 0) {
+            valueCol = i;
+            break;
+          }
         }
+        if (valueCol !== -1) break;
+      }
+      // If still not found, just take the next column after date
+      if (valueCol === -1 && headers.length > 1) {
+        valueCol = dateCol === 0 ? 1 : 0;
       }
     }
     
     // If date not found, try first column
     if (dateCol === -1) dateCol = 0;
     
+    console.log("Column mapping: date=", dateCol, "time=", timeCol, "value=", valueCol);
+    
     const dataPoints: Array<{ date: string; time: string; value: number }> = [];
     
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(separator).map(c => c.trim().replace(/['"]/g, ''));
+    for (let i = headerIndex + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const cols = line.split(separator).map(c => c.trim().replace(/['"]/g, ''));
       
       let dateStr = cols[dateCol] || '';
       let timeStr = timeCol >= 0 ? (cols[timeCol] || '') : '';
       const valueStr = valueCol >= 0 ? (cols[valueCol] || '0') : '0';
       
-      // Handle combined datetime
+      // Handle combined datetime in date column (e.g., "31/12/2024 23:30:00")
       if (!timeStr && dateStr.includes(' ')) {
-        const parts = dateStr.split(' ');
-        dateStr = parts[0];
-        timeStr = parts.slice(1).join(' ');
+        const spaceIdx = dateStr.indexOf(' ');
+        const potentialTime = dateStr.substring(spaceIdx + 1);
+        // Check if it looks like a time (contains :)
+        if (potentialTime.includes(':')) {
+          timeStr = potentialTime;
+          dateStr = dateStr.substring(0, spaceIdx);
+        }
       }
+      // Handle ISO format with T separator
       if (!timeStr && dateStr.includes('T')) {
         const parts = dateStr.split('T');
         dateStr = parts[0];
@@ -263,29 +295,18 @@ export function SitesTab() {
       const value = parseFloat(valueStr.replace(/,/g, ''));
       if (isNaN(value)) continue;
       
-      // Normalize date format (try common formats)
+      // Normalize date format (DD/MM/YYYY to YYYY-MM-DD)
       let normalizedDate = dateStr;
-      const dateFormats = [
-        // DD/MM/YYYY or DD-MM-YYYY
-        /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/,
-        // YYYY/MM/DD or YYYY-MM-DD
-        /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/,
-        // MM/DD/YYYY
-        /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/,
-      ];
       
-      for (const fmt of dateFormats) {
-        const match = dateStr.match(fmt);
-        if (match) {
-          if (match[1].length === 4) {
-            // YYYY-MM-DD format
-            normalizedDate = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
-          } else if (match[3].length === 4) {
-            // Assume DD/MM/YYYY for non-US data
-            normalizedDate = `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
-          }
-          break;
-        }
+      // Match DD/MM/YYYY or DD-MM-YYYY
+      const ddmmyyyy = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (ddmmyyyy) {
+        normalizedDate = `${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`;
+      }
+      // Match YYYY/MM/DD or YYYY-MM-DD
+      const yyyymmdd = dateStr.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+      if (yyyymmdd) {
+        normalizedDate = `${yyyymmdd[1]}-${yyyymmdd[2].padStart(2, '0')}-${yyyymmdd[3].padStart(2, '0')}`;
       }
       
       // Normalize time format (extract HH:MM:SS)
@@ -301,6 +322,7 @@ export function SitesTab() {
       dataPoints.push({ date: normalizedDate, time: normalizedTime, value });
     }
     
+    console.log(`Parsed ${dataPoints.length} data points. First:`, dataPoints[0], "Last:", dataPoints[dataPoints.length - 1]);
     return dataPoints;
   };
 
