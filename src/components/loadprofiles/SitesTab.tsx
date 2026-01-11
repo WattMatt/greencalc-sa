@@ -199,13 +199,118 @@ export function SitesTab() {
     }
   };
 
+  // Helper function to parse CSV content into data points
+  const parseCsvContent = (csvContent: string): Array<{ date: string; time: string; value: number }> => {
+    const lines = csvContent.split('\n').filter(l => l.trim());
+    if (lines.length < 2) return [];
+    
+    // Detect separator
+    const firstLine = lines[0];
+    let separator = ',';
+    if (firstLine.includes('\t')) separator = '\t';
+    else if (firstLine.includes(';')) separator = ';';
+    
+    // Parse header to find columns
+    const headers = firstLine.split(separator).map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+    
+    // Find date, time, and value columns by name patterns
+    let dateCol = -1, timeCol = -1, valueCol = -1;
+    
+    headers.forEach((h, i) => {
+      if (dateCol === -1 && (h.includes('date') || h.includes('datum'))) dateCol = i;
+      if (timeCol === -1 && (h.includes('time') || h.includes('tyd') || h === 'hour')) timeCol = i;
+      if (valueCol === -1 && (h.includes('kwh') || h.includes('kw') || h.includes('value') || h.includes('energy') || h.includes('consumption') || h.includes('reading'))) valueCol = i;
+    });
+    
+    // If value column not found by name, find first numeric column (after date/time)
+    if (valueCol === -1) {
+      const sampleRow = lines[1]?.split(separator) || [];
+      for (let i = 0; i < sampleRow.length; i++) {
+        if (i === dateCol || i === timeCol) continue;
+        const val = sampleRow[i]?.trim().replace(/['"]/g, '');
+        if (val && !isNaN(parseFloat(val))) {
+          valueCol = i;
+          break;
+        }
+      }
+    }
+    
+    // If date not found, try first column
+    if (dateCol === -1) dateCol = 0;
+    
+    const dataPoints: Array<{ date: string; time: string; value: number }> = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(separator).map(c => c.trim().replace(/['"]/g, ''));
+      
+      let dateStr = cols[dateCol] || '';
+      let timeStr = timeCol >= 0 ? (cols[timeCol] || '') : '';
+      const valueStr = valueCol >= 0 ? (cols[valueCol] || '0') : '0';
+      
+      // Handle combined datetime
+      if (!timeStr && dateStr.includes(' ')) {
+        const parts = dateStr.split(' ');
+        dateStr = parts[0];
+        timeStr = parts.slice(1).join(' ');
+      }
+      if (!timeStr && dateStr.includes('T')) {
+        const parts = dateStr.split('T');
+        dateStr = parts[0];
+        timeStr = parts[1]?.split(/[Z+]/)[0] || '';
+      }
+      
+      // Parse value
+      const value = parseFloat(valueStr.replace(/,/g, ''));
+      if (isNaN(value)) continue;
+      
+      // Normalize date format (try common formats)
+      let normalizedDate = dateStr;
+      const dateFormats = [
+        // DD/MM/YYYY or DD-MM-YYYY
+        /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/,
+        // YYYY/MM/DD or YYYY-MM-DD
+        /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/,
+        // MM/DD/YYYY
+        /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/,
+      ];
+      
+      for (const fmt of dateFormats) {
+        const match = dateStr.match(fmt);
+        if (match) {
+          if (match[1].length === 4) {
+            // YYYY-MM-DD format
+            normalizedDate = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+          } else if (match[3].length === 4) {
+            // Assume DD/MM/YYYY for non-US data
+            normalizedDate = `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+          }
+          break;
+        }
+      }
+      
+      // Normalize time format (extract HH:MM:SS)
+      let normalizedTime = '00:00:00';
+      const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (timeMatch) {
+        const h = timeMatch[1].padStart(2, '0');
+        const m = timeMatch[2].padStart(2, '0');
+        const s = (timeMatch[3] || '00').padStart(2, '0');
+        normalizedTime = `${h}:${m}:${s}`;
+      }
+      
+      dataPoints.push({ date: normalizedDate, time: normalizedTime, value });
+    }
+    
+    return dataPoints;
+  };
+
   const processMeter = async (meter: Meter) => {
     setProcessingMeterId(meter.id);
 
     try {
       console.log("Processing meter:", meter.id, meter.shop_name);
       
-      // Fetch fresh raw_data directly from the database since it might not be included in the list query
+      // Fetch fresh raw_data directly from the database
       const { data: meterData, error: fetchError } = await supabase
         .from("scada_imports")
         .select("raw_data")
@@ -226,16 +331,27 @@ export function SitesTab() {
         return;
       }
 
-      // raw_data is already an array of parsed data points: {date, time, value, timestamp, originalLine}
-      const rawDataArray = meterData.raw_data as Array<{
-        date?: string;
-        time?: string;
-        timestamp?: string;
-        value?: number;
-      }>;
+      // Handle both formats: {csvContent: string} OR pre-parsed data points
+      let rawDataArray: Array<{ date?: string; time?: string; timestamp?: string; value?: number }>;
+      
+      const rawData = meterData.raw_data as unknown;
+      if (Array.isArray(rawData) && rawData.length === 1 && typeof rawData[0] === 'object' && 'csvContent' in (rawData[0] as object)) {
+        // CSV content stored - need to parse it
+        console.log("Parsing CSV content from raw_data...");
+        const csvContent = (rawData[0] as { csvContent: string }).csvContent;
+        rawDataArray = parseCsvContent(csvContent);
+        console.log(`Parsed ${rawDataArray.length} data points from CSV`);
+      } else if (Array.isArray(rawData)) {
+        // Already parsed data points
+        rawDataArray = rawData as Array<{ date?: string; time?: string; timestamp?: string; value?: number }>;
+      } else {
+        toast.error("Invalid raw data format");
+        setProcessingMeterId(null);
+        return;
+      }
 
-      if (!Array.isArray(rawDataArray) || rawDataArray.length === 0) {
-        toast.error("No data points found in raw data");
+      if (rawDataArray.length === 0) {
+        toast.error("No data points could be parsed from the file");
         setProcessingMeterId(null);
         return;
       }
