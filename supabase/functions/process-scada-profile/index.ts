@@ -117,25 +117,68 @@ function autoDetectColumns(headers: string[], sampleRows: string[][]): { dateCol
       console.log(`Found date column by header name: ${idx} (${headers[idx]})`);
     }
     
-    // Value column detection
-    if (valueCol === -1 && (lower.includes('kwh') || lower.includes('value') || lower.includes('active') || lower.includes('reading') || lower.includes('energy') || lower.includes('power') || lower.includes('consumption'))) {
+    // Value column detection - prioritize specific energy-related terms
+    if (valueCol === -1 && (lower.includes('kwh') || lower.includes('active') || lower.includes('energy') || lower.includes('consumption') || lower.includes('reading') || lower.includes('power'))) {
       valueCol = idx;
       console.log(`Found value column by header name: ${idx} (${headers[idx]})`);
     }
   }
   
-  // If value not found by name, look for first numeric column that isn't the date
+  // If value not found by name, analyze ALL numeric columns and pick the best one
   if (valueCol === -1 && sampleRows.length > 0) {
+    console.log(`Analyzing sample rows to find value column...`);
+    
+    // Collect stats for each candidate column
+    const candidates: Array<{
+      idx: number;
+      nonZeroCount: number;
+      hasVariation: boolean;
+      sum: number;
+      values: number[];
+    }> = [];
+    
     for (let idx = 0; idx < headers.length; idx++) {
-      if (idx === dateCol) continue;
+      if (idx === dateCol || idx === timeCol) continue;
       
-      const sampleValues = sampleRows.slice(0, 5).map(row => row[idx]).filter(v => v !== undefined && v !== null && v !== '');
+      const sampleValues = sampleRows.slice(0, 20).map(row => row[idx]).filter(v => v !== undefined && v !== null && v !== '');
       
       if (sampleValues.length > 0 && sampleValues.every(v => looksLikeNumber(v))) {
-        valueCol = idx;
-        console.log(`Found value column by content analysis: ${idx} (${headers[idx]}), samples: ${sampleValues.slice(0, 3).join(', ')}`);
-        break;
+        const numValues = sampleValues.map(v => parseFloat(v.replace(',', '.')));
+        const nonZeroCount = numValues.filter(v => v !== 0).length;
+        const sum = numValues.reduce((a, b) => a + b, 0);
+        const min = Math.min(...numValues);
+        const max = Math.max(...numValues);
+        const hasVariation = max !== min;
+        
+        candidates.push({
+          idx,
+          nonZeroCount,
+          hasVariation,
+          sum,
+          values: numValues.slice(0, 5)
+        });
+        
+        console.log(`Column ${idx} (${headers[idx]}): nonZero=${nonZeroCount}/${sampleValues.length}, hasVariation=${hasVariation}, sum=${sum.toFixed(2)}, samples=[${numValues.slice(0, 3).join(', ')}]`);
       }
+    }
+    
+    // Sort candidates: prefer columns with non-zero values, variation, and higher sums
+    candidates.sort((a, b) => {
+      // First priority: has non-zero values
+      if (a.nonZeroCount !== b.nonZeroCount) return b.nonZeroCount - a.nonZeroCount;
+      // Second priority: has variation
+      if (a.hasVariation !== b.hasVariation) return a.hasVariation ? -1 : 1;
+      // Third priority: higher sum (actual energy values tend to be larger)
+      return b.sum - a.sum;
+    });
+    
+    if (candidates.length > 0 && candidates[0].nonZeroCount > 0) {
+      valueCol = candidates[0].idx;
+      console.log(`Selected value column ${valueCol} (${headers[valueCol]}) with ${candidates[0].nonZeroCount} non-zero values`);
+    } else if (candidates.length > 0) {
+      // Fall back to first numeric column even if all zeros
+      valueCol = candidates[0].idx;
+      console.log(`Warning: All numeric columns have zeros. Using column ${valueCol} (${headers[valueCol]})`);
     }
   }
   
