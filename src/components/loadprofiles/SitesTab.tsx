@@ -171,6 +171,67 @@ export function SitesTab() {
     onError: (error) => toast.error(error.message),
   });
 
+  const [isDeletingDuplicates, setIsDeletingDuplicates] = useState(false);
+
+  const deleteDuplicateMeters = async () => {
+    if (!siteMeters || siteMeters.length === 0) return;
+    
+    setIsDeletingDuplicates(true);
+    try {
+      // Group meters by normalized shop name
+      const meterGroups = new Map<string, Meter[]>();
+      
+      for (const meter of siteMeters) {
+        const name = (meter.shop_name || meter.site_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (!meterGroups.has(name)) {
+          meterGroups.set(name, []);
+        }
+        meterGroups.get(name)!.push(meter);
+      }
+      
+      // Find duplicates - keep the one with most data points or newest if tie
+      const idsToDelete: string[] = [];
+      
+      for (const [, meters] of meterGroups) {
+        if (meters.length > 1) {
+          // Sort by data_points desc, then by created_at desc
+          meters.sort((a, b) => {
+            const pointsDiff = (b.data_points || 0) - (a.data_points || 0);
+            if (pointsDiff !== 0) return pointsDiff;
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          });
+          
+          // Keep first (best), delete rest
+          for (let i = 1; i < meters.length; i++) {
+            idsToDelete.push(meters[i].id);
+          }
+        }
+      }
+      
+      if (idsToDelete.length === 0) {
+        toast.info("No duplicate meters found");
+        return;
+      }
+      
+      if (!confirm(`Found ${idsToDelete.length} duplicate meter(s). Delete them?`)) {
+        return;
+      }
+      
+      const { error } = await supabase.from("scada_imports").delete().in("id", idsToDelete);
+      if (error) throw error;
+      
+      queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
+      toast.success(`Deleted ${idsToDelete.length} duplicate meter(s)`);
+    } catch (error) {
+      console.error("Error deleting duplicates:", error);
+      toast.error("Failed to delete duplicates");
+    } finally {
+      setIsDeletingDuplicates(false);
+    }
+  };
+
   const toggleMeterSelection = (id: string) => {
     setSelectedMeterIds(prev => {
       const next = new Set(prev);
@@ -544,6 +605,19 @@ export function SitesTab() {
                 </CardDescription>
               </div>
               <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={deleteDuplicateMeters}
+                  disabled={isDeletingDuplicates || !siteMeters?.length}
+                >
+                  {isDeletingDuplicates ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Delete Duplicates
+                </Button>
                 {selectedMeterIds.size > 0 && (
                   <Button
                     variant="destructive"
