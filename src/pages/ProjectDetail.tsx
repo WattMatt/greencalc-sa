@@ -6,7 +6,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet, CheckCircle2, AlertCircle, Lock, Circle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet, CheckCircle2, AlertCircle, Lock, Circle, CalendarIcon, Save, TrendingUp, Leaf, Battery, Building2 } from "lucide-react";
+import { format } from "date-fns";
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
@@ -19,9 +24,35 @@ import { ProposalManager } from "@/components/projects/ProposalManager";
 import { SystemCostsManager, SystemCostsData } from "@/components/projects/SystemCostsManager";
 import { DEFAULT_SYSTEM_COSTS } from "@/components/projects/simulation/FinancialAnalysis";
 import { toast } from "sonner";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+interface DashboardParams {
+  name: string;
+  location: string;
+  totalArea: number;
+  capacity: number;
+  systemType: "Solar" | "Wind" | "Hybrid" | "";
+  clientName: string;
+  budget: number;
+  targetDate: Date | undefined;
+}
+
+interface WorkflowStep {
+  id: number;
+  name: string;
+  status: "complete" | "pending";
+}
+
+interface KPIData {
+  annualYield: number;
+  savings: number;
+  roi: number;
+  selfCoverage: number;
+  co2Avoided: number;
+  gridImpact: number;
+}
 
 type TabStatus = "complete" | "partial" | "pending" | "blocked";
 
@@ -70,6 +101,311 @@ const TabWithStatus = ({
     </TooltipContent>
   </Tooltip>
 );
+
+// Dashboard Tab Content Component
+const DashboardTabContent = ({ 
+  projectId, 
+  project, 
+  tenants 
+}: { 
+  projectId: string;
+  project: { name: string; location: string | null; connection_size_kva: number | null };
+  tenants: { area_sqm: number; scada_import_id: string | null }[];
+}) => {
+  const [params, setParams] = useState<DashboardParams>({
+    name: project.name || "",
+    location: project.location || "",
+    totalArea: tenants.reduce((sum, t) => sum + Number(t.area_sqm || 0), 0),
+    capacity: project.connection_size_kva || 0,
+    systemType: "Solar",
+    clientName: "",
+    budget: 0,
+    targetDate: undefined,
+  });
+
+  const workflowSteps: WorkflowStep[] = [
+    { id: 1, name: "Resource Analysis", status: tenants.length > 0 ? "complete" : "pending" },
+    { id: 2, name: "System Design", status: "pending" },
+    { id: 3, name: "Energy Configuration", status: "pending" },
+    { id: 4, name: "Financial Analysis", status: "pending" },
+    { id: 5, name: "Proposal Draft", status: "pending" },
+    { id: 6, name: "Client Review", status: "pending" },
+    { id: 7, name: "Approval Workflow", status: "pending" },
+    { id: 8, name: "Contract Generation", status: "pending" },
+    { id: 9, name: "Portal Setup", status: "pending" },
+  ];
+
+  const kpis: KPIData = {
+    annualYield: 245.8,
+    savings: 480000,
+    roi: 18.5,
+    selfCoverage: 78.5,
+    co2Avoided: 198.4,
+    gridImpact: -45,
+  };
+
+  const completedSteps = workflowSteps.filter(s => s.status === "complete").length;
+
+  const handleParamChange = (key: keyof DashboardParams, value: string | number | Date | undefined) => {
+    setParams(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = () => {
+    console.log("Saving parameters:", params);
+    toast.success("Parameters saved");
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-ZA', {
+      style: 'currency',
+      currency: 'ZAR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  return (
+    <div className="flex gap-6">
+      {/* Left Panel - Parameters */}
+      <div className="w-80 flex-shrink-0">
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Building2 className="h-4 w-4 text-primary" />
+              Project Parameters
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-xs">Project Name</Label>
+              <Input
+                id="name"
+                value={params.name}
+                onChange={(e) => handleParamChange("name", e.target.value)}
+                placeholder="Enter project name"
+                className="h-8"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="location" className="text-xs">Location</Label>
+              <Input
+                id="location"
+                value={params.location}
+                onChange={(e) => handleParamChange("location", e.target.value)}
+                placeholder="Enter location"
+                className="h-8"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="totalArea" className="text-xs">Total Area (m²)</Label>
+                <Input
+                  id="totalArea"
+                  type="number"
+                  value={params.totalArea || ""}
+                  onChange={(e) => handleParamChange("totalArea", Number(e.target.value))}
+                  placeholder="0"
+                  className="h-8"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="capacity" className="text-xs">Capacity (kVA)</Label>
+                <Input
+                  id="capacity"
+                  type="number"
+                  value={params.capacity || ""}
+                  onChange={(e) => handleParamChange("capacity", Number(e.target.value))}
+                  placeholder="0"
+                  className="h-8"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">System Type</Label>
+              <Select
+                value={params.systemType}
+                onValueChange={(value) => handleParamChange("systemType", value)}
+              >
+                <SelectTrigger className="h-8">
+                  <SelectValue placeholder="Select system type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Solar">Solar</SelectItem>
+                  <SelectItem value="Wind">Wind</SelectItem>
+                  <SelectItem value="Hybrid">Hybrid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="clientName" className="text-xs">Client Name</Label>
+              <Input
+                id="clientName"
+                value={params.clientName}
+                onChange={(e) => handleParamChange("clientName", e.target.value)}
+                placeholder="Enter client name"
+                className="h-8"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="budget" className="text-xs">Budget (R)</Label>
+              <Input
+                id="budget"
+                type="number"
+                value={params.budget || ""}
+                onChange={(e) => handleParamChange("budget", Number(e.target.value))}
+                placeholder="0"
+                className="h-8"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Target Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal h-8",
+                      !params.targetDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-3 w-3" />
+                    {params.targetDate ? format(params.targetDate, "PPP") : <span>Select date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={params.targetDate}
+                    onSelect={(date) => handleParamChange("targetDate", date)}
+                    initialFocus
+                    className="pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <Button onClick={handleSave} className="w-full h-8 mt-2" size="sm">
+              <Save className="mr-2 h-3 w-3" />
+              Save Parameters
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Right Panel - Workflow & KPIs */}
+      <div className="flex-1 space-y-6">
+        {/* Progress Tracker */}
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center justify-between text-base">
+              <span>Workflow Progress</span>
+              <Badge variant="secondary" className="text-xs">
+                {completedSteps}/{workflowSteps.length} Steps
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-2">
+              {workflowSteps.map((step) => (
+                <div
+                  key={step.id}
+                  className={cn(
+                    "flex items-center gap-2 p-2 rounded-lg border transition-colors",
+                    step.status === "complete"
+                      ? "border-primary/50 bg-primary/5"
+                      : "border-border bg-card hover:bg-muted/50"
+                  )}
+                >
+                  <div className="flex-shrink-0">
+                    {step.status === "complete" ? (
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] text-muted-foreground">Step {step.id}</span>
+                    <p className="text-xs font-medium truncate">{step.name}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI Grid */}
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Key Performance Indicators</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 rounded-lg border bg-card">
+                <div className="flex items-center gap-2 mb-1">
+                  <Sun className="h-3 w-3 text-amber-500" />
+                  <span className="text-xs text-muted-foreground">Annual Yield</span>
+                </div>
+                <p className="text-xl font-bold">{kpis.annualYield}</p>
+                <span className="text-xs text-muted-foreground">MWh</span>
+              </div>
+
+              <div className="p-3 rounded-lg border bg-card">
+                <div className="flex items-center gap-2 mb-1">
+                  <DollarSign className="h-3 w-3 text-emerald-500" />
+                  <span className="text-xs text-muted-foreground">Savings</span>
+                </div>
+                <p className="text-xl font-bold">{formatCurrency(kpis.savings)}</p>
+                <span className="text-xs text-muted-foreground">/year</span>
+              </div>
+
+              <div className="p-3 rounded-lg border bg-card">
+                <div className="flex items-center gap-2 mb-1">
+                  <TrendingUp className="h-3 w-3 text-blue-500" />
+                  <span className="text-xs text-muted-foreground">ROI</span>
+                </div>
+                <p className="text-xl font-bold">{kpis.roi}%</p>
+                <span className="text-xs text-muted-foreground">return</span>
+              </div>
+
+              <div className="p-3 rounded-lg border bg-card">
+                <div className="flex items-center gap-2 mb-1">
+                  <Battery className="h-3 w-3 text-purple-500" />
+                  <span className="text-xs text-muted-foreground">Self-Coverage</span>
+                </div>
+                <p className="text-xl font-bold">{kpis.selfCoverage}%</p>
+                <span className="text-xs text-muted-foreground">of load</span>
+              </div>
+
+              <div className="p-3 rounded-lg border bg-card">
+                <div className="flex items-center gap-2 mb-1">
+                  <Leaf className="h-3 w-3 text-green-500" />
+                  <span className="text-xs text-muted-foreground">CO₂ Avoided</span>
+                </div>
+                <p className="text-xl font-bold">{kpis.co2Avoided}</p>
+                <span className="text-xs text-muted-foreground">tons/year</span>
+              </div>
+
+              <div className="p-3 rounded-lg border bg-card">
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap className="h-3 w-3 text-orange-500" />
+                  <span className="text-xs text-muted-foreground">Grid Impact</span>
+                </div>
+                <p className="text-xl font-bold">{kpis.gridImpact}%</p>
+                <span className="text-xs text-muted-foreground">reduction</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -372,16 +708,6 @@ export default function ProjectDetail() {
         </Card>
       </div>
 
-      <div className="flex items-center gap-3 mb-4">
-        <Button 
-          variant="outline" 
-          onClick={() => navigate(`/projects/${id}/dashboard`)}
-          className="gap-2"
-        >
-          <LayoutDashboard className="h-4 w-4" />
-          Project Dashboard
-        </Button>
-      </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TooltipProvider delayDuration={300}>
@@ -430,16 +756,7 @@ export default function ProjectDetail() {
         </TooltipProvider>
 
         <TabsContent value="overview" className="mt-6">
-          <div className="flex flex-col items-center justify-center py-12 space-y-4">
-            <LayoutDashboard className="h-12 w-12 text-muted-foreground" />
-            <h3 className="text-lg font-medium">Project Dashboard</h3>
-            <p className="text-muted-foreground text-center max-w-md">
-              Access the full project dashboard with workflow tracking, KPIs, and project parameters.
-            </p>
-            <Button onClick={() => navigate(`/projects/${id}/dashboard`)}>
-              Open Project Dashboard
-            </Button>
-          </div>
+          <DashboardTabContent projectId={id!} project={project} tenants={tenants || []} />
         </TabsContent>
 
         <TabsContent value="tenants" className="mt-6">
