@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, FileSpreadsheet, Settings2, Columns, Check, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, Zap } from "lucide-react";
 import { ColumnConfig, WizardParseConfig, ParsedData } from "./types/csvImportTypes";
 
 // Re-export types for convenience
@@ -61,11 +61,9 @@ function detectPnPScadaFormat(content: string): {
   const lines = content.split('\n').slice(0, 5);
   if (lines.length < 2) return { isPnPScada: false };
 
-  // Check if first line has meter name pattern: ,"{name}",date,date
   const firstLine = lines[0];
   const meterMatch = firstLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
   
-  // Check if second line has SCADA headers
   const secondLine = lines[1]?.toLowerCase() || "";
   const hasScadaHeaders = secondLine.includes('rdate') && 
                           secondLine.includes('rtime') && 
@@ -96,17 +94,14 @@ function detectDelimiter(content: string, startRow: number): WizardParseConfig["
     otherChar: "",
   };
 
-  // Count occurrences
   const tabCount = (sampleLine.match(/\t/g) || []).length;
   const semicolonCount = (sampleLine.match(/;/g) || []).length;
   const commaCount = (sampleLine.match(/,/g) || []).length;
 
-  // Set the most likely delimiter
   if (tabCount > 0) delimiters.tab = true;
   if (semicolonCount > 0) delimiters.semicolon = true;
   if (commaCount > 0) delimiters.comma = true;
 
-  // If none detected, default to comma
   if (!delimiters.tab && !delimiters.semicolon && !delimiters.comma) {
     delimiters.comma = true;
   }
@@ -118,7 +113,6 @@ function detectDelimiter(content: string, startRow: number): WizardParseConfig["
 function parseWithConfig(content: string, config: WizardParseConfig): ParsedData {
   const lines = content.split('\n').filter(l => l.trim());
   
-  // Build delimiter regex
   const delims: string[] = [];
   if (config.delimiters.tab) delims.push('\t');
   if (config.delimiters.semicolon) delims.push(';');
@@ -133,9 +127,7 @@ function parseWithConfig(content: string, config: WizardParseConfig): ParsedData
     ? new RegExp(`(${delimPattern})+`)
     : new RegExp(delimPattern);
 
-  // Parse rows
   const parseRow = (line: string): string[] => {
-    // Handle quoted values
     const result: string[] = [];
     let current = "";
     let inQuotes = false;
@@ -168,7 +160,6 @@ function parseWithConfig(content: string, config: WizardParseConfig): ParsedData
   const headers = headerIdx < lines.length ? parseRow(lines[headerIdx]) : [];
   const rows = lines.slice(headerIdx + 1).map(parseRow);
 
-  // Extract metadata for PnP SCADA format
   let meterName: string | undefined;
   let dateRange: { start: string; end: string } | undefined;
 
@@ -182,6 +173,12 @@ function parseWithConfig(content: string, config: WizardParseConfig): ParsedData
   }
 
   return { headers, rows, meterName, dateRange };
+}
+
+// Get raw lines for preview (before parsing)
+function getRawLines(content: string, startRow: number, maxLines: number = 10): string[] {
+  const lines = content.split('\n').filter(l => l.trim());
+  return lines.slice(startRow - 1, startRow - 1 + maxLines);
 }
 
 export function CsvImportWizard({
@@ -202,17 +199,15 @@ export function CsvImportWizard({
       const detection = detectPnPScadaFormat(csvContent);
       
       if (detection.isPnPScada) {
-        // PnP SCADA format detected - auto-configure
         setConfig({
           ...DEFAULT_CONFIG,
-          startRow: 2, // Headers are on row 2
+          startRow: 2,
           delimiters: { ...DEFAULT_CONFIG.delimiters, comma: true },
           detectedFormat: "pnp-scada",
           meterName: detection.meterName,
           dateRange: detection.dateRange,
         });
       } else {
-        // Generic CSV - auto-detect delimiter
         const delimiters = detectDelimiter(csvContent, 1);
         setConfig({
           ...DEFAULT_CONFIG,
@@ -231,11 +226,16 @@ export function CsvImportWizard({
     return parseWithConfig(csvContent, config);
   }, [csvContent, config]);
 
+  // Raw lines for step 1 preview
+  const rawLines = useMemo(() => {
+    if (!csvContent) return [];
+    return getRawLines(csvContent, config.startRow, 8);
+  }, [csvContent, config.startRow]);
+
   // Initialize column configs when headers change
   useEffect(() => {
     if (previewData?.headers) {
       const newColumns: ColumnConfig[] = previewData.headers.map((name, index) => {
-        // Auto-detect column types
         let dataType: ColumnConfig["dataType"] = "general";
         const lowerName = name.toLowerCase();
         
@@ -281,16 +281,17 @@ export function CsvImportWizard({
     }
   };
 
+  // Step 1: File Type & Start Row
   const renderStep1 = () => (
     <div className="space-y-6">
       {config.detectedFormat === "pnp-scada" && (
         <Card className="border-primary/50 bg-primary/5">
-          <CardContent className="py-4">
+          <CardContent className="py-3">
             <div className="flex items-center gap-3">
               <Zap className="h-5 w-5 text-primary" />
               <div>
-                <p className="font-medium text-primary">PnP SCADA Format Detected</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="font-medium text-primary text-sm">PnP SCADA Format Detected</p>
+                <p className="text-xs text-muted-foreground">
                   Meter: <span className="font-medium">{config.meterName}</span>
                   {config.dateRange && (
                     <> • {config.dateRange.start} to {config.dateRange.end}</>
@@ -302,101 +303,114 @@ export function CsvImportWizard({
         </Card>
       )}
 
-      <div className="space-y-4">
-        <div>
-          <Label className="text-sm font-medium">File Type</Label>
-          <p className="text-xs text-muted-foreground mb-3">
-            Choose the data type that best describes your data.
-          </p>
-          <RadioGroup
-            value={config.fileType}
-            onValueChange={(v) => setConfig(prev => ({ ...prev, fileType: v as "delimited" | "fixed" }))}
-            className="space-y-3"
-          >
-            <div className="flex items-start space-x-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
-              <RadioGroupItem value="delimited" id="delimited" className="mt-0.5" />
-              <div>
-                <Label htmlFor="delimited" className="font-medium cursor-pointer">Delimited</Label>
-                <p className="text-xs text-muted-foreground">
-                  Characters such as commas or tabs separate each field.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start space-x-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors opacity-50">
-              <RadioGroupItem value="fixed" id="fixed" className="mt-0.5" disabled />
-              <div>
-                <Label htmlFor="fixed" className="font-medium cursor-pointer">Fixed width</Label>
-                <p className="text-xs text-muted-foreground">
-                  Fields are aligned in columns with spaces between each field.
-                </p>
-              </div>
-            </div>
-          </RadioGroup>
-        </div>
+      <div>
+        <h3 className="font-semibold text-foreground mb-1">
+          The Text Wizard has determined that your data is {config.fileType === "delimited" ? "Delimited" : "Fixed Width"}.
+        </h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          If this is correct, choose Next, or choose the data type that best describes your data.
+        </p>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Start import at row</Label>
-            <Input
-              type="number"
-              min={1}
-              value={config.startRow}
-              onChange={(e) => setConfig(prev => ({ ...prev, startRow: parseInt(e.target.value) || 1 }))}
-              className="w-24"
-            />
+        <RadioGroup
+          value={config.fileType}
+          onValueChange={(v) => setConfig(prev => ({ ...prev, fileType: v as "delimited" | "fixed" }))}
+          className="space-y-2"
+        >
+          <div className="flex items-center space-x-3">
+            <RadioGroupItem value="delimited" id="delimited" />
+            <Label htmlFor="delimited" className="cursor-pointer">
+              <span className="font-medium">Delimited</span>
+              <span className="text-muted-foreground ml-2">– Characters such as commas or tabs separate each field.</span>
+            </Label>
           </div>
+          <div className="flex items-center space-x-3">
+            <RadioGroupItem value="fixed" id="fixed" disabled />
+            <Label htmlFor="fixed" className="cursor-pointer text-muted-foreground">
+              <span className="font-medium">Fixed width</span>
+              <span className="ml-2">– Fields are aligned in columns with spaces between each field.</span>
+            </Label>
+          </div>
+        </RadioGroup>
+      </div>
+
+      <div className="flex items-center gap-6">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="startRow">Start import at row:</Label>
+          <Input
+            id="startRow"
+            type="number"
+            min={1}
+            value={config.startRow}
+            onChange={(e) => setConfig(prev => ({ ...prev, startRow: parseInt(e.target.value) || 1 }))}
+            className="w-16 h-8"
+          />
         </div>
       </div>
 
-      {/* Preview */}
+      {/* Raw Preview */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Preview of selected data:</Label>
-        <PreviewTable data={previewData} config={config} maxRows={8} />
+        <Label className="font-medium">Preview of selected data:</Label>
+        <Card className="bg-muted/30">
+          <CardContent className="p-0">
+            <div className="bg-muted px-3 py-1.5 border-b">
+              <span className="text-xs font-medium text-muted-foreground">Preview of file {fileName}</span>
+            </div>
+            <ScrollArea className="h-[180px]">
+              <div className="p-3 font-mono text-xs">
+                {rawLines.map((line, idx) => (
+                  <div key={idx} className="flex">
+                    <span className="text-muted-foreground w-6 flex-shrink-0">{config.startRow + idx}</span>
+                    <span className="break-all">{line}</span>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
 
+  // Step 2: Delimiter Configuration
   const renderStep2 = () => (
     <div className="space-y-6">
       <div>
-        <p className="text-sm text-muted-foreground mb-4">
+        <h3 className="font-semibold text-foreground mb-4">
           This screen lets you set the delimiters your data contains.
-        </p>
+        </h3>
 
-        <div className="grid grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <Label className="font-medium">Delimiters</Label>
-            <div className="space-y-3">
-              {[
-                { key: "tab", label: "Tab" },
-                { key: "semicolon", label: "Semicolon" },
-                { key: "comma", label: "Comma" },
-                { key: "space", label: "Space" },
-              ].map(({ key, label }) => (
-                <div key={key} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={key}
-                    checked={config.delimiters[key as keyof typeof config.delimiters] as boolean}
-                    onCheckedChange={(checked) => updateDelimiter(key as keyof WizardParseConfig["delimiters"], !!checked)}
-                  />
-                  <Label htmlFor={key} className="cursor-pointer">{label}</Label>
-                </div>
-              ))}
-              <div className="flex items-center space-x-2">
+        <div className="flex gap-12">
+          <div className="space-y-3">
+            <Label className="font-medium text-sm">Delimiters</Label>
+            {[
+              { key: "tab", label: "Tab" },
+              { key: "semicolon", label: "Semicolon" },
+              { key: "comma", label: "Comma" },
+              { key: "space", label: "Space" },
+            ].map(({ key, label }) => (
+              <div key={key} className="flex items-center space-x-2">
                 <Checkbox
-                  id="other"
-                  checked={config.delimiters.other}
-                  onCheckedChange={(checked) => updateDelimiter("other", !!checked)}
+                  id={key}
+                  checked={config.delimiters[key as keyof typeof config.delimiters] as boolean}
+                  onCheckedChange={(checked) => updateDelimiter(key as keyof WizardParseConfig["delimiters"], !!checked)}
                 />
-                <Label htmlFor="other" className="cursor-pointer">Other:</Label>
-                <Input
-                  value={config.delimiters.otherChar}
-                  onChange={(e) => updateDelimiter("otherChar", e.target.value.slice(0, 1))}
-                  className="w-12 h-8"
-                  maxLength={1}
-                  disabled={!config.delimiters.other}
-                />
+                <Label htmlFor={key} className="cursor-pointer text-sm">{label}</Label>
               </div>
+            ))}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="other"
+                checked={config.delimiters.other}
+                onCheckedChange={(checked) => updateDelimiter("other", !!checked)}
+              />
+              <Label htmlFor="other" className="cursor-pointer text-sm">Other:</Label>
+              <Input
+                value={config.delimiters.otherChar}
+                onChange={(e) => updateDelimiter("otherChar", e.target.value.slice(0, 1))}
+                className="w-10 h-7 text-center"
+                maxLength={1}
+                disabled={!config.delimiters.other}
+              />
             </div>
           </div>
 
@@ -407,18 +421,18 @@ export function CsvImportWizard({
                 checked={config.treatConsecutiveAsOne}
                 onCheckedChange={(checked) => setConfig(prev => ({ ...prev, treatConsecutiveAsOne: !!checked }))}
               />
-              <Label htmlFor="consecutive" className="cursor-pointer">
+              <Label htmlFor="consecutive" className="cursor-pointer text-sm">
                 Treat consecutive delimiters as one
               </Label>
             </div>
 
-            <div className="space-y-2">
-              <Label>Text qualifier</Label>
+            <div className="flex items-center gap-3">
+              <Label className="text-sm">Text qualifier:</Label>
               <Select
                 value={config.textQualifier}
                 onValueChange={(v) => setConfig(prev => ({ ...prev, textQualifier: v }))}
               >
-                <SelectTrigger className="w-24">
+                <SelectTrigger className="w-16 h-8">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -432,24 +446,25 @@ export function CsvImportWizard({
         </div>
       </div>
 
-      {/* Preview */}
+      {/* Parsed Preview */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Preview of selected data:</Label>
-        <PreviewTable data={previewData} config={config} maxRows={8} showColumns />
+        <Label className="font-medium">Preview of selected data:</Label>
+        <ParsedPreviewTable data={previewData} maxRows={6} />
       </div>
     </div>
   );
 
+  // Step 3: Column Format Configuration
   const renderStep3 = () => (
     <div className="space-y-6">
       <div>
-        <p className="text-sm text-muted-foreground mb-4">
+        <h3 className="font-semibold text-foreground mb-4">
           This screen lets you select each column and set the Data Format.
-        </p>
+        </h3>
 
-        <div className="grid grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <Label className="font-medium">Column data format</Label>
+        <div className="flex gap-8">
+          <div className="space-y-3">
+            <Label className="font-medium text-sm">Column data format</Label>
             <RadioGroup
               value={selectedColumn !== null ? (config.columns[selectedColumn]?.dataType || "general") : "general"}
               onValueChange={(v) => {
@@ -461,15 +476,15 @@ export function CsvImportWizard({
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="general" id="general" />
-                <Label htmlFor="general" className="cursor-pointer">General</Label>
+                <Label htmlFor="general" className="cursor-pointer text-sm">General</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="text" id="text" />
-                <Label htmlFor="text" className="cursor-pointer">Text</Label>
+                <Label htmlFor="text" className="cursor-pointer text-sm">Text</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="date" id="date" />
-                <Label htmlFor="date" className="cursor-pointer">Date:</Label>
+                <Label htmlFor="date" className="cursor-pointer text-sm">Date:</Label>
                 <Select
                   value={selectedColumn !== null ? (config.columns[selectedColumn]?.dateFormat || "YMD") : "YMD"}
                   onValueChange={(v) => {
@@ -479,7 +494,7 @@ export function CsvImportWizard({
                   }}
                   disabled={selectedColumn === null || config.columns[selectedColumn]?.dataType !== "date"}
                 >
-                  <SelectTrigger className="w-20 h-8">
+                  <SelectTrigger className="w-16 h-7">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -491,41 +506,22 @@ export function CsvImportWizard({
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="skip" id="skip" />
-                <Label htmlFor="skip" className="cursor-pointer">Do not import column (skip)</Label>
+                <Label htmlFor="skip" className="cursor-pointer text-sm">Do not import column (skip)</Label>
               </div>
             </RadioGroup>
-          </div>
-
-          <div>
-            {selectedColumn !== null && config.columns[selectedColumn] && (
-              <Card>
-                <CardContent className="py-3">
-                  <p className="text-sm">
-                    <span className="text-muted-foreground">Selected:</span>{" "}
-                    <span className="font-medium">{config.columns[selectedColumn].name}</span>
-                  </p>
-                  <Badge variant="outline" className="mt-2">
-                    {config.columns[selectedColumn].dataType}
-                  </Badge>
-                </CardContent>
-              </Card>
-            )}
           </div>
         </div>
       </div>
 
-      {/* Preview with column selection */}
+      {/* Preview with selectable columns */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Preview of selected data:</Label>
-        <p className="text-xs text-muted-foreground">Click a column to select it for formatting</p>
-        <PreviewTable 
+        <Label className="font-medium">Preview of selected data:</Label>
+        <ColumnSelectPreview 
           data={previewData} 
-          config={config} 
-          maxRows={8} 
-          showColumns 
-          showDataTypes
+          config={config}
           selectedColumn={selectedColumn}
           onColumnSelect={setSelectedColumn}
+          maxRows={6}
         />
       </div>
     </div>
@@ -533,148 +529,190 @@ export function CsvImportWizard({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="h-5 w-5" />
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader className="pb-2">
+          <DialogTitle className="text-lg">
             Text Import Wizard - Step {step} of 3
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto py-4">
+        <div className="flex-1 overflow-auto py-2">
           {step === 1 && renderStep1()}
           {step === 2 && renderStep2()}
           {step === 3 && renderStep3()}
         </div>
 
-        <div className="flex items-center justify-between pt-4 border-t">
+        <div className="flex items-center justify-end gap-2 pt-4 border-t">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleBack}
-              disabled={step === 1}
-            >
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              Back
+          <Button
+            variant="outline"
+            onClick={handleBack}
+            disabled={step === 1}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
+          {step < 3 ? (
+            <Button onClick={handleNext}>
+              Next
+              <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
-            
-            {step < 3 ? (
-              <Button onClick={handleNext}>
-                Next
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            ) : (
-              <Button onClick={handleFinish} disabled={isProcessing}>
-                {isProcessing ? "Processing..." : "Finish"}
-                <Check className="h-4 w-4 ml-1" />
-              </Button>
-            )}
-          </div>
+          ) : (
+            <Button onClick={handleFinish} disabled={isProcessing}>
+              {isProcessing ? "Processing..." : "Finish"}
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-// Preview Table Component
-interface PreviewTableProps {
-  data: ParsedData | null;
-  config: WizardParseConfig;
-  maxRows?: number;
-  showColumns?: boolean;
-  showDataTypes?: boolean;
-  selectedColumn?: number | null;
-  onColumnSelect?: (index: number) => void;
-}
-
-function PreviewTable({ 
-  data, 
-  config, 
-  maxRows = 10, 
-  showColumns = false,
-  showDataTypes = false,
-  selectedColumn,
-  onColumnSelect 
-}: PreviewTableProps) {
+// Simple parsed preview table for Step 2
+function ParsedPreviewTable({ data, maxRows = 8 }: { data: ParsedData | null; maxRows?: number }) {
   if (!data) {
     return (
-      <div className="border rounded-lg p-4 bg-muted/30 text-center text-muted-foreground">
+      <Card className="bg-muted/30 p-4 text-center text-muted-foreground text-sm">
         No preview available
-      </div>
+      </Card>
     );
   }
 
   return (
     <Card className="overflow-hidden">
-      <ScrollArea className="h-[250px]">
-        <div className="min-w-max">
-          <table className="w-full text-xs font-mono">
-            {showDataTypes && (
-              <thead className="bg-muted/50 sticky top-0">
-                <tr>
-                  {data.headers.map((_, idx) => {
-                    const colConfig = config.columns[idx];
-                    return (
-                      <th 
-                        key={`type-${idx}`} 
-                        className={cn(
-                          "px-2 py-1 text-left font-normal text-muted-foreground border-r last:border-r-0",
-                          selectedColumn === idx && "bg-primary/20"
-                        )}
-                      >
-                        {colConfig?.dataType || "General"}
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-            )}
-            <thead className="bg-muted sticky top-0">
-              <tr>
-                {data.headers.map((header, idx) => (
-                  <th 
-                    key={idx} 
-                    className={cn(
-                      "px-2 py-1.5 text-left font-medium border-r last:border-r-0 whitespace-nowrap",
-                      onColumnSelect && "cursor-pointer hover:bg-primary/10",
-                      selectedColumn === idx && "bg-primary/20 text-primary"
-                    )}
-                    onClick={() => onColumnSelect?.(idx)}
+      <ScrollArea className="h-[200px]">
+        <table className="w-full text-xs font-mono border-collapse">
+          <thead className="bg-muted sticky top-0">
+            <tr>
+              {data.headers.map((header, idx) => (
+                <th 
+                  key={idx} 
+                  className="px-3 py-2 text-left font-medium border-r border-border last:border-r-0 whitespace-nowrap"
+                >
+                  {header || `Column ${idx + 1}`}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.slice(0, maxRows).map((row, rowIdx) => (
+              <tr key={rowIdx} className="border-t border-border">
+                {row.map((cell, cellIdx) => (
+                  <td 
+                    key={cellIdx} 
+                    className="px-3 py-1.5 border-r border-border last:border-r-0 whitespace-nowrap"
                   >
-                    {showColumns && (
-                      <span className="text-muted-foreground mr-1">{idx + 1}.</span>
-                    )}
-                    {header || `Col ${idx + 1}`}
-                  </th>
+                    {cell}
+                  </td>
                 ))}
               </tr>
-            </thead>
-            <tbody>
-              {data.rows.slice(0, maxRows).map((row, rowIdx) => (
-                <tr key={rowIdx} className="border-t hover:bg-muted/30">
-                  {row.map((cell, cellIdx) => (
-                    <td 
-                      key={cellIdx} 
-                      className={cn(
-                        "px-2 py-1 border-r last:border-r-0 whitespace-nowrap",
-                        selectedColumn === cellIdx && "bg-primary/10"
-                      )}
-                    >
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </ScrollArea>
       {data.rows.length > maxRows && (
-        <div className="px-2 py-1 text-xs text-muted-foreground border-t bg-muted/30">
+        <div className="px-3 py-1 text-xs text-muted-foreground border-t bg-muted/30">
+          Showing {maxRows} of {data.rows.length} rows
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// Column selection preview for Step 3 (Excel-style)
+function ColumnSelectPreview({ 
+  data, 
+  config,
+  selectedColumn,
+  onColumnSelect,
+  maxRows = 8 
+}: { 
+  data: ParsedData | null; 
+  config: WizardParseConfig;
+  selectedColumn: number | null;
+  onColumnSelect: (idx: number) => void;
+  maxRows?: number;
+}) {
+  if (!data) {
+    return (
+      <Card className="bg-muted/30 p-4 text-center text-muted-foreground text-sm">
+        No preview available
+      </Card>
+    );
+  }
+
+  const getDataTypeLabel = (idx: number): string => {
+    const col = config.columns[idx];
+    if (!col) return "General";
+    switch (col.dataType) {
+      case "general": return "General";
+      case "text": return "Text";
+      case "date": return "Date";
+      case "skip": return "Skip";
+      default: return "General";
+    }
+  };
+
+  return (
+    <Card className="overflow-hidden">
+      <ScrollArea className="h-[220px]">
+        <table className="w-full text-xs font-mono border-collapse">
+          {/* Data type row */}
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-muted/80">
+              {data.headers.map((_, idx) => (
+                <th 
+                  key={`type-${idx}`} 
+                  onClick={() => onColumnSelect(idx)}
+                  className={cn(
+                    "px-3 py-1 text-left font-normal text-muted-foreground border-r border-border last:border-r-0 cursor-pointer text-[10px]",
+                    selectedColumn === idx && "bg-foreground text-background"
+                  )}
+                >
+                  {getDataTypeLabel(idx)}
+                </th>
+              ))}
+            </tr>
+            {/* Header row */}
+            <tr className="bg-muted">
+              {data.headers.map((header, idx) => (
+                <th 
+                  key={idx}
+                  onClick={() => onColumnSelect(idx)}
+                  className={cn(
+                    "px-3 py-2 text-left font-medium border-r border-border last:border-r-0 whitespace-nowrap cursor-pointer",
+                    selectedColumn === idx && "bg-foreground text-background"
+                  )}
+                >
+                  {header || `Column ${idx + 1}`}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.slice(0, maxRows).map((row, rowIdx) => (
+              <tr key={rowIdx} className="border-t border-border">
+                {row.map((cell, cellIdx) => (
+                  <td 
+                    key={cellIdx}
+                    onClick={() => onColumnSelect(cellIdx)}
+                    className={cn(
+                      "px-3 py-1.5 border-r border-border last:border-r-0 whitespace-nowrap cursor-pointer",
+                      selectedColumn === cellIdx && "bg-foreground/10"
+                    )}
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ScrollArea>
+      {data.rows.length > maxRows && (
+        <div className="px-3 py-1 text-xs text-muted-foreground border-t bg-muted/30">
           Showing {maxRows} of {data.rows.length} rows
         </div>
       )}
