@@ -487,7 +487,6 @@ export function CsvImportWizard({
                 }
               }}
               className="space-y-2"
-              disabled={selectedColumn === null}
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="general" id="general" />
