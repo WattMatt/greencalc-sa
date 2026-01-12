@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Plus, Upload, Trash2, Edit2, Download } from "lucide-react";
 import { toast } from "sonner";
 import { CsvImportWizard, WizardParseConfig } from "@/components/loadprofiles/CsvImportWizard";
+import { detectCsvType, buildMismatchErrorMessage } from "@/components/loadprofiles/utils/csvTypeDetection";
 
 interface ShopType {
   id: string;
@@ -86,6 +87,13 @@ export function ShopTypesManager({ shopTypes }: ShopTypesManagerProps) {
     setIsProcessingWizard(true);
     
     try {
+      // Early detection - check for wrong data type
+      const detection = detectCsvType(parsedData.headers);
+      if (detection.detectedType === "scada-meter") {
+        const errorMsg = buildMismatchErrorMessage("shop-types", detection, parsedData.headers);
+        throw new Error(errorMsg);
+      }
+      
       const headers = parsedData.headers.map(h => h.toLowerCase().trim());
       
       const nameIdx = headers.findIndex((h) => h.includes("name") || h.includes("type"));
@@ -102,7 +110,12 @@ export function ShopTypesManager({ shopTypes }: ShopTypesManagerProps) {
       }
 
       if (nameIdx === -1) {
-        throw new Error(`Could not find 'name' column. Found: ${parsedData.headers.join(", ")}`);
+        const detection = detectCsvType(parsedData.headers);
+        if (detection.detectedType !== "shop-types" && detection.detectedType !== "unknown") {
+          const errorMsg = buildMismatchErrorMessage("shop-types", detection, parsedData.headers);
+          throw new Error(errorMsg);
+        }
+        throw new Error(`Missing 'name' column.\nFound: ${parsedData.headers.join(", ")}\n\nExpected columns: name, kwh_per_sqm_month, description (optional), h0-h23 (optional)`);
       }
 
       const typesToInsert = [];
@@ -148,7 +161,16 @@ export function ShopTypesManager({ shopTypes }: ShopTypesManagerProps) {
       setWizardOpen(false);
       setWizardFile(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to import shop types");
+      const message = error instanceof Error ? error.message : "Failed to import shop types";
+      if (message.includes("\n")) {
+        const [title, ...rest] = message.split("\n\n");
+        toast.error(title, { 
+          description: rest.join("\n\n"),
+          duration: 10000 
+        });
+      } else {
+        toast.error(message);
+      }
     } finally {
       setIsProcessingWizard(false);
     }

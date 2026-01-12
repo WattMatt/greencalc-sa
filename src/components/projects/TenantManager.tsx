@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { TenantProfileMatcher } from "./TenantProfileMatcher";
 import { AccuracyBadge, AccuracySummary, getAccuracyLevel } from "@/components/simulation/AccuracyBadge";
 import { CsvImportWizard, WizardParseConfig } from "@/components/loadprofiles/CsvImportWizard";
+import { detectCsvType, buildMismatchErrorMessage } from "@/components/loadprofiles/utils/csvTypeDetection";
 
 interface Tenant {
   id: string;
@@ -228,6 +229,13 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     try {
       const headers = parsedData.headers.map(h => h.toLowerCase().trim());
       
+      // Detect CSV type and check for mismatch
+      const detection = detectCsvType(parsedData.headers);
+      if (detection.detectedType !== "tenant-list" && detection.detectedType !== "unknown") {
+        const errorMsg = buildMismatchErrorMessage("tenant-list", detection, parsedData.headers);
+        throw new Error(errorMsg);
+      }
+      
       // Find name and area columns
       const nameIdx = headers.findIndex((h) => 
         h.includes("name") || h.includes("tenant") || h.includes("shop")
@@ -237,7 +245,9 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       );
 
       if (nameIdx === -1 || areaIdx === -1) {
-        throw new Error(`Could not find required columns. Found: ${parsedData.headers.join(", ")}. Need 'name' and 'area' columns.`);
+        const detection = detectCsvType(parsedData.headers);
+        const errorMsg = buildMismatchErrorMessage("tenant-list", detection, parsedData.headers);
+        throw new Error(errorMsg || `Missing required columns. Need 'name' and 'area' columns.\nFound: ${parsedData.headers.join(", ")}`);
       }
 
       const tenantsToInsert = [];
@@ -268,7 +278,17 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       setWizardOpen(false);
       setWizardFile(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to import tenants");
+      const message = error instanceof Error ? error.message : "Failed to import tenants";
+      // Show longer messages with description
+      if (message.includes("\n")) {
+        const [title, ...rest] = message.split("\n\n");
+        toast.error(title, { 
+          description: rest.join("\n\n"),
+          duration: 10000 
+        });
+      } else {
+        toast.error(message);
+      }
     } finally {
       setIsProcessingWizard(false);
     }
