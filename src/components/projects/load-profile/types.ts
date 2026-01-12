@@ -1,3 +1,10 @@
+export interface RawDataPoint {
+  date: string;
+  time: string;
+  timestamp: string;
+  value: number;
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -16,6 +23,9 @@ export interface Tenant {
     area_sqm: number | null;
     load_profile_weekday: number[] | null;
     load_profile_weekend?: number[] | null;
+    raw_data?: RawDataPoint[] | null;
+    date_range_start?: string | null;
+    date_range_end?: string | null;
   } | null;
 }
 

@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tenant, ShopType, DAYS_OF_WEEK, DayOfWeek, DisplayUnit, Annotation } from "./types";
 import { useLoadProfileData } from "./hooks/useLoadProfileData";
+import { useSpecificDateData } from "./hooks/useSpecificDateData";
 import { useExportHandlers } from "./hooks/useExportHandlers";
 import { useSolcastPVProfile } from "./hooks/useSolcastPVProfile";
 import { LoadChart } from "./charts/LoadChart";
@@ -15,6 +16,7 @@ import { OverPanelingAnalysis } from "./components/OverPanelingAnalysis";
 import { AnnotationsPanel } from "./components/AnnotationsPanel";
 import { TOULegend } from "./components/TOULegend";
 import { TopContributors } from "./components/TopContributors";
+import { DateModeSelector, DateMode } from "./components/DateModeSelector";
 import { MethodologySection, solarMethodology, batteryMethodology, financialMethodology, touMethodology } from "@/components/simulation/MethodologySection";
 
 interface LoadProfileChartProps {
@@ -40,12 +42,13 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [systemLosses, setSystemLosses] = useState(0.14);
+  const [dateMode, setDateMode] = useState<DateMode>("average");
+  const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
   const chartRef = useRef<HTMLDivElement>(null);
 
   const maxPvAcKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
   const dcCapacityKwp = maxPvAcKva ? maxPvAcKva * dcAcRatio : null;
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
-  const isWeekend = selectedDay === "Saturday" || selectedDay === "Sunday";
   const unit = displayUnit === "kwh" ? "kWh" : "kVA";
 
   // Solcast PV profile hook
@@ -61,37 +64,68 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
     longitude: longitude || null,
   });
 
+  // Specific date data hook
+  const {
+    chartData: specificDateChartData,
+    availableDateRange,
+    hasRawData,
+  } = useSpecificDateData({
+    tenants,
+    shopTypes,
+    selectedDate: specificDate || null,
+    displayUnit,
+    powerFactor,
+  });
+
   const navigateDay = (direction: "prev" | "next") => {
     const newIndex = direction === "prev" ? (dayIndex - 1 + 7) % 7 : (dayIndex + 1) % 7;
     setSelectedDay(DAYS_OF_WEEK[newIndex]);
   };
 
+  // Averaged data hook
   const {
-    chartData,
-    totalDaily,
-    peakHour,
-    avgHourly,
-    loadFactor,
+    chartData: averagedChartData,
+    totalDaily: avgTotalDaily,
+    peakHour: avgPeakHour,
+    avgHourly: avgAvgHourly,
+    loadFactor: avgLoadFactor,
     pvStats,
     overPanelingStats,
     tenantsWithScada,
     tenantsEstimated,
+    isWeekend,
   } = useLoadProfileData({
     tenants,
     shopTypes,
     selectedDay,
     displayUnit,
     powerFactor,
-    showPVProfile,
+    showPVProfile: dateMode === "average" && showPVProfile,
     maxPvAcKva,
     dcCapacityKwp,
     dcAcRatio,
-    showBattery,
+    showBattery: dateMode === "average" && showBattery,
     batteryCapacity,
     batteryPower,
     solcastProfile: useSolcast ? solcastProfile : undefined,
     systemLosses,
   });
+
+  // Use appropriate data based on mode
+  const chartData = dateMode === "specific" && specificDateChartData ? specificDateChartData : averagedChartData;
+  const totalDaily = dateMode === "specific" && specificDateChartData 
+    ? specificDateChartData.reduce((sum, d) => sum + d.total, 0)
+    : avgTotalDaily;
+  const peakHour = dateMode === "specific" && specificDateChartData
+    ? specificDateChartData.reduce((max, d, i) => (d.total > max.val ? { val: d.total, hour: i } : max), { val: 0, hour: 0 })
+    : avgPeakHour;
+  const avgHourly = totalDaily / 24;
+  const loadFactor = peakHour.val > 0 ? (avgHourly / peakHour.val) * 100 : 0;
+  
+  // For specific date mode, determine if it's a weekend
+  const effectiveIsWeekend = dateMode === "specific" && specificDate
+    ? (specificDate.getDay() === 0 || specificDate.getDay() === 6)
+    : isWeekend;
 
   const { exportToCSV, exportToPDF, exportToPNG, exportToSVG } = useExportHandlers({
     chartData,
@@ -126,7 +160,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
         <CardHeader className="pb-3">
           <ChartHeader
             selectedDay={selectedDay}
-            isWeekend={isWeekend}
+            isWeekend={effectiveIsWeekend}
             displayUnit={displayUnit}
             setDisplayUnit={setDisplayUnit}
             navigateDay={navigateDay}
@@ -147,6 +181,15 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
             exportToPDF={exportToPDF}
             exportToPNG={exportToPNG}
             exportToSVG={exportToSVG}
+            // Date mode props
+            dateMode={dateMode}
+            onDateModeChange={setDateMode}
+            specificDate={specificDate}
+            onSpecificDateChange={setSpecificDate}
+            availableDates={availableDateRange.availableDates}
+            dateRangeStart={availableDateRange.startDate}
+            dateRangeEnd={availableDateRange.endDate}
+            hasRawData={hasRawData}
           />
         </CardHeader>
 
@@ -181,15 +224,22 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
             setSystemLosses={setSystemLosses}
           />
 
+          {/* No data message for specific date */}
+          {dateMode === "specific" && !specificDateChartData && specificDate && (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              <p className="text-sm">No SCADA data available for {specificDate.toLocaleDateString()}</p>
+            </div>
+          )}
+
           {/* Load Profile Chart */}
-          <LoadChart chartData={chartData} showTOU={showTOU} isWeekend={isWeekend} unit={unit} />
+          <LoadChart chartData={chartData} showTOU={showTOU} isWeekend={effectiveIsWeekend} unit={unit} />
 
           {/* PV Generation Chart */}
-          {showPVProfile && maxPvAcKva && (
+          {showPVProfile && maxPvAcKva && dateMode === "average" && (
             <SolarChart
               chartData={chartData}
               showTOU={showTOU}
-              isWeekend={isWeekend}
+              isWeekend={effectiveIsWeekend}
               dcAcRatio={dcAcRatio}
               show1to1Comparison={show1to1Comparison}
               unit={unit}
@@ -197,23 +247,23 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
           )}
 
           {/* Grid Flow Chart */}
-          {showPVProfile && maxPvAcKva && (
+          {showPVProfile && maxPvAcKva && dateMode === "average" && (
             <GridFlowChart
               chartData={chartData}
               showTOU={showTOU}
-              isWeekend={isWeekend}
+              isWeekend={effectiveIsWeekend}
               unit={unit}
             />
           )}
 
 
           {/* Over-Paneling Summary */}
-          {showPVProfile && maxPvAcKva && overPanelingStats && dcAcRatio > 1 && (
+          {showPVProfile && maxPvAcKva && overPanelingStats && dcAcRatio > 1 && dateMode === "average" && (
             <OverPanelingAnalysis stats={overPanelingStats} dcAcRatio={dcAcRatio} />
           )}
 
           {/* Battery Chart */}
-          {showBattery && showPVProfile && maxPvAcKva && (
+          {showBattery && showPVProfile && maxPvAcKva && dateMode === "average" && (
             <BatteryChart chartData={chartData} batteryCapacity={batteryCapacity} batteryPower={batteryPower} />
           )}
 
@@ -226,7 +276,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
       </Card>
 
       {/* Compact Stats Row */}
-      <ChartStats totalDaily={totalDaily} avgHourly={avgHourly} loadFactor={loadFactor} unit={unit} pvStats={pvStats} />
+      <ChartStats totalDaily={totalDaily} avgHourly={avgHourly} loadFactor={loadFactor} unit={unit} pvStats={dateMode === "average" ? pvStats : null} />
 
       {/* Top Contributors */}
       <TopContributors tenants={tenants} chartData={chartData} />
