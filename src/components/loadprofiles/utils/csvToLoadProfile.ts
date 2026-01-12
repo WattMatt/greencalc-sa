@@ -1,4 +1,4 @@
-import { WizardParseConfig, ColumnConfig } from "../CsvImportWizard";
+import { WizardParseConfig, ColumnConfig } from "../types/csvImportTypes";
 
 export interface ProcessedLoadProfile {
   weekdayProfile: number[]; // 24 hourly values in kW

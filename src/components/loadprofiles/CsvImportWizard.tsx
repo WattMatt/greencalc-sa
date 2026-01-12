@@ -22,32 +22,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, FileSpreadsheet, Settings2, Columns, Check, Zap } from "lucide-react";
+import { ColumnConfig, WizardParseConfig, ParsedData } from "./types/csvImportTypes";
 
-export interface ColumnConfig {
-  index: number;
-  name: string;
-  dataType: "general" | "text" | "date" | "skip";
-  dateFormat?: string;
-}
-
-export interface WizardParseConfig {
-  fileType: "delimited" | "fixed";
-  startRow: number;
-  delimiters: {
-    tab: boolean;
-    semicolon: boolean;
-    comma: boolean;
-    space: boolean;
-    other: boolean;
-    otherChar: string;
-  };
-  treatConsecutiveAsOne: boolean;
-  textQualifier: string;
-  columns: ColumnConfig[];
-  detectedFormat?: "pnp-scada" | "generic";
-  meterName?: string;
-  dateRange?: { start: string; end: string };
-}
+// Re-export types for convenience
+export type { ColumnConfig, WizardParseConfig, ParsedData };
 
 interface CsvImportWizardProps {
   isOpen: boolean;
@@ -56,13 +34,6 @@ interface CsvImportWizardProps {
   fileName: string;
   onProcess: (config: WizardParseConfig, parsedData: ParsedData) => void;
   isProcessing: boolean;
-}
-
-interface ParsedData {
-  headers: string[];
-  rows: string[][];
-  meterName?: string;
-  dateRange?: { start: string; end: string };
 }
 
 const DEFAULT_CONFIG: WizardParseConfig = {
