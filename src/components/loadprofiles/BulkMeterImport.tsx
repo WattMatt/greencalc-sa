@@ -11,7 +11,7 @@ import {
   Upload, Loader2, FileUp, Save, X, FileText, Link2, AlertCircle, CheckCircle2, Settings2
 } from "lucide-react";
 import { toast } from "sonner";
-import { CsvImportWizard, WizardParseConfig } from "./CsvImportWizard";
+import { CsvImportWizard, WizardParseConfig, ColumnConfig } from "./CsvImportWizard";
 import { processCSVToLoadProfile, ProcessedLoadProfile } from "./utils/csvToLoadProfile";
 
 interface PendingFile {
@@ -156,11 +156,132 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
     [unassignedMeters, usedMeterIds]
   );
 
+  // Auto-parse CSV content with auto-detected configuration
+  const autoParseCSV = useCallback((content: string, fileName: string): { 
+    parseConfig: WizardParseConfig; 
+    parsedData: { headers: string[]; rows: string[][]; meterName?: string; dateRange?: { start: string; end: string } };
+    processedProfile: ProcessedLoadProfile;
+  } => {
+    // Detect PnP SCADA format
+    const lines = content.split('\n').filter(l => l.trim());
+    let isPnPScada = false;
+    let meterName: string | undefined;
+    let dateRange: { start: string; end: string } | undefined;
+    let startRow = 1;
+
+    // Check for PnP SCADA format
+    if (lines.length >= 2) {
+      const firstLine = lines[0];
+      const meterMatch = firstLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
+      const secondLine = lines[1]?.toLowerCase() || "";
+      const hasScadaHeaders = secondLine.includes('rdate') && secondLine.includes('rtime') && secondLine.includes('kwh');
+      
+      if (meterMatch && hasScadaHeaders) {
+        isPnPScada = true;
+        meterName = meterMatch[1];
+        dateRange = { start: meterMatch[2], end: meterMatch[3] };
+        startRow = 2; // Headers are on row 2
+      }
+    }
+
+    // Auto-detect delimiter
+    const sampleLine = lines[startRow - 1] || lines[0] || "";
+    const tabCount = (sampleLine.match(/\t/g) || []).length;
+    const semicolonCount = (sampleLine.match(/;/g) || []).length;
+    const commaCount = (sampleLine.match(/,/g) || []).length;
+
+    const delimiters = {
+      tab: tabCount > 0,
+      semicolon: semicolonCount > 0,
+      comma: commaCount > 0 || (tabCount === 0 && semicolonCount === 0),
+      space: false,
+      other: false,
+      otherChar: "",
+    };
+
+    // Build parse config
+    const parseConfig: WizardParseConfig = {
+      fileType: "delimited",
+      startRow,
+      delimiters,
+      treatConsecutiveAsOne: false,
+      textQualifier: '"',
+      columns: [],
+      detectedFormat: isPnPScada ? "pnp-scada" : undefined,
+    };
+
+    // Parse the CSV
+    const delimPattern = [
+      delimiters.tab ? '\t' : null,
+      delimiters.semicolon ? ';' : null,
+      delimiters.comma ? ',' : null,
+    ].filter(Boolean).join('|') || ',';
+    
+    const regex = new RegExp(delimPattern);
+
+    const parseRow = (line: string): string[] => {
+      const result: string[] = [];
+      let current = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"' && !inQuotes) {
+          inQuotes = true;
+        } else if (char === '"' && inQuotes) {
+          if (line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else if (!inQuotes && regex.test(char)) {
+          result.push(current.trim());
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    };
+
+    const headerIdx = startRow - 1;
+    const headers = headerIdx < lines.length ? parseRow(lines[headerIdx]) : [];
+    const rows = lines.slice(headerIdx + 1).map(parseRow);
+
+    // Auto-detect column types (using ColumnConfig interface)
+    const columns: ColumnConfig[] = headers.map((header, idx) => {
+      const lowerHeader = header.toLowerCase();
+      if (lowerHeader.includes('date') || lowerHeader.includes('rdate')) {
+        return { index: idx, name: header, dataType: 'date' as const, dateFormat: 'YMD' };
+      } else if (lowerHeader.includes('kwh') || lowerHeader.includes('energy') || lowerHeader.includes('consumption')) {
+        return { index: idx, name: header, dataType: 'general' as const };
+      }
+      return { index: idx, name: header, dataType: 'text' as const };
+    });
+    parseConfig.columns = columns;
+
+    // If no meter name from SCADA format, derive from filename
+    if (!meterName) {
+      meterName = fileName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+    }
+
+    // Process into load profile
+    const processedProfile = processCSVToLoadProfile(headers, rows, parseConfig);
+
+    return {
+      parseConfig,
+      parsedData: { headers, rows, meterName, dateRange },
+      processedProfile,
+    };
+  }, []);
+
   const handleFilesUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
 
-    // For single file, open the wizard
+    // For single file, open the wizard for fine-tuning
     if (files.length === 1) {
       const file = files[0];
       const reader = new FileReader();
@@ -171,32 +292,60 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
       };
       reader.readAsText(file);
     } else {
-      // For multiple files, use quick import (existing behavior)
+      // For multiple files, auto-parse each file
       Array.from(files).forEach((file) => {
         const reader = new FileReader();
         reader.onload = (event) => {
           const content = event.target?.result as string;
-          const rowCount = content.split('\n').filter(l => l.trim()).length;
+          
+          try {
+            const { parseConfig, parsedData, processedProfile } = autoParseCSV(content, file.name);
+            const match = findBestMatch(parsedData.meterName || file.name, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
 
-          const match = findBestMatch(file.name, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
+            const newFile: PendingFile = {
+              id: crypto.randomUUID(),
+              fileName: file.name,
+              content,
+              rowCount: parsedData.rows.length,
+              matchedMeterId: match?.meter.id,
+              matchType: match ? "auto" : "new",
+              parseConfig,
+              meterName: parsedData.meterName,
+              dateRange: parsedData.dateRange,
+              processedProfile,
+              parsedHeaders: parsedData.headers,
+              parsedRows: parsedData.rows,
+            };
 
-          const newFile: PendingFile = {
-            id: crypto.randomUUID(),
-            fileName: file.name,
-            content,
-            rowCount,
-            matchedMeterId: match?.meter.id,
-            matchType: match ? "auto" : "new",
-          };
-
-          setPendingFiles((prev) => [...prev, newFile]);
+            setPendingFiles((prev) => [...prev, newFile]);
+            
+            if (processedProfile.dataPoints > 0) {
+              console.log(`Auto-parsed ${file.name}: ${processedProfile.dataPoints} data points, peak ${processedProfile.peakKw} kW`);
+            } else {
+              console.warn(`Warning: ${file.name} parsed but produced no data points - may need manual configuration`);
+            }
+          } catch (err) {
+            console.error(`Failed to auto-parse ${file.name}:`, err);
+            // Still add the file, but without processed data - user can use wizard
+            const rowCount = content.split('\n').filter(l => l.trim()).length;
+            const match = findBestMatch(file.name, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
+            
+            setPendingFiles((prev) => [...prev, {
+              id: crypto.randomUUID(),
+              fileName: file.name,
+              content,
+              rowCount,
+              matchedMeterId: match?.meter.id,
+              matchType: match ? "auto" : "new",
+            }]);
+          }
         };
         reader.readAsText(file);
       });
     }
 
     e.target.value = "";
-  }, [unassignedMeters, usedMeterIds]);
+  }, [unassignedMeters, usedMeterIds, autoParseCSV]);
 
   const handleWizardProcess = useCallback((config: WizardParseConfig, parsedData: { headers: string[]; rows: string[][]; meterName?: string; dateRange?: { start: string; end: string } }) => {
     if (!wizardFile) return;
