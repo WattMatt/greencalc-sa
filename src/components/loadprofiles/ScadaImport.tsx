@@ -11,7 +11,8 @@ import {
   Upload, Loader2, Check, FileUp, Calendar, Zap, Settings2
 } from "lucide-react";
 import { toast } from "sonner";
-import { CsvParseDialog, ParseConfiguration } from "./CsvParseDialog";
+import { CsvImportWizard, WizardParseConfig } from "./CsvImportWizard";
+import { processCSVToLoadProfile, ProcessedLoadProfile } from "./utils/csvToLoadProfile";
 import { MeterAnalysisChart, MeterChartDataPoint } from "./MeterAnalysisChart";
 
 interface Category {
@@ -133,61 +134,68 @@ export function ScadaImport({ categories, siteId, onImportComplete }: ScadaImpor
     e.target.value = "";
   }, [siteName]);
 
-  const handleProcess = async (config: ParseConfiguration) => {
-    if (!csvContent) return;
-
+  const handleWizardProcess = useCallback((
+    config: WizardParseConfig, 
+    parsedData: { headers: string[]; rows: string[][]; meterName?: string; dateRange?: { start: string; end: string } }
+  ) => {
     setIsProcessing(true);
-    setDialogOpen(false); // Close dialog while processing
+    setDialogOpen(false);
 
     try {
-      const { data, error } = await supabase.functions.invoke("process-scada-profile", {
-        body: {
-          csvContent,
-          action: "process",
-          ...config.columnMapping, // Spread mapping: dateColumn, timeColumn, valueColumn etc.
-          separator: config.separator,
-          headerRowNumber: config.headerRowNumber
-        },
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
-
-      // Transform raw data for chart
-      // We want to show the Average Hourly Profile (weekday vs weekend)
+      // Process CSV data into load profiles using our utility
+      const profile = processCSVToLoadProfile(parsedData.headers, parsedData.rows, config);
+      
+      // Transform for chart display
       const chartData: MeterChartDataPoint[] = [];
-
-      // Data format from backend: { weekdayProfile: number[], weekendProfile: number[] } (percentages)
-      // OR we can calculate from rawData if we want exact values
-      // Let's use the profile percentages for shape visualization
-
       for (let i = 0; i < 24; i++) {
         chartData.push({
           period: `${i}:00`,
-          amount: data.weekdayProfile[i], // Using "amount" for the bar
-          meterReading: data.weekendProfile[i], // Using "meterReading" for the line (weekend)
+          amount: profile.weekdayProfile[i],
+          meterReading: profile.weekendProfile[i],
         });
       }
 
+      // Build raw data from parsed rows for storage
+      const headers = parsedData.headers.map(h => h.toLowerCase());
+      const dateIdx = headers.findIndex(h => h.includes('date') || h === 'rdate');
+      const timeIdx = headers.findIndex(h => h.includes('time') || h === 'rtime');
+      const valueIdx = headers.findIndex(h => h.includes('kwh') || h.includes('value') || h.includes('active'));
+      
+      const rawData = parsedData.rows.map(row => ({
+        timestamp: `${row[dateIdx] || ''} ${row[timeIdx] || ''}`.trim(),
+        value: parseFloat(row[valueIdx]?.replace(/[^\d.-]/g, '') || '0') || 0
+      })).filter(d => d.value !== 0 || d.timestamp);
+
       setProcessedData({
-        dataPoints: data.dataPoints,
-        dateRange: data.dateRange,
-        weekdayDays: data.weekdayDays,
-        weekendDays: data.weekendDays,
-        rawData: data.rawData,
-        weekdayProfile: data.weekdayProfile,
-        weekendProfile: data.weekendProfile,
+        dataPoints: profile.dataPoints,
+        dateRange: { 
+          start: profile.dateRangeStart || parsedData.dateRange?.start || '', 
+          end: profile.dateRangeEnd || parsedData.dateRange?.end || '' 
+        },
+        weekdayDays: profile.weekdayDays,
+        weekendDays: profile.weekendDays,
+        rawData,
+        weekdayProfile: profile.weekdayProfile,
+        weekendProfile: profile.weekendProfile,
         hourlyProfile: chartData
       });
 
-      toast.success(`Processed ${data.dataPoints.toLocaleString()} readings`);
+      // Auto-set names from detected metadata
+      if (parsedData.meterName && !siteName) {
+        setSiteName(parsedData.meterName);
+      }
+      if (parsedData.meterName && !shopName) {
+        setShopName(parsedData.meterName);
+      }
+
+      toast.success(`Processed ${profile.dataPoints.toLocaleString()} readings (Peak: ${profile.peakKw} kW)`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to process CSV");
-      setDialogOpen(true); // Re-open dialog on error
+      setDialogOpen(true);
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [siteName, shopName]);
 
   const handleSave = async () => {
     if (!siteName || !processedData?.rawData?.length) {
@@ -419,12 +427,12 @@ export function ScadaImport({ categories, siteId, onImportComplete }: ScadaImpor
         </CardContent>
       </Card>
 
-      <CsvParseDialog
+      <CsvImportWizard
         isOpen={dialogOpen}
         onClose={() => setDialogOpen(false)}
         csvContent={csvContent}
         fileName={fileName}
-        onProcess={handleProcess}
+        onProcess={handleWizardProcess}
         isProcessing={isProcessing}
       />
     </div>

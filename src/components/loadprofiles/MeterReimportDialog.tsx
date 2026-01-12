@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Upload, Loader2, Check, FileUp, AlertTriangle } from "lucide-react";
-import { CsvParseDialog, ParseConfiguration } from "./CsvParseDialog";
+import { CsvImportWizard, WizardParseConfig } from "./CsvImportWizard";
+import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
 
 interface MeterReimportDialogProps {
   isOpen: boolean;
@@ -60,29 +61,30 @@ export function MeterReimportDialog({
     e.target.value = "";
   };
 
-  const handleProcess = async (config: ParseConfiguration) => {
-    if (!csvContent) return;
-
+  const handleWizardProcess = useCallback(async (
+    config: WizardParseConfig, 
+    parsedData: { headers: string[]; rows: string[][] }
+  ) => {
     setIsProcessing(true);
     setDialogOpen(false);
 
     try {
-      const { data, error } = await supabase.functions.invoke("process-scada-profile", {
-        body: {
-          csvContent,
-          action: "process",
-          ...config.columnMapping,
-          separator: config.separator,
-          headerRowNumber: config.headerRowNumber,
-          autoDetect: false // Force manual column selection
-        },
-      });
-
-      if (error) throw error;
-      if (!data.success) throw new Error(data.error);
+      // Process CSV data into load profiles using our utility
+      const profile = processCSVToLoadProfile(parsedData.headers, parsedData.rows, config);
+      
+      // Build raw data from parsed rows for storage
+      const headers = parsedData.headers.map(h => h.toLowerCase());
+      const dateIdx = headers.findIndex(h => h.includes('date') || h === 'rdate');
+      const timeIdx = headers.findIndex(h => h.includes('time') || h === 'rtime');
+      const valueIdx = headers.findIndex(h => h.includes('kwh') || h.includes('value') || h.includes('active'));
+      
+      const rawData = parsedData.rows.map(row => ({
+        timestamp: `${row[dateIdx] || ''} ${row[timeIdx] || ''}`.trim(),
+        value: parseFloat(row[valueIdx]?.replace(/[^\d.-]/g, '') || '0') || 0
+      })).filter(d => d.value !== 0 || d.timestamp);
 
       // Check if we got meaningful data
-      const hasNonZeroValues = data.rawData?.some((d: any) => d.value !== 0);
+      const hasNonZeroValues = rawData.some(d => d.value !== 0);
       
       if (!hasNonZeroValues) {
         toast.warning("All values are zero. Please check you selected the correct value column.", {
@@ -94,21 +96,21 @@ export function MeterReimportDialog({
       const { error: updateError } = await supabase
         .from("scada_imports")
         .update({
-          raw_data: data.rawData,
-          data_points: data.dataPoints,
-          date_range_start: data.dateRange.start,
-          date_range_end: data.dateRange.end,
-          weekday_days: data.weekdayDays,
-          weekend_days: data.weekendDays,
-          load_profile_weekday: data.weekdayProfile,
-          load_profile_weekend: data.weekendProfile,
+          raw_data: rawData,
+          data_points: profile.dataPoints,
+          date_range_start: profile.dateRangeStart,
+          date_range_end: profile.dateRangeEnd,
+          weekday_days: profile.weekdayDays,
+          weekend_days: profile.weekendDays,
+          load_profile_weekday: profile.weekdayProfile,
+          load_profile_weekend: profile.weekendProfile,
           file_name: fileName,
         })
         .eq("id", meterId);
 
       if (updateError) throw updateError;
 
-      toast.success(`Re-imported ${meterName} with ${data.dataPoints.toLocaleString()} readings`, {
+      toast.success(`Re-imported ${meterName} with ${profile.dataPoints.toLocaleString()} readings`, {
         description: hasNonZeroValues 
           ? "Data successfully updated with non-zero values"
           : "Warning: All values are zero"
@@ -131,7 +133,7 @@ export function MeterReimportDialog({
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [meterId, meterName, fileName, queryClient, onClose]);
 
   const handleClose = () => {
     setCsvContent(null);
@@ -207,7 +209,7 @@ export function MeterReimportDialog({
         </DialogContent>
       </Dialog>
 
-      <CsvParseDialog
+      <CsvImportWizard
         isOpen={dialogOpen}
         onClose={() => {
           setDialogOpen(false);
@@ -215,7 +217,7 @@ export function MeterReimportDialog({
         }}
         csvContent={csvContent}
         fileName={fileName}
-        onProcess={handleProcess}
+        onProcess={handleWizardProcess}
         isProcessing={isProcessing}
       />
     </>
