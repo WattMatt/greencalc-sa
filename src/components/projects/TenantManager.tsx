@@ -6,6 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { ChevronsUpDown, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -504,27 +507,55 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     <TableCell className="font-medium">{tenant.name}</TableCell>
                     <TableCell>{tenantArea.toLocaleString()}</TableCell>
                     <TableCell>
-                      <Select
-                        key={tenant.id}
-                        value={tenant.scada_import_id ?? undefined}
-                        onValueChange={(v) =>
-                          updateTenantProfile.mutate({
-                            tenantId: tenant.id,
-                            scadaImportId: v || null,
-                          })
-                        }
-                      >
-                        <SelectTrigger className="w-[220px]">
-                          <SelectValue placeholder="Unassigned" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {sortedProfiles.map((meter) => (
-                            <SelectItem key={meter.id} value={meter.id}>
-                              {formatProfileOption(meter)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-[220px] justify-between text-left font-normal"
+                          >
+                            <span className="truncate">
+                              {assignedProfile
+                                ? formatProfileOption(assignedProfile)
+                                : "Unassigned"}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[320px] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Search profiles..." className="h-9" />
+                            <CommandList>
+                              <CommandEmpty>No profile found.</CommandEmpty>
+                              <CommandGroup>
+                                {sortedProfiles.map((meter) => (
+                                  <CommandItem
+                                    key={meter.id}
+                                    value={`${meter.shop_name || ""} ${meter.area_sqm || ""}`}
+                                    onSelect={() => {
+                                      updateTenantProfile.mutate({
+                                        tenantId: tenant.id,
+                                        scadaImportId: meter.id,
+                                      });
+                                    }}
+                                    className="text-sm"
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        tenant.scada_import_id === meter.id
+                                          ? "opacity-100"
+                                          : "opacity-0"
+                                      )}
+                                    />
+                                    {formatProfileOption(meter)}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </TableCell>
                     <TableCell className="text-center">
                       {scaleFactor !== null ? (
