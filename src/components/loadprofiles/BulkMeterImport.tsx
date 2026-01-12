@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { CsvImportWizard, WizardParseConfig } from "./CsvImportWizard";
+import { processCSVToLoadProfile, ProcessedLoadProfile } from "./utils/csvToLoadProfile";
 
 interface PendingFile {
   id: string;
@@ -23,6 +24,9 @@ interface PendingFile {
   parseConfig?: WizardParseConfig;
   meterName?: string;
   dateRange?: { start: string; end: string };
+  processedProfile?: ProcessedLoadProfile;
+  parsedHeaders?: string[];
+  parsedRows?: string[][];
 }
 
 interface ExistingMeter {
@@ -203,6 +207,9 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
       const meterName = parsedData.meterName || wizardFile.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
       const match = findBestMatch(meterName, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
 
+      // Process CSV data into load profiles
+      const processedProfile = processCSVToLoadProfile(parsedData.headers, parsedData.rows, config);
+
       const newFile: PendingFile = {
         id: crypto.randomUUID(),
         fileName: wizardFile.name,
@@ -213,13 +220,19 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
         parseConfig: config,
         meterName: parsedData.meterName,
         dateRange: parsedData.dateRange,
+        processedProfile,
+        parsedHeaders: parsedData.headers,
+        parsedRows: parsedData.rows,
       };
 
       setPendingFiles((prev) => [...prev, newFile]);
       setWizardOpen(false);
       setWizardFile(null);
       
-      toast.success(`Parsed "${meterName}" with ${parsedData.rows.length} data rows`);
+      const profileSummary = processedProfile.dataPoints > 0 
+        ? ` (Peak: ${processedProfile.peakKw} kW, ${processedProfile.weekdayDays} weekdays, ${processedProfile.weekendDays} weekend days)`
+        : "";
+      toast.success(`Parsed "${meterName}" with ${parsedData.rows.length} data rows${profileSummary}`);
     } finally {
       setIsProcessingWizard(false);
     }
@@ -287,37 +300,50 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
       let createdCount = 0;
 
       for (const file of filesToSave) {
+        // Use processed profile data if available, otherwise use empty arrays
+        const profile = file.processedProfile;
+        const weekdayProfile = profile?.weekdayProfile || Array(24).fill(0);
+        const weekendProfile = profile?.weekendProfile || Array(24).fill(0);
+        const weekdayDays = profile?.weekdayDays || 0;
+        const weekendDays = profile?.weekendDays || 0;
+        const dateRangeStart = profile?.dateRangeStart || file.dateRange?.start || null;
+        const dateRangeEnd = profile?.dateRangeEnd || file.dateRange?.end || null;
+
         if (file.matchedMeterId) {
-          // Update existing meter placeholder with CSV data
+          // Update existing meter placeholder with processed CSV data
           const { error } = await supabase
             .from("scada_imports")
             .update({
               file_name: file.fileName,
               raw_data: [{ csvContent: file.content }],
-              data_points: file.rowCount,
-              load_profile_weekday: Array(24).fill(0),
-              load_profile_weekend: Array(24).fill(0),
-              weekday_days: 0,
-              weekend_days: 0,
+              data_points: profile?.dataPoints || file.rowCount,
+              load_profile_weekday: weekdayProfile,
+              load_profile_weekend: weekendProfile,
+              weekday_days: weekdayDays,
+              weekend_days: weekendDays,
+              date_range_start: dateRangeStart,
+              date_range_end: dateRangeEnd,
             })
             .eq("id", file.matchedMeterId);
 
           if (error) throw error;
           updatedCount++;
         } else {
-          // Create new meter record
-          const meterName = file.fileName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+          // Create new meter record with processed data
+          const meterName = file.meterName || file.fileName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
           const { error } = await supabase.from("scada_imports").insert({
             site_name: site?.name || meterName,
             site_id: siteId || null,
             shop_name: meterName,
             file_name: file.fileName,
             raw_data: [{ csvContent: file.content }],
-            data_points: file.rowCount,
-            load_profile_weekday: Array(24).fill(0),
-            load_profile_weekend: Array(24).fill(0),
-            weekday_days: 0,
-            weekend_days: 0,
+            data_points: profile?.dataPoints || file.rowCount,
+            load_profile_weekday: weekdayProfile,
+            load_profile_weekend: weekendProfile,
+            weekday_days: weekdayDays,
+            weekend_days: weekendDays,
+            date_range_start: dateRangeStart,
+            date_range_end: dateRangeEnd,
           });
 
           if (error) throw error;
@@ -474,7 +500,22 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                         <Badge variant="outline">{file.rowCount.toLocaleString()}</Badge>
                       </TableCell>
                       <TableCell>
-                        {file.meterName ? (
+                        {file.processedProfile && file.processedProfile.dataPoints > 0 ? (
+                          <div className="text-sm space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{file.meterName || "-"}</span>
+                              <Badge variant="default" className="text-xs">
+                                {file.processedProfile.peakKw} kW peak
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {file.processedProfile.weekdayDays} weekdays, {file.processedProfile.weekendDays} weekend days
+                              {file.processedProfile.dateRangeStart && (
+                                <> • {file.processedProfile.dateRangeStart} → {file.processedProfile.dateRangeEnd}</>
+                              )}
+                            </p>
+                          </div>
+                        ) : file.meterName ? (
                           <div className="text-sm">
                             <span className="font-medium">{file.meterName}</span>
                             {file.dateRange && (
@@ -484,7 +525,7 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                             )}
                           </div>
                         ) : (
-                          <span className="text-muted-foreground text-xs">-</span>
+                          <span className="text-muted-foreground text-xs">Not processed</span>
                         )}
                       </TableCell>
                       <TableCell>
