@@ -118,15 +118,56 @@ export function processCSVToLoadProfile(
   rows: string[][],
   config: WizardParseConfig
 ): ProcessedLoadProfile {
-  // Find relevant columns
-  const dateColIdx = findColumnIndex(headers, ["rdate", "date", "datetime", "timestamp"]);
-  const timeColIdx = findColumnIndex(headers, ["rtime", "time"]);
-  const kwhColIdx = findColumnIndex(headers, ["kwh+", "kwh", "energy", "consumption", "reading"]);
+  // First, check if user has configured column types explicitly
+  let dateColIdx = -1;
+  let timeColIdx = -1;
+  let kwhColIdx = -1;
+  
+  // Look for configured columns first (from wizard step 3)
+  if (config.columns && config.columns.length > 0) {
+    for (const col of config.columns) {
+      if (col.dataType === "date") {
+        // First date column found is the date column
+        if (dateColIdx === -1) {
+          dateColIdx = col.index;
+        }
+      } else if (col.dataType === "general") {
+        // First "general" (numeric) column is the kWh column
+        if (kwhColIdx === -1) {
+          kwhColIdx = col.index;
+        }
+      }
+    }
+  }
+  
+  // Check for time column by name pattern in configured columns
+  if (config.columns && config.columns.length > 0) {
+    for (const col of config.columns) {
+      const lowerName = col.name.toLowerCase();
+      if ((lowerName.includes("time") || lowerName.includes("rtime")) && col.dataType !== "skip") {
+        timeColIdx = col.index;
+        break;
+      }
+    }
+  }
+  
+  // Fall back to auto-detection if columns not found in config
+  if (dateColIdx === -1) {
+    dateColIdx = findColumnIndex(headers, ["rdate", "date", "datetime", "timestamp"]);
+  }
+  if (timeColIdx === -1) {
+    timeColIdx = findColumnIndex(headers, ["rtime", "time"]);
+  }
+  if (kwhColIdx === -1) {
+    kwhColIdx = findColumnIndex(headers, ["kwh+", "kwh", "energy", "consumption", "reading", "value", "amount"]);
+  }
   
   if (dateColIdx === -1 || kwhColIdx === -1) {
-    console.warn("Could not find required columns. Date:", dateColIdx, "kWh:", kwhColIdx);
+    console.warn("Could not find required columns. Date:", dateColIdx, "kWh:", kwhColIdx, "Headers:", headers, "Config columns:", config.columns);
     return createEmptyProfile();
   }
+  
+  console.log(`Processing CSV: Date col=${dateColIdx} (${headers[dateColIdx]}), Time col=${timeColIdx} (${headers[timeColIdx] || 'N/A'}), kWh col=${kwhColIdx} (${headers[kwhColIdx]})`);
   
   const dateFormat = getDateFormat(config.columns, dateColIdx);
   
