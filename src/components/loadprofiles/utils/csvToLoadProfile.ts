@@ -101,6 +101,52 @@ function findColumnIndex(headers: string[], patterns: string[]): number {
   return -1;
 }
 
+// Detect if a column contains numeric values by analyzing sample data
+function isNumericColumn(rows: string[][], colIdx: number): boolean {
+  if (colIdx < 0) return false;
+  
+  let numericCount = 0;
+  const sampleSize = Math.min(rows.length, 20);
+  
+  for (let i = 0; i < sampleSize; i++) {
+    const val = rows[i]?.[colIdx]?.replace(/[^\d.-]/g, "");
+    if (val && !isNaN(parseFloat(val)) && parseFloat(val) > 0) {
+      numericCount++;
+    }
+  }
+  
+  return numericCount >= sampleSize * 0.8; // 80% must be valid numbers
+}
+
+// Find the best kWh/value column by analyzing data
+function findValueColumn(headers: string[], rows: string[][]): number {
+  const lowerHeaders = headers.map(h => h.toLowerCase().trim());
+  
+  // First try common energy column patterns
+  const energyPatterns = ["kwh+", "kwh-", "kwh", "energy", "consumption", "reading", "value", "amount", "usage", "total", "active"];
+  
+  for (const pattern of energyPatterns) {
+    const idx = lowerHeaders.findIndex(h => h.includes(pattern));
+    if (idx !== -1 && isNumericColumn(rows, idx)) {
+      return idx;
+    }
+  }
+  
+  // Fallback: find the first numeric column that's not likely a date/time
+  for (let i = 0; i < headers.length; i++) {
+    const header = lowerHeaders[i];
+    // Skip date/time/id columns
+    if (header.includes("date") || header.includes("time") || header.includes("id") || header.includes("name")) {
+      continue;
+    }
+    if (isNumericColumn(rows, i)) {
+      return i;
+    }
+  }
+  
+  return -1;
+}
+
 // Get date format from column config
 function getDateFormat(columns: ColumnConfig[], index: number): string {
   const col = columns.find(c => c.index === index);
@@ -159,7 +205,13 @@ export function processCSVToLoadProfile(
     timeColIdx = findColumnIndex(headers, ["rtime", "time"]);
   }
   if (kwhColIdx === -1) {
-    kwhColIdx = findColumnIndex(headers, ["kwh+", "kwh", "energy", "consumption", "reading", "value", "amount"]);
+    // Try pattern-based detection first
+    kwhColIdx = findColumnIndex(headers, ["kwh+", "kwh-", "kwh", "energy", "consumption", "reading", "value", "amount", "usage"]);
+    
+    // If still not found, try to find any numeric column that looks like energy data
+    if (kwhColIdx === -1) {
+      kwhColIdx = findValueColumn(headers, rows);
+    }
   }
   
   if (dateColIdx === -1 || kwhColIdx === -1) {

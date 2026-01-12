@@ -109,10 +109,16 @@ export function LoadProfilesDashboard({ onNavigateToSites, onNavigateToMeters }:
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats?.totalDataPoints ? (stats.totalDataPoints / 1000).toFixed(0) + "K" : 0}
+              {stats?.totalDataPoints 
+                ? stats.totalDataPoints >= 1_000_000 
+                  ? (stats.totalDataPoints / 1_000_000).toFixed(1) + "M"
+                  : stats.totalDataPoints >= 1_000 
+                    ? (stats.totalDataPoints / 1_000).toFixed(1) + "K"
+                    : stats.totalDataPoints.toLocaleString()
+                : 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              Readings captured
+              {stats?.totalDataPoints?.toLocaleString() || 0} readings
             </p>
           </CardContent>
         </Card>
