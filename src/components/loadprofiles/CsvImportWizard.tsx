@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -324,10 +325,10 @@ export function CsvImportWizard({
             </Label>
           </div>
           <div className="flex items-center space-x-3">
-            <RadioGroupItem value="fixed" id="fixed" disabled />
-            <Label htmlFor="fixed" className="cursor-pointer text-muted-foreground">
+            <RadioGroupItem value="fixed" id="fixed" />
+            <Label htmlFor="fixed" className="cursor-pointer">
               <span className="font-medium">Fixed width</span>
-              <span className="ml-2">– Fields are aligned in columns with spaces between each field.</span>
+              <span className="text-muted-foreground ml-2">– Fields are aligned in columns with spaces between each field.</span>
             </Label>
           </div>
         </RadioGroup>
@@ -534,6 +535,9 @@ export function CsvImportWizard({
           <DialogTitle className="text-lg">
             Text Import Wizard - Step {step} of 3
           </DialogTitle>
+          <DialogDescription>
+            Configure how your CSV data should be parsed and imported.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-auto py-2">
