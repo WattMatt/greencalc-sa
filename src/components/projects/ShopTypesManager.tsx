@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Upload, Trash2, Edit2, Download } from "lucide-react";
 import { toast } from "sonner";
+import { CsvImportWizard, WizardParseConfig } from "@/components/loadprofiles/CsvImportWizard";
 
 interface ShopType {
   id: string;
@@ -33,6 +34,11 @@ export function ShopTypesManager({ shopTypes }: ShopTypesManagerProps) {
     description: "",
     kwh_per_sqm_month: "50",
   });
+  
+  // CSV Wizard state
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardFile, setWizardFile] = useState<{ name: string; content: string } | null>(null);
+  const [isProcessingWizard, setIsProcessingWizard] = useState(false);
 
   const resetForm = () => {
     setFormData({ name: "", description: "", kwh_per_sqm_month: "50" });
@@ -73,11 +79,14 @@ export function ShopTypesManager({ shopTypes }: ShopTypesManagerProps) {
     onError: (error) => toast.error(error.message),
   });
 
-  const importShopTypes = useMutation({
-    mutationFn: async (file: File) => {
-      const text = await file.text();
-      const lines = text.split("\n").filter((l) => l.trim());
-      const headers = lines[0].toLowerCase().split(",").map((h) => h.trim());
+  const processWizardData = useCallback(async (
+    config: WizardParseConfig, 
+    parsedData: { headers: string[]; rows: string[][] }
+  ) => {
+    setIsProcessingWizard(true);
+    
+    try {
+      const headers = parsedData.headers.map(h => h.toLowerCase().trim());
       
       const nameIdx = headers.findIndex((h) => h.includes("name") || h.includes("type"));
       const kwhIdx = headers.findIndex((h) => h.includes("kwh") || h.includes("consumption"));
@@ -93,22 +102,21 @@ export function ShopTypesManager({ shopTypes }: ShopTypesManagerProps) {
       }
 
       if (nameIdx === -1) {
-        throw new Error("CSV must have a 'name' column");
+        throw new Error(`Could not find 'name' column. Found: ${parsedData.headers.join(", ")}`);
       }
 
       const typesToInsert = [];
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(",").map((c) => c.trim().replace(/^["']|["']$/g, ""));
-        const name = cols[nameIdx];
+      for (const row of parsedData.rows) {
+        const name = row[nameIdx]?.trim();
         if (!name) continue;
 
-        const kwh = kwhIdx !== -1 ? parseFloat(cols[kwhIdx]) || 50 : 50;
-        const desc = descIdx !== -1 ? cols[descIdx] : null;
+        const kwh = kwhIdx !== -1 ? parseFloat(row[kwhIdx]) || 50 : 50;
+        const desc = descIdx !== -1 ? row[descIdx] : null;
 
         // Parse hourly profile if present
         let loadProfile: number[] | undefined;
         if (hourlyIdxs.length === 24) {
-          loadProfile = hourlyIdxs.map((idx) => parseFloat(cols[idx]) || 4.17);
+          loadProfile = hourlyIdxs.map((idx) => parseFloat(row[idx]) || 4.17);
           // Normalize to sum to 100
           const sum = loadProfile.reduce((a, b) => a + b, 0);
           if (sum > 0) {
@@ -133,19 +141,29 @@ export function ShopTypesManager({ shopTypes }: ShopTypesManagerProps) {
 
       const { error } = await supabase.from("shop_types").insert(typesToInsert);
       if (error) throw error;
-      return typesToInsert.length;
-    },
-    onSuccess: (count) => {
+
       queryClient.invalidateQueries({ queryKey: ["shop-types"] });
-      toast.success(`Imported ${count} shop types`);
-    },
-    onError: (error) => toast.error(error.message),
-  });
+      toast.success(`Imported ${typesToInsert.length} shop types`);
+      
+      setWizardOpen(false);
+      setWizardFile(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to import shop types");
+    } finally {
+      setIsProcessingWizard(false);
+    }
+  }, [queryClient]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      importShopTypes.mutate(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        setWizardFile({ name: file.name, content });
+        setWizardOpen(true);
+      };
+      reader.readAsText(file);
     }
     e.target.value = "";
   };
@@ -333,6 +351,18 @@ Clothing Retail,45,Fashion and apparel,1,1,1,1,1,1,2,4,6,7,8,9,9,9,8,7,6,6,7,6,4
           </CardContent>
         </Card>
       )}
+
+      <CsvImportWizard
+        isOpen={wizardOpen}
+        onClose={() => {
+          setWizardOpen(false);
+          setWizardFile(null);
+        }}
+        csvContent={wizardFile?.content || null}
+        fileName={wizardFile?.name || ""}
+        onProcess={processWizardData}
+        isProcessing={isProcessingWizard}
+      />
     </div>
   );
 }

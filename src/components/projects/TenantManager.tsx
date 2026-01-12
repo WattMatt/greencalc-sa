@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { toast } from "sonner";
 
 import { TenantProfileMatcher } from "./TenantProfileMatcher";
 import { AccuracyBadge, AccuracySummary, getAccuracyLevel } from "@/components/simulation/AccuracyBadge";
+import { CsvImportWizard, WizardParseConfig } from "@/components/loadprofiles/CsvImportWizard";
 
 interface Tenant {
   id: string;
@@ -141,6 +142,11 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newTenant, setNewTenant] = useState({ name: "", area_sqm: "", scada_import_id: "" });
+  
+  // CSV Wizard state
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardFile, setWizardFile] = useState<{ name: string; content: string } | null>(null);
+  const [isProcessingWizard, setIsProcessingWizard] = useState(false);
 
   // Fetch SCADA imports for profile assignment
   const { data: scadaImports } = useQuery({
@@ -213,24 +219,33 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     onError: (error) => toast.error(error.message),
   });
 
-  const importTenants = useMutation({
-    mutationFn: async (file: File) => {
-      const text = await file.text();
-      const lines = text.split("\n").filter((l) => l.trim());
-      const headers = lines[0].toLowerCase().split(",").map((h) => h.trim());
-
-      const nameIdx = headers.findIndex((h) => h.includes("name") || h.includes("tenant") || h.includes("shop"));
-      const areaIdx = headers.findIndex((h) => h.includes("area") || h.includes("sqm") || h.includes("size"));
+  const processWizardData = useCallback(async (
+    config: WizardParseConfig, 
+    parsedData: { headers: string[]; rows: string[][] }
+  ) => {
+    setIsProcessingWizard(true);
+    
+    try {
+      const headers = parsedData.headers.map(h => h.toLowerCase().trim());
+      
+      // Find name and area columns
+      const nameIdx = headers.findIndex((h) => 
+        h.includes("name") || h.includes("tenant") || h.includes("shop")
+      );
+      const areaIdx = headers.findIndex((h) => 
+        h.includes("area") || h.includes("sqm") || h.includes("size") || h.includes("m2") || h.includes("m²")
+      );
 
       if (nameIdx === -1 || areaIdx === -1) {
-        throw new Error("CSV must have 'name' and 'area' columns");
+        throw new Error(`Could not find required columns. Found: ${parsedData.headers.join(", ")}. Need 'name' and 'area' columns.`);
       }
 
       const tenantsToInsert = [];
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(",").map((c) => c.trim().replace(/^["']|["']$/g, ""));
-        const name = cols[nameIdx];
-        const area = parseFloat(cols[areaIdx]);
+      for (const row of parsedData.rows) {
+        const name = row[nameIdx]?.trim();
+        const areaStr = row[areaIdx]?.replace(/[^\d.]/g, "");
+        const area = parseFloat(areaStr);
+        
         if (name && !isNaN(area) && area > 0) {
           tenantsToInsert.push({
             project_id: projectId,
@@ -246,19 +261,29 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
 
       const { error } = await supabase.from("project_tenants").insert(tenantsToInsert);
       if (error) throw error;
-      return tenantsToInsert.length;
-    },
-    onSuccess: (count) => {
+
       queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
-      toast.success(`Imported ${count} tenants`);
-    },
-    onError: (error) => toast.error(error.message),
-  });
+      toast.success(`Imported ${tenantsToInsert.length} tenants`);
+      
+      setWizardOpen(false);
+      setWizardFile(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to import tenants");
+    } finally {
+      setIsProcessingWizard(false);
+    }
+  }, [projectId, queryClient]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      importTenants.mutate(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        setWizardFile({ name: file.name, content });
+        setWizardOpen(true);
+      };
+      reader.readAsText(file);
     }
     e.target.value = "";
   };
@@ -544,6 +569,18 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       {tenants.length > 0 && (
         <TenantProfileMatcher projectId={projectId} tenants={tenants} />
       )}
+
+      <CsvImportWizard
+        isOpen={wizardOpen}
+        onClose={() => {
+          setWizardOpen(false);
+          setWizardFile(null);
+        }}
+        csvContent={wizardFile?.content || null}
+        fileName={wizardFile?.name || ""}
+        onProcess={processWizardData}
+        isProcessing={isProcessingWizard}
+      />
     </div>
   );
 }
