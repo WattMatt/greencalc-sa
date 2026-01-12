@@ -2,15 +2,18 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "@/hooks/use-toast";
-import { AdvancedSimulationConfig } from "@/components/projects/simulation/AdvancedSimulationTypes";
 import type { Json } from "@/integrations/supabase/types";
+
+// Generic config type that accepts any serializable config object
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type PresetConfigType = Record<string, any>;
 
 interface SimulationPreset {
   id: string;
   user_id: string;
   name: string;
   description: string | null;
-  config: AdvancedSimulationConfig;
+  config: PresetConfigType;
   is_default: boolean;
   created_at: string;
   updated_at: string;
@@ -19,7 +22,7 @@ interface SimulationPreset {
 interface CreatePresetInput {
   name: string;
   description?: string;
-  config: AdvancedSimulationConfig;
+  config: PresetConfigType;
   is_default?: boolean;
 }
 
@@ -27,7 +30,7 @@ interface UpdatePresetInput {
   id: string;
   name?: string;
   description?: string;
-  config?: AdvancedSimulationConfig;
+  config?: PresetConfigType;
   is_default?: boolean;
 }
 
@@ -50,7 +53,7 @@ export function useSimulationPresets() {
       
       return data.map((preset) => ({
         ...preset,
-        config: preset.config as unknown as AdvancedSimulationConfig,
+        config: preset.config as unknown as PresetConfigType,
       })) as SimulationPreset[];
     },
     enabled: !!user,

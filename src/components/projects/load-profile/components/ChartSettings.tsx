@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Settings2, ChevronDown, Cloud, RefreshCw, Loader2 } from "lucide-react";
 import { DisplayUnit } from "../types";
 import { SolcastPVProfile } from "../hooks/useSolcastPVProfile";
+import { SavePresetDialog, PresetConfig } from "./SavePresetDialog";
 
 interface ChartSettingsProps {
   showAdvancedSettings: boolean;
@@ -65,15 +66,31 @@ export function ChartSettings({
   systemLosses = 0.14,
   setSystemLosses,
 }: ChartSettingsProps) {
+  // Build current config for preset saving
+  const currentConfig: PresetConfig = {
+    dcAcRatio,
+    batteryCapacity,
+    batteryPower,
+    systemLosses,
+    powerFactor,
+    showPVProfile,
+    showBattery,
+    show1to1Comparison,
+    useSolcast: useSolcast || false,
+  };
+
   return (
     <Collapsible open={showAdvancedSettings} onOpenChange={setShowAdvancedSettings}>
-      <CollapsibleTrigger asChild>
-        <Button variant="ghost" size="sm" className="mb-2 h-7 text-xs text-muted-foreground gap-1">
-          <Settings2 className="h-3 w-3" />
-          Settings
-          <ChevronDown className={`h-3 w-3 transition-transform ${showAdvancedSettings ? "rotate-180" : ""}`} />
-        </Button>
-      </CollapsibleTrigger>
+      <div className="flex items-center gap-2 mb-2">
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground gap-1">
+            <Settings2 className="h-3 w-3" />
+            Settings
+            <ChevronDown className={`h-3 w-3 transition-transform ${showAdvancedSettings ? "rotate-180" : ""}`} />
+          </Button>
+        </CollapsibleTrigger>
+        <SavePresetDialog config={currentConfig} />
+      </div>
       <CollapsibleContent className="mb-4 p-3 rounded-lg bg-muted/50 space-y-3">
         {/* Check if any settings are available */}
         {!showPVProfile && !showBattery && displayUnit !== "kva" ? (

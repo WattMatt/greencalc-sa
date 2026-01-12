@@ -157,7 +157,7 @@ export function AdvancedSimulationConfigPanel({
                           className="h-7 text-xs gap-1 group"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onChange(preset.config);
+                            onChange(preset.config as AdvancedSimulationConfig);
                           }}
                         >
                           {preset.name}
