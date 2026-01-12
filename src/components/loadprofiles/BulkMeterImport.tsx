@@ -8,17 +8,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Upload, Loader2, FileUp, Save, X, FileText, Link2, AlertCircle, CheckCircle2
+  Upload, Loader2, FileUp, Save, X, FileText, Link2, AlertCircle, CheckCircle2, Settings2
 } from "lucide-react";
 import { toast } from "sonner";
+import { CsvImportWizard, WizardParseConfig } from "./CsvImportWizard";
 
 interface PendingFile {
   id: string;
   fileName: string;
   content: string;
   rowCount: number;
-  matchedMeterId?: string; // ID of matched existing meter placeholder
-  matchType?: "auto" | "manual" | "new"; // How the match was determined
+  matchedMeterId?: string;
+  matchType?: "auto" | "manual" | "new";
+  parseConfig?: WizardParseConfig;
+  meterName?: string;
+  dateRange?: { start: string; end: string };
 }
 
 interface ExistingMeter {
@@ -92,6 +96,11 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Wizard state
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardFile, setWizardFile] = useState<{ name: string; content: string } | null>(null);
+  const [isProcessingWizard, setIsProcessingWizard] = useState(false);
 
   // Fetch existing site name if siteId provided
   const { data: site } = useQuery({
@@ -147,31 +156,82 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
     const files = e.target.files;
     if (!files?.length) return;
 
-    Array.from(files).forEach((file) => {
+    // For single file, open the wizard
+    if (files.length === 1) {
+      const file = files[0];
       const reader = new FileReader();
       reader.onload = (event) => {
         const content = event.target?.result as string;
-        const rowCount = content.split('\n').filter(l => l.trim()).length;
-
-        // Try to auto-match with existing meter placeholder
-        const match = findBestMatch(file.name, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
-
-        const newFile: PendingFile = {
-          id: crypto.randomUUID(),
-          fileName: file.name,
-          content,
-          rowCount,
-          matchedMeterId: match?.meter.id,
-          matchType: match ? "auto" : "new",
-        };
-
-        setPendingFiles((prev) => [...prev, newFile]);
+        setWizardFile({ name: file.name, content });
+        setWizardOpen(true);
       };
       reader.readAsText(file);
-    });
+    } else {
+      // For multiple files, use quick import (existing behavior)
+      Array.from(files).forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const content = event.target?.result as string;
+          const rowCount = content.split('\n').filter(l => l.trim()).length;
+
+          const match = findBestMatch(file.name, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
+
+          const newFile: PendingFile = {
+            id: crypto.randomUUID(),
+            fileName: file.name,
+            content,
+            rowCount,
+            matchedMeterId: match?.meter.id,
+            matchType: match ? "auto" : "new",
+          };
+
+          setPendingFiles((prev) => [...prev, newFile]);
+        };
+        reader.readAsText(file);
+      });
+    }
 
     e.target.value = "";
   }, [unassignedMeters, usedMeterIds]);
+
+  const handleWizardProcess = useCallback((config: WizardParseConfig, parsedData: { headers: string[]; rows: string[][]; meterName?: string; dateRange?: { start: string; end: string } }) => {
+    if (!wizardFile) return;
+    
+    setIsProcessingWizard(true);
+    
+    try {
+      const meterName = parsedData.meterName || wizardFile.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+      const match = findBestMatch(meterName, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
+
+      const newFile: PendingFile = {
+        id: crypto.randomUUID(),
+        fileName: wizardFile.name,
+        content: wizardFile.content,
+        rowCount: parsedData.rows.length,
+        matchedMeterId: match?.meter.id,
+        matchType: match ? "auto" : "new",
+        parseConfig: config,
+        meterName: parsedData.meterName,
+        dateRange: parsedData.dateRange,
+      };
+
+      setPendingFiles((prev) => [...prev, newFile]);
+      setWizardOpen(false);
+      setWizardFile(null);
+      
+      toast.success(`Parsed "${meterName}" with ${parsedData.rows.length} data rows`);
+    } finally {
+      setIsProcessingWizard(false);
+    }
+  }, [wizardFile, unassignedMeters, usedMeterIds]);
+
+  const openWizardForFile = (fileId: string) => {
+    const file = pendingFiles.find(f => f.id === fileId);
+    if (file) {
+      setWizardFile({ name: file.fileName, content: file.content });
+      setWizardOpen(true);
+    }
+  };
 
   const removeFile = (id: string) => {
     setPendingFiles((prev) => prev.filter((f) => f.id !== id));
@@ -384,8 +444,9 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                     </TableHead>
                     <TableHead>File Name</TableHead>
                     <TableHead>Rows</TableHead>
+                    <TableHead>Meter Info</TableHead>
                     <TableHead>Assign to Shop</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -401,11 +462,30 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <FileText className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium">{file.fileName}</span>
+                          <div>
+                            <span className="font-medium">{file.fileName}</span>
+                            {file.parseConfig?.detectedFormat === "pnp-scada" && (
+                              <Badge variant="secondary" className="ml-2 text-xs">SCADA</Badge>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{file.rowCount.toLocaleString()}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {file.meterName ? (
+                          <div className="text-sm">
+                            <span className="font-medium">{file.meterName}</span>
+                            {file.dateRange && (
+                              <p className="text-xs text-muted-foreground">
+                                {file.dateRange.start} → {file.dateRange.end}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {unassignedMeters.length > 0 ? (
@@ -461,14 +541,25 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                         )}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeFile(file.id)}
-                          disabled={isSaving}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openWizardForFile(file.id)}
+                            disabled={isSaving}
+                            title="Configure parsing"
+                          >
+                            <Settings2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeFile(file.id)}
+                            disabled={isSaving}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -478,6 +569,19 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
           )}
         </CardContent>
       </Card>
+
+      {/* CSV Import Wizard */}
+      <CsvImportWizard
+        isOpen={wizardOpen}
+        onClose={() => {
+          setWizardOpen(false);
+          setWizardFile(null);
+        }}
+        csvContent={wizardFile?.content || null}
+        fileName={wizardFile?.name || ""}
+        onProcess={handleWizardProcess}
+        isProcessing={isProcessingWizard}
+      />
     </div>
   );
 }
