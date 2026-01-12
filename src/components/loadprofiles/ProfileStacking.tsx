@@ -113,7 +113,7 @@ export function ProfileStacking() {
         .select("*")
         .order("created_at", { ascending: false });
       
-      if (selectedProjectId) {
+      if (selectedProjectId && selectedProjectId !== "__all__") {
         query = query.eq("project_id", selectedProjectId);
       }
       
@@ -184,7 +184,7 @@ export function ProfileStacking() {
     saveConfig.mutate({
       name: configName,
       description: configDescription,
-      project_id: selectedProjectId || null,
+      project_id: (selectedProjectId && selectedProjectId !== "__all__" && selectedProjectId !== "__none__") ? selectedProjectId : null,
       meter_ids: Array.from(selectedMeters),
     });
   };
@@ -406,7 +406,7 @@ export function ProfileStacking() {
                   <SelectValue placeholder="All projects" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All projects</SelectItem>
+                  <SelectItem value="__all__">All projects</SelectItem>
                   {projects?.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
@@ -510,7 +510,7 @@ export function ProfileStacking() {
                           <SelectValue placeholder="Select project..." />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">No project</SelectItem>
+                          <SelectItem value="__none__">No project</SelectItem>
                           {projects?.map(p => (
                             <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                           ))}

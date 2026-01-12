@@ -139,7 +139,7 @@ function parseWithConfig(content: string, config: WizardParseConfig): ParsedData
     const result: string[] = [];
     let current = "";
     let inQuotes = false;
-    const qualifier = config.textQualifier;
+    const qualifier = config.textQualifier === "none" ? "" : config.textQualifier;
 
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
@@ -424,7 +424,7 @@ export function CsvImportWizard({
                 <SelectContent>
                   <SelectItem value='"'>"</SelectItem>
                   <SelectItem value="'">'</SelectItem>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                 </SelectContent>
               </Select>
             </div>
