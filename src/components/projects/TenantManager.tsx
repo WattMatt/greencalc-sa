@@ -40,6 +40,7 @@ interface ShopType {
 interface ScadaImport {
   id: string;
   shop_name: string | null;
+  site_name: string;
   area_sqm: number | null;
   load_profile_weekday: number[] | null;
 }
@@ -130,7 +131,7 @@ function calculateDailyKwh(profile: number[] | null): number {
 
 // Format profile option label: "Shop Name (XXX m²)"
 function formatProfileOption(meter: ScadaImport): string {
-  const name = meter.shop_name || "Unknown";
+  const name = meter.shop_name || meter.site_name || "Unknown";
   const area = meter.area_sqm ? `${Math.round(meter.area_sqm)} m²` : "No area";
   return `${name} (${area})`;
 }
@@ -158,7 +159,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, shop_name, area_sqm, load_profile_weekday")
+        .select("id, shop_name, site_name, area_sqm, load_profile_weekday")
         .order("shop_name");
       if (error) throw error;
       return data as ScadaImport[];
@@ -531,7 +532,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                                 {sortedProfiles.map((meter) => (
                                   <CommandItem
                                     key={meter.id}
-                                    value={`${meter.shop_name || ""} ${meter.area_sqm || ""}`}
+                                    value={`${meter.shop_name || ""} ${meter.site_name || ""} ${meter.area_sqm || ""}`}
                                     onSelect={() => {
                                       updateTenantProfile.mutate({
                                         tenantId: tenant.id,
