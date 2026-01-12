@@ -23,7 +23,8 @@ export interface Tenant {
     area_sqm: number | null;
     load_profile_weekday: number[] | null;
     load_profile_weekend?: number[] | null;
-    raw_data?: RawDataPoint[] | null;
+    // raw_data comes from DB as Json, we cast to RawDataPoint[] when using
+    raw_data?: unknown;
     date_range_start?: string | null;
     date_range_end?: string | null;
   } | null;
