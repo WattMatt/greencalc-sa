@@ -127,17 +127,41 @@ export function TenantProfileMatcher({ projectId, tenants }: TenantProfileMatche
                             </div>
                         </CardContent>
                     </Card>
-                    <Card className="bg-amber-50/50 border-amber-100">
-                        <CardContent className="p-4 flex items-center gap-3">
-                            <AlertCircle className="h-8 w-8 text-amber-500" />
-                            <div>
-                                <p className="text-sm font-medium text-amber-900">Average Confidence</p>
-                                <p className="text-2xl font-bold text-amber-700">
-                                    {tenantMatches.filter(m => m.match).length > 0 ? "High" : "Low"}
-                                </p>
-                            </div>
-                        </CardContent>
-                    </Card>
+                    {(() => {
+                        const exactMatches = tenantMatches.filter(m => m.type === "exact").length;
+                        const fuzzyMatches = tenantMatches.filter(m => m.type === "fuzzy").length;
+                        const totalMatched = exactMatches + fuzzyMatches;
+                        const matchRatio = tenants.length > 0 ? totalMatched / tenants.length : 0;
+                        const exactRatio = totalMatched > 0 ? exactMatches / totalMatched : 0;
+                        
+                        // Calculate confidence: high if >70% matched with >50% exact, medium if >40% matched, low otherwise
+                        const confidence = matchRatio > 0.7 && exactRatio > 0.5 ? "High" 
+                            : matchRatio > 0.4 ? "Medium" 
+                            : "Low";
+                        const bgClass = confidence === "High" ? "bg-green-50/50 border-green-100" 
+                            : confidence === "Medium" ? "bg-amber-50/50 border-amber-100"
+                            : "bg-red-50/50 border-red-100";
+                        const textClass = confidence === "High" ? "text-green-" 
+                            : confidence === "Medium" ? "text-amber-"
+                            : "text-red-";
+                        
+                        return (
+                            <Card className={bgClass}>
+                                <CardContent className="p-4 flex items-center gap-3">
+                                    <AlertCircle className={`h-8 w-8 ${textClass}500`} />
+                                    <div>
+                                        <p className={`text-sm font-medium ${textClass}900`}>Average Confidence</p>
+                                        <p className={`text-2xl font-bold ${textClass}700`}>
+                                            {confidence}
+                                        </p>
+                                        <p className={`text-xs ${textClass}600`}>
+                                            {exactMatches} exact, {fuzzyMatches} fuzzy
+                                        </p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        );
+                    })()}
                 </div>
 
                 <ScrollArea className="h-[400px] pr-4">
