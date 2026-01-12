@@ -5,8 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Zap, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Loader2, Zap, ArrowRight, CheckCircle2, AlertCircle, ChevronsUpDown, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Tenant {
     id: string;
@@ -176,18 +178,48 @@ export function TenantProfileMatcher({ projectId, tenants }: TenantProfileMatche
                                     ) : (
                                         <div className="flex items-center gap-2">
                                             <p className="text-sm text-muted-foreground italic">No profile matched</p>
-                                            <Select>
-                                                <SelectTrigger className="h-8 w-[140px]">
-                                                    <SelectValue placeholder="Assign..." />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {meters?.map(m => (
-                                                        <SelectItem key={m.id} value={m.id}>
-                                                            {m.shop_name || m.meter_label || m.site_name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button
+                                                        variant="outline"
+                                                        role="combobox"
+                                                        className="h-8 w-[160px] justify-between text-xs"
+                                                    >
+                                                        Assign...
+                                                        <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-[280px] p-0" align="start">
+                                                    <Command>
+                                                        <CommandInput placeholder="Search profiles..." className="h-9" />
+                                                        <CommandList>
+                                                            <CommandEmpty>No profile found.</CommandEmpty>
+                                                            <CommandGroup>
+                                                                {meters?.map(m => (
+                                                                    <CommandItem
+                                                                        key={m.id}
+                                                                        value={`${m.shop_name || ""} ${m.meter_label || ""} ${m.site_name}`}
+                                                                        onSelect={() => {
+                                                                            // TODO: Implement assignment logic
+                                                                            console.log("Assign", tenant.id, "to", m.id);
+                                                                        }}
+                                                                        className="text-xs"
+                                                                    >
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-medium">
+                                                                                {m.shop_name || m.meter_label || m.site_name}
+                                                                            </span>
+                                                                            <span className="text-muted-foreground text-[10px]">
+                                                                                {m.site_name} • {m.weekday_days}d data
+                                                                            </span>
+                                                                        </div>
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        </CommandList>
+                                                    </Command>
+                                                </PopoverContent>
+                                            </Popover>
                                         </div>
                                     )}
                                 </div>
