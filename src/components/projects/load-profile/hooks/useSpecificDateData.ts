@@ -15,6 +15,64 @@ interface AvailableDateRange {
   availableDates: Date[];
 }
 
+// Parse raw_data which might be in different formats
+function parseRawData(rawData: unknown): RawDataPoint[] {
+  if (!rawData) return [];
+  
+  // If it's already an array of RawDataPoints
+  if (Array.isArray(rawData) && rawData.length > 0) {
+    const firstItem = rawData[0];
+    
+    // Check if it's already in the correct format
+    if (firstItem.date && firstItem.time && 'value' in firstItem) {
+      return rawData as RawDataPoint[];
+    }
+    
+    // Check if it's the CSV format { csvContent: "..." }
+    if (firstItem.csvContent && typeof firstItem.csvContent === 'string') {
+      const parsed: RawDataPoint[] = [];
+      const lines = firstItem.csvContent.split('\n');
+      
+      // Find header line (look for rdate,rtime,kWh)
+      let headerIndex = -1;
+      for (let i = 0; i < Math.min(10, lines.length); i++) {
+        if (lines[i].toLowerCase().includes('rdate') || lines[i].toLowerCase().includes('date')) {
+          headerIndex = i;
+          break;
+        }
+      }
+      
+      if (headerIndex === -1) return [];
+      
+      // Parse data lines after header
+      for (let i = headerIndex + 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        const parts = line.split(',');
+        if (parts.length >= 3) {
+          const date = parts[0]; // e.g., 2025-01-01
+          const time = parts[1]; // e.g., 00:30:00
+          const kwhValue = parseFloat(parts[2]) || 0; // kWh+ column
+          
+          if (date && time && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            parsed.push({
+              date,
+              time,
+              timestamp: `${date}T${time}`,
+              value: kwhValue,
+            });
+          }
+        }
+      }
+      
+      return parsed;
+    }
+  }
+  
+  return [];
+}
+
 export function useSpecificDateData({
   tenants,
   shopTypes,
@@ -29,8 +87,8 @@ export function useSpecificDateData({
     let maxDate: Date | null = null;
 
     tenants.forEach((tenant) => {
-      const rawData = tenant.scada_imports?.raw_data as RawDataPoint[] | undefined;
-      if (!rawData?.length) return;
+      const rawData = parseRawData(tenant.scada_imports?.raw_data);
+      if (!rawData.length) return;
 
       rawData.forEach((point) => {
         if (!point.date) return;
@@ -51,8 +109,8 @@ export function useSpecificDateData({
   // Check if any tenants have raw SCADA data
   const hasRawData = useMemo(() => {
     return tenants.some((tenant) => {
-      const rawData = tenant.scada_imports?.raw_data as RawDataPoint[] | undefined;
-      return rawData && rawData.length > 0;
+      const rawData = parseRawData(tenant.scada_imports?.raw_data);
+      return rawData.length > 0;
     });
   }, [tenants]);
 
@@ -72,10 +130,10 @@ export function useSpecificDateData({
     let hasDataForDate = false;
 
     tenants.forEach((tenant) => {
-      const rawData = tenant.scada_imports?.raw_data as RawDataPoint[] | undefined;
+      const rawData = parseRawData(tenant.scada_imports?.raw_data);
       const tenantArea = Number(tenant.area_sqm) || 0;
 
-      if (rawData?.length) {
+      if (rawData.length) {
         // Filter data for the selected date
         const dateData = rawData.filter((point) => point.date === dateStr);
 
