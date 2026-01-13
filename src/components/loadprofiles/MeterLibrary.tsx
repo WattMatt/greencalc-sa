@@ -10,9 +10,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown } from "lucide-react";
+import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
+import { WizardParseConfig, ColumnConfig } from "./types/csvImportTypes";
 
 interface ScadaImport {
   id: string;
@@ -128,6 +130,213 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     },
     onError: (error) => toast.error(error.message),
   });
+
+  // Re-process meters from stored CSV content
+  const reprocessMeters = useMutation({
+    mutationFn: async (meterIds: string[]) => {
+      // Fetch meters with raw_data containing CSV content
+      const { data: metersToProcess, error: fetchError } = await supabase
+        .from("scada_imports")
+        .select("id, raw_data, shop_name")
+        .in("id", meterIds);
+
+      if (fetchError) throw fetchError;
+      if (!metersToProcess?.length) throw new Error("No meters to process");
+
+      let processed = 0;
+      let failed = 0;
+
+      for (const meter of metersToProcess) {
+        try {
+          // Extract CSV content from raw_data
+          const rawData = meter.raw_data as { csvContent?: string }[] | null;
+          const csvContent = rawData?.[0]?.csvContent;
+
+          if (!csvContent) {
+            console.warn(`Meter ${meter.id} has no CSV content to reprocess`);
+            failed++;
+            continue;
+          }
+
+          // Auto-parse the CSV
+          const lines = csvContent.split('\n').filter((l: string) => l.trim());
+          let isPnPScada = false;
+          let meterName: string | undefined;
+          let dateRange: { start: string; end: string } | undefined;
+          let startRow = 1;
+
+          // Check for PnP SCADA format
+          if (lines.length >= 2) {
+            const firstLine = lines[0];
+            const meterMatch = firstLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
+            const secondLine = lines[1]?.toLowerCase() || "";
+            const hasScadaHeaders = secondLine.includes('rdate') && secondLine.includes('rtime') && secondLine.includes('kwh');
+            
+            if (meterMatch && hasScadaHeaders) {
+              isPnPScada = true;
+              meterName = meterMatch[1];
+              dateRange = { start: meterMatch[2], end: meterMatch[3] };
+              startRow = 2;
+            }
+          }
+
+          // Auto-detect delimiter
+          const sampleLine = lines[startRow - 1] || lines[0] || "";
+          const tabCount = (sampleLine.match(/\t/g) || []).length;
+          const semicolonCount = (sampleLine.match(/;/g) || []).length;
+          const commaCount = (sampleLine.match(/,/g) || []).length;
+
+          const delimiters = {
+            tab: tabCount > 0,
+            semicolon: semicolonCount > 0,
+            comma: commaCount > 0 || (tabCount === 0 && semicolonCount === 0),
+            space: false,
+            other: false,
+            otherChar: "",
+          };
+
+          // Parse config
+          const delimPattern = [
+            delimiters.tab ? '\t' : null,
+            delimiters.semicolon ? ';' : null,
+            delimiters.comma ? ',' : null,
+          ].filter(Boolean).join('|') || ',';
+          
+          const regex = new RegExp(delimPattern);
+
+          const parseRow = (line: string): string[] => {
+            const result: string[] = [];
+            let current = "";
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+              if (char === '"' && !inQuotes) {
+                inQuotes = true;
+              } else if (char === '"' && inQuotes) {
+                if (line[i + 1] === '"') {
+                  current += '"';
+                  i++;
+                } else {
+                  inQuotes = false;
+                }
+              } else if (!inQuotes && regex.test(char)) {
+                result.push(current.trim());
+                current = "";
+              } else {
+                current += char;
+              }
+            }
+            result.push(current.trim());
+            return result;
+          };
+
+          const headerIdx = startRow - 1;
+          const headers = headerIdx < lines.length ? parseRow(lines[headerIdx]) : [];
+          const rows = lines.slice(headerIdx + 1).map(parseRow);
+
+          // Auto-detect column types
+          const columns: ColumnConfig[] = headers.map((header, idx) => {
+            const lowerHeader = header.toLowerCase();
+            if (lowerHeader.includes('date') || lowerHeader.includes('rdate')) {
+              return { index: idx, name: header, dataType: 'date' as const, dateFormat: 'YMD' };
+            } else if (lowerHeader.includes('kwh') || lowerHeader.includes('energy') || lowerHeader.includes('consumption')) {
+              return { index: idx, name: header, dataType: 'general' as const };
+            }
+            return { index: idx, name: header, dataType: 'text' as const };
+          });
+
+          const parseConfig: WizardParseConfig = {
+            fileType: "delimited",
+            startRow,
+            delimiters,
+            treatConsecutiveAsOne: false,
+            textQualifier: '"',
+            columns,
+            detectedFormat: isPnPScada ? "pnp-scada" : undefined,
+          };
+
+          // Process into load profile
+          const profile = processCSVToLoadProfile(headers, rows, parseConfig);
+
+          // Calculate stats
+          const dateRangeStart = profile.dateRangeStart || dateRange?.start || null;
+          const dateRangeEnd = profile.dateRangeEnd || dateRange?.end || null;
+          const totalDays = Math.max(1, profile.weekdayDays + profile.weekendDays);
+          const avgDailyKwh = profile.totalKwh / totalDays;
+
+          // Build new raw_data with stats
+          const newRawData = [{
+            csvContent,
+            totalKwh: profile.totalKwh,
+            avgDailyKwh,
+            peakKw: profile.peakKw,
+            avgKw: profile.avgKw,
+            dataPoints: profile.dataPoints,
+            dateStart: dateRangeStart,
+            dateEnd: dateRangeEnd,
+          }];
+
+          // Update the meter
+          const { error: updateError } = await supabase
+            .from("scada_imports")
+            .update({
+              raw_data: newRawData,
+              data_points: profile.dataPoints,
+              load_profile_weekday: profile.weekdayProfile,
+              load_profile_weekend: profile.weekendProfile,
+              weekday_days: profile.weekdayDays,
+              weekend_days: profile.weekendDays,
+              date_range_start: dateRangeStart,
+              date_range_end: dateRangeEnd,
+            })
+            .eq("id", meter.id);
+
+          if (updateError) {
+            console.error(`Failed to update meter ${meter.id}:`, updateError);
+            failed++;
+          } else {
+            processed++;
+            console.log(`Reprocessed ${meter.shop_name || meter.id}: ${profile.dataPoints} points, peak ${profile.peakKw} kW, avg daily ${avgDailyKwh.toFixed(1)} kWh`);
+          }
+        } catch (err) {
+          console.error(`Error processing meter ${meter.id}:`, err);
+          failed++;
+        }
+      }
+
+      return { processed, failed };
+    },
+    onSuccess: ({ processed, failed }) => {
+      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+      queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
+      queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });
+      if (failed > 0) {
+        toast.warning(`Reprocessed ${processed} meters, ${failed} failed (no CSV data)`);
+      } else {
+        toast.success(`Reprocessed ${processed} meters successfully`);
+      }
+    },
+    onError: (error) => toast.error(`Reprocess failed: ${error.message}`),
+  });
+
+  const handleReprocessSelected = () => {
+    if (selectedIds.size === 0) {
+      toast.error("No meters selected");
+      return;
+    }
+    reprocessMeters.mutate(Array.from(selectedIds));
+  };
+
+  const handleReprocessAll = () => {
+    if (!filteredMeters.length) {
+      toast.error("No meters to reprocess");
+      return;
+    }
+    if (confirm(`Reprocess ${filteredMeters.length} meter(s) from stored CSV data? This will recalculate all load profiles.`)) {
+      reprocessMeters.mutate(filteredMeters.map(m => m.id));
+    }
+  };
 
   const toggleSelectAll = () => {
     if (selectedIds.size === filteredMeters.length) {
@@ -303,16 +512,46 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
             )}
             
             {selectedIds.size > 0 && (
-              <Button 
-                variant="destructive" 
-                size="sm" 
-                onClick={handleBulkDelete}
-                disabled={bulkDeleteMeters.isPending}
-              >
-                <Trash2 className="h-4 w-4 mr-1" />
-                Delete {selectedIds.size} selected
-              </Button>
+              <>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleReprocessSelected}
+                  disabled={reprocessMeters.isPending}
+                >
+                  {reprocessMeters.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                  )}
+                  Reprocess {selectedIds.size} selected
+                </Button>
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleteMeters.isPending}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete {selectedIds.size} selected
+                </Button>
+              </>
             )}
+            
+            {/* Re-process All button */}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleReprocessAll}
+              disabled={reprocessMeters.isPending || !meters?.length}
+            >
+              {reprocessMeters.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              Re-process All
+            </Button>
           </div>
 
           {!meters?.length ? (
