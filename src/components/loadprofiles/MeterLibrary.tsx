@@ -10,7 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle } from "lucide-react";
+import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
@@ -909,18 +910,39 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                         if (monthlyKwh === null) {
                           return <span className="text-muted-foreground text-sm">-</span>;
                         }
-                        // Format with K suffix for thousands
-                        if (monthlyKwh >= 1000) {
-                          return (
-                            <span className="text-sm font-mono font-medium">
-                              {(monthlyKwh / 1000).toFixed(1)}K
-                            </span>
-                          );
-                        }
+                        
+                        // Calculate daily kWh for tooltip
+                        const dailyKwh = meter.load_profile_weekday 
+                          ? meter.load_profile_weekday.reduce((sum, val) => sum + (val || 0), 0)
+                          : 0;
+                        
+                        const displayValue = monthlyKwh >= 1000 
+                          ? `${(monthlyKwh / 1000).toFixed(1)}K`
+                          : monthlyKwh.toFixed(0);
+                        
                         return (
-                          <span className="text-sm font-mono font-medium">
-                            {monthlyKwh.toFixed(0)}
-                          </span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-sm font-mono font-medium cursor-help underline decoration-dotted underline-offset-2">
+                                  {displayValue}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="left" className="max-w-xs">
+                                <div className="space-y-1 text-xs">
+                                  <p className="font-semibold">Monthly Estimate Breakdown</p>
+                                  <div className="border-t pt-1 space-y-0.5">
+                                    <p>Daily (weekday profile): <span className="font-mono">{dailyKwh.toFixed(1)} kWh</span></p>
+                                    <p>× 30 days/month</p>
+                                    <p className="font-medium pt-1">= <span className="font-mono">{monthlyKwh.toFixed(0)} kWh/mo</span></p>
+                                  </div>
+                                  <p className="text-muted-foreground pt-1 italic">
+                                    Based on 48 half-hourly values from weekday load profile
+                                  </p>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         );
                       })()}
                     </TableCell>
