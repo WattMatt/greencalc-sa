@@ -16,6 +16,15 @@ import { format } from "date-fns";
 import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
 import { WizardParseConfig, ColumnConfig } from "./types/csvImportTypes";
 
+interface RawDataStats {
+  csvContent?: string;
+  totalKwh?: number;
+  avgDailyKwh?: number;
+  peakKw?: number;
+  avgKw?: number;
+  dataPoints?: number;
+}
+
 interface ScadaImport {
   id: string;
   site_name: string;
@@ -28,6 +37,10 @@ interface ScadaImport {
   date_range_end: string | null;
   data_points: number | null;
   created_at: string;
+  raw_data: RawDataStats[] | null;
+  load_profile_weekday: number[] | null;
+  weekday_days: number | null;
+  weekend_days: number | null;
 }
 
 const METER_COLORS = [
@@ -63,7 +76,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     queryFn: async () => {
       let query = supabase
         .from("scada_imports")
-        .select("id, site_name, site_id, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at")
+        .select("id, site_name, site_id, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at, raw_data, load_profile_weekday, weekday_days, weekend_days")
         .order("created_at", { ascending: false });
       
       if (siteId) {
@@ -72,7 +85,10 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       
       const { data, error } = await query;
       if (error) throw error;
-      return data as ScadaImport[];
+      return (data || []).map(row => ({
+        ...row,
+        raw_data: row.raw_data as RawDataStats[] | null
+      })) as ScadaImport[];
     },
   });
   const updateMeter = useMutation({
@@ -262,7 +278,19 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
           };
 
           // Process into load profile
+          console.log(`[Reprocess] ${meter.shop_name || meterId}: Detected ${headers.length} columns, ${rows.length} rows`);
+          console.log(`[Reprocess] Headers:`, headers);
+          console.log(`[Reprocess] Columns config:`, columns.map(c => `${c.name}:${c.dataType}`).join(', '));
+          
           const profile = processCSVToLoadProfile(headers, rows, parseConfig);
+
+          // Validation check - if profile has zeros, something went wrong
+          if (profile.dataPoints === 0 || profile.totalKwh === 0) {
+            console.warn(`[Reprocess] ${meter.shop_name || meterId}: Profile empty! dataPoints=${profile.dataPoints}, totalKwh=${profile.totalKwh}`);
+            console.warn(`[Reprocess] Sample row:`, rows[0]);
+          } else {
+            console.log(`[Reprocess] ${meter.shop_name || meterId}: SUCCESS - ${profile.dataPoints} points, ${profile.totalKwh.toFixed(1)} total kWh, peak ${profile.peakKw.toFixed(1)} kW`);
+          }
 
           // Calculate stats
           const dateRangeStart = profile.dateRangeStart || dateRange?.start || null;
@@ -588,8 +616,11 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                     <TableHead className="w-8">Color</TableHead>
                     <TableHead>Meter / Label</TableHead>
                     <TableHead>Area (m²)</TableHead>
-                    <TableHead>Date Range</TableHead>
+                    <TableHead>Days (WD/WE)</TableHead>
+                    <TableHead>Peak kW</TableHead>
+                    <TableHead>Avg Daily kWh</TableHead>
                     <TableHead>Data Points</TableHead>
+                    <TableHead>CSV</TableHead>
                     <TableHead className="w-24">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -626,16 +657,50 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                       )}
                     </TableCell>
                     <TableCell>
-                      {meter.date_range_start && meter.date_range_end ? (
-                        <span className="text-sm">
-                          {format(new Date(meter.date_range_start), "MMM d")} - {format(new Date(meter.date_range_end), "MMM d, yyyy")}
+                      {(meter.weekday_days || meter.weekend_days) ? (
+                        <span className="text-sm font-mono">
+                          {meter.weekday_days || 0}/{meter.weekend_days || 0}
                         </span>
-                      ) : "-"}
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const peakKw = meter.raw_data?.[0]?.peakKw;
+                        // Fallback: calculate from load profile if raw_data doesn't have it
+                        const profilePeak = meter.load_profile_weekday 
+                          ? Math.max(...meter.load_profile_weekday, 0)
+                          : 0;
+                        const displayPeak = peakKw || profilePeak;
+                        return displayPeak > 0 ? (
+                          <span className="text-sm font-mono">{displayPeak.toFixed(1)}</span>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const avgDaily = meter.raw_data?.[0]?.avgDailyKwh;
+                        return avgDaily && avgDaily > 0 ? (
+                          <span className="text-sm font-mono">{avgDaily.toFixed(1)}</span>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">
                         {meter.data_points?.toLocaleString() || 0}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {meter.raw_data?.[0]?.csvContent ? (
+                        <Badge variant="outline" className="text-green-600 border-green-600">✓</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">-</Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
