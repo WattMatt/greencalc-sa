@@ -7,7 +7,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Upload, FileSpreadsheet, Building2, Store, Ruler, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { 
+  Upload, FileSpreadsheet, Building2, Store, Ruler, Loader2, 
+  CheckCircle2, AlertCircle, AlertTriangle, RefreshCw, Copy, 
+  Shield, ArrowRight 
+} from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -19,16 +25,40 @@ interface ParsedRow {
   dataSource: string | null;
   fileName: string | null;
   selected: boolean;
+  // Duplicate detection fields
+  duplicateStatus: 'new' | 'existing-site' | 'existing-meter' | 'duplicate-in-file';
+  existingMeterId?: string;
+  existingSiteId?: string;
+  duplicateOf?: string; // For duplicates within the file itself
 }
 
 interface SiteGroup {
   siteName: string;
   shops: ParsedRow[];
   selected: boolean;
+  isExistingSite: boolean;
+  existingSiteId?: string;
 }
 
 interface SheetImportProps {
   onImportComplete?: () => void;
+}
+
+interface ExistingData {
+  sites: Map<string, { id: string; name: string }>;
+  meters: Map<string, { id: string; site_id: string; shop_name: string; site_name: string }[]>;
+}
+
+// Normalize names for comparison
+function normalizeName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+}
+
+// Check if two names are similar enough to be considered duplicates
+function isSimilarName(name1: string, name2: string): boolean {
+  const n1 = normalizeName(name1);
+  const n2 = normalizeName(name2);
+  return n1 === n2 || n1.includes(n2) || n2.includes(n1);
 }
 
 export function SheetImport({ onImportComplete }: SheetImportProps) {
@@ -36,11 +66,149 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsedData, setParsedData] = useState<SiteGroup[]>([]);
   const [isParsing, setIsParsing] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
+  const [verificationComplete, setVerificationComplete] = useState(false);
+  const [duplicateStats, setDuplicateStats] = useState<{
+    existingSites: number;
+    existingMeters: number;
+    duplicatesInFile: number;
+    newSites: number;
+    newMeters: number;
+  } | null>(null);
+
+  // Fetch existing sites and meters from database
+  const fetchExistingData = async (): Promise<ExistingData> => {
+    const [sitesResult, metersResult] = await Promise.all([
+      supabase.from("sites").select("id, name"),
+      supabase.from("scada_imports").select("id, site_id, shop_name, site_name")
+    ]);
+
+    const sites = new Map<string, { id: string; name: string }>();
+    const meters = new Map<string, { id: string; site_id: string; shop_name: string; site_name: string }[]>();
+
+    // Index sites by normalized name
+    for (const site of sitesResult.data || []) {
+      sites.set(normalizeName(site.name), { id: site.id, name: site.name });
+    }
+
+    // Index meters by normalized site name for quick lookup
+    for (const meter of metersResult.data || []) {
+      const key = normalizeName(meter.site_name);
+      if (!meters.has(key)) {
+        meters.set(key, []);
+      }
+      meters.get(key)!.push(meter);
+    }
+
+    return { sites, meters };
+  };
+
+  // Verify parsed data against existing database
+  const verifyDuplicates = async (groups: SiteGroup[]): Promise<SiteGroup[]> => {
+    setIsVerifying(true);
+    
+    try {
+      const existingData = await fetchExistingData();
+      
+      // Track duplicates within the file itself
+      const seenInFile = new Map<string, string>(); // normalized "siteName|shopName" -> original shopName
+      
+      let existingSites = 0;
+      let existingMeters = 0;
+      let duplicatesInFile = 0;
+      let newSites = 0;
+      let newMeters = 0;
+
+      const verifiedGroups = groups.map(group => {
+        const normalizedSiteName = normalizeName(group.siteName);
+        const existingSite = existingData.sites.get(normalizedSiteName);
+        const existingMetersForSite = existingData.meters.get(normalizedSiteName) || [];
+        
+        const isExistingSite = !!existingSite;
+        if (isExistingSite) {
+          existingSites++;
+        } else {
+          newSites++;
+        }
+
+        const verifiedShops = group.shops.map(shop => {
+          const normalizedShopName = normalizeName(shop.shopName);
+          const fileKey = `${normalizedSiteName}|${normalizedShopName}`;
+          
+          // Check if this is a duplicate within the file itself
+          if (seenInFile.has(fileKey)) {
+            duplicatesInFile++;
+            return {
+              ...shop,
+              duplicateStatus: 'duplicate-in-file' as const,
+              duplicateOf: seenInFile.get(fileKey),
+              selected: false, // Auto-deselect duplicates
+            };
+          }
+          
+          // Mark as seen in file
+          seenInFile.set(fileKey, shop.shopName);
+          
+          // Check if meter already exists in database
+          const existingMeter = existingMetersForSite.find(m => 
+            isSimilarName(m.shop_name || '', shop.shopName)
+          );
+          
+          if (existingMeter) {
+            existingMeters++;
+            return {
+              ...shop,
+              duplicateStatus: 'existing-meter' as const,
+              existingMeterId: existingMeter.id,
+              existingSiteId: existingMeter.site_id,
+            };
+          }
+          
+          if (isExistingSite) {
+            newMeters++;
+            return {
+              ...shop,
+              duplicateStatus: 'existing-site' as const,
+              existingSiteId: existingSite.id,
+            };
+          }
+          
+          newMeters++;
+          return {
+            ...shop,
+            duplicateStatus: 'new' as const,
+          };
+        });
+
+        return {
+          ...group,
+          shops: verifiedShops,
+          isExistingSite,
+          existingSiteId: existingSite?.id,
+        };
+      });
+
+      setDuplicateStats({
+        existingSites,
+        existingMeters,
+        duplicatesInFile,
+        newSites,
+        newMeters,
+      });
+      
+      return verifiedGroups;
+    } finally {
+      setIsVerifying(false);
+    }
+  };
 
   const parseExcelFile = async (file: File) => {
     setIsParsing(true);
+    setVerificationComplete(false);
+    setDuplicateStats(null);
+    
     try {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: "array" });
@@ -51,7 +219,6 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
       // Parse rows and group by site
       const rows: ParsedRow[] = [];
       for (const row of jsonData) {
-        // Try to find columns by common header names
         const siteName = String(
           row["Shopping Centre"] || row["Site"] || row["Site Name"] || row["Center"] || ""
         ).trim();
@@ -73,6 +240,7 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
             dataSource,
             fileName,
             selected: true,
+            duplicateStatus: 'new', // Will be verified next
           });
         }
       }
@@ -90,10 +258,15 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
         siteName,
         shops,
         selected: true,
+        isExistingSite: false,
       }));
 
-      setParsedData(groups);
-      toast.success(`Parsed ${rows.length} shops across ${groups.length} sites`);
+      // Verify against existing data
+      const verifiedGroups = await verifyDuplicates(groups);
+      
+      setParsedData(verifiedGroups);
+      setVerificationComplete(true);
+      toast.success(`Parsed ${rows.length} shops across ${groups.length} sites - verification complete`);
     } catch (error) {
       console.error("Error parsing Excel file:", error);
       toast.error("Failed to parse Excel file");
@@ -117,7 +290,11 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
           return {
             ...site,
             selected: newSelected,
-            shops: site.shops.map((s) => ({ ...s, selected: newSelected })),
+            shops: site.shops.map((s) => ({ 
+              ...s, 
+              // Don't select file duplicates even when selecting all
+              selected: s.duplicateStatus === 'duplicate-in-file' ? false : newSelected 
+            })),
           };
         }
         return site;
@@ -132,7 +309,7 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
           const newShops = site.shops.map((shop, shi) =>
             shi === shopIndex ? { ...shop, selected: !shop.selected } : shop
           );
-          const allSelected = newShops.every((s) => s.selected);
+          const allSelected = newShops.every((s) => s.selected || s.duplicateStatus === 'duplicate-in-file');
           return { ...site, shops: newShops, selected: allSelected };
         }
         return site;
@@ -154,59 +331,59 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
     let imported = 0;
     let sitesCreated = 0;
     let metersCreated = 0;
+    let metersUpdated = 0;
+    let skipped = 0;
 
     try {
       for (const siteGroup of selectedSites) {
         const selectedShops = siteGroup.shops.filter((s) => s.selected);
         if (selectedShops.length === 0) continue;
 
-        // Check if site exists or create it
+        // Use existing site ID if available, otherwise create
         let siteId: string;
-        const { data: existingSite } = await supabase
-          .from("sites")
-          .select("id")
-          .ilike("name", siteGroup.siteName)
-          .single();
-
-        if (existingSite) {
-          siteId = existingSite.id;
+        
+        if (siteGroup.existingSiteId) {
+          siteId = siteGroup.existingSiteId;
         } else {
-          // Calculate total area from shops
-          const totalArea = selectedShops.reduce((acc, s) => acc + (s.areaSqm || 0), 0);
-          const { data: newSite, error: siteError } = await supabase
+          // Double-check site doesn't exist (race condition protection)
+          const { data: existingSite } = await supabase
             .from("sites")
-            .insert({
-              name: siteGroup.siteName,
-              site_type: "Shopping Centre",
-              total_area_sqm: totalArea > 0 ? totalArea : null,
-            })
             .select("id")
+            .ilike("name", siteGroup.siteName)
             .single();
 
-          if (siteError) throw siteError;
-          siteId = newSite.id;
-          sitesCreated++;
+          if (existingSite) {
+            siteId = existingSite.id;
+          } else {
+            const totalArea = selectedShops.reduce((acc, s) => acc + (s.areaSqm || 0), 0);
+            const { data: newSite, error: siteError } = await supabase
+              .from("sites")
+              .insert({
+                name: siteGroup.siteName,
+                site_type: "Shopping Centre",
+                total_area_sqm: totalArea > 0 ? totalArea : null,
+              })
+              .select("id")
+              .single();
+
+            if (siteError) throw siteError;
+            siteId = newSite.id;
+            sitesCreated++;
+          }
         }
 
-        // Create or update meter entries for each shop
+        // Process each shop
         for (const shop of selectedShops) {
-          // Check if meter already exists for this site with similar shop name
-          const { data: existingMeters } = await supabase
-            .from("scada_imports")
-            .select("id, shop_name")
-            .eq("site_id", siteId);
-          
-          // Try to find an existing meter with matching shop name
-          const normalizedShopName = shop.shopName.toLowerCase().replace(/[^a-z0-9]/g, '');
-          const existingMeter = existingMeters?.find(m => {
-            const existingNormalized = (m.shop_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            return existingNormalized === normalizedShopName || 
-                   existingNormalized.includes(normalizedShopName) || 
-                   normalizedShopName.includes(existingNormalized);
-          });
+          // Skip file duplicates
+          if (shop.duplicateStatus === 'duplicate-in-file') {
+            skipped++;
+            imported++;
+            setImportProgress({ current: imported, total: totalShops });
+            continue;
+          }
 
-          if (existingMeter) {
-            // Update existing meter with new info (area, breaker, etc.)
+          if (shop.duplicateStatus === 'existing-meter' && shop.existingMeterId) {
+            // Update existing meter
             const { error: updateError } = await supabase
               .from("scada_imports")
               .update({
@@ -214,12 +391,12 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
                 area_sqm: shop.areaSqm || undefined,
                 file_name: shop.fileName || undefined,
               })
-              .eq("id", existingMeter.id);
+              .eq("id", shop.existingMeterId);
 
             if (updateError) {
               console.error("Error updating meter:", updateError);
             } else {
-              metersCreated++; // Count as processed
+              metersUpdated++;
             }
           } else {
             // Create new meter entry
@@ -244,8 +421,15 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
         }
       }
 
-      toast.success(`Imported ${metersCreated} meters across ${sitesCreated} new site(s)`);
+      const messages = [];
+      if (sitesCreated > 0) messages.push(`${sitesCreated} new site(s)`);
+      if (metersCreated > 0) messages.push(`${metersCreated} new meter(s)`);
+      if (metersUpdated > 0) messages.push(`${metersUpdated} updated`);
+      if (skipped > 0) messages.push(`${skipped} skipped`);
+      
+      toast.success(`Import complete: ${messages.join(', ')}`);
       queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
       queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
       onImportComplete?.();
     } catch (error) {
@@ -262,6 +446,70 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
     0
   );
   const totalCount = parsedData.reduce((acc, s) => acc + s.shops.length, 0);
+
+  // Get status badge for a shop
+  const getStatusBadge = (shop: ParsedRow) => {
+    switch (shop.duplicateStatus) {
+      case 'duplicate-in-file':
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <Badge variant="destructive" className="gap-1">
+                  <Copy className="h-3 w-3" />
+                  Duplicate
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Duplicate of "{shop.duplicateOf}" in this file</p>
+                <p className="text-xs text-muted-foreground">Will be skipped</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      case 'existing-meter':
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <Badge variant="secondary" className="gap-1 bg-amber-500/20 text-amber-700 dark:text-amber-400">
+                  <RefreshCw className="h-3 w-3" />
+                  Update
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Meter already exists in database</p>
+                <p className="text-xs text-muted-foreground">Will update area/breaker info</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      case 'existing-site':
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <Badge variant="secondary" className="gap-1 bg-blue-500/20 text-blue-700 dark:text-blue-400">
+                  <ArrowRight className="h-3 w-3" />
+                  Add to site
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Site exists, new meter will be added</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      case 'new':
+      default:
+        return (
+          <Badge variant="outline" className="gap-1 text-green-700 dark:text-green-400 border-green-500/30">
+            <CheckCircle2 className="h-3 w-3" />
+            New
+          </Badge>
+        );
+    }
+  };
 
   return (
     <Card>
@@ -287,14 +535,14 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
           <Button
             variant="outline"
             onClick={() => fileInputRef.current?.click()}
-            disabled={isParsing}
+            disabled={isParsing || isVerifying}
           >
-            {isParsing ? (
+            {isParsing || isVerifying ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Upload className="h-4 w-4 mr-2" />
             )}
-            {isParsing ? "Parsing..." : "Select Excel File"}
+            {isParsing ? "Parsing..." : isVerifying ? "Verifying..." : "Select Excel File"}
           </Button>
           {parsedData.length > 0 && (
             <Badge variant="secondary">
@@ -302,6 +550,54 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
             </Badge>
           )}
         </div>
+
+        {/* Verification Summary */}
+        {verificationComplete && duplicateStats && (
+          <Alert className="border-primary/30 bg-primary/5">
+            <Shield className="h-4 w-4" />
+            <AlertTitle className="flex items-center gap-2">
+              Duplicate Verification Complete
+            </AlertTitle>
+            <AlertDescription>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-2 text-sm">
+                <div className="flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-green-500" />
+                  <span>{duplicateStats.newSites} new sites</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-green-500" />
+                  <span>{duplicateStats.newMeters} new meters</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <RefreshCw className="h-3 w-3 text-amber-500" />
+                  <span>{duplicateStats.existingMeters} to update</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Building2 className="h-3 w-3 text-blue-500" />
+                  <span>{duplicateStats.existingSites} existing sites</span>
+                </div>
+                {duplicateStats.duplicatesInFile > 0 && (
+                  <div className="flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 text-destructive" />
+                    <span>{duplicateStats.duplicatesInFile} file duplicates</span>
+                  </div>
+                )}
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Warning for duplicates in file */}
+        {duplicateStats && duplicateStats.duplicatesInFile > 0 && (
+          <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Duplicates Found in File</AlertTitle>
+            <AlertDescription>
+              {duplicateStats.duplicatesInFile} duplicate entries were found within your Excel file.
+              These are automatically deselected and will be skipped during import.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Parsed Data Preview */}
         {parsedData.length > 0 && (
@@ -331,6 +627,7 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
                   <TableRow>
                     <TableHead className="w-12"></TableHead>
                     <TableHead>Site / Shop</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Breaker</TableHead>
                     <TableHead className="text-right">Area (m²)</TableHead>
                     <TableHead>File Name</TableHead>
@@ -347,25 +644,38 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
                             onCheckedChange={() => toggleSite(siteIndex)}
                           />
                         </TableCell>
-                        <TableCell colSpan={4}>
+                        <TableCell colSpan={2}>
                           <div className="flex items-center gap-2 font-medium">
                             <Building2 className="h-4 w-4 text-primary" />
                             {site.siteName}
                             <Badge variant="outline" className="ml-2">
                               {site.shops.length} shops
                             </Badge>
+                            {site.isExistingSite && (
+                              <Badge variant="secondary" className="bg-blue-500/20 text-blue-700 dark:text-blue-400">
+                                Existing Site
+                              </Badge>
+                            )}
                           </div>
                         </TableCell>
+                        <TableCell colSpan={3}></TableCell>
                       </TableRow>
                       {/* Shop Rows */}
                       {site.shops.map((shop, shopIndex) => (
                         <TableRow
                           key={`shop-${siteIndex}-${shopIndex}`}
-                          className={!shop.selected ? "opacity-50" : ""}
+                          className={
+                            shop.duplicateStatus === 'duplicate-in-file' 
+                              ? "opacity-50 bg-destructive/5" 
+                              : !shop.selected 
+                                ? "opacity-50" 
+                                : ""
+                          }
                         >
                           <TableCell className="pl-8">
                             <Checkbox
                               checked={shop.selected}
+                              disabled={shop.duplicateStatus === 'duplicate-in-file'}
                               onCheckedChange={() => toggleShop(siteIndex, shopIndex)}
                             />
                           </TableCell>
@@ -374,6 +684,9 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
                               <Store className="h-4 w-4 text-muted-foreground" />
                               {shop.shopName}
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            {getStatusBadge(shop)}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             {shop.breaker || "-"}
@@ -416,6 +729,10 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
             <p className="text-sm mt-2">
               Optional: <strong>Breaker</strong>, <strong>Data Source</strong>, <strong>File Name</strong>
             </p>
+            <div className="mt-4 p-3 bg-muted/50 rounded-md text-xs inline-block">
+              <Shield className="h-4 w-4 inline mr-1" />
+              Duplicate detection will verify against existing sites and meters before import
+            </div>
           </div>
         )}
       </CardContent>
