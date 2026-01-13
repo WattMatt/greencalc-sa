@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -16,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, X, Layers, Database, BarChart3, Trash2 } from "lucide-react";
+import { Plus, X, Layers, Database, BarChart3, Trash2, Scale } from "lucide-react";
 import { toast } from "sonner";
 
 interface ScadaImport {
@@ -148,6 +149,20 @@ export function MultiMeterSelector({
     onError: (error) => toast.error(error.message),
   });
 
+  const updateWeight = useMutation({
+    mutationFn: async ({ meterId, weight }: { meterId: string; weight: number }) => {
+      const { error } = await supabase
+        .from("project_tenant_meters")
+        .update({ weight })
+        .eq("id", meterId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenant-meters", tenantId] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const assignedIds = useMemo(() => 
     new Set(assignedMeters.map(m => m.scada_import_id)), 
     [assignedMeters]
@@ -247,15 +262,19 @@ export function MultiMeterSelector({
                 No meters assigned. Select meters below to build an averaged profile.
               </div>
             ) : (
-              <ScrollArea className="h-[180px] border rounded-md">
+              <ScrollArea className="h-[200px] border rounded-md">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Meter</TableHead>
-                      <TableHead>Site</TableHead>
-                      <TableHead className="text-right">Area</TableHead>
                       <TableHead className="text-right">Data Points</TableHead>
                       <TableHead className="text-right">Daily kWh</TableHead>
+                      <TableHead className="w-[100px]">
+                        <div className="flex items-center gap-1">
+                          <Scale className="h-3 w-3" />
+                          Scale
+                        </div>
+                      </TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -266,27 +285,42 @@ export function MultiMeterSelector({
                         : 0;
                       return (
                         <TableRow key={meter.id}>
-                          <TableCell className="font-medium">
-                            {meter.scada_imports?.shop_name || "Unnamed"}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {meter.scada_imports?.site_name || "-"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {meter.scada_imports?.area_sqm 
-                              ? `${Math.round(meter.scada_imports.area_sqm)} m²` 
-                              : "-"}
+                          <TableCell>
+                            <div>
+                              <span className="font-medium">
+                                {meter.scada_imports?.shop_name || "Unnamed"}
+                              </span>
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {meter.scada_imports?.site_name || ""}
+                              </span>
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <Badge 
                               variant={meter.scada_imports?.data_points ? "secondary" : "outline"}
-                              className="font-mono"
+                              className="font-mono text-xs"
                             >
                               {formatDataPoints(meter.scada_imports?.data_points)}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="text-right text-sm">
                             {dailyKwh > 0 ? `${Math.round(dailyKwh)}` : "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min={0.1}
+                              max={10}
+                              step={0.1}
+                              value={meter.weight}
+                              onChange={(e) => {
+                                const value = parseFloat(e.target.value);
+                                if (!isNaN(value) && value > 0) {
+                                  updateWeight.mutate({ meterId: meter.id, weight: value });
+                                }
+                              }}
+                              className="h-7 w-16 text-center font-mono text-sm"
+                            />
                           </TableCell>
                           <TableCell>
                             <Button
