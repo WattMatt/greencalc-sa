@@ -794,6 +794,7 @@ export type Database = {
           load_profile_weekend: number[] | null
           meter_color: string | null
           meter_label: string | null
+          processed_at: string | null
           project_id: string | null
           raw_data: Json | null
           shop_name: string | null
@@ -817,6 +818,7 @@ export type Database = {
           load_profile_weekend?: number[] | null
           meter_color?: string | null
           meter_label?: string | null
+          processed_at?: string | null
           project_id?: string | null
           raw_data?: Json | null
           shop_name?: string | null
@@ -840,6 +842,7 @@ export type Database = {
           load_profile_weekend?: number[] | null
           meter_color?: string | null
           meter_label?: string | null
+          processed_at?: string | null
           project_id?: string | null
           raw_data?: Json | null
           shop_name?: string | null
