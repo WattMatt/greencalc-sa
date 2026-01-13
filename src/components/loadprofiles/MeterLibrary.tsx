@@ -131,30 +131,37 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     onError: (error) => toast.error(error.message),
   });
 
-  // Re-process meters from stored CSV content
+  // Re-process meters from stored CSV content - fetches one at a time to avoid timeout
   const reprocessMeters = useMutation({
     mutationFn: async (meterIds: string[]) => {
-      // Fetch meters with raw_data containing CSV content
-      const { data: metersToProcess, error: fetchError } = await supabase
-        .from("scada_imports")
-        .select("id, raw_data, shop_name")
-        .in("id", meterIds);
-
-      if (fetchError) throw fetchError;
-      if (!metersToProcess?.length) throw new Error("No meters to process");
+      if (!meterIds.length) throw new Error("No meters to process");
 
       let processed = 0;
       let failed = 0;
+      let skipped = 0;
 
-      for (const meter of metersToProcess) {
+      for (const meterId of meterIds) {
         try {
+          // Fetch one meter at a time to avoid timeout with large raw_data
+          const { data: meter, error: fetchError } = await supabase
+            .from("scada_imports")
+            .select("id, raw_data, shop_name")
+            .eq("id", meterId)
+            .single();
+
+          if (fetchError) {
+            console.error(`Failed to fetch meter ${meterId}:`, fetchError);
+            failed++;
+            continue;
+          }
+
           // Extract CSV content from raw_data
           const rawData = meter.raw_data as { csvContent?: string }[] | null;
           const csvContent = rawData?.[0]?.csvContent;
 
           if (!csvContent) {
-            console.warn(`Meter ${meter.id} has no CSV content to reprocess`);
-            failed++;
+            console.warn(`Meter ${meter.shop_name || meter.id} has no CSV content to reprocess`);
+            skipped++;
             continue;
           }
 
@@ -298,19 +305,19 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
             console.log(`Reprocessed ${meter.shop_name || meter.id}: ${profile.dataPoints} points, peak ${profile.peakKw} kW, avg daily ${avgDailyKwh.toFixed(1)} kWh`);
           }
         } catch (err) {
-          console.error(`Error processing meter ${meter.id}:`, err);
+          console.error(`Error processing meter ${meterId}:`, err);
           failed++;
         }
       }
 
-      return { processed, failed };
+      return { processed, failed, skipped };
     },
-    onSuccess: ({ processed, failed }) => {
+    onSuccess: ({ processed, failed, skipped }) => {
       queryClient.invalidateQueries({ queryKey: ["meter-library"] });
       queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
       queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });
-      if (failed > 0) {
-        toast.warning(`Reprocessed ${processed} meters, ${failed} failed (no CSV data)`);
+      if (failed > 0 || skipped > 0) {
+        toast.warning(`Reprocessed ${processed} meters, ${skipped} skipped (no CSV), ${failed} failed`);
       } else {
         toast.success(`Reprocessed ${processed} meters successfully`);
       }
