@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ChevronsUpDown, Check, Layers } from "lucide-react";
+import { ChevronsUpDown, Check, Layers, MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Upload, Trash2, Download, Pencil, RotateCcw } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Plus, Upload, Trash2, Download, Pencil, RotateCcw, Settings2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
@@ -594,22 +595,6 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                             </Command>
                           </PopoverContent>
                         </Popover>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          title="Multi-meter assignment"
-                          onClick={() => setMultiMeterTenant({ 
-                            id: tenant.id, 
-                            name: tenant.name, 
-                            area: tenantArea 
-                          })}
-                        >
-                          <Layers className={cn(
-                            "h-4 w-4",
-                            meterCount > 0 ? "text-primary" : "text-muted-foreground"
-                          )} />
-                        </Button>
                         {meterCount > 0 && (
                           <Badge variant="secondary" className="text-xs">
                             {meterCount}
@@ -656,14 +641,38 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                       />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => deleteTenant.mutate(tenant.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => setMultiMeterTenant({ 
+                              id: tenant.id, 
+                              name: tenant.name, 
+                              area: tenantArea 
+                            })}
+                          >
+                            <Layers className="h-4 w-4 mr-2" />
+                            Manage Assigned Meters
+                            {meterCount > 0 && (
+                              <Badge variant="secondary" className="ml-2 text-xs">
+                                {meterCount}
+                              </Badge>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => deleteTenant.mutate(tenant.id)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Tenant
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 );
