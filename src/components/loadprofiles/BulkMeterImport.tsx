@@ -458,13 +458,25 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
         const dateRangeStart = profile?.dateRangeStart || file.dateRange?.start || null;
         const dateRangeEnd = profile?.dateRangeEnd || file.dateRange?.end || null;
 
+        // Build raw_data with actual consumption stats
+        const rawDataPayload = [{
+          csvContent: file.content,
+          totalKwh: profile?.totalKwh || 0,
+          avgDailyKwh: profile ? (profile.totalKwh / Math.max(1, profile.weekdayDays + profile.weekendDays)) : 0,
+          peakKw: profile?.peakKw || 0,
+          avgKw: profile?.avgKw || 0,
+          dataPoints: profile?.dataPoints || file.rowCount,
+          dateStart: dateRangeStart,
+          dateEnd: dateRangeEnd,
+        }];
+
         if (file.matchedMeterId) {
           // Update existing meter placeholder with processed CSV data
           const { error } = await supabase
             .from("scada_imports")
             .update({
               file_name: file.fileName,
-              raw_data: [{ csvContent: file.content }],
+              raw_data: rawDataPayload,
               data_points: profile?.dataPoints || file.rowCount,
               load_profile_weekday: weekdayProfile,
               load_profile_weekend: weekendProfile,
@@ -485,7 +497,7 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
             site_id: siteId || null,
             shop_name: meterName,
             file_name: file.fileName,
-            raw_data: [{ csvContent: file.content }],
+            raw_data: rawDataPayload,
             data_points: profile?.dataPoints || file.rowCount,
             load_profile_weekday: weekdayProfile,
             load_profile_weekend: weekendProfile,

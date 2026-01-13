@@ -293,7 +293,9 @@ export function processCSVToLoadProfile(
   }
   
   // Calculate average kW for each hour
-  // Note: If data is in kWh per interval, convert to kW
+  // Note: CSV data is typically in kWh per interval (e.g., 0.5 kWh for 30-min interval)
+  // To get average kW for the hour, we sum all intervals for that hour and that's the kWh for the hour
+  // Since kWh/hour = kW (average power over that hour), we just need to sum the interval readings
   const weekdayProfile: number[] = [];
   const weekendProfile: number[] = [];
   
@@ -301,20 +303,21 @@ export function processCSVToLoadProfile(
     // Weekday: sum all readings for this hour across all days, divide by number of days
     const wdValues = weekdayHours[h];
     const wdDayCount = weekdayDates.size || 1;
-    // Sum readings for the hour, then average per day
-    // If readings are in kWh per 30-min interval, sum them per hour = kWh/hour
-    // Average across days gives average kWh consumed in that hour
+    
+    // Each value is kWh consumed in that interval (e.g., 30-min)
+    // Sum all intervals for this hour = total kWh consumed in this hour across all days
+    // Divide by day count = average kWh consumed in this hour per day
+    // kWh per hour = kW average power for that hour
     const wdHourlySum = wdValues.reduce((sum, v) => sum + v, 0);
     const wdAvgKwhPerHour = wdHourlySum / wdDayCount;
-    // Convert kWh per hour to average kW: kWh/hour = kW (for that hour's average power)
-    weekdayProfile.push(Math.round(wdAvgKwhPerHour * intervalsPerHour * 100) / 100);
+    weekdayProfile.push(Math.round(wdAvgKwhPerHour * 100) / 100);
     
     // Weekend
     const weValues = weekendHours[h];
     const weDayCount = weekendDates.size || 1;
     const weHourlySum = weValues.reduce((sum, v) => sum + v, 0);
     const weAvgKwhPerHour = weHourlySum / weDayCount;
-    weekendProfile.push(Math.round(weAvgKwhPerHour * intervalsPerHour * 100) / 100);
+    weekendProfile.push(Math.round(weAvgKwhPerHour * 100) / 100);
   }
   
   // Calculate totals
