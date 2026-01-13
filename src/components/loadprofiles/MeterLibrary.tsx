@@ -186,14 +186,44 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     mutationFn: async (meterIds: string[]) => {
       if (!meterIds.length) throw new Error("No meters to process");
 
-      // Filter to only unprocessed meters
-      const { data: unprocessedCheck } = await supabase
-        .from("scada_imports")
-        .select("id, shop_name, processed_at")
-        .in("id", meterIds)
-        .is("processed_at", null);
+      console.log(`[Reprocess] Requested to process ${meterIds.length} meters`);
+
+      // For large batches, don't pre-filter - just process directly
+      // The filtering was causing issues with large IN queries
+      let unprocessedIds: string[] = [];
       
-      const unprocessedIds = unprocessedCheck?.map(m => m.id) || [];
+      if (meterIds.length > 100) {
+        // For large sets, process in chunks to check unprocessed status
+        const chunkSize = 50;
+        for (let i = 0; i < meterIds.length; i += chunkSize) {
+          const chunk = meterIds.slice(i, i + chunkSize);
+          const { data: unprocessedChunk, error } = await supabase
+            .from("scada_imports")
+            .select("id")
+            .in("id", chunk)
+            .is("processed_at", null);
+          
+          if (error) {
+            console.error(`[Reprocess] Error checking unprocessed status:`, error);
+            continue;
+          }
+          unprocessedIds.push(...(unprocessedChunk?.map(m => m.id) || []));
+        }
+      } else {
+        // For smaller sets, single query is fine
+        const { data: unprocessedCheck, error } = await supabase
+          .from("scada_imports")
+          .select("id, shop_name, processed_at")
+          .in("id", meterIds)
+          .is("processed_at", null);
+        
+        if (error) {
+          console.error(`[Reprocess] Error checking unprocessed status:`, error);
+        }
+        unprocessedIds = unprocessedCheck?.map(m => m.id) || [];
+      }
+      
+      console.log(`[Reprocess] Found ${unprocessedIds.length} unprocessed meters out of ${meterIds.length}`);
       
       if (unprocessedIds.length === 0) {
         toast.info("All meters already processed. Use 'Clear Processed' to reset.");
