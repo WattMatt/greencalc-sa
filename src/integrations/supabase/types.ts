@@ -280,6 +280,45 @@ export type Database = {
           },
         ]
       }
+      project_tenant_meters: {
+        Row: {
+          created_at: string
+          id: string
+          scada_import_id: string
+          tenant_id: string
+          weight: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          scada_import_id: string
+          tenant_id: string
+          weight?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          scada_import_id?: string
+          tenant_id?: string
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_tenant_meters_scada_import_id_fkey"
+            columns: ["scada_import_id"]
+            isOneToOne: false
+            referencedRelation: "scada_imports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_tenant_meters_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "project_tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_tenants: {
         Row: {
           area_sqm: number

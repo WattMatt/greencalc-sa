@@ -5,6 +5,19 @@ export interface RawDataPoint {
   value: number;
 }
 
+export interface TenantMeter {
+  id: string;
+  scada_import_id: string;
+  weight: number;
+  scada_imports?: {
+    id: string;
+    shop_name: string | null;
+    area_sqm: number | null;
+    load_profile_weekday: number[] | null;
+    load_profile_weekend: number[] | null;
+  };
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -28,6 +41,8 @@ export interface Tenant {
     date_range_start?: string | null;
     date_range_end?: string | null;
   } | null;
+  // Multi-meter support
+  tenant_meters?: TenantMeter[];
 }
 
 export interface ShopType {

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import {
   Tenant,
+  TenantMeter,
   ShopType,
   DayOfWeek,
   DAY_MULTIPLIERS,
@@ -12,6 +13,33 @@ import {
   PVStats,
 } from "../types";
 import { SolcastPVProfile } from "./useSolcastPVProfile";
+
+// Calculate averaged profile from multiple meters
+function getAveragedProfile(
+  meters: TenantMeter[] | undefined,
+  profileKey: 'load_profile_weekday' | 'load_profile_weekend'
+): number[] | null {
+  if (!meters || meters.length === 0) return null;
+  
+  const validMeters = meters.filter(m => 
+    m.scada_imports?.[profileKey]?.length === 24
+  );
+  
+  if (validMeters.length === 0) return null;
+  
+  const totalWeight = validMeters.reduce((sum, m) => sum + (m.weight || 1), 0);
+  const averaged: number[] = Array(24).fill(0);
+  
+  for (const meter of validMeters) {
+    const profile = meter.scada_imports![profileKey]!;
+    const weight = (meter.weight || 1) / totalWeight;
+    for (let h = 0; h < 24; h++) {
+      averaged[h] += profile[h] * weight;
+    }
+  }
+  
+  return averaged;
+}
 
 interface UseLoadProfileDataProps {
   tenants: Tenant[];
@@ -65,12 +93,14 @@ export function useLoadProfileData({
     return solcastProfile?.hourlyTemp || Array(24).fill(25);
   }, [solcastProfile]);
 
-  // Count tenants with actual SCADA data
+  // Count tenants with actual SCADA data (including multi-meter)
   const { tenantsWithScada, tenantsEstimated } = useMemo(() => {
     let scadaCount = 0;
     let estimatedCount = 0;
     tenants.forEach((t) => {
-      if (t.scada_imports?.load_profile_weekday?.length === 24) scadaCount++;
+      const hasMultiMeter = (t.tenant_meters?.length || 0) > 0 && 
+        t.tenant_meters?.some(m => m.scada_imports?.load_profile_weekday?.length === 24);
+      if (hasMultiMeter || t.scada_imports?.load_profile_weekday?.length === 24) scadaCount++;
       else estimatedCount++;
     });
     return { tenantsWithScada: scadaCount, tenantsEstimated: estimatedCount };
@@ -88,6 +118,29 @@ export function useLoadProfileData({
 
       tenants.forEach((tenant) => {
         const tenantArea = Number(tenant.area_sqm) || 0;
+        
+        // Check for multi-meter averaged profile first
+        const multiMeterProfile = isWeekendDay 
+          ? getAveragedProfile(tenant.tenant_meters, 'load_profile_weekend') || getAveragedProfile(tenant.tenant_meters, 'load_profile_weekday')
+          : getAveragedProfile(tenant.tenant_meters, 'load_profile_weekday');
+        
+        if (multiMeterProfile?.length === 24) {
+          // Use averaged profile from multiple meters
+          // Calculate average area from assigned meters
+          const metersWithArea = (tenant.tenant_meters || []).filter(m => m.scada_imports?.area_sqm);
+          const avgMeterArea = metersWithArea.length > 0
+            ? metersWithArea.reduce((sum, m) => sum + (m.scada_imports!.area_sqm || 0), 0) / metersWithArea.length
+            : tenantArea;
+          
+          const areaScaleFactor = avgMeterArea > 0 ? tenantArea / avgMeterArea : 1;
+          const scaledHourlyKwh = (multiMeterProfile[h] || 0) * areaScaleFactor * dayMultiplier;
+          const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
+          hourData[key] = ((hourData[key] as number) || 0) + scaledHourlyKwh;
+          hourData.total += scaledHourlyKwh;
+          return;
+        }
+        
+        // Fall back to single SCADA profile
         const scadaWeekday = tenant.scada_imports?.load_profile_weekday;
         const scadaWeekend = tenant.scada_imports?.load_profile_weekend;
         const scadaProfile = isWeekendDay ? scadaWeekend || scadaWeekday : scadaWeekday;

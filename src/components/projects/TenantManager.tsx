@@ -7,15 +7,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ChevronsUpDown, Check } from "lucide-react";
+import { ChevronsUpDown, Check, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Upload, Trash2, Download, Pencil, RotateCcw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 import { TenantProfileMatcher } from "./TenantProfileMatcher";
+import { MultiMeterSelector } from "./MultiMeterSelector";
 import { AccuracyBadge, AccuracySummary, getAccuracyLevel } from "@/components/simulation/AccuracyBadge";
 import { CsvImportWizard, WizardParseConfig } from "@/components/loadprofiles/CsvImportWizard";
 import { detectCsvType, buildMismatchErrorMessage } from "@/components/loadprofiles/utils/csvTypeDetection";
@@ -29,6 +31,8 @@ interface Tenant {
   monthly_kwh_override: number | null;
   shop_types?: { name: string; kwh_per_sqm_month: number } | null;
   scada_imports?: { shop_name: string | null; area_sqm: number | null; load_profile_weekday: number[] | null } | null;
+  // Multi-meter support
+  tenant_meters_count?: number;
 }
 
 interface ShopType {
@@ -152,6 +156,33 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardFile, setWizardFile] = useState<{ name: string; content: string } | null>(null);
   const [isProcessingWizard, setIsProcessingWizard] = useState(false);
+  
+  // Multi-meter selector state
+  const [multiMeterTenant, setMultiMeterTenant] = useState<{ id: string; name: string; area: number } | null>(null);
+
+  // Fetch multi-meter counts for all tenants
+  const { data: tenantMeterCounts = {} } = useQuery({
+    queryKey: ["tenant-meter-counts", projectId],
+    queryFn: async () => {
+      const tenantIds = tenants.map(t => t.id);
+      if (tenantIds.length === 0) return {};
+      
+      const { data, error } = await supabase
+        .from("project_tenant_meters")
+        .select("tenant_id")
+        .in("tenant_id", tenantIds);
+      
+      if (error) throw error;
+      
+      // Count meters per tenant
+      const counts: Record<string, number> = {};
+      for (const row of data || []) {
+        counts[row.tenant_id] = (counts[row.tenant_id] || 0) + 1;
+      }
+      return counts;
+    },
+    enabled: tenants.length > 0,
+  });
 
   // Fetch SCADA imports for profile assignment
   const { data: scadaImports } = useQuery({
@@ -483,6 +514,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
               {tenants.map((tenant) => {
                 const tenantArea = Number(tenant.area_sqm) || 0;
                 const scadaArea = tenant.scada_imports?.area_sqm || null;
+                const meterCount = tenantMeterCounts[tenant.id] || 0;
                 
                 // Calculate scale factor
                 let scaleFactor: number | null = null;
@@ -508,55 +540,80 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     <TableCell className="font-medium">{tenant.name}</TableCell>
                     <TableCell>{tenantArea.toLocaleString()}</TableCell>
                     <TableCell>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            className="w-[220px] justify-between text-left font-normal"
-                          >
-                            <span className="truncate">
-                              {assignedProfile
-                                ? formatProfileOption(assignedProfile)
-                                : "Unassigned"}
-                            </span>
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[320px] p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Search profiles..." className="h-9" />
-                            <CommandList>
-                              <CommandEmpty>No profile found.</CommandEmpty>
-                              <CommandGroup>
-                                {sortedProfiles.map((meter) => (
-                                  <CommandItem
-                                    key={meter.id}
-                                    value={`${meter.shop_name || ""} ${meter.site_name || ""} ${meter.area_sqm || ""}`}
-                                    onSelect={() => {
-                                      updateTenantProfile.mutate({
-                                        tenantId: tenant.id,
-                                        scadaImportId: meter.id,
-                                      });
-                                    }}
-                                    className="text-sm"
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        tenant.scada_import_id === meter.id
-                                          ? "opacity-100"
-                                          : "opacity-0"
-                                      )}
-                                    />
-                                    {formatProfileOption(meter)}
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                      <div className="flex items-center gap-2">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className="w-[200px] justify-between text-left font-normal"
+                            >
+                              <span className="truncate">
+                                {meterCount > 0 
+                                  ? `${meterCount} meters (averaged)`
+                                  : assignedProfile
+                                    ? formatProfileOption(assignedProfile)
+                                    : "Unassigned"}
+                              </span>
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[320px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Search profiles..." className="h-9" />
+                              <CommandList>
+                                <CommandEmpty>No profile found.</CommandEmpty>
+                                <CommandGroup>
+                                  {sortedProfiles.map((meter) => (
+                                    <CommandItem
+                                      key={meter.id}
+                                      value={`${meter.shop_name || ""} ${meter.site_name || ""} ${meter.area_sqm || ""}`}
+                                      onSelect={() => {
+                                        updateTenantProfile.mutate({
+                                          tenantId: tenant.id,
+                                          scadaImportId: meter.id,
+                                        });
+                                      }}
+                                      className="text-sm"
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          tenant.scada_import_id === meter.id
+                                            ? "opacity-100"
+                                            : "opacity-0"
+                                        )}
+                                      />
+                                      {formatProfileOption(meter)}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="Multi-meter assignment"
+                          onClick={() => setMultiMeterTenant({ 
+                            id: tenant.id, 
+                            name: tenant.name, 
+                            area: tenantArea 
+                          })}
+                        >
+                          <Layers className={cn(
+                            "h-4 w-4",
+                            meterCount > 0 ? "text-primary" : "text-muted-foreground"
+                          )} />
+                        </Button>
+                        {meterCount > 0 && (
+                          <Badge variant="secondary" className="text-xs">
+                            {meterCount}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-center">
                       {scaleFactor !== null ? (
@@ -570,6 +627,8 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                         >
                           ×{scaleFactor.toFixed(2)}
                         </span>
+                      ) : meterCount > 0 ? (
+                        <span className="text-sm text-primary font-mono">avg</span>
                       ) : (
                         <span className="text-muted-foreground text-sm">—</span>
                       )}
@@ -585,10 +644,12 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     </TableCell>
                     <TableCell className="text-center">
                       <AccuracyBadge 
-                        level={getAccuracyLevel(
-                          !!tenant.scada_imports?.load_profile_weekday,
-                          !!tenant.shop_type_id
-                        )} 
+                        level={meterCount > 1 
+                          ? "actual" 
+                          : getAccuracyLevel(
+                              !!tenant.scada_imports?.load_profile_weekday,
+                              !!tenant.shop_type_id
+                            )} 
                         showIcon={true}
                       />
                     </TableCell>
@@ -633,6 +694,23 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         onProcess={processWizardData}
         isProcessing={isProcessingWizard}
       />
+      
+      {/* Multi-Meter Selector Dialog */}
+      {multiMeterTenant && (
+        <MultiMeterSelector
+          tenantId={multiMeterTenant.id}
+          tenantName={multiMeterTenant.name}
+          tenantArea={multiMeterTenant.area}
+          open={!!multiMeterTenant}
+          onOpenChange={(open) => {
+            if (!open) {
+              setMultiMeterTenant(null);
+              queryClient.invalidateQueries({ queryKey: ["tenant-meter-counts", projectId] });
+            }
+          }}
+          availableMeters={scadaImports || []}
+        />
+      )}
     </div>
   );
 }
