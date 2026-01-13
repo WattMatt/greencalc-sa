@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2 } from "lucide-react";
+import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
@@ -40,6 +40,14 @@ interface ScadaImport {
   load_profile_weekday: number[] | null;
   weekday_days: number | null;
   weekend_days: number | null;
+  processed_at: string | null;
+}
+
+interface CompletedMeter {
+  id: string;
+  name: string;
+  status: 'success' | 'skipped' | 'failed';
+  message: string;
 }
 
 const METER_COLORS = [
@@ -70,7 +78,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   
-  // Reprocess progress
+  // Reprocess progress and completed list
   const [reprocessProgress, setReprocessProgress] = useState<{ 
     current: number; 
     total: number; 
@@ -78,8 +86,9 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     batch: number;
     totalBatches: number;
   } | null>(null);
+  const [completedMeters, setCompletedMeters] = useState<CompletedMeter[]>([]);
   
-  const BATCH_SIZE = 5; // Process 5 meters at a time, then pause
+  const BATCH_SIZE = 20; // Process 20 meters at a time
 
   const { data: meters, isLoading } = useQuery({
     queryKey: ["meter-library", siteId],
@@ -87,7 +96,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       // IMPORTANT: Do NOT include raw_data here - it's huge and causes timeouts
       let query = supabase
         .from("scada_imports")
-        .select("id, site_name, site_id, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at, load_profile_weekday, weekday_days, weekend_days")
+        .select("id, site_name, site_id, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at, load_profile_weekday, weekday_days, weekend_days, processed_at")
         .order("created_at", { ascending: false });
       
       if (siteId) {
@@ -160,19 +169,34 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     mutationFn: async (meterIds: string[]) => {
       if (!meterIds.length) throw new Error("No meters to process");
 
+      // Filter to only unprocessed meters
+      const { data: unprocessedCheck } = await supabase
+        .from("scada_imports")
+        .select("id, shop_name, processed_at")
+        .in("id", meterIds)
+        .is("processed_at", null);
+      
+      const unprocessedIds = unprocessedCheck?.map(m => m.id) || [];
+      
+      if (unprocessedIds.length === 0) {
+        toast.info("All meters already processed. Use 'Clear Processed' to reset.");
+        return { processed: 0, failed: 0, skipped: 0, alreadyDone: meterIds.length };
+      }
+
       let processed = 0;
       let failed = 0;
       let skipped = 0;
-      const total = meterIds.length;
+      const total = unprocessedIds.length;
       const totalBatches = Math.ceil(total / BATCH_SIZE);
       
-      console.log(`[Reprocess] Starting batch processing: ${total} meters in ${totalBatches} batches of ${BATCH_SIZE}`);
+      console.log(`[Reprocess] Starting: ${total} unprocessed meters in ${totalBatches} batches of ${BATCH_SIZE}`);
+      setCompletedMeters([]);
 
       // Process in batches
       for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
         const batchStart = batchIdx * BATCH_SIZE;
         const batchEnd = Math.min(batchStart + BATCH_SIZE, total);
-        const batchMeterIds = meterIds.slice(batchStart, batchEnd);
+        const batchMeterIds = unprocessedIds.slice(batchStart, batchEnd);
         
         console.log(`[Reprocess] Batch ${batchIdx + 1}/${totalBatches}: Processing meters ${batchStart + 1}-${batchEnd}`);
         
@@ -201,17 +225,23 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
             // Fetch one meter at a time to avoid timeout with large raw_data
             const { data: meter, error: fetchError } = await supabase
               .from("scada_imports")
-              .select("id, raw_data, shop_name")
+              .select("id, raw_data, shop_name, site_name")
               .eq("id", meterId)
               .single();
 
             if (fetchError) {
               console.error(`[Reprocess] Failed to fetch meter ${meterId}:`, fetchError);
               failed++;
+              setCompletedMeters(prev => [...prev, { 
+                id: meterId, 
+                name: meterId.slice(0, 8), 
+                status: 'failed', 
+                message: 'Fetch error' 
+              }]);
               continue;
             }
 
-            const displayName = meter.shop_name || meterId.slice(0, 8);
+            const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
             setReprocessProgress({ 
               current: overallIdx + 1, 
               total, 
@@ -227,166 +257,195 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
             if (!csvContent) {
               console.warn(`[Reprocess] ${displayName}: No CSV content stored - skipping`);
               skipped++;
+              setCompletedMeters(prev => [...prev, { 
+                id: meter.id, 
+                name: displayName, 
+                status: 'skipped', 
+                message: 'No CSV data' 
+              }]);
               continue;
             }
             
             console.log(`[Reprocess] ${displayName}: Found CSV with ${csvContent.length} chars`);
 
-          // Auto-parse the CSV
-          const lines = csvContent.split('\n').filter((l: string) => l.trim());
-          let isPnPScada = false;
-          let meterName: string | undefined;
-          let dateRange: { start: string; end: string } | undefined;
-          let startRow = 1;
+            // Auto-parse the CSV
+            const lines = csvContent.split('\n').filter((l: string) => l.trim());
+            let isPnPScada = false;
+            let meterName: string | undefined;
+            let dateRange: { start: string; end: string } | undefined;
+            let startRow = 1;
 
-          // Check for PnP SCADA format
-          if (lines.length >= 2) {
-            const firstLine = lines[0];
-            const meterMatch = firstLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
-            const secondLine = lines[1]?.toLowerCase() || "";
-            const hasScadaHeaders = secondLine.includes('rdate') && secondLine.includes('rtime') && secondLine.includes('kwh');
-            
-            if (meterMatch && hasScadaHeaders) {
-              isPnPScada = true;
-              meterName = meterMatch[1];
-              dateRange = { start: meterMatch[2], end: meterMatch[3] };
-              startRow = 2;
-            }
-          }
-
-          // Auto-detect delimiter
-          const sampleLine = lines[startRow - 1] || lines[0] || "";
-          const tabCount = (sampleLine.match(/\t/g) || []).length;
-          const semicolonCount = (sampleLine.match(/;/g) || []).length;
-          const commaCount = (sampleLine.match(/,/g) || []).length;
-
-          const delimiters = {
-            tab: tabCount > 0,
-            semicolon: semicolonCount > 0,
-            comma: commaCount > 0 || (tabCount === 0 && semicolonCount === 0),
-            space: false,
-            other: false,
-            otherChar: "",
-          };
-
-          // Build set of delimiter characters
-          const delimChars = new Set<string>();
-          if (delimiters.tab) delimChars.add('\t');
-          if (delimiters.semicolon) delimChars.add(';');
-          if (delimiters.comma) delimChars.add(',');
-          if (delimChars.size === 0) delimChars.add(',');
-
-          const parseRow = (line: string): string[] => {
-            const result: string[] = [];
-            let current = "";
-            let inQuotes = false;
-
-            for (let i = 0; i < line.length; i++) {
-              const char = line[i];
-              if (char === '"' && !inQuotes) {
-                inQuotes = true;
-              } else if (char === '"' && inQuotes) {
-                if (line[i + 1] === '"') {
-                  current += '"';
-                  i++;
-                } else {
-                  inQuotes = false;
-                }
-              } else if (!inQuotes && delimChars.has(char)) {
-                result.push(current.trim());
-                current = "";
-              } else {
-                current += char;
+            // Check for PnP SCADA format
+            if (lines.length >= 2) {
+              const firstLine = lines[0];
+              const meterMatch = firstLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
+              const secondLine = lines[1]?.toLowerCase() || "";
+              const hasScadaHeaders = secondLine.includes('rdate') && secondLine.includes('rtime') && secondLine.includes('kwh');
+              
+              if (meterMatch && hasScadaHeaders) {
+                isPnPScada = true;
+                meterName = meterMatch[1];
+                dateRange = { start: meterMatch[2], end: meterMatch[3] };
+                startRow = 2;
               }
             }
-            result.push(current.trim());
-            return result;
-          };
 
-          const headerIdx = startRow - 1;
-          const headers = headerIdx < lines.length ? parseRow(lines[headerIdx]) : [];
-          const rows = lines.slice(headerIdx + 1).map(parseRow);
+            // Auto-detect delimiter
+            const sampleLine = lines[startRow - 1] || lines[0] || "";
+            const tabCount = (sampleLine.match(/\t/g) || []).length;
+            const semicolonCount = (sampleLine.match(/;/g) || []).length;
+            const commaCount = (sampleLine.match(/,/g) || []).length;
 
-          // Auto-detect column types
-          const columns: ColumnConfig[] = headers.map((header, idx) => {
-            const lowerHeader = header.toLowerCase();
-            if (lowerHeader.includes('date') || lowerHeader.includes('rdate')) {
-              return { index: idx, name: header, dataType: 'date' as const, dateFormat: 'YMD' };
-            } else if (lowerHeader.includes('kwh') || lowerHeader.includes('energy') || lowerHeader.includes('consumption')) {
-              return { index: idx, name: header, dataType: 'general' as const };
+            const delimiters = {
+              tab: tabCount > 0,
+              semicolon: semicolonCount > 0,
+              comma: commaCount > 0 || (tabCount === 0 && semicolonCount === 0),
+              space: false,
+              other: false,
+              otherChar: "",
+            };
+
+            // Build set of delimiter characters
+            const delimChars = new Set<string>();
+            if (delimiters.tab) delimChars.add('\t');
+            if (delimiters.semicolon) delimChars.add(';');
+            if (delimiters.comma) delimChars.add(',');
+            if (delimChars.size === 0) delimChars.add(',');
+
+            const parseRow = (line: string): string[] => {
+              const result: string[] = [];
+              let current = "";
+              let inQuotes = false;
+
+              for (let j = 0; j < line.length; j++) {
+                const char = line[j];
+                if (char === '"' && !inQuotes) {
+                  inQuotes = true;
+                } else if (char === '"' && inQuotes) {
+                  if (line[j + 1] === '"') {
+                    current += '"';
+                    j++;
+                  } else {
+                    inQuotes = false;
+                  }
+                } else if (!inQuotes && delimChars.has(char)) {
+                  result.push(current.trim());
+                  current = "";
+                } else {
+                  current += char;
+                }
+              }
+              result.push(current.trim());
+              return result;
+            };
+
+            const headerIdx = startRow - 1;
+            const headers = headerIdx < lines.length ? parseRow(lines[headerIdx]) : [];
+            const rows = lines.slice(headerIdx + 1).map(parseRow);
+
+            // Auto-detect column types
+            const columns: ColumnConfig[] = headers.map((header, idx) => {
+              const lowerHeader = header.toLowerCase();
+              if (lowerHeader.includes('date') || lowerHeader.includes('rdate')) {
+                return { index: idx, name: header, dataType: 'date' as const, dateFormat: 'YMD' };
+              } else if (lowerHeader.includes('kwh') || lowerHeader.includes('energy') || lowerHeader.includes('consumption')) {
+                return { index: idx, name: header, dataType: 'general' as const };
+              }
+              return { index: idx, name: header, dataType: 'text' as const };
+            });
+
+            const parseConfig: WizardParseConfig = {
+              fileType: "delimited",
+              startRow,
+              delimiters,
+              treatConsecutiveAsOne: false,
+              textQualifier: '"',
+              columns,
+              detectedFormat: isPnPScada ? "pnp-scada" : undefined,
+            };
+
+            // Process into load profile
+            console.log(`[Reprocess] ${displayName}: Detected ${headers.length} columns, ${rows.length} rows`);
+            
+            const profile = processCSVToLoadProfile(headers, rows, parseConfig);
+
+            // Validation check - if profile has zeros, something went wrong
+            if (profile.dataPoints === 0 || profile.totalKwh === 0) {
+              console.warn(`[Reprocess] ${displayName}: Profile empty! dataPoints=${profile.dataPoints}, totalKwh=${profile.totalKwh}`);
+              failed++;
+              setCompletedMeters(prev => [...prev, { 
+                id: meter.id, 
+                name: displayName, 
+                status: 'failed', 
+                message: 'Empty profile' 
+              }]);
+              continue;
             }
-            return { index: idx, name: header, dataType: 'text' as const };
-          });
+            
+            console.log(`[Reprocess] ${displayName}: SUCCESS - ${profile.dataPoints} points, ${profile.totalKwh.toFixed(1)} total kWh`);
 
-          const parseConfig: WizardParseConfig = {
-            fileType: "delimited",
-            startRow,
-            delimiters,
-            treatConsecutiveAsOne: false,
-            textQualifier: '"',
-            columns,
-            detectedFormat: isPnPScada ? "pnp-scada" : undefined,
-          };
+            // Calculate stats
+            const dateRangeStart = profile.dateRangeStart || dateRange?.start || null;
+            const dateRangeEnd = profile.dateRangeEnd || dateRange?.end || null;
+            const totalDays = Math.max(1, profile.weekdayDays + profile.weekendDays);
+            const avgDailyKwh = profile.totalKwh / totalDays;
 
-          // Process into load profile
-          console.log(`[Reprocess] ${meter.shop_name || meterId}: Detected ${headers.length} columns, ${rows.length} rows`);
-          console.log(`[Reprocess] Headers:`, headers);
-          console.log(`[Reprocess] Columns config:`, columns.map(c => `${c.name}:${c.dataType}`).join(', '));
-          
-          const profile = processCSVToLoadProfile(headers, rows, parseConfig);
+            // Build new raw_data WITHOUT CSV content (clear it to save space)
+            const newRawData = [{
+              // csvContent intentionally removed to save storage
+              totalKwh: profile.totalKwh,
+              avgDailyKwh,
+              peakKw: profile.peakKw,
+              avgKw: profile.avgKw,
+              dataPoints: profile.dataPoints,
+              dateStart: dateRangeStart,
+              dateEnd: dateRangeEnd,
+            }];
 
-          // Validation check - if profile has zeros, something went wrong
-          if (profile.dataPoints === 0 || profile.totalKwh === 0) {
-            console.warn(`[Reprocess] ${meter.shop_name || meterId}: Profile empty! dataPoints=${profile.dataPoints}, totalKwh=${profile.totalKwh}`);
-            console.warn(`[Reprocess] Sample row:`, rows[0]);
-          } else {
-            console.log(`[Reprocess] ${meter.shop_name || meterId}: SUCCESS - ${profile.dataPoints} points, ${profile.totalKwh.toFixed(1)} total kWh, peak ${profile.peakKw.toFixed(1)} kW`);
-          }
+            // Update the meter with processed_at timestamp
+            const { error: updateError } = await supabase
+              .from("scada_imports")
+              .update({
+                raw_data: newRawData,
+                data_points: profile.dataPoints,
+                load_profile_weekday: profile.weekdayProfile,
+                load_profile_weekend: profile.weekendProfile,
+                weekday_days: profile.weekdayDays,
+                weekend_days: profile.weekendDays,
+                date_range_start: dateRangeStart,
+                date_range_end: dateRangeEnd,
+                processed_at: new Date().toISOString(),
+              })
+              .eq("id", meter.id);
 
-          // Calculate stats
-          const dateRangeStart = profile.dateRangeStart || dateRange?.start || null;
-          const dateRangeEnd = profile.dateRangeEnd || dateRange?.end || null;
-          const totalDays = Math.max(1, profile.weekdayDays + profile.weekendDays);
-          const avgDailyKwh = profile.totalKwh / totalDays;
-
-          // Build new raw_data with stats
-          const newRawData = [{
-            csvContent,
-            totalKwh: profile.totalKwh,
-            avgDailyKwh,
-            peakKw: profile.peakKw,
-            avgKw: profile.avgKw,
-            dataPoints: profile.dataPoints,
-            dateStart: dateRangeStart,
-            dateEnd: dateRangeEnd,
-          }];
-
-          // Update the meter
-          const { error: updateError } = await supabase
-            .from("scada_imports")
-            .update({
-              raw_data: newRawData,
-              data_points: profile.dataPoints,
-              load_profile_weekday: profile.weekdayProfile,
-              load_profile_weekend: profile.weekendProfile,
-              weekday_days: profile.weekdayDays,
-              weekend_days: profile.weekendDays,
-              date_range_start: dateRangeStart,
-              date_range_end: dateRangeEnd,
-            })
-            .eq("id", meter.id);
-
-          if (updateError) {
-            console.error(`Failed to update meter ${meter.id}:`, updateError);
+            if (updateError) {
+              console.error(`Failed to update meter ${meter.id}:`, updateError);
+              failed++;
+              setCompletedMeters(prev => [...prev, { 
+                id: meter.id, 
+                name: displayName, 
+                status: 'failed', 
+                message: updateError.message 
+              }]);
+            } else {
+              processed++;
+              setCompletedMeters(prev => [...prev, { 
+                id: meter.id, 
+                name: displayName, 
+                status: 'success', 
+                message: `${profile.dataPoints} pts, ${profile.peakKw.toFixed(1)} kW peak` 
+              }]);
+            }
+          } catch (err) {
+            console.error(`Error processing meter ${meterId}:`, err);
             failed++;
-          } else {
-            processed++;
-            console.log(`Reprocessed ${meter.shop_name || meter.id}: ${profile.dataPoints} points, peak ${profile.peakKw} kW, avg daily ${avgDailyKwh.toFixed(1)} kWh`);
+            setCompletedMeters(prev => [...prev, { 
+              id: meterId, 
+              name: meterId.slice(0, 8), 
+              status: 'failed', 
+              message: String(err) 
+            }]);
           }
-        } catch (err) {
-          console.error(`Error processing meter ${meterId}:`, err);
-          failed++;
-        }
         } // end inner for (meters in batch)
         
         // Pause between batches to let the system breathe
@@ -436,8 +495,36 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       toast.error("No meters to reprocess");
       return;
     }
-    if (confirm(`Reprocess ${filteredMeters.length} meter(s) from stored CSV data? This will recalculate all load profiles.`)) {
+    // Count unprocessed meters
+    const unprocessedCount = filteredMeters.filter(m => !m.processed_at).length;
+    if (unprocessedCount === 0) {
+      toast.info("All meters already processed. Use 'Clear Processed' to reset.");
+      return;
+    }
+    if (confirm(`Reprocess ${unprocessedCount} unprocessed meter(s)? (${filteredMeters.length - unprocessedCount} already processed will be skipped)`)) {
       reprocessMeters.mutate(filteredMeters.map(m => m.id));
+    }
+  };
+
+  const handleClearProcessed = async () => {
+    if (!meters?.length) return;
+    const processedCount = meters.filter(m => m.processed_at).length;
+    if (processedCount === 0) {
+      toast.info("No processed meters to clear");
+      return;
+    }
+    if (confirm(`Clear processed status from ${processedCount} meter(s)? This will allow them to be reprocessed.`)) {
+      const { error } = await supabase
+        .from("scada_imports")
+        .update({ processed_at: null })
+        .not("processed_at", "is", null);
+      
+      if (error) {
+        toast.error(error.message);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+        toast.success(`Cleared processed status from ${processedCount} meters`);
+      }
     }
   };
 
@@ -655,6 +742,19 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
               )}
               Re-process All
             </Button>
+            
+            {/* Clear Processed button */}
+            {meters && meters.some(m => m.processed_at) && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleClearProcessed}
+                disabled={reprocessMeters.isPending}
+              >
+                <X className="h-4 w-4 mr-1" />
+                Clear Processed ({meters.filter(m => m.processed_at).length})
+              </Button>
+            )}
           </div>
           
           {/* Progress indicator */}
@@ -679,6 +779,31 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">{reprocessProgress.currentMeter}</p>
                 </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Completed meters list (shown during/after processing) */}
+          {completedMeters.length > 0 && (
+            <div className="bg-muted/30 rounded-lg p-4 border max-h-48 overflow-y-auto">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Completed ({completedMeters.length})</span>
+                {!reprocessProgress && (
+                  <Button variant="ghost" size="sm" onClick={() => setCompletedMeters([])}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <div className="space-y-1">
+                {completedMeters.map((cm, idx) => (
+                  <div key={`${cm.id}-${idx}`} className="flex items-center gap-2 text-xs">
+                    {cm.status === 'success' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+                    {cm.status === 'skipped' && <Circle className="h-3 w-3 text-yellow-500" />}
+                    {cm.status === 'failed' && <X className="h-3 w-3 text-destructive" />}
+                    <span className="font-medium">{cm.name}</span>
+                    <span className="text-muted-foreground">{cm.message}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -709,6 +834,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                         onCheckedChange={toggleSelectAll}
                       />
                     </TableHead>
+                    <TableHead className="w-8">Status</TableHead>
                     <TableHead className="w-8">Color</TableHead>
                     <TableHead>Meter / Label</TableHead>
                     <TableHead>Area (m²)</TableHead>
@@ -726,6 +852,15 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                           checked={selectedIds.has(meter.id)}
                           onCheckedChange={() => toggleSelect(meter.id)}
                         />
+                      </TableCell>
+                      <TableCell>
+                        <div title={meter.processed_at ? `Processed: ${format(new Date(meter.processed_at), 'MMM d, HH:mm')}` : "Not processed"}>
+                          {meter.processed_at ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Circle className="h-4 w-4 text-muted-foreground/50" />
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div
