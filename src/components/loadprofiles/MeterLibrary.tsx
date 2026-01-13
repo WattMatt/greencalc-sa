@@ -936,6 +936,17 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                                     <p>× 30 days/month</p>
                                     <p className="font-medium pt-1">= <span className="font-mono">{monthlyKwh.toFixed(0)} kWh/mo</span></p>
                                   </div>
+                                  {meter.area_sqm && meter.area_sqm > 0 && (
+                                    <div className="border-t pt-1 mt-1">
+                                      <p className="font-semibold text-primary">Energy Intensity</p>
+                                      <p>
+                                        <span className="font-mono">{(monthlyKwh / meter.area_sqm).toFixed(1)}</span> kWh/m²/month
+                                      </p>
+                                      <p className="text-muted-foreground">
+                                        ({meter.area_sqm.toLocaleString()} m² area)
+                                      </p>
+                                    </div>
+                                  )}
                                   <p className="text-muted-foreground pt-1 italic">
                                     Based on 48 half-hourly values from weekday load profile
                                   </p>
