@@ -720,6 +720,13 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
             }
           }}
           availableMeters={scadaImports || []}
+          singleProfileId={tenants.find(t => t.id === multiMeterTenant.id)?.scada_import_id}
+          onClearSingleProfile={() => {
+            updateTenantProfile.mutate({
+              tenantId: multiMeterTenant.id,
+              scadaImportId: null,
+            });
+          }}
         />
       )}
     </div>
