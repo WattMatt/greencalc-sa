@@ -37,7 +37,6 @@ interface ScadaImport {
   date_range_end: string | null;
   data_points: number | null;
   created_at: string;
-  raw_data: RawDataStats[] | null;
   load_profile_weekday: number[] | null;
   weekday_days: number | null;
   weekend_days: number | null;
@@ -74,9 +73,10 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   const { data: meters, isLoading } = useQuery({
     queryKey: ["meter-library", siteId],
     queryFn: async () => {
+      // IMPORTANT: Do NOT include raw_data here - it's huge and causes timeouts
       let query = supabase
         .from("scada_imports")
-        .select("id, site_name, site_id, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at, raw_data, load_profile_weekday, weekday_days, weekend_days")
+        .select("id, site_name, site_id, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at, load_profile_weekday, weekday_days, weekend_days")
         .order("created_at", { ascending: false });
       
       if (siteId) {
@@ -85,10 +85,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       
       const { data, error } = await query;
       if (error) throw error;
-      return (data || []).map(row => ({
-        ...row,
-        raw_data: row.raw_data as RawDataStats[] | null
-      })) as ScadaImport[];
+      return (data || []) as ScadaImport[];
     },
   });
   const updateMeter = useMutation({
@@ -618,9 +615,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                     <TableHead>Area (m²)</TableHead>
                     <TableHead>Days (WD/WE)</TableHead>
                     <TableHead>Peak kW</TableHead>
-                    <TableHead>Avg Daily kWh</TableHead>
                     <TableHead>Data Points</TableHead>
-                    <TableHead>CSV</TableHead>
                     <TableHead className="w-24">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -667,24 +662,12 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                     </TableCell>
                     <TableCell>
                       {(() => {
-                        const peakKw = meter.raw_data?.[0]?.peakKw;
-                        // Fallback: calculate from load profile if raw_data doesn't have it
+                        // Calculate peak from load profile
                         const profilePeak = meter.load_profile_weekday 
                           ? Math.max(...meter.load_profile_weekday, 0)
                           : 0;
-                        const displayPeak = peakKw || profilePeak;
-                        return displayPeak > 0 ? (
-                          <span className="text-sm font-mono">{displayPeak.toFixed(1)}</span>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">-</span>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      {(() => {
-                        const avgDaily = meter.raw_data?.[0]?.avgDailyKwh;
-                        return avgDaily && avgDaily > 0 ? (
-                          <span className="text-sm font-mono">{avgDaily.toFixed(1)}</span>
+                        return profilePeak > 0 ? (
+                          <span className="text-sm font-mono">{profilePeak.toFixed(1)}</span>
                         ) : (
                           <span className="text-muted-foreground text-sm">-</span>
                         );
@@ -694,13 +677,6 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                       <Badge variant="secondary">
                         {meter.data_points?.toLocaleString() || 0}
                       </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {meter.raw_data?.[0]?.csvContent ? (
-                        <Badge variant="outline" className="text-green-600 border-green-600">✓</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-muted-foreground">-</Badge>
-                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
