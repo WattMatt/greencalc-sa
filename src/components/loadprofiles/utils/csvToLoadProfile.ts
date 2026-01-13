@@ -14,116 +14,143 @@ export interface ProcessedLoadProfile {
 }
 
 interface ParsedRow {
-  date: Date | null;
+  date: Date;
   hour: number;
   minute: number;
   kWh: number;
 }
 
-// Parse date based on format configuration
-function parseDate(dateStr: string, format: string = "YMD"): Date | null {
+interface ParsedDateTime {
+  date: Date;
+  hour: number;
+  minute: number;
+}
+
+// Parse date (and optionally time) from string - handles combined datetime fields
+function parseDateTime(dateStr: string, timeStr: string | null, format: string = "YMD"): ParsedDateTime | null {
   if (!dateStr) return null;
-  
-  // Clean the string
   dateStr = dateStr.trim();
   
-  // Try ISO format first (YYYY-MM-DD)
-  const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) {
-    return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
-  }
-  
-  // Try other formats based on config
-  const parts = dateStr.split(/[-\/\.]/);
-  if (parts.length >= 3) {
-    let year: number, month: number, day: number;
-    
-    switch (format) {
-      case "DMY":
-        day = parseInt(parts[0]);
-        month = parseInt(parts[1]) - 1;
-        year = parseInt(parts[2]);
-        break;
-      case "MDY":
-        month = parseInt(parts[0]) - 1;
-        day = parseInt(parts[1]);
-        year = parseInt(parts[2]);
-        break;
-      case "YMD":
-      default:
-        year = parseInt(parts[0]);
-        month = parseInt(parts[1]) - 1;
-        day = parseInt(parts[2]);
-        break;
-    }
-    
-    // Handle 2-digit years
-    if (year < 100) {
-      year += year > 50 ? 1900 : 2000;
-    }
+  // Try combined datetime format: "31/12/2024 23:30:00" or "2024-12-31 23:30:00"
+  const dtMatch = dateStr.match(/^(\d{1,4})[-\/](\d{1,2})[-\/](\d{1,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (dtMatch) {
+    const p1 = parseInt(dtMatch[1]);
+    const p2 = parseInt(dtMatch[2]);
+    const p3 = parseInt(dtMatch[3]);
+    const { year, month, day } = parseYMD(p1, p2, p3, format);
     
     const date = new Date(year, month, day);
     if (!isNaN(date.getTime())) {
-      return date;
+      return { date, hour: parseInt(dtMatch[4]), minute: parseInt(dtMatch[5]) };
+    }
+  }
+  
+  // Try date-only format
+  const dateOnlyMatch = dateStr.match(/^(\d{1,4})[-\/](\d{1,2})[-\/](\d{1,4})/);
+  if (dateOnlyMatch) {
+    const p1 = parseInt(dateOnlyMatch[1]);
+    const p2 = parseInt(dateOnlyMatch[2]);
+    const p3 = parseInt(dateOnlyMatch[3]);
+    const { year, month, day } = parseYMD(p1, p2, p3, format);
+    
+    const date = new Date(year, month, day);
+    if (!isNaN(date.getTime())) {
+      // Parse separate time column if provided
+      let hour = 0, minute = 0;
+      if (timeStr) {
+        const timeMatch = timeStr.trim().match(/^(\d{1,2}):(\d{2})/);
+        if (timeMatch) {
+          hour = parseInt(timeMatch[1]);
+          minute = parseInt(timeMatch[2]);
+        }
+      }
+      return { date, hour, minute };
     }
   }
   
   return null;
 }
 
-// Parse time string to hour and minute
-function parseTime(timeStr: string): { hour: number; minute: number } | null {
-  if (!timeStr) return null;
+// Helper to parse year/month/day from 3 parts with format hint
+function parseYMD(p1: number, p2: number, p3: number, format: string): { year: number; month: number; day: number } {
+  let year: number, month: number, day: number;
   
-  timeStr = timeStr.trim();
-  
-  // Match HH:MM or HH:MM:SS format
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-  if (match) {
-    return {
-      hour: parseInt(match[1]),
-      minute: parseInt(match[2])
-    };
+  // Auto-detect based on value ranges
+  if (p1 > 31) {
+    // YYYY-MM-DD (ISO)
+    year = p1; month = p2 - 1; day = p3;
+  } else if (p3 > 31) {
+    // DD/MM/YYYY or MM/DD/YYYY
+    if (format === "MDY") {
+      month = p1 - 1; day = p2; year = p3;
+    } else {
+      day = p1; month = p2 - 1; year = p3;
+    }
+  } else {
+    // Ambiguous, use format hint
+    switch (format) {
+      case "DMY": day = p1; month = p2 - 1; year = p3; break;
+      case "MDY": month = p1 - 1; day = p2; year = p3; break;
+      default: year = p1; month = p2 - 1; day = p3;
+    }
   }
   
-  return null;
+  // Handle 2-digit years
+  if (year < 100) year += year > 50 ? 1900 : 2000;
+  
+  return { year, month, day };
 }
 
 // Find column index by name pattern
 function findColumnIndex(headers: string[], patterns: string[]): number {
   const lowerHeaders = headers.map(h => h.toLowerCase().trim());
-  
   for (const pattern of patterns) {
     const idx = lowerHeaders.findIndex(h => h.includes(pattern.toLowerCase()));
     if (idx !== -1) return idx;
   }
-  
   return -1;
 }
 
-// Detect if a column contains numeric values by analyzing sample data
+// Detect if a column contains numeric values
 function isNumericColumn(rows: string[][], colIdx: number): boolean {
-  if (colIdx < 0) return false;
+  if (colIdx < 0 || rows.length === 0) return false;
   
   let numericCount = 0;
   const sampleSize = Math.min(rows.length, 20);
   
   for (let i = 0; i < sampleSize; i++) {
     const val = rows[i]?.[colIdx]?.replace(/[^\d.-]/g, "");
-    if (val && !isNaN(parseFloat(val)) && parseFloat(val) > 0) {
+    if (val && !isNaN(parseFloat(val))) {
       numericCount++;
     }
   }
   
-  return numericCount >= sampleSize * 0.8; // 80% must be valid numbers
+  return numericCount >= sampleSize * 0.5; // 50% threshold - be lenient
 }
 
-// Find the best kWh/value column by analyzing data
+// Detect if a column contains date/time values
+function isDateTimeColumn(rows: string[][], colIdx: number): boolean {
+  if (colIdx < 0 || rows.length === 0) return false;
+  
+  let dateCount = 0;
+  const sampleSize = Math.min(rows.length, 10);
+  
+  for (let i = 0; i < sampleSize; i++) {
+    const val = rows[i]?.[colIdx] || "";
+    if (/\d{1,4}[-\/]\d{1,2}[-\/]\d{1,4}/.test(val)) {
+      dateCount++;
+    }
+  }
+  
+  return dateCount >= sampleSize * 0.8;
+}
+
+// Find the best kWh/value column by analyzing data - SMART DETECTION
 function findValueColumn(headers: string[], rows: string[][]): number {
   const lowerHeaders = headers.map(h => h.toLowerCase().trim());
   
   // First try common energy column patterns
-  const energyPatterns = ["kwh+", "kwh-", "kwh", "energy", "consumption", "reading", "value", "amount", "usage", "total", "active"];
+  const energyPatterns = ["kwh+", "kwh-", "kwh", "energy", "consumption", "reading", "value", "amount", "usage", "total", "active", "power", "load"];
   
   for (const pattern of energyPatterns) {
     const idx = lowerHeaders.findIndex(h => h.includes(pattern));
@@ -132,14 +159,15 @@ function findValueColumn(headers: string[], rows: string[][]): number {
     }
   }
   
-  // Fallback: find the first numeric column that's not likely a date/time
+  // Look for columns that are NOT date/time and ARE numeric
+  // This handles columns like "p14", "meter1", etc.
   for (let i = 0; i < headers.length; i++) {
     const header = lowerHeaders[i];
-    // Skip date/time/id columns
-    if (header.includes("date") || header.includes("time") || header.includes("id") || header.includes("name")) {
+    if (header.includes("date") || header.includes("time") || header.includes("timestamp")) {
       continue;
     }
-    if (isNumericColumn(rows, i)) {
+    if (isNumericColumn(rows, i) && !isDateTimeColumn(rows, i)) {
+      console.log(`[findValueColumn] Found numeric column at index ${i}: "${headers[i]}"`);
       return i;
     }
   }
@@ -156,7 +184,7 @@ function getDateFormat(columns: ColumnConfig[], index: number): string {
 // Check if a date is a weekend
 function isWeekend(date: Date): boolean {
   const day = date.getDay();
-  return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+  return day === 0 || day === 6;
 }
 
 export function processCSVToLoadProfile(
@@ -164,7 +192,9 @@ export function processCSVToLoadProfile(
   rows: string[][],
   config: WizardParseConfig
 ): ProcessedLoadProfile {
-  // First, check if user has configured column types explicitly
+  console.log(`[processCSV] Starting with ${headers.length} headers, ${rows.length} rows`);
+  console.log(`[processCSV] Headers:`, headers);
+  
   let dateColIdx = -1;
   let timeColIdx = -1;
   let kwhColIdx = -1;
@@ -172,22 +202,13 @@ export function processCSVToLoadProfile(
   // Look for configured columns first (from wizard step 3)
   if (config.columns && config.columns.length > 0) {
     for (const col of config.columns) {
-      if (col.dataType === "date") {
-        // First date column found is the date column
-        if (dateColIdx === -1) {
-          dateColIdx = col.index;
-        }
-      } else if (col.dataType === "general") {
-        // First "general" (numeric) column is the kWh column
-        if (kwhColIdx === -1) {
-          kwhColIdx = col.index;
-        }
+      if (col.dataType === "date" && dateColIdx === -1) {
+        dateColIdx = col.index;
+      } else if (col.dataType === "general" && kwhColIdx === -1) {
+        kwhColIdx = col.index;
       }
     }
-  }
-  
-  // Check for time column by name pattern in configured columns
-  if (config.columns && config.columns.length > 0) {
+    // Check for time column
     for (const col of config.columns) {
       const lowerName = col.name.toLowerCase();
       if ((lowerName.includes("time") || lowerName.includes("rtime")) && col.dataType !== "skip") {
@@ -197,7 +218,7 @@ export function processCSVToLoadProfile(
     }
   }
   
-  // Fall back to auto-detection if columns not found in config
+  // Fall back to auto-detection
   if (dateColIdx === -1) {
     dateColIdx = findColumnIndex(headers, ["rdate", "date", "datetime", "timestamp"]);
   }
@@ -205,65 +226,62 @@ export function processCSVToLoadProfile(
     timeColIdx = findColumnIndex(headers, ["rtime", "time"]);
   }
   if (kwhColIdx === -1) {
-    // Try pattern-based detection first
     kwhColIdx = findColumnIndex(headers, ["kwh+", "kwh-", "kwh", "energy", "consumption", "reading", "value", "amount", "usage"]);
-    
-    // If still not found, try to find any numeric column that looks like energy data
     if (kwhColIdx === -1) {
       kwhColIdx = findValueColumn(headers, rows);
     }
   }
   
+  console.log(`[processCSV] Column detection: date=${dateColIdx}, time=${timeColIdx}, kwh=${kwhColIdx}`);
+  
   if (dateColIdx === -1 || kwhColIdx === -1) {
-    console.warn("Could not find required columns. Date:", dateColIdx, "kWh:", kwhColIdx, "Headers:", headers, "Config columns:", config.columns);
+    console.warn(`[processCSV] Missing required columns. Date: ${dateColIdx}, kWh: ${kwhColIdx}`);
+    console.warn(`[processCSV] Headers:`, headers);
+    console.warn(`[processCSV] Sample row:`, rows[0]);
     return createEmptyProfile();
   }
   
-  console.log(`Processing CSV: Date col=${dateColIdx} (${headers[dateColIdx]}), Time col=${timeColIdx} (${headers[timeColIdx] || 'N/A'}), kWh col=${kwhColIdx} (${headers[kwhColIdx]})`);
+  console.log(`[processCSV] Using: Date="${headers[dateColIdx]}", Time="${headers[timeColIdx] || 'N/A'}", kWh="${headers[kwhColIdx]}"`);
   
   const dateFormat = getDateFormat(config.columns, dateColIdx);
   
   // Parse all rows
   const parsedRows: ParsedRow[] = [];
   const uniqueDates = new Set<string>();
+  let parseErrors = 0;
   
   for (const row of rows) {
     const dateStr = row[dateColIdx];
     const timeStr = timeColIdx !== -1 ? row[timeColIdx] : null;
     const kwhStr = row[kwhColIdx];
     
-    const date = parseDate(dateStr, dateFormat);
-    if (!date) continue;
-    
-    const dateKey = date.toISOString().split('T')[0];
-    uniqueDates.add(dateKey);
-    
-    // Parse time
-    let hour = 0;
-    let minute = 0;
-    
-    if (timeStr) {
-      const time = parseTime(timeStr);
-      if (time) {
-        hour = time.hour;
-        minute = time.minute;
-      }
+    const parsed = parseDateTime(dateStr, timeStr, dateFormat);
+    if (!parsed) {
+      parseErrors++;
+      continue;
     }
+    
+    const dateKey = parsed.date.toISOString().split('T')[0];
+    uniqueDates.add(dateKey);
     
     // Parse kWh value
     const kWh = parseFloat(kwhStr?.replace(/[^\d.-]/g, "") || "0");
     if (isNaN(kWh)) continue;
     
-    parsedRows.push({ date, hour, minute, kWh });
+    parsedRows.push({ 
+      date: parsed.date, 
+      hour: parsed.hour, 
+      minute: parsed.minute, 
+      kWh 
+    });
   }
+  
+  console.log(`[processCSV] Parsed ${parsedRows.length} rows, ${parseErrors} errors, ${uniqueDates.size} unique dates`);
   
   if (parsedRows.length === 0) {
+    console.warn(`[processCSV] No valid rows parsed!`);
     return createEmptyProfile();
   }
-  
-  // Determine interval (usually 30 min for SCADA)
-  const intervalMinutes = detectInterval(parsedRows);
-  const intervalsPerHour = 60 / intervalMinutes;
   
   // Aggregate by hour for weekdays and weekends
   const weekdayHours: { [hour: number]: number[] } = {};
@@ -278,8 +296,6 @@ export function processCSVToLoadProfile(
   const weekendDates = new Set<string>();
   
   for (const row of parsedRows) {
-    if (!row.date) continue;
-    
     const dateKey = row.date.toISOString().split('T')[0];
     const isWeekendDay = isWeekend(row.date);
     
@@ -293,31 +309,19 @@ export function processCSVToLoadProfile(
   }
   
   // Calculate average kW for each hour
-  // Note: CSV data is typically in kWh per interval (e.g., 0.5 kWh for 30-min interval)
-  // To get average kW for the hour, we sum all intervals for that hour and that's the kWh for the hour
-  // Since kWh/hour = kW (average power over that hour), we just need to sum the interval readings
   const weekdayProfile: number[] = [];
   const weekendProfile: number[] = [];
   
   for (let h = 0; h < 24; h++) {
-    // Weekday: sum all readings for this hour across all days, divide by number of days
     const wdValues = weekdayHours[h];
     const wdDayCount = weekdayDates.size || 1;
-    
-    // Each value is kWh consumed in that interval (e.g., 30-min)
-    // Sum all intervals for this hour = total kWh consumed in this hour across all days
-    // Divide by day count = average kWh consumed in this hour per day
-    // kWh per hour = kW average power for that hour
     const wdHourlySum = wdValues.reduce((sum, v) => sum + v, 0);
-    const wdAvgKwhPerHour = wdHourlySum / wdDayCount;
-    weekdayProfile.push(Math.round(wdAvgKwhPerHour * 100) / 100);
+    weekdayProfile.push(Math.round((wdHourlySum / wdDayCount) * 100) / 100);
     
-    // Weekend
     const weValues = weekendHours[h];
     const weDayCount = weekendDates.size || 1;
     const weHourlySum = weValues.reduce((sum, v) => sum + v, 0);
-    const weAvgKwhPerHour = weHourlySum / weDayCount;
-    weekendProfile.push(Math.round(weAvgKwhPerHour * 100) / 100);
+    weekendProfile.push(Math.round((weHourlySum / weDayCount) * 100) / 100);
   }
   
   // Calculate totals
@@ -333,6 +337,8 @@ export function processCSVToLoadProfile(
   const dateRangeStart = sortedDates[0] || null;
   const dateRangeEnd = sortedDates[sortedDates.length - 1] || null;
   
+  console.log(`[processCSV] Result: ${parsedRows.length} points, ${totalKwh.toFixed(1)} kWh, peak ${peakKw.toFixed(1)} kW`);
+  
   return {
     weekdayProfile,
     weekendProfile,
@@ -345,49 +351,6 @@ export function processCSVToLoadProfile(
     peakKw: Math.round(peakKw * 100) / 100,
     avgKw: Math.round(avgKw * 100) / 100,
   };
-}
-
-function detectInterval(rows: ParsedRow[]): number {
-  // Sample first few rows to detect interval
-  if (rows.length < 2) return 30;
-  
-  const intervals: number[] = [];
-  
-  for (let i = 1; i < Math.min(rows.length, 10); i++) {
-    const prev = rows[i - 1];
-    const curr = rows[i];
-    
-    if (!prev.date || !curr.date) continue;
-    
-    const prevMinutes = prev.hour * 60 + prev.minute;
-    const currMinutes = curr.hour * 60 + curr.minute;
-    
-    let diff = currMinutes - prevMinutes;
-    if (diff < 0) diff += 24 * 60; // Handle day boundary
-    
-    if (diff > 0 && diff <= 60) {
-      intervals.push(diff);
-    }
-  }
-  
-  if (intervals.length === 0) return 30;
-  
-  // Return most common interval
-  const counts: { [key: number]: number } = {};
-  for (const interval of intervals) {
-    counts[interval] = (counts[interval] || 0) + 1;
-  }
-  
-  let maxCount = 0;
-  let mostCommon = 30;
-  for (const [interval, count] of Object.entries(counts)) {
-    if (count > maxCount) {
-      maxCount = count;
-      mostCommon = parseInt(interval);
-    }
-  }
-  
-  return mostCommon;
 }
 
 function createEmptyProfile(): ProcessedLoadProfile {

@@ -69,6 +69,9 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  
+  // Reprocess progress
+  const [reprocessProgress, setReprocessProgress] = useState<{ current: number; total: number; currentMeter: string } | null>(null);
 
   const { data: meters, isLoading } = useQuery({
     queryKey: ["meter-library", siteId],
@@ -152,9 +155,16 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       let processed = 0;
       let failed = 0;
       let skipped = 0;
+      const total = meterIds.length;
+      
+      setReprocessProgress({ current: 0, total, currentMeter: "Starting..." });
 
-      for (const meterId of meterIds) {
+      for (let i = 0; i < meterIds.length; i++) {
+        const meterId = meterIds[i];
         try {
+          // Update progress
+          setReprocessProgress({ current: i + 1, total, currentMeter: `Fetching meter ${i + 1}...` });
+          
           // Fetch one meter at a time to avoid timeout with large raw_data
           const { data: meter, error: fetchError } = await supabase
             .from("scada_imports")
@@ -163,20 +173,25 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
             .single();
 
           if (fetchError) {
-            console.error(`Failed to fetch meter ${meterId}:`, fetchError);
+            console.error(`[Reprocess] Failed to fetch meter ${meterId}:`, fetchError);
             failed++;
             continue;
           }
+
+          const displayName = meter.shop_name || meterId.slice(0, 8);
+          setReprocessProgress({ current: i + 1, total, currentMeter: `Processing ${displayName}...` });
 
           // Extract CSV content from raw_data
           const rawData = meter.raw_data as { csvContent?: string }[] | null;
           const csvContent = rawData?.[0]?.csvContent;
 
           if (!csvContent) {
-            console.warn(`Meter ${meter.shop_name || meter.id} has no CSV content to reprocess`);
+            console.warn(`[Reprocess] ${displayName}: No CSV content stored - skipping`);
             skipped++;
             continue;
           }
+          
+          console.log(`[Reprocess] ${displayName}: Found CSV with ${csvContent.length} chars`);
 
           // Auto-parse the CSV
           const lines = csvContent.split('\n').filter((l: string) => l.trim());
@@ -338,6 +353,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       return { processed, failed, skipped };
     },
     onSuccess: ({ processed, failed, skipped }) => {
+      setReprocessProgress(null);
       queryClient.invalidateQueries({ queryKey: ["meter-library"] });
       queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
       queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });
@@ -347,7 +363,10 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
         toast.success(`Reprocessed ${processed} meters successfully`);
       }
     },
-    onError: (error) => toast.error(`Reprocess failed: ${error.message}`),
+    onError: (error) => {
+      setReprocessProgress(null);
+      toast.error(`Reprocess failed: ${error.message}`);
+    },
   });
 
   const handleReprocessSelected = () => {
@@ -583,6 +602,32 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
               Re-process All
             </Button>
           </div>
+          
+          {/* Progress indicator */}
+          {reprocessProgress && (
+            <div className="bg-muted/50 rounded-lg p-4 border">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <div className="flex-1">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="font-medium">
+                      Processing meter {reprocessProgress.current} of {reprocessProgress.total}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {Math.round((reprocessProgress.current / reprocessProgress.total) * 100)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div 
+                      className="bg-primary h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(reprocessProgress.current / reprocessProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{reprocessProgress.currentMeter}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {!meters?.length ? (
             <div className="text-center py-8 text-muted-foreground">
