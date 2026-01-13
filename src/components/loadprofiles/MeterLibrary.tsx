@@ -71,7 +71,15 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   
   // Reprocess progress
-  const [reprocessProgress, setReprocessProgress] = useState<{ current: number; total: number; currentMeter: string } | null>(null);
+  const [reprocessProgress, setReprocessProgress] = useState<{ 
+    current: number; 
+    total: number; 
+    currentMeter: string;
+    batch: number;
+    totalBatches: number;
+  } | null>(null);
+  
+  const BATCH_SIZE = 5; // Process 5 meters at a time, then pause
 
   const { data: meters, isLoading } = useQuery({
     queryKey: ["meter-library", siteId],
@@ -147,7 +155,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     onError: (error) => toast.error(error.message),
   });
 
-  // Re-process meters from stored CSV content - fetches one at a time to avoid timeout
+  // Re-process meters in batches to avoid timeouts and system strain
   const reprocessMeters = useMutation({
     mutationFn: async (meterIds: string[]) => {
       if (!meterIds.length) throw new Error("No meters to process");
@@ -156,42 +164,73 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       let failed = 0;
       let skipped = 0;
       const total = meterIds.length;
+      const totalBatches = Math.ceil(total / BATCH_SIZE);
       
-      setReprocessProgress({ current: 0, total, currentMeter: "Starting..." });
+      console.log(`[Reprocess] Starting batch processing: ${total} meters in ${totalBatches} batches of ${BATCH_SIZE}`);
 
-      for (let i = 0; i < meterIds.length; i++) {
-        const meterId = meterIds[i];
-        try {
-          // Update progress
-          setReprocessProgress({ current: i + 1, total, currentMeter: `Fetching meter ${i + 1}...` });
+      // Process in batches
+      for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+        const batchStart = batchIdx * BATCH_SIZE;
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, total);
+        const batchMeterIds = meterIds.slice(batchStart, batchEnd);
+        
+        console.log(`[Reprocess] Batch ${batchIdx + 1}/${totalBatches}: Processing meters ${batchStart + 1}-${batchEnd}`);
+        
+        setReprocessProgress({ 
+          current: batchStart, 
+          total, 
+          currentMeter: `Starting batch ${batchIdx + 1} of ${totalBatches}...`,
+          batch: batchIdx + 1,
+          totalBatches
+        });
+
+        // Process each meter in the batch
+        for (let i = 0; i < batchMeterIds.length; i++) {
+          const meterId = batchMeterIds[i];
+          const overallIdx = batchStart + i;
           
-          // Fetch one meter at a time to avoid timeout with large raw_data
-          const { data: meter, error: fetchError } = await supabase
-            .from("scada_imports")
-            .select("id, raw_data, shop_name")
-            .eq("id", meterId)
-            .single();
+          try {
+            setReprocessProgress({ 
+              current: overallIdx + 1, 
+              total, 
+              currentMeter: `Fetching meter ${overallIdx + 1}...`,
+              batch: batchIdx + 1,
+              totalBatches
+            });
+            
+            // Fetch one meter at a time to avoid timeout with large raw_data
+            const { data: meter, error: fetchError } = await supabase
+              .from("scada_imports")
+              .select("id, raw_data, shop_name")
+              .eq("id", meterId)
+              .single();
 
-          if (fetchError) {
-            console.error(`[Reprocess] Failed to fetch meter ${meterId}:`, fetchError);
-            failed++;
-            continue;
-          }
+            if (fetchError) {
+              console.error(`[Reprocess] Failed to fetch meter ${meterId}:`, fetchError);
+              failed++;
+              continue;
+            }
 
-          const displayName = meter.shop_name || meterId.slice(0, 8);
-          setReprocessProgress({ current: i + 1, total, currentMeter: `Processing ${displayName}...` });
+            const displayName = meter.shop_name || meterId.slice(0, 8);
+            setReprocessProgress({ 
+              current: overallIdx + 1, 
+              total, 
+              currentMeter: `Processing ${displayName}...`,
+              batch: batchIdx + 1,
+              totalBatches
+            });
 
-          // Extract CSV content from raw_data
-          const rawData = meter.raw_data as { csvContent?: string }[] | null;
-          const csvContent = rawData?.[0]?.csvContent;
+            // Extract CSV content from raw_data
+            const rawData = meter.raw_data as { csvContent?: string }[] | null;
+            const csvContent = rawData?.[0]?.csvContent;
 
-          if (!csvContent) {
-            console.warn(`[Reprocess] ${displayName}: No CSV content stored - skipping`);
-            skipped++;
-            continue;
-          }
-          
-          console.log(`[Reprocess] ${displayName}: Found CSV with ${csvContent.length} chars`);
+            if (!csvContent) {
+              console.warn(`[Reprocess] ${displayName}: No CSV content stored - skipping`);
+              skipped++;
+              continue;
+            }
+            
+            console.log(`[Reprocess] ${displayName}: Found CSV with ${csvContent.length} chars`);
 
           // Auto-parse the CSV
           const lines = csvContent.split('\n').filter((l: string) => l.trim());
@@ -348,8 +387,23 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
           console.error(`Error processing meter ${meterId}:`, err);
           failed++;
         }
-      }
+        } // end inner for (meters in batch)
+        
+        // Pause between batches to let the system breathe
+        if (batchIdx < totalBatches - 1) {
+          console.log(`[Reprocess] Batch ${batchIdx + 1} complete. Pausing before next batch...`);
+          setReprocessProgress({ 
+            current: batchEnd, 
+            total, 
+            currentMeter: `Batch ${batchIdx + 1} complete. Pausing...`,
+            batch: batchIdx + 1,
+            totalBatches
+          });
+          await new Promise(resolve => setTimeout(resolve, 500)); // 500ms pause between batches
+        }
+      } // end outer for (batches)
 
+      console.log(`[Reprocess] Complete: ${processed} processed, ${skipped} skipped, ${failed} failed`);
       return { processed, failed, skipped };
     },
     onSuccess: ({ processed, failed, skipped }) => {
@@ -611,7 +665,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                 <div className="flex-1">
                   <div className="flex justify-between text-sm mb-1">
                     <span className="font-medium">
-                      Processing meter {reprocessProgress.current} of {reprocessProgress.total}
+                      Batch {reprocessProgress.batch} of {reprocessProgress.totalBatches} — Meter {reprocessProgress.current} of {reprocessProgress.total}
                     </span>
                     <span className="text-muted-foreground">
                       {Math.round((reprocessProgress.current / reprocessProgress.total) * 100)}%
