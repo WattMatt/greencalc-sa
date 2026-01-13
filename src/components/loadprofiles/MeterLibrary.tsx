@@ -195,14 +195,12 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
             otherChar: "",
           };
 
-          // Parse config
-          const delimPattern = [
-            delimiters.tab ? '\t' : null,
-            delimiters.semicolon ? ';' : null,
-            delimiters.comma ? ',' : null,
-          ].filter(Boolean).join('|') || ',';
-          
-          const regex = new RegExp(delimPattern);
+          // Build set of delimiter characters
+          const delimChars = new Set<string>();
+          if (delimiters.tab) delimChars.add('\t');
+          if (delimiters.semicolon) delimChars.add(';');
+          if (delimiters.comma) delimChars.add(',');
+          if (delimChars.size === 0) delimChars.add(',');
 
           const parseRow = (line: string): string[] => {
             const result: string[] = [];
@@ -220,7 +218,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                 } else {
                   inQuotes = false;
                 }
-              } else if (!inQuotes && regex.test(char)) {
+              } else if (!inQuotes && delimChars.has(char)) {
                 result.push(current.trim());
                 current = "";
               } else {
