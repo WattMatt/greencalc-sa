@@ -438,7 +438,7 @@ export function MultiMeterSelector({
             {/* Summary stats card */}
             {totalAssignedCount > 0 && (
               <div className="p-3 bg-primary/5 rounded-md border border-primary/20">
-                <p className="text-xs font-semibold text-primary mb-2">Profile Summary</p>
+                <p className="text-xs font-semibold text-primary mb-2">Profile Summary (Scaled to {tenantArea} m²)</p>
                 <div className="grid grid-cols-4 gap-4 text-xs">
                   <div>
                     <span className="text-muted-foreground">Meters:</span>{" "}
@@ -447,19 +447,13 @@ export function MultiMeterSelector({
                   <div>
                     <span className="text-muted-foreground">Daily kWh:</span>{" "}
                     <span className="font-medium">
-                      {singleProfile?.load_profile_weekday
-                        ? Math.round(singleProfile.load_profile_weekday.reduce((s, v) => s + v, 0))
-                        : Math.round(avgDailyKwh)
-                      }
+                      {Math.round(avgDailyKwh)}
                     </span>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Est. Monthly:</span>{" "}
                     <span className="font-medium">
-                      {singleProfile?.load_profile_weekday
-                        ? Math.round(singleProfile.load_profile_weekday.reduce((s, v) => s + v, 0) * 30).toLocaleString()
-                        : Math.round(avgDailyKwh * 30).toLocaleString()
-                      } kWh
+                      {Math.round(avgDailyKwh * 30).toLocaleString()} kWh
                     </span>
                   </div>
                   <div>
