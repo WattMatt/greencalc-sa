@@ -44,6 +44,9 @@ interface MultiMeterSelectorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   availableMeters: ScadaImport[];
+  // Single assigned profile from project_tenants.scada_import_id
+  singleProfileId?: string | null;
+  onClearSingleProfile?: () => void;
 }
 
 function formatMeterName(meter: ScadaImport): string {
@@ -84,11 +87,13 @@ export function MultiMeterSelector({
   open,
   onOpenChange,
   availableMeters,
+  singleProfileId,
+  onClearSingleProfile,
 }: MultiMeterSelectorProps) {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Fetch assigned meters for this tenant
+  // Fetch assigned meters for this tenant (from junction table)
   const { data: assignedMeters = [], isLoading } = useQuery({
     queryKey: ["tenant-meters", tenantId],
     queryFn: async () => {
@@ -101,6 +106,12 @@ export function MultiMeterSelector({
     },
     enabled: open,
   });
+
+  // Get the single profile data if assigned via dropdown
+  const singleProfile = useMemo(() => {
+    if (!singleProfileId) return null;
+    return availableMeters.find(m => m.id === singleProfileId) || null;
+  }, [singleProfileId, availableMeters]);
 
   const addMeter = useMutation({
     mutationFn: async (scadaImportId: string) => {
@@ -163,10 +174,15 @@ export function MultiMeterSelector({
     onError: (error) => toast.error(error.message),
   });
 
-  const assignedIds = useMemo(() => 
-    new Set(assignedMeters.map(m => m.scada_import_id)), 
-    [assignedMeters]
-  );
+  // Include single profile ID in assigned IDs set
+  const assignedIds = useMemo(() => {
+    const ids = new Set(assignedMeters.map(m => m.scada_import_id));
+    if (singleProfileId) ids.add(singleProfileId);
+    return ids;
+  }, [assignedMeters, singleProfileId]);
+
+  // Total assigned count (single + multi)
+  const totalAssignedCount = assignedMeters.length + (singleProfile ? 1 : 0);
 
   const filteredMeters = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -190,21 +206,31 @@ export function MultiMeterSelector({
     ? averagedProfile.reduce((sum, v) => sum + v, 0)
     : 0;
 
-  // Calculate accumulative stats
+  // Calculate accumulative stats (include single profile)
   const accumulativeStats = useMemo(() => {
-    const totalDataPoints = assignedMeters.reduce(
+    let totalDataPoints = assignedMeters.reduce(
       (sum, m) => sum + (m.scada_imports?.data_points || 0),
       0
     );
-    const totalArea = assignedMeters.reduce(
+    let totalArea = assignedMeters.reduce(
       (sum, m) => sum + (m.scada_imports?.area_sqm || 0),
       0
     );
-    const metersWithData = assignedMeters.filter(
+    let metersWithData = assignedMeters.filter(
       m => m.scada_imports?.data_points && m.scada_imports.data_points > 0
     ).length;
+    
+    // Include single profile stats
+    if (singleProfile) {
+      totalDataPoints += singleProfile.data_points || 0;
+      totalArea += singleProfile.area_sqm || 0;
+      if (singleProfile.data_points && singleProfile.data_points > 0) {
+        metersWithData += 1;
+      }
+    }
+    
     return { totalDataPoints, totalArea, metersWithData };
-  }, [assignedMeters]);
+  }, [assignedMeters, singleProfile]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -226,9 +252,9 @@ export function MultiMeterSelector({
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold flex items-center gap-2">
                 <Database className="h-4 w-4" />
-                Assigned Meters ({assignedMeters.length})
+                Assigned Meters ({totalAssignedCount})
               </h4>
-              {assignedMeters.length > 0 && (
+              {totalAssignedCount > 0 && (
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
@@ -236,19 +262,21 @@ export function MultiMeterSelector({
                       {formatDataPoints(accumulativeStats.totalDataPoints)} data points
                     </span>
                     <span>
-                      {accumulativeStats.metersWithData}/{assignedMeters.length} with data
+                      {accumulativeStats.metersWithData}/{totalAssignedCount} with data
                     </span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive h-7"
-                    onClick={() => removeAllMeters.mutate()}
-                    disabled={removeAllMeters.isPending}
-                  >
-                    <Trash2 className="h-3 w-3 mr-1" />
-                    Remove All
-                  </Button>
+                  {assignedMeters.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive h-7"
+                      onClick={() => removeAllMeters.mutate()}
+                      disabled={removeAllMeters.isPending}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Remove All
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -257,7 +285,7 @@ export function MultiMeterSelector({
               <div className="text-sm text-muted-foreground p-4 text-center border rounded-md bg-muted/20">
                 Loading assigned meters...
               </div>
-            ) : assignedMeters.length === 0 ? (
+            ) : totalAssignedCount === 0 ? (
               <div className="text-sm text-muted-foreground p-4 text-center border rounded-md bg-muted/20">
                 No meters assigned. Select meters below to build an averaged profile.
               </div>
@@ -279,6 +307,55 @@ export function MultiMeterSelector({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {/* Show single profile first if exists */}
+                    {singleProfile && (
+                      <TableRow className="bg-muted/30">
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-[10px] px-1">Primary</Badge>
+                            <div>
+                              <span className="font-medium">
+                                {singleProfile.shop_name || "Unnamed"}
+                              </span>
+                              <span className="text-xs text-muted-foreground ml-2">
+                                {singleProfile.site_name || ""}
+                              </span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge 
+                            variant={singleProfile.data_points ? "secondary" : "outline"}
+                            className="font-mono text-xs"
+                          >
+                            {formatDataPoints(singleProfile.data_points)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right text-sm">
+                          {singleProfile.load_profile_weekday 
+                            ? Math.round(singleProfile.load_profile_weekday.reduce((s, v) => s + v, 0))
+                            : "-"
+                          }
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs text-muted-foreground">1.0</span>
+                        </TableCell>
+                        <TableCell>
+                          {onClearSingleProfile && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={onClearSingleProfile}
+                              title="Remove primary profile assignment"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {/* Multi-meter assignments */}
                     {assignedMeters.map((meter) => {
                       const dailyKwh = meter.scada_imports?.load_profile_weekday
                         ? meter.scada_imports.load_profile_weekday.reduce((s, v) => s + v, 0)
@@ -342,21 +419,31 @@ export function MultiMeterSelector({
             )}
 
             {/* Summary stats card */}
-            {assignedMeters.length > 0 && (
+            {totalAssignedCount > 0 && (
               <div className="p-3 bg-primary/5 rounded-md border border-primary/20">
-                <p className="text-xs font-semibold text-primary mb-2">Averaged Profile Summary</p>
+                <p className="text-xs font-semibold text-primary mb-2">Profile Summary</p>
                 <div className="grid grid-cols-4 gap-4 text-xs">
                   <div>
                     <span className="text-muted-foreground">Meters:</span>{" "}
-                    <span className="font-medium">{assignedMeters.length}</span>
+                    <span className="font-medium">{totalAssignedCount}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Avg Daily:</span>{" "}
-                    <span className="font-medium">{Math.round(avgDailyKwh)} kWh</span>
+                    <span className="text-muted-foreground">Daily kWh:</span>{" "}
+                    <span className="font-medium">
+                      {singleProfile?.load_profile_weekday
+                        ? Math.round(singleProfile.load_profile_weekday.reduce((s, v) => s + v, 0))
+                        : Math.round(avgDailyKwh)
+                      }
+                    </span>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Est. Monthly:</span>{" "}
-                    <span className="font-medium">{Math.round(avgDailyKwh * 30).toLocaleString()} kWh</span>
+                    <span className="font-medium">
+                      {singleProfile?.load_profile_weekday
+                        ? Math.round(singleProfile.load_profile_weekday.reduce((s, v) => s + v, 0) * 30).toLocaleString()
+                        : Math.round(avgDailyKwh * 30).toLocaleString()
+                      } kWh
+                    </span>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Total Data:</span>{" "}
