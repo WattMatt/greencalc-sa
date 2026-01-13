@@ -62,18 +62,44 @@ function formatDataPoints(points: number | null | undefined): string {
   return points.toLocaleString();
 }
 
-function calculateAveragedProfile(meters: TenantMeter[]): number[] | null {
-  const validMeters = meters.filter(m => m.scada_imports?.load_profile_weekday?.length === 24);
-  if (validMeters.length === 0) return null;
+// Calculate auto-scale factor: tenantArea / meterArea
+// If meter has no area, assume it's the same as tenant (scale = 1)
+function calculateAutoScale(meterArea: number | null, tenantArea: number): number {
+  if (!meterArea || meterArea <= 0 || !tenantArea || tenantArea <= 0) {
+    return 1; // If no area available, assume same area
+  }
+  return tenantArea / meterArea;
+}
+
+function calculateAveragedProfile(
+  meters: TenantMeter[], 
+  tenantArea: number,
+  singleProfile?: ScadaImport | null
+): number[] | null {
+  // Combine meters with single profile if present
+  const allProfiles: { profile: number[]; scale: number }[] = [];
   
-  const totalWeight = validMeters.reduce((sum, m) => sum + (m.weight || 1), 0);
+  // Add single profile first
+  if (singleProfile?.load_profile_weekday?.length === 24) {
+    const scale = calculateAutoScale(singleProfile.area_sqm, tenantArea);
+    allProfiles.push({ profile: singleProfile.load_profile_weekday, scale });
+  }
+  
+  // Add multi-meter profiles
+  for (const m of meters) {
+    if (m.scada_imports?.load_profile_weekday?.length === 24) {
+      const scale = calculateAutoScale(m.scada_imports.area_sqm, tenantArea);
+      allProfiles.push({ profile: m.scada_imports.load_profile_weekday, scale });
+    }
+  }
+  
+  if (allProfiles.length === 0) return null;
+  
+  // Average the scaled profiles
   const averaged: number[] = Array(24).fill(0);
-  
-  for (const meter of validMeters) {
-    const profile = meter.scada_imports!.load_profile_weekday!;
-    const weight = (meter.weight || 1) / totalWeight;
+  for (const { profile, scale } of allProfiles) {
     for (let h = 0; h < 24; h++) {
-      averaged[h] += profile[h] * weight;
+      averaged[h] += (profile[h] * scale) / allProfiles.length;
     }
   }
   
@@ -198,8 +224,8 @@ export function MultiMeterSelector({
   }, [availableMeters, searchQuery, tenantArea]);
 
   const averagedProfile = useMemo(() => 
-    calculateAveragedProfile(assignedMeters), 
-    [assignedMeters]
+    calculateAveragedProfile(assignedMeters, tenantArea, singleProfile), 
+    [assignedMeters, tenantArea, singleProfile]
   );
 
   const avgDailyKwh = averagedProfile 
@@ -298,9 +324,9 @@ export function MultiMeterSelector({
                       <TableHead className="text-right">Data Points</TableHead>
                       <TableHead className="text-right">Daily kWh</TableHead>
                       <TableHead className="w-[100px]">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 text-xs">
                           <Scale className="h-3 w-3" />
-                          Scale
+                          Auto Scale
                         </div>
                       </TableHead>
                       <TableHead className="w-[50px]"></TableHead>
@@ -338,7 +364,9 @@ export function MultiMeterSelector({
                           }
                         </TableCell>
                         <TableCell>
-                          <span className="text-xs text-muted-foreground">1.0</span>
+                          <span className="text-xs text-muted-foreground font-mono">
+                            {calculateAutoScale(singleProfile.area_sqm, tenantArea).toFixed(2)}x
+                          </span>
                         </TableCell>
                         <TableCell>
                           {onClearSingleProfile && (
@@ -384,20 +412,9 @@ export function MultiMeterSelector({
                             {dailyKwh > 0 ? `${Math.round(dailyKwh)}` : "-"}
                           </TableCell>
                           <TableCell>
-                            <Input
-                              type="number"
-                              min={0.1}
-                              max={10}
-                              step={0.1}
-                              value={meter.weight}
-                              onChange={(e) => {
-                                const value = parseFloat(e.target.value);
-                                if (!isNaN(value) && value > 0) {
-                                  updateWeight.mutate({ meterId: meter.id, weight: value });
-                                }
-                              }}
-                              className="h-7 w-16 text-center font-mono text-sm"
-                            />
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {calculateAutoScale(meter.scada_imports?.area_sqm || null, tenantArea).toFixed(2)}x
+                            </span>
                           </TableCell>
                           <TableCell>
                             <Button
