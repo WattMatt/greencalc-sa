@@ -46,7 +46,9 @@ interface ScadaImport {
   shop_name: string | null;
   site_name: string;
   area_sqm: number | null;
+  data_points: number | null;
   load_profile_weekday: number[] | null;
+  load_profile_weekend: number[] | null;
 }
 
 interface TenantManagerProps {
@@ -190,7 +192,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, shop_name, site_name, area_sqm, load_profile_weekday")
+        .select("id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend")
         .order("shop_name");
       if (error) throw error;
       return data as ScadaImport[];

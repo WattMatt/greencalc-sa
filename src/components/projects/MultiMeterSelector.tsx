@@ -2,12 +2,21 @@ import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, X, Layers } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Plus, X, Layers, Database, BarChart3, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface ScadaImport {
@@ -15,7 +24,9 @@ interface ScadaImport {
   shop_name: string | null;
   site_name: string;
   area_sqm: number | null;
+  data_points: number | null;
   load_profile_weekday: number[] | null;
+  load_profile_weekend: number[] | null;
 }
 
 interface TenantMeter {
@@ -38,6 +49,13 @@ function formatMeterName(meter: ScadaImport): string {
   const name = meter.shop_name || meter.site_name || "Unknown";
   const area = meter.area_sqm ? `${Math.round(meter.area_sqm)} m²` : "No area";
   return `${name} (${area})`;
+}
+
+function formatDataPoints(points: number | null | undefined): string {
+  if (!points) return "0";
+  if (points >= 1_000_000) return (points / 1_000_000).toFixed(1) + "M";
+  if (points >= 1_000) return (points / 1_000).toFixed(1) + "K";
+  return points.toLocaleString();
 }
 
 function calculateAveragedProfile(meters: TenantMeter[]): number[] | null {
@@ -75,7 +93,7 @@ export function MultiMeterSelector({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("project_tenant_meters")
-        .select("id, scada_import_id, weight, scada_imports:scada_import_id(id, shop_name, site_name, area_sqm, load_profile_weekday)")
+        .select("id, scada_import_id, weight, scada_imports:scada_import_id(id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend)")
         .eq("tenant_id", tenantId);
       if (error) throw error;
       return (data || []) as TenantMeter[];
@@ -92,6 +110,7 @@ export function MultiMeterSelector({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tenant-meters", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["tenant-meter-counts"] });
       toast.success("Meter added");
     },
     onError: (error) => toast.error(error.message),
@@ -107,7 +126,24 @@ export function MultiMeterSelector({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tenant-meters", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["tenant-meter-counts"] });
       toast.success("Meter removed");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const removeAllMeters = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("project_tenant_meters")
+        .delete()
+        .eq("tenant_id", tenantId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenant-meters", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["tenant-meter-counts"] });
+      toast.success("All meters removed");
     },
     onError: (error) => toast.error(error.message),
   });
@@ -139,9 +175,25 @@ export function MultiMeterSelector({
     ? averagedProfile.reduce((sum, v) => sum + v, 0)
     : 0;
 
+  // Calculate accumulative stats
+  const accumulativeStats = useMemo(() => {
+    const totalDataPoints = assignedMeters.reduce(
+      (sum, m) => sum + (m.scada_imports?.data_points || 0),
+      0
+    );
+    const totalArea = assignedMeters.reduce(
+      (sum, m) => sum + (m.scada_imports?.area_sqm || 0),
+      0
+    );
+    const metersWithData = assignedMeters.filter(
+      m => m.scada_imports?.data_points && m.scada_imports.data_points > 0
+    ).length;
+    return { totalDataPoints, totalArea, metersWithData };
+  }, [assignedMeters]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Layers className="h-5 w-5" />
@@ -153,21 +205,156 @@ export function MultiMeterSelector({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
-          {/* Left: Available meters */}
-          <div className="flex flex-col min-h-0">
-            <h4 className="text-sm font-medium mb-2">Available Meters</h4>
+        <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
+          {/* Assigned Meters Section */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Assigned Meters ({assignedMeters.length})
+              </h4>
+              {assignedMeters.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <BarChart3 className="h-3 w-3" />
+                      {formatDataPoints(accumulativeStats.totalDataPoints)} data points
+                    </span>
+                    <span>
+                      {accumulativeStats.metersWithData}/{assignedMeters.length} with data
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive h-7"
+                    onClick={() => removeAllMeters.mutate()}
+                    disabled={removeAllMeters.isPending}
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    Remove All
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {isLoading ? (
+              <div className="text-sm text-muted-foreground p-4 text-center border rounded-md bg-muted/20">
+                Loading assigned meters...
+              </div>
+            ) : assignedMeters.length === 0 ? (
+              <div className="text-sm text-muted-foreground p-4 text-center border rounded-md bg-muted/20">
+                No meters assigned. Select meters below to build an averaged profile.
+              </div>
+            ) : (
+              <ScrollArea className="h-[180px] border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Meter</TableHead>
+                      <TableHead>Site</TableHead>
+                      <TableHead className="text-right">Area</TableHead>
+                      <TableHead className="text-right">Data Points</TableHead>
+                      <TableHead className="text-right">Daily kWh</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {assignedMeters.map((meter) => {
+                      const dailyKwh = meter.scada_imports?.load_profile_weekday
+                        ? meter.scada_imports.load_profile_weekday.reduce((s, v) => s + v, 0)
+                        : 0;
+                      return (
+                        <TableRow key={meter.id}>
+                          <TableCell className="font-medium">
+                            {meter.scada_imports?.shop_name || "Unnamed"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {meter.scada_imports?.site_name || "-"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {meter.scada_imports?.area_sqm 
+                              ? `${Math.round(meter.scada_imports.area_sqm)} m²` 
+                              : "-"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge 
+                              variant={meter.scada_imports?.data_points ? "secondary" : "outline"}
+                              className="font-mono"
+                            >
+                              {formatDataPoints(meter.scada_imports?.data_points)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {dailyKwh > 0 ? `${Math.round(dailyKwh)}` : "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => removeMeter.mutate(meter.id)}
+                              disabled={removeMeter.isPending}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+
+            {/* Summary stats card */}
+            {assignedMeters.length > 0 && (
+              <div className="p-3 bg-primary/5 rounded-md border border-primary/20">
+                <p className="text-xs font-semibold text-primary mb-2">Averaged Profile Summary</p>
+                <div className="grid grid-cols-4 gap-4 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Meters:</span>{" "}
+                    <span className="font-medium">{assignedMeters.length}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Avg Daily:</span>{" "}
+                    <span className="font-medium">{Math.round(avgDailyKwh)} kWh</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Est. Monthly:</span>{" "}
+                    <span className="font-medium">{Math.round(avgDailyKwh * 30).toLocaleString()} kWh</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total Data:</span>{" "}
+                    <span className="font-medium">{formatDataPoints(accumulativeStats.totalDataPoints)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Available Meters Section */}
+          <div className="flex flex-col min-h-0 flex-1">
+            <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Available Meters ({filteredMeters.length})
+            </h4>
             <Command className="border rounded-md flex-1">
               <CommandInput 
-                placeholder="Search meters..." 
+                placeholder="Search meters by name or site..." 
                 value={searchQuery}
                 onValueChange={setSearchQuery}
               />
-              <CommandList className="max-h-[300px]">
+              <CommandList className="max-h-[200px]">
                 <CommandEmpty>No meters found.</CommandEmpty>
                 <CommandGroup>
                   {filteredMeters.map((meter) => {
                     const isAssigned = assignedIds.has(meter.id);
+                    const dailyKwh = meter.load_profile_weekday
+                      ? meter.load_profile_weekday.reduce((s, v) => s + v, 0)
+                      : 0;
                     return (
                       <CommandItem
                         key={meter.id}
@@ -184,14 +371,24 @@ export function MultiMeterSelector({
                           checked={isAssigned} 
                           className="pointer-events-none"
                         />
-                        <span className={isAssigned ? "text-muted-foreground" : ""}>
-                          {formatMeterName(meter)}
-                        </span>
-                        {meter.load_profile_weekday?.length === 24 && (
-                          <Badge variant="secondary" className="ml-auto text-xs">
-                            {Math.round(meter.load_profile_weekday.reduce((s, v) => s + v, 0))} kWh/day
+                        <div className="flex-1 min-w-0">
+                          <span className={isAssigned ? "text-muted-foreground" : ""}>
+                            {formatMeterName(meter)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 ml-auto">
+                          <Badge 
+                            variant={meter.data_points ? "secondary" : "outline"} 
+                            className="text-xs font-mono"
+                          >
+                            {formatDataPoints(meter.data_points)}
                           </Badge>
-                        )}
+                          {dailyKwh > 0 && (
+                            <Badge variant="outline" className="text-xs">
+                              {Math.round(dailyKwh)} kWh/day
+                            </Badge>
+                          )}
+                        </div>
                       </CommandItem>
                     );
                   })}
@@ -199,82 +396,13 @@ export function MultiMeterSelector({
               </CommandList>
             </Command>
           </div>
-
-          {/* Right: Assigned meters */}
-          <div className="flex flex-col min-h-0">
-            <h4 className="text-sm font-medium mb-2">
-              Assigned Meters ({assignedMeters.length})
-            </h4>
-            <ScrollArea className="border rounded-md flex-1 p-2">
-              {isLoading ? (
-                <p className="text-sm text-muted-foreground p-2">Loading...</p>
-              ) : assignedMeters.length === 0 ? (
-                <p className="text-sm text-muted-foreground p-2">
-                  No meters assigned. Select meters from the left to build an averaged profile.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {assignedMeters.map((meter) => (
-                    <div 
-                      key={meter.id} 
-                      className="flex items-center justify-between p-2 bg-muted/50 rounded-md"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {meter.scada_imports?.shop_name || meter.scada_imports?.site_name || "Unknown"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {meter.scada_imports?.area_sqm 
-                            ? `${Math.round(meter.scada_imports.area_sqm)} m²` 
-                            : "No area"}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive"
-                        onClick={() => removeMeter.mutate(meter.id)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-
-            {/* Summary stats */}
-            {assignedMeters.length > 0 && (
-              <div className="mt-3 p-3 bg-primary/5 rounded-md border border-primary/20">
-                <p className="text-xs font-medium text-primary mb-1">Averaged Profile Stats</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">Meters:</span>{" "}
-                    <span className="font-medium">{assignedMeters.length}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Avg Daily:</span>{" "}
-                    <span className="font-medium">{Math.round(avgDailyKwh)} kWh</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Est. Monthly:</span>{" "}
-                    <span className="font-medium">{Math.round(avgDailyKwh * 30).toLocaleString()} kWh</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Tenant Area:</span>{" "}
-                    <span className="font-medium">{tenantArea} m²</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-4 border-t">
+        <DialogFooter className="pt-4 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -287,7 +415,7 @@ export function useAveragedProfile(tenantId: string, enabled = true) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("project_tenant_meters")
-        .select("id, scada_import_id, weight, scada_imports:scada_import_id(id, shop_name, site_name, area_sqm, load_profile_weekday, load_profile_weekend)")
+        .select("id, scada_import_id, weight, scada_imports:scada_import_id(id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend)")
         .eq("tenant_id", tenantId);
       if (error) throw error;
       return data as TenantMeter[];
