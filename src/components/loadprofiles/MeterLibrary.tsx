@@ -571,6 +571,30 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     return meter.site_name;
   };
 
+  // Calculate estimated monthly kWh from load profile data
+  // Weekday profile: 48 half-hour values (kWh per half hour)
+  // Weekend profile stored separately but we only have weekday in query
+  // Monthly estimate = (weekday daily * ~22 days) + (weekend daily * ~8 days)
+  const getMonthlyKwhEstimate = (meter: ScadaImport): number | null => {
+    if (!meter.load_profile_weekday || meter.load_profile_weekday.length === 0) {
+      return null;
+    }
+    
+    // Sum the 48 half-hourly values to get daily kWh
+    const dailyWeekdayKwh = meter.load_profile_weekday.reduce((sum, val) => sum + (val || 0), 0);
+    
+    // Assume typical month: ~22 weekdays, ~8 weekend days
+    // Since we don't have weekend profile in the query, use weekday as estimate
+    // (slightly overestimate but reasonable for quick validation)
+    const avgWeekdaysPerMonth = 22;
+    const avgWeekendsPerMonth = 8;
+    
+    // Use weekday profile for both if weekend not available
+    const monthlyEstimate = dailyWeekdayKwh * (avgWeekdaysPerMonth + avgWeekendsPerMonth);
+    
+    return monthlyEstimate;
+  };
+
   // Get unique site names for filter
   const uniqueSites = useMemo(() => {
     if (!meters) return [];
@@ -837,6 +861,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                     <TableHead className="w-8">Status</TableHead>
                     <TableHead className="w-8">Color</TableHead>
                     <TableHead>Meter / Label</TableHead>
+                    <TableHead className="text-right">Est. kWh/mo</TableHead>
                     <TableHead>Area (m²)</TableHead>
                     <TableHead>Days (WD/WE)</TableHead>
                     <TableHead>Peak kW</TableHead>
@@ -877,6 +902,27 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                           </div>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(() => {
+                        const monthlyKwh = getMonthlyKwhEstimate(meter);
+                        if (monthlyKwh === null) {
+                          return <span className="text-muted-foreground text-sm">-</span>;
+                        }
+                        // Format with K suffix for thousands
+                        if (monthlyKwh >= 1000) {
+                          return (
+                            <span className="text-sm font-mono font-medium">
+                              {(monthlyKwh / 1000).toFixed(1)}K
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="text-sm font-mono font-medium">
+                            {monthlyKwh.toFixed(0)}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {meter.area_sqm ? (
