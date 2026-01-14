@@ -14,6 +14,7 @@ export interface ProcessedLoadProfile {
   dataPoints: number;
   peakKw: number;
   avgKw: number;
+  detectedInterval: number; // Detected interval in minutes (15, 30, 60, etc.)
 }
 
 interface ParsedRow {
@@ -59,6 +60,75 @@ function isEnergyUnit(unit: ValueUnit): boolean {
 
 function isPowerUnit(unit: ValueUnit): boolean {
   return ["kW", "W", "MW", "kVA", "A"].includes(unit);
+}
+
+// Detect data interval from timestamps (returns interval in minutes)
+function detectDataInterval(parsedRows: ParsedRow[]): number {
+  if (parsedRows.length < 2) return 60; // Default to hourly
+  
+  // Sort by timestamp to analyze consecutive readings
+  const sortedRows = [...parsedRows].sort((a, b) => {
+    const aTime = a.date.getTime() + a.hour * 3600000 + a.minute * 60000;
+    const bTime = b.date.getTime() + b.hour * 3600000 + b.minute * 60000;
+    return aTime - bTime;
+  });
+  
+  // Calculate intervals between consecutive readings
+  const intervals: number[] = [];
+  for (let i = 1; i < Math.min(sortedRows.length, 100); i++) { // Sample first 100 pairs
+    const prev = sortedRows[i - 1];
+    const curr = sortedRows[i];
+    
+    const prevTime = prev.date.getTime() + prev.hour * 3600000 + prev.minute * 60000;
+    const currTime = curr.date.getTime() + curr.hour * 3600000 + curr.minute * 60000;
+    
+    const diffMinutes = (currTime - prevTime) / 60000;
+    
+    // Only consider reasonable intervals (1 min to 4 hours)
+    if (diffMinutes > 0 && diffMinutes <= 240) {
+      intervals.push(diffMinutes);
+    }
+  }
+  
+  if (intervals.length === 0) return 60;
+  
+  // Find the most common interval (mode)
+  const intervalCounts: Record<number, number> = {};
+  for (const interval of intervals) {
+    // Round to nearest standard interval (5, 10, 15, 30, 60, 120, etc.)
+    const rounded = roundToStandardInterval(interval);
+    intervalCounts[rounded] = (intervalCounts[rounded] || 0) + 1;
+  }
+  
+  // Find the interval with the highest count
+  let mostCommonInterval = 60;
+  let maxCount = 0;
+  for (const [interval, count] of Object.entries(intervalCounts)) {
+    if (count > maxCount) {
+      maxCount = count;
+      mostCommonInterval = parseInt(interval);
+    }
+  }
+  
+  console.log(`[detectDataInterval] Detected interval: ${mostCommonInterval} minutes from ${intervals.length} samples`);
+  return mostCommonInterval;
+}
+
+// Round to nearest standard interval
+function roundToStandardInterval(minutes: number): number {
+  const standardIntervals = [1, 5, 10, 15, 30, 60, 120, 180, 240];
+  let closest = standardIntervals[0];
+  let minDiff = Math.abs(minutes - closest);
+  
+  for (const interval of standardIntervals) {
+    const diff = Math.abs(minutes - interval);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = interval;
+    }
+  }
+  
+  return closest;
 }
 
 // Parse date (and optionally time) from string - handles combined datetime fields
@@ -398,6 +468,9 @@ export function processCSVToLoadProfile(
     }
   }
   
+  // Detect data interval
+  const detectedInterval = detectDataInterval(parsedRows);
+  
   // Determine if we're working with power or energy units
   const isEnergy = isEnergyUnit(valueUnit);
   
@@ -446,14 +519,14 @@ export function processCSVToLoadProfile(
     weekendProfile.push(Math.round(weHourlyValue * 100) / 100);
   }
   
-  // Calculate totals based on unit type
+  // Calculate totals based on unit type and detected interval
   let totalKwh: number;
   if (!isEnergy) {
     // For power readings: integrate power over time
-    // Each reading represents power at a point - multiply by interval duration
-    const intervalHours = parsedRows.length > 1 ? 
-      24 / (parsedRows.length / uniqueDates.size) : 0.5;
+    // Use detected interval for more accurate calculation
+    const intervalHours = detectedInterval / 60;
     totalKwh = parsedRows.reduce((sum, row) => sum + row.value * intervalHours, 0);
+    console.log(`[processCSV] Using detected interval of ${detectedInterval} min (${intervalHours} hours) for power-to-energy conversion`);
   } else {
     // For energy readings: sum directly (already converted to kWh)
     totalKwh = parsedRows.reduce((sum, row) => sum + row.value, 0);
@@ -470,7 +543,7 @@ export function processCSVToLoadProfile(
   const dateRangeStart = sortedDates[0] || null;
   const dateRangeEnd = sortedDates[sortedDates.length - 1] || null;
   
-  console.log(`[processCSV] Result: ${parsedRows.length} points, ${totalKwh.toFixed(1)} kWh, peak ${peakKw.toFixed(1)} kW (unit: ${valueUnit})`);
+  console.log(`[processCSV] Result: ${parsedRows.length} points, ${totalKwh.toFixed(1)} kWh, peak ${peakKw.toFixed(1)} kW (unit: ${valueUnit}, interval: ${detectedInterval}min)`);
   
   return {
     weekdayProfile,
@@ -483,6 +556,7 @@ export function processCSVToLoadProfile(
     dataPoints: parsedRows.length,
     peakKw: Math.round(peakKw * 100) / 100,
     avgKw: Math.round(avgKw * 100) / 100,
+    detectedInterval,
   };
 }
 
@@ -498,5 +572,6 @@ function createEmptyProfile(): ProcessedLoadProfile {
     dataPoints: 0,
     peakKw: 0,
     avgKw: 0,
+    detectedInterval: 60,
   };
 }
