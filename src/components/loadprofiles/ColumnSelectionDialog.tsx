@@ -112,8 +112,8 @@ function parseCSVColumns(csvContent: string): {
       }
     });
     
-    // Include columns with at least some numeric data (lower threshold)
-    if (values.length >= dataLines.length * 0.1) { // At least 10% numeric
+    // Include ANY column that has at least 1 numeric value (be maximally inclusive)
+    if (values.length > 0) {
       const nonZeroCount = values.filter(v => v !== 0).length;
       const avgValue = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
       
