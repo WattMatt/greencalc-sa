@@ -953,7 +953,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                     <TableHead className="w-8">Status</TableHead>
                     <TableHead className="w-8">Color</TableHead>
                     <TableHead>Meter / Label</TableHead>
-                    <TableHead className="text-right">Est. kWh/mo</TableHead>
+                    <TableHead className="text-right">Total kWh</TableHead>
                     <TableHead>Area (m²)</TableHead>
                     <TableHead>Days (WD/WE)</TableHead>
                     <TableHead>Peak kW</TableHead>
@@ -997,63 +997,48 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                     </TableCell>
                     <TableCell className="text-right">
                       {(() => {
-                        const estimate = getMonthlyKwhEstimate(meter);
-                        if (estimate === null) {
+                        // Only show actual recorded data - no estimates
+                        if (!meter.load_profile_weekday || meter.load_profile_weekday.length === 0) {
                           return <span className="text-muted-foreground text-sm">-</span>;
                         }
                         
-                        const { kwhPerMonth, method, dailyWeekdayKwh, dailyWeekendKwh, vaPerSqm, operatingHours, diversityFactor, powerFactor } = estimate;
+                        // Calculate total recorded kWh from actual days
+                        const dailyWeekdayKwh = meter.load_profile_weekday.reduce((sum, val) => sum + (val || 0), 0);
+                        const dailyWeekendKwh = meter.load_profile_weekend && meter.load_profile_weekend.length > 0
+                          ? meter.load_profile_weekend.reduce((sum, val) => sum + (val || 0), 0)
+                          : 0;
                         
-                        const displayValue = kwhPerMonth >= 1000 
-                          ? `${(kwhPerMonth / 1000).toFixed(1)}K`
-                          : kwhPerMonth.toFixed(0);
+                        const weekdayDays = meter.weekday_days || 0;
+                        const weekendDays = meter.weekend_days || 0;
+                        const totalDays = weekdayDays + weekendDays;
+                        
+                        // Calculate total recorded kWh
+                        const totalKwh = (dailyWeekdayKwh * weekdayDays) + (dailyWeekendKwh * weekendDays);
+                        
+                        const displayValue = totalKwh >= 1000 
+                          ? `${(totalKwh / 1000).toFixed(1)}K`
+                          : totalKwh.toFixed(0);
                         
                         return (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className={`text-sm font-mono font-medium cursor-help underline decoration-dotted underline-offset-2 ${method === 'area-estimate' ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+                                <span className="text-sm font-mono font-medium cursor-help underline decoration-dotted underline-offset-2">
                                   {displayValue}
-                                  {method === 'area-estimate' && <span className="text-[10px] ml-0.5">*</span>}
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent side="left" className="max-w-sm">
-                                <div className="space-y-2 text-xs">
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-semibold">Monthly Estimate</p>
-                                    <Badge variant={method === 'profile' ? 'default' : 'secondary'} className="text-[10px] h-4">
-                                      {method === 'profile' ? 'From Meter Data' : 'Area Estimate'}
-                                    </Badge>
+                              <TooltipContent side="left" className="max-w-xs">
+                                <div className="space-y-1.5 text-xs">
+                                  <p className="font-semibold">Recorded Consumption</p>
+                                  <div className="border-t pt-1 space-y-0.5">
+                                    <p>Weekdays: <span className="font-mono">{dailyWeekdayKwh.toFixed(1)} kWh/day</span> × {weekdayDays} days</p>
+                                    {weekendDays > 0 && (
+                                      <p>Weekends: <span className="font-mono">{dailyWeekendKwh.toFixed(1)} kWh/day</span> × {weekendDays} days</p>
+                                    )}
+                                    <p className="font-medium pt-1 border-t mt-1">
+                                      Total: <span className="font-mono">{totalKwh.toLocaleString()} kWh</span> ({totalDays} days)
+                                    </p>
                                   </div>
-                                  
-                                  {method === 'profile' ? (
-                                    <div className="border-t pt-1 space-y-0.5">
-                                      <p>Weekday: <span className="font-mono">{dailyWeekdayKwh.toFixed(1)} kWh/day</span> × 22 days</p>
-                                      <p>Weekend: <span className="font-mono">{dailyWeekendKwh.toFixed(1)} kWh/day</span> × 8 days</p>
-                                      <p className="font-medium pt-1 border-t mt-1">= <span className="font-mono">{kwhPerMonth.toFixed(0)} kWh/mo</span></p>
-                                    </div>
-                                  ) : (
-                                    <div className="border-t pt-1 space-y-0.5">
-                                      <p className="font-medium text-amber-600 dark:text-amber-400">⚠ No meter data - using area estimate</p>
-                                      <div className="bg-muted/50 rounded p-1.5 mt-1 space-y-0.5">
-                                        <p>Connected Load: <span className="font-mono">{vaPerSqm} VA/m²</span> × {meter.area_sqm?.toLocaleString()} m²</p>
-                                        <p>Operating Hours: <span className="font-mono">{operatingHours}h/day</span></p>
-                                        <p>Diversity Factor: <span className="font-mono">{((diversityFactor || 0.65) * 100).toFixed(0)}%</span></p>
-                                        <p>Power Factor: <span className="font-mono">{powerFactor}</span></p>
-                                        <p>Load Factor: <span className="font-mono">55%</span> (avg/peak)</p>
-                                      </div>
-                                      <p className="font-medium pt-1 border-t mt-1">= <span className="font-mono">{kwhPerMonth.toFixed(0)} kWh/mo</span></p>
-                                    </div>
-                                  )}
-                                  
-                                  {meter.area_sqm && meter.area_sqm > 0 && (
-                                    <div className="border-t pt-1">
-                                      <p className="font-semibold text-primary">Energy Intensity</p>
-                                      <p>
-                                        <span className="font-mono">{(kwhPerMonth / meter.area_sqm).toFixed(1)}</span> kWh/m²/month
-                                      </p>
-                                    </div>
-                                  )}
                                 </div>
                               </TooltipContent>
                             </Tooltip>
