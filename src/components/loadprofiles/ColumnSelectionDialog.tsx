@@ -70,6 +70,11 @@ function parseCSVColumns(csvContent: string): {
   
   const headers = headerLine.split(separator).map(h => h.trim().replace(/['"]/g, ''));
   
+  // DEBUG: Log all headers found
+  console.log('[ColumnSelectionDialog] All headers found:', headers);
+  console.log('[ColumnSelectionDialog] Separator detected:', separator);
+  console.log('[ColumnSelectionDialog] Header line:', headerLine);
+  
   // Find date column
   let dateColumn: string | null = null;
   const dateIdx = headers.findIndex(h => 
@@ -117,14 +122,20 @@ function parseCSVColumns(csvContent: string): {
       const nonZeroCount = values.filter(v => v !== 0).length;
       const avgValue = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
       
+      console.log(`[ColumnSelectionDialog] Including column: "${header}" with ${values.length} numeric values, ${nonZeroCount} non-zero`);
+      
       valueColumns.push({
         name: header,
         sampleValues,
         nonZeroCount,
         avgValue,
       });
+    } else {
+      console.log(`[ColumnSelectionDialog] Skipping column: "${header}" - no numeric values found. Sample: ${sampleValues.join(', ')}`);
     }
   });
+  
+  console.log('[ColumnSelectionDialog] Final valueColumns:', valueColumns.map(c => c.name));
   
   return { dateColumn, valueColumns };
 }
