@@ -118,23 +118,34 @@ function parseCsvToDataPoints(csvContent: string): RawDataPoint[] {
 
 // Extract RawDataPoint[] from raw_data (handles both formats)
 function extractDataPoints(rawData: unknown): RawDataPoint[] | null {
+  console.log('[MeterAnalysis] extractDataPoints called with:', typeof rawData, rawData ? 'has data' : 'null');
+  
   if (!rawData) return null;
   
   // If it's already an array of data points
   if (Array.isArray(rawData)) {
+    console.log('[MeterAnalysis] rawData is array with length:', rawData.length);
+    
     // Check if it's the wrapper format [{csvContent: "..."}]
     if (rawData.length > 0 && typeof rawData[0] === 'object') {
       const first = rawData[0] as RawDataWrapper;
+      console.log('[MeterAnalysis] First element keys:', Object.keys(first));
+      
       if (first.csvContent && typeof first.csvContent === 'string') {
-        return parseCsvToDataPoints(first.csvContent);
+        console.log('[MeterAnalysis] Found csvContent, length:', first.csvContent.length);
+        const parsed = parseCsvToDataPoints(first.csvContent);
+        console.log('[MeterAnalysis] Parsed data points:', parsed.length, 'first:', parsed[0]);
+        return parsed;
       }
       // Already in RawDataPoint format
       if ('timestamp' in first && 'values' in first) {
+        console.log('[MeterAnalysis] Already in RawDataPoint format');
         return rawData as RawDataPoint[];
       }
     }
   }
   
+  console.log('[MeterAnalysis] Could not extract data points');
   return null;
 }
 
@@ -203,21 +214,33 @@ export function MeterAnalysis({ siteId }: MeterAnalysisProps) {
   });
   // Get selected meter data
   const selectedImport = useMemo(() => {
-    return imports?.find(imp => imp.id === selectedMeter);
+    const imp = imports?.find(imp => imp.id === selectedMeter);
+    console.log('[MeterAnalysis] selectedImport:', imp?.id, 'raw_data length:', imp?.raw_data?.length);
+    return imp;
   }, [imports, selectedMeter]);
 
   // Get available quantities from the selected meter's raw data
   const availableQuantities = useMemo(() => {
-    if (!selectedImport?.raw_data?.length) return [];
+    if (!selectedImport?.raw_data?.length) {
+      console.log('[MeterAnalysis] No raw_data for availableQuantities');
+      return [];
+    }
     const firstPoint = selectedImport.raw_data[0];
-    return Object.keys(firstPoint.values || {});
+    const quantities = Object.keys(firstPoint.values || {});
+    console.log('[MeterAnalysis] availableQuantities:', quantities);
+    return quantities;
   }, [selectedImport]);
 
   // Process and filter data for the chart
   const chartData = useMemo(() => {
-    if (!selectedImport?.raw_data?.length || !showGraph || selectedQuantities.size === 0) return [];
+    console.log('[MeterAnalysis] chartData memo - showGraph:', showGraph, 'selectedQuantities:', Array.from(selectedQuantities));
+    if (!selectedImport?.raw_data?.length || !showGraph || selectedQuantities.size === 0) {
+      console.log('[MeterAnalysis] chartData early return - no data or not ready');
+      return [];
+    }
 
     let data = selectedImport.raw_data;
+    console.log('[MeterAnalysis] Starting with', data.length, 'data points');
 
     // Filter by date range with time
     if (dateFrom) {
