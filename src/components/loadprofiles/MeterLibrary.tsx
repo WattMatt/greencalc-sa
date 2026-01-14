@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,13 +10,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle, Info, Eye } from "lucide-react";
+import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle, Info, Eye, Settings } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
-import { WizardParseConfig, ColumnConfig } from "./types/csvImportTypes";
+import { WizardParseConfig, ColumnConfig, ParsedData } from "./types/csvImportTypes";
 import { MeterProfilePreview } from "./MeterProfilePreview";
+import { CsvImportWizard } from "./CsvImportWizard";
 
 interface RawDataStats {
   csvContent?: string;
@@ -106,6 +107,13 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     totalBatches: number;
   } | null>(null);
   const [completedMeters, setCompletedMeters] = useState<CompletedMeter[]>([]);
+  
+  // Wizard-based processing queue
+  const [processingQueue, setProcessingQueue] = useState<string[]>([]);
+  const [currentWizardMeterId, setCurrentWizardMeterId] = useState<string | null>(null);
+  const [currentWizardCsvContent, setCurrentWizardCsvContent] = useState<string | null>(null);
+  const [currentWizardFileName, setCurrentWizardFileName] = useState<string>("");
+  const [isWizardProcessing, setIsWizardProcessing] = useState(false);
   
   const BATCH_SIZE = 20; // Process 20 meters at a time
 
@@ -536,7 +544,8 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       toast.error("No meters selected");
       return;
     }
-    reprocessMeters.mutate(Array.from(selectedIds));
+    // Use wizard-based processing for selected meters
+    startWizardProcessing(Array.from(selectedIds));
   };
 
   const handleReprocessAll = () => {
@@ -545,13 +554,182 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       return;
     }
     // Count unprocessed meters
-    const unprocessedCount = filteredMeters.filter(m => !m.processed_at).length;
-    if (unprocessedCount === 0) {
+    const unprocessedMeters = filteredMeters.filter(m => !m.processed_at);
+    if (unprocessedMeters.length === 0) {
       toast.info("All meters already processed. Use 'Clear Processed' to reset.");
       return;
     }
-    if (confirm(`Reprocess ${unprocessedCount} unprocessed meter(s)? (${filteredMeters.length - unprocessedCount} already processed will be skipped)`)) {
-      reprocessMeters.mutate(filteredMeters.map(m => m.id));
+    // Start wizard-based processing - user must configure columns for each meter
+    toast.info(`Starting column configuration for ${unprocessedMeters.length} meters...`);
+    startWizardProcessing(unprocessedMeters.map(m => m.id));
+  };
+
+  // Start wizard-based processing for a list of meter IDs
+  const startWizardProcessing = async (meterIds: string[]) => {
+    if (meterIds.length === 0) return;
+    
+    // Filter to only unprocessed meters
+    const { data: unprocessedCheck } = await supabase
+      .from("scada_imports")
+      .select("id")
+      .in("id", meterIds)
+      .is("processed_at", null);
+    
+    const unprocessedIds = unprocessedCheck?.map(m => m.id) || [];
+    
+    if (unprocessedIds.length === 0) {
+      toast.info("All selected meters already processed.");
+      return;
+    }
+    
+    setCompletedMeters([]);
+    setProcessingQueue(unprocessedIds);
+    // Load the first meter's CSV and open wizard
+    await loadMeterForWizard(unprocessedIds[0]);
+  };
+
+  // Load a meter's CSV content and open the wizard
+  const loadMeterForWizard = async (meterId: string) => {
+    try {
+      const { data: meter, error } = await supabase
+        .from("scada_imports")
+        .select("id, raw_data, shop_name, site_name")
+        .eq("id", meterId)
+        .single();
+      
+      if (error || !meter) {
+        console.error("Failed to fetch meter for wizard:", error);
+        toast.error("Failed to load meter data");
+        moveToNextMeterInQueue(meterId, 'failed', 'Failed to load');
+        return;
+      }
+      
+      const rawData = meter.raw_data as { csvContent?: string }[] | null;
+      const csvContent = rawData?.[0]?.csvContent;
+      
+      if (!csvContent) {
+        console.warn("No CSV content for meter:", meterId);
+        moveToNextMeterInQueue(meterId, 'skipped', 'No CSV data stored');
+        return;
+      }
+      
+      const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
+      setCurrentWizardMeterId(meterId);
+      setCurrentWizardCsvContent(csvContent);
+      setCurrentWizardFileName(displayName);
+    } catch (err) {
+      console.error("Error loading meter for wizard:", err);
+      moveToNextMeterInQueue(meterId, 'failed', String(err));
+    }
+  };
+
+  // Handle wizard close (skip current meter)
+  const handleWizardClose = () => {
+    if (currentWizardMeterId) {
+      moveToNextMeterInQueue(currentWizardMeterId, 'skipped', 'User skipped');
+    } else {
+      // Just close if no meter
+      setCurrentWizardMeterId(null);
+      setCurrentWizardCsvContent(null);
+      setCurrentWizardFileName("");
+      setProcessingQueue([]);
+    }
+  };
+
+  // Handle wizard process completion
+  const handleWizardProcess = async (config: WizardParseConfig, parsedData: ParsedData) => {
+    if (!currentWizardMeterId) return;
+    
+    setIsWizardProcessing(true);
+    const meterId = currentWizardMeterId;
+    const displayName = currentWizardFileName;
+    
+    try {
+      // Process the CSV with user-configured columns
+      const profile = processCSVToLoadProfile(parsedData.headers, parsedData.rows, config);
+      
+      if (profile.dataPoints === 0 || profile.totalKwh === 0) {
+        console.warn(`Profile empty for ${displayName}`);
+        moveToNextMeterInQueue(meterId, 'failed', 'Empty profile - check column selection');
+        return;
+      }
+      
+      // Calculate stats
+      const dateRangeStart = profile.dateRangeStart || parsedData.dateRange?.start || null;
+      const dateRangeEnd = profile.dateRangeEnd || parsedData.dateRange?.end || null;
+      const totalDays = Math.max(1, profile.weekdayDays + profile.weekendDays);
+      const avgDailyKwh = profile.totalKwh / totalDays;
+
+      // Build new raw_data WITHOUT CSV content
+      const newRawData = [{
+        totalKwh: profile.totalKwh,
+        avgDailyKwh,
+        peakKw: profile.peakKw,
+        avgKw: profile.avgKw,
+        dataPoints: profile.dataPoints,
+        dateStart: dateRangeStart,
+        dateEnd: dateRangeEnd,
+      }];
+
+      // Update the meter
+      const { error: updateError } = await supabase
+        .from("scada_imports")
+        .update({
+          raw_data: newRawData,
+          data_points: profile.dataPoints,
+          load_profile_weekday: profile.weekdayProfile,
+          load_profile_weekend: profile.weekendProfile,
+          weekday_days: profile.weekdayDays,
+          weekend_days: profile.weekendDays,
+          date_range_start: dateRangeStart,
+          date_range_end: dateRangeEnd,
+          processed_at: new Date().toISOString(),
+        })
+        .eq("id", meterId);
+
+      if (updateError) {
+        console.error("Failed to update meter:", updateError);
+        moveToNextMeterInQueue(meterId, 'failed', updateError.message);
+      } else {
+        moveToNextMeterInQueue(meterId, 'success', `${profile.dataPoints} readings`);
+      }
+    } catch (err) {
+      console.error("Error processing meter:", err);
+      moveToNextMeterInQueue(meterId, 'failed', String(err));
+    } finally {
+      setIsWizardProcessing(false);
+    }
+  };
+
+  // Move to next meter in queue after processing current one
+  const moveToNextMeterInQueue = async (
+    processedMeterId: string, 
+    status: 'success' | 'skipped' | 'failed',
+    message: string
+  ) => {
+    // Add to completed list
+    setCompletedMeters(prev => [...prev, {
+      id: processedMeterId,
+      name: currentWizardFileName || processedMeterId.slice(0, 8),
+      status,
+      message
+    }]);
+    
+    // Remove from queue and get next
+    const remainingQueue = processingQueue.filter(id => id !== processedMeterId);
+    setProcessingQueue(remainingQueue);
+    
+    if (remainingQueue.length > 0) {
+      // Load next meter
+      await loadMeterForWizard(remainingQueue[0]);
+    } else {
+      // All done
+      setCurrentWizardMeterId(null);
+      setCurrentWizardCsvContent(null);
+      setCurrentWizardFileName("");
+      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+      queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
+      toast.success("All meters processed!");
     }
   };
 
@@ -577,26 +755,18 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     }
   };
 
-  // Single meter reprocess - forces reprocess even if already processed
-  const [reprocessingMeterId, setReprocessingMeterId] = useState<string | null>(null);
-  
-  const handleReprocessSingleMeter = async (meterId: string) => {
-    setReprocessingMeterId(meterId);
-    try {
-      // First clear the processed_at flag so it will be reprocessed
-      await supabase
-        .from("scada_imports")
-        .update({ processed_at: null })
-        .eq("id", meterId);
-      
-      // Then trigger reprocess for this single meter
-      await reprocessMeters.mutateAsync([meterId]);
-    } catch (error) {
-      console.error("Reprocess single meter failed:", error);
-      toast.error("Failed to reprocess meter");
-    } finally {
-      setReprocessingMeterId(null);
-    }
+  // Single meter configure via wizard
+  const handleConfigureSingleMeter = async (meterId: string) => {
+    // First clear the processed_at flag so it will be reprocessed
+    await supabase
+      .from("scada_imports")
+      .update({ processed_at: null })
+      .eq("id", meterId);
+    
+    // Start wizard processing for just this meter
+    setCompletedMeters([]);
+    setProcessingQueue([meterId]);
+    await loadMeterForWizard(meterId);
   };
 
   const toggleSelectAll = () => {
@@ -845,14 +1015,14 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                   variant="outline" 
                   size="sm" 
                   onClick={handleReprocessSelected}
-                  disabled={reprocessMeters.isPending}
+                  disabled={processingQueue.length > 0}
                 >
-                  {reprocessMeters.isPending ? (
+                  {processingQueue.length > 0 ? (
                     <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                   ) : (
-                    <RefreshCw className="h-4 w-4 mr-1" />
+                    <Settings className="h-4 w-4 mr-1" />
                   )}
-                  Reprocess {selectedIds.size} selected
+                  Process {selectedIds.size} selected
                 </Button>
                 <Button 
                   variant="destructive" 
@@ -866,20 +1036,25 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
               </>
             )}
             
-            {/* Re-process All button */}
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleReprocessAll}
-              disabled={reprocessMeters.isPending || !meters?.length}
-            >
-              {reprocessMeters.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-1" />
-              )}
-              Re-process All
-            </Button>
+            {/* Process All button - requires column selection for each */}
+            {(() => {
+              const unprocessedCount = filteredMeters.filter(m => !m.processed_at).length;
+              return unprocessedCount > 0 && (
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  onClick={handleReprocessAll}
+                  disabled={processingQueue.length > 0 || !meters?.length}
+                >
+                  {processingQueue.length > 0 ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Settings className="h-4 w-4 mr-1" />
+                  )}
+                  Process All ({unprocessedCount})
+                </Button>
+              );
+            })()}
             
             {/* Clear Processed button */}
             {meters && meters.some(m => m.processed_at) && (
@@ -887,7 +1062,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                 variant="ghost" 
                 size="sm" 
                 onClick={handleClearProcessed}
-                disabled={reprocessMeters.isPending}
+                disabled={processingQueue.length > 0}
               >
                 <X className="h-4 w-4 mr-1" />
                 Clear Processed ({meters.filter(m => m.processed_at).length})
@@ -1108,20 +1283,20 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
-                                variant="ghost"
+                                variant={!meter.processed_at ? "default" : "ghost"}
                                 size="icon"
-                                onClick={() => handleReprocessSingleMeter(meter.id)}
-                                disabled={reprocessingMeterId === meter.id || reprocessMeters.isPending}
-                                title="Reprocess CSV data"
+                                onClick={() => handleConfigureSingleMeter(meter.id)}
+                                disabled={processingQueue.includes(meter.id)}
+                                title="Configure columns"
                               >
-                                {reprocessingMeterId === meter.id ? (
+                                {processingQueue.includes(meter.id) ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
-                                  <RefreshCw className="h-4 w-4" />
+                                  <Settings className="h-4 w-4" />
                                 )}
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Reprocess CSV data</TooltipContent>
+                            <TooltipContent>{meter.processed_at ? "Reconfigure columns" : "Configure columns"}</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                         <Button
@@ -1282,6 +1457,31 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
         onClose={() => setPreviewMeter(null)}
         meter={previewMeter}
       />
+
+      {/* CSV Import Wizard for processing meters */}
+      <CsvImportWizard
+        isOpen={!!currentWizardMeterId}
+        onClose={handleWizardClose}
+        csvContent={currentWizardCsvContent}
+        fileName={currentWizardFileName}
+        onProcess={handleWizardProcess}
+        isProcessing={isWizardProcessing}
+      />
+
+      {/* Processing queue indicator */}
+      {processingQueue.length > 0 && currentWizardMeterId && (
+        <div className="fixed bottom-4 right-4 bg-background border rounded-lg shadow-lg p-4 max-w-sm z-50">
+          <div className="flex items-center gap-3">
+            <Settings className="h-5 w-5 text-primary animate-pulse" />
+            <div>
+              <p className="font-medium text-sm">Configuring Meters</p>
+              <p className="text-xs text-muted-foreground">
+                {processingQueue.length} remaining • Configure columns for each meter
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
