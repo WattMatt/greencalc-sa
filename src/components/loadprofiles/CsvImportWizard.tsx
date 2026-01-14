@@ -193,6 +193,10 @@ export function CsvImportWizard({
   const [step, setStep] = useState(1);
   const [config, setConfig] = useState<WizardParseConfig>(DEFAULT_CONFIG);
   const [selectedColumn, setSelectedColumn] = useState<number | null>(null);
+  // Step 4: Column selection for load profile
+  const [selectedValueColumn, setSelectedValueColumn] = useState<number | null>(null);
+  const [selectedDateColumn, setSelectedDateColumn] = useState<number | null>(null);
+  const [selectedTimeColumn, setSelectedTimeColumn] = useState<number | null>(null);
 
   // Auto-detect format on open
   useEffect(() => {
@@ -269,7 +273,7 @@ export function CsvImportWizard({
   };
 
   const handleNext = () => {
-    if (step < 3) setStep(step + 1);
+    if (step < 4) setStep(step + 1);
   };
 
   const handleBack = () => {
@@ -278,9 +282,93 @@ export function CsvImportWizard({
 
   const handleFinish = () => {
     if (previewData) {
-      onProcess(config, previewData);
+      // Include selected columns in the config
+      const finalConfig: WizardParseConfig = {
+        ...config,
+        valueColumnIndex: selectedValueColumn ?? undefined,
+        dateColumnIndex: selectedDateColumn ?? undefined,
+        timeColumnIndex: selectedTimeColumn ?? undefined,
+      };
+      onProcess(finalConfig, previewData);
     }
   };
+
+  // Auto-detect columns for step 4
+  const autoDetectedColumns = useMemo(() => {
+    if (!previewData) return { date: -1, time: -1, value: -1 };
+    
+    const lowerHeaders = previewData.headers.map(h => h.toLowerCase().trim());
+    
+    // Find date column
+    let dateIdx = lowerHeaders.findIndex(h => h.includes("rdate") || h.includes("date") || h.includes("timestamp"));
+    
+    // Find time column
+    let timeIdx = lowerHeaders.findIndex(h => h.includes("rtime") || (h.includes("time") && !h.includes("timestamp")));
+    
+    // Find value column - look for numeric columns that aren't date/time
+    let valueIdx = -1;
+    const valuePatterns = ["kwh", "energy", "consumption", "reading", "value", "amount", "power", "load"];
+    for (const pattern of valuePatterns) {
+      const idx = lowerHeaders.findIndex(h => h.includes(pattern));
+      if (idx !== -1) {
+        valueIdx = idx;
+        break;
+      }
+    }
+    
+    // If no match, find first numeric column that's not date/time
+    if (valueIdx === -1 && previewData.rows.length > 0) {
+      for (let i = 0; i < previewData.headers.length; i++) {
+        if (i === dateIdx || i === timeIdx) continue;
+        const sampleVal = previewData.rows[0]?.[i];
+        if (sampleVal && !isNaN(parseFloat(sampleVal.replace(/[^\d.-]/g, "")))) {
+          valueIdx = i;
+          break;
+        }
+      }
+    }
+    
+    return { date: dateIdx, time: timeIdx, value: valueIdx };
+  }, [previewData]);
+
+  // Initialize column selections when entering step 4
+  useEffect(() => {
+    if (step === 4) {
+      if (selectedDateColumn === null && autoDetectedColumns.date !== -1) {
+        setSelectedDateColumn(autoDetectedColumns.date);
+      }
+      if (selectedTimeColumn === null && autoDetectedColumns.time !== -1) {
+        setSelectedTimeColumn(autoDetectedColumns.time);
+      }
+      if (selectedValueColumn === null && autoDetectedColumns.value !== -1) {
+        setSelectedValueColumn(autoDetectedColumns.value);
+      }
+    }
+  }, [step, autoDetectedColumns, selectedDateColumn, selectedTimeColumn, selectedValueColumn]);
+
+  // Analyze columns for step 4 display
+  const columnAnalysis = useMemo(() => {
+    if (!previewData) return [];
+    
+    return previewData.headers.map((header, idx) => {
+      const values = previewData.rows.slice(0, 10).map(row => row[idx]).filter(Boolean);
+      const numericValues = values.map(v => parseFloat(v?.replace(/[^\d.-]/g, "") || "")).filter(v => !isNaN(v));
+      const isNumeric = numericValues.length >= values.length * 0.5;
+      const avg = isNumeric && numericValues.length > 0 
+        ? numericValues.reduce((a, b) => a + b, 0) / numericValues.length 
+        : 0;
+      const nonZero = numericValues.filter(v => v !== 0).length;
+      
+      return {
+        index: idx,
+        header,
+        isNumeric,
+        sampleValues: values.slice(0, 3),
+        avg: Math.round(avg * 100) / 100,
+        nonZeroCount: nonZero,
+      };
+    });
+  }, [previewData]);
 
   // Step 1: File Type & Start Row
   const renderStep1 = () => (
@@ -528,12 +616,187 @@ export function CsvImportWizard({
     </div>
   );
 
+  // Step 4: Load Profile Column Selection
+  const renderStep4 = () => (
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-semibold text-foreground mb-2">
+          Select the columns to use for load profile extraction
+        </h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          Choose which column contains the energy/power values for the load profile. This is critical for accurate profile generation.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Date Column */}
+          <div className="space-y-2">
+            <Label className="font-medium text-sm">Date/Timestamp Column</Label>
+            <Select
+              value={selectedDateColumn?.toString() ?? "auto"}
+              onValueChange={(v) => setSelectedDateColumn(v === "auto" ? null : parseInt(v))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Auto-detect" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto-detect</SelectItem>
+                {columnAnalysis.map(col => (
+                  <SelectItem key={col.index} value={col.index.toString()}>
+                    {col.header || `Column ${col.index + 1}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedDateColumn !== null && (
+              <p className="text-xs text-muted-foreground">
+                Sample: {columnAnalysis[selectedDateColumn]?.sampleValues[0] || "N/A"}
+              </p>
+            )}
+          </div>
+
+          {/* Time Column (optional) */}
+          <div className="space-y-2">
+            <Label className="font-medium text-sm">Time Column (optional)</Label>
+            <Select
+              value={selectedTimeColumn?.toString() ?? "none"}
+              onValueChange={(v) => setSelectedTimeColumn(v === "none" ? null : parseInt(v))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="None" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None (included in date)</SelectItem>
+                {columnAnalysis.map(col => (
+                  <SelectItem key={col.index} value={col.index.toString()}>
+                    {col.header || `Column ${col.index + 1}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedTimeColumn !== null && (
+              <p className="text-xs text-muted-foreground">
+                Sample: {columnAnalysis[selectedTimeColumn]?.sampleValues[0] || "N/A"}
+              </p>
+            )}
+          </div>
+
+          {/* Value Column */}
+          <div className="space-y-2">
+            <Label className="font-medium text-sm flex items-center gap-2">
+              Value Column (kW/kWh)
+              <Badge variant="destructive" className="text-[10px]">Required</Badge>
+            </Label>
+            <Select
+              value={selectedValueColumn?.toString() ?? "auto"}
+              onValueChange={(v) => setSelectedValueColumn(v === "auto" ? null : parseInt(v))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Auto-detect" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto-detect</SelectItem>
+                {columnAnalysis.filter(col => col.isNumeric).map(col => (
+                  <SelectItem key={col.index} value={col.index.toString()}>
+                    <div className="flex items-center gap-2">
+                      <span>{col.header || `Column ${col.index + 1}`}</span>
+                      <span className="text-muted-foreground text-xs">
+                        (avg: {col.avg})
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedValueColumn !== null && (
+              <p className="text-xs text-muted-foreground">
+                Sample: {columnAnalysis[selectedValueColumn]?.sampleValues.join(", ") || "N/A"}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Numeric Columns Analysis */}
+      <div className="space-y-2">
+        <Label className="font-medium">Available Numeric Columns:</Label>
+        <Card className="overflow-hidden">
+          <ScrollArea className="h-[180px]">
+            <table className="w-full text-xs">
+              <thead className="bg-muted sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">Column</th>
+                  <th className="px-3 py-2 text-left font-medium">Sample Values</th>
+                  <th className="px-3 py-2 text-right font-medium">Avg Value</th>
+                  <th className="px-3 py-2 text-center font-medium">Selected</th>
+                </tr>
+              </thead>
+              <tbody>
+                {columnAnalysis.filter(col => col.isNumeric).map(col => (
+                  <tr 
+                    key={col.index} 
+                    className={cn(
+                      "border-t cursor-pointer hover:bg-muted/50",
+                      selectedValueColumn === col.index && "bg-primary/10"
+                    )}
+                    onClick={() => setSelectedValueColumn(col.index)}
+                  >
+                    <td className="px-3 py-2 font-medium">{col.header || `Column ${col.index + 1}`}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{col.sampleValues.join(", ")}</td>
+                    <td className="px-3 py-2 text-right">{col.avg}</td>
+                    <td className="px-3 py-2 text-center">
+                      {selectedValueColumn === col.index && (
+                        <Badge variant="default" className="text-[10px]">Selected</Badge>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollArea>
+        </Card>
+      </div>
+
+      {/* Preview of selected columns */}
+      <div className="space-y-2">
+        <Label className="font-medium">Preview with selected columns:</Label>
+        <Card className="bg-muted/30 p-3">
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <span className="text-muted-foreground">Date:</span>{" "}
+              <span className="font-medium">
+                {selectedDateColumn !== null 
+                  ? previewData?.headers[selectedDateColumn] || `Col ${selectedDateColumn + 1}`
+                  : "Auto-detect"}
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Time:</span>{" "}
+              <span className="font-medium">
+                {selectedTimeColumn !== null 
+                  ? previewData?.headers[selectedTimeColumn] || `Col ${selectedTimeColumn + 1}`
+                  : "Included in date"}
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Value:</span>{" "}
+              <span className="font-medium text-primary">
+                {selectedValueColumn !== null 
+                  ? previewData?.headers[selectedValueColumn] || `Col ${selectedValueColumn + 1}`
+                  : "Auto-detect"}
+              </span>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader className="pb-2">
           <DialogTitle className="text-lg">
-            Text Import Wizard - Step {step} of 3
+            Text Import Wizard - Step {step} of 4
           </DialogTitle>
           <DialogDescription>
             Configure how your CSV data should be parsed and imported.
@@ -544,6 +807,7 @@ export function CsvImportWizard({
           {step === 1 && renderStep1()}
           {step === 2 && renderStep2()}
           {step === 3 && renderStep3()}
+          {step === 4 && renderStep4()}
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-4 border-t">
@@ -558,7 +822,7 @@ export function CsvImportWizard({
             <ChevronLeft className="h-4 w-4 mr-1" />
             Back
           </Button>
-          {step < 3 ? (
+          {step < 4 ? (
             <Button onClick={handleNext}>
               Next
               <ChevronRight className="h-4 w-4 ml-1" />

@@ -199,7 +199,21 @@ export function processCSVToLoadProfile(
   let timeColIdx = -1;
   let kwhColIdx = -1;
   
-  // Look for configured columns first (from wizard step 3)
+  // PRIORITY 1: Use explicitly configured column indices from wizard step 4
+  if (config.valueColumnIndex !== undefined && config.valueColumnIndex >= 0) {
+    kwhColIdx = config.valueColumnIndex;
+    console.log(`[processCSV] Using explicit value column: ${kwhColIdx} (${headers[kwhColIdx]})`);
+  }
+  if (config.dateColumnIndex !== undefined && config.dateColumnIndex >= 0) {
+    dateColIdx = config.dateColumnIndex;
+    console.log(`[processCSV] Using explicit date column: ${dateColIdx} (${headers[dateColIdx]})`);
+  }
+  if (config.timeColumnIndex !== undefined && config.timeColumnIndex >= 0) {
+    timeColIdx = config.timeColumnIndex;
+    console.log(`[processCSV] Using explicit time column: ${timeColIdx} (${headers[timeColIdx]})`);
+  }
+  
+  // PRIORITY 2: Look for configured columns from wizard step 3
   if (config.columns && config.columns.length > 0) {
     for (const col of config.columns) {
       if (col.dataType === "date" && dateColIdx === -1) {
@@ -209,16 +223,18 @@ export function processCSVToLoadProfile(
       }
     }
     // Check for time column
-    for (const col of config.columns) {
-      const lowerName = col.name.toLowerCase();
-      if ((lowerName.includes("time") || lowerName.includes("rtime")) && col.dataType !== "skip") {
-        timeColIdx = col.index;
-        break;
+    if (timeColIdx === -1) {
+      for (const col of config.columns) {
+        const lowerName = col.name.toLowerCase();
+        if ((lowerName.includes("time") || lowerName.includes("rtime")) && col.dataType !== "skip") {
+          timeColIdx = col.index;
+          break;
+        }
       }
     }
   }
   
-  // Fall back to auto-detection
+  // PRIORITY 3: Fall back to auto-detection
   if (dateColIdx === -1) {
     dateColIdx = findColumnIndex(headers, ["rdate", "date", "datetime", "timestamp"]);
   }
@@ -232,7 +248,7 @@ export function processCSVToLoadProfile(
     }
   }
   
-  console.log(`[processCSV] Column detection: date=${dateColIdx}, time=${timeColIdx}, kwh=${kwhColIdx}`);
+  console.log(`[processCSV] Final column detection: date=${dateColIdx}, time=${timeColIdx}, kwh=${kwhColIdx}`);
   
   if (dateColIdx === -1 || kwhColIdx === -1) {
     console.warn(`[processCSV] Missing required columns. Date: ${dateColIdx}, kWh: ${kwhColIdx}`);

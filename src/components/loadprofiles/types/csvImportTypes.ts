@@ -24,6 +24,10 @@ export interface WizardParseConfig {
   detectedFormat?: "pnp-scada" | "generic";
   meterName?: string;
   dateRange?: { start: string; end: string };
+  // Explicit column selection for load profile extraction
+  valueColumnIndex?: number; // The column to use for kWh/kW values
+  dateColumnIndex?: number;  // The column containing date/timestamp
+  timeColumnIndex?: number;  // Optional separate time column
 }
 
 export interface ParsedData {
