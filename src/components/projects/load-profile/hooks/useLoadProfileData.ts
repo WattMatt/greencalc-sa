@@ -106,6 +106,62 @@ export function useLoadProfileData({
     return { tenantsWithScada: scadaCount, tenantsEstimated: estimatedCount };
   }, [tenants]);
 
+  // Calculate daily kWh totals for weekday and weekend (for monthly calculation)
+  const { weekdayDailyKwh, weekendDailyKwh } = useMemo(() => {
+    let weekdayTotal = 0;
+    let weekendTotal = 0;
+    
+    for (let h = 0; h < 24; h++) {
+      tenants.forEach((tenant) => {
+        const tenantArea = Number(tenant.area_sqm) || 0;
+        
+        // Multi-meter profiles
+        const multiMeterWeekday = getAveragedProfile(tenant.tenant_meters, 'load_profile_weekday');
+        const multiMeterWeekend = getAveragedProfile(tenant.tenant_meters, 'load_profile_weekend') || multiMeterWeekday;
+        
+        if (multiMeterWeekday?.length === 24) {
+          const metersWithArea = (tenant.tenant_meters || []).filter(m => m.scada_imports?.area_sqm);
+          const avgMeterArea = metersWithArea.length > 0
+            ? metersWithArea.reduce((sum, m) => sum + (m.scada_imports!.area_sqm || 0), 0) / metersWithArea.length
+            : tenantArea;
+          const areaScaleFactor = avgMeterArea > 0 ? tenantArea / avgMeterArea : 1;
+          
+          weekdayTotal += (multiMeterWeekday[h] || 0) * areaScaleFactor;
+          if (multiMeterWeekend?.length === 24) {
+            weekendTotal += (multiMeterWeekend[h] || 0) * areaScaleFactor;
+          }
+          return;
+        }
+        
+        // Single SCADA profile
+        const scadaWeekday = tenant.scada_imports?.load_profile_weekday;
+        const scadaWeekend = tenant.scada_imports?.load_profile_weekend || scadaWeekday;
+        
+        if (scadaWeekday?.length === 24) {
+          const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
+          const areaScaleFactor = scadaArea > 0 ? tenantArea / scadaArea : 1;
+          weekdayTotal += (scadaWeekday[h] || 0) * areaScaleFactor;
+          if (scadaWeekend?.length === 24) {
+            weekendTotal += (scadaWeekend[h] || 0) * areaScaleFactor;
+          }
+          return;
+        }
+        
+        // Shop type estimate
+        const shopType = tenant.shop_type_id ? shopTypes.find((st) => st.id === tenant.shop_type_id) : null;
+        const monthlyKwh = tenant.monthly_kwh_override || (shopType?.kwh_per_sqm_month || 50) * tenantArea;
+        const dailyKwh = monthlyKwh / 30;
+        const weekdayProfile = shopType?.load_profile_weekday?.length === 24 ? shopType.load_profile_weekday.map(Number) : DEFAULT_PROFILE_PERCENT;
+        const weekendProfile = shopType?.load_profile_weekend?.length === 24 ? shopType.load_profile_weekend.map(Number) : weekdayProfile;
+        
+        weekdayTotal += dailyKwh * (weekdayProfile[h] / 100);
+        weekendTotal += dailyKwh * (weekendProfile[h] / 100);
+      });
+    }
+    
+    return { weekdayDailyKwh: weekdayTotal, weekendDailyKwh: weekendTotal };
+  }, [tenants, shopTypes]);
+
   // Calculate base kWh data based on selected day
   const baseChartData = useMemo(() => {
     const isWeekendDay = selectedDay === "Saturday" || selectedDay === "Sunday";
@@ -341,5 +397,7 @@ export function useLoadProfileData({
     tenantsWithScada,
     tenantsEstimated,
     isWeekend,
+    weekdayDailyKwh,
+    weekendDailyKwh,
   };
 }
