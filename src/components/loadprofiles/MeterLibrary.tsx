@@ -577,6 +577,28 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     }
   };
 
+  // Single meter reprocess - forces reprocess even if already processed
+  const [reprocessingMeterId, setReprocessingMeterId] = useState<string | null>(null);
+  
+  const handleReprocessSingleMeter = async (meterId: string) => {
+    setReprocessingMeterId(meterId);
+    try {
+      // First clear the processed_at flag so it will be reprocessed
+      await supabase
+        .from("scada_imports")
+        .update({ processed_at: null })
+        .eq("id", meterId);
+      
+      // Then trigger reprocess for this single meter
+      await reprocessMeters.mutateAsync([meterId]);
+    } catch (error) {
+      console.error("Reprocess single meter failed:", error);
+      toast.error("Failed to reprocess meter");
+    } finally {
+      setReprocessingMeterId(null);
+    }
+  };
+
   const toggleSelectAll = () => {
     if (selectedIds.size === filteredMeters.length) {
       setSelectedIds(new Set());
@@ -1082,6 +1104,26 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleReprocessSingleMeter(meter.id)}
+                                disabled={reprocessingMeterId === meter.id || reprocessMeters.isPending}
+                                title="Reprocess CSV data"
+                              >
+                                {reprocessingMeterId === meter.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Reprocess CSV data</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <Button
                           variant="ghost"
                           size="icon"
