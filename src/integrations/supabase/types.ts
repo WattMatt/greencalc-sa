@@ -788,6 +788,7 @@ export type Database = {
           data_points: number | null
           date_range_end: string | null
           date_range_start: string | null
+          detected_interval_minutes: number | null
           file_name: string | null
           id: string
           load_profile_weekday: number[] | null
@@ -812,6 +813,7 @@ export type Database = {
           data_points?: number | null
           date_range_end?: string | null
           date_range_start?: string | null
+          detected_interval_minutes?: number | null
           file_name?: string | null
           id?: string
           load_profile_weekday?: number[] | null
@@ -836,6 +838,7 @@ export type Database = {
           data_points?: number | null
           date_range_end?: string | null
           date_range_start?: string | null
+          detected_interval_minutes?: number | null
           file_name?: string | null
           id?: string
           load_profile_weekday?: number[] | null
