@@ -334,11 +334,9 @@ serve(async (req) => {
         }
       }
 
-      // Calculate normalized profiles
+      // Calculate average kW profiles (actual values, not normalized)
       const calculateProfile = (buckets: number[][]) => {
-        const avgs = buckets.map(b => b.length ? b.reduce((s, v) => s + v, 0) / b.length : 0);
-        const total = avgs.reduce((s, v) => s + v, 0);
-        return total === 0 ? Array(24).fill(0) : avgs.map(v => (v / total) * 100);
+        return buckets.map(b => b.length ? b.reduce((s, v) => s + v, 0) / b.length : 0);
       };
 
       const weekdayProfile = calculateProfile(hourlyData.weekday);
