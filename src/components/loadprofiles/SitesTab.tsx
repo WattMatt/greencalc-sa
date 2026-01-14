@@ -73,7 +73,7 @@ export function SitesTab() {
   });
 
   const { data: sites, isLoading } = useQuery({
-    queryKey: ["sites"],
+    queryKey: ["sites-with-stats"],
     queryFn: async () => {
       const { data: sitesData, error } = await supabase
         .from("sites")
@@ -86,40 +86,44 @@ export function SitesTab() {
         .select("site_id, data_points, load_profile_weekday");
 
       // Track total meters and those with actual data (either data_points > 0 OR has processed load profile)
-      const meterStats = (meters || []).reduce((acc, m) => {
+      const meterStats: Record<string, { total: number; withData: number }> = {};
+      
+      (meters || []).forEach(m => {
         if (m.site_id) {
-          if (!acc[m.site_id]) {
-            acc[m.site_id] = { total: 0, withData: 0 };
+          if (!meterStats[m.site_id]) {
+            meterStats[m.site_id] = { total: 0, withData: 0 };
           }
-          acc[m.site_id].total += 1;
+          meterStats[m.site_id].total += 1;
           
           // Has data if data_points > 0 OR has a non-empty load profile (processed)
-          // Handle both array and null cases for load_profile_weekday
           const profileArray = m.load_profile_weekday;
           const hasValidProfile = profileArray && 
             Array.isArray(profileArray) && 
             profileArray.length > 0 &&
-            profileArray.some((v: number) => v > 0); // At least one non-zero value
+            profileArray.some((v: number) => v > 0);
           const hasDataPoints = m.data_points && m.data_points > 0;
           
           if (hasDataPoints || hasValidProfile) {
-            acc[m.site_id].withData += 1;
+            meterStats[m.site_id].withData += 1;
           }
         }
-        return acc;
-      }, {} as Record<string, { total: number; withData: number }>);
+      });
 
       // Calculate stats per site
-      return (sitesData || []).map(site => {
+      const result = (sitesData || []).map(site => {
         const stats = meterStats[site.id] || { total: 0, withData: 0 };
+        const listedOnly = stats.total - stats.withData;
         return {
           ...site,
           meter_count: stats.total,
           meters_with_data: stats.withData,
-          meters_listed_only: stats.total - stats.withData,
+          meters_listed_only: listedOnly,
         };
       }) as Site[];
+      
+      return result;
     },
+    staleTime: 0, // Always refetch
   });
 
   // Fetch meters for selected site
