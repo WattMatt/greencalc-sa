@@ -28,6 +28,7 @@ export interface WizardParseConfig {
   valueColumnIndex?: number; // The column to use for kWh/kW values
   dateColumnIndex?: number;  // The column containing date/timestamp
   timeColumnIndex?: number;  // Optional separate time column
+  valueUnit?: "kW" | "kWh" | "auto"; // Unit type for the value column
 }
 
 export interface ParsedData {
