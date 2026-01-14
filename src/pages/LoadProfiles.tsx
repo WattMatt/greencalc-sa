@@ -5,7 +5,6 @@ import { LayoutDashboard, Building2, Database } from "lucide-react";
 import { LoadProfilesDashboard } from "@/components/loadprofiles/LoadProfilesDashboard";
 import { SitesTab } from "@/components/loadprofiles/SitesTab";
 import { MeterLibrary } from "@/components/loadprofiles/MeterLibrary";
-import { MeterAnalysis } from "@/components/loadprofiles/MeterAnalysis";
 
 export default function LoadProfiles() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -46,8 +45,7 @@ export default function LoadProfiles() {
           <SitesTab />
         </TabsContent>
 
-        <TabsContent value="meter-library" className="space-y-6">
-          <MeterAnalysis />
+        <TabsContent value="meter-library">
           <MeterLibrary />
         </TabsContent>
       </Tabs>
