@@ -246,14 +246,23 @@ export function MeterAnalysis({ siteId }: MeterAnalysisProps) {
   }, [imports, selectedMeter]);
 
   // Get available quantities from the selected meter's raw data
+  // Scan ALL data points to find all unique quantity names (not just first point)
   const availableQuantities = useMemo(() => {
     if (!selectedImport?.raw_data?.length) {
       console.log('[MeterAnalysis] No raw_data for availableQuantities');
       return [];
     }
-    const firstPoint = selectedImport.raw_data[0];
-    const quantities = Object.keys(firstPoint.values || {});
-    console.log('[MeterAnalysis] availableQuantities:', quantities);
+    
+    // Collect all unique quantity names from all data points
+    const allQuantities = new Set<string>();
+    selectedImport.raw_data.forEach(point => {
+      if (point.values) {
+        Object.keys(point.values).forEach(key => allQuantities.add(key));
+      }
+    });
+    
+    const quantities = Array.from(allQuantities).sort();
+    console.log('[MeterAnalysis] availableQuantities (from all points):', quantities);
     return quantities;
   }, [selectedImport]);
 
