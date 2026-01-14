@@ -64,11 +64,16 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
   const displayName = meter.meter_label || meter.shop_name || meter.shop_number || meter.site_name;
   const hasProfile = meter.load_profile_weekday && meter.load_profile_weekday.length > 0;
 
-  // Calculate stats - profiles contain average kW per hour, sum = kWh/day
+  // Calculate stats - profiles contain average kW per hour
+  // For 24 hourly values, sum of avg kW = kWh/day (each hour's avg kW × 1 hour)
   const weekdayProfile = meter.load_profile_weekday || Array(24).fill(0);
   const weekendProfile = meter.load_profile_weekend || Array(24).fill(0);
   
-  // Sum of hourly average kW values = total kWh per day
+  // DEBUG: Log actual profile data to verify it's from real CSV data
+  console.log(`[MeterProfilePreview] ${displayName} weekday profile:`, weekdayProfile);
+  console.log(`[MeterProfilePreview] ${displayName} weekend profile:`, weekendProfile);
+  
+  // Sum of hourly average kW values = total kWh per day (power × 1 hour each)
   const weekdayTotal = weekdayProfile.reduce((a, b) => a + b, 0);
   const weekendTotal = weekendProfile.reduce((a, b) => a + b, 0);
   const weekdayPeak = Math.max(...weekdayProfile);
