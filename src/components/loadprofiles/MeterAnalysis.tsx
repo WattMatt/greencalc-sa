@@ -20,6 +20,15 @@ interface RawDataPoint {
   values: Record<string, number>;
 }
 
+interface RawDataWrapper {
+  csvContent?: string;
+  avgDailyKwh?: number;
+  avgKw?: number;
+  peakKw?: number;
+  totalKwh?: number;
+  dataPoints?: number;
+}
+
 interface ScadaImportRow {
   id: string;
   site_name: string;
@@ -40,6 +49,93 @@ interface ScadaImport {
   date_range_end: string | null;
   data_points: number;
   raw_data: RawDataPoint[] | null;
+}
+
+// Parse CSV content into RawDataPoint array
+function parseCsvToDataPoints(csvContent: string): RawDataPoint[] {
+  const lines = csvContent.split('\n').filter(line => line.trim() && !line.startsWith('sep='));
+  if (lines.length < 2) return [];
+  
+  // Parse header to get column names
+  const headerLine = lines[0];
+  const headers = headerLine.split(',').map(h => h.trim());
+  const dateColIndex = headers.findIndex(h => h.toLowerCase() === 'date' || h.toLowerCase() === 'timestamp');
+  const valueHeaders = headers.filter((_, i) => i !== dateColIndex);
+  
+  const dataPoints: RawDataPoint[] = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    const values = line.split(',');
+    const dateStr = dateColIndex >= 0 ? values[dateColIndex]?.trim() : values[0]?.trim();
+    
+    if (!dateStr) continue;
+    
+    // Parse date (format: DD/MM/YYYY HH:mm:ss)
+    let timestamp: Date | null = null;
+    const dateMatch = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):?(\d{2})?/);
+    if (dateMatch) {
+      const [, day, month, year, hour, min, sec] = dateMatch;
+      timestamp = new Date(
+        parseInt(year), 
+        parseInt(month) - 1, 
+        parseInt(day), 
+        parseInt(hour), 
+        parseInt(min), 
+        parseInt(sec || '0')
+      );
+    } else {
+      // Try ISO format
+      timestamp = new Date(dateStr);
+    }
+    
+    if (!timestamp || isNaN(timestamp.getTime())) continue;
+    
+    const point: RawDataPoint = {
+      timestamp: timestamp.toISOString(),
+      values: {}
+    };
+    
+    // Extract values for each column
+    valueHeaders.forEach((header, idx) => {
+      const valueIdx = dateColIndex >= 0 && idx >= dateColIndex ? idx + 1 : (idx === 0 && dateColIndex === 0 ? idx + 1 : idx);
+      const actualIdx = headers.indexOf(header);
+      const val = parseFloat(values[actualIdx]);
+      if (!isNaN(val)) {
+        point.values[header] = val;
+      }
+    });
+    
+    if (Object.keys(point.values).length > 0) {
+      dataPoints.push(point);
+    }
+  }
+  
+  return dataPoints.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+}
+
+// Extract RawDataPoint[] from raw_data (handles both formats)
+function extractDataPoints(rawData: unknown): RawDataPoint[] | null {
+  if (!rawData) return null;
+  
+  // If it's already an array of data points
+  if (Array.isArray(rawData)) {
+    // Check if it's the wrapper format [{csvContent: "..."}]
+    if (rawData.length > 0 && typeof rawData[0] === 'object') {
+      const first = rawData[0] as RawDataWrapper;
+      if (first.csvContent && typeof first.csvContent === 'string') {
+        return parseCsvToDataPoints(first.csvContent);
+      }
+      // Already in RawDataPoint format
+      if ('timestamp' in first && 'values' in first) {
+        return rawData as RawDataPoint[];
+      }
+    }
+  }
+  
+  return null;
 }
 
 type AggregationPeriod = "raw" | "hourly" | "daily";
@@ -101,7 +197,7 @@ export function MeterAnalysis({ siteId }: MeterAnalysisProps) {
       return (data as ScadaImportRow[]).map(row => ({
         ...row,
         data_points: row.data_points ?? 0,
-        raw_data: Array.isArray(row.raw_data) ? row.raw_data as RawDataPoint[] : null
+        raw_data: extractDataPoints(row.raw_data)
       })) as ScadaImport[];
     },
   });
