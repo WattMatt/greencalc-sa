@@ -15,16 +15,17 @@ export function LoadProfilesDashboard({ onNavigateToSites, onNavigateToMeters }:
     queryFn: async () => {
       const [sitesRes, metersRes] = await Promise.all([
         supabase.from("sites").select("id, name, total_area_sqm"),
-        supabase.from("scada_imports").select("id, site_id, data_points, date_range_start, date_range_end"),
+        supabase.from("scada_imports").select("id, site_id, data_points, date_range_start, date_range_end, processed_at"),
       ]);
 
       const sites = sitesRes.data || [];
       const meters = metersRes.data || [];
       
       const assignedMeters = meters.filter(m => m.site_id);
-      const metersWithData = meters.filter(m => m.data_points && m.data_points > 0);
-      const metersListedOnly = meters.filter(m => !m.data_points || m.data_points === 0);
-      const totalDataPoints = meters.reduce((sum, m) => sum + (m.data_points || 0), 0);
+      const processedMeters = meters.filter(m => m.processed_at);
+      const metersWithData = processedMeters.filter(m => m.data_points && m.data_points > 0);
+      const metersListedOnly = meters.filter(m => !m.processed_at);
+      const totalDataPoints = processedMeters.reduce((sum, m) => sum + (m.data_points || 0), 0);
       
       // Calculate date coverage
       const allDates = meters
