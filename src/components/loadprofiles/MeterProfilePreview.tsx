@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea } from "recharts";
-import { Activity, Calendar, Zap, Clock } from "lucide-react";
+import { Activity, Calendar, Zap, Clock, Loader2 } from "lucide-react";
+import { useMonthlyConsumption } from "./hooks/useMonthlyConsumption";
 
 interface MeterProfilePreviewProps {
   isOpen: boolean;
@@ -48,6 +51,14 @@ const TOU_COLORS = {
 };
 
 export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePreviewProps) {
+  const { 
+    isLoading: isLoadingMonthly, 
+    selectedMonth, 
+    setSelectedMonth, 
+    selectedMonthData,
+    availableMonths 
+  } = useMonthlyConsumption(isOpen ? meter?.id || null : null);
+
   if (!meter) return null;
 
   const displayName = meter.meter_label || meter.shop_name || meter.shop_number || meter.site_name;
@@ -79,10 +90,11 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
   const weekdayData = createChartData(weekdayProfile, false);
   const weekendData = createChartData(weekendProfile, true);
 
-  // Calculate monthly estimate
-  const dailyWeekdayKwh = weekdayTotal;
-  const dailyWeekendKwh = weekendTotal;
-  const monthlyEstimate = (dailyWeekdayKwh * 22) + (dailyWeekendKwh * 8);
+  // Use actual monthly data if available, otherwise estimate
+  const monthlyKwh = selectedMonthData?.totalKwh ?? null;
+  const monthlyLabel = selectedMonthData?.label ?? null;
+  const monthlyDays = selectedMonthData?.days ?? null;
+  const monthlyPeak = selectedMonthData?.peakKw ?? null;
 
   const renderChart = (data: typeof weekdayData, isWeekend: boolean, peakHour: number) => (
     <div className="h-[280px]">
@@ -191,22 +203,52 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
           <div className="space-y-6">
             {/* Stats summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="bg-muted/30">
+              <Card className="bg-muted/30 md:col-span-2">
                 <CardContent className="pt-4">
-                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                    <Zap className="h-4 w-4" />
-                    Monthly Est.
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                      <Zap className="h-4 w-4" />
+                      Monthly Consumption
+                    </div>
+                    {availableMonths.length > 0 && (
+                      <Select value={selectedMonth || ""} onValueChange={setSelectedMonth}>
+                        <SelectTrigger className="w-[140px] h-8 text-xs">
+                          <SelectValue placeholder="Select month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableMonths.map(m => (
+                            <SelectItem key={m.value} value={m.value} className="text-xs">
+                              {m.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
-                  <p className="text-2xl font-bold mt-1">
-                    {monthlyEstimate >= 1000 
-                      ? `${(monthlyEstimate / 1000).toFixed(1)}K`
-                      : monthlyEstimate.toFixed(0)
-                    }
-                    <span className="text-sm font-normal text-muted-foreground ml-1">kWh</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ({weekdayTotal.toFixed(0)}×22 + {weekendTotal.toFixed(0)}×8 days)
-                  </p>
+                  
+                  {isLoadingMonthly ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Loading monthly data...</span>
+                    </div>
+                  ) : monthlyKwh !== null ? (
+                    <>
+                      <p className="text-2xl font-bold">
+                        {monthlyKwh >= 1000 
+                          ? `${(monthlyKwh / 1000).toFixed(1)}K`
+                          : monthlyKwh.toFixed(0)
+                        }
+                        <span className="text-sm font-normal text-muted-foreground ml-1">kWh</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Actual consumption for {monthlyLabel} ({monthlyDays} days)
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No monthly data available
+                    </p>
+                  )}
                 </CardContent>
               </Card>
               
@@ -217,11 +259,11 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                     Peak Demand
                   </div>
                   <p className="text-2xl font-bold mt-1">
-                    {Math.max(weekdayPeak, weekendPeak).toFixed(1)}
+                    {(monthlyPeak ?? Math.max(weekdayPeak, weekendPeak)).toFixed(1)}
                     <span className="text-sm font-normal text-muted-foreground ml-1">kW</span>
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    from {meter.data_points?.toLocaleString()} readings
+                    {monthlyPeak ? `in ${monthlyLabel}` : 'from profile avg'}
                   </p>
                 </CardContent>
               </Card>
@@ -235,22 +277,6 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                   <p className="text-2xl font-bold mt-1">
                     {weekdayPeakHour.toString().padStart(2, '0')}:00
                     <span className="text-sm font-normal text-muted-foreground ml-1">WD</span>
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className="bg-muted/30">
-                <CardContent className="pt-4">
-                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                    <Calendar className="h-4 w-4" />
-                    Data Coverage
-                  </div>
-                  <p className="text-2xl font-bold mt-1">
-                    {(meter.weekday_days || 0) + (meter.weekend_days || 0)}
-                    <span className="text-sm font-normal text-muted-foreground ml-1">days</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {meter.weekday_days || 0} weekdays, {meter.weekend_days || 0} weekend
                   </p>
                 </CardContent>
               </Card>
@@ -319,14 +345,14 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                   {meter.data_points.toLocaleString()} data points
                 </div>
               )}
-              {meter.processed_at && (
+              {meter.weekday_days && meter.weekend_days && (
                 <div>
-                  Processed: {format(new Date(meter.processed_at), 'MMM d, yyyy HH:mm')}
+                  {meter.weekday_days} weekdays, {meter.weekend_days} weekends
                 </div>
               )}
-              {meter.area_sqm && (
+              {meter.area_sqm && selectedMonthData && (
                 <div>
-                  Area: {meter.area_sqm.toLocaleString()} m² • Intensity: {(monthlyEstimate / meter.area_sqm).toFixed(1)} kWh/m²/mo
+                  Intensity: {(selectedMonthData.totalKwh / meter.area_sqm).toFixed(1)} kWh/m²/mo
                 </div>
               )}
             </div>
