@@ -94,6 +94,8 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
     tenantsWithScada,
     tenantsEstimated,
     isWeekend,
+    weekdayDailyKwh,
+    weekendDailyKwh,
   } = useLoadProfileData({
     tenants,
     shopTypes,
@@ -276,7 +278,15 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
       </Card>
 
       {/* Compact Stats Row */}
-      <ChartStats totalDaily={totalDaily} avgHourly={avgHourly} loadFactor={loadFactor} unit={unit} pvStats={dateMode === "average" ? pvStats : null} />
+      <ChartStats 
+        totalDaily={totalDaily} 
+        avgHourly={avgHourly} 
+        loadFactor={loadFactor} 
+        unit={unit} 
+        pvStats={dateMode === "average" ? pvStats : null}
+        weekdayDailyKwh={weekdayDailyKwh}
+        weekendDailyKwh={weekendDailyKwh}
+      />
 
       {/* Top Contributors */}
       <TopContributors tenants={tenants} chartData={chartData} />
