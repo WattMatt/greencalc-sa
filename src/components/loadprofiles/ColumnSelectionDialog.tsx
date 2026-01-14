@@ -199,7 +199,7 @@ export function ColumnSelectionDialog({
             </div>
           ) : (
             <>
-              <ScrollArea className="max-h-[200px]">
+              <ScrollArea className="max-h-[300px] pr-4">
                 <RadioGroup
                   value={selectedColumn}
                   onValueChange={setSelectedColumn}
