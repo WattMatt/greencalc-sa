@@ -204,6 +204,9 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                     }
                     <span className="text-sm font-normal text-muted-foreground ml-1">kWh</span>
                   </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ({weekdayTotal.toFixed(0)}×22 + {weekendTotal.toFixed(0)}×8 days)
+                  </p>
                 </CardContent>
               </Card>
               
@@ -216,6 +219,9 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                   <p className="text-2xl font-bold mt-1">
                     {Math.max(weekdayPeak, weekendPeak).toFixed(1)}
                     <span className="text-sm font-normal text-muted-foreground ml-1">kW</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    from {meter.data_points?.toLocaleString()} readings
                   </p>
                 </CardContent>
               </Card>
@@ -237,11 +243,14 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                 <CardContent className="pt-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-sm">
                     <Calendar className="h-4 w-4" />
-                    Data Days
+                    Data Coverage
                   </div>
                   <p className="text-2xl font-bold mt-1">
                     {(meter.weekday_days || 0) + (meter.weekend_days || 0)}
                     <span className="text-sm font-normal text-muted-foreground ml-1">days</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {meter.weekday_days || 0} weekdays, {meter.weekend_days || 0} weekend
                   </p>
                 </CardContent>
               </Card>
