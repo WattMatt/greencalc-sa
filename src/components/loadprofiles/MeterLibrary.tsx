@@ -10,12 +10,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle, Info } from "lucide-react";
+import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle, Info, Eye } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
 import { WizardParseConfig, ColumnConfig } from "./types/csvImportTypes";
+import { MeterProfilePreview } from "./MeterProfilePreview";
 
 interface RawDataStats {
   csvContent?: string;
@@ -86,6 +87,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   const [editArea, setEditArea] = useState("");
   const [editSiteName, setEditSiteName] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [previewMeter, setPreviewMeter] = useState<ScadaImport | null>(null);
   
   // Filter states
   const [searchQuery, setSearchQuery] = useState("");
@@ -1098,6 +1100,15 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                         <Button
                           variant="ghost"
                           size="icon"
+                          onClick={() => setPreviewMeter(meter)}
+                          title="Preview profile"
+                          disabled={!meter.load_profile_weekday}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => openEditDialog(meter)}
                         >
                           <Edit2 className="h-4 w-4" />
@@ -1237,6 +1248,13 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Profile Preview Dialog */}
+      <MeterProfilePreview
+        isOpen={!!previewMeter}
+        onClose={() => setPreviewMeter(null)}
+        meter={previewMeter}
+      />
     </div>
   );
 }
