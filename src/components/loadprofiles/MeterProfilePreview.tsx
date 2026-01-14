@@ -1,8 +1,6 @@
-import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -54,7 +52,7 @@ const TOU_COLORS = {
 };
 
 export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePreviewProps) {
-  const [viewMode, setViewMode] = useState<'average' | 'daily'>('average');
+  
   
   const { 
     isLoading: isLoadingMonthly, 
@@ -77,25 +75,7 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
   if (!meter) return null;
 
   const displayName = meter.meter_label || meter.shop_name || meter.shop_number || meter.site_name;
-  const hasProfile = meter.load_profile_weekday && meter.load_profile_weekday.length > 0;
-
-  // Calculate stats - profiles contain average kW per hour
-  // For 24 hourly values, sum of avg kW = kWh/day (each hour's avg kW × 1 hour)
-  const weekdayProfile = meter.load_profile_weekday || Array(24).fill(0);
-  const weekendProfile = meter.load_profile_weekend || Array(24).fill(0);
-  
-  // DEBUG: Log actual profile data to verify it's from real CSV data
-  console.log(`[MeterProfilePreview] ${displayName} weekday profile:`, weekdayProfile);
-  console.log(`[MeterProfilePreview] ${displayName} weekend profile:`, weekendProfile);
-  
-  // Sum of hourly average kW values = total kWh per day (power × 1 hour each)
-  const weekdayTotal = weekdayProfile.reduce((a, b) => a + b, 0);
-  const weekendTotal = weekendProfile.reduce((a, b) => a + b, 0);
-  const weekdayPeak = Math.max(...weekdayProfile);
-  const weekendPeak = Math.max(...weekendProfile);
-  
-  const weekdayPeakHour = weekdayProfile.indexOf(weekdayPeak);
-  const weekendPeakHour = weekendProfile.indexOf(weekendPeak);
+  const hasData = meter.data_points && meter.data_points > 0;
 
   // Prepare chart data
   const createChartData = (profile: number[], isWeekend: boolean) => {
@@ -107,16 +87,13 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
     }));
   };
 
-  const weekdayData = createChartData(weekdayProfile, false);
-  const weekendData = createChartData(weekendProfile, true);
-
-  // Use actual monthly data if available, otherwise estimate
+  // Use actual monthly data if available
   const monthlyKwh = selectedMonthData?.totalKwh ?? null;
   const monthlyLabel = selectedMonthData?.label ?? null;
   const monthlyDays = selectedMonthData?.days ?? null;
   const monthlyPeak = selectedMonthData?.peakKw ?? null;
 
-  const renderChart = (data: typeof weekdayData, isWeekend: boolean, peakHour: number) => (
+  const renderChart = (data: { hour: string; kw: number; touPeriod: string; fill: string }[], isWeekend: boolean, peakHour: number) => (
     <div className="h-[280px]">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 30 }}>
@@ -213,10 +190,10 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
           </DialogDescription>
         </DialogHeader>
 
-        {!hasProfile ? (
+        {!hasData ? (
           <div className="text-center py-12 text-muted-foreground">
             <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p className="font-medium">No profile data available</p>
+            <p className="font-medium">No data available</p>
             <p className="text-sm">This meter needs to be processed first</p>
           </div>
         ) : (
@@ -278,13 +255,19 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                     <Activity className="h-4 w-4" />
                     Peak Demand
                   </div>
-                  <p className="text-2xl font-bold mt-1">
-                    {(monthlyPeak ?? Math.max(weekdayPeak, weekendPeak)).toFixed(1)}
-                    <span className="text-sm font-normal text-muted-foreground ml-1">kW</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {monthlyPeak ? `in ${monthlyLabel}` : 'from profile avg'}
-                  </p>
+                  {monthlyPeak !== null ? (
+                    <>
+                      <p className="text-2xl font-bold mt-1">
+                        {monthlyPeak.toFixed(1)}
+                        <span className="text-sm font-normal text-muted-foreground ml-1">kW</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        in {monthlyLabel}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-1">Select a month</p>
+                  )}
                 </CardContent>
               </Card>
               
@@ -292,87 +275,18 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                 <CardContent className="pt-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-sm">
                     <Clock className="h-4 w-4" />
-                    Peak Hour
+                    Data Points
                   </div>
                   <p className="text-2xl font-bold mt-1">
-                    {weekdayPeakHour.toString().padStart(2, '0')}:00
-                    <span className="text-sm font-normal text-muted-foreground ml-1">WD</span>
+                    {meter.data_points?.toLocaleString() || 0}
                   </p>
+                  <p className="text-xs text-muted-foreground mt-1">readings</p>
                 </CardContent>
               </Card>
             </div>
 
-            {/* View mode toggle */}
-            <div className="flex items-center gap-2 mb-4">
-              <Button
-                variant={viewMode === 'average' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setViewMode('average')}
-              >
-                <Activity className="h-4 w-4 mr-1" />
-                Average Profile
-              </Button>
-              <Button
-                variant={viewMode === 'daily' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setViewMode('daily')}
-              >
-                <CalendarDays className="h-4 w-4 mr-1" />
-                Daily View
-              </Button>
-            </div>
-
-            {viewMode === 'average' ? (
-              /* Average Profile tabs */
-              <Tabs defaultValue="weekday" className="w-full">
-                <TabsList className="grid w-full max-w-md grid-cols-2">
-                  <TabsTrigger value="weekday" className="gap-2">
-                    Weekday
-                    <Badge variant="secondary" className="text-xs">
-                      {weekdayTotal.toFixed(1)} kWh/day
-                    </Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="weekend" className="gap-2">
-                    Weekend
-                    <Badge variant="secondary" className="text-xs">
-                      {weekendTotal.toFixed(1)} kWh/day
-                    </Badge>
-                  </TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="weekday" className="mt-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center justify-between">
-                        <span>Average Weekday Profile</span>
-                        <span className="text-muted-foreground font-normal">
-                          Peak: {weekdayPeak.toFixed(2)} kW @ {weekdayPeakHour.toString().padStart(2, '0')}:00
-                        </span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {renderChart(weekdayData, false, weekdayPeakHour)}
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-                
-                <TabsContent value="weekend" className="mt-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center justify-between">
-                        <span>Average Weekend Profile</span>
-                        <span className="text-muted-foreground font-normal">
-                          Peak: {weekendPeak.toFixed(2)} kW @ {weekendPeakHour.toString().padStart(2, '0')}:00
-                        </span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {renderChart(weekendData, true, weekendPeakHour)}
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              </Tabs>
-            ) : (
+            {/* Daily View with slider */}
+            (
               /* Daily View with slider */
               <div className="space-y-4">
                 {isLoadingDaily ? (
@@ -502,7 +416,7 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
                   </>
                 )}
               </div>
-            )}
+            )
 
             {/* Data info */}
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground border-t pt-4">
