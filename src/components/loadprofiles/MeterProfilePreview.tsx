@@ -4,10 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import { format } from "date-fns";
 import { ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea } from "recharts";
-import { Activity, Calendar, Zap, Clock, Loader2 } from "lucide-react";
+import { Activity, Calendar, Zap, Clock, Loader2, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { useMonthlyConsumption } from "./hooks/useMonthlyConsumption";
+import { useDailyConsumption } from "./hooks/useDailyConsumption";
 
 interface MeterProfilePreviewProps {
   isOpen: boolean;
@@ -51,6 +54,8 @@ const TOU_COLORS = {
 };
 
 export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePreviewProps) {
+  const [viewMode, setViewMode] = useState<'average' | 'daily'>('average');
+  
   const { 
     isLoading: isLoadingMonthly, 
     selectedMonth, 
@@ -58,6 +63,16 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
     selectedMonthData,
     availableMonths 
   } = useMonthlyConsumption(isOpen ? meter?.id || null : null);
+
+  const {
+    isLoading: isLoadingDaily,
+    selectedDayData,
+    navigateDay,
+    currentIndex,
+    totalDays,
+    setSelectedDate,
+    days
+  } = useDailyConsumption(isOpen ? meter?.id || null : null);
 
   if (!meter) return null;
 
@@ -287,55 +302,207 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
               </Card>
             </div>
 
-            {/* Profile tabs */}
-            <Tabs defaultValue="weekday" className="w-full">
-              <TabsList className="grid w-full max-w-md grid-cols-2">
-                <TabsTrigger value="weekday" className="gap-2">
-                  Weekday
-                  <Badge variant="secondary" className="text-xs">
-                    {weekdayTotal.toFixed(1)} kWh/day
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="weekend" className="gap-2">
-                  Weekend
-                  <Badge variant="secondary" className="text-xs">
-                    {weekendTotal.toFixed(1)} kWh/day
-                  </Badge>
-                </TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="weekday" className="mt-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center justify-between">
-                      <span>Average Weekday Profile</span>
-                      <span className="text-muted-foreground font-normal">
-                        Peak: {weekdayPeak.toFixed(2)} kW @ {weekdayPeakHour.toString().padStart(2, '0')}:00
-                      </span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {renderChart(weekdayData, false, weekdayPeakHour)}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              
-              <TabsContent value="weekend" className="mt-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center justify-between">
-                      <span>Average Weekend Profile</span>
-                      <span className="text-muted-foreground font-normal">
-                        Peak: {weekendPeak.toFixed(2)} kW @ {weekendPeakHour.toString().padStart(2, '0')}:00
-                      </span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {renderChart(weekendData, true, weekendPeakHour)}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
+            {/* View mode toggle */}
+            <div className="flex items-center gap-2 mb-4">
+              <Button
+                variant={viewMode === 'average' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('average')}
+              >
+                <Activity className="h-4 w-4 mr-1" />
+                Average Profile
+              </Button>
+              <Button
+                variant={viewMode === 'daily' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setViewMode('daily')}
+              >
+                <CalendarDays className="h-4 w-4 mr-1" />
+                Daily View
+              </Button>
+            </div>
+
+            {viewMode === 'average' ? (
+              /* Average Profile tabs */
+              <Tabs defaultValue="weekday" className="w-full">
+                <TabsList className="grid w-full max-w-md grid-cols-2">
+                  <TabsTrigger value="weekday" className="gap-2">
+                    Weekday
+                    <Badge variant="secondary" className="text-xs">
+                      {weekdayTotal.toFixed(1)} kWh/day
+                    </Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="weekend" className="gap-2">
+                    Weekend
+                    <Badge variant="secondary" className="text-xs">
+                      {weekendTotal.toFixed(1)} kWh/day
+                    </Badge>
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="weekday" className="mt-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center justify-between">
+                        <span>Average Weekday Profile</span>
+                        <span className="text-muted-foreground font-normal">
+                          Peak: {weekdayPeak.toFixed(2)} kW @ {weekdayPeakHour.toString().padStart(2, '0')}:00
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {renderChart(weekdayData, false, weekdayPeakHour)}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                
+                <TabsContent value="weekend" className="mt-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center justify-between">
+                        <span>Average Weekend Profile</span>
+                        <span className="text-muted-foreground font-normal">
+                          Peak: {weekendPeak.toFixed(2)} kW @ {weekendPeakHour.toString().padStart(2, '0')}:00
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {renderChart(weekendData, true, weekendPeakHour)}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            ) : (
+              /* Daily View with slider */
+              <div className="space-y-4">
+                {isLoadingDaily ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                    <span>Loading daily data...</span>
+                  </div>
+                ) : totalDays === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No daily data available. Raw data may not be stored.
+                  </div>
+                ) : (
+                  <>
+                    {/* Day navigation */}
+                    <Card className="bg-muted/30">
+                      <CardContent className="pt-4 pb-3">
+                        <div className="flex items-center justify-between mb-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigateDay('prev')}
+                            disabled={currentIndex <= 0}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          
+                          <div className="text-center flex-1">
+                            <div className="text-lg font-semibold">
+                              {selectedDayData?.label}
+                              {selectedDayData?.isWeekend && (
+                                <Badge variant="outline" className="ml-2 text-xs">Weekend</Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Day {currentIndex + 1} of {totalDays}
+                            </div>
+                          </div>
+                          
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigateDay('next')}
+                            disabled={currentIndex >= totalDays - 1}
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        
+                        {/* Slider */}
+                        <Slider
+                          value={[currentIndex]}
+                          min={0}
+                          max={Math.max(0, totalDays - 1)}
+                          step={1}
+                          onValueChange={(value) => {
+                            if (days[value[0]]) {
+                              setSelectedDate(days[value[0]].date);
+                            }
+                          }}
+                          className="w-full"
+                        />
+                        
+                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                          <span>{days[0]?.label}</span>
+                          <span>{days[days.length - 1]?.label}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    {/* Day stats */}
+                    {selectedDayData && (
+                      <div className="grid grid-cols-3 gap-3">
+                        <Card className="bg-muted/30">
+                          <CardContent className="pt-3 pb-2">
+                            <div className="text-xs text-muted-foreground">Total</div>
+                            <div className="text-lg font-bold">
+                              {selectedDayData.totalKwh.toFixed(1)}
+                              <span className="text-xs font-normal ml-1">kWh</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card className="bg-muted/30">
+                          <CardContent className="pt-3 pb-2">
+                            <div className="text-xs text-muted-foreground">Peak</div>
+                            <div className="text-lg font-bold">
+                              {selectedDayData.peakKw.toFixed(2)}
+                              <span className="text-xs font-normal ml-1">kW</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card className="bg-muted/30">
+                          <CardContent className="pt-3 pb-2">
+                            <div className="text-xs text-muted-foreground">Peak Hour</div>
+                            <div className="text-lg font-bold">
+                              {selectedDayData.peakHour.toString().padStart(2, '0')}:00
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+                    
+                    {/* Daily chart */}
+                    {selectedDayData && (
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm flex items-center justify-between">
+                            <span>
+                              Actual Profile — {selectedDayData.label}
+                              <Badge variant="outline" className="ml-2 text-xs">
+                                {selectedDayData.dataPoints} readings
+                              </Badge>
+                            </span>
+                            <span className="text-muted-foreground font-normal">
+                              {selectedDayData.totalKwh.toFixed(1)} kWh total
+                            </span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {renderChart(
+                            createChartData(selectedDayData.hourlyProfile, selectedDayData.isWeekend),
+                            selectedDayData.isWeekend,
+                            selectedDayData.peakHour
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Data info */}
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground border-t pt-4">
