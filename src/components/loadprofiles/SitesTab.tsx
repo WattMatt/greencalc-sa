@@ -48,6 +48,7 @@ export function SitesTab() {
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [processingMeterId, setProcessingMeterId] = useState<string | null>(null);
+  const [reprocessingMeterId, setReprocessingMeterId] = useState<string | null>(null);
   const [selectedMeterIds, setSelectedMeterIds] = useState<Set<string>>(new Set());
   const [reimportMeter, setReimportMeter] = useState<Meter | null>(null);
   const [formData, setFormData] = useState({
@@ -271,6 +272,36 @@ export function SitesTab() {
     if (selectedMeterIds.size === 0) return;
     if (confirm(`Delete ${selectedMeterIds.size} selected meter(s)?`)) {
       bulkDeleteMeters.mutate(Array.from(selectedMeterIds));
+    }
+  };
+
+  // Reprocess a single meter - clears processed status and reprocesses
+  const handleReprocessMeter = async (meter: Meter) => {
+    setReprocessingMeterId(meter.id);
+    try {
+      // Clear the processed status first
+      await supabase
+        .from("scada_imports")
+        .update({ 
+          processed_at: null,
+          load_profile_weekday: null,
+          load_profile_weekend: null,
+          weekday_days: null,
+          weekend_days: null
+        })
+        .eq("id", meter.id);
+      
+      // Now process it
+      await processMeter(meter);
+      
+      queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      toast.success("Meter reprocessed successfully");
+    } catch (error) {
+      console.error("Reprocess failed:", error);
+      toast.error("Failed to reprocess meter");
+    } finally {
+      setReprocessingMeterId(null);
     }
   };
 
@@ -739,30 +770,37 @@ export function SitesTab() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            {!processed && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => processMeter(meter)}
-                                  disabled={isProcessing}
-                                  title="Process meter"
-                                >
-                                  {isProcessing ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Play className="h-4 w-4 text-primary" />
-                                  )}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setReimportMeter(meter)}
-                                  title="Re-import CSV with correct columns"
-                                >
+                            {/* Process button - only show for unprocessed meters */}
+                            {!processed && (meter.data_points || 0) > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => processMeter(meter)}
+                                disabled={isProcessing}
+                                title="Process meter"
+                              >
+                                {isProcessing ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Play className="h-4 w-4 text-primary" />
+                                )}
+                              </Button>
+                            )}
+                            {/* Reprocess button - always show for all meters with data */}
+                            {(meter.data_points || 0) > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleReprocessMeter(meter)}
+                                disabled={reprocessingMeterId === meter.id}
+                                title="Reprocess CSV data"
+                              >
+                                {reprocessingMeterId === meter.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
                                   <RefreshCw className="h-4 w-4 text-orange-500" />
-                                </Button>
-                              </>
+                                )}
+                              </Button>
                             )}
                             <Button
                               variant="ghost"
