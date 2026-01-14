@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Play, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw } from "lucide-react";
+import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Play, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
 import { SheetImport } from "@/components/loadprofiles/SheetImport";
@@ -39,6 +39,7 @@ interface Meter {
   created_at: string;
   load_profile_weekday: number[] | null;
   load_profile_weekend: number[] | null;
+  detected_interval_minutes: number | null;
 }
 
 export function SitesTab() {
@@ -106,7 +107,7 @@ export function SitesTab() {
       if (!selectedSite) return [];
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, site_name, shop_name, file_name, data_points, date_range_start, date_range_end, created_at, load_profile_weekday, load_profile_weekend")
+        .select("id, site_name, shop_name, file_name, data_points, date_range_start, date_range_end, created_at, load_profile_weekday, load_profile_weekend, detected_interval_minutes")
         .eq("site_id", selectedSite.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -384,6 +385,66 @@ export function SitesTab() {
     return ["kWh", "Wh", "MWh", "kVAh"].includes(unit);
   };
 
+  // Detect data interval from timestamps (returns interval in minutes)
+  const detectDataIntervalLocal = (dataPoints: Array<{ date?: string; time?: string; timestamp?: string }>): number => {
+    if (dataPoints.length < 2) return 60; // Default to hourly
+    
+    // Parse timestamps
+    const timestamps: number[] = [];
+    for (const point of dataPoints.slice(0, 200)) { // Sample first 200 points
+      const dateStr = point.date || (point.timestamp ? point.timestamp.split("T")[0] : null);
+      const timeStr = point.time || (point.timestamp ? point.timestamp.split("T")[1]?.substring(0, 8) : null);
+      
+      if (dateStr && timeStr) {
+        const dt = new Date(`${dateStr}T${timeStr}`);
+        if (!isNaN(dt.getTime())) {
+          timestamps.push(dt.getTime());
+        }
+      }
+    }
+    
+    if (timestamps.length < 2) return 60;
+    
+    // Sort and calculate intervals
+    timestamps.sort((a, b) => a - b);
+    const intervals: number[] = [];
+    
+    for (let i = 1; i < timestamps.length; i++) {
+      const diffMinutes = (timestamps[i] - timestamps[i - 1]) / 60000;
+      if (diffMinutes > 0 && diffMinutes <= 240) { // Reasonable range: 1 min to 4 hours
+        intervals.push(diffMinutes);
+      }
+    }
+    
+    if (intervals.length === 0) return 60;
+    
+    // Find mode (most common interval), rounded to standard values
+    const roundToStandard = (min: number): number => {
+      const standards = [1, 5, 10, 15, 30, 60, 120, 180, 240];
+      return standards.reduce((prev, curr) => 
+        Math.abs(curr - min) < Math.abs(prev - min) ? curr : prev
+      );
+    };
+    
+    const counts: Record<number, number> = {};
+    for (const interval of intervals) {
+      const rounded = roundToStandard(interval);
+      counts[rounded] = (counts[rounded] || 0) + 1;
+    }
+    
+    let mostCommon = 60;
+    let maxCount = 0;
+    for (const [interval, count] of Object.entries(counts)) {
+      if (count > maxCount) {
+        maxCount = count;
+        mostCommon = parseInt(interval);
+      }
+    }
+    
+    console.log(`[detectDataInterval] Detected ${mostCommon}-minute intervals from ${intervals.length} samples`);
+    return mostCommon;
+  };
+
   // Process meter with optional column selection and unit
   const processWithColumn = async (
     meter: Meter, 
@@ -505,6 +566,9 @@ export function SitesTab() {
         ? weekendAvg.map((v) => Math.round((v / weekendSum) * 100 * 100) / 100)
         : weekendAvg;
 
+      // Detect data interval
+      const detectedInterval = detectDataIntervalLocal(rawDataArray);
+
       // Update the meter with processed data
       const { error: updateError } = await supabase
         .from("scada_imports")
@@ -517,6 +581,7 @@ export function SitesTab() {
           weekend_days: weekendDates.size,
           data_points: rawDataArray.length,
           processed_at: new Date().toISOString(),
+          detected_interval_minutes: detectedInterval,
         })
         .eq("id", meter.id);
 
@@ -966,6 +1031,7 @@ export function SitesTab() {
                     <TableHead>Meter Name</TableHead>
                     <TableHead>File</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Interval</TableHead>
                     <TableHead>Data Points</TableHead>
                     <TableHead>Date Range</TableHead>
                     <TableHead className="w-24"></TableHead>
@@ -1003,6 +1069,16 @@ export function SitesTab() {
                               <FileText className="h-3 w-3 mr-1" />
                               Listed Only
                             </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {meter.detected_interval_minutes ? (
+                            <Badge variant="outline" className="text-xs">
+                              <Clock className="h-3 w-3 mr-1" />
+                              {meter.detected_interval_minutes}-min
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
                           )}
                         </TableCell>
                         <TableCell>
