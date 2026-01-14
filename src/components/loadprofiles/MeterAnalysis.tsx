@@ -59,8 +59,23 @@ function parseCsvToDataPoints(csvContent: string): RawDataPoint[] {
   // Parse header to get column names
   const headerLine = lines[0];
   const headers = headerLine.split(',').map(h => h.trim());
-  const dateColIndex = headers.findIndex(h => h.toLowerCase() === 'date' || h.toLowerCase() === 'timestamp');
-  const valueHeaders = headers.filter((_, i) => i !== dateColIndex);
+  console.log('[MeterAnalysis] CSV headers:', headers);
+  
+  // Find date column index
+  const dateColIndex = headers.findIndex(h => 
+    h.toLowerCase() === 'date' || 
+    h.toLowerCase() === 'timestamp' ||
+    h.toLowerCase() === 'datetime'
+  );
+  
+  // All columns except date are value columns
+  const valueColumns: { name: string; index: number }[] = [];
+  headers.forEach((header, index) => {
+    if (index !== dateColIndex && header) {
+      valueColumns.push({ name: header, index });
+    }
+  });
+  console.log('[MeterAnalysis] Value columns:', valueColumns.map(v => v.name));
   
   const dataPoints: RawDataPoint[] = [];
   
@@ -98,13 +113,11 @@ function parseCsvToDataPoints(csvContent: string): RawDataPoint[] {
       values: {}
     };
     
-    // Extract values for each column
-    valueHeaders.forEach((header, idx) => {
-      const valueIdx = dateColIndex >= 0 && idx >= dateColIndex ? idx + 1 : (idx === 0 && dateColIndex === 0 ? idx + 1 : idx);
-      const actualIdx = headers.indexOf(header);
-      const val = parseFloat(values[actualIdx]);
+    // Extract values for each value column using the correct index
+    valueColumns.forEach(({ name, index }) => {
+      const val = parseFloat(values[index]);
       if (!isNaN(val)) {
-        point.values[header] = val;
+        point.values[name] = val;
       }
     });
     
@@ -113,6 +126,7 @@ function parseCsvToDataPoints(csvContent: string): RawDataPoint[] {
     }
   }
   
+  console.log('[MeterAnalysis] Parsed', dataPoints.length, 'points, first point values:', dataPoints[0]?.values);
   return dataPoints.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 }
 
