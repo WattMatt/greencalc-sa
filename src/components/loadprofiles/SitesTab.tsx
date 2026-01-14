@@ -92,22 +92,33 @@ export function SitesTab() {
             acc[m.site_id] = { total: 0, withData: 0 };
           }
           acc[m.site_id].total += 1;
+          
           // Has data if data_points > 0 OR has a non-empty load profile (processed)
-          const hasData = (m.data_points && m.data_points > 0) || 
-            (m.load_profile_weekday && Array.isArray(m.load_profile_weekday) && m.load_profile_weekday.length > 0);
-          if (hasData) {
+          // Handle both array and null cases for load_profile_weekday
+          const profileArray = m.load_profile_weekday;
+          const hasValidProfile = profileArray && 
+            Array.isArray(profileArray) && 
+            profileArray.length > 0 &&
+            profileArray.some((v: number) => v > 0); // At least one non-zero value
+          const hasDataPoints = m.data_points && m.data_points > 0;
+          
+          if (hasDataPoints || hasValidProfile) {
             acc[m.site_id].withData += 1;
           }
         }
         return acc;
       }, {} as Record<string, { total: number; withData: number }>);
 
-      return (sitesData || []).map(site => ({
-        ...site,
-        meter_count: meterStats[site.id]?.total || 0,
-        meters_with_data: meterStats[site.id]?.withData || 0,
-        meters_listed_only: (meterStats[site.id]?.total || 0) - (meterStats[site.id]?.withData || 0),
-      })) as Site[];
+      // Calculate stats per site
+      return (sitesData || []).map(site => {
+        const stats = meterStats[site.id] || { total: 0, withData: 0 };
+        return {
+          ...site,
+          meter_count: stats.total,
+          meters_with_data: stats.withData,
+          meters_listed_only: stats.total - stats.withData,
+        };
+      }) as Site[];
     },
   });
 
