@@ -9,10 +9,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   Upload, FileSpreadsheet, Building2, Store, Ruler, Loader2, 
   CheckCircle2, AlertCircle, AlertTriangle, RefreshCw, Copy, 
-  Shield, ArrowRight 
+  Shield, ArrowRight, Trash2, ChevronDown, FileWarning, ListChecks
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -30,6 +33,9 @@ interface ParsedRow {
   existingMeterId?: string;
   existingSiteId?: string;
   duplicateOf?: string; // For duplicates within the file itself
+  // Validation
+  validationErrors?: string[];
+  rowNumber?: number;
 }
 
 interface SiteGroup {
@@ -47,6 +53,29 @@ interface SheetImportProps {
 interface ExistingData {
   sites: Map<string, { id: string; name: string }>;
   meters: Map<string, { id: string; site_id: string; shop_name: string; site_name: string }[]>;
+}
+
+interface OrphanedMeter {
+  id: string;
+  site_name: string;
+  shop_name: string;
+  site_id: string | null;
+  selected: boolean;
+}
+
+interface ParseError {
+  rowNumber: number;
+  message: string;
+  rawData: Record<string, unknown>;
+}
+
+interface AuditLog {
+  timestamp: Date;
+  action: 'parse' | 'validate' | 'import' | 'delete' | 'update' | 'create' | 'error';
+  entity: 'site' | 'meter' | 'file' | 'system';
+  entityName?: string;
+  details: string;
+  success: boolean;
 }
 
 // Normalize names for comparison
@@ -70,12 +99,22 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [verificationComplete, setVerificationComplete] = useState(false);
+  
+  // Import mode: false = Add/Update Only, true = Full Sync (deletes orphans)
+  const [fullSyncMode, setFullSyncMode] = useState(false);
+  const [orphanedMeters, setOrphanedMeters] = useState<OrphanedMeter[]>([]);
+  const [parseErrors, setParseErrors] = useState<ParseError[]>([]);
+  const [auditLog, setAuditLog] = useState<AuditLog[]>([]);
+  const [showAuditLog, setShowAuditLog] = useState(false);
+  
   const [duplicateStats, setDuplicateStats] = useState<{
     existingSites: number;
     existingMeters: number;
     duplicatesInFile: number;
     newSites: number;
     newMeters: number;
+    orphanedMeters: number;
+    parseErrors: number;
   } | null>(null);
 
   // Fetch existing sites and meters from database
@@ -105,9 +144,78 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
     return { sites, meters };
   };
 
+  // Add entry to audit log
+  const addAuditEntry = (entry: Omit<AuditLog, 'timestamp'>) => {
+    setAuditLog(prev => [...prev, { ...entry, timestamp: new Date() }]);
+  };
+
+  // Validate a single row
+  const validateRow = (row: ParsedRow): string[] => {
+    const errors: string[] = [];
+    
+    if (!row.siteName || row.siteName.trim().length === 0) {
+      errors.push("Missing site name");
+    }
+    if (!row.shopName || row.shopName.trim().length === 0) {
+      errors.push("Missing shop name");
+    }
+    if (row.areaSqm !== null && (isNaN(row.areaSqm) || row.areaSqm < 0)) {
+      errors.push("Invalid area value");
+    }
+    if (row.siteName && row.siteName.length > 200) {
+      errors.push("Site name too long (max 200 chars)");
+    }
+    if (row.shopName && row.shopName.length > 200) {
+      errors.push("Shop name too long (max 200 chars)");
+    }
+    
+    return errors;
+  };
+
+  // Find orphaned meters (exist in DB but not in file)
+  const findOrphanedMeters = async (groups: SiteGroup[]): Promise<OrphanedMeter[]> => {
+    const { data: allMeters } = await supabase
+      .from("scada_imports")
+      .select("id, site_name, shop_name, site_id");
+    
+    if (!allMeters) return [];
+
+    // Build set of all meters in the file
+    const fileMeters = new Set<string>();
+    for (const group of groups) {
+      for (const shop of group.shops) {
+        const key = `${normalizeName(group.siteName)}|${normalizeName(shop.shopName)}`;
+        fileMeters.add(key);
+      }
+    }
+
+    // Find meters in DB not in file
+    const orphans: OrphanedMeter[] = [];
+    for (const meter of allMeters) {
+      const key = `${normalizeName(meter.site_name)}|${normalizeName(meter.shop_name || '')}`;
+      if (!fileMeters.has(key)) {
+        orphans.push({
+          id: meter.id,
+          site_name: meter.site_name,
+          shop_name: meter.shop_name || '',
+          site_id: meter.site_id,
+          selected: true, // Default to selected for deletion in full sync
+        });
+      }
+    }
+
+    return orphans;
+  };
+
   // Verify parsed data against existing database
   const verifyDuplicates = async (groups: SiteGroup[]): Promise<SiteGroup[]> => {
     setIsVerifying(true);
+    addAuditEntry({
+      action: 'validate',
+      entity: 'system',
+      details: `Starting verification of ${groups.length} sites`,
+      success: true,
+    });
     
     try {
       const existingData = await fetchExistingData();
@@ -120,6 +228,7 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
       let duplicatesInFile = 0;
       let newSites = 0;
       let newMeters = 0;
+      let validationErrorCount = 0;
 
       const verifiedGroups = groups.map(group => {
         const normalizedSiteName = normalizeName(group.siteName);
@@ -134,6 +243,12 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
         }
 
         const verifiedShops = group.shops.map(shop => {
+          // Run validation
+          const validationErrors = validateRow(shop);
+          if (validationErrors.length > 0) {
+            validationErrorCount++;
+          }
+
           const normalizedShopName = normalizeName(shop.shopName);
           const fileKey = `${normalizedSiteName}|${normalizedShopName}`;
           
@@ -145,6 +260,7 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
               duplicateStatus: 'duplicate-in-file' as const,
               duplicateOf: seenInFile.get(fileKey),
               selected: false, // Auto-deselect duplicates
+              validationErrors,
             };
           }
           
@@ -163,6 +279,7 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
               duplicateStatus: 'existing-meter' as const,
               existingMeterId: existingMeter.id,
               existingSiteId: existingMeter.site_id,
+              validationErrors,
             };
           }
           
@@ -172,6 +289,7 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
               ...shop,
               duplicateStatus: 'existing-site' as const,
               existingSiteId: existingSite.id,
+              validationErrors,
             };
           }
           
@@ -179,6 +297,7 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
           return {
             ...shop,
             duplicateStatus: 'new' as const,
+            validationErrors,
           };
         });
 
@@ -190,12 +309,28 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
         };
       });
 
+      // Find orphaned meters if in full sync mode
+      let orphans: OrphanedMeter[] = [];
+      if (fullSyncMode) {
+        orphans = await findOrphanedMeters(groups);
+        setOrphanedMeters(orphans);
+      }
+
       setDuplicateStats({
         existingSites,
         existingMeters,
         duplicatesInFile,
         newSites,
         newMeters,
+        orphanedMeters: orphans.length,
+        parseErrors: parseErrors.length,
+      });
+
+      addAuditEntry({
+        action: 'validate',
+        entity: 'system',
+        details: `Verification complete: ${newSites} new sites, ${newMeters} new meters, ${existingMeters} to update, ${orphans.length} orphaned`,
+        success: true,
       });
       
       return verifiedGroups;
@@ -208,6 +343,17 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
     setIsParsing(true);
     setVerificationComplete(false);
     setDuplicateStats(null);
+    setParseErrors([]);
+    setOrphanedMeters([]);
+    setAuditLog([]);
+    
+    addAuditEntry({
+      action: 'parse',
+      entity: 'file',
+      entityName: file.name,
+      details: `Starting parse of ${file.name} (${(file.size / 1024).toFixed(1)} KB)`,
+      success: true,
+    });
     
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -218,6 +364,9 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
 
       // Parse rows and group by site
       const rows: ParsedRow[] = [];
+      const errors: ParseError[] = [];
+      let rowNum = 2; // Start at 2 (1 = header row)
+      
       for (const row of jsonData) {
         const siteName = String(
           row["Shopping Centre"] || row["Site"] || row["Site Name"] || row["Center"] || ""
@@ -231,18 +380,45 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
         const dataSource = row["Data Source"] ? String(row["Data Source"]).trim() : null;
         const fileName = row["File Name"] ? String(row["File Name"]).trim() : null;
 
-        if (siteName && shopName) {
-          rows.push({
-            siteName,
-            shopName,
-            breaker: breaker || null,
-            areaSqm: isNaN(areaSqm || NaN) ? null : areaSqm,
-            dataSource,
-            fileName,
-            selected: true,
-            duplicateStatus: 'new', // Will be verified next
+        // Track parse errors for rows missing required fields
+        if (!siteName || !shopName) {
+          errors.push({
+            rowNumber: rowNum,
+            message: !siteName && !shopName 
+              ? "Missing both site name and shop name" 
+              : !siteName 
+                ? "Missing site name" 
+                : "Missing shop name",
+            rawData: row,
           });
+          rowNum++;
+          continue;
         }
+
+        rows.push({
+          siteName,
+          shopName,
+          breaker: breaker || null,
+          areaSqm: isNaN(areaSqm || NaN) ? null : areaSqm,
+          dataSource,
+          fileName,
+          selected: true,
+          duplicateStatus: 'new', // Will be verified next
+          rowNumber: rowNum,
+        });
+        rowNum++;
+      }
+
+      setParseErrors(errors);
+      
+      if (errors.length > 0) {
+        addAuditEntry({
+          action: 'error',
+          entity: 'file',
+          entityName: file.name,
+          details: `${errors.length} rows skipped due to parse errors`,
+          success: false,
+        });
       }
 
       // Group by site
@@ -261,6 +437,14 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
         isExistingSite: false,
       }));
 
+      addAuditEntry({
+        action: 'parse',
+        entity: 'file',
+        entityName: file.name,
+        details: `Parsed ${rows.length} valid rows across ${groups.length} sites`,
+        success: true,
+      });
+
       // Verify against existing data
       const verifiedGroups = await verifyDuplicates(groups);
       
@@ -269,6 +453,13 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
       toast.success(`Parsed ${rows.length} shops across ${groups.length} sites - verification complete`);
     } catch (error) {
       console.error("Error parsing Excel file:", error);
+      addAuditEntry({
+        action: 'error',
+        entity: 'file',
+        entityName: file.name,
+        details: `Parse failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        success: false,
+      });
       toast.error("Failed to parse Excel file");
     } finally {
       setIsParsing(false);
@@ -317,24 +508,80 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
     );
   };
 
+  const toggleOrphanedMeter = (meterId: string) => {
+    setOrphanedMeters(prev => 
+      prev.map(m => m.id === meterId ? { ...m, selected: !m.selected } : m)
+    );
+  };
+
+  const toggleAllOrphanedMeters = (selected: boolean) => {
+    setOrphanedMeters(prev => prev.map(m => ({ ...m, selected })));
+  };
+
   const handleImport = async () => {
     const selectedSites = parsedData.filter((s) => s.shops.some((shop) => shop.selected));
-    if (selectedSites.length === 0) {
+    const selectedOrphans = orphanedMeters.filter(m => m.selected);
+    
+    if (selectedSites.length === 0 && selectedOrphans.length === 0) {
       toast.error("No shops selected for import");
       return;
     }
 
     setIsImporting(true);
     const totalShops = selectedSites.reduce((acc, s) => acc + s.shops.filter((sh) => sh.selected).length, 0);
-    setImportProgress({ current: 0, total: totalShops });
+    const totalOperations = totalShops + (fullSyncMode ? selectedOrphans.length : 0);
+    setImportProgress({ current: 0, total: totalOperations });
 
     let imported = 0;
     let sitesCreated = 0;
     let metersCreated = 0;
     let metersUpdated = 0;
+    let metersDeleted = 0;
     let skipped = 0;
+    let errors = 0;
+
+    addAuditEntry({
+      action: 'import',
+      entity: 'system',
+      details: `Starting import: ${totalShops} meters to process${fullSyncMode ? `, ${selectedOrphans.length} orphans to delete` : ''}`,
+      success: true,
+    });
 
     try {
+      // Delete orphaned meters first if in full sync mode
+      if (fullSyncMode && selectedOrphans.length > 0) {
+        for (const orphan of selectedOrphans) {
+          const { error: deleteError } = await supabase
+            .from("scada_imports")
+            .delete()
+            .eq("id", orphan.id);
+
+          if (deleteError) {
+            console.error("Error deleting orphaned meter:", deleteError);
+            addAuditEntry({
+              action: 'error',
+              entity: 'meter',
+              entityName: orphan.shop_name,
+              details: `Failed to delete: ${deleteError.message}`,
+              success: false,
+            });
+            errors++;
+          } else {
+            metersDeleted++;
+            addAuditEntry({
+              action: 'delete',
+              entity: 'meter',
+              entityName: `${orphan.site_name} / ${orphan.shop_name}`,
+              details: 'Orphaned meter deleted (not in import file)',
+              success: true,
+            });
+          }
+          imported++;
+          setImportProgress({ current: imported, total: totalOperations });
+        }
+      }
+
+      // Process sites and meters
       for (const siteGroup of selectedSites) {
         const selectedShops = siteGroup.shops.filter((s) => s.selected);
         if (selectedShops.length === 0) continue;
@@ -366,9 +613,25 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
               .select("id")
               .single();
 
-            if (siteError) throw siteError;
+            if (siteError) {
+              addAuditEntry({
+                action: 'error',
+                entity: 'site',
+                entityName: siteGroup.siteName,
+                details: `Failed to create: ${siteError.message}`,
+                success: false,
+              });
+              throw siteError;
+            }
             siteId = newSite.id;
             sitesCreated++;
+            addAuditEntry({
+              action: 'create',
+              entity: 'site',
+              entityName: siteGroup.siteName,
+              details: 'New site created',
+              success: true,
+            });
           }
         }
 
@@ -378,7 +641,7 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
           if (shop.duplicateStatus === 'duplicate-in-file') {
             skipped++;
             imported++;
-            setImportProgress({ current: imported, total: totalShops });
+            setImportProgress({ current: imported, total: totalOperations });
             continue;
           }
 
@@ -395,8 +658,23 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
 
             if (updateError) {
               console.error("Error updating meter:", updateError);
+              addAuditEntry({
+                action: 'error',
+                entity: 'meter',
+                entityName: shop.shopName,
+                details: `Failed to update: ${updateError.message}`,
+                success: false,
+              });
+              errors++;
             } else {
               metersUpdated++;
+              addAuditEntry({
+                action: 'update',
+                entity: 'meter',
+                entityName: `${siteGroup.siteName} / ${shop.shopName}`,
+                details: 'Meter updated with new metadata',
+                success: true,
+              });
             }
           } else {
             // Create new meter entry
@@ -411,13 +689,28 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
 
             if (meterError) {
               console.error("Error creating meter:", meterError);
+              addAuditEntry({
+                action: 'error',
+                entity: 'meter',
+                entityName: shop.shopName,
+                details: `Failed to create: ${meterError.message}`,
+                success: false,
+              });
+              errors++;
             } else {
               metersCreated++;
+              addAuditEntry({
+                action: 'create',
+                entity: 'meter',
+                entityName: `${siteGroup.siteName} / ${shop.shopName}`,
+                details: 'New meter created',
+                success: true,
+              });
             }
           }
 
           imported++;
-          setImportProgress({ current: imported, total: totalShops });
+          setImportProgress({ current: imported, total: totalOperations });
         }
       }
 
@@ -425,15 +718,31 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
       if (sitesCreated > 0) messages.push(`${sitesCreated} new site(s)`);
       if (metersCreated > 0) messages.push(`${metersCreated} new meter(s)`);
       if (metersUpdated > 0) messages.push(`${metersUpdated} updated`);
+      if (metersDeleted > 0) messages.push(`${metersDeleted} deleted`);
       if (skipped > 0) messages.push(`${skipped} skipped`);
+      if (errors > 0) messages.push(`${errors} error(s)`);
+
+      addAuditEntry({
+        action: 'import',
+        entity: 'system',
+        details: `Import complete: ${messages.join(', ')}`,
+        success: errors === 0,
+      });
       
       toast.success(`Import complete: ${messages.join(', ')}`);
       queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
       queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
       queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
       onImportComplete?.();
     } catch (error) {
       console.error("Import error:", error);
+      addAuditEntry({
+        action: 'error',
+        entity: 'system',
+        details: `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        success: false,
+      });
       toast.error("Import failed: " + (error instanceof Error ? error.message : "Unknown error"));
     } finally {
       setIsImporting(false);
@@ -523,6 +832,30 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Import Mode Toggle */}
+        <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+          <div className="space-y-0.5">
+            <Label htmlFor="sync-mode" className="text-sm font-medium">
+              Import Mode
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {fullSyncMode 
+                ? "Full Sync: Delete meters not in file, add/update all others" 
+                : "Add/Update Only: Keep existing meters, only add or update from file"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Add/Update</span>
+            <Switch
+              id="sync-mode"
+              checked={fullSyncMode}
+              onCheckedChange={setFullSyncMode}
+              disabled={isParsing || isVerifying || isImporting}
+            />
+            <span className="text-xs text-muted-foreground">Full Sync</span>
+          </div>
+        </div>
+
         {/* File Upload */}
         <div className="flex items-center gap-4">
           <input
@@ -551,15 +884,46 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
           )}
         </div>
 
+        {/* Parse Errors Alert */}
+        {parseErrors.length > 0 && (
+          <Collapsible>
+            <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">
+              <FileWarning className="h-4 w-4" />
+              <AlertTitle className="flex items-center justify-between">
+                <span>{parseErrors.length} Rows Skipped (Parse Errors)</span>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-6 px-2">
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </CollapsibleTrigger>
+              </AlertTitle>
+              <CollapsibleContent>
+                <AlertDescription className="mt-2">
+                  <ScrollArea className="h-[100px]">
+                    <div className="space-y-1 text-xs">
+                      {parseErrors.map((err, i) => (
+                        <div key={i} className="flex gap-2">
+                          <span className="font-mono">Row {err.rowNumber}:</span>
+                          <span>{err.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </AlertDescription>
+              </CollapsibleContent>
+            </Alert>
+          </Collapsible>
+        )}
+
         {/* Verification Summary */}
         {verificationComplete && duplicateStats && (
           <Alert className="border-primary/30 bg-primary/5">
             <Shield className="h-4 w-4" />
             <AlertTitle className="flex items-center gap-2">
-              Duplicate Verification Complete
+              Verification Complete
             </AlertTitle>
             <AlertDescription>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-2 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2 text-sm">
                 <div className="flex items-center gap-1">
                   <CheckCircle2 className="h-3 w-3 text-green-500" />
                   <span>{duplicateStats.newSites} new sites</span>
@@ -582,6 +946,12 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
                     <span>{duplicateStats.duplicatesInFile} file duplicates</span>
                   </div>
                 )}
+                {fullSyncMode && duplicateStats.orphanedMeters > 0 && (
+                  <div className="flex items-center gap-1">
+                    <Trash2 className="h-3 w-3 text-destructive" />
+                    <span>{duplicateStats.orphanedMeters} to delete</span>
+                  </div>
+                )}
               </div>
             </AlertDescription>
           </Alert>
@@ -599,23 +969,99 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
           </Alert>
         )}
 
+        {/* Orphaned Meters Section (Full Sync Mode) */}
+        {fullSyncMode && orphanedMeters.length > 0 && (
+          <Collapsible defaultOpen>
+            <Alert className="border-destructive/30 bg-destructive/5">
+              <Trash2 className="h-4 w-4 text-destructive" />
+              <AlertTitle className="flex items-center justify-between">
+                <span>{orphanedMeters.filter(m => m.selected).length} of {orphanedMeters.length} Orphaned Meters to Delete</span>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 px-2 text-xs"
+                    onClick={() => toggleAllOrphanedMeters(true)}
+                  >
+                    Select All
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 px-2 text-xs"
+                    onClick={() => toggleAllOrphanedMeters(false)}
+                  >
+                    Deselect All
+                  </Button>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 px-2">
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </CollapsibleTrigger>
+                </div>
+              </AlertTitle>
+              <CollapsibleContent>
+                <AlertDescription className="mt-2">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    These meters exist in the database but are not in your import file. They will be deleted.
+                  </p>
+                  <ScrollArea className="h-[150px] border rounded-md bg-background/50">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12"></TableHead>
+                          <TableHead>Site</TableHead>
+                          <TableHead>Shop</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {orphanedMeters.map((meter) => (
+                          <TableRow key={meter.id} className={!meter.selected ? "opacity-50" : ""}>
+                            <TableCell>
+                              <Checkbox
+                                checked={meter.selected}
+                                onCheckedChange={() => toggleOrphanedMeter(meter.id)}
+                              />
+                            </TableCell>
+                            <TableCell className="text-sm">{meter.site_name}</TableCell>
+                            <TableCell className="text-sm">{meter.shop_name}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </AlertDescription>
+              </CollapsibleContent>
+            </Alert>
+          </Collapsible>
+        )}
+
         {/* Parsed Data Preview */}
         {parsedData.length > 0 && (
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 {selectedCount} of {totalCount} shops selected for import
+                {fullSyncMode && orphanedMeters.filter(m => m.selected).length > 0 && (
+                  <span className="text-destructive ml-2">
+                    + {orphanedMeters.filter(m => m.selected).length} to delete
+                  </span>
+                )}
               </p>
-              <Button onClick={handleImport} disabled={isImporting || selectedCount === 0}>
+              <Button 
+                onClick={handleImport} 
+                disabled={isImporting || (selectedCount === 0 && orphanedMeters.filter(m => m.selected).length === 0)}
+                variant={fullSyncMode ? "destructive" : "default"}
+              >
                 {isImporting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Importing {importProgress?.current}/{importProgress?.total}...
+                    {fullSyncMode ? "Syncing" : "Importing"} {importProgress?.current}/{importProgress?.total}...
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Import Selected ({selectedCount})
+                    {fullSyncMode ? <RefreshCw className="h-4 w-4 mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                    {fullSyncMode ? "Full Sync" : "Import Selected"} ({selectedCount})
                   </>
                 )}
               </Button>
@@ -667,9 +1113,11 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
                           className={
                             shop.duplicateStatus === 'duplicate-in-file' 
                               ? "opacity-50 bg-destructive/5" 
-                              : !shop.selected 
-                                ? "opacity-50" 
-                                : ""
+                              : shop.validationErrors && shop.validationErrors.length > 0
+                                ? "bg-amber-500/5"
+                                : !shop.selected 
+                                  ? "opacity-50" 
+                                  : ""
                           }
                         >
                           <TableCell className="pl-8">
@@ -683,6 +1131,18 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
                             <div className="flex items-center gap-2">
                               <Store className="h-4 w-4 text-muted-foreground" />
                               {shop.shopName}
+                              {shop.validationErrors && shop.validationErrors.length > 0 && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <AlertTriangle className="h-3 w-3 text-amber-500" />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="text-xs">{shop.validationErrors.join(', ')}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -715,6 +1175,60 @@ export function SheetImport({ onImportComplete }: SheetImportProps) {
               </Table>
             </ScrollArea>
           </>
+        )}
+
+        {/* Audit Log */}
+        {auditLog.length > 0 && (
+          <Collapsible open={showAuditLog} onOpenChange={setShowAuditLog}>
+            <div className="flex items-center justify-between border-t pt-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <ListChecks className="h-4 w-4" />
+                <span>Audit Trail ({auditLog.length} entries)</span>
+              </div>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showAuditLog ? "rotate-180" : ""}`} />
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent>
+              <ScrollArea className="h-[200px] mt-2 border rounded-md bg-muted/30">
+                <div className="p-2 space-y-1 font-mono text-xs">
+                  {auditLog.map((entry, i) => (
+                    <div 
+                      key={i} 
+                      className={`flex gap-2 p-1 rounded ${
+                        entry.success ? "" : "bg-destructive/10 text-destructive"
+                      }`}
+                    >
+                      <span className="text-muted-foreground whitespace-nowrap">
+                        {entry.timestamp.toLocaleTimeString()}
+                      </span>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-[10px] px-1 ${
+                          entry.action === 'error' 
+                            ? 'border-destructive text-destructive' 
+                            : entry.action === 'create' 
+                              ? 'border-green-500 text-green-600' 
+                              : entry.action === 'delete' 
+                                ? 'border-destructive text-destructive'
+                                : entry.action === 'update'
+                                  ? 'border-amber-500 text-amber-600'
+                                  : ''
+                        }`}
+                      >
+                        {entry.action}
+                      </Badge>
+                      <span className="text-muted-foreground">[{entry.entity}]</span>
+                      {entry.entityName && <span className="font-medium">{entry.entityName}:</span>}
+                      <span className="flex-1">{entry.details}</span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CollapsibleContent>
+          </Collapsible>
         )}
 
         {/* Help Text */}
