@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
 import { SheetImport } from "@/components/loadprofiles/SheetImport";
 import { MeterReimportDialog } from "@/components/loadprofiles/MeterReimportDialog";
+import { ColumnSelectionDialog } from "@/components/loadprofiles/ColumnSelectionDialog";
 
 interface Site {
   id: string;
@@ -51,6 +52,8 @@ export function SitesTab() {
   const [reprocessingMeterId, setReprocessingMeterId] = useState<string | null>(null);
   const [selectedMeterIds, setSelectedMeterIds] = useState<Set<string>>(new Set());
   const [reimportMeter, setReimportMeter] = useState<Meter | null>(null);
+  const [columnSelectionMeter, setColumnSelectionMeter] = useState<Meter | null>(null);
+  const [columnSelectionCsvContent, setColumnSelectionCsvContent] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     site_type: "",
@@ -275,9 +278,52 @@ export function SitesTab() {
     }
   };
 
-  // Reprocess a single meter - clears processed status and reprocesses
+  // Open column selection dialog for reprocessing a meter
   const handleReprocessMeter = async (meter: Meter) => {
-    setReprocessingMeterId(meter.id);
+    try {
+      // Fetch the raw data to extract CSV content for column detection
+      const { data: meterData, error: fetchError } = await supabase
+        .from("scada_imports")
+        .select("raw_data")
+        .eq("id", meter.id)
+        .single();
+      
+      if (fetchError || !meterData?.raw_data) {
+        toast.error("No raw data available to reprocess");
+        return;
+      }
+      
+      // Extract CSV content
+      const rawData = meterData.raw_data as unknown;
+      let csvContent: string | null = null;
+      
+      if (Array.isArray(rawData) && rawData.length > 0) {
+        const firstItem = rawData[0] as { csvContent?: string };
+        if (firstItem && 'csvContent' in firstItem) {
+          csvContent = firstItem.csvContent || null;
+        }
+      }
+      
+      if (!csvContent) {
+        // No CSV content, process directly with default column
+        await processWithColumn(meter, null);
+        return;
+      }
+      
+      // Open the column selection dialog
+      setColumnSelectionMeter(meter);
+      setColumnSelectionCsvContent(csvContent);
+    } catch (error) {
+      console.error("Error preparing reprocess:", error);
+      toast.error("Failed to load meter data for reprocessing");
+    }
+  };
+
+  // Process meter with a specific selected column
+  const handleColumnSelected = async (selectedColumn: string) => {
+    if (!columnSelectionMeter) return;
+    
+    setReprocessingMeterId(columnSelectionMeter.id);
     try {
       // Clear the processed status first
       await supabase
@@ -289,19 +335,158 @@ export function SitesTab() {
           weekday_days: null,
           weekend_days: null
         })
-        .eq("id", meter.id);
+        .eq("id", columnSelectionMeter.id);
       
-      // Now process it
-      await processMeter(meter);
+      // Now process it with the selected column
+      await processWithColumn(columnSelectionMeter, selectedColumn);
       
       queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
       queryClient.invalidateQueries({ queryKey: ["sites"] });
-      toast.success("Meter reprocessed successfully");
+      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+      toast.success(`Meter reprocessed using column: ${selectedColumn}`);
     } catch (error) {
       console.error("Reprocess failed:", error);
       toast.error("Failed to reprocess meter");
     } finally {
       setReprocessingMeterId(null);
+      setColumnSelectionMeter(null);
+      setColumnSelectionCsvContent(null);
+    }
+  };
+
+  // Process meter with optional column selection
+  const processWithColumn = async (meter: Meter, selectedColumn: string | null) => {
+    setProcessingMeterId(meter.id);
+
+    try {
+      console.log("Processing meter:", meter.id, meter.shop_name, "with column:", selectedColumn);
+      
+      // Fetch fresh raw_data directly from the database
+      const { data: meterData, error: fetchError } = await supabase
+        .from("scada_imports")
+        .select("raw_data")
+        .eq("id", meter.id)
+        .single();
+
+      console.log("Fetch result:", { hasData: !!meterData, error: fetchError?.message });
+
+      if (fetchError) {
+        toast.error(`Failed to fetch data: ${fetchError.message}`);
+        setProcessingMeterId(null);
+        return;
+      }
+
+      if (!meterData?.raw_data) {
+        toast.error("No raw data available to process");
+        setProcessingMeterId(null);
+        return;
+      }
+
+      // Handle both formats: {csvContent: string} OR pre-parsed data points
+      let rawDataArray: Array<{ date?: string; time?: string; timestamp?: string; value?: number }>;
+      
+      const rawData = meterData.raw_data as unknown;
+      if (Array.isArray(rawData) && rawData.length === 1 && typeof rawData[0] === 'object' && 'csvContent' in (rawData[0] as object)) {
+        // CSV content stored - need to parse it with selected column
+        console.log("Parsing CSV content from raw_data with selected column:", selectedColumn);
+        const csvContent = (rawData[0] as { csvContent: string }).csvContent;
+        rawDataArray = parseCsvContentWithColumn(csvContent, selectedColumn);
+        console.log(`Parsed ${rawDataArray.length} data points from CSV using column: ${selectedColumn || 'auto'}`);
+      } else if (Array.isArray(rawData)) {
+        // Already parsed data points
+        rawDataArray = rawData as Array<{ date?: string; time?: string; timestamp?: string; value?: number }>;
+      } else {
+        toast.error("Invalid raw data format");
+        setProcessingMeterId(null);
+        return;
+      }
+
+      if (rawDataArray.length === 0) {
+        toast.error("No data points could be parsed from the file");
+        setProcessingMeterId(null);
+        return;
+      }
+
+      // Process the data points to calculate hourly profiles
+      const weekdayHours: number[][] = Array.from({ length: 24 }, () => []);
+      const weekendHours: number[][] = Array.from({ length: 24 }, () => []);
+      const weekdayDates = new Set<string>();
+      const weekendDates = new Set<string>();
+      let minDate: string | null = null;
+      let maxDate: string | null = null;
+
+      for (const point of rawDataArray) {
+        const dateStr = point.date || (point.timestamp ? point.timestamp.split("T")[0] : null);
+        const timeStr = point.time || (point.timestamp ? point.timestamp.split("T")[1]?.substring(0, 8) : null);
+        const value = typeof point.value === "number" ? point.value : parseFloat(String(point.value));
+
+        if (!dateStr || !timeStr || isNaN(value)) continue;
+
+        // Track date range
+        if (!minDate || dateStr < minDate) minDate = dateStr;
+        if (!maxDate || dateStr > maxDate) maxDate = dateStr;
+
+        // Parse hour from time
+        const hour = parseInt(timeStr.split(":")[0], 10);
+        if (isNaN(hour) || hour < 0 || hour > 23) continue;
+
+        // Determine day of week
+        const date = new Date(dateStr);
+        const dayOfWeek = date.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+        if (isWeekend) {
+          weekendHours[hour].push(value);
+          weekendDates.add(dateStr);
+        } else {
+          weekdayHours[hour].push(value);
+          weekdayDates.add(dateStr);
+        }
+      }
+
+      // Calculate average for each hour and normalize
+      const weekdayAvg = weekdayHours.map((vals) =>
+        vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+      );
+      const weekendAvg = weekendHours.map((vals) =>
+        vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+      );
+
+      // Normalize to percentages (sum to 100)
+      const weekdaySum = weekdayAvg.reduce((a, b) => a + b, 0);
+      const weekendSum = weekendAvg.reduce((a, b) => a + b, 0);
+
+      const weekdayProfile = weekdaySum > 0
+        ? weekdayAvg.map((v) => Math.round((v / weekdaySum) * 100 * 100) / 100)
+        : weekdayAvg;
+      const weekendProfile = weekendSum > 0
+        ? weekendAvg.map((v) => Math.round((v / weekendSum) * 100 * 100) / 100)
+        : weekendAvg;
+
+      // Update the meter with processed data
+      const { error: updateError } = await supabase
+        .from("scada_imports")
+        .update({
+          load_profile_weekday: weekdayProfile,
+          load_profile_weekend: weekendProfile,
+          date_range_start: minDate,
+          date_range_end: maxDate,
+          weekday_days: weekdayDates.size,
+          weekend_days: weekendDates.size,
+          data_points: rawDataArray.length,
+          processed_at: new Date().toISOString(),
+        })
+        .eq("id", meter.id);
+
+      if (updateError) throw updateError;
+
+      toast.success(`Processed ${meter.shop_name || meter.site_name} (${rawDataArray.length} readings)`);
+      queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
+      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to process meter");
+    } finally {
+      setProcessingMeterId(null);
     }
   };
 
@@ -432,138 +617,147 @@ export function SitesTab() {
     return dataPoints;
   };
 
-  const processMeter = async (meter: Meter) => {
-    setProcessingMeterId(meter.id);
-
-    try {
-      console.log("Processing meter:", meter.id, meter.shop_name);
+  // Parse CSV content with a specific column selection
+  const parseCsvContentWithColumn = (csvContent: string, selectedColumn: string | null): Array<{ date: string; time: string; value: number }> => {
+    // Split by newlines and filter empty lines, also handle \r\n
+    let lines = csvContent.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return [];
+    
+    // Skip Excel separator directive lines like "sep=,"
+    let headerIndex = 0;
+    while (headerIndex < lines.length && (
+      lines[headerIndex].toLowerCase().startsWith('sep=') || 
+      !lines[headerIndex].includes(',') && !lines[headerIndex].includes('\t') && !lines[headerIndex].includes(';')
+    )) {
+      headerIndex++;
+    }
+    
+    if (headerIndex >= lines.length) return [];
+    
+    // Detect separator from header line
+    const headerLine = lines[headerIndex];
+    let separator = ',';
+    if (headerLine.includes('\t')) separator = '\t';
+    else if (headerLine.includes(';') && !headerLine.includes(',')) separator = ';';
+    
+    // Parse header to find columns
+    const headers = headerLine.split(separator).map(h => h.trim().replace(/['"]/g, ''));
+    const headersLower = headers.map(h => h.toLowerCase());
+    console.log("CSV Headers detected:", headers, "selected column:", selectedColumn);
+    
+    // Find date, time, and value columns
+    let dateCol = -1, timeCol = -1, valueCol = -1;
+    
+    headersLower.forEach((h, i) => {
+      if (dateCol === -1 && (h.includes('date') || h.includes('datum') || h.includes('datetime'))) dateCol = i;
+      if (timeCol === -1 && (h.includes('time') && !h.includes('datetime') || h.includes('tyd') || h === 'hour')) timeCol = i;
+    });
+    
+    // Use selected column if provided, otherwise auto-detect
+    if (selectedColumn) {
+      const selectedIdx = headers.findIndex(h => h === selectedColumn);
+      if (selectedIdx >= 0) {
+        valueCol = selectedIdx;
+        console.log(`Using selected column "${selectedColumn}" at index ${valueCol}`);
+      }
+    }
+    
+    // If no selected column or not found, fallback to auto-detection
+    if (valueCol === -1) {
+      headersLower.forEach((h, i) => {
+        if (valueCol === -1 && (h.includes('kwh') || h.includes('kw') || h.includes('value') || h.includes('energy'))) valueCol = i;
+      });
       
-      // Fetch fresh raw_data directly from the database
-      const { data: meterData, error: fetchError } = await supabase
-        .from("scada_imports")
-        .select("raw_data")
-        .eq("id", meter.id)
-        .single();
-
-      console.log("Fetch result:", { hasData: !!meterData, error: fetchError?.message });
-
-      if (fetchError) {
-        toast.error(`Failed to fetch data: ${fetchError.message}`);
-        setProcessingMeterId(null);
-        return;
-      }
-
-      if (!meterData?.raw_data) {
-        toast.error("No raw data available to process");
-        setProcessingMeterId(null);
-        return;
-      }
-
-      // Handle both formats: {csvContent: string} OR pre-parsed data points
-      let rawDataArray: Array<{ date?: string; time?: string; timestamp?: string; value?: number }>;
-      
-      const rawData = meterData.raw_data as unknown;
-      if (Array.isArray(rawData) && rawData.length === 1 && typeof rawData[0] === 'object' && 'csvContent' in (rawData[0] as object)) {
-        // CSV content stored - need to parse it
-        console.log("Parsing CSV content from raw_data...");
-        const csvContent = (rawData[0] as { csvContent: string }).csvContent;
-        rawDataArray = parseCsvContent(csvContent);
-        console.log(`Parsed ${rawDataArray.length} data points from CSV`);
-      } else if (Array.isArray(rawData)) {
-        // Already parsed data points
-        rawDataArray = rawData as Array<{ date?: string; time?: string; timestamp?: string; value?: number }>;
-      } else {
-        toast.error("Invalid raw data format");
-        setProcessingMeterId(null);
-        return;
-      }
-
-      if (rawDataArray.length === 0) {
-        toast.error("No data points could be parsed from the file");
-        setProcessingMeterId(null);
-        return;
-      }
-
-      // Process the data points to calculate hourly profiles
-      const weekdayHours: number[][] = Array.from({ length: 24 }, () => []);
-      const weekendHours: number[][] = Array.from({ length: 24 }, () => []);
-      const weekdayDates = new Set<string>();
-      const weekendDates = new Set<string>();
-      let minDate: string | null = null;
-      let maxDate: string | null = null;
-
-      for (const point of rawDataArray) {
-        const dateStr = point.date || (point.timestamp ? point.timestamp.split("T")[0] : null);
-        const timeStr = point.time || (point.timestamp ? point.timestamp.split("T")[1]?.substring(0, 8) : null);
-        const value = typeof point.value === "number" ? point.value : parseFloat(String(point.value));
-
-        if (!dateStr || !timeStr || isNaN(value)) continue;
-
-        // Track date range
-        if (!minDate || dateStr < minDate) minDate = dateStr;
-        if (!maxDate || dateStr > maxDate) maxDate = dateStr;
-
-        // Parse hour from time
-        const hour = parseInt(timeStr.split(":")[0], 10);
-        if (isNaN(hour) || hour < 0 || hour > 23) continue;
-
-        // Determine day of week
-        const date = new Date(dateStr);
-        const dayOfWeek = date.getDay();
-        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
-        if (isWeekend) {
-          weekendHours[hour].push(value);
-          weekendDates.add(dateStr);
-        } else {
-          weekdayHours[hour].push(value);
-          weekdayDates.add(dateStr);
+      // If still not found, find first numeric column
+      if (valueCol === -1) {
+        const dataLines = lines.slice(headerIndex + 1);
+        for (let lineIdx = 0; lineIdx < Math.min(5, dataLines.length); lineIdx++) {
+          const sampleRow = dataLines[lineIdx]?.split(separator) || [];
+          for (let i = 0; i < sampleRow.length; i++) {
+            if (i === dateCol || i === timeCol) continue;
+            const val = sampleRow[i]?.trim().replace(/['"]/g, '');
+            if (val && !isNaN(parseFloat(val)) && parseFloat(val) !== 0) {
+              valueCol = i;
+              break;
+            }
+          }
+          if (valueCol !== -1) break;
+        }
+        if (valueCol === -1 && headers.length > 1) {
+          valueCol = dateCol === 0 ? 1 : 0;
         }
       }
-
-      // Calculate average for each hour and normalize
-      const weekdayAvg = weekdayHours.map((vals) =>
-        vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
-      );
-      const weekendAvg = weekendHours.map((vals) =>
-        vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
-      );
-
-      // Normalize to percentages (sum to 100)
-      const weekdaySum = weekdayAvg.reduce((a, b) => a + b, 0);
-      const weekendSum = weekendAvg.reduce((a, b) => a + b, 0);
-
-      const weekdayProfile = weekdaySum > 0
-        ? weekdayAvg.map((v) => Math.round((v / weekdaySum) * 100 * 100) / 100)
-        : weekdayAvg;
-      const weekendProfile = weekendSum > 0
-        ? weekendAvg.map((v) => Math.round((v / weekendSum) * 100 * 100) / 100)
-        : weekendAvg;
-
-      // Update the meter with processed data
-      const { error: updateError } = await supabase
-        .from("scada_imports")
-        .update({
-          load_profile_weekday: weekdayProfile,
-          load_profile_weekend: weekendProfile,
-          date_range_start: minDate,
-          date_range_end: maxDate,
-          weekday_days: weekdayDates.size,
-          weekend_days: weekendDates.size,
-          data_points: rawDataArray.length,
-        })
-        .eq("id", meter.id);
-
-      if (updateError) throw updateError;
-
-      toast.success(`Processed ${meter.shop_name || meter.site_name} (${rawDataArray.length} readings)`);
-      queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
-      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to process meter");
-    } finally {
-      setProcessingMeterId(null);
     }
+    
+    // If date not found, try first column
+    if (dateCol === -1) dateCol = 0;
+    
+    console.log("Column mapping: date=", dateCol, "time=", timeCol, "value=", valueCol, "(", headers[valueCol], ")");
+    
+    const dataPoints: Array<{ date: string; time: string; value: number }> = [];
+    
+    for (let i = headerIndex + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const cols = line.split(separator).map(c => c.trim().replace(/['"]/g, ''));
+      
+      let dateStr = cols[dateCol] || '';
+      let timeStr = timeCol >= 0 ? (cols[timeCol] || '') : '';
+      const valueStr = valueCol >= 0 ? (cols[valueCol] || '0') : '0';
+      
+      // Handle combined datetime in date column
+      if (!timeStr && dateStr.includes(' ')) {
+        const spaceIdx = dateStr.indexOf(' ');
+        const potentialTime = dateStr.substring(spaceIdx + 1);
+        if (potentialTime.includes(':')) {
+          timeStr = potentialTime;
+          dateStr = dateStr.substring(0, spaceIdx);
+        }
+      }
+      // Handle ISO format with T separator
+      if (!timeStr && dateStr.includes('T')) {
+        const parts = dateStr.split('T');
+        dateStr = parts[0];
+        timeStr = parts[1]?.split(/[Z+]/)[0] || '';
+      }
+      
+      // Parse value
+      const value = parseFloat(valueStr.replace(/,/g, ''));
+      if (isNaN(value)) continue;
+      
+      // Normalize date format (DD/MM/YYYY to YYYY-MM-DD)
+      let normalizedDate = dateStr;
+      
+      const ddmmyyyy = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (ddmmyyyy) {
+        normalizedDate = `${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`;
+      }
+      const yyyymmdd = dateStr.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+      if (yyyymmdd) {
+        normalizedDate = `${yyyymmdd[1]}-${yyyymmdd[2].padStart(2, '0')}-${yyyymmdd[3].padStart(2, '0')}`;
+      }
+      
+      // Normalize time format (extract HH:MM:SS)
+      let normalizedTime = '00:00:00';
+      const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (timeMatch) {
+        const h = timeMatch[1].padStart(2, '0');
+        const m = timeMatch[2].padStart(2, '0');
+        const s = (timeMatch[3] || '00').padStart(2, '0');
+        normalizedTime = `${h}:${m}:${s}`;
+      }
+      
+      dataPoints.push({ date: normalizedDate, time: normalizedTime, value });
+    }
+    
+    console.log(`Parsed ${dataPoints.length} data points using column "${selectedColumn || 'auto'}"`);
+    return dataPoints;
+  };
+
+  const processMeter = async (meter: Meter) => {
+    // For initial processing, use auto-detection (null column)
+    await processWithColumn(meter, null);
   };
 
   const isProcessed = (meter: Meter) => {
@@ -859,6 +1053,19 @@ export function SitesTab() {
           meterName={reimportMeter?.shop_name || reimportMeter?.site_name || ""}
           originalFileName={reimportMeter?.file_name || null}
           siteId={selectedSite?.id}
+        />
+
+        {/* Column Selection Dialog for Reprocessing */}
+        <ColumnSelectionDialog
+          isOpen={!!columnSelectionMeter}
+          onClose={() => {
+            setColumnSelectionMeter(null);
+            setColumnSelectionCsvContent(null);
+          }}
+          onConfirm={handleColumnSelected}
+          csvContent={columnSelectionCsvContent}
+          meterName={columnSelectionMeter?.shop_name || columnSelectionMeter?.site_name || ""}
+          isProcessing={reprocessingMeterId === columnSelectionMeter?.id}
         />
       </div>
     );
