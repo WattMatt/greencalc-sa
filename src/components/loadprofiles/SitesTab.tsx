@@ -903,7 +903,13 @@ export function SitesTab() {
   };
 
   const isProcessed = (meter: Meter) => {
-    // A meter is processed if it has valid load profiles (not all zeros)
+    // A meter is processed if it has:
+    // 1. Actual CSV data uploaded (data_points > 0) AND
+    // 2. Valid load profiles (not all zeros)
+    // "Listed only" meters may have placeholder profiles but no real data
+    const hasDataPoints = (meter.data_points || 0) > 0;
+    if (!hasDataPoints) return false;
+    
     const weekday = meter.load_profile_weekday || [];
     const weekend = meter.load_profile_weekend || [];
     const hasWeekdayData = weekday.some(v => v > 0);
@@ -1306,8 +1312,8 @@ export function SitesTab() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            {/* Configure button - for all meters with data */}
-                            {(meter.data_points || 0) > 0 && (
+                            {/* Configure button - for meters with CSV data */}
+                            {(meter.data_points || 0) > 0 ? (
                               <Button
                                 variant={!processed ? "default" : "ghost"}
                                 size="icon"
@@ -1320,6 +1326,16 @@ export function SitesTab() {
                                 ) : (
                                   <Settings className="h-4 w-4" />
                                 )}
+                              </Button>
+                            ) : (
+                              /* Upload button - for listed-only meters without CSV data */
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => setReimportMeter(meter)}
+                                title="Upload CSV data for this meter"
+                              >
+                                <Upload className="h-4 w-4" />
                               </Button>
                             )}
                             <Button
