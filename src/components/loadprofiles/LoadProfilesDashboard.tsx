@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Database, Activity, TrendingUp } from "lucide-react";
+import { Building2, Database, Activity, TrendingUp, CheckCircle2, FileText } from "lucide-react";
 
 interface DashboardProps {
   onNavigateToSites: () => void;
@@ -22,6 +22,8 @@ export function LoadProfilesDashboard({ onNavigateToSites, onNavigateToMeters }:
       const meters = metersRes.data || [];
       
       const assignedMeters = meters.filter(m => m.site_id);
+      const metersWithData = meters.filter(m => m.data_points && m.data_points > 0);
+      const metersListedOnly = meters.filter(m => !m.data_points || m.data_points === 0);
       const totalDataPoints = meters.reduce((sum, m) => sum + (m.data_points || 0), 0);
       
       // Calculate date coverage
@@ -42,6 +44,8 @@ export function LoadProfilesDashboard({ onNavigateToSites, onNavigateToMeters }:
       return {
         siteCount: sites.length,
         meterCount: meters.length,
+        metersWithData: metersWithData.length,
+        metersListedOnly: metersListedOnly.length,
         assignedMeterCount: assignedMeters.length,
         unassignedMeterCount: meters.length - assignedMeters.length,
         totalDataPoints,
@@ -96,9 +100,16 @@ export function LoadProfilesDashboard({ onNavigateToSites, onNavigateToMeters }:
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.meterCount || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats?.assignedMeterCount || 0} assigned to sites
-            </p>
+            <div className="flex items-center gap-3 text-xs mt-1">
+              <span className="flex items-center gap-1 text-green-600">
+                <CheckCircle2 className="h-3 w-3" />
+                {stats?.metersWithData || 0} with data
+              </span>
+              <span className="flex items-center gap-1 text-amber-600">
+                <FileText className="h-3 w-3" />
+                {stats?.metersListedOnly || 0} listed only
+              </span>
+            </div>
           </CardContent>
         </Card>
 
