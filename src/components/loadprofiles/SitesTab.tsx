@@ -85,7 +85,8 @@ export function SitesTab() {
         .from("scada_imports")
         .select("site_id, data_points, load_profile_weekday");
 
-      // Track total meters and those with actual data (either data_points > 0 OR has processed load profile)
+      // Track total meters and those with actual CSV data imported (data_points > 0)
+      // Note: load_profile_weekday may contain estimated profiles for "listed only" meters
       const meterStats: Record<string, { total: number; withData: number }> = {};
       
       (meters || []).forEach(m => {
@@ -95,15 +96,11 @@ export function SitesTab() {
           }
           meterStats[m.site_id].total += 1;
           
-          // Has data if data_points > 0 OR has a non-empty load profile (processed)
-          const profileArray = m.load_profile_weekday;
-          const hasValidProfile = profileArray && 
-            Array.isArray(profileArray) && 
-            profileArray.length > 0 &&
-            profileArray.some((v: number) => v > 0);
+          // "With Data" means actual raw CSV data was imported (data_points > 0)
+          // "Listed Only" means meter was listed but no CSV data uploaded yet
           const hasDataPoints = m.data_points && m.data_points > 0;
           
-          if (hasDataPoints || hasValidProfile) {
+          if (hasDataPoints) {
             meterStats[m.site_id].withData += 1;
           }
         }
