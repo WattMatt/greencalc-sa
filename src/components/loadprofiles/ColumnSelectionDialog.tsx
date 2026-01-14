@@ -199,7 +199,7 @@ export function ColumnSelectionDialog({
             </div>
           ) : (
             <>
-              <ScrollArea className="max-h-[300px] pr-4">
+              <div className="max-h-[280px] overflow-y-auto border rounded-md p-2 space-y-2">
                 <RadioGroup
                   value={selectedColumn}
                   onValueChange={setSelectedColumn}
@@ -244,7 +244,11 @@ export function ColumnSelectionDialog({
                     </Card>
                   ))}
                 </RadioGroup>
-              </ScrollArea>
+              </div>
+              
+              <div className="text-xs text-muted-foreground">
+                {columnInfo.valueColumns.length} columns available
+              </div>
               
               {/* Unit Selection */}
               <div className="space-y-2">
