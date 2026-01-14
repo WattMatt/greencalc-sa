@@ -1067,10 +1067,21 @@ export function SitesTab() {
   };
 
   // Process All handler using wizard
+  // Only include meters that have actual CSV data (data_points > 0) and aren't processed yet
   const handleProcessAllWithWizard = () => {
-    const unprocessed = siteMeters?.filter(m => !isProcessed(m)) || [];
+    // Filter to meters that have data_points (CSV uploaded) but aren't processed yet
+    const unprocessed = siteMeters?.filter(m => {
+      const hasDataPoints = m.data_points && m.data_points > 0;
+      return hasDataPoints && !isProcessed(m);
+    }) || [];
+    
     if (unprocessed.length === 0) {
-      toast.info("All meters already processed");
+      const listedOnly = siteMeters?.filter(m => !m.data_points || m.data_points === 0) || [];
+      if (listedOnly.length > 0) {
+        toast.info(`All meters with data are processed. ${listedOnly.length} meters are listed only (no CSV uploaded).`);
+      } else {
+        toast.info("All meters already processed");
+      }
       return;
     }
     toast.info(`Starting column configuration for ${unprocessed.length} meters...`);
@@ -1116,7 +1127,10 @@ export function SitesTab() {
   // Show site meters view when a site is selected
   if (selectedSite) {
     const processedCount = siteMeters?.filter(m => isProcessed(m)).length || 0;
-    const unprocessedCount = (siteMeters?.length || 0) - processedCount;
+    // Only count meters with actual CSV data (data_points > 0) that need processing
+    const metersWithData = siteMeters?.filter(m => m.data_points && m.data_points > 0) || [];
+    const unprocessedCount = metersWithData.filter(m => !isProcessed(m)).length;
+    const listedOnlyCount = (siteMeters?.length || 0) - metersWithData.length;
 
     return (
       <div className="space-y-6">
@@ -1152,9 +1166,12 @@ export function SitesTab() {
                   Uploaded Meters
                 </CardTitle>
                 <CardDescription>
-                  {siteMeters?.length || 0} meter{(siteMeters?.length || 0) !== 1 ? "s" : ""} uploaded
+                  {siteMeters?.length || 0} meter{(siteMeters?.length || 0) !== 1 ? "s" : ""}
+                  {listedOnlyCount > 0 && (
+                    <span className="ml-2 text-amber-600">• {listedOnlyCount} listed only</span>
+                  )}
                   {unprocessedCount > 0 && (
-                    <span className="ml-2 text-orange-600">• {unprocessedCount} need processing</span>
+                    <span className="ml-2 text-orange-600">• {unprocessedCount} with data need processing</span>
                   )}
                 </CardDescription>
               </div>
