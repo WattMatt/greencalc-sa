@@ -208,7 +208,8 @@ export function MeterAnalysis({ siteId }: MeterAnalysisProps) {
   const [timeFrom, setTimeFrom] = useState<string>("00:00");
   const [timeTo, setTimeTo] = useState<string>("23:59");
   const [aggregationPeriod, setAggregationPeriod] = useState<AggregationPeriod>("daily");
-  const [aggregationOperation, setAggregationOperation] = useState<AggregationOperation>("sum");
+  // Default to average for power readings - sum doesn't make sense for kW
+  const [aggregationOperation, setAggregationOperation] = useState<AggregationOperation>("average");
   const [yAxisMin, setYAxisMin] = useState<string>("");
   const [yAxisMax, setYAxisMax] = useState<string>("");
   const [dataLoaded, setDataLoaded] = useState(false);
