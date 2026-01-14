@@ -27,6 +27,7 @@ interface PendingFile {
   processedProfile?: ProcessedLoadProfile;
   parsedHeaders?: string[];
   parsedRows?: string[][];
+  isConfigured: boolean; // Track if user has explicitly configured this file
 }
 
 interface ExistingMeter {
@@ -277,75 +278,46 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
     };
   }, []);
 
+  // Track which file is being configured in the wizard
+  const [configuringFileId, setConfiguringFileId] = useState<string | null>(null);
+
   const handleFilesUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
 
-    // For single file, open the wizard for fine-tuning
-    if (files.length === 1) {
-      const file = files[0];
+    // For all files (single or multiple), add them to pending list requiring configuration
+    Array.from(files).forEach((file) => {
       const reader = new FileReader();
       reader.onload = (event) => {
         const content = event.target?.result as string;
-        setWizardFile({ name: file.name, content });
-        setWizardOpen(true);
+        const rowCount = content.split('\n').filter(l => l.trim()).length;
+        const match = findBestMatch(file.name, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
+        
+        const newFileId = crypto.randomUUID();
+        const newFile: PendingFile = {
+          id: newFileId,
+          fileName: file.name,
+          content,
+          rowCount,
+          matchedMeterId: match?.meter.id,
+          matchType: match ? "auto" : "new",
+          isConfigured: false, // Require explicit configuration
+        };
+
+        setPendingFiles((prev) => [...prev, newFile]);
+        
+        // For single file upload, automatically open the wizard
+        if (files.length === 1) {
+          setConfiguringFileId(newFileId);
+          setWizardFile({ name: file.name, content });
+          setWizardOpen(true);
+        }
       };
       reader.readAsText(file);
-    } else {
-      // For multiple files, auto-parse each file
-      Array.from(files).forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const content = event.target?.result as string;
-          
-          try {
-            const { parseConfig, parsedData, processedProfile } = autoParseCSV(content, file.name);
-            const match = findBestMatch(parsedData.meterName || file.name, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
-
-            const newFile: PendingFile = {
-              id: crypto.randomUUID(),
-              fileName: file.name,
-              content,
-              rowCount: parsedData.rows.length,
-              matchedMeterId: match?.meter.id,
-              matchType: match ? "auto" : "new",
-              parseConfig,
-              meterName: parsedData.meterName,
-              dateRange: parsedData.dateRange,
-              processedProfile,
-              parsedHeaders: parsedData.headers,
-              parsedRows: parsedData.rows,
-            };
-
-            setPendingFiles((prev) => [...prev, newFile]);
-            
-            if (processedProfile.dataPoints > 0) {
-              console.log(`Auto-parsed ${file.name}: ${processedProfile.dataPoints} data points, peak ${processedProfile.peakKw} kW`);
-            } else {
-              console.warn(`Warning: ${file.name} parsed but produced no data points - may need manual configuration`);
-            }
-          } catch (err) {
-            console.error(`Failed to auto-parse ${file.name}:`, err);
-            // Still add the file, but without processed data - user can use wizard
-            const rowCount = content.split('\n').filter(l => l.trim()).length;
-            const match = findBestMatch(file.name, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
-            
-            setPendingFiles((prev) => [...prev, {
-              id: crypto.randomUUID(),
-              fileName: file.name,
-              content,
-              rowCount,
-              matchedMeterId: match?.meter.id,
-              matchType: match ? "auto" : "new",
-            }]);
-          }
-        };
-        reader.readAsText(file);
-      });
-    }
+    });
 
     e.target.value = "";
-  }, [unassignedMeters, usedMeterIds, autoParseCSV]);
+  }, [unassignedMeters, usedMeterIds]);
 
   const handleWizardProcess = useCallback((config: WizardParseConfig, parsedData: { headers: string[]; rows: string[][]; meterName?: string; dateRange?: { start: string; end: string } }) => {
     if (!wizardFile) return;
@@ -354,42 +326,65 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
     
     try {
       const meterName = parsedData.meterName || wizardFile.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
-      const match = findBestMatch(meterName, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
-
+      
       // Process CSV data into load profiles
       const processedProfile = processCSVToLoadProfile(parsedData.headers, parsedData.rows, config);
 
-      const newFile: PendingFile = {
-        id: crypto.randomUUID(),
-        fileName: wizardFile.name,
-        content: wizardFile.content,
-        rowCount: parsedData.rows.length,
-        matchedMeterId: match?.meter.id,
-        matchType: match ? "auto" : "new",
-        parseConfig: config,
-        meterName: parsedData.meterName,
-        dateRange: parsedData.dateRange,
-        processedProfile,
-        parsedHeaders: parsedData.headers,
-        parsedRows: parsedData.rows,
-      };
+      if (configuringFileId) {
+        // Update existing pending file
+        setPendingFiles((prev) => prev.map((f) => 
+          f.id === configuringFileId ? {
+            ...f,
+            parseConfig: config,
+            meterName: parsedData.meterName || f.meterName,
+            dateRange: parsedData.dateRange || f.dateRange,
+            processedProfile,
+            parsedHeaders: parsedData.headers,
+            parsedRows: parsedData.rows,
+            rowCount: parsedData.rows.length,
+            isConfigured: true,
+          } : f
+        ));
+        setConfiguringFileId(null);
+      } else {
+        // Create new pending file (this shouldn't happen with the new flow, but keep for safety)
+        const match = findBestMatch(meterName, unassignedMeters.filter(m => !usedMeterIds.has(m.id)));
+        
+        const newFile: PendingFile = {
+          id: crypto.randomUUID(),
+          fileName: wizardFile.name,
+          content: wizardFile.content,
+          rowCount: parsedData.rows.length,
+          matchedMeterId: match?.meter.id,
+          matchType: match ? "auto" : "new",
+          parseConfig: config,
+          meterName: parsedData.meterName,
+          dateRange: parsedData.dateRange,
+          processedProfile,
+          parsedHeaders: parsedData.headers,
+          parsedRows: parsedData.rows,
+          isConfigured: true,
+        };
 
-      setPendingFiles((prev) => [...prev, newFile]);
+        setPendingFiles((prev) => [...prev, newFile]);
+      }
+      
       setWizardOpen(false);
       setWizardFile(null);
       
       const profileSummary = processedProfile.dataPoints > 0 
         ? ` (Peak: ${processedProfile.peakKw} kW, ${processedProfile.weekdayDays} weekdays, ${processedProfile.weekendDays} weekend days)`
         : "";
-      toast.success(`Parsed "${meterName}" with ${parsedData.rows.length} data rows${profileSummary}`);
+      toast.success(`Configured "${meterName}" with ${parsedData.rows.length} data rows${profileSummary}`);
     } finally {
       setIsProcessingWizard(false);
     }
-  }, [wizardFile, unassignedMeters, usedMeterIds]);
+  }, [wizardFile, unassignedMeters, usedMeterIds, configuringFileId]);
 
   const openWizardForFile = (fileId: string) => {
     const file = pendingFiles.find(f => f.id === fileId);
     if (file) {
+      setConfiguringFileId(fileId);
       setWizardFile({ name: file.fileName, content: file.content });
       setWizardOpen(true);
     }
@@ -439,6 +434,13 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
     
     if (filesToSave.length === 0) {
       toast.error("No files selected");
+      return;
+    }
+
+    // Check if all selected files are configured
+    const unconfiguredFiles = filesToSave.filter(f => !f.isConfigured);
+    if (unconfiguredFiles.length > 0) {
+      toast.error(`${unconfiguredFiles.length} file(s) need column configuration before saving. Click the ⚙ icon to configure.`);
       return;
     }
 
@@ -589,10 +591,22 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <span className="text-sm text-muted-foreground">
-                    {pendingFiles.length} file{pendingFiles.length !== 1 ? "s" : ""} ready
+                    {pendingFiles.length} file{pendingFiles.length !== 1 ? "s" : ""} uploaded
                   </span>
-                  {matchedCount > 0 && (
+                  {pendingFiles.filter(f => f.isConfigured).length > 0 && (
                     <Badge variant="default" className="gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      {pendingFiles.filter(f => f.isConfigured).length} configured
+                    </Badge>
+                  )}
+                  {pendingFiles.filter(f => !f.isConfigured).length > 0 && (
+                    <Badge variant="destructive" className="gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {pendingFiles.filter(f => !f.isConfigured).length} need configuration
+                    </Badge>
+                  )}
+                  {matchedCount > 0 && (
+                    <Badge variant="outline" className="gap-1">
                       <Link2 className="h-3 w-3" />
                       {matchedCount} matched
                     </Badge>
@@ -603,7 +617,7 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                 </div>
                 <Button
                   onClick={saveSelectedFiles}
-                  disabled={isSaving || selectedCount === 0}
+                  disabled={isSaving || selectedCount === 0 || pendingFiles.filter(f => selectedIds.has(f.id) && !f.isConfigured).length > 0}
                 >
                   {isSaving ? (
                     <>
@@ -651,8 +665,16 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                           <FileText className="h-4 w-4 text-muted-foreground" />
                           <div>
                             <span className="font-medium">{file.fileName}</span>
-                            {file.parseConfig?.detectedFormat === "pnp-scada" && (
-                              <Badge variant="secondary" className="ml-2 text-xs">SCADA</Badge>
+                            {file.isConfigured ? (
+                              <Badge variant="secondary" className="ml-2 text-xs">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Configured
+                              </Badge>
+                            ) : (
+                              <Badge variant="destructive" className="ml-2 text-xs">
+                                <AlertCircle className="h-3 w-3 mr-1" />
+                                Needs Config
+                              </Badge>
                             )}
                           </div>
                         </div>
@@ -661,7 +683,7 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                         <Badge variant="outline">{file.rowCount.toLocaleString()}</Badge>
                       </TableCell>
                       <TableCell>
-                        {file.processedProfile && file.processedProfile.dataPoints > 0 ? (
+                        {file.isConfigured && file.processedProfile && file.processedProfile.dataPoints > 0 ? (
                           <div className="text-sm space-y-0.5">
                             <div className="flex items-center gap-2">
                               <span className="font-medium">{file.meterName || "-"}</span>
@@ -676,17 +698,19 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                               )}
                             </p>
                           </div>
-                        ) : file.meterName ? (
-                          <div className="text-sm">
-                            <span className="font-medium">{file.meterName}</span>
-                            {file.dateRange && (
-                              <p className="text-xs text-muted-foreground">
-                                {file.dateRange.start} → {file.dateRange.end}
-                              </p>
-                            )}
-                          </div>
+                        ) : !file.isConfigured ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openWizardForFile(file.id)}
+                            disabled={isSaving}
+                            className="gap-2"
+                          >
+                            <Settings2 className="h-4 w-4" />
+                            Configure Columns
+                          </Button>
                         ) : (
-                          <span className="text-muted-foreground text-xs">Not processed</span>
+                          <span className="text-muted-foreground text-xs">No data</span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -745,11 +769,11 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Button
-                            variant="ghost"
+                            variant={file.isConfigured ? "ghost" : "default"}
                             size="icon"
                             onClick={() => openWizardForFile(file.id)}
                             disabled={isSaving}
-                            title="Configure parsing"
+                            title={file.isConfigured ? "Reconfigure columns" : "Configure columns (required)"}
                           >
                             <Settings2 className="h-4 w-4" />
                           </Button>
@@ -778,6 +802,7 @@ export function BulkMeterImport({ siteId, onImportComplete }: BulkMeterImportPro
         onClose={() => {
           setWizardOpen(false);
           setWizardFile(null);
+          setConfiguringFileId(null);
         }}
         csvContent={wizardFile?.content || null}
         fileName={wizardFile?.name || ""}
