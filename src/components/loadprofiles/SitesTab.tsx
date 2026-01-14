@@ -23,6 +23,8 @@ interface Site {
   total_area_sqm: number | null;
   created_at: string;
   meter_count?: number;
+  meters_with_data?: number;
+  meters_listed_only?: number;
 }
 
 interface Meter {
@@ -65,18 +67,27 @@ export function SitesTab() {
 
       const { data: meters } = await supabase
         .from("scada_imports")
-        .select("site_id");
+        .select("site_id, data_points");
 
-      const meterCounts = (meters || []).reduce((acc, m) => {
+      // Track total meters and those with actual data
+      const meterStats = (meters || []).reduce((acc, m) => {
         if (m.site_id) {
-          acc[m.site_id] = (acc[m.site_id] || 0) + 1;
+          if (!acc[m.site_id]) {
+            acc[m.site_id] = { total: 0, withData: 0 };
+          }
+          acc[m.site_id].total += 1;
+          if (m.data_points && m.data_points > 0) {
+            acc[m.site_id].withData += 1;
+          }
         }
         return acc;
-      }, {} as Record<string, number>);
+      }, {} as Record<string, { total: number; withData: number }>);
 
       return (sitesData || []).map(site => ({
         ...site,
-        meter_count: meterCounts[site.id] || 0,
+        meter_count: meterStats[site.id]?.total || 0,
+        meters_with_data: meterStats[site.id]?.withData || 0,
+        meters_listed_only: (meterStats[site.id]?.total || 0) - (meterStats[site.id]?.withData || 0),
       })) as Site[];
     },
   });
@@ -703,8 +714,13 @@ export function SitesTab() {
                               <CheckCircle2 className="h-3 w-3 mr-1" />
                               Processed
                             </Badge>
-                          ) : (
+                          ) : (meter.data_points || 0) > 0 ? (
                             <Badge variant="secondary">Pending</Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-amber-500/50 text-amber-600">
+                              <FileText className="h-3 w-3 mr-1" />
+                              Listed Only
+                            </Badge>
                           )}
                         </TableCell>
                         <TableCell>
@@ -965,12 +981,25 @@ export function SitesTab() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
+                  {/* Meters with CSV data */}
                   <div className="flex items-center justify-between text-sm">
                     <span className="flex items-center gap-1 text-muted-foreground">
-                      <Database className="h-4 w-4" />
-                      Meters
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      With Data
                     </span>
-                    <Badge variant="secondary">{site.meter_count || 0}</Badge>
+                    <Badge variant="default" className={site.meters_with_data ? "bg-green-600" : "bg-muted text-muted-foreground"}>
+                      {site.meters_with_data || 0}
+                    </Badge>
+                  </div>
+                  {/* Meters listed only (no CSV) */}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <FileText className="h-4 w-4 text-amber-500" />
+                      Listed Only
+                    </span>
+                    <Badge variant="outline" className={site.meters_listed_only ? "border-amber-500/50 text-amber-600" : ""}>
+                      {site.meters_listed_only || 0}
+                    </Badge>
                   </div>
                   {site.location && (
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
