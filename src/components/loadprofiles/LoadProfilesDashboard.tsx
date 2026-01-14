@@ -15,17 +15,27 @@ export function LoadProfilesDashboard({ onNavigateToSites, onNavigateToMeters }:
     queryFn: async () => {
       const [sitesRes, metersRes] = await Promise.all([
         supabase.from("sites").select("id, name, total_area_sqm"),
-        supabase.from("scada_imports").select("id, site_id, data_points, date_range_start, date_range_end, processed_at"),
+        supabase.from("scada_imports").select("id, site_id, data_points, date_range_start, date_range_end, processed_at, load_profile_weekday"),
       ]);
 
       const sites = sitesRes.data || [];
       const meters = metersRes.data || [];
       
       const assignedMeters = meters.filter(m => m.site_id);
-      const processedMeters = meters.filter(m => m.processed_at);
-      const metersWithData = processedMeters.filter(m => m.data_points && m.data_points > 0);
-      const metersListedOnly = meters.filter(m => !m.processed_at);
-      const totalDataPoints = processedMeters.reduce((sum, m) => sum + (m.data_points || 0), 0);
+      
+      // Consistent logic: has data if data_points > 0 OR has a non-empty load profile with non-zero values
+      const metersWithData = meters.filter(m => {
+        const hasDataPoints = m.data_points && m.data_points > 0;
+        const profileArray = m.load_profile_weekday;
+        const hasValidProfile = profileArray && 
+          Array.isArray(profileArray) && 
+          profileArray.length > 0 &&
+          profileArray.some((v: number) => v > 0);
+        return hasDataPoints || hasValidProfile;
+      });
+      
+      const metersListedOnly = meters.length - metersWithData.length;
+      const totalDataPoints = meters.reduce((sum, m) => sum + (m.data_points || 0), 0);
       
       // Calculate date coverage
       const allDates = meters
@@ -46,7 +56,7 @@ export function LoadProfilesDashboard({ onNavigateToSites, onNavigateToMeters }:
         siteCount: sites.length,
         meterCount: meters.length,
         metersWithData: metersWithData.length,
-        metersListedOnly: metersListedOnly.length,
+        metersListedOnly,
         assignedMeterCount: assignedMeters.length,
         unassignedMeterCount: meters.length - assignedMeters.length,
         totalDataPoints,
