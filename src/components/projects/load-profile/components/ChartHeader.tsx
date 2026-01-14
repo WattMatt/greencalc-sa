@@ -9,6 +9,13 @@ import { DayOfWeek, DisplayUnit } from "../types";
 import { AccuracyBadge } from "@/components/simulation/AccuracyBadge";
 import { DateModeSelector, DateMode } from "./DateModeSelector";
 
+interface AvailableMonth {
+  value: string;
+  label: string;
+  daysWithData: number;
+  totalKwh: number;
+}
+
 interface ChartHeaderProps {
   selectedDay: DayOfWeek;
   isWeekend: boolean;
@@ -41,6 +48,11 @@ interface ChartHeaderProps {
   dateRangeStart: Date | null;
   dateRangeEnd: Date | null;
   hasRawData: boolean;
+  // Monthly mode props
+  selectedMonth?: string | null;
+  onMonthChange?: (month: string | null) => void;
+  availableMonths?: AvailableMonth[];
+  monthlyStats?: { totalKwh: number; peakKw: number; daysWithData: number } | null;
 }
 
 export function ChartHeader({
@@ -74,6 +86,10 @@ export function ChartHeader({
   dateRangeStart,
   dateRangeEnd,
   hasRawData,
+  selectedMonth,
+  onMonthChange,
+  availableMonths = [],
+  monthlyStats,
 }: ChartHeaderProps) {
   return (
     <div className="flex flex-col gap-3">
@@ -88,6 +104,9 @@ export function ChartHeader({
           startDate={dateRangeStart}
           endDate={dateRangeEnd}
           hasRawData={hasRawData}
+          selectedMonth={selectedMonth}
+          onMonthChange={onMonthChange}
+          availableMonths={availableMonths}
         />
         
         {/* Unit Toggle */}
@@ -119,6 +138,25 @@ export function ChartHeader({
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateDay("next")}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
+            </div>
+          )}
+
+          {/* Monthly stats info */}
+          {dateMode === "month" && selectedMonth && monthlyStats && (
+            <div className="flex items-center gap-3">
+              <div>
+                <span className="font-medium text-sm">
+                  {availableMonths.find(m => m.value === selectedMonth)?.label || selectedMonth}
+                </span>
+                <Badge variant="secondary" className="ml-2 text-[10px]">
+                  {monthlyStats.daysWithData} days
+                </Badge>
+              </div>
+              <div className="text-xs text-muted-foreground border-l pl-3">
+                <span className="font-medium text-foreground">{Math.round(monthlyStats.totalKwh).toLocaleString()}</span> kWh total
+                <span className="mx-2">·</span>
+                <span className="font-medium text-foreground">{Math.round(monthlyStats.peakKw)}</span> kW peak
+              </div>
             </div>
           )}
 

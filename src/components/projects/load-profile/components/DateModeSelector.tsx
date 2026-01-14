@@ -1,14 +1,22 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { CalendarIcon, BarChart3, Calendar } from "lucide-react";
+import { CalendarIcon, BarChart3, Calendar, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export type DateMode = "average" | "specific";
+export type DateMode = "average" | "specific" | "month";
+
+interface AvailableMonth {
+  value: string;
+  label: string;
+  daysWithData: number;
+  totalKwh: number;
+}
 
 interface DateModeSelectorProps {
   mode: DateMode;
@@ -19,6 +27,10 @@ interface DateModeSelectorProps {
   startDate: Date | null;
   endDate: Date | null;
   hasRawData: boolean;
+  // Monthly mode props
+  selectedMonth?: string | null;
+  onMonthChange?: (month: string | null) => void;
+  availableMonths?: AvailableMonth[];
 }
 
 export function DateModeSelector({
@@ -30,6 +42,9 @@ export function DateModeSelector({
   startDate,
   endDate,
   hasRawData,
+  selectedMonth,
+  onMonthChange,
+  availableMonths = [],
 }: DateModeSelectorProps) {
   const [calendarOpen, setCalendarOpen] = useState(false);
 
@@ -41,6 +56,8 @@ export function DateModeSelector({
   const isDateAvailable = (date: Date) => {
     return availableDateStrings.has(date.toISOString().split("T")[0]);
   };
+
+  const selectedMonthData = availableMonths.find((m) => m.value === selectedMonth);
 
   return (
     <div className="flex items-center gap-2">
@@ -59,16 +76,57 @@ export function DateModeSelector({
           Averaged
         </ToggleGroupItem>
         <ToggleGroupItem
+          value="month"
+          aria-label="Monthly data"
+          className="h-7 px-2 text-xs gap-1"
+          disabled={!hasRawData}
+        >
+          <CalendarDays className="h-3 w-3" />
+          Month
+        </ToggleGroupItem>
+        <ToggleGroupItem
           value="specific"
           aria-label="Specific date"
           className="h-7 px-2 text-xs gap-1"
           disabled={!hasRawData}
         >
           <Calendar className="h-3 w-3" />
-          Date
+          Day
         </ToggleGroupItem>
       </ToggleGroup>
 
+      {/* Month selector */}
+      {mode === "month" && hasRawData && availableMonths.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Select
+            value={selectedMonth || ""}
+            onValueChange={(value) => onMonthChange?.(value || null)}
+          >
+            <SelectTrigger className="h-7 w-[130px] text-xs">
+              <SelectValue placeholder="Select month" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableMonths.map((m) => (
+                <SelectItem key={m.value} value={m.value} className="text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>{m.label}</span>
+                    <Badge variant="secondary" className="text-[9px] px-1">
+                      {m.daysWithData}d
+                    </Badge>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedMonthData && (
+            <span className="text-[10px] text-muted-foreground">
+              {selectedMonthData.daysWithData} days · {Math.round(selectedMonthData.totalKwh).toLocaleString()} kWh
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Day selector */}
       {mode === "specific" && hasRawData && (
         <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
           <PopoverTrigger asChild>
@@ -113,7 +171,7 @@ export function DateModeSelector({
         </Popover>
       )}
 
-      {mode === "specific" && !hasRawData && (
+      {(mode === "specific" || mode === "month") && !hasRawData && (
         <span className="text-[10px] text-muted-foreground">
           No raw SCADA data available
         </span>

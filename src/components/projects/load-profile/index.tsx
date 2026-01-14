@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tenant, ShopType, DAYS_OF_WEEK, DayOfWeek, DisplayUnit, Annotation } from "./types";
 import { useLoadProfileData } from "./hooks/useLoadProfileData";
 import { useSpecificDateData } from "./hooks/useSpecificDateData";
+import { useMonthlyData } from "./hooks/useMonthlyData";
 import { useExportHandlers } from "./hooks/useExportHandlers";
 import { useSolcastPVProfile } from "./hooks/useSolcastPVProfile";
 import { LoadChart } from "./charts/LoadChart";
@@ -44,6 +45,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
   const [systemLosses, setSystemLosses] = useState(0.14);
   const [dateMode, setDateMode] = useState<DateMode>("average");
   const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
 
   const maxPvAcKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
@@ -68,7 +70,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
   const {
     chartData: specificDateChartData,
     availableDateRange,
-    hasRawData,
+    hasRawData: specificDateHasRawData,
   } = useSpecificDateData({
     tenants,
     shopTypes,
@@ -76,6 +78,22 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
     displayUnit,
     powerFactor,
   });
+
+  // Monthly data hook
+  const {
+    chartData: monthlyChartData,
+    availableMonths,
+    monthlyStats,
+    hasRawData: monthlyHasRawData,
+  } = useMonthlyData({
+    tenants,
+    shopTypes,
+    selectedMonth,
+    displayUnit,
+    powerFactor,
+  });
+
+  const hasRawData = specificDateHasRawData || monthlyHasRawData;
 
   const navigateDay = (direction: "prev" | "next") => {
     const newIndex = direction === "prev" ? (dayIndex - 1 + 7) % 7 : (dayIndex + 1) % 7;
@@ -114,13 +132,24 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
   });
 
   // Use appropriate data based on mode
-  const chartData = dateMode === "specific" && specificDateChartData ? specificDateChartData : averagedChartData;
-  const totalDaily = dateMode === "specific" && specificDateChartData 
-    ? specificDateChartData.reduce((sum, d) => sum + d.total, 0)
-    : avgTotalDaily;
-  const peakHour = dateMode === "specific" && specificDateChartData
-    ? specificDateChartData.reduce((max, d, i) => (d.total > max.val ? { val: d.total, hour: i } : max), { val: 0, hour: 0 })
-    : avgPeakHour;
+  const chartData = dateMode === "month" && monthlyChartData 
+    ? monthlyChartData 
+    : dateMode === "specific" && specificDateChartData 
+      ? specificDateChartData 
+      : averagedChartData;
+  
+  const totalDaily = dateMode === "month" && monthlyChartData
+    ? monthlyChartData.reduce((sum, d) => sum + d.total, 0)
+    : dateMode === "specific" && specificDateChartData 
+      ? specificDateChartData.reduce((sum, d) => sum + d.total, 0)
+      : avgTotalDaily;
+  
+  const peakHour = dateMode === "month" && monthlyChartData
+    ? monthlyChartData.reduce((max, d, i) => (d.total > max.val ? { val: d.total, hour: i } : max), { val: 0, hour: 0 })
+    : dateMode === "specific" && specificDateChartData
+      ? specificDateChartData.reduce((max, d, i) => (d.total > max.val ? { val: d.total, hour: i } : max), { val: 0, hour: 0 })
+      : avgPeakHour;
+  
   const avgHourly = totalDaily / 24;
   const loadFactor = peakHour.val > 0 ? (avgHourly / peakHour.val) * 100 : 0;
   
@@ -192,6 +221,11 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
             dateRangeStart={availableDateRange.startDate}
             dateRangeEnd={availableDateRange.endDate}
             hasRawData={hasRawData}
+            // Monthly mode props
+            selectedMonth={selectedMonth}
+            onMonthChange={setSelectedMonth}
+            availableMonths={availableMonths}
+            monthlyStats={monthlyStats}
           />
         </CardHeader>
 
@@ -225,6 +259,13 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
             systemLosses={systemLosses}
             setSystemLosses={setSystemLosses}
           />
+
+          {/* No data message for month mode */}
+          {dateMode === "month" && !monthlyChartData && selectedMonth && (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              <p className="text-sm">No SCADA data available for {selectedMonth}</p>
+            </div>
+          )}
 
           {/* No data message for specific date */}
           {dateMode === "specific" && !specificDateChartData && specificDate && (
