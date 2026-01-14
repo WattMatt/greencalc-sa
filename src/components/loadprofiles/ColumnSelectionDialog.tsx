@@ -13,12 +13,23 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2, Zap, Database } from "lucide-react";
+
+// Define the extended unit type
+type ValueUnit = "kW" | "kWh" | "W" | "Wh" | "MW" | "MWh" | "kVA" | "kVAh" | "A";
 
 interface ColumnSelectionDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (selectedColumn: string) => void;
+  onConfirm: (selectedColumn: string, unit: ValueUnit, voltageV?: number, powerFactor?: number) => void;
   csvContent: string | null;
   meterName: string;
   isProcessing: boolean;
@@ -123,6 +134,9 @@ export function ColumnSelectionDialog({
   isProcessing,
 }: ColumnSelectionDialogProps) {
   const [selectedColumn, setSelectedColumn] = useState<string>("");
+  const [selectedUnit, setSelectedUnit] = useState<ValueUnit>("kW");
+  const [voltageV, setVoltageV] = useState<number>(400);
+  const [powerFactor, setPowerFactor] = useState<number>(0.9);
   
   const columnInfo = useMemo(() => {
     if (!csvContent) return { dateColumn: null, valueColumns: [] };
@@ -139,8 +153,8 @@ export function ColumnSelectionDialog({
   }, [columnInfo.valueColumns, selectedColumn]);
   
   const handleConfirm = () => {
-    if (selectedColumn) {
-      onConfirm(selectedColumn);
+    if (selectedColumn && selectedUnit) {
+      onConfirm(selectedColumn, selectedUnit, voltageV, powerFactor);
     }
   };
   
@@ -169,52 +183,126 @@ export function ColumnSelectionDialog({
               No value columns detected in the CSV data
             </div>
           ) : (
-            <ScrollArea className="max-h-[300px]">
-              <RadioGroup
-                value={selectedColumn}
-                onValueChange={setSelectedColumn}
-                className="space-y-2"
-              >
-                {columnInfo.valueColumns.map((col) => (
-                  <Card 
-                    key={col.name} 
-                    className={`cursor-pointer transition-colors ${
-                      selectedColumn === col.name ? 'border-primary bg-primary/5' : ''
-                    }`}
-                    onClick={() => setSelectedColumn(col.name)}
-                  >
-                    <CardContent className="p-3">
-                      <div className="flex items-start gap-3">
-                        <RadioGroupItem value={col.name} id={col.name} className="mt-1" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Label htmlFor={col.name} className="font-medium cursor-pointer">
-                              {col.name}
-                            </Label>
-                            {col.nonZeroCount > columnInfo.valueColumns.reduce((max, c) => 
-                              c.nonZeroCount > max ? c.nonZeroCount : max, 0
-                            ) * 0.9 && (
-                              <Badge className="text-xs" variant="default">
-                                <Zap className="h-3 w-3 mr-1" />
-                                Recommended
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground space-y-1">
-                            <div>
-                              {col.nonZeroCount} non-zero values • Avg: {col.avgValue.toFixed(2)}
+            <>
+              <ScrollArea className="max-h-[200px]">
+                <RadioGroup
+                  value={selectedColumn}
+                  onValueChange={setSelectedColumn}
+                  className="space-y-2"
+                >
+                  {columnInfo.valueColumns.map((col) => (
+                    <Card 
+                      key={col.name} 
+                      className={`cursor-pointer transition-colors ${
+                        selectedColumn === col.name ? 'border-primary bg-primary/5' : ''
+                      }`}
+                      onClick={() => setSelectedColumn(col.name)}
+                    >
+                      <CardContent className="p-3">
+                        <div className="flex items-start gap-3">
+                          <RadioGroupItem value={col.name} id={col.name} className="mt-1" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Label htmlFor={col.name} className="font-medium cursor-pointer">
+                                {col.name}
+                              </Label>
+                              {col.nonZeroCount > columnInfo.valueColumns.reduce((max, c) => 
+                                c.nonZeroCount > max ? c.nonZeroCount : max, 0
+                              ) * 0.9 && (
+                                <Badge className="text-xs" variant="default">
+                                  <Zap className="h-3 w-3 mr-1" />
+                                  Recommended
+                                </Badge>
+                              )}
                             </div>
-                            <div className="font-mono truncate">
-                              Sample: {col.sampleValues.slice(0, 3).join(', ')}
+                            <div className="text-xs text-muted-foreground space-y-1">
+                              <div>
+                                {col.nonZeroCount} non-zero values • Avg: {col.avgValue.toFixed(2)}
+                              </div>
+                              <div className="font-mono truncate">
+                                Sample: {col.sampleValues.slice(0, 3).join(', ')}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </RadioGroup>
-            </ScrollArea>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </RadioGroup>
+              </ScrollArea>
+              
+              {/* Unit Selection */}
+              <div className="space-y-2">
+                <Label className="font-medium text-sm flex items-center gap-2">
+                  Value Unit Type
+                  <Badge variant="destructive" className="text-[10px]">Required</Badge>
+                </Label>
+                <Select
+                  value={selectedUnit}
+                  onValueChange={(v) => setSelectedUnit(v as ValueUnit)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select unit type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kWh">kWh (Kilowatt-hours)</SelectItem>
+                    <SelectItem value="kW">kW (Kilowatts)</SelectItem>
+                    <SelectItem value="Wh">Wh (Watt-hours)</SelectItem>
+                    <SelectItem value="W">W (Watts)</SelectItem>
+                    <SelectItem value="MWh">MWh (Megawatt-hours)</SelectItem>
+                    <SelectItem value="MW">MW (Megawatts)</SelectItem>
+                    <SelectItem value="kVAh">kVAh (Kilovolt-amp-hours)</SelectItem>
+                    <SelectItem value="kVA">kVA (Kilovolt-amps)</SelectItem>
+                    <SelectItem value="A">A (Amps)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Conversion parameters for kVA and Amps */}
+              {(selectedUnit === "kVA" || selectedUnit === "kVAh") && (
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm whitespace-nowrap">Power Factor:</Label>
+                    <Input
+                      type="number"
+                      min={0.1}
+                      max={1.0}
+                      step={0.01}
+                      value={powerFactor}
+                      onChange={(e) => setPowerFactor(parseFloat(e.target.value) || 0.9)}
+                      className="w-20 h-8"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {selectedUnit === "A" && (
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm whitespace-nowrap">Voltage (V):</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={voltageV}
+                      onChange={(e) => setVoltageV(parseInt(e.target.value) || 400)}
+                      className="w-24 h-8"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm whitespace-nowrap">Power Factor:</Label>
+                    <Input
+                      type="number"
+                      min={0.1}
+                      max={1.0}
+                      step={0.01}
+                      value={powerFactor}
+                      onChange={(e) => setPowerFactor(parseFloat(e.target.value) || 0.9)}
+                      className="w-20 h-8"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
         
@@ -224,7 +312,7 @@ export function ColumnSelectionDialog({
           </Button>
           <Button 
             onClick={handleConfirm} 
-            disabled={!selectedColumn || isProcessing}
+            disabled={!selectedColumn || !selectedUnit || isProcessing}
           >
             {isProcessing ? (
               <>
