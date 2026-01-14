@@ -86,11 +86,15 @@ function parseCSVColumns(csvContent: string): {
   const valueColumns: ColumnInfo[] = [];
   
   headers.forEach((header, colIdx) => {
-    // Skip the date/time columns
-    const lowerHeader = header.toLowerCase();
-    if (lowerHeader.includes('date') || lowerHeader.includes('time') || 
-        lowerHeader === 'rdate' || lowerHeader === 'rtime' ||
-        lowerHeader === 'status') {
+    // Skip empty headers
+    if (!header.trim()) return;
+    
+    // Skip ONLY the primary date/time column we detected
+    if (dateIdx >= 0 && colIdx === dateIdx) return;
+    
+    // Skip known non-value columns (be very specific)
+    const lowerHeader = header.toLowerCase().trim();
+    if (lowerHeader === 'rdate' || lowerHeader === 'rtime' || lowerHeader === 'status') {
       return;
     }
     
@@ -108,10 +112,10 @@ function parseCSVColumns(csvContent: string): {
       }
     });
     
-    // Only include columns with numeric data
-    if (values.length > 0) {
+    // Include columns with at least some numeric data (lower threshold)
+    if (values.length >= dataLines.length * 0.1) { // At least 10% numeric
       const nonZeroCount = values.filter(v => v !== 0).length;
-      const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
+      const avgValue = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
       
       valueColumns.push({
         name: header,
