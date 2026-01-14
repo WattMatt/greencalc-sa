@@ -67,16 +67,19 @@ export function SitesTab() {
 
       const { data: meters } = await supabase
         .from("scada_imports")
-        .select("site_id, data_points");
+        .select("site_id, data_points, load_profile_weekday");
 
-      // Track total meters and those with actual data
+      // Track total meters and those with actual data (either data_points > 0 OR has processed load profile)
       const meterStats = (meters || []).reduce((acc, m) => {
         if (m.site_id) {
           if (!acc[m.site_id]) {
             acc[m.site_id] = { total: 0, withData: 0 };
           }
           acc[m.site_id].total += 1;
-          if (m.data_points && m.data_points > 0) {
+          // Has data if data_points > 0 OR has a non-empty load profile (processed)
+          const hasData = (m.data_points && m.data_points > 0) || 
+            (m.load_profile_weekday && Array.isArray(m.load_profile_weekday) && m.load_profile_weekday.length > 0);
+          if (hasData) {
             acc[m.site_id].withData += 1;
           }
         }
