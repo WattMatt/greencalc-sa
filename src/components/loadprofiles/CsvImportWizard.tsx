@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, Zap, TrendingUp, Activity, Clock, BarChart3 } from "lucide-react";
 import { ColumnConfig, WizardParseConfig, ParsedData } from "./types/csvImportTypes";
 
 // Re-export types for convenience
@@ -369,6 +369,65 @@ export function CsvImportWizard({
       };
     });
   }, [previewData]);
+
+  // Calculate load profile preview based on selected column
+  const loadProfilePreview = useMemo(() => {
+    if (!previewData || selectedValueColumn === null) {
+      return null;
+    }
+
+    // Extract all numeric values from the selected column
+    const allValues = previewData.rows
+      .map(row => {
+        const val = row[selectedValueColumn];
+        if (!val) return NaN;
+        return parseFloat(val.replace(/[^\d.-]/g, ""));
+      })
+      .filter(v => !isNaN(v));
+
+    if (allValues.length === 0) return null;
+
+    // Calculate statistics
+    const peak = Math.max(...allValues);
+    const min = Math.min(...allValues);
+    const sum = allValues.reduce((a, b) => a + b, 0);
+    const avg = sum / allValues.length;
+    
+    // Estimate daily kWh - assume 30-min intervals (48 readings per day)
+    // Or detect interval from data if possible
+    const readingsPerDay = 48; // Default assumption: 30-min intervals
+    const estimatedDays = allValues.length / readingsPerDay;
+    const dailyKwh = estimatedDays > 0 ? sum / estimatedDays : sum;
+    
+    // Calculate load factor (average / peak)
+    const loadFactor = peak > 0 ? (avg / peak) * 100 : 0;
+
+    // Get unique dates if date column is selected
+    let uniqueDays = 0;
+    if (selectedDateColumn !== null) {
+      const dates = new Set(
+        previewData.rows
+          .map(row => row[selectedDateColumn])
+          .filter(Boolean)
+      );
+      uniqueDays = dates.size;
+    }
+
+    // Calculate more accurate daily kWh if we know the number of days
+    const actualDailyKwh = uniqueDays > 0 ? sum / uniqueDays : dailyKwh;
+
+    return {
+      peak: Math.round(peak * 100) / 100,
+      min: Math.round(min * 100) / 100,
+      avg: Math.round(avg * 100) / 100,
+      dailyKwh: Math.round(actualDailyKwh * 100) / 100,
+      totalKwh: Math.round(sum * 100) / 100,
+      loadFactor: Math.round(loadFactor),
+      dataPoints: allValues.length,
+      estimatedDays: uniqueDays > 0 ? uniqueDays : Math.round(estimatedDays * 10) / 10,
+      hasDateColumn: selectedDateColumn !== null && uniqueDays > 0,
+    };
+  }, [previewData, selectedValueColumn, selectedDateColumn]);
 
   // Step 1: File Type & Start Row
   const renderStep1 = () => (
@@ -756,38 +815,108 @@ export function CsvImportWizard({
         </Card>
       </div>
 
-      {/* Preview of selected columns */}
-      <div className="space-y-2">
-        <Label className="font-medium">Preview with selected columns:</Label>
-        <Card className="bg-muted/30 p-3">
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Date:</span>{" "}
-              <span className="font-medium">
-                {selectedDateColumn !== null 
-                  ? previewData?.headers[selectedDateColumn] || `Col ${selectedDateColumn + 1}`
-                  : "Auto-detect"}
-              </span>
+      {/* Load Profile Preview */}
+      {loadProfilePreview ? (
+        <div className="space-y-2">
+          <Label className="font-medium flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-primary" />
+            Load Profile Preview
+          </Label>
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="py-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Peak kW */}
+                <div className="text-center p-3 bg-background/50 rounded-lg">
+                  <div className="flex items-center justify-center gap-1 text-muted-foreground text-xs mb-1">
+                    <TrendingUp className="h-3 w-3" />
+                    Peak
+                  </div>
+                  <div className="text-2xl font-bold text-primary">{loadProfilePreview.peak}</div>
+                  <div className="text-xs text-muted-foreground">kW</div>
+                </div>
+                
+                {/* Average kW */}
+                <div className="text-center p-3 bg-background/50 rounded-lg">
+                  <div className="flex items-center justify-center gap-1 text-muted-foreground text-xs mb-1">
+                    <Activity className="h-3 w-3" />
+                    Average
+                  </div>
+                  <div className="text-2xl font-bold">{loadProfilePreview.avg}</div>
+                  <div className="text-xs text-muted-foreground">kW</div>
+                </div>
+                
+                {/* Daily kWh */}
+                <div className="text-center p-3 bg-background/50 rounded-lg">
+                  <div className="flex items-center justify-center gap-1 text-muted-foreground text-xs mb-1">
+                    <Zap className="h-3 w-3" />
+                    Daily Usage
+                  </div>
+                  <div className="text-2xl font-bold text-amber-600">{loadProfilePreview.dailyKwh.toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground">kWh/day</div>
+                </div>
+                
+                {/* Load Factor */}
+                <div className="text-center p-3 bg-background/50 rounded-lg">
+                  <div className="flex items-center justify-center gap-1 text-muted-foreground text-xs mb-1">
+                    <Clock className="h-3 w-3" />
+                    Load Factor
+                  </div>
+                  <div className="text-2xl font-bold">{loadProfilePreview.loadFactor}%</div>
+                  <div className="text-xs text-muted-foreground">avg/peak</div>
+                </div>
+              </div>
+              
+              {/* Additional stats */}
+              <div className="mt-4 pt-3 border-t border-primary/20 grid grid-cols-3 gap-4 text-xs text-center">
+                <div>
+                  <span className="text-muted-foreground">Data Points:</span>{" "}
+                  <span className="font-medium">{loadProfilePreview.dataPoints.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Days:</span>{" "}
+                  <span className="font-medium">
+                    {loadProfilePreview.hasDateColumn ? loadProfilePreview.estimatedDays : `~${loadProfilePreview.estimatedDays}`}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Total:</span>{" "}
+                  <span className="font-medium">{loadProfilePreview.totalKwh.toLocaleString()} kWh</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label className="font-medium">Preview with selected columns:</Label>
+          <Card className="bg-muted/30 p-3">
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Date:</span>{" "}
+                <span className="font-medium">
+                  {selectedDateColumn !== null 
+                    ? previewData?.headers[selectedDateColumn] || `Col ${selectedDateColumn + 1}`
+                    : "Auto-detect"}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Time:</span>{" "}
+                <span className="font-medium">
+                  {selectedTimeColumn !== null 
+                    ? previewData?.headers[selectedTimeColumn] || `Col ${selectedTimeColumn + 1}`
+                    : "Included in date"}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Value:</span>{" "}
+                <span className="font-medium text-muted-foreground">
+                  Select a value column above
+                </span>
+              </div>
             </div>
-            <div>
-              <span className="text-muted-foreground">Time:</span>{" "}
-              <span className="font-medium">
-                {selectedTimeColumn !== null 
-                  ? previewData?.headers[selectedTimeColumn] || `Col ${selectedTimeColumn + 1}`
-                  : "Included in date"}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Value:</span>{" "}
-              <span className="font-medium text-primary">
-                {selectedValueColumn !== null 
-                  ? previewData?.headers[selectedValueColumn] || `Col ${selectedValueColumn + 1}`
-                  : "Auto-detect"}
-              </span>
-            </div>
-          </div>
-        </Card>
-      </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 
