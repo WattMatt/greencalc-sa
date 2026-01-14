@@ -198,6 +198,7 @@ export function processCSVToLoadProfile(
   let dateColIdx = -1;
   let timeColIdx = -1;
   let kwhColIdx = -1;
+  let valueUnit: "kW" | "kWh" | "auto" = config.valueUnit || "auto";
   
   // PRIORITY 1: Use explicitly configured column indices from wizard step 4
   if (config.valueColumnIndex !== undefined && config.valueColumnIndex >= 0) {
@@ -248,7 +249,21 @@ export function processCSVToLoadProfile(
     }
   }
   
-  console.log(`[processCSV] Final column detection: date=${dateColIdx}, time=${timeColIdx}, kwh=${kwhColIdx}`);
+  // Auto-detect unit type from column header if not specified
+  if (valueUnit === "auto" && kwhColIdx !== -1) {
+    const colHeader = headers[kwhColIdx]?.toLowerCase() || "";
+    if (colHeader.includes("kwh") || colHeader.includes("energy") || colHeader.includes("consumption")) {
+      valueUnit = "kWh";
+    } else if (colHeader.includes("kw") || colHeader.includes("power") || colHeader.includes("load")) {
+      valueUnit = "kW";
+    } else {
+      // Default to kWh for interval meter data
+      valueUnit = "kWh";
+    }
+    console.log(`[processCSV] Auto-detected unit: ${valueUnit} from header "${headers[kwhColIdx]}"`);
+  }
+  
+  console.log(`[processCSV] Final column detection: date=${dateColIdx}, time=${timeColIdx}, value=${kwhColIdx}, unit=${valueUnit}`);
   
   if (dateColIdx === -1 || kwhColIdx === -1) {
     console.warn(`[processCSV] Missing required columns. Date: ${dateColIdx}, kWh: ${kwhColIdx}`);
@@ -324,24 +339,64 @@ export function processCSVToLoadProfile(
     }
   }
   
-  // Calculate average kW for each hour
+  // Calculate load profile for each hour based on unit type
+  // For kW: average the power readings for each hour
+  // For kWh: sum the energy readings for each hour, then average across days
   const weekdayProfile: number[] = [];
   const weekendProfile: number[] = [];
+  
+  // Detect readings per hour (how many sub-hourly intervals)
+  const sampleHourReadings = Object.values(weekdayHours).find(arr => arr.length > 0)?.length || 1;
+  const daysInSample = weekdayDates.size || 1;
+  const readingsPerHourPerDay = sampleHourReadings / daysInSample;
+  
+  console.log(`[processCSV] Unit type: ${valueUnit}, readings per hour per day: ~${readingsPerHourPerDay.toFixed(1)}`);
   
   for (let h = 0; h < 24; h++) {
     const wdValues = weekdayHours[h];
     const wdDayCount = weekdayDates.size || 1;
-    const wdHourlySum = wdValues.reduce((sum, v) => sum + v, 0);
-    weekdayProfile.push(Math.round((wdHourlySum / wdDayCount) * 100) / 100);
+    
+    let wdHourlyValue: number;
+    if (valueUnit === "kW") {
+      // For kW readings: average the power values to get typical power for this hour
+      wdHourlyValue = wdValues.length > 0 
+        ? wdValues.reduce((sum, v) => sum + v, 0) / wdValues.length 
+        : 0;
+    } else {
+      // For kWh readings: sum all readings and divide by days to get avg kWh per hour
+      const totalEnergy = wdValues.reduce((sum, v) => sum + v, 0);
+      wdHourlyValue = totalEnergy / wdDayCount;
+    }
+    weekdayProfile.push(Math.round(wdHourlyValue * 100) / 100);
     
     const weValues = weekendHours[h];
     const weDayCount = weekendDates.size || 1;
-    const weHourlySum = weValues.reduce((sum, v) => sum + v, 0);
-    weekendProfile.push(Math.round((weHourlySum / weDayCount) * 100) / 100);
+    
+    let weHourlyValue: number;
+    if (valueUnit === "kW") {
+      weHourlyValue = weValues.length > 0 
+        ? weValues.reduce((sum, v) => sum + v, 0) / weValues.length 
+        : 0;
+    } else {
+      const totalEnergy = weValues.reduce((sum, v) => sum + v, 0);
+      weHourlyValue = totalEnergy / weDayCount;
+    }
+    weekendProfile.push(Math.round(weHourlyValue * 100) / 100);
   }
   
-  // Calculate totals
-  const totalKwh = parsedRows.reduce((sum, row) => sum + row.kWh, 0);
+  // Calculate totals based on unit type
+  let totalKwh: number;
+  if (valueUnit === "kW") {
+    // For kW readings: integrate power over time
+    // Each reading represents power at a point - multiply by interval duration
+    const intervalHours = parsedRows.length > 1 ? 
+      24 / (parsedRows.length / uniqueDates.size) : 0.5;
+    totalKwh = parsedRows.reduce((sum, row) => sum + row.kWh * intervalHours, 0);
+  } else {
+    // For kWh readings: sum directly
+    totalKwh = parsedRows.reduce((sum, row) => sum + row.kWh, 0);
+  }
+  
   const allValues = [...weekdayProfile, ...weekendProfile].filter(v => v > 0);
   const peakKw = Math.max(...allValues, 0);
   const avgKw = allValues.length > 0 
@@ -353,7 +408,7 @@ export function processCSVToLoadProfile(
   const dateRangeStart = sortedDates[0] || null;
   const dateRangeEnd = sortedDates[sortedDates.length - 1] || null;
   
-  console.log(`[processCSV] Result: ${parsedRows.length} points, ${totalKwh.toFixed(1)} kWh, peak ${peakKw.toFixed(1)} kW`);
+  console.log(`[processCSV] Result: ${parsedRows.length} points, ${totalKwh.toFixed(1)} kWh, peak ${peakKw.toFixed(1)} kW (unit: ${valueUnit})`);
   
   return {
     weekdayProfile,

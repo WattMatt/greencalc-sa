@@ -197,6 +197,7 @@ export function CsvImportWizard({
   const [selectedValueColumn, setSelectedValueColumn] = useState<number | null>(null);
   const [selectedDateColumn, setSelectedDateColumn] = useState<number | null>(null);
   const [selectedTimeColumn, setSelectedTimeColumn] = useState<number | null>(null);
+  const [selectedValueUnit, setSelectedValueUnit] = useState<"kW" | "kWh" | "auto">("auto");
 
   // Auto-detect format on open
   useEffect(() => {
@@ -288,6 +289,7 @@ export function CsvImportWizard({
         valueColumnIndex: selectedValueColumn ?? undefined,
         dateColumnIndex: selectedDateColumn ?? undefined,
         timeColumnIndex: selectedTimeColumn ?? undefined,
+        valueUnit: selectedValueUnit,
       };
       onProcess(finalConfig, previewData);
     }
@@ -295,7 +297,7 @@ export function CsvImportWizard({
 
   // Auto-detect columns for step 4
   const autoDetectedColumns = useMemo(() => {
-    if (!previewData) return { date: -1, time: -1, value: -1 };
+    if (!previewData) return { date: -1, time: -1, value: -1, detectedUnit: "auto" as "kW" | "kWh" | "auto" };
     
     const lowerHeaders = previewData.headers.map(h => h.toLowerCase().trim());
     
@@ -307,12 +309,41 @@ export function CsvImportWizard({
     
     // Find value column - look for numeric columns that aren't date/time
     let valueIdx = -1;
-    const valuePatterns = ["kwh", "energy", "consumption", "reading", "value", "amount", "power", "load"];
-    for (const pattern of valuePatterns) {
+    let detectedUnit: "kW" | "kWh" | "auto" = "auto";
+    
+    // First check for kWh patterns (energy)
+    const kwhPatterns = ["kwh", "energy", "consumption", "usage"];
+    for (const pattern of kwhPatterns) {
       const idx = lowerHeaders.findIndex(h => h.includes(pattern));
       if (idx !== -1) {
         valueIdx = idx;
+        detectedUnit = "kWh";
         break;
+      }
+    }
+    
+    // Then check for kW patterns (power)
+    if (valueIdx === -1) {
+      const kwPatterns = ["kw", "power", "load", "demand"];
+      for (const pattern of kwPatterns) {
+        const idx = lowerHeaders.findIndex(h => h.includes(pattern) && !h.includes("kwh"));
+        if (idx !== -1) {
+          valueIdx = idx;
+          detectedUnit = "kW";
+          break;
+        }
+      }
+    }
+    
+    // Generic patterns
+    if (valueIdx === -1) {
+      const genericPatterns = ["reading", "value", "amount"];
+      for (const pattern of genericPatterns) {
+        const idx = lowerHeaders.findIndex(h => h.includes(pattern));
+        if (idx !== -1) {
+          valueIdx = idx;
+          break;
+        }
       }
     }
     
@@ -328,8 +359,31 @@ export function CsvImportWizard({
       }
     }
     
-    return { date: dateIdx, time: timeIdx, value: valueIdx };
+    return { date: dateIdx, time: timeIdx, value: valueIdx, detectedUnit };
   }, [previewData]);
+
+  // Detect unit from column header
+  const detectUnitFromHeader = useCallback((header: string): "kW" | "kWh" | "auto" => {
+    const lower = header.toLowerCase();
+    if (lower.includes("kwh") || lower.includes("energy") || lower.includes("consumption") || lower.includes("usage")) {
+      return "kWh";
+    }
+    if (lower.includes("kw") || lower.includes("power") || lower.includes("load") || lower.includes("demand")) {
+      return "kW";
+    }
+    return "auto";
+  }, []);
+
+  // Auto-detect unit when value column changes
+  useEffect(() => {
+    if (selectedValueColumn !== null && previewData) {
+      const header = previewData.headers[selectedValueColumn] || "";
+      const detected = detectUnitFromHeader(header);
+      if (detected !== "auto") {
+        setSelectedValueUnit(detected);
+      }
+    }
+  }, [selectedValueColumn, previewData, detectUnitFromHeader]);
 
   // Initialize column selections when entering step 4
   useEffect(() => {
@@ -393,15 +447,6 @@ export function CsvImportWizard({
     const sum = allValues.reduce((a, b) => a + b, 0);
     const avg = sum / allValues.length;
     
-    // Estimate daily kWh - assume 30-min intervals (48 readings per day)
-    // Or detect interval from data if possible
-    const readingsPerDay = 48; // Default assumption: 30-min intervals
-    const estimatedDays = allValues.length / readingsPerDay;
-    const dailyKwh = estimatedDays > 0 ? sum / estimatedDays : sum;
-    
-    // Calculate load factor (average / peak)
-    const loadFactor = peak > 0 ? (avg / peak) * 100 : 0;
-
     // Get unique dates if date column is selected
     let uniqueDays = 0;
     if (selectedDateColumn !== null) {
@@ -413,21 +458,54 @@ export function CsvImportWizard({
       uniqueDays = dates.size;
     }
 
-    // Calculate more accurate daily kWh if we know the number of days
-    const actualDailyKwh = uniqueDays > 0 ? sum / uniqueDays : dailyKwh;
+    // Estimate readings per day based on data count and unique days
+    const readingsPerDay = uniqueDays > 0 ? allValues.length / uniqueDays : 48; // Default: 30-min intervals
+    const estimatedDays = uniqueDays > 0 ? uniqueDays : allValues.length / 48;
+    
+    // Calculate daily energy based on unit type
+    let dailyKwh: number;
+    let peakKw: number;
+    let avgKw: number;
+    
+    if (selectedValueUnit === "kWh") {
+      // Values are already energy readings
+      dailyKwh = uniqueDays > 0 ? sum / uniqueDays : sum / estimatedDays;
+      // For kWh readings, peak power is estimated from interval energy
+      // Assume 30-min intervals, so kW = kWh * 2
+      const intervalHours = 24 / readingsPerDay;
+      peakKw = peak / intervalHours; // Convert energy to power
+      avgKw = avg / intervalHours;
+    } else if (selectedValueUnit === "kW") {
+      // Values are power readings - need to integrate for energy
+      const hoursPerReading = 24 / readingsPerDay;
+      const dailyEnergyFromPower = sum * hoursPerReading / estimatedDays;
+      dailyKwh = uniqueDays > 0 ? dailyEnergyFromPower : sum * hoursPerReading / estimatedDays;
+      peakKw = peak;
+      avgKw = avg;
+    } else {
+      // Auto mode - assume values are what they claim (likely kWh interval readings)
+      dailyKwh = uniqueDays > 0 ? sum / uniqueDays : sum / estimatedDays;
+      peakKw = peak;
+      avgKw = avg;
+    }
+    
+    // Calculate load factor (average / peak)
+    const loadFactor = peakKw > 0 ? (avgKw / peakKw) * 100 : 0;
 
     return {
-      peak: Math.round(peak * 100) / 100,
+      peak: Math.round(peakKw * 100) / 100,
       min: Math.round(min * 100) / 100,
-      avg: Math.round(avg * 100) / 100,
-      dailyKwh: Math.round(actualDailyKwh * 100) / 100,
+      avg: Math.round(avgKw * 100) / 100,
+      dailyKwh: Math.round(dailyKwh * 100) / 100,
       totalKwh: Math.round(sum * 100) / 100,
       loadFactor: Math.round(loadFactor),
       dataPoints: allValues.length,
       estimatedDays: uniqueDays > 0 ? uniqueDays : Math.round(estimatedDays * 10) / 10,
       hasDateColumn: selectedDateColumn !== null && uniqueDays > 0,
+      readingsPerDay: Math.round(readingsPerDay * 10) / 10,
+      unit: selectedValueUnit,
     };
-  }, [previewData, selectedValueColumn, selectedDateColumn]);
+  }, [previewData, selectedValueColumn, selectedDateColumn, selectedValueUnit]);
 
   // Step 1: File Type & Start Row
   const renderStep1 = () => (
@@ -772,6 +850,64 @@ export function CsvImportWizard({
               </p>
             )}
           </div>
+        </div>
+
+        {/* Unit Type Selection */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="font-medium text-sm flex items-center gap-2">
+              Value Unit Type
+              {selectedValueUnit !== "auto" && (
+                <Badge variant="secondary" className="text-[10px]">
+                  {selectedValueUnit === "kW" ? "Power" : "Energy"}
+                </Badge>
+              )}
+            </Label>
+            <Select
+              value={selectedValueUnit}
+              onValueChange={(v) => setSelectedValueUnit(v as "kW" | "kWh" | "auto")}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">
+                  <div className="flex flex-col">
+                    <span>Auto-detect</span>
+                    <span className="text-xs text-muted-foreground">Detect from column header</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="kWh">
+                  <div className="flex flex-col">
+                    <span>kWh (Energy)</span>
+                    <span className="text-xs text-muted-foreground">Interval energy readings - will be summed</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="kW">
+                  <div className="flex flex-col">
+                    <span>kW (Power)</span>
+                    <span className="text-xs text-muted-foreground">Instantaneous power - will be averaged</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Unit explanation */}
+          <Card className="bg-muted/30 p-3">
+            <div className="text-xs space-y-1">
+              <p className="font-medium">
+                {selectedValueUnit === "kWh" && "📊 Energy readings (kWh)"}
+                {selectedValueUnit === "kW" && "⚡ Power readings (kW)"}
+                {selectedValueUnit === "auto" && "🔍 Auto-detecting unit type..."}
+              </p>
+              <p className="text-muted-foreground">
+                {selectedValueUnit === "kWh" && "Each value represents energy consumed during an interval. Values will be summed for daily totals."}
+                {selectedValueUnit === "kW" && "Each value represents instantaneous power. Values will be averaged for load profile, integrated for energy."}
+                {selectedValueUnit === "auto" && "The system will detect the unit from the column header name (kwh, energy, power, etc.)."}
+              </p>
+            </div>
+          </Card>
         </div>
       </div>
 
