@@ -57,8 +57,14 @@ export function MeterProfilePreview({ isOpen, onClose, meter }: MeterProfilePrev
   const weekdayProfile = meter.load_profile_weekday || Array(24).fill(0);
   const weekendProfile = meter.load_profile_weekend || Array(24).fill(0);
   
-  const weekdayTotal = weekdayProfile.reduce((a, b) => a + b, 0);
-  const weekendTotal = weekendProfile.reduce((a, b) => a + b, 0);
+  // Check if profiles are normalized (sum ~100) or actual kW values
+  const weekdaySum = weekdayProfile.reduce((a, b) => a + b, 0);
+  const weekendSum = weekendProfile.reduce((a, b) => a + b, 0);
+  const isNormalized = weekdaySum > 90 && weekdaySum < 110; // Normalized profiles sum to ~100
+  
+  // For display, use actual values if available, otherwise show normalized
+  const weekdayTotal = isNormalized ? weekdaySum : weekdaySum; // kWh/day = sum of hourly kW
+  const weekendTotal = isNormalized ? weekendSum : weekendSum;
   const weekdayPeak = Math.max(...weekdayProfile);
   const weekendPeak = Math.max(...weekendProfile);
   
