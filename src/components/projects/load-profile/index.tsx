@@ -17,7 +17,7 @@ import { OverPanelingAnalysis } from "./components/OverPanelingAnalysis";
 import { AnnotationsPanel } from "./components/AnnotationsPanel";
 import { TOULegend } from "./components/TOULegend";
 import { TopContributors } from "./components/TopContributors";
-import { DateModeSelector, DateMode } from "./components/DateModeSelector";
+import { DateMode } from "./components/DateModeSelector";
 import { MethodologySection, solarMethodology, batteryMethodology, financialMethodology, touMethodology } from "@/components/simulation/MethodologySection";
 
 interface LoadProfileChartProps {

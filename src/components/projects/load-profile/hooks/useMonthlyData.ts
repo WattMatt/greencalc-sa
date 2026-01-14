@@ -81,11 +81,10 @@ function parseRawData(rawData: unknown): RawDataPoint[] {
 
 export function useMonthlyData({
   tenants,
-  shopTypes,
   selectedMonth,
   displayUnit,
   powerFactor,
-}: UseMonthlyDataProps) {
+}: Omit<UseMonthlyDataProps, 'shopTypes'> & { shopTypes?: ShopType[] }) {
   // Get available months from all tenants with SCADA data
   const availableMonths = useMemo((): AvailableMonth[] => {
     const monthMap = new Map<string, { dates: Set<string>; totalKwh: number }>();
@@ -235,7 +234,7 @@ export function useMonthlyData({
     }
     
     return result;
-  }, [tenants, shopTypes, selectedMonth, displayUnit, powerFactor]);
+  }, [tenants, selectedMonth, displayUnit, powerFactor]);
 
   const hasRawData = availableMonths.length > 0;
 
