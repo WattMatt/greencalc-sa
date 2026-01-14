@@ -319,8 +319,11 @@ export function SitesTab() {
     }
   };
 
-  // Process meter with a specific selected column
-  const handleColumnSelected = async (selectedColumn: string) => {
+  // Unit type for column selection
+  type ValueUnit = "kW" | "kWh" | "W" | "Wh" | "MW" | "MWh" | "kVA" | "kVAh" | "A";
+  
+  // Process meter with a specific selected column and unit
+  const handleColumnSelected = async (selectedColumn: string, unit: ValueUnit, voltageV?: number, powerFactor?: number) => {
     if (!columnSelectionMeter) return;
     
     setReprocessingMeterId(columnSelectionMeter.id);
@@ -337,13 +340,13 @@ export function SitesTab() {
         })
         .eq("id", columnSelectionMeter.id);
       
-      // Now process it with the selected column
-      await processWithColumn(columnSelectionMeter, selectedColumn);
+      // Now process it with the selected column and unit
+      await processWithColumn(columnSelectionMeter, selectedColumn, unit, voltageV, powerFactor);
       
       queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
       queryClient.invalidateQueries({ queryKey: ["sites"] });
       queryClient.invalidateQueries({ queryKey: ["meter-library"] });
-      toast.success(`Meter reprocessed using column: ${selectedColumn}`);
+      toast.success(`Meter reprocessed using column: ${selectedColumn} (${unit})`);
     } catch (error) {
       console.error("Reprocess failed:", error);
       toast.error("Failed to reprocess meter");
@@ -354,12 +357,45 @@ export function SitesTab() {
     }
   };
 
-  // Process meter with optional column selection
-  const processWithColumn = async (meter: Meter, selectedColumn: string | null) => {
+  // Unit conversion utilities (local copies)
+  const convertToKwLocal = (value: number, unit: ValueUnit, voltageV: number = 400, powerFactor: number = 0.9): number => {
+    switch (unit) {
+      case "kW": return value;
+      case "W": return value / 1000;
+      case "MW": return value * 1000;
+      case "kVA": return value * powerFactor;
+      case "A": 
+        return (Math.sqrt(3) * voltageV * value * powerFactor) / 1000;
+      default: return value;
+    }
+  };
+
+  const convertToKwhLocal = (value: number, unit: ValueUnit, powerFactor: number = 0.9): number => {
+    switch (unit) {
+      case "kWh": return value;
+      case "Wh": return value / 1000;
+      case "MWh": return value * 1000;
+      case "kVAh": return value * powerFactor;
+      default: return value;
+    }
+  };
+
+  const isEnergyUnitLocal = (unit: ValueUnit): boolean => {
+    return ["kWh", "Wh", "MWh", "kVAh"].includes(unit);
+  };
+
+  // Process meter with optional column selection and unit
+  const processWithColumn = async (
+    meter: Meter, 
+    selectedColumn: string | null, 
+    unit: ValueUnit = "kWh",
+    voltageV: number = 400,
+    powerFactor: number = 0.9
+  ) => {
     setProcessingMeterId(meter.id);
 
     try {
-      console.log("Processing meter:", meter.id, meter.shop_name, "with column:", selectedColumn);
+      console.log("Processing meter:", meter.id, meter.shop_name, "with column:", selectedColumn, "unit:", unit);
       
       // Fetch fresh raw_data directly from the database
       const { data: meterData, error: fetchError } = await supabase
@@ -390,11 +426,17 @@ export function SitesTab() {
         // CSV content stored - need to parse it with selected column
         console.log("Parsing CSV content from raw_data with selected column:", selectedColumn);
         const csvContent = (rawData[0] as { csvContent: string }).csvContent;
-        rawDataArray = parseCsvContentWithColumn(csvContent, selectedColumn);
-        console.log(`Parsed ${rawDataArray.length} data points from CSV using column: ${selectedColumn || 'auto'}`);
+        rawDataArray = parseCsvContentWithColumn(csvContent, selectedColumn, unit, voltageV, powerFactor);
+        console.log(`Parsed ${rawDataArray.length} data points from CSV using column: ${selectedColumn || 'auto'} (${unit})`);
       } else if (Array.isArray(rawData)) {
-        // Already parsed data points
-        rawDataArray = rawData as Array<{ date?: string; time?: string; timestamp?: string; value?: number }>;
+        // Already parsed data points - apply unit conversion
+        rawDataArray = (rawData as Array<{ date?: string; time?: string; timestamp?: string; value?: number }>).map(point => {
+          const rawValue = typeof point.value === "number" ? point.value : parseFloat(String(point.value)) || 0;
+          const convertedValue = isEnergyUnitLocal(unit)
+            ? convertToKwhLocal(rawValue, unit, powerFactor)
+            : convertToKwLocal(rawValue, unit, voltageV, powerFactor);
+          return { ...point, value: convertedValue };
+        });
       } else {
         toast.error("Invalid raw data format");
         setProcessingMeterId(null);
@@ -617,8 +659,14 @@ export function SitesTab() {
     return dataPoints;
   };
 
-  // Parse CSV content with a specific column selection
-  const parseCsvContentWithColumn = (csvContent: string, selectedColumn: string | null): Array<{ date: string; time: string; value: number }> => {
+  // Parse CSV content with a specific column selection and unit conversion
+  const parseCsvContentWithColumn = (
+    csvContent: string, 
+    selectedColumn: string | null,
+    unit: ValueUnit = "kWh",
+    voltageV: number = 400,
+    powerFactor: number = 0.9
+  ): Array<{ date: string; time: string; value: number }> => {
     // Split by newlines and filter empty lines, also handle \r\n
     let lines = csvContent.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return [];
@@ -643,7 +691,7 @@ export function SitesTab() {
     // Parse header to find columns
     const headers = headerLine.split(separator).map(h => h.trim().replace(/['"]/g, ''));
     const headersLower = headers.map(h => h.toLowerCase());
-    console.log("CSV Headers detected:", headers, "selected column:", selectedColumn);
+    console.log("CSV Headers detected:", headers, "selected column:", selectedColumn, "unit:", unit);
     
     // Find date, time, and value columns
     let dateCol = -1, timeCol = -1, valueCol = -1;
@@ -694,6 +742,7 @@ export function SitesTab() {
     
     console.log("Column mapping: date=", dateCol, "time=", timeCol, "value=", valueCol, "(", headers[valueCol], ")");
     
+    const isEnergy = isEnergyUnitLocal(unit);
     const dataPoints: Array<{ date: string; time: string; value: number }> = [];
     
     for (let i = headerIndex + 1; i < lines.length; i++) {
@@ -722,9 +771,14 @@ export function SitesTab() {
         timeStr = parts[1]?.split(/[Z+]/)[0] || '';
       }
       
-      // Parse value
-      const value = parseFloat(valueStr.replace(/,/g, ''));
-      if (isNaN(value)) continue;
+      // Parse raw value
+      const rawValue = parseFloat(valueStr.replace(/,/g, ''));
+      if (isNaN(rawValue)) continue;
+      
+      // Convert value based on unit type
+      const convertedValue = isEnergy
+        ? convertToKwhLocal(rawValue, unit, powerFactor)
+        : convertToKwLocal(rawValue, unit, voltageV, powerFactor);
       
       // Normalize date format (DD/MM/YYYY to YYYY-MM-DD)
       let normalizedDate = dateStr;
@@ -748,10 +802,10 @@ export function SitesTab() {
         normalizedTime = `${h}:${m}:${s}`;
       }
       
-      dataPoints.push({ date: normalizedDate, time: normalizedTime, value });
+      dataPoints.push({ date: normalizedDate, time: normalizedTime, value: convertedValue });
     }
     
-    console.log(`Parsed ${dataPoints.length} data points using column "${selectedColumn || 'auto'}"`);
+    console.log(`Parsed ${dataPoints.length} data points using column "${selectedColumn || 'auto'}" with unit ${unit}`);
     return dataPoints;
   };
 
