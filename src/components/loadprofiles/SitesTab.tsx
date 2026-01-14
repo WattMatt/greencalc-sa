@@ -165,7 +165,7 @@ export function SitesTab() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
       queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
       toast.success(editingSite ? "Site updated" : "Site created");
       setSiteDialogOpen(false);
@@ -180,7 +180,7 @@ export function SitesTab() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
       queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
       toast.success("Site deleted");
       setSelectedSite(null);
@@ -195,7 +195,7 @@ export function SitesTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
-      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
       toast.success("Meter deleted");
     },
     onError: (error) => toast.error(error.message),
@@ -208,7 +208,7 @@ export function SitesTab() {
     },
     onSuccess: (_, ids) => {
       queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite?.id] });
-      queryClient.invalidateQueries({ queryKey: ["sites"] });
+      queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
       queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
       setSelectedMeterIds(new Set());
       toast.success(`Deleted ${ids.length} meter(s)`);
