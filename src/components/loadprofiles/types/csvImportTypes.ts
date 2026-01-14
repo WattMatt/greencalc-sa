@@ -28,7 +28,9 @@ export interface WizardParseConfig {
   valueColumnIndex?: number; // The column to use for kWh/kW values
   dateColumnIndex?: number;  // The column containing date/timestamp
   timeColumnIndex?: number;  // Optional separate time column
-  valueUnit?: "kW" | "kWh" | "auto"; // Unit type for the value column
+  valueUnit?: "kW" | "kWh" | "W" | "Wh" | "MW" | "MWh" | "kVA" | "kVAh" | "A" | "auto"; // Unit type for the value column
+  voltageV?: number; // Voltage for Amps conversion (default 400V 3-phase)
+  powerFactor?: number; // Power factor for kVA conversion (default 0.9)
 }
 
 export interface ParsedData {

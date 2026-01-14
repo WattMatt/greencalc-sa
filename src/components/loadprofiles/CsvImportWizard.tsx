@@ -197,7 +197,9 @@ export function CsvImportWizard({
   const [selectedValueColumn, setSelectedValueColumn] = useState<number | null>(null);
   const [selectedDateColumn, setSelectedDateColumn] = useState<number | null>(null);
   const [selectedTimeColumn, setSelectedTimeColumn] = useState<number | null>(null);
-  const [selectedValueUnit, setSelectedValueUnit] = useState<"kW" | "kWh" | "auto">("auto");
+  const [selectedValueUnit, setSelectedValueUnit] = useState<"kW" | "kWh" | "W" | "Wh" | "MW" | "MWh" | "kVA" | "kVAh" | "A">("kW");
+  const [voltageV, setVoltageV] = useState<number>(400);
+  const [powerFactor, setPowerFactor] = useState<number>(0.9);
 
   // Auto-detect format on open
   useEffect(() => {
@@ -290,6 +292,8 @@ export function CsvImportWizard({
         dateColumnIndex: selectedDateColumn ?? undefined,
         timeColumnIndex: selectedTimeColumn ?? undefined,
         valueUnit: selectedValueUnit,
+        voltageV: voltageV,
+        powerFactor: powerFactor,
       };
       onProcess(finalConfig, previewData);
     }
@@ -297,7 +301,7 @@ export function CsvImportWizard({
 
   // Auto-detect columns for step 4
   const autoDetectedColumns = useMemo(() => {
-    if (!previewData) return { date: -1, time: -1, value: -1, detectedUnit: "auto" as "kW" | "kWh" | "auto" };
+    if (!previewData) return { date: -1, time: -1, value: -1 };
     
     const lowerHeaders = previewData.headers.map(h => h.toLowerCase().trim());
     
@@ -309,41 +313,14 @@ export function CsvImportWizard({
     
     // Find value column - look for numeric columns that aren't date/time
     let valueIdx = -1;
-    let detectedUnit: "kW" | "kWh" | "auto" = "auto";
     
-    // First check for kWh patterns (energy)
-    const kwhPatterns = ["kwh", "energy", "consumption", "usage"];
-    for (const pattern of kwhPatterns) {
+    // First check for common energy/power column patterns
+    const valuePatterns = ["kwh", "kw", "energy", "power", "consumption", "usage", "load", "demand", "reading", "value", "amount"];
+    for (const pattern of valuePatterns) {
       const idx = lowerHeaders.findIndex(h => h.includes(pattern));
       if (idx !== -1) {
         valueIdx = idx;
-        detectedUnit = "kWh";
         break;
-      }
-    }
-    
-    // Then check for kW patterns (power)
-    if (valueIdx === -1) {
-      const kwPatterns = ["kw", "power", "load", "demand"];
-      for (const pattern of kwPatterns) {
-        const idx = lowerHeaders.findIndex(h => h.includes(pattern) && !h.includes("kwh"));
-        if (idx !== -1) {
-          valueIdx = idx;
-          detectedUnit = "kW";
-          break;
-        }
-      }
-    }
-    
-    // Generic patterns
-    if (valueIdx === -1) {
-      const genericPatterns = ["reading", "value", "amount"];
-      for (const pattern of genericPatterns) {
-        const idx = lowerHeaders.findIndex(h => h.includes(pattern));
-        if (idx !== -1) {
-          valueIdx = idx;
-          break;
-        }
       }
     }
     
@@ -359,31 +336,23 @@ export function CsvImportWizard({
       }
     }
     
-    return { date: dateIdx, time: timeIdx, value: valueIdx, detectedUnit };
+    return { date: dateIdx, time: timeIdx, value: valueIdx };
   }, [previewData]);
 
-  // Detect unit from column header
-  const detectUnitFromHeader = useCallback((header: string): "kW" | "kWh" | "auto" => {
+  // Detect unit from column header - but don't auto-apply since headers are often cryptic
+  const detectUnitFromHeader = useCallback((header: string): typeof selectedValueUnit | null => {
     const lower = header.toLowerCase();
-    if (lower.includes("kwh") || lower.includes("energy") || lower.includes("consumption") || lower.includes("usage")) {
-      return "kWh";
-    }
-    if (lower.includes("kw") || lower.includes("power") || lower.includes("load") || lower.includes("demand")) {
-      return "kW";
-    }
-    return "auto";
+    if (lower.includes("mwh")) return "MWh";
+    if (lower.includes("mw") && !lower.includes("mwh")) return "MW";
+    if (lower.includes("kwh") || lower.includes("energy") || lower.includes("consumption") || lower.includes("usage")) return "kWh";
+    if (lower.includes("kvah")) return "kVAh";
+    if (lower.includes("kva")) return "kVA";
+    if (lower.includes("wh") && !lower.includes("kwh") && !lower.includes("mwh")) return "Wh";
+    if (lower.includes("kw") && !lower.includes("kwh")) return "kW";
+    if (/\bw\b/.test(lower) || (lower.includes("watt") && !lower.includes("kwh") && !lower.includes("kw"))) return "W";
+    if (lower.includes("amp") || /\ba\b/.test(lower) || lower.includes("current")) return "A";
+    return null; // No match - require explicit selection
   }, []);
-
-  // Auto-detect unit when value column changes
-  useEffect(() => {
-    if (selectedValueColumn !== null && previewData) {
-      const header = previewData.headers[selectedValueColumn] || "";
-      const detected = detectUnitFromHeader(header);
-      if (detected !== "auto") {
-        setSelectedValueUnit(detected);
-      }
-    }
-  }, [selectedValueColumn, previewData, detectUnitFromHeader]);
 
   // Initialize column selections when entering step 4
   useEffect(() => {
@@ -853,58 +822,151 @@ export function CsvImportWizard({
         </div>
 
         {/* Unit Type Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <div className="space-y-2">
             <Label className="font-medium text-sm flex items-center gap-2">
               Value Unit Type
-              {selectedValueUnit !== "auto" && (
+              <Badge variant="destructive" className="text-[10px]">Required</Badge>
+              {selectedValueUnit && (
                 <Badge variant="secondary" className="text-[10px]">
-                  {selectedValueUnit === "kW" ? "Power" : "Energy"}
+                  {["kW", "W", "MW", "kVA", "A"].includes(selectedValueUnit) ? "Power" : "Energy"}
                 </Badge>
               )}
             </Label>
             <Select
               value={selectedValueUnit}
-              onValueChange={(v) => setSelectedValueUnit(v as "kW" | "kWh" | "auto")}
+              onValueChange={(v) => setSelectedValueUnit(v as typeof selectedValueUnit)}
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue placeholder="Select unit type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="auto">
-                  <div className="flex flex-col">
-                    <span>Auto-detect</span>
-                    <span className="text-xs text-muted-foreground">Detect from column header</span>
-                  </div>
-                </SelectItem>
                 <SelectItem value="kWh">
                   <div className="flex flex-col">
-                    <span>kWh (Energy)</span>
+                    <span>kWh (Kilowatt-hours)</span>
                     <span className="text-xs text-muted-foreground">Interval energy readings - will be summed</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="kW">
                   <div className="flex flex-col">
-                    <span>kW (Power)</span>
+                    <span>kW (Kilowatts)</span>
                     <span className="text-xs text-muted-foreground">Instantaneous power - will be averaged</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="Wh">
+                  <div className="flex flex-col">
+                    <span>Wh (Watt-hours)</span>
+                    <span className="text-xs text-muted-foreground">Small energy readings - divided by 1000 → kWh</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="W">
+                  <div className="flex flex-col">
+                    <span>W (Watts)</span>
+                    <span className="text-xs text-muted-foreground">Small power readings - divided by 1000 → kW</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="MWh">
+                  <div className="flex flex-col">
+                    <span>MWh (Megawatt-hours)</span>
+                    <span className="text-xs text-muted-foreground">Large energy readings - multiplied by 1000 → kWh</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="MW">
+                  <div className="flex flex-col">
+                    <span>MW (Megawatts)</span>
+                    <span className="text-xs text-muted-foreground">Large power readings - multiplied by 1000 → kW</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="kVAh">
+                  <div className="flex flex-col">
+                    <span>kVAh (Kilovolt-amp-hours)</span>
+                    <span className="text-xs text-muted-foreground">Apparent energy - multiplied by power factor → kWh</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="kVA">
+                  <div className="flex flex-col">
+                    <span>kVA (Kilovolt-amps)</span>
+                    <span className="text-xs text-muted-foreground">Apparent power - multiplied by power factor → kW</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="A">
+                  <div className="flex flex-col">
+                    <span>A (Amps)</span>
+                    <span className="text-xs text-muted-foreground">Current - multiplied by voltage → kW</span>
                   </div>
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
           
+          {/* Conversion parameters for kVA and Amps */}
+          {(selectedValueUnit === "kVA" || selectedValueUnit === "kVAh") && (
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm whitespace-nowrap">Power Factor:</Label>
+                <Input
+                  type="number"
+                  min={0.1}
+                  max={1.0}
+                  step={0.01}
+                  value={powerFactor}
+                  onChange={(e) => setPowerFactor(parseFloat(e.target.value) || 0.9)}
+                  className="w-20 h-8"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                PF = {powerFactor} → {selectedValueUnit} × {powerFactor} = {selectedValueUnit === "kVA" ? "kW" : "kWh"}
+              </p>
+            </div>
+          )}
+          
+          {selectedValueUnit === "A" && (
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm whitespace-nowrap">Voltage (V):</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={voltageV}
+                  onChange={(e) => setVoltageV(parseInt(e.target.value) || 400)}
+                  className="w-24 h-8"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="text-sm whitespace-nowrap">Power Factor:</Label>
+                <Input
+                  type="number"
+                  min={0.1}
+                  max={1.0}
+                  step={0.01}
+                  value={powerFactor}
+                  onChange={(e) => setPowerFactor(parseFloat(e.target.value) || 0.9)}
+                  className="w-20 h-8"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A × {voltageV}V × √3 × {powerFactor} ÷ 1000 = kW
+              </p>
+            </div>
+          )}
+          
           {/* Unit explanation */}
           <Card className="bg-muted/30 p-3">
             <div className="text-xs space-y-1">
               <p className="font-medium">
                 {selectedValueUnit === "kWh" && "📊 Energy readings (kWh)"}
+                {selectedValueUnit === "Wh" && "📊 Energy readings (Wh → kWh)"}
+                {selectedValueUnit === "MWh" && "📊 Energy readings (MWh → kWh)"}
+                {selectedValueUnit === "kVAh" && "📊 Apparent energy (kVAh → kWh)"}
                 {selectedValueUnit === "kW" && "⚡ Power readings (kW)"}
-                {selectedValueUnit === "auto" && "🔍 Auto-detecting unit type..."}
+                {selectedValueUnit === "W" && "⚡ Power readings (W → kW)"}
+                {selectedValueUnit === "MW" && "⚡ Power readings (MW → kW)"}
+                {selectedValueUnit === "kVA" && "⚡ Apparent power (kVA → kW)"}
+                {selectedValueUnit === "A" && "⚡ Current readings (A → kW)"}
               </p>
               <p className="text-muted-foreground">
-                {selectedValueUnit === "kWh" && "Each value represents energy consumed during an interval. Values will be summed for daily totals."}
-                {selectedValueUnit === "kW" && "Each value represents instantaneous power. Values will be averaged for load profile, integrated for energy."}
-                {selectedValueUnit === "auto" && "The system will detect the unit from the column header name (kwh, energy, power, etc.)."}
+                {["kWh", "Wh", "MWh", "kVAh"].includes(selectedValueUnit) && "Each value represents energy consumed during an interval. Values will be summed for daily totals."}
+                {["kW", "W", "MW", "kVA", "A"].includes(selectedValueUnit) && "Each value represents instantaneous power. Values will be averaged for load profile, integrated for energy."}
               </p>
             </div>
           </Card>

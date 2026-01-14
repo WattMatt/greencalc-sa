@@ -1,5 +1,8 @@
 import { WizardParseConfig, ColumnConfig } from "../types/csvImportTypes";
 
+// Define the extended unit type
+export type ValueUnit = "kW" | "kWh" | "W" | "Wh" | "MW" | "MWh" | "kVA" | "kVAh" | "A" | "auto";
+
 export interface ProcessedLoadProfile {
   weekdayProfile: number[]; // 24 hourly values in kW
   weekendProfile: number[]; // 24 hourly values in kW
@@ -17,13 +20,45 @@ interface ParsedRow {
   date: Date;
   hour: number;
   minute: number;
-  kWh: number;
+  value: number; // Converted value in kW (for power units) or kWh (for energy units)
 }
 
 interface ParsedDateTime {
   date: Date;
   hour: number;
   minute: number;
+}
+
+// Unit conversion utilities
+function convertToKw(value: number, unit: ValueUnit, voltageV: number = 400, powerFactor: number = 0.9): number {
+  switch (unit) {
+    case "kW": return value;
+    case "W": return value / 1000;
+    case "MW": return value * 1000;
+    case "kVA": return value * powerFactor;
+    case "A": 
+      // 3-phase: P = √3 × V × I × PF / 1000 (to get kW)
+      return (Math.sqrt(3) * voltageV * value * powerFactor) / 1000;
+    default: return value; // For energy units, return as-is (will be handled differently)
+  }
+}
+
+function convertToKwh(value: number, unit: ValueUnit, powerFactor: number = 0.9): number {
+  switch (unit) {
+    case "kWh": return value;
+    case "Wh": return value / 1000;
+    case "MWh": return value * 1000;
+    case "kVAh": return value * powerFactor;
+    default: return value; // For power units, return as-is
+  }
+}
+
+function isEnergyUnit(unit: ValueUnit): boolean {
+  return ["kWh", "Wh", "MWh", "kVAh"].includes(unit);
+}
+
+function isPowerUnit(unit: ValueUnit): boolean {
+  return ["kW", "W", "MW", "kVA", "A"].includes(unit);
 }
 
 // Parse date (and optionally time) from string - handles combined datetime fields
@@ -198,7 +233,9 @@ export function processCSVToLoadProfile(
   let dateColIdx = -1;
   let timeColIdx = -1;
   let kwhColIdx = -1;
-  let valueUnit: "kW" | "kWh" | "auto" = config.valueUnit || "auto";
+  let valueUnit: ValueUnit = config.valueUnit || "auto";
+  const voltageV = config.voltageV || 400;
+  const powerFactor = config.powerFactor || 0.9;
   
   // PRIORITY 1: Use explicitly configured column indices from wizard step 4
   if (config.valueColumnIndex !== undefined && config.valueColumnIndex >= 0) {
@@ -249,13 +286,27 @@ export function processCSVToLoadProfile(
     }
   }
   
-  // Auto-detect unit type from column header if not specified
+  // Auto-detect unit type from column header if not specified or auto
   if (valueUnit === "auto" && kwhColIdx !== -1) {
     const colHeader = headers[kwhColIdx]?.toLowerCase() || "";
-    if (colHeader.includes("kwh") || colHeader.includes("energy") || colHeader.includes("consumption")) {
+    if (colHeader.includes("mwh")) {
+      valueUnit = "MWh";
+    } else if (colHeader.includes("mw") && !colHeader.includes("mwh")) {
+      valueUnit = "MW";
+    } else if (colHeader.includes("kvah")) {
+      valueUnit = "kVAh";
+    } else if (colHeader.includes("kva")) {
+      valueUnit = "kVA";
+    } else if (colHeader.includes("kwh") || colHeader.includes("energy") || colHeader.includes("consumption")) {
       valueUnit = "kWh";
-    } else if (colHeader.includes("kw") || colHeader.includes("power") || colHeader.includes("load")) {
+    } else if (colHeader.includes("kw") && !colHeader.includes("kwh")) {
       valueUnit = "kW";
+    } else if (colHeader.includes("wh") && !colHeader.includes("kwh") && !colHeader.includes("mwh")) {
+      valueUnit = "Wh";
+    } else if (/\bw\b/.test(colHeader) || (colHeader.includes("watt") && !colHeader.includes("kwh") && !colHeader.includes("kw"))) {
+      valueUnit = "W";
+    } else if (colHeader.includes("amp") || /\ba\b/.test(colHeader) || colHeader.includes("current")) {
+      valueUnit = "A";
     } else {
       // Default to kWh for interval meter data
       valueUnit = "kWh";
@@ -295,15 +346,23 @@ export function processCSVToLoadProfile(
     const dateKey = parsed.date.toISOString().split('T')[0];
     uniqueDates.add(dateKey);
     
-    // Parse kWh value
-    const kWh = parseFloat(kwhStr?.replace(/[^\d.-]/g, "") || "0");
-    if (isNaN(kWh)) continue;
+    // Parse raw value
+    const rawValue = parseFloat(kwhStr?.replace(/[^\d.-]/g, "") || "0");
+    if (isNaN(rawValue)) continue;
+    
+    // Convert to standard unit (kW for power, kWh for energy)
+    let convertedValue: number;
+    if (isPowerUnit(valueUnit)) {
+      convertedValue = convertToKw(rawValue, valueUnit, voltageV, powerFactor);
+    } else {
+      convertedValue = convertToKwh(rawValue, valueUnit, powerFactor);
+    }
     
     parsedRows.push({ 
       date: parsed.date, 
       hour: parsed.hour, 
       minute: parsed.minute, 
-      kWh 
+      value: convertedValue
     });
   }
   
@@ -332,16 +391,19 @@ export function processCSVToLoadProfile(
     
     if (isWeekendDay) {
       weekendDates.add(dateKey);
-      weekendHours[row.hour].push(row.kWh);
+      weekendHours[row.hour].push(row.value);
     } else {
       weekdayDates.add(dateKey);
-      weekdayHours[row.hour].push(row.kWh);
+      weekdayHours[row.hour].push(row.value);
     }
   }
   
+  // Determine if we're working with power or energy units
+  const isEnergy = isEnergyUnit(valueUnit);
+  
   // Calculate load profile for each hour based on unit type
-  // For kW: average the power readings for each hour
-  // For kWh: sum the energy readings for each hour, then average across days
+  // For power units: average the power values to get typical power for this hour
+  // For energy units: sum the energy readings for each hour, then average across days
   const weekdayProfile: number[] = [];
   const weekendProfile: number[] = [];
   
@@ -350,20 +412,20 @@ export function processCSVToLoadProfile(
   const daysInSample = weekdayDates.size || 1;
   const readingsPerHourPerDay = sampleHourReadings / daysInSample;
   
-  console.log(`[processCSV] Unit type: ${valueUnit}, readings per hour per day: ~${readingsPerHourPerDay.toFixed(1)}`);
+  console.log(`[processCSV] Unit type: ${valueUnit} (${isEnergy ? 'energy' : 'power'}), readings per hour per day: ~${readingsPerHourPerDay.toFixed(1)}`);
   
   for (let h = 0; h < 24; h++) {
     const wdValues = weekdayHours[h];
     const wdDayCount = weekdayDates.size || 1;
     
     let wdHourlyValue: number;
-    if (valueUnit === "kW") {
-      // For kW readings: average the power values to get typical power for this hour
+    if (!isEnergy) {
+      // For power readings: average the power values to get typical power for this hour
       wdHourlyValue = wdValues.length > 0 
         ? wdValues.reduce((sum, v) => sum + v, 0) / wdValues.length 
         : 0;
     } else {
-      // For kWh readings: sum all readings and divide by days to get avg kWh per hour
+      // For energy readings: sum all readings and divide by days to get avg kWh per hour
       const totalEnergy = wdValues.reduce((sum, v) => sum + v, 0);
       wdHourlyValue = totalEnergy / wdDayCount;
     }
@@ -373,7 +435,7 @@ export function processCSVToLoadProfile(
     const weDayCount = weekendDates.size || 1;
     
     let weHourlyValue: number;
-    if (valueUnit === "kW") {
+    if (!isEnergy) {
       weHourlyValue = weValues.length > 0 
         ? weValues.reduce((sum, v) => sum + v, 0) / weValues.length 
         : 0;
@@ -386,15 +448,15 @@ export function processCSVToLoadProfile(
   
   // Calculate totals based on unit type
   let totalKwh: number;
-  if (valueUnit === "kW") {
-    // For kW readings: integrate power over time
+  if (!isEnergy) {
+    // For power readings: integrate power over time
     // Each reading represents power at a point - multiply by interval duration
     const intervalHours = parsedRows.length > 1 ? 
       24 / (parsedRows.length / uniqueDates.size) : 0.5;
-    totalKwh = parsedRows.reduce((sum, row) => sum + row.kWh * intervalHours, 0);
+    totalKwh = parsedRows.reduce((sum, row) => sum + row.value * intervalHours, 0);
   } else {
-    // For kWh readings: sum directly
-    totalKwh = parsedRows.reduce((sum, row) => sum + row.kWh, 0);
+    // For energy readings: sum directly (already converted to kWh)
+    totalKwh = parsedRows.reduce((sum, row) => sum + row.value, 0);
   }
   
   const allValues = [...weekdayProfile, ...weekendProfile].filter(v => v > 0);
