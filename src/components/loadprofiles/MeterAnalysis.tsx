@@ -53,29 +53,41 @@ interface ScadaImport {
 
 // Parse CSV content into RawDataPoint array
 function parseCsvToDataPoints(csvContent: string): RawDataPoint[] {
-  const lines = csvContent.split('\n').filter(line => line.trim() && !line.startsWith('sep='));
+  // Clean up CSV: remove sep= lines, empty lines, and carriage returns
+  const cleanedContent = csvContent.replace(/\r/g, '');
+  const lines = cleanedContent.split('\n').filter(line => {
+    const trimmed = line.trim();
+    return trimmed && !trimmed.startsWith('sep=');
+  });
+  
+  console.log('[MeterAnalysis] CSV lines after cleaning:', lines.length, 'first line:', lines[0]);
+  
   if (lines.length < 2) return [];
   
   // Parse header to get column names
   const headerLine = lines[0];
-  const headers = headerLine.split(',').map(h => h.trim());
+  const headers = headerLine.split(',').map(h => h.trim().toLowerCase());
   console.log('[MeterAnalysis] CSV headers:', headers);
   
-  // Find date column index
+  // Find date column index (check for various date column names)
   const dateColIndex = headers.findIndex(h => 
-    h.toLowerCase() === 'date' || 
-    h.toLowerCase() === 'timestamp' ||
-    h.toLowerCase() === 'datetime'
+    h === 'date' || 
+    h === 'timestamp' ||
+    h === 'datetime' ||
+    h === 'time'
   );
+  
+  // Get original header names for display (preserving case)
+  const originalHeaders = lines[0].split(',').map(h => h.trim());
   
   // All columns except date are value columns
   const valueColumns: { name: string; index: number }[] = [];
-  headers.forEach((header, index) => {
+  originalHeaders.forEach((header, index) => {
     if (index !== dateColIndex && header) {
       valueColumns.push({ name: header, index });
     }
   });
-  console.log('[MeterAnalysis] Value columns:', valueColumns.map(v => v.name));
+  console.log('[MeterAnalysis] Value columns detected:', valueColumns.map(v => v.name));
   
   const dataPoints: RawDataPoint[] = [];
   
