@@ -260,6 +260,8 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
   const processFile = async (fileInfo: FileMatchInfo): Promise<FileMatchInfo> => {
     const { file, content, match } = fileInfo;
     
+    console.log(`[BulkCSV] Processing file: ${file.name}`);
+    
     try {
       // Detect configuration
       const config = autoDetectConfig(content);
@@ -290,19 +292,26 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
       const headers = headerIdx < lines.length ? parseRow(lines[headerIdx]) : [];
       const rows = lines.slice(headerIdx + 1).map(parseRow);
 
+      console.log(`[BulkCSV] ${file.name}: ${rows.length} rows, headers:`, headers.slice(0, 5));
+
       if (rows.length < 10) {
-        return { ...fileInfo, status: 'failed', message: 'Insufficient data rows' };
+        console.warn(`[BulkCSV] ${file.name}: Only ${rows.length} rows`);
+        return { ...fileInfo, status: 'failed', message: `Only ${rows.length} data rows (need 10+)` };
       }
 
       // Detect columns
       const sampleRows = rows.slice(0, 20);
       const { dateCol, timeCol, valueCol, valueUnit } = detectColumns(headers, sampleRows);
 
+      console.log(`[BulkCSV] ${file.name}: dateCol=${dateCol}, timeCol=${timeCol}, valueCol=${valueCol}, unit=${valueUnit}`);
+
       if (dateCol === -1) {
-        return { ...fileInfo, status: 'failed', message: 'No date column found' };
+        console.warn(`[BulkCSV] ${file.name}: No date column. Headers:`, headers);
+        return { ...fileInfo, status: 'failed', message: `No date column found in: ${headers.slice(0, 5).join(', ')}` };
       }
       if (valueCol === -1) {
-        return { ...fileInfo, status: 'failed', message: 'No value column found' };
+        console.warn(`[BulkCSV] ${file.name}: No value column. Headers:`, headers);
+        return { ...fileInfo, status: 'failed', message: `No value column found in: ${headers.slice(0, 5).join(', ')}` };
       }
 
       // Build column config - note: ColumnConfig only supports date/general/text/skip
@@ -338,14 +347,19 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
       };
 
       // Process CSV
+      console.log(`[BulkCSV] ${file.name}: Calling processCSVToLoadProfile...`);
       const profile = processCSVToLoadProfile(headers, rows, parseConfig);
 
+      console.log(`[BulkCSV] ${file.name}: Profile result - weekdayProfile length=${profile.weekdayProfile?.length}, dataPoints=${profile.dataPoints}`);
+
       if (!profile.weekdayProfile || profile.weekdayProfile.length === 0) {
-        return { ...fileInfo, status: 'failed', message: 'Failed to generate profile' };
+        console.warn(`[BulkCSV] ${file.name}: Empty profile returned`);
+        return { ...fileInfo, status: 'failed', message: 'Failed to generate profile (no data parsed)' };
       }
 
       // Validate
       const validation = validateLoadProfile(profile);
+      console.log(`[BulkCSV] ${file.name}: Validation result - isValid=${validation.isValid}, reason=${validation.reason}`);
 
       // Determine target meter ID
       let targetMeterId = match?.meterId;
