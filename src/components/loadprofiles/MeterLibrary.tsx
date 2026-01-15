@@ -563,10 +563,10 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       toast.error("No meters to reprocess");
       return;
     }
-    // Count unprocessed meters
-    const unprocessedMeters = filteredMeters.filter(m => !m.processed_at);
+    // Only include meters that are unprocessed AND have actual data to process
+    const unprocessedMeters = filteredMeters.filter(m => !m.processed_at && (m.data_points || 0) > 0);
     if (unprocessedMeters.length === 0) {
-      toast.info("All meters already processed. Use 'Clear Processed' to reset.");
+      toast.info("No meters with data available to process. Upload CSV data first.");
       return;
     }
     // Start wizard-based processing - user must configure columns for each meter
@@ -1064,7 +1064,8 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
             
             {/* Process All button - requires column selection for each */}
             {(() => {
-              const unprocessedCount = filteredMeters.filter(m => !m.processed_at).length;
+              // Only count meters that are unprocessed AND have actual data to process
+              const unprocessedCount = filteredMeters.filter(m => !m.processed_at && (m.data_points || 0) > 0).length;
               return unprocessedCount > 0 && (
                 <Button 
                   variant="default" 
