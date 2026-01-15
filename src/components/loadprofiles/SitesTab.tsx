@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Play, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
+import { BulkCsvDropzone } from "@/components/loadprofiles/BulkCsvDropzone";
 import { SheetImport } from "@/components/loadprofiles/SheetImport";
 import { MeterReimportDialog } from "@/components/loadprofiles/MeterReimportDialog";
 import { ColumnSelectionDialog } from "@/components/loadprofiles/ColumnSelectionDialog";
@@ -1398,25 +1399,50 @@ export function SitesTab() {
           </CardContent>
         </Card>
 
-        {/* Upload Dialog */}
+        {/* Upload Dialog - with Bulk CSV Automation */}
         <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Upload className="h-5 w-5" />
                 Upload Meters to {selectedSite.name}
               </DialogTitle>
               <DialogDescription>
-                Upload CSV files containing meter data
+                Drag & drop CSV files for automatic processing with smart meter matching
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
+            <div className="py-4 space-y-6">
+              {/* Bulk CSV Dropzone - Full Automation */}
+              <BulkCsvDropzone 
+                siteId={selectedSite.id}
+                onComplete={() => {
+                  setUploadDialogOpen(false);
+                  queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite.id] });
+                  queryClient.invalidateQueries({ queryKey: ["sites"] });
+                  queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
+                  queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+                  queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
+                }}
+              />
+              
+              {/* Separator */}
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or use manual import</span>
+                </div>
+              </div>
+              
+              {/* Legacy Manual Import */}
               <BulkMeterImport 
                 siteId={selectedSite.id}
                 onImportComplete={() => {
                   setUploadDialogOpen(false);
                   queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite.id] });
                   queryClient.invalidateQueries({ queryKey: ["sites"] });
+                  queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
                   queryClient.invalidateQueries({ queryKey: ["meter-library"] });
                   queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
                 }}

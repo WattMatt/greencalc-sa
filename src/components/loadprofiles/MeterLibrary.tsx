@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle, Info, Eye, Settings, Zap, FolderUp } from "lucide-react";
+import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle, Info, Eye, Settings, Zap } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -19,7 +19,7 @@ import { WizardParseConfig, ColumnConfig, ParsedData } from "./types/csvImportTy
 import { MeterProfilePreview } from "./MeterProfilePreview";
 import { CsvImportWizard } from "./CsvImportWizard";
 import { OneClickBatchProcessor } from "./OneClickBatchProcessor";
-import { BulkCsvDropzone } from "./BulkCsvDropzone";
+// BulkCsvDropzone moved to SitesTab for site-specific bulk imports
 
 interface RawDataStats {
   csvContent?: string;
@@ -129,8 +129,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   const [showOneClickProcessor, setShowOneClickProcessor] = useState(false);
   const [oneClickMeterIds, setOneClickMeterIds] = useState<string[]>([]);
   
-  // Bulk CSV dropzone state
-  const [showBulkDropzone, setShowBulkDropzone] = useState(false);
+  // Bulk CSV dropzone moved to SitesTab
   
   const BATCH_SIZE = 20; // Process 20 meters at a time
 
@@ -1007,15 +1006,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
 
   return (
     <div className="space-y-4">
-      {/* Bulk CSV Dropzone */}
-      {showBulkDropzone && (
-        <BulkCsvDropzone 
-          siteId={siteId} 
-          onComplete={() => {
-            queryClient.invalidateQueries({ queryKey: ["meter-library"] });
-          }} 
-        />
-      )}
+      {/* Bulk CSV import is now in SitesTab upload dialog */}
       
       <Card>
         <CardHeader>
@@ -1029,14 +1020,6 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                 Global reference meters - used to build project load profiles
               </CardDescription>
             </div>
-            <Button 
-              variant={showBulkDropzone ? "secondary" : "default"}
-              onClick={() => setShowBulkDropzone(!showBulkDropzone)}
-              className="gap-2"
-            >
-              <FolderUp className="h-4 w-4" />
-              {showBulkDropzone ? "Hide Dropzone" : "Bulk Import CSVs"}
-            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
