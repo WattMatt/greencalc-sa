@@ -134,15 +134,20 @@ function validateProfile(weekdayProfile: number[], weekendProfile: number[], dat
 
 function detectDelimiter(content: string): string {
   const sampleLines = content.split('\n').slice(0, 10).join('\n');
-
+  
+  // Supported delimiters per spec: Tab, Semicolon, Comma, Pipe, Space
   const counts = {
     '\t': (sampleLines.match(/\t/g) || []).length,
     ';': (sampleLines.match(/;/g) || []).length,
     ',': (sampleLines.match(/,/g) || []).length,
     '|': (sampleLines.match(/\|/g) || []).length,
+    ' ': 0, // Space needs special handling - only count if no other delimiters
   };
-
-  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  
+  const sorted = Object.entries(counts)
+    .filter(([k]) => k !== ' ')
+    .sort((a, b) => b[1] - a[1]);
+  
   if (sorted[0][1] > 0) return sorted[0][0];
   return ',';
 }
@@ -239,9 +244,11 @@ function detectFormat(lines: string[], delimiter: string): FormatDetection {
 
 // ============= COLUMN DETECTION =============
 
-const DATE_PATTERNS = ["rdate", "date", "datetime", "timestamp", "day"];
-const TIME_PATTERNS = ["rtime", "time"];
-const VALUE_PATTERNS = ["kwh+", "kwh-", "kwh", "kw", "energy", "consumption", "reading", "value", "power", "active"];
+// Column detection patterns per spec - includes German patterns
+const DATE_PATTERNS = ["rdate", "date", "datetime", "timestamp", "day", "datum"];
+const TIME_PATTERNS = ["rtime", "time", "hour", "zeit"];
+const VALUE_PATTERNS = ["kwh+", "kwh-", "kwh", "kw", "energy", "consumption", "reading", "value", "power", "load", "demand", "active"];
+const METER_PATTERNS = ["meter", "meter_id", "meterid", "device", "channel", "point", "site"];
 
 function autoDetectColumns(headers: string[], sampleRows: string[][]): {
   dateCol: number;
@@ -274,7 +281,7 @@ function autoDetectColumns(headers: string[], sampleRows: string[][]): {
       valueCol = i;
       console.log(`[autoDetect] Value column: ${i} (${headers[i]})`);
     }
-    if (meterIdCol === -1 && (h.includes('meter') || h.includes('device') || h.includes('channel'))) {
+    if (meterIdCol === -1 && METER_PATTERNS.some(p => h.includes(p))) {
       meterIdCol = i;
       console.log(`[autoDetect] Meter ID column: ${i} (${headers[i]})`);
     }

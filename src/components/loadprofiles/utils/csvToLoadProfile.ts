@@ -114,7 +114,7 @@ function detectDataInterval(parsedRows: ParsedRow[]): number {
   return mostCommonInterval;
 }
 
-// Round to nearest standard interval
+// Round to nearest standard interval per spec: 1, 5, 10, 15, 30, 60, 120, 180, 240 minutes
 function roundToStandardInterval(minutes: number): number {
   const standardIntervals = [1, 5, 10, 15, 30, 60, 120, 180, 240];
   let closest = standardIntervals[0];
@@ -574,4 +574,53 @@ function createEmptyProfile(): ProcessedLoadProfile {
     avgKw: 0,
     detectedInterval: 60,
   };
+}
+
+/**
+ * Validates a processed load profile per CSV_EXTRACTION_SPECIFICATION.md
+ * Rejects profiles where all values are identical (indicates extraction failure)
+ * @returns true if profile is valid, false if extraction likely failed
+ */
+export function validateLoadProfile(profile: ProcessedLoadProfile): { 
+  isValid: boolean; 
+  reason?: string;
+} {
+  // Check for no data points
+  if (profile.dataPoints === 0) {
+    return { isValid: false, reason: "No data points parsed from file" };
+  }
+  
+  // Check for all-zero profiles
+  const weekdayAllZero = profile.weekdayProfile.every(v => v === 0);
+  const weekendAllZero = profile.weekendProfile.every(v => v === 0);
+  
+  if (weekdayAllZero && weekendAllZero) {
+    return { isValid: false, reason: "All profile values are zero" };
+  }
+  
+  // Check for all-identical profiles (non-zero) - strong indicator of extraction failure
+  // This catches the 4.17, 4.17, 4.17... pattern or any other flat profile
+  const allWeekdaySame = profile.weekdayProfile.every(v => v === profile.weekdayProfile[0]);
+  const allWeekendSame = profile.weekendProfile.every(v => v === profile.weekendProfile[0]);
+  
+  // Only flag if BOTH profiles are identical (flat) - some meters legitimately have flat weekend profiles
+  if (allWeekdaySame && allWeekendSame && profile.weekdayProfile[0] === profile.weekendProfile[0]) {
+    // Allow if it's all zeros (already handled above) or if there's natural variation
+    if (profile.weekdayProfile[0] !== 0) {
+      return { 
+        isValid: false, 
+        reason: `All profile values are identical (${profile.weekdayProfile[0].toFixed(2)}) - possible extraction failure` 
+      };
+    }
+  }
+  
+  // Check for unrealistic peak values (likely unit conversion error)
+  if (profile.peakKw > 100000) {
+    return { 
+      isValid: false, 
+      reason: `Unrealistic peak value (${profile.peakKw.toFixed(0)} kW) - check unit settings` 
+    };
+  }
+  
+  return { isValid: true };
 }

@@ -155,6 +155,7 @@ export function parseDate(dateStr: string, timeStr: string | null, format: strin
 
 // ============= COLUMN DETECTION =============
 
+// Column detection patterns per spec - includes German patterns (datum, zeit)
 const DATE_PATTERNS = ["rdate", "date", "datetime", "timestamp", "day", "datum"];
 const TIME_PATTERNS = ["rtime", "time", "hour", "zeit"];
 const VALUE_PATTERNS = ["kwh+", "kwh-", "kwh", "kw", "energy", "consumption", "reading", "value", "power", "load", "demand", "active"];
@@ -433,8 +434,9 @@ function estimateDataInterval(rows: string[][], dateCol: number, timeCol: number
   return mode;
 }
 
+// Standard intervals per spec: 1, 5, 10, 15, 30, 60, 120, 180, 240 minutes
 function roundToStandardInterval(minutes: number): number {
-  const standards = [1, 5, 10, 15, 30, 60, 120];
+  const standards = [1, 5, 10, 15, 30, 60, 120, 180, 240];
   let closest = standards[0];
   let minDiff = Math.abs(minutes - closest);
   
