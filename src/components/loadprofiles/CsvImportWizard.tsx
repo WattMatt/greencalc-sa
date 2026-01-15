@@ -112,7 +112,15 @@ function detectDelimiter(content: string, startRow: number): WizardParseConfig["
 
 // Parse CSV with given configuration
 function parseWithConfig(content: string, config: WizardParseConfig): ParsedData {
-  const lines = content.split('\n').filter(l => l.trim());
+  let lines = content.split('\n').filter(l => l.trim());
+  
+  // Skip sep= directive lines at the beginning - these are Excel metadata, not data
+  let sepLinesSkipped = 0;
+  while (lines.length > 0 && lines[0].toLowerCase().startsWith('sep=')) {
+    console.log('[parseWithConfig] Skipping sep= directive:', lines[0]);
+    lines = lines.slice(1);
+    sepLinesSkipped++;
+  }
   
   const delims: string[] = [];
   if (config.delimiters.tab) delims.push('\t');
@@ -157,15 +165,29 @@ function parseWithConfig(content: string, config: WizardParseConfig): ParsedData
     return result;
   };
 
-  const headerIdx = config.startRow - 1;
+  // Adjust header index accounting for skipped sep= lines
+  // If startRow was 2 and we skipped 1 sep= line, now we need startRow - 1 = 1
+  // But since we already removed the sep= lines, we use startRow - 1 - sepLinesSkipped
+  // Actually simpler: startRow is user-facing (1-indexed including sep=), 
+  // so after removing sep= lines, headerIdx = max(0, startRow - 1 - sepLinesSkipped)
+  const headerIdx = Math.max(0, config.startRow - 1 - sepLinesSkipped);
+  
+  console.log('[parseWithConfig] startRow:', config.startRow, 'sepLinesSkipped:', sepLinesSkipped, 'headerIdx:', headerIdx);
+  console.log('[parseWithConfig] First few lines after sep= removal:', lines.slice(0, 3));
+  
   const headers = headerIdx < lines.length ? parseRow(lines[headerIdx]) : [];
   const rows = lines.slice(headerIdx + 1).map(parseRow);
+  
+  console.log('[parseWithConfig] Parsed headers:', headers);
+  console.log('[parseWithConfig] Row count:', rows.length);
 
   let meterName: string | undefined;
   let dateRange: { start: string; end: string } | undefined;
 
-  if (config.detectedFormat === "pnp-scada" && headerIdx > 0) {
-    const metaLine = lines[0];
+  if (config.detectedFormat === "pnp-scada" && config.startRow > 1) {
+    // For PnP SCADA, the meter info is in line 0 (before sep= removal)
+    const allLines = content.split('\n').filter(l => l.trim());
+    const metaLine = allLines[0];
     const match = metaLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
     if (match) {
       meterName = match[1];
