@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle, Info, Eye, Settings } from "lucide-react";
+import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle, Info, Eye, Settings, Zap } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -18,6 +18,7 @@ import { processCSVToLoadProfile, validateLoadProfile } from "./utils/csvToLoadP
 import { WizardParseConfig, ColumnConfig, ParsedData } from "./types/csvImportTypes";
 import { MeterProfilePreview } from "./MeterProfilePreview";
 import { CsvImportWizard } from "./CsvImportWizard";
+import { OneClickBatchProcessor } from "./OneClickBatchProcessor";
 
 interface RawDataStats {
   csvContent?: string;
@@ -122,6 +123,10 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     voltageV?: number;
     powerFactor?: number;
   } | null>(null);
+  
+  // One-click batch processor state
+  const [showOneClickProcessor, setShowOneClickProcessor] = useState(false);
+  const [oneClickMeterIds, setOneClickMeterIds] = useState<string[]>([]);
   
   const BATCH_SIZE = 20; // Process 20 meters at a time
 
@@ -1057,8 +1062,21 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
               </Button>
             )}
             
-            {selectedIds.size > 0 && (
+            {selectedIds.size > 0 && !showOneClickProcessor && (
               <>
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  onClick={() => {
+                    setOneClickMeterIds(Array.from(selectedIds));
+                    setShowOneClickProcessor(true);
+                  }}
+                  disabled={processingQueue.length > 0}
+                  className="gap-2"
+                >
+                  <Zap className="h-4 w-4" />
+                  Quick Process {selectedIds.size}
+                </Button>
                 <Button 
                   variant="outline" 
                   size="sm" 
@@ -1070,7 +1088,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                   ) : (
                     <Settings className="h-4 w-4 mr-1" />
                   )}
-                  Process {selectedIds.size} selected
+                  Manual Config
                 </Button>
                 <Button 
                   variant="destructive" 
@@ -1079,18 +1097,38 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                   disabled={bulkDeleteMeters.isPending}
                 >
                   <Trash2 className="h-4 w-4 mr-1" />
-                  Delete {selectedIds.size} selected
+                  Delete {selectedIds.size}
                 </Button>
               </>
             )}
             
-            {/* Process All button - requires column selection for each */}
+            {/* One-Click Quick Process button - auto-detects columns */}
+            {(() => {
+              const unprocessedWithData = filteredMeters.filter(m => !m.processed_at && (m.data_points || 0) > 0);
+              return unprocessedWithData.length > 0 && !showOneClickProcessor && (
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  onClick={() => {
+                    setOneClickMeterIds(unprocessedWithData.map(m => m.id));
+                    setShowOneClickProcessor(true);
+                  }}
+                  disabled={processingQueue.length > 0}
+                  className="gap-2 bg-primary"
+                >
+                  <Zap className="h-4 w-4" />
+                  Quick Process ({unprocessedWithData.length})
+                </Button>
+              );
+            })()}
+            
+            {/* Manual Process All button - requires column selection for each */}
             {(() => {
               // Only count meters that are unprocessed AND have actual data to process
               const unprocessedCount = filteredMeters.filter(m => !m.processed_at && (m.data_points || 0) > 0).length;
-              return unprocessedCount > 0 && (
+              return unprocessedCount > 0 && !showOneClickProcessor && (
                 <Button 
-                  variant="default" 
+                  variant="outline" 
                   size="sm" 
                   onClick={handleReprocessAll}
                   disabled={processingQueue.length > 0 || !meters?.length}
@@ -1100,13 +1138,13 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                   ) : (
                     <Settings className="h-4 w-4 mr-1" />
                   )}
-                  Process All ({unprocessedCount})
+                  Manual Config...
                 </Button>
               );
             })()}
             
             {/* Clear Processed button */}
-            {meters && meters.some(m => m.processed_at) && (
+            {meters && meters.some(m => m.processed_at) && !showOneClickProcessor && (
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -1118,6 +1156,22 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
               </Button>
             )}
           </div>
+          
+          {/* One-Click Batch Processor */}
+          {showOneClickProcessor && oneClickMeterIds.length > 0 && (
+            <OneClickBatchProcessor
+              meterIds={oneClickMeterIds}
+              onComplete={() => {
+                setShowOneClickProcessor(false);
+                setOneClickMeterIds([]);
+                queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+              }}
+              onCancel={() => {
+                setShowOneClickProcessor(false);
+                setOneClickMeterIds([]);
+              }}
+            />
+          )}
           
           {/* Progress indicator */}
           {reprocessProgress && (
