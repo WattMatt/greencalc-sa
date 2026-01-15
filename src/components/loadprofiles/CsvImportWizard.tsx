@@ -35,6 +35,13 @@ interface CsvImportWizardProps {
   fileName: string;
   onProcess: (config: WizardParseConfig, parsedData: ParsedData) => void;
   isProcessing: boolean;
+  // Previous processing config for reconfiguration
+  previousConfig?: {
+    column?: string;
+    unit?: "kW" | "kWh" | "W" | "Wh" | "MW" | "MWh" | "kVA" | "kVAh" | "A";
+    voltageV?: number;
+    powerFactor?: number;
+  } | null;
 }
 
 const DEFAULT_CONFIG: WizardParseConfig = {
@@ -211,6 +218,7 @@ export function CsvImportWizard({
   fileName,
   onProcess,
   isProcessing,
+  previousConfig,
 }: CsvImportWizardProps) {
   const [step, setStep] = useState(1);
   const [config, setConfig] = useState<WizardParseConfig>(DEFAULT_CONFIG);
@@ -222,6 +230,7 @@ export function CsvImportWizard({
   const [selectedValueUnit, setSelectedValueUnit] = useState<"kW" | "kWh" | "W" | "Wh" | "MW" | "MWh" | "kVA" | "kVAh" | "A">("kW");
   const [voltageV, setVoltageV] = useState<number>(400);
   const [powerFactor, setPowerFactor] = useState<number>(0.9);
+  const [hasPreviousConfig, setHasPreviousConfig] = useState(false);
 
   // Auto-detect format on open
   useEffect(() => {
@@ -247,8 +256,19 @@ export function CsvImportWizard({
       }
       setStep(1);
       setSelectedColumn(null);
+      
+      // Apply previous config if available
+      if (previousConfig) {
+        setHasPreviousConfig(true);
+        if (previousConfig.unit) setSelectedValueUnit(previousConfig.unit);
+        if (previousConfig.voltageV) setVoltageV(previousConfig.voltageV);
+        if (previousConfig.powerFactor) setPowerFactor(previousConfig.powerFactor);
+        // Note: column selection will be applied after headers are parsed
+      } else {
+        setHasPreviousConfig(false);
+      }
     }
-  }, [isOpen, csvContent]);
+  }, [isOpen, csvContent, previousConfig]);
 
   // Parse preview data
   const previewData = useMemo(() => {
@@ -378,7 +398,18 @@ export function CsvImportWizard({
 
   // Initialize column selections when entering step 4
   useEffect(() => {
-    if (step === 4) {
+    if (step === 4 && previewData) {
+      // If we have a previous config with a column name, try to find it by name first
+      if (previousConfig?.column && selectedValueColumn === null) {
+        const matchIndex = previewData.headers.findIndex(
+          h => h.toLowerCase().trim() === previousConfig.column?.toLowerCase().trim()
+        );
+        if (matchIndex !== -1) {
+          setSelectedValueColumn(matchIndex);
+        }
+      }
+      
+      // Fall back to auto-detection if no previous column was matched
       if (selectedDateColumn === null && autoDetectedColumns.date !== -1) {
         setSelectedDateColumn(autoDetectedColumns.date);
       }
@@ -389,7 +420,7 @@ export function CsvImportWizard({
         setSelectedValueColumn(autoDetectedColumns.value);
       }
     }
-  }, [step, autoDetectedColumns, selectedDateColumn, selectedTimeColumn, selectedValueColumn]);
+  }, [step, autoDetectedColumns, selectedDateColumn, selectedTimeColumn, selectedValueColumn, previewData, previousConfig]);
 
   // Analyze columns for step 4 display
   const columnAnalysis = useMemo(() => {

@@ -115,6 +115,14 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   const [currentWizardFileName, setCurrentWizardFileName] = useState<string>("");
   const [isWizardProcessing, setIsWizardProcessing] = useState(false);
   
+  // Previous processing config for reconfiguration
+  const [previousProcessingConfig, setPreviousProcessingConfig] = useState<{
+    column?: string;
+    unit?: "kW" | "kWh" | "W" | "Wh" | "MW" | "MWh" | "kVA" | "kVAh" | "A";
+    voltageV?: number;
+    powerFactor?: number;
+  } | null>(null);
+  
   const BATCH_SIZE = 20; // Process 20 meters at a time
 
   const { data: meters, isLoading } = useQuery({
@@ -604,8 +612,17 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
         return;
       }
       
-      const rawData = meter.raw_data as { csvContent?: string }[] | null;
+      const rawData = meter.raw_data as { 
+        csvContent?: string;
+        processingConfig?: {
+          column?: string;
+          unit?: "kW" | "kWh" | "W" | "Wh" | "MW" | "MWh" | "kVA" | "kVAh" | "A";
+          voltageV?: number;
+          powerFactor?: number;
+        };
+      }[] | null;
       const csvContent = rawData?.[0]?.csvContent;
+      const processingConfig = rawData?.[0]?.processingConfig || null;
       
       if (!csvContent) {
         console.warn("No CSV content for meter:", meterId);
@@ -617,6 +634,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       setCurrentWizardMeterId(meterId);
       setCurrentWizardCsvContent(csvContent);
       setCurrentWizardFileName(displayName);
+      setPreviousProcessingConfig(processingConfig);
     } catch (err) {
       console.error("Error loading meter for wizard:", err);
       moveToNextMeterInQueue(meterId, 'failed', String(err));
@@ -660,8 +678,17 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       const totalDays = Math.max(1, profile.weekdayDays + profile.weekendDays);
       const avgDailyKwh = profile.totalKwh / totalDays;
 
-      // Build new raw_data WITHOUT CSV content
+      // Build new raw_data - PRESERVE CSV content for reprocessing and STORE processing config
+      const processingConfig = {
+        column: config.valueColumnIndex !== undefined ? parsedData.headers[config.valueColumnIndex] : undefined,
+        unit: config.valueUnit,
+        voltageV: config.voltageV,
+        powerFactor: config.powerFactor,
+      };
+      
       const newRawData = [{
+        csvContent: currentWizardCsvContent, // Preserve for reprocessing
+        processingConfig, // Store the config for reconfiguration
         totalKwh: profile.totalKwh,
         avgDailyKwh,
         peakKw: profile.peakKw,
@@ -1466,6 +1493,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
         fileName={currentWizardFileName}
         onProcess={handleWizardProcess}
         isProcessing={isWizardProcessing}
+        previousConfig={previousProcessingConfig}
       />
 
       {/* Processing queue indicator */}
