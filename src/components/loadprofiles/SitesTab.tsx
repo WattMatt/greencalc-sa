@@ -1317,19 +1317,37 @@ export function SitesTab() {
                           <div className="flex gap-1">
                             {/* Configure button - for meters with CSV data */}
                             {(meter.data_points || 0) > 0 ? (
-                              <Button
-                                variant={!processed ? "default" : "ghost"}
-                                size="icon"
-                                onClick={() => handleConfigureSingleMeter(meter)}
-                                disabled={processingQueue.includes(meter.id)}
-                                title={processed ? "Reconfigure columns" : "Configure columns"}
-                              >
-                                {processingQueue.includes(meter.id) ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Settings className="h-4 w-4" />
+                              <>
+                                <Button
+                                  variant={!processed ? "default" : "ghost"}
+                                  size="icon"
+                                  onClick={() => handleConfigureSingleMeter(meter)}
+                                  disabled={processingQueue.includes(meter.id)}
+                                  title={processed ? "Reconfigure columns" : "Configure columns"}
+                                >
+                                  {processingQueue.includes(meter.id) ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Settings className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                {/* Reprocess button - force reprocess with existing settings */}
+                                {processed && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleReprocessMeter(meter)}
+                                    disabled={reprocessingMeterId === meter.id}
+                                    title="Reprocess CSV data"
+                                  >
+                                    {reprocessingMeterId === meter.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="h-4 w-4" />
+                                    )}
+                                  </Button>
                                 )}
-                              </Button>
+                              </>
                             ) : (
                               /* Upload button - for listed-only meters without CSV data */
                               <Button
