@@ -82,18 +82,27 @@ const MONTH_MAP: Record<string, number> = {
 export function parseDate(dateStr: string, timeStr: string | null, format: string = "DMY"): Date | null {
   if (!dateStr) return null;
   
-  const combined = timeStr ? `${dateStr.trim()} ${timeStr.trim()}` : dateStr.trim();
+  // Clean input
+  const cleanDate = dateStr.trim().replace(/^["']|["']$/g, '');
+  const cleanTime = timeStr ? timeStr.trim().replace(/^["']|["']$/g, '') : null;
+  const combined = cleanTime ? `${cleanDate} ${cleanTime}` : cleanDate;
   
-  // Try native parsing first (ISO format)
+  // Try native parsing first (supports ISO and some others)
   const nativeDate = new Date(combined);
-  if (!isNaN(nativeDate.getTime()) && combined.includes('-') && combined.length >= 10) {
-    return nativeDate;
+  if (!isNaN(nativeDate.getTime()) && combined.length >= 10) {
+    // Basic check for ISO-like formats (YYYY-MM-DD or YYYY/MM/DD)
+    if (/^\d{4}[-\/]\d{2}[-\/]\d{2}/.test(combined)) {
+      return nativeDate;
+    }
   }
   
-  // DD/MM/YYYY HH:mm:ss or DD-MM-YYYY HH:mm:ss
-  const ddmmyyyy = combined.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (ddmmyyyy) {
-    const [, p1, p2, year, hour, min, sec] = ddmmyyyy;
+  // Flexible regex-based parsing
+  
+  // 1. DD/MM/YYYY or MM/DD/YYYY or DD-MM-YYYY (with optional time)
+  // Pattern: [1-2 digits] [separator] [1-2 digits] [separator] [4 digits] [optional time]
+  const dmyMatch = combined.match(/^(\d{1,2})[\/\-\. ](\d{1,2})[\/\-\. ](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (dmyMatch) {
+    const [, p1, p2, year, hour, min, sec] = dmyMatch;
     let day: number, month: number;
     
     if (format === "MDY") {
@@ -104,29 +113,42 @@ export function parseDate(dateStr: string, timeStr: string | null, format: strin
       month = parseInt(p2) - 1;
     }
     
-    return new Date(parseInt(year), month, day,
-      parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
+    // Validate date components
+    if (month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+      return new Date(parseInt(year), month, day,
+        parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
+    }
   }
   
-  // YYYY/MM/DD HH:mm:ss or YYYY-MM-DD HH:mm:ss
-  const yyyymmdd = combined.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (yyyymmdd) {
-    const [, year, month, day, hour, min, sec] = yyyymmdd;
-    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day),
-      parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
+  // 2. YYYY/MM/DD or YYYY-MM-DD (with optional time)
+  const ymdMatch = combined.match(/^(\d{4})[\/\-\. ](\d{1,2})[\/\-\. ](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (ymdMatch) {
+    const [, year, month, day, hour, min, sec] = ymdMatch;
+    const m = parseInt(month) - 1;
+    const d = parseInt(day);
+    if (m >= 0 && m <= 11 && d >= 1 && d <= 31) {
+      return new Date(parseInt(year), m, d,
+        parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
+    }
   }
   
-  // DD-MMM-YY HH:mm:ss (01-Jan-24)
-  const ddmmmyy = combined.match(/(\d{1,2})[\/\-]([A-Za-z]{3})[\/\-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (ddmmmyy) {
-    const [, day, monthStr, year, hour, min, sec] = ddmmmyy;
-    const monthNum = MONTH_MAP[monthStr.toLowerCase()];
+  // 3. DD-MMM-YYYY or DD-MMM-YY (e.g., 01-Jan-24)
+  const mmmMatch = combined.match(/^(\d{1,2})[\/\-\. ]([A-Za-z]{3,9})[\/\-\. ](\d{2,4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (mmmMatch) {
+    const [, day, monthStr, year, hour, min, sec] = mmmMatch;
+    const monthNum = MONTH_MAP[monthStr.toLowerCase().substring(0, 3)];
     if (monthNum !== undefined) {
-      const fullYear = year.length === 2 ? 2000 + parseInt(year) : parseInt(year);
+      let fullYear = parseInt(year);
+      if (year.length === 2) {
+        fullYear += (fullYear > 50) ? 1900 : 2000;
+      }
       return new Date(fullYear, monthNum, parseInt(day),
         parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
     }
   }
+
+  // Fallback: try Native again if nothing else matched but it actually worked (e.g. "January 1, 2024")
+  if (!isNaN(nativeDate.getTime())) return nativeDate;
   
   return null;
 }
@@ -497,4 +519,61 @@ export function detectUnitFromHeader(header: string): ValueUnit {
   if (h.includes("amp") || /\ba\b/.test(h) || h.includes("current")) return "A";
   
   return "kWh"; // Default for interval meter data
+}
+
+// ============= PROFILE VALIDATION =============
+
+export interface ValidationIssues {
+  allZeros: boolean;
+  flatLine: boolean;
+  extremeOutliers: boolean;
+  tooFewPoints: boolean;
+  emptyProfile: boolean;
+  isInvalid: boolean;
+  warnings: string[];
+}
+
+export function validateProfile(weekdayProfile: number[], weekendProfile: number[], dataPoints: number): ValidationIssues {
+  const allValues = [...weekdayProfile, ...weekendProfile];
+  const issues: ValidationIssues = {
+    allZeros: false,
+    flatLine: false,
+    extremeOutliers: false,
+    tooFewPoints: dataPoints < 48, // Less than 2 days of 1-hour data
+    emptyProfile: allValues.every(v => v === 0),
+    isInvalid: false,
+    warnings: [],
+  };
+
+  if (issues.emptyProfile) {
+    issues.isInvalid = true;
+    issues.warnings.push("Extracted profile is empty (all zeros).");
+    return issues;
+  }
+
+  // Check for flat line (all non-zero values are identical)
+  const nonZeroValues = allValues.filter(v => v !== 0);
+  if (nonZeroValues.length > 0) {
+    const firstVal = nonZeroValues[0];
+    issues.flatLine = nonZeroValues.every(v => Math.abs(v - firstVal) < 0.0001);
+  }
+
+  // Check for outliers (values > 1,000,000 kW usually indicate unit error)
+  issues.extremeOutliers = allValues.some(v => v > 1000000);
+
+  if (issues.flatLine) {
+    issues.warnings.push("Profile is a 'flat line' (all consumption values are identical). Check column mapping.");
+  }
+  if (issues.extremeOutliers) {
+    issues.warnings.push("Extremely high values detected. Check if units (e.g., Watts vs kW) are correct.");
+  }
+  if (issues.tooFewPoints) {
+    issues.warnings.push(`Only ${dataPoints} data points processed. Profile may not be representative.`);
+  }
+
+  // Consider profile invalid if empty or has severe unit error (extremely huge values that aren't possible)
+  // We don't mark flat line as "invalid" because some stable loads might actually look like that, but we warn.
+  issues.isInvalid = issues.emptyProfile || (allValues.some(v => v > 10000000));
+
+  return issues;
 }

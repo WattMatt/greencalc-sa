@@ -46,20 +46,24 @@ const MONTH_MAP: Record<string, number> = {
 function parseDate(dateStr: string, timeStr: string | null, format: string = "DMY"): Date | null {
   if (!dateStr) return null;
 
-  const combined = timeStr ? `${dateStr.trim()} ${timeStr.trim()}` : dateStr.trim();
-  
-  // Try native parsing first (ISO format)
+  // Clean input
+  const cleanDate = dateStr.trim().replace(/^["']|["']$/g, '');
+  const cleanTime = timeStr ? timeStr.trim().replace(/^["']|["']$/g, '') : null;
+  const combined = cleanTime ? `${cleanDate} ${cleanTime}` : cleanDate;
+
+  // Try native parsing first (supports ISO and some others)
   const nativeDate = new Date(combined);
-  if (!isNaN(nativeDate.getTime()) && combined.includes('-') && combined.length >= 10) {
-    return nativeDate;
+  if (!isNaN(nativeDate.getTime()) && combined.length >= 10) {
+    if (/^\d{4}[-\/]\d{2}[-\/]\d{2}/.test(combined)) {
+      return nativeDate;
+    }
   }
 
-  // DD/MM/YYYY HH:mm:ss or DD-MM-YYYY HH:mm:ss
-  const ddmmyyyy = combined.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (ddmmyyyy) {
-    const [, p1, p2, year, hour, min, sec] = ddmmyyyy;
+  // DD/MM/YYYY or MM/DD/YYYY (with optional time)
+  const dmyMatch = combined.match(/^(\d{1,2})[\/\-\. ](\d{1,2})[\/\-\. ](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (dmyMatch) {
+    const [, p1, p2, year, hour, min, sec] = dmyMatch;
     let day: number, month: number;
-    
     if (format === "MDY") {
       month = parseInt(p1) - 1;
       day = parseInt(p2);
@@ -67,46 +71,77 @@ function parseDate(dateStr: string, timeStr: string | null, format: string = "DM
       day = parseInt(p1);
       month = parseInt(p2) - 1;
     }
-    
-    return new Date(parseInt(year), month, day,
-      parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
+    if (month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+      return new Date(parseInt(year), month, day,
+        parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
+    }
   }
 
-  // YYYY/MM/DD HH:mm:ss or YYYY-MM-DD HH:mm:ss
-  const yyyymmdd = combined.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (yyyymmdd) {
-    const [, year, month, day, hour, min, sec] = yyyymmdd;
-    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day),
-      parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
+  // YYYY/MM/DD or YYYY-MM-DD
+  const ymdMatch = combined.match(/^(\d{4})[\/\-\. ](\d{1,2})[\/\-\. ](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (ymdMatch) {
+    const [, year, month, day, hour, min, sec] = ymdMatch;
+    const m = parseInt(month) - 1;
+    const d = parseInt(day);
+    if (m >= 0 && m <= 11 && d >= 1 && d <= 31) {
+      return new Date(parseInt(year), m, d,
+        parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
+    }
   }
 
-  // DD-MMM-YY HH:mm:ss (01-Jan-24)
-  const ddmmmyy = combined.match(/(\d{1,2})[\/\-]([A-Za-z]{3})[\/\-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (ddmmmyy) {
-    const [, day, monthStr, year, hour, min, sec] = ddmmmyy;
-    const monthNum = MONTH_MAP[monthStr.toLowerCase()];
+  // DD-MMM-YY
+  const mmmMatch = combined.match(/^(\d{1,2})[\/\-\. ]([A-Za-z]{3,9})[\/\-\. ](\d{2,4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (mmmMatch) {
+    const [, day, monthStr, year, hour, min, sec] = mmmMatch;
+    const monthNum = MONTH_MAP[monthStr.toLowerCase().substring(0, 3)];
     if (monthNum !== undefined) {
-      const fullYear = year.length === 2 ? 2000 + parseInt(year) : parseInt(year);
+      let fullYear = parseInt(year);
+      if (year.length === 2) {
+        fullYear += (fullYear > 50) ? 1900 : 2000;
+      }
       return new Date(fullYear, monthNum, parseInt(day),
         parseInt(hour || '0'), parseInt(min || '0'), parseInt(sec || '0'));
     }
   }
 
+  if (!isNaN(nativeDate.getTime())) return nativeDate;
   return null;
+}
+
+function validateProfile(weekdayProfile: number[], weekendProfile: number[], dataPoints: number) {
+  const allValues = [...weekdayProfile, ...weekendProfile];
+  const emptyProfile = allValues.every(v => v === 0);
+
+  if (emptyProfile) return { isInvalid: true, warnings: ["Profile is empty (all zeros)."] };
+
+  const nonZeroValues = allValues.filter(v => v !== 0);
+  let flatLine = false;
+  if (nonZeroValues.length > 0) {
+    const firstVal = nonZeroValues[0];
+    flatLine = nonZeroValues.every(v => Math.abs(v - firstVal) < 0.0001);
+  }
+
+  const extremeOutliers = allValues.some(v => v > 10000000);
+  const warnings = [];
+  if (flatLine) warnings.push("Profile is a 'flat line'.");
+  if (extremeOutliers) warnings.push("Extremely high values detected.");
+  if (dataPoints < 48) warnings.push(`Only ${dataPoints} data points processed.`);
+
+  return { isInvalid: emptyProfile || extremeOutliers, warnings };
 }
 
 // ============= DELIMITER & FORMAT DETECTION =============
 
 function detectDelimiter(content: string): string {
   const sampleLines = content.split('\n').slice(0, 10).join('\n');
-  
+
   const counts = {
     '\t': (sampleLines.match(/\t/g) || []).length,
     ';': (sampleLines.match(/;/g) || []).length,
     ',': (sampleLines.match(/,/g) || []).length,
     '|': (sampleLines.match(/\|/g) || []).length,
   };
-  
+
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   if (sorted[0][1] > 0) return sorted[0][0];
   return ',';
@@ -121,16 +156,16 @@ function detectFormat(lines: string[], delimiter: string): FormatDetection {
     isCumulative: false,
     confidence: 0,
   };
-  
+
   // Check for PnP SCADA format
   if (lines.length >= 2) {
     const firstLine = lines[0];
     const meterMatch = firstLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
     const secondLine = lines[1]?.toLowerCase() || "";
-    const hasScadaHeaders = secondLine.includes('rdate') && 
-                            secondLine.includes('rtime') && 
-                            secondLine.includes('kwh');
-    
+    const hasScadaHeaders = secondLine.includes('rdate') &&
+      secondLine.includes('rtime') &&
+      secondLine.includes('kwh');
+
     if (meterMatch && hasScadaHeaders) {
       result.format = "pnp-scada";
       result.headerRow = 2;
@@ -138,10 +173,10 @@ function detectFormat(lines: string[], delimiter: string): FormatDetection {
       return result;
     }
   }
-  
+
   // Parse rows to analyze
   const rows = lines.map(l => l.split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, '')));
-  
+
   // Find header row
   for (let i = 0; i < Math.min(rows.length, 5); i++) {
     const firstCell = rows[i]?.[0] || "";
@@ -150,16 +185,16 @@ function detectFormat(lines: string[], delimiter: string): FormatDetection {
       break;
     }
   }
-  
+
   const dataRows = rows.slice(result.headerRow);
-  
+
   // Check for meter ID column (multi-meter detection)
   const headers = rows[result.headerRow - 1] || [];
   const lowerHeaders = headers.map(h => h.toLowerCase());
-  const meterColIdx = lowerHeaders.findIndex(h => 
+  const meterColIdx = lowerHeaders.findIndex(h =>
     h.includes('meter') || h.includes('device') || h.includes('channel') || h.includes('point')
   );
-  
+
   if (meterColIdx !== -1) {
     const meterIds = new Set<string>();
     for (const row of dataRows.slice(0, 200)) {
@@ -170,17 +205,17 @@ function detectFormat(lines: string[], delimiter: string): FormatDetection {
       result.meterIds = Array.from(meterIds);
     }
   }
-  
+
   // Find value column and analyze data
-  let valueColIdx = lowerHeaders.findIndex(h => 
+  let valueColIdx = lowerHeaders.findIndex(h =>
     h.includes('kwh') || h.includes('energy') || h.includes('value') || h.includes('reading')
   );
   if (valueColIdx === -1) valueColIdx = 1;
-  
+
   let negativeCount = 0;
   let prevValue: number | null = null;
   let increasingCount = 0;
-  
+
   for (const row of dataRows.slice(0, 200)) {
     const val = parseFloat(row[valueColIdx]?.replace(/[^\d.-]/g, "") || "0");
     if (!isNaN(val)) {
@@ -189,16 +224,16 @@ function detectFormat(lines: string[], delimiter: string): FormatDetection {
       prevValue = val;
     }
   }
-  
+
   result.hasNegatives = negativeCount > 0;
   result.isCumulative = increasingCount > dataRows.length * 0.9;
-  
+
   if (result.format === "unknown") {
     result.format = result.isCumulative ? "cumulative" : "standard";
   }
-  
+
   result.confidence = headers.length > 0 ? 0.8 : 0.5;
-  
+
   return result;
 }
 
@@ -208,25 +243,25 @@ const DATE_PATTERNS = ["rdate", "date", "datetime", "timestamp", "day"];
 const TIME_PATTERNS = ["rtime", "time"];
 const VALUE_PATTERNS = ["kwh+", "kwh-", "kwh", "kw", "energy", "consumption", "reading", "value", "power", "active"];
 
-function autoDetectColumns(headers: string[], sampleRows: string[][]): { 
-  dateCol: number; 
-  valueCol: number; 
+function autoDetectColumns(headers: string[], sampleRows: string[][]): {
+  dateCol: number;
+  valueCol: number;
   timeCol: number;
   meterIdCol: number;
 } {
   const lowerHeaders = headers.map(h => h.toLowerCase().trim());
-  
+
   let dateCol = -1;
   let timeCol = -1;
   let valueCol = -1;
   let meterIdCol = -1;
-  
+
   console.log(`[autoDetect] Headers: ${JSON.stringify(headers)}`);
-  
+
   // Header-based detection
   for (let i = 0; i < lowerHeaders.length; i++) {
     const h = lowerHeaders[i];
-    
+
     if (dateCol === -1 && DATE_PATTERNS.some(p => h.includes(p))) {
       dateCol = i;
       console.log(`[autoDetect] Date column: ${i} (${headers[i]})`);
@@ -244,23 +279,23 @@ function autoDetectColumns(headers: string[], sampleRows: string[][]): {
       console.log(`[autoDetect] Meter ID column: ${i} (${headers[i]})`);
     }
   }
-  
+
   // Data-based detection for value column
   if (valueCol === -1 && sampleRows.length > 0) {
     const candidates: Array<{ idx: number; score: number }> = [];
-    
+
     for (let idx = 0; idx < headers.length; idx++) {
       if (idx === dateCol || idx === timeCol) continue;
-      
+
       let numericCount = 0;
       let hasVariation = false;
       let sum = 0;
       let prevVal: number | null = null;
-      
+
       for (const row of sampleRows.slice(0, 20)) {
         const valStr = row[idx]?.replace(/[^\d.-]/g, "") || "";
         const val = parseFloat(valStr);
-        
+
         if (!isNaN(val) && isFinite(val)) {
           numericCount++;
           sum += Math.abs(val);
@@ -268,26 +303,26 @@ function autoDetectColumns(headers: string[], sampleRows: string[][]): {
           prevVal = val;
         }
       }
-      
+
       if (numericCount >= 10) {
         const score = numericCount + (hasVariation ? 10 : 0) + (sum > 0 ? 5 : 0);
         candidates.push({ idx, score });
       }
     }
-    
+
     candidates.sort((a, b) => b.score - a.score);
     if (candidates.length > 0) {
       valueCol = candidates[0].idx;
       console.log(`[autoDetect] Value column (data-based): ${valueCol} (${headers[valueCol]})`);
     }
   }
-  
+
   // Fallbacks
   if (dateCol === -1) dateCol = 0;
   if (valueCol === -1) valueCol = headers.length > 1 ? 1 : 0;
-  
+
   console.log(`[autoDetect] Final: date=${dateCol}, time=${timeCol}, value=${valueCol}, meter=${meterIdCol}`);
-  
+
   return { dateCol, valueCol, timeCol, meterIdCol };
 }
 
@@ -306,7 +341,7 @@ function processMultiMeterData(
   meterIds: string[]
 ): Record<string, { weekdayProfile: number[]; weekendProfile: number[]; dataPoints: number }> {
   const result: Record<string, { weekday: number[][]; weekend: number[][]; count: number }> = {};
-  
+
   // Initialize for each meter
   for (const meterId of meterIds) {
     result[meterId] = {
@@ -315,15 +350,15 @@ function processMultiMeterData(
       count: 0,
     };
   }
-  
+
   // Aggregate data per meter
   for (const point of rawData) {
     if (!point.meterId || !result[point.meterId]) continue;
-    
+
     const date = new Date(point.timestamp);
     const hour = date.getHours();
     const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-    
+
     if (isWeekend) {
       result[point.meterId].weekend[hour].push(point.value);
     } else {
@@ -331,10 +366,10 @@ function processMultiMeterData(
     }
     result[point.meterId].count++;
   }
-  
+
   // Calculate averages
   const output: Record<string, { weekdayProfile: number[]; weekendProfile: number[]; dataPoints: number }> = {};
-  
+
   for (const [meterId, data] of Object.entries(result)) {
     output[meterId] = {
       weekdayProfile: data.weekday.map(arr => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0),
@@ -342,7 +377,7 @@ function processMultiMeterData(
       dataPoints: data.count,
     };
   }
-  
+
   return output;
 }
 
@@ -380,21 +415,21 @@ serve(async (req) => {
       const lines = csvContent.split('\n')
         .map((l: string) => l.replace(/^\uFEFF/, '').trim())
         .filter((l: string) => l && !l.toLowerCase().startsWith('sep='));
-      
-      const delimiter = manualSeparator 
+
+      const delimiter = manualSeparator
         ? (manualSeparator === 'tab' ? '\t' : manualSeparator === 'semicolon' ? ';' : manualSeparator)
         : detectDelimiter(csvContent);
-      
+
       const formatResult = detectFormat(lines, delimiter);
-      
+
       // Also detect columns
       const headerIdx = formatResult.headerRow - 1;
       const rows = lines.map((l: string) => l.split(delimiter).map((c: string) => c.trim().replace(/^["']|["']$/g, '')));
       const headers = rows[headerIdx] || [];
       const dataRows = rows.slice(headerIdx + 1);
-      
+
       const columns = autoDetectColumns(headers, dataRows.slice(0, 20));
-      
+
       return new Response(JSON.stringify({
         success: true,
         ...formatResult,
@@ -414,27 +449,27 @@ serve(async (req) => {
         negativeValues: 0,
         parseErrors: [],
       };
-      
+
       // Clean and filter lines
       let lines = csvContent.split('\n')
         .map((l: string) => l.replace(/^\uFEFF/, '').trim())
         .filter((l: string) => l && !l.toLowerCase().startsWith('sep='));
 
       // Auto-detect or use manual settings
-      const delimiter = manualSeparator 
+      const delimiter = manualSeparator
         ? (manualSeparator === 'tab' ? '\t' : manualSeparator === 'semicolon' ? ';' : manualSeparator === 'space' ? ' ' : manualSeparator)
         : detectDelimiter(lines.join('\n'));
 
       // Detect format
       const formatResult = detectFormat(lines, delimiter);
-      
+
       console.log(`[process] Delimiter: "${delimiter === '\t' ? 'TAB' : delimiter}", Format: ${formatResult.format}`);
       console.log(`[process] Lines: ${lines.length}, Has negatives: ${formatResult.hasNegatives}, Is cumulative: ${formatResult.isCumulative}`);
 
-      const headerIdx = headerRowNumber !== undefined 
+      const headerIdx = headerRowNumber !== undefined
         ? Math.max(0, parseInt(headerRowNumber.toString()) - 1)
         : formatResult.headerRow - 1;
-      
+
       // Parse all rows
       const allRows = lines.map((line: string) => {
         if (delimiter === ' ') {
@@ -442,10 +477,10 @@ serve(async (req) => {
         }
         return line.split(delimiter).map((c: string) => c.trim().replace(/^["']|["']$/g, ''));
       });
-      
+
       const headers = allRows[headerIdx] || [];
       const dataRows = allRows.slice(headerIdx + 1).filter((row: string[]) => row.some(cell => cell.trim()));
-      
+
       stats.totalRows = dataRows.length;
 
       console.log(`[process] Headers: ${JSON.stringify(headers)}`);
@@ -456,7 +491,7 @@ serve(async (req) => {
       let timeColIdx: number;
       let valColIdx: number;
       let meterColIdx: number;
-      
+
       if (autoDetect && (manualDateColumn === undefined || manualValueColumn === undefined)) {
         const detected = autoDetectColumns(headers, dataRows.slice(0, 20));
         dateColIdx = manualDateColumn !== undefined ? parseInt(manualDateColumn) : detected.dateCol;
@@ -469,7 +504,7 @@ serve(async (req) => {
         valColIdx = parseInt(manualValueColumn || '1');
         meterColIdx = parseInt(manualMeterIdColumn || '-1');
       }
-      
+
       const kvaColIdx = parseInt(kvaColumn || '-1');
 
       console.log(`[process] Columns - Date: ${dateColIdx}, Time: ${timeColIdx}, Value: ${valColIdx}, Meter: ${meterColIdx}`);
@@ -484,7 +519,7 @@ serve(async (req) => {
       let weekdayDays = 0;
       let weekendDays = 0;
       const seenDates: Record<string, boolean> = {};
-      
+
       // For cumulative readings
       let previousValue: number | null = null;
       const shouldHandleCumulative = handleCumulative || formatResult.isCumulative;
@@ -562,7 +597,7 @@ serve(async (req) => {
           meterId,
           originalLine: i + headerIdx + 2
         });
-        
+
         stats.processedRows++;
       }
 
@@ -579,7 +614,7 @@ serve(async (req) => {
 
       // Process multi-meter data if applicable
       let meterData: Record<string, { weekdayProfile: number[]; weekendProfile: number[]; dataPoints: number }> | undefined;
-      
+
       if (formatResult.format === "multi-meter" && formatResult.meterIds && formatResult.meterIds.length > 1) {
         meterData = processMultiMeterData(rawData, formatResult.meterIds);
         console.log(`[process] Multi-meter: ${Object.keys(meterData).length} meters`);

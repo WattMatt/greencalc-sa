@@ -390,15 +390,20 @@ Site (sites table)
 ### Data Validation
 
 ```typescript
-// Rows are skipped if:
-- Row has fewer columns than required indices
-- Date cannot be parsed
-- Value is NaN or undefined
+// Profiles are validated against:
+- allZeros: Entire profile is 0
+- flatLine: All non-zero hourly values are identical
+- extremeOutliers: Hourly kW > 10,000,000 (usually unit error)
+- tooFewPoints: Less than 48 data points (minimum 2 days of hourly data)
+
+// Critical Failure:
+- Profile is rejected/marked invalid if all zeros or extreme unit error
+```
 
 // Error logging:
 - Parse errors accumulated in stats.parseErrors
 - Maximum 100 errors stored to prevent memory issues
-```
+
 
 ### Performance Considerations
 
