@@ -948,7 +948,10 @@ export function SitesTab() {
       
       if (!csvContent) {
         console.warn("No CSV content for meter:", meterId);
-        moveToNextMeterInQueue(meterId, 'skipped', 'No CSV data stored');
+        toast.error("No CSV data stored for this meter", {
+          description: "Use the upload button to import CSV data first"
+        });
+        setProcessingQueue(prev => prev.filter(id => id !== meterId));
         return;
       }
       
