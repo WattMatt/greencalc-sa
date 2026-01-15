@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { CsvImportWizard, WizardParseConfig } from "./CsvImportWizard";
-import { processCSVToLoadProfile, ProcessedLoadProfile } from "./utils/csvToLoadProfile";
+import { processCSVToLoadProfile, ProcessedLoadProfile, validateLoadProfile } from "./utils/csvToLoadProfile";
 import { MeterAnalysisChart, MeterChartDataPoint } from "./MeterAnalysisChart";
 
 interface Category {
@@ -274,6 +274,29 @@ export function ScadaImport({ categories, siteId, onImportComplete }: ScadaImpor
   const handleSave = async () => {
     if (!siteName || !processedData?.rawData?.length) {
       toast.error("Please provide a site name and process the CSV first");
+      return;
+    }
+
+    // Validate profile per CSV_EXTRACTION_SPECIFICATION.md
+    const validation = validateLoadProfile({
+      weekdayProfile: processedData.weekdayProfile,
+      weekendProfile: processedData.weekendProfile,
+      weekdayDays: processedData.weekdayDays,
+      weekendDays: processedData.weekendDays,
+      totalKwh: 0,
+      dateRangeStart: processedData.dateRange.start,
+      dateRangeEnd: processedData.dateRange.end,
+      dataPoints: processedData.dataPoints,
+      peakKw: Math.max(...processedData.weekdayProfile, ...processedData.weekendProfile),
+      avgKw: 0,
+      detectedInterval: 60,
+    });
+    
+    if (!validation.isValid) {
+      toast.error(`Profile validation failed: ${validation.reason}`, {
+        description: "Please check your column and unit settings",
+        duration: 5000,
+      });
       return;
     }
 

@@ -14,7 +14,7 @@ import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, A
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
+import { processCSVToLoadProfile, validateLoadProfile } from "./utils/csvToLoadProfile";
 import { WizardParseConfig, ColumnConfig, ParsedData } from "./types/csvImportTypes";
 import { MeterProfilePreview } from "./MeterProfilePreview";
 import { CsvImportWizard } from "./CsvImportWizard";
@@ -469,6 +469,20 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
               dateEnd: dateRangeEnd,
             }];
 
+            // Validate profile per CSV_EXTRACTION_SPECIFICATION.md
+            const validation = validateLoadProfile(profile);
+            if (!validation.isValid) {
+              console.warn(`Profile validation failed for meter ${meter.id}: ${validation.reason}`);
+              failed++;
+              setCompletedMeters(prev => [...prev, { 
+                id: meter.id, 
+                name: displayName, 
+                status: 'failed', 
+                message: validation.reason || 'Validation failed'
+              }]);
+              continue;
+            }
+
             // Update the meter with processed_at timestamp
             const { error: updateError } = await supabase
               .from("scada_imports")
@@ -704,6 +718,14 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
         dateStart: dateRangeStart,
         dateEnd: dateRangeEnd,
       }];
+
+      // Validate profile per CSV_EXTRACTION_SPECIFICATION.md
+      const validation = validateLoadProfile(profile);
+      if (!validation.isValid) {
+        console.warn(`Profile validation failed for meter ${meterId}: ${validation.reason}`);
+        moveToNextMeterInQueue(meterId, 'failed', validation.reason || 'Validation failed');
+        return;
+      }
 
       // Update the meter
       const { error: updateError } = await supabase
