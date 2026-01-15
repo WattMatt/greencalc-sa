@@ -373,22 +373,48 @@ export function CsvImportWizard({
   const columnAnalysis = useMemo(() => {
     if (!previewData) return [];
     
+    // Sample more rows for better detection (up to 100)
+    const sampleSize = Math.min(100, previewData.rows.length);
+    
     return previewData.headers.map((header, idx) => {
-      const values = previewData.rows.slice(0, 10).map(row => row[idx]).filter(Boolean);
-      const numericValues = values.map(v => parseFloat(v?.replace(/[^\d.-]/g, "") || "")).filter(v => !isNaN(v));
-      const isNumeric = numericValues.length >= values.length * 0.5;
-      const avg = isNumeric && numericValues.length > 0 
+      const values = previewData.rows.slice(0, sampleSize).map(row => row[idx]).filter(Boolean);
+      const numericValues = values
+        .map(v => parseFloat(v?.replace(/[^\d.-]/g, "") || ""))
+        .filter(v => !isNaN(v) && isFinite(v));
+      
+      // Be more inclusive - any column with at least 1 numeric value counts
+      // Also check if the header suggests it's a value column
+      const hasNumericData = numericValues.length > 0;
+      const lowerHeader = header.toLowerCase();
+      const isLikelyValueColumn = hasNumericData || 
+        lowerHeader.includes('kw') || 
+        lowerHeader.includes('kwh') ||
+        lowerHeader.includes('energy') ||
+        lowerHeader.includes('power') ||
+        lowerHeader.includes('value') ||
+        lowerHeader.includes('consumption') ||
+        lowerHeader.includes('usage') ||
+        lowerHeader.includes('demand') ||
+        lowerHeader.includes('load') ||
+        lowerHeader.includes('reading');
+      
+      const avg = numericValues.length > 0 
         ? numericValues.reduce((a, b) => a + b, 0) / numericValues.length 
         : 0;
       const nonZero = numericValues.filter(v => v !== 0).length;
       
+      console.log(`[CsvImportWizard] Column "${header}" - numeric: ${numericValues.length}/${values.length}, hasNumeric: ${hasNumericData}, isLikely: ${isLikelyValueColumn}`);
+      
       return {
         index: idx,
         header,
-        isNumeric,
+        isNumeric: hasNumericData, // Changed: any numeric values counts
+        isLikelyValueColumn,
         sampleValues: values.slice(0, 3),
         avg: Math.round(avg * 100) / 100,
         nonZeroCount: nonZero,
+        numericCount: numericValues.length,
+        totalCount: values.length,
       };
     });
   }, [previewData]);
@@ -801,13 +827,23 @@ export function CsvImportWizard({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto">Auto-detect</SelectItem>
-                {columnAnalysis.filter(col => col.isNumeric).map(col => (
+                {/* Show ALL columns - highlight numeric ones */}
+                {columnAnalysis.map(col => (
                   <SelectItem key={col.index} value={col.index.toString()}>
                     <div className="flex items-center gap-2">
-                      <span>{col.header || `Column ${col.index + 1}`}</span>
-                      <span className="text-muted-foreground text-xs">
-                        (avg: {col.avg})
+                      <span className={col.isNumeric ? "" : "text-muted-foreground"}>
+                        {col.header || `Column ${col.index + 1}`}
                       </span>
+                      {col.isNumeric && (
+                        <span className="text-muted-foreground text-xs">
+                          (avg: {col.avg})
+                        </span>
+                      )}
+                      {!col.isNumeric && (
+                        <span className="text-muted-foreground text-xs italic">
+                          (non-numeric)
+                        </span>
+                      )}
                     </div>
                   </SelectItem>
                 ))}
@@ -973,9 +1009,9 @@ export function CsvImportWizard({
         </div>
       </div>
 
-      {/* Numeric Columns Analysis */}
+      {/* All Columns Analysis */}
       <div className="space-y-2">
-        <Label className="font-medium">Available Numeric Columns:</Label>
+        <Label className="font-medium">Available Columns:</Label>
         <Card className="overflow-hidden">
           <ScrollArea className="h-[180px]">
             <table className="w-full text-xs">
@@ -988,18 +1024,24 @@ export function CsvImportWizard({
                 </tr>
               </thead>
               <tbody>
-                {columnAnalysis.filter(col => col.isNumeric).map(col => (
+                {columnAnalysis.map(col => (
                   <tr 
                     key={col.index} 
                     className={cn(
                       "border-t cursor-pointer hover:bg-muted/50",
-                      selectedValueColumn === col.index && "bg-primary/10"
+                      selectedValueColumn === col.index && "bg-primary/10",
+                      !col.isNumeric && "opacity-60"
                     )}
                     onClick={() => setSelectedValueColumn(col.index)}
                   >
-                    <td className="px-3 py-2 font-medium">{col.header || `Column ${col.index + 1}`}</td>
+                    <td className="px-3 py-2 font-medium">
+                      {col.header || `Column ${col.index + 1}`}
+                      {!col.isNumeric && (
+                        <span className="ml-2 text-muted-foreground italic">(non-numeric)</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-muted-foreground">{col.sampleValues.join(", ")}</td>
-                    <td className="px-3 py-2 text-right">{col.avg}</td>
+                    <td className="px-3 py-2 text-right">{col.isNumeric ? col.avg : "-"}</td>
                     <td className="px-3 py-2 text-center">
                       {selectedValueColumn === col.index && (
                         <Badge variant="default" className="text-[10px]">Selected</Badge>
@@ -1011,6 +1053,9 @@ export function CsvImportWizard({
             </table>
           </ScrollArea>
         </Card>
+        <p className="text-xs text-muted-foreground">
+          {columnAnalysis.length} columns available • {columnAnalysis.filter(c => c.isNumeric).length} numeric
+        </p>
       </div>
 
       {/* Load Profile Preview */}
