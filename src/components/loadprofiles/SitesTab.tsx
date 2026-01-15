@@ -305,6 +305,8 @@ export function SitesTab() {
   // Open column selection dialog for reprocessing a meter
   const handleReprocessMeter = async (meter: Meter) => {
     try {
+      console.log('[Reprocess] Starting reprocess for meter:', meter.id, meter.shop_name || meter.site_name);
+      
       // Fetch the raw data to extract CSV content for column detection
       const { data: meterData, error: fetchError } = await supabase
         .from("scada_imports")
@@ -312,25 +314,40 @@ export function SitesTab() {
         .eq("id", meter.id)
         .single();
       
-      if (fetchError || !meterData?.raw_data) {
-        toast.error("No raw data available to reprocess");
+      if (fetchError) {
+        console.error('[Reprocess] Fetch error:', fetchError);
+        toast.error("Failed to fetch meter data");
         return;
       }
+      
+      if (!meterData?.raw_data) {
+        console.warn('[Reprocess] No raw_data field for meter:', meter.id);
+        toast.error("No raw data stored for this meter. Please re-upload the CSV file.");
+        return;
+      }
+      
+      console.log('[Reprocess] raw_data type:', typeof meterData.raw_data, 'isArray:', Array.isArray(meterData.raw_data));
       
       // Extract CSV content
       const rawData = meterData.raw_data as unknown;
       let csvContent: string | null = null;
       
       if (Array.isArray(rawData) && rawData.length > 0) {
-        const firstItem = rawData[0] as { csvContent?: string };
-        if (firstItem && 'csvContent' in firstItem) {
-          csvContent = firstItem.csvContent || null;
+        const firstItem = rawData[0] as Record<string, unknown>;
+        console.log('[Reprocess] First item keys:', Object.keys(firstItem));
+        
+        if (firstItem && 'csvContent' in firstItem && typeof firstItem.csvContent === 'string') {
+          csvContent = firstItem.csvContent;
+          console.log('[Reprocess] Found csvContent, length:', csvContent.length);
+        } else {
+          console.warn('[Reprocess] No csvContent in first item. Available fields:', Object.keys(firstItem));
         }
+      } else {
+        console.warn('[Reprocess] raw_data is not an array or is empty');
       }
       
       if (!csvContent) {
-        // No CSV content, process directly with default column
-        await processWithColumn(meter, null);
+        toast.error("No CSV content stored for this meter. The original CSV data was not preserved during import. Please re-upload the CSV file using the upload button.");
         return;
       }
       
@@ -338,7 +355,7 @@ export function SitesTab() {
       setColumnSelectionMeter(meter);
       setColumnSelectionCsvContent(csvContent);
     } catch (error) {
-      console.error("Error preparing reprocess:", error);
+      console.error("[Reprocess] Error preparing reprocess:", error);
       toast.error("Failed to load meter data for reprocessing");
     }
   };
