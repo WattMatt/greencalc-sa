@@ -129,10 +129,12 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     queryKey: ["meter-library", siteId],
     queryFn: async () => {
       // IMPORTANT: Do NOT include raw_data here - it's huge and causes timeouts
+      // Use a higher limit to fetch all meters (default is 1000)
       let query = supabase
         .from("scada_imports")
         .select("id, site_name, site_id, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at, load_profile_weekday, load_profile_weekend, weekday_days, weekend_days, processed_at, category_id")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(5000);
       
       if (siteId) {
         query = query.eq("site_id", siteId);
