@@ -1221,8 +1221,8 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                     </TableCell>
                     <TableCell className="text-right">
                       {(() => {
-                        // Only show actual recorded data - no estimates
-                        if (!meter.load_profile_weekday || meter.load_profile_weekday.length === 0) {
+                        // Only show actual recorded data - meters must have data_points > 0
+                        if (!meter.data_points || meter.data_points === 0 || !meter.load_profile_weekday || meter.load_profile_weekday.length === 0) {
                           return <span className="text-muted-foreground text-sm">-</span>;
                         }
                         
@@ -1288,6 +1288,10 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                     </TableCell>
                     <TableCell>
                       {(() => {
+                        // Only show peak if meter has actual processed data
+                        if (!meter.data_points || meter.data_points === 0) {
+                          return <span className="text-muted-foreground text-sm">-</span>;
+                        }
                         // Calculate peak from load profile
                         const profilePeak = meter.load_profile_weekday 
                           ? Math.max(...meter.load_profile_weekday, 0)
