@@ -44,32 +44,48 @@ function autoDetectConfig(content: string): {
   let meterName: string | undefined;
   let dateRange: { start: string; end: string } | undefined;
   let startRow = 1;
+  let delimiter = ',';
 
-  // Check for PnP SCADA format
-  if (lines.length >= 2) {
-    const firstLine = lines[0];
+  // Check for Excel "sep=" line and skip it
+  let lineOffset = 0;
+  if (lines.length > 0 && lines[0].toLowerCase().startsWith('sep=')) {
+    // Extract delimiter from sep= line (e.g., "sep=;" means semicolon)
+    const sepMatch = lines[0].match(/^sep=(.)/i);
+    if (sepMatch) {
+      delimiter = sepMatch[1];
+      console.log(`[autoDetect] Found sep= line, delimiter: "${delimiter}"`);
+    }
+    lineOffset = 1;
+    startRow = 2; // Skip sep= line, headers are on line 2
+  }
+
+  // Check for PnP SCADA format (after skipping sep= line)
+  if (lines.length >= 2 + lineOffset) {
+    const firstLine = lines[lineOffset];
     const meterMatch = firstLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
-    const secondLine = lines[1]?.toLowerCase() || "";
+    const secondLine = lines[lineOffset + 1]?.toLowerCase() || "";
     const hasScadaHeaders = secondLine.includes('rdate') && secondLine.includes('rtime') && secondLine.includes('kwh');
     
     if (meterMatch && hasScadaHeaders) {
       isPnpScada = true;
       meterName = meterMatch[1];
       dateRange = { start: meterMatch[2], end: meterMatch[3] };
-      startRow = 2;
+      startRow = lineOffset + 3; // Skip sep= (if present), meter info line, and header line
     }
   }
 
-  // Detect delimiter
-  const sampleLine = lines[startRow - 1] || lines[0] || "";
-  const tabCount = (sampleLine.match(/\t/g) || []).length;
-  const semicolonCount = (sampleLine.match(/;/g) || []).length;
-  const commaCount = (sampleLine.match(/,/g) || []).length;
+  // If we didn't get delimiter from sep=, detect it from actual data
+  if (delimiter === ',' && lines.length > lineOffset) {
+    const sampleLine = lines[lineOffset + 1] || lines[lineOffset] || "";
+    const tabCount = (sampleLine.match(/\t/g) || []).length;
+    const semicolonCount = (sampleLine.match(/;/g) || []).length;
+    const commaCount = (sampleLine.match(/,/g) || []).length;
 
-  let delimiter = ',';
-  if (tabCount > commaCount && tabCount > semicolonCount) delimiter = '\t';
-  else if (semicolonCount > commaCount) delimiter = ';';
+    if (tabCount > commaCount && tabCount > semicolonCount) delimiter = '\t';
+    else if (semicolonCount > commaCount) delimiter = ';';
+  }
 
+  console.log(`[autoDetect] Result: delimiter="${delimiter}", startRow=${startRow}, isPnpScada=${isPnpScada}`);
   return { delimiter, startRow, isPnpScada, meterName, dateRange };
 }
 
