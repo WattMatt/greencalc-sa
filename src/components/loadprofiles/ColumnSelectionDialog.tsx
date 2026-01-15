@@ -33,6 +33,11 @@ interface ColumnSelectionDialogProps {
   csvContent: string | null;
   meterName: string;
   isProcessing: boolean;
+  // Initial values for reconfiguration
+  initialColumn?: string;
+  initialUnit?: ValueUnit;
+  initialVoltageV?: number;
+  initialPowerFactor?: number;
 }
 
 interface ColumnInfo {
@@ -147,25 +152,36 @@ export function ColumnSelectionDialog({
   csvContent,
   meterName,
   isProcessing,
+  initialColumn,
+  initialUnit,
+  initialVoltageV,
+  initialPowerFactor,
 }: ColumnSelectionDialogProps) {
-  const [selectedColumn, setSelectedColumn] = useState<string>("");
-  const [selectedUnit, setSelectedUnit] = useState<ValueUnit>("kW");
-  const [voltageV, setVoltageV] = useState<number>(400);
-  const [powerFactor, setPowerFactor] = useState<number>(0.9);
+  const [selectedColumn, setSelectedColumn] = useState<string>(initialColumn || "");
+  const [selectedUnit, setSelectedUnit] = useState<ValueUnit>(initialUnit || "kW");
+  const [voltageV, setVoltageV] = useState<number>(initialVoltageV || 400);
+  const [powerFactor, setPowerFactor] = useState<number>(initialPowerFactor || 0.9);
   
   const columnInfo = useMemo(() => {
     if (!csvContent) return { dateColumn: null, valueColumns: [] };
     return parseCSVColumns(csvContent);
   }, [csvContent]);
   
-  // Auto-select first column with data or recommended column
+  // Reset to initial values when dialog opens with new meter or initial values change
   useMemo(() => {
-    if (columnInfo.valueColumns.length > 0 && !selectedColumn) {
-      // Prefer columns with more non-zero values
-      const sorted = [...columnInfo.valueColumns].sort((a, b) => b.nonZeroCount - a.nonZeroCount);
-      setSelectedColumn(sorted[0].name);
+    if (isOpen) {
+      if (initialColumn) {
+        setSelectedColumn(initialColumn);
+      } else if (columnInfo.valueColumns.length > 0) {
+        // Auto-select best column only if no initial value provided
+        const sorted = [...columnInfo.valueColumns].sort((a, b) => b.nonZeroCount - a.nonZeroCount);
+        setSelectedColumn(sorted[0].name);
+      }
+      if (initialUnit) setSelectedUnit(initialUnit);
+      if (initialVoltageV) setVoltageV(initialVoltageV);
+      if (initialPowerFactor) setPowerFactor(initialPowerFactor);
     }
-  }, [columnInfo.valueColumns, selectedColumn]);
+  }, [isOpen, initialColumn, initialUnit, initialVoltageV, initialPowerFactor, columnInfo.valueColumns]);
   
   const handleConfirm = () => {
     if (selectedColumn && selectedUnit) {
