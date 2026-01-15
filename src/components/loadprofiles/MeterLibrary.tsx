@@ -573,27 +573,32 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   };
 
   // Start wizard-based processing for a list of meter IDs
-  const startWizardProcessing = async (meterIds: string[]) => {
+  // If forceReprocess is true, allow reconfiguring already-processed meters
+  const startWizardProcessing = async (meterIds: string[], forceReprocess: boolean = false) => {
     if (meterIds.length === 0) return;
     
-    // Filter to only unprocessed meters
-    const { data: unprocessedCheck } = await supabase
-      .from("scada_imports")
-      .select("id")
-      .in("id", meterIds)
-      .is("processed_at", null);
+    let idsToProcess: string[] = meterIds;
     
-    const unprocessedIds = unprocessedCheck?.map(m => m.id) || [];
-    
-    if (unprocessedIds.length === 0) {
-      toast.info("All selected meters already processed.");
-      return;
+    if (!forceReprocess) {
+      // Filter to only unprocessed meters
+      const { data: unprocessedCheck } = await supabase
+        .from("scada_imports")
+        .select("id")
+        .in("id", meterIds)
+        .is("processed_at", null);
+      
+      idsToProcess = unprocessedCheck?.map(m => m.id) || [];
+      
+      if (idsToProcess.length === 0) {
+        toast.info("All selected meters already processed. Click the Settings icon on a specific meter to reconfigure it.");
+        return;
+      }
     }
     
     setCompletedMeters([]);
-    setProcessingQueue(unprocessedIds);
+    setProcessingQueue(idsToProcess);
     // Load the first meter's CSV and open wizard
-    await loadMeterForWizard(unprocessedIds[0]);
+    await loadMeterForWizard(idsToProcess[0]);
   };
 
   // Load a meter's CSV content and open the wizard
@@ -782,18 +787,10 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     }
   };
 
-  // Single meter configure via wizard
+  // Single meter configure via wizard - use forceReprocess to allow reconfiguring already-processed meters
   const handleConfigureSingleMeter = async (meterId: string) => {
-    // First clear the processed_at flag so it will be reprocessed
-    await supabase
-      .from("scada_imports")
-      .update({ processed_at: null })
-      .eq("id", meterId);
-    
-    // Start wizard processing for just this meter
-    setCompletedMeters([]);
-    setProcessingQueue([meterId]);
-    await loadMeterForWizard(meterId);
+    // Use forceReprocess=true to allow reconfiguring processed meters
+    await startWizardProcessing([meterId], true);
   };
 
   const toggleSelectAll = () => {
