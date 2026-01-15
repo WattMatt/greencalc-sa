@@ -1,11 +1,11 @@
-import { useState, useCallback } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useCallback, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Zap, Loader2, CheckCircle2, XCircle, AlertCircle, X, Play, Pause } from "lucide-react";
+import { Zap, CheckCircle2, XCircle, AlertTriangle, X, Play, Pause } from "lucide-react";
 import { toast } from "sonner";
 import { processCSVToLoadProfile, validateLoadProfile } from "./utils/csvToLoadProfile";
 import { WizardParseConfig, ColumnConfig } from "./types/csvImportTypes";
@@ -13,7 +13,7 @@ import { WizardParseConfig, ColumnConfig } from "./types/csvImportTypes";
 interface ProcessingResult {
   id: string;
   name: string;
-  status: 'success' | 'failed' | 'skipped';
+  status: 'success' | 'failed' | 'skipped' | 'needs_review';
   message: string;
   dataPoints?: number;
   peakKw?: number;
@@ -27,6 +27,72 @@ interface OneClickBatchProcessorProps {
 
 const BATCH_SIZE = 10;
 
+// Score a column to determine if it's a good value column
+const scoreValueColumn = (header: string, sampleValues: string[]): { score: number; unit: 'kWh' | 'kW' } => {
+  const lower = header.toLowerCase().trim();
+  let score = 0;
+  let unit: 'kWh' | 'kW' = 'kWh'; // Default to kWh
+  
+  // Exact matches get highest priority
+  if (lower === 'kwh' || lower === 'kwh_del') {
+    score += 100;
+    unit = 'kWh';
+  } else if (lower === 'kw' || lower === 'power') {
+    score += 80;
+    unit = 'kW';
+  }
+  // Pattern matches
+  else if (lower.includes('kwh') || lower.includes('energy') || lower.includes('consumption')) {
+    score += 70;
+    unit = 'kWh';
+  } else if (lower.includes('kw') || lower.includes('demand')) {
+    score += 60;
+    unit = 'kW';
+  } else if (lower.includes('value') || lower.includes('reading')) {
+    score += 40;
+    unit = 'kWh'; // Default to kWh for generic value columns
+  }
+  
+  // Check if values are numeric - boost score if they are
+  const numericCount = sampleValues.filter(v => {
+    const num = parseFloat(v?.replace?.(',', '.') || '');
+    return !isNaN(num) && isFinite(num);
+  }).length;
+  
+  if (numericCount > sampleValues.length * 0.8) {
+    score += 25;
+  }
+  
+  // Analyze value patterns to distinguish kW vs kWh
+  if (score > 0 && sampleValues.length > 1) {
+    const numericValues = sampleValues
+      .map(v => parseFloat(v?.replace?.(',', '.') || ''))
+      .filter(n => !isNaN(n) && isFinite(n));
+    
+    if (numericValues.length >= 2) {
+      // Check if values are cumulative (monotonically increasing)
+      let increasing = 0;
+      for (let i = 1; i < numericValues.length; i++) {
+        if (numericValues[i] > numericValues[i - 1]) increasing++;
+      }
+      const isCumulative = increasing > numericValues.length * 0.9;
+      
+      if (isCumulative) {
+        unit = 'kWh'; // Cumulative readings are energy
+      }
+      
+      // Check value magnitude - large values more likely kWh totals
+      const maxVal = Math.max(...numericValues);
+      if (maxVal > 1000) {
+        // Very large values suggest cumulative kWh
+        unit = 'kWh';
+      }
+    }
+  }
+  
+  return { score, unit };
+};
+
 export function OneClickBatchProcessor({ 
   meterIds, 
   onComplete, 
@@ -34,6 +100,7 @@ export function OneClickBatchProcessor({
 }: OneClickBatchProcessorProps) {
   const queryClient = useQueryClient();
   const [isProcessing, setIsProcessing] = useState(false);
+  const isPausedRef = useRef(false);
   const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [results, setResults] = useState<ProcessingResult[]>([]);
@@ -42,8 +109,9 @@ export function OneClickBatchProcessor({
   const successCount = results.filter(r => r.status === 'success').length;
   const failedCount = results.filter(r => r.status === 'failed').length;
   const skippedCount = results.filter(r => r.status === 'skipped').length;
+  const needsReviewCount = results.filter(r => r.status === 'needs_review').length;
 
-  // Auto-detect and parse CSV content
+  // Auto-detect and parse CSV content with smart column detection
   const autoParseCSV = useCallback((csvContent: string, previousConfig?: {
     column?: string;
     unit?: string;
@@ -72,7 +140,7 @@ export function OneClickBatchProcessor({
       }
     }
 
-    // Auto-detect delimiter
+    // Auto-detect delimiter with improved counting
     const sampleLine = lines[startRow - 1] || lines[0] || "";
     const tabCount = (sampleLine.match(/\t/g) || []).length;
     const semicolonCount = (sampleLine.match(/;/g) || []).length;
@@ -127,40 +195,55 @@ export function OneClickBatchProcessor({
     const headers = headerIdx < lines.length ? parseRow(lines[headerIdx]) : [];
     const rows = lines.slice(headerIdx + 1).map(parseRow);
 
+    // Get sample values for each column (first 10 data rows)
+    const sampleRows = rows.slice(0, 10);
+
     // Auto-detect column types with improved patterns
     const columns: ColumnConfig[] = headers.map((header, idx) => {
       const lowerHeader = header.toLowerCase();
-      // Date patterns (including German)
+      // Date patterns (including German and various formats)
       if (lowerHeader.includes('date') || lowerHeader.includes('rdate') || 
-          lowerHeader.includes('datum') || lowerHeader.includes('timestamp')) {
+          lowerHeader.includes('datum') || lowerHeader.includes('timestamp') ||
+          lowerHeader.includes('datetime') || lowerHeader === 'dd/mm/yyyy') {
         return { index: idx, name: header, dataType: 'date' as const, dateFormat: 'YMD' };
       }
-      // Energy/power patterns
-      if (lowerHeader.includes('kwh') || lowerHeader.includes('energy') || 
-          lowerHeader.includes('consumption') || lowerHeader.includes('kw') ||
-          lowerHeader.includes('power') || lowerHeader.includes('demand')) {
-        return { index: idx, name: header, dataType: 'general' as const };
+      // Time patterns
+      if (lowerHeader.includes('time') || lowerHeader.includes('rtime') ||
+          lowerHeader.includes('zeit') || lowerHeader === 'hh:mm') {
+        return { index: idx, name: header, dataType: 'text' as const };
       }
-      return { index: idx, name: header, dataType: 'text' as const };
+      return { index: idx, name: header, dataType: 'general' as const };
     });
 
-    // Find value column - prefer previous config if available
+    // Find best value column using scoring system
     let valueColumnIndex: number | undefined;
+    let detectedUnit: 'kWh' | 'kW' = 'kWh'; // Default to kWh
+    
+    // First try previous config
     if (previousConfig?.column) {
       const prevColIdx = headers.findIndex(h => 
         h.toLowerCase() === previousConfig.column?.toLowerCase()
       );
-      if (prevColIdx >= 0) valueColumnIndex = prevColIdx;
+      if (prevColIdx >= 0) {
+        valueColumnIndex = prevColIdx;
+        detectedUnit = (previousConfig.unit as 'kWh' | 'kW') || 'kWh';
+      }
     }
     
-    // If no previous config, auto-detect
+    // If no previous config, use smart detection
     if (valueColumnIndex === undefined) {
-      // Look for kWh column first
-      const kwhIdx = headers.findIndex(h => {
-        const lower = h.toLowerCase();
-        return lower === 'kwh' || lower.includes('kwh_del') || lower.includes('energy');
+      let bestScore = 0;
+      
+      headers.forEach((header, idx) => {
+        const sampleValues = sampleRows.map(row => row[idx] || '');
+        const { score, unit } = scoreValueColumn(header, sampleValues);
+        
+        if (score > bestScore) {
+          bestScore = score;
+          valueColumnIndex = idx;
+          detectedUnit = unit;
+        }
       });
-      if (kwhIdx >= 0) valueColumnIndex = kwhIdx;
     }
 
     const parseConfig: WizardParseConfig = {
@@ -172,7 +255,7 @@ export function OneClickBatchProcessor({
       columns,
       detectedFormat: isPnPScada ? "pnp-scada" : "generic",
       valueColumnIndex,
-      valueUnit: (previousConfig?.unit as WizardParseConfig['valueUnit']) || "kWh",
+      valueUnit: (previousConfig?.unit as WizardParseConfig['valueUnit']) || detectedUnit,
       voltageV: previousConfig?.voltageV || 400,
       powerFactor: previousConfig?.powerFactor || 0.9,
     };
@@ -328,22 +411,17 @@ export function OneClickBatchProcessor({
   const startProcessing = async () => {
     setIsProcessing(true);
     setIsPaused(false);
+    isPausedRef.current = false;
     setResults([]);
     setProgress({ current: 0, total: meterIds.length });
 
     const totalBatches = Math.ceil(meterIds.length / BATCH_SIZE);
+    const allResults: ProcessingResult[] = [];
 
     for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
-      // Check if paused
-      if (isPaused) {
-        await new Promise<void>(resolve => {
-          const checkResume = setInterval(() => {
-            if (!isPaused) {
-              clearInterval(checkResume);
-              resolve();
-            }
-          }, 100);
-        });
+      // Check if paused using ref for immediate response
+      while (isPausedRef.current) {
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       const batchStart = batchIdx * BATCH_SIZE;
@@ -352,10 +430,16 @@ export function OneClickBatchProcessor({
 
       // Process batch
       for (let i = 0; i < batchMeterIds.length; i++) {
+        // Check pause state again for each meter
+        while (isPausedRef.current) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
         const meterId = batchMeterIds[i];
         const result = await processMeter(meterId);
         
-        setResults(prev => [...prev, result]);
+        allResults.push(result);
+        setResults([...allResults]);
         setProgress({ current: batchStart + i + 1, total: meterIds.length });
       }
 
@@ -373,19 +457,28 @@ export function OneClickBatchProcessor({
     queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
     queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
 
-    const finalSuccess = results.filter(r => r.status === 'success').length + 
-      (results.length === 0 ? meterIds.length : 0);
+    // Calculate final counts from allResults
+    const finalSuccess = allResults.filter(r => r.status === 'success').length;
+    const finalFailed = allResults.filter(r => r.status === 'failed').length;
+    const finalNeedsReview = allResults.filter(r => r.status === 'needs_review').length;
     
     toast.success(`Batch processing complete`, {
-      description: `Processed ${meterIds.length} meters`
+      description: `✅ ${finalSuccess} success, ❌ ${finalFailed} failed${finalNeedsReview > 0 ? `, ⚠️ ${finalNeedsReview} needs review` : ''}`
     });
 
     onComplete?.();
   };
 
+  const handlePauseToggle = () => {
+    const newPaused = !isPaused;
+    setIsPaused(newPaused);
+    isPausedRef.current = newPaused;
+  };
+
   const handleCancel = () => {
     setIsProcessing(false);
     setIsPaused(false);
+    isPausedRef.current = false;
     onCancel?.();
   };
 
@@ -410,17 +503,15 @@ export function OneClickBatchProcessor({
                 Start Processing
               </Button>
             ) : (
-              <>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setIsPaused(!isPaused)}
-                  className="gap-2"
-                >
-                  {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-                  {isPaused ? 'Resume' : 'Pause'}
-                </Button>
-              </>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handlePauseToggle}
+                className="gap-2"
+              >
+                {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                {isPaused ? 'Resume' : 'Pause'}
+              </Button>
             )}
             <Button variant="ghost" size="sm" onClick={handleCancel}>
               <X className="h-4 w-4" />
@@ -433,14 +524,14 @@ export function OneClickBatchProcessor({
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">
-                {isProcessing ? currentMeterName || 'Processing...' : 'Complete'}
+                {isProcessing ? (isPaused ? 'Paused' : currentMeterName || 'Processing...') : 'Complete'}
               </span>
               <span className="font-medium">{progressPercent}%</span>
             </div>
             <Progress value={progressPercent} className="h-2" />
             
             {/* Stats */}
-            <div className="flex gap-4 text-sm">
+            <div className="flex flex-wrap gap-3 text-sm">
               <div className="flex items-center gap-1">
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <span>{successCount} success</span>
@@ -449,8 +540,13 @@ export function OneClickBatchProcessor({
                 <XCircle className="h-4 w-4 text-destructive" />
                 <span>{failedCount} failed</span>
               </div>
-              <div className="flex items-center gap-1">
-                <AlertCircle className="h-4 w-4 text-yellow-500" />
+              {needsReviewCount > 0 && (
+                <div className="flex items-center gap-1">
+                  <AlertTriangle className="h-4 w-4 text-orange-500" />
+                  <span>{needsReviewCount} review</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1 text-muted-foreground">
                 <span>{skippedCount} skipped</span>
               </div>
             </div>
@@ -463,12 +559,13 @@ export function OneClickBatchProcessor({
             <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
               View details ({results.length} processed)
             </summary>
-            <div className="mt-2 max-h-40 overflow-y-auto space-y-1 pl-2 border-l-2 border-muted">
+            <div className="mt-2 max-h-48 overflow-y-auto space-y-1 pl-2 border-l-2 border-muted">
               {results.map((result, idx) => (
                 <div key={`${result.id}-${idx}`} className="flex items-center gap-2 py-0.5">
                   {result.status === 'success' && <CheckCircle2 className="h-3 w-3 text-green-500 flex-shrink-0" />}
                   {result.status === 'failed' && <XCircle className="h-3 w-3 text-destructive flex-shrink-0" />}
-                  {result.status === 'skipped' && <AlertCircle className="h-3 w-3 text-yellow-500 flex-shrink-0" />}
+                  {result.status === 'needs_review' && <AlertTriangle className="h-3 w-3 text-orange-500 flex-shrink-0" />}
+                  {result.status === 'skipped' && <X className="h-3 w-3 text-muted-foreground flex-shrink-0" />}
                   <span className="font-medium truncate max-w-[150px]">{result.name}</span>
                   <span className="text-muted-foreground truncate">{result.message}</span>
                 </div>
