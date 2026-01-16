@@ -44,3 +44,9 @@ verify_jwt = false
 
 [functions.generate-proposal-narrative]
 verify_jwt = false
+
+[functions.code-review]
+verify_jwt = false
+
+[functions.fetch-github-files]
+verify_jwt = false

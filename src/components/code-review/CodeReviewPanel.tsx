@@ -5,141 +5,244 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { ProjectFileBrowser } from "./ProjectFileBrowser";
+import { supabase } from "@/integrations/supabase/client";
+import { ProjectFileBrowser, PROJECT_FILES, getAllFilePaths } from "./ProjectFileBrowser";
+import { CodeReviewResults } from "./CodeReviewResults";
 import { 
   Code2, 
-  Copy,
-  Check,
+  Loader2,
+  Shield,
+  Zap,
   Sparkles,
-  RefreshCw,
+  CheckCircle,
+  AlertTriangle,
   FileCode,
-  Info
+  Settings2
 } from "lucide-react";
+
+export interface ReviewIssue {
+  file: string;
+  location: string;
+  severity: "critical" | "high" | "medium" | "low";
+  category: string;
+  issue: string;
+  suggestion: string;
+  codeSnippet?: string;
+}
+
+export interface CodeReviewResponse {
+  summary: string;
+  overallScore: number;
+  issues: ReviewIssue[];
+  improvements: string[];
+  actionItems: string[];
+}
+
+type ReviewType = "security" | "performance" | "quality" | "full";
+
+// Mock file contents for demo (in production, these would come from GitHub API)
+const MOCK_FILE_CONTENTS: Record<string, string> = {
+  "src/hooks/useAuth.tsx": `import { createContext, useContext, useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { User, Session } from "@supabase/supabase-js";
+
+interface AuthContextType {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  signOut: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, session, loading, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}`,
+  "src/pages/Auth.tsx": `import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { toast } from "sonner";
+
+export default function Auth() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        toast.success("Check your email for verification link");
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        toast.success("Logged in successfully");
+      }
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Card className="w-full max-w-md p-6">
+        <h1 className="text-2xl font-bold mb-4">{isSignUp ? "Sign Up" : "Login"}</h1>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <Input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          <Button type="submit" disabled={loading} className="w-full">
+            {loading ? "Loading..." : isSignUp ? "Sign Up" : "Login"}
+          </Button>
+        </form>
+        <button
+          onClick={() => setIsSignUp(!isSignUp)}
+          className="mt-4 text-sm text-primary hover:underline"
+        >
+          {isSignUp ? "Already have an account? Login" : "Need an account? Sign Up"}
+        </button>
+      </Card>
+    </div>
+  );
+}`,
+};
 
 export function CodeReviewPanel() {
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [additionalContext, setAdditionalContext] = useState("");
-  const [generatedPrompt, setGeneratedPrompt] = useState("");
-  const [isCopied, setIsCopied] = useState(false);
+  const [reviewType, setReviewType] = useState<ReviewType>("full");
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [reviewProgress, setReviewProgress] = useState(0);
+  const [reviewResult, setReviewResult] = useState<CodeReviewResponse | null>(null);
+  const [githubConfigured, setGithubConfigured] = useState<boolean | null>(null);
 
-  const handleGeneratePrompt = () => {
+  const handleRunReview = async () => {
     if (selectedFiles.length === 0) {
       toast.error("Please select at least one file to review");
       return;
     }
 
-    const prompt = generateDevelopmentPrompt(selectedFiles, additionalContext);
-    setGeneratedPrompt(prompt);
-    toast.success("Development prompt generated! Copy and paste into your AI platform.");
-  };
+    setIsReviewing(true);
+    setReviewProgress(10);
+    setReviewResult(null);
 
-  const generateDevelopmentPrompt = (files: string[], context: string): string => {
-    const filesByFolder: Record<string, string[]> = {};
-    
-    files.forEach(file => {
-      const parts = file.split('/');
-      const folder = parts.slice(0, -1).join('/');
-      const fileName = parts[parts.length - 1];
-      if (!filesByFolder[folder]) {
-        filesByFolder[folder] = [];
-      }
-      filesByFolder[folder].push(fileName);
-    });
-
-    const fileListFormatted = Object.entries(filesByFolder)
-      .map(([folder, fileNames]) => {
-        return `**${folder}/**\n${fileNames.map(f => `  - ${f}`).join('\n')}`;
-      })
-      .join('\n\n');
-
-    const prompt = `# Code Review & Development Assistance Request
-
-## Project Context
-This is a **Solar Energy Management & Tariff Analysis Platform** built with:
-- **Frontend**: React 18 + TypeScript + Vite
-- **UI**: Tailwind CSS + shadcn/ui components
-- **State**: Zustand + React Query
-- **Backend**: Supabase (PostgreSQL + Edge Functions)
-- **Charts**: Recharts
-
-## Files I Need You to Review
-
-I'm going to share the contents of the following ${files.length} file(s) for review:
-
-${fileListFormatted}
-
-${context ? `## Additional Context & Focus Areas\n${context}\n` : ''}
----
-
-## What I Need From You
-
-### 1. **Code Review**
-Please analyze the code I'll paste below and provide:
-
-- **Security Issues**: Identify vulnerabilities, unsafe patterns, or potential exploits
-- **Code Quality**: Assess structure, readability, DRY principles, and TypeScript usage
-- **Performance**: Identify bottlenecks, unnecessary re-renders, or inefficient patterns
-- **Best Practices**: Check adherence to React/TypeScript conventions
-
-### 2. **Specific Feedback For Each Issue**
-For each issue found:
-- **Location**: File name and approximate location
-- **Severity**: Critical / High / Medium / Low
-- **Issue**: Clear description of the problem
-- **Solution**: Specific code fix or recommendation
-
-### 3. **Improvement Suggestions**
-Prioritized list of improvements with:
-- Before/after code examples where applicable
-- Explanation of why the change is beneficial
-
-### 4. **Action Items**
-A numbered checklist I can work through to implement the fixes.
-
----
-
-## File Contents
-
-**IMPORTANT**: Please paste the actual file contents below this line. Copy each file from your project and paste it here with a clear header like:
-
-\`\`\`typescript
-// ===== FILE: src/components/example/MyComponent.tsx =====
-
-// [paste file contents here]
-\`\`\`
-
-${files.map(f => `\`\`\`typescript
-// ===== FILE: ${f} =====
-
-// [PASTE CONTENTS OF ${f} HERE]
-\`\`\``).join('\n\n')}
-
----
-
-## Review Focus Priority
-
-1. 🔒 **Security vulnerabilities** (XSS, injection, auth issues)
-2. 🐛 **Bugs or potential runtime errors**
-3. ⚡ **Performance issues** (re-renders, memory leaks)
-4. 📐 **Architecture & patterns** (component structure, state management)
-5. ✨ **Code cleanliness** (naming, organization, readability)
-
-Please provide actionable, specific feedback I can immediately apply to improve this code.`;
-
-    return prompt;
-  };
-
-  const handleCopyPrompt = async () => {
     try {
-      await navigator.clipboard.writeText(generatedPrompt);
-      setIsCopied(true);
-      toast.success("Prompt copied! Now paste into Claude, ChatGPT, or your preferred AI.");
-      setTimeout(() => setIsCopied(false), 2000);
+      // For demo purposes, use mock content for known files
+      // In production, this would fetch from GitHub
+      const files = selectedFiles.map(path => ({
+        path,
+        content: MOCK_FILE_CONTENTS[path] || `// File content for ${path}\n// (Connect GitHub to fetch actual content)`
+      }));
+
+      setReviewProgress(30);
+
+      // Call the code review edge function
+      const { data, error } = await supabase.functions.invoke('code-review', {
+        body: {
+          files,
+          context: additionalContext,
+          reviewType
+        }
+      });
+
+      setReviewProgress(90);
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setReviewResult(data);
+      setReviewProgress(100);
+      toast.success(`Review complete! Found ${data.issues?.length || 0} issues.`);
+
     } catch (error) {
-      toast.error("Failed to copy - please select and copy manually");
+      console.error("Review error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to run code review");
+    } finally {
+      setIsReviewing(false);
     }
   };
+
+  const getReviewTypeIcon = (type: ReviewType) => {
+    switch (type) {
+      case "security": return <Shield className="h-4 w-4" />;
+      case "performance": return <Zap className="h-4 w-4" />;
+      case "quality": return <Sparkles className="h-4 w-4" />;
+      case "full": return <CheckCircle className="h-4 w-4" />;
+    }
+  };
+
+  const reviewTypes: { value: ReviewType; label: string; description: string }[] = [
+    { value: "full", label: "Full Review", description: "Complete analysis of security, performance, and quality" },
+    { value: "security", label: "Security", description: "Focus on vulnerabilities and unsafe patterns" },
+    { value: "performance", label: "Performance", description: "Focus on optimization and efficiency" },
+    { value: "quality", label: "Code Quality", description: "Focus on readability and best practices" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -147,20 +250,36 @@ Please provide actionable, specific feedback I can immediately apply to improve 
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Code2 className="h-5 w-5 text-primary" />
-            Code Review Prompt Generator
+            AI Code Review
           </CardTitle>
           <CardDescription>
-            Select project files, generate a structured prompt, then paste the files and prompt into your AI development platform
+            Select files and run an AI-powered code review directly in the app
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              <strong>How it works:</strong> Select files below → Generate prompt → Copy the prompt → Paste into Claude/ChatGPT → 
-              Then copy the actual file contents from your IDE and paste them into the designated sections.
-            </AlertDescription>
-          </Alert>
+        <CardContent className="space-y-6">
+          {/* Review Type Selection */}
+          <div>
+            <label className="text-sm font-medium mb-3 block">Review Type</label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {reviewTypes.map(type => (
+                <button
+                  key={type.value}
+                  onClick={() => setReviewType(type.value)}
+                  className={`p-3 rounded-lg border text-left transition-all ${
+                    reviewType === type.value 
+                      ? "border-primary bg-primary/10" 
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    {getReviewTypeIcon(type.value)}
+                    <span className="font-medium text-sm">{type.label}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{type.description}</p>
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* File Browser */}
           <div>
@@ -179,83 +298,59 @@ Please provide actionable, specific feedback I can immediately apply to improve 
               Additional Context (Optional)
             </label>
             <Textarea
-              placeholder="What specific aspects do you want reviewed? Any known issues? Areas of concern?&#10;&#10;Examples:&#10;- Focus on authentication security&#10;- Check for performance issues in data loading&#10;- Review state management patterns"
+              placeholder="Any specific areas of concern? Known issues? What are you trying to achieve?"
               value={additionalContext}
               onChange={(e) => setAdditionalContext(e.target.value)}
               className="text-sm"
-              rows={4}
+              rows={3}
             />
           </div>
 
-          {/* Generate Button */}
+          {/* Review Progress */}
+          {isReviewing && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Analyzing {selectedFiles.length} file(s)...</span>
+              </div>
+              <Progress value={reviewProgress} className="h-2" />
+            </div>
+          )}
+
+          {/* Run Review Button */}
           <Button 
-            onClick={handleGeneratePrompt} 
-            disabled={selectedFiles.length === 0}
+            onClick={handleRunReview} 
+            disabled={selectedFiles.length === 0 || isReviewing}
             className="w-full"
             size="lg"
           >
-            <Sparkles className="mr-2 h-4 w-4" />
-            Generate Development Prompt ({selectedFiles.length} files selected)
+            {isReviewing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Reviewing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Run AI Code Review ({selectedFiles.length} files)
+              </>
+            )}
           </Button>
+
+          {/* Note about GitHub */}
+          <Alert>
+            <Settings2 className="h-4 w-4" />
+            <AlertDescription className="text-sm">
+              <strong>Demo Mode:</strong> Currently using sample file contents. 
+              To review your actual code, connect GitHub by adding <code className="bg-muted px-1 rounded">GITHUB_TOKEN</code>, <code className="bg-muted px-1 rounded">GITHUB_OWNER</code>, and <code className="bg-muted px-1 rounded">GITHUB_REPO</code> secrets.
+            </AlertDescription>
+          </Alert>
         </CardContent>
       </Card>
 
-      {/* Generated Prompt Output */}
-      {generatedPrompt && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <FileCode className="h-5 w-5 text-primary" />
-                Your Development Prompt
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGeneratePrompt}
-                >
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  Regenerate
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleCopyPrompt}
-                >
-                  {isCopied ? (
-                    <>
-                      <Check className="h-4 w-4 mr-1" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4 mr-1" />
-                      Copy Prompt
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardTitle>
-            <CardDescription>
-              Copy this prompt and paste it into Claude, ChatGPT, GitHub Copilot, or any AI assistant. Then paste your actual file contents in the marked sections.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="relative">
-              <ScrollArea className="h-[500px] w-full rounded-md border bg-muted/30">
-                <pre className="p-4 text-sm whitespace-pre-wrap font-mono">
-                  {generatedPrompt}
-                </pre>
-              </ScrollArea>
-              <div className="absolute bottom-4 right-4">
-                <Badge variant="secondary" className="text-xs">
-                  {generatedPrompt.length.toLocaleString()} characters
-                </Badge>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Review Results */}
+      {reviewResult && (
+        <CodeReviewResults result={reviewResult} />
       )}
     </div>
   );
