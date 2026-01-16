@@ -1411,34 +1411,11 @@ export function SitesTab() {
                 Drag & drop CSV files for automatic processing with smart meter matching
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4 space-y-6">
-              {/* Bulk CSV Dropzone - Full Automation */}
+            <div className="py-4">
+              {/* One-Click Bulk Import - Primary Option */}
               <BulkCsvDropzone 
                 siteId={selectedSite.id}
                 onComplete={() => {
-                  setUploadDialogOpen(false);
-                  queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite.id] });
-                  queryClient.invalidateQueries({ queryKey: ["sites"] });
-                  queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
-                  queryClient.invalidateQueries({ queryKey: ["meter-library"] });
-                  queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
-                }}
-              />
-              
-              {/* Separator */}
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Or use manual import</span>
-                </div>
-              </div>
-              
-              {/* Legacy Manual Import */}
-              <BulkMeterImport 
-                siteId={selectedSite.id}
-                onImportComplete={() => {
                   setUploadDialogOpen(false);
                   queryClient.invalidateQueries({ queryKey: ["site-meters", selectedSite.id] });
                   queryClient.invalidateQueries({ queryKey: ["sites"] });
