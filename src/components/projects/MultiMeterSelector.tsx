@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Table,
   TableBody,
@@ -17,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, X, Layers, Database, BarChart3, Trash2, Scale } from "lucide-react";
+import { Plus, X, Layers, Database, BarChart3, Trash2, Scale, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 interface ScadaImport {
@@ -133,6 +135,32 @@ export function MultiMeterSelector({
     enabled: open,
   });
 
+  // Fetch all meter assignments across all tenants to detect duplicates
+  const { data: allMeterAssignments = [] } = useQuery({
+    queryKey: ["all-meter-assignments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_tenant_meters")
+        .select("scada_import_id, tenant_id, project_tenants:tenant_id(name)");
+      if (error) throw error;
+      return data as { scada_import_id: string; tenant_id: string; project_tenants: { name: string } | null }[];
+    },
+    enabled: open,
+  });
+
+  // Build a map of meter_id -> assigned tenant names (excluding current tenant)
+  const meterToOtherTenants = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const assignment of allMeterAssignments) {
+      if (assignment.tenant_id === tenantId) continue;
+      const tenantName = assignment.project_tenants?.name || "Unknown";
+      const existing = map.get(assignment.scada_import_id) || [];
+      existing.push(tenantName);
+      map.set(assignment.scada_import_id, existing);
+    }
+    return map;
+  }, [allMeterAssignments, tenantId]);
+
   // Get the single profile data if assigned via dropdown
   const singleProfile = useMemo(() => {
     if (!singleProfileId) return null;
@@ -141,6 +169,12 @@ export function MultiMeterSelector({
 
   const addMeter = useMutation({
     mutationFn: async (scadaImportId: string) => {
+      // Check if meter is already assigned to another tenant
+      const otherTenants = meterToOtherTenants.get(scadaImportId);
+      if (otherTenants && otherTenants.length > 0) {
+        throw new Error(`This meter is already assigned to: ${otherTenants.join(", ")}. Each meter should only be assigned to one tenant.`);
+      }
+      
       const { error } = await supabase
         .from("project_tenant_meters")
         .insert({ tenant_id: tenantId, scada_import_id: scadaImportId, weight: 1.0 });
@@ -149,6 +183,7 @@ export function MultiMeterSelector({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tenant-meters", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["tenant-meter-counts"] });
+      queryClient.invalidateQueries({ queryKey: ["all-meter-assignments"] });
       toast.success("Meter added");
     },
     onError: (error) => toast.error(error.message),
@@ -482,48 +517,79 @@ export function MultiMeterSelector({
               <CommandList className="max-h-[200px]">
                 <CommandEmpty>No meters found.</CommandEmpty>
                 <CommandGroup>
-                  {filteredMeters.map((meter) => {
-                    const isAssigned = assignedIds.has(meter.id);
-                    const dailyKwh = meter.load_profile_weekday
-                      ? meter.load_profile_weekday.reduce((s, v) => s + v, 0)
-                      : 0;
-                    return (
-                      <CommandItem
-                        key={meter.id}
-                        value={`${meter.shop_name || ""} ${meter.site_name || ""}`}
-                        onSelect={() => {
-                          if (!isAssigned) {
-                            addMeter.mutate(meter.id);
-                          }
-                        }}
-                        disabled={isAssigned}
-                        className="flex items-center gap-2"
-                      >
-                        <Checkbox 
-                          checked={isAssigned} 
-                          className="pointer-events-none"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className={isAssigned ? "text-muted-foreground" : ""}>
-                            {formatMeterName(meter)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 ml-auto">
-                          <Badge 
-                            variant={meter.data_points ? "secondary" : "outline"} 
-                            className="text-xs font-mono"
-                          >
-                            {formatDataPoints(meter.data_points)}
-                          </Badge>
-                          {dailyKwh > 0 && (
-                            <Badge variant="outline" className="text-xs">
-                              {Math.round(dailyKwh)} kWh/day
+                  <TooltipProvider>
+                    {filteredMeters.map((meter) => {
+                      const isAssigned = assignedIds.has(meter.id);
+                      const otherTenants = meterToOtherTenants.get(meter.id);
+                      const isAssignedElsewhere = otherTenants && otherTenants.length > 0;
+                      const dailyKwh = meter.load_profile_weekday
+                        ? meter.load_profile_weekday.reduce((s, v) => s + v, 0)
+                        : 0;
+                      
+                      const meterItem = (
+                        <CommandItem
+                          key={meter.id}
+                          value={`${meter.shop_name || ""} ${meter.site_name || ""}`}
+                          onSelect={() => {
+                            if (!isAssigned && !isAssignedElsewhere) {
+                              addMeter.mutate(meter.id);
+                            } else if (isAssignedElsewhere) {
+                              toast.error(`Already assigned to: ${otherTenants!.join(", ")}`);
+                            }
+                          }}
+                          disabled={isAssigned}
+                          className={`flex items-center gap-2 ${isAssignedElsewhere ? "opacity-60" : ""}`}
+                        >
+                          <Checkbox 
+                            checked={isAssigned} 
+                            className="pointer-events-none"
+                          />
+                          <div className="flex-1 min-w-0 flex items-center gap-1">
+                            <span className={isAssigned ? "text-muted-foreground" : ""}>
+                              {formatMeterName(meter)}
+                            </span>
+                            {isAssignedElsewhere && (
+                              <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 ml-auto">
+                            {isAssignedElsewhere && (
+                              <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                                In use
+                              </Badge>
+                            )}
+                            <Badge 
+                              variant={meter.data_points ? "secondary" : "outline"} 
+                              className="text-xs font-mono"
+                            >
+                              {formatDataPoints(meter.data_points)}
                             </Badge>
-                          )}
-                        </div>
-                      </CommandItem>
-                    );
-                  })}
+                            {dailyKwh > 0 && (
+                              <Badge variant="outline" className="text-xs">
+                                {Math.round(dailyKwh)} kWh/day
+                              </Badge>
+                            )}
+                          </div>
+                        </CommandItem>
+                      );
+
+                      if (isAssignedElsewhere) {
+                        return (
+                          <Tooltip key={meter.id}>
+                            <TooltipTrigger asChild>
+                              {meterItem}
+                            </TooltipTrigger>
+                            <TooltipContent side="left">
+                              <p className="text-xs">Already assigned to: {otherTenants!.join(", ")}</p>
+                              <p className="text-xs text-muted-foreground">Each meter should only be assigned once</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      }
+                      
+                      return meterItem;
+                    })}
+                  </TooltipProvider>
                 </CommandGroup>
               </CommandList>
             </Command>
