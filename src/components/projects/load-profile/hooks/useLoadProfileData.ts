@@ -15,6 +15,8 @@ import {
 import { SolcastPVProfile } from "./useSolcastPVProfile";
 
 // Calculate averaged profile from multiple meters
+// This normalizes each profile to percentages first, averages the shapes,
+// then scales by the weighted average of daily kWh values
 function getAveragedProfile(
   meters: TenantMeter[] | undefined,
   profileKey: 'load_profile_weekday' | 'load_profile_weekend'
@@ -27,18 +29,47 @@ function getAveragedProfile(
   
   if (validMeters.length === 0) return null;
   
+  // Calculate total weight for averaging
   const totalWeight = validMeters.reduce((sum, m) => sum + (m.weight || 1), 0);
-  const averaged: number[] = Array(24).fill(0);
+  
+  // First normalize each profile to percentage shape (0-100 scale)
+  // Then calculate weighted average of the normalized shapes
+  const normalizedAveraged: number[] = Array(24).fill(0);
+  let weightedDailyTotal = 0;
+  let validMeterCount = 0;
   
   for (const meter of validMeters) {
     const profile = meter.scada_imports![profileKey]!;
-    const weight = (meter.weight || 1) / totalWeight;
+    const meterWeight = (meter.weight || 1) / totalWeight;
+    const dailyTotal = profile.reduce((sum, v) => sum + v, 0);
+    
+    // Skip meters with zero or near-zero consumption (bad data)
+    if (dailyTotal < 10) continue;
+    
+    validMeterCount++;
+    
+    // Normalize this profile to percentages
+    const percentages = profile.map(v => (v / dailyTotal) * 100);
+    
+    // Add weighted normalized shape
     for (let h = 0; h < 24; h++) {
-      averaged[h] += profile[h] * weight;
+      normalizedAveraged[h] += percentages[h] * meterWeight;
     }
+    
+    // Track weighted daily total for scaling back
+    weightedDailyTotal += dailyTotal * meterWeight;
   }
   
-  return averaged;
+  // If no valid data after filtering, return null
+  if (validMeterCount === 0 || weightedDailyTotal < 1) return null;
+  
+  // Scale the averaged percentages back to actual kWh values
+  // using the weighted average daily consumption
+  const result: number[] = normalizedAveraged.map(
+    pct => (pct / 100) * weightedDailyTotal
+  );
+  
+  return result;
 }
 
 interface UseLoadProfileDataProps {
