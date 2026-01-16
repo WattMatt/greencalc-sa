@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -529,17 +529,7 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Zap className="h-5 w-5 text-primary" />
-          One-Click Bulk Import
-        </CardTitle>
-        <CardDescription>
-          Drop CSV files to auto-match with meters and process automatically
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-4">
         {/* Drop Zone */}
         <div
           className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
@@ -725,7 +715,6 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
-  );
+      </div>
+    );
 }
