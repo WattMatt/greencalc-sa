@@ -10,6 +10,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
+import { ProjectFileBrowser } from "./ProjectFileBrowser";
 import { 
   Shield, 
   Code2, 
@@ -21,7 +22,9 @@ import {
   FileCode,
   Bug,
   Zap,
-  TrendingUp
+  TrendingUp,
+  FolderOpen,
+  FileText
 } from "lucide-react";
 
 interface SecurityIssue {
@@ -61,6 +64,7 @@ interface CodeReviewResult {
 }
 
 type ReviewType = 'security' | 'quality' | 'suggestions' | 'full';
+type InputMode = 'files' | 'paste';
 
 const LANGUAGES = [
   { value: 'typescript', label: 'TypeScript' },
@@ -86,32 +90,168 @@ const issueTypeIcons: Record<string, React.ReactNode> = {
   'performance': <Zap className="h-4 w-4" />,
 };
 
+// Sample code files for demonstration - in production these would come from GitHub
+const SAMPLE_CODE_FILES: Record<string, string> = {
+  "src/App.tsx": `import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+// ... more code`,
+  
+  "src/hooks/useAuth.tsx": `import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { User, Session } from '@supabase/supabase-js';
+
+interface AuthContextType {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  signOut: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, session, loading, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}`,
+
+  "src/integrations/supabase/client.ts": `import { createClient } from '@supabase/supabase-js';
+import type { Database } from './types';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);`,
+
+  "supabase/functions/abacus-code-review/index.ts": `import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const ABACUS_API_KEY = Deno.env.get("ABACUS_AI_API_KEY");
+    if (!ABACUS_API_KEY) {
+      throw new Error("ABACUS_AI_API_KEY is not configured");
+    }
+    // ... more code
+  } catch (error) {
+    console.error("Code review error:", error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});`,
+};
+
 export function CodeReviewPanel() {
+  const [inputMode, setInputMode] = useState<InputMode>("files");
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("typescript");
   const [reviewType, setReviewType] = useState<ReviewType>("full");
   const [context, setContext] = useState("");
   const [isReviewing, setIsReviewing] = useState(false);
   const [result, setResult] = useState<CodeReviewResult | null>(null);
+  const [reviewedFiles, setReviewedFiles] = useState<string[]>([]);
 
   const handleReview = async () => {
-    if (!code.trim()) {
-      toast.error("Please enter some code to review");
-      return;
+    let codeToReview = "";
+    let filesToReview: string[] = [];
+
+    if (inputMode === "files") {
+      if (selectedFiles.length === 0) {
+        toast.error("Please select at least one file to review");
+        return;
+      }
+      
+      // Combine selected files into a single code block for review
+      const codeBlocks: string[] = [];
+      for (const filePath of selectedFiles) {
+        const fileContent = SAMPLE_CODE_FILES[filePath];
+        if (fileContent) {
+          codeBlocks.push(`// ===== ${filePath} =====\n${fileContent}`);
+        }
+      }
+      
+      if (codeBlocks.length === 0) {
+        toast.error("Could not load selected files. Please try different files.");
+        return;
+      }
+      
+      codeToReview = codeBlocks.join("\n\n");
+      filesToReview = selectedFiles;
+    } else {
+      if (!code.trim()) {
+        toast.error("Please enter some code to review");
+        return;
+      }
+      codeToReview = code;
     }
 
     setIsReviewing(true);
     setResult(null);
+    setReviewedFiles(filesToReview);
 
     try {
       const { data, error } = await supabase.functions.invoke('abacus-code-review', {
-        body: { code, language, reviewType, context }
+        body: { 
+          code: codeToReview, 
+          language, 
+          reviewType, 
+          context: inputMode === "files" 
+            ? `Reviewing ${selectedFiles.length} files: ${selectedFiles.join(", ")}. ${context}` 
+            : context 
+        }
       });
 
       if (error) throw error;
 
       setResult(data);
-      toast.success("Code review completed!");
+      toast.success(`Code review completed for ${inputMode === "files" ? `${selectedFiles.length} files` : "pasted code"}!`);
     } catch (error) {
       console.error("Code review failed:", error);
       toast.error("Failed to perform code review. Please try again.");
@@ -142,10 +282,40 @@ export function CodeReviewPanel() {
             AI Code Review (Abacus.AI)
           </CardTitle>
           <CardDescription>
-            Comprehensive code analysis for security, quality, and improvement suggestions
+            Select files from the codebase or paste code for comprehensive security, quality, and improvement analysis
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Input Mode Toggle */}
+          <Tabs value={inputMode} onValueChange={(v) => setInputMode(v as InputMode)}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="files" className="flex items-center gap-2">
+                <FolderOpen className="h-4 w-4" />
+                Select Project Files
+              </TabsTrigger>
+              <TabsTrigger value="paste" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Paste Code
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="files" className="mt-4">
+              <ProjectFileBrowser 
+                selectedFiles={selectedFiles}
+                onSelectionChange={setSelectedFiles}
+              />
+            </TabsContent>
+
+            <TabsContent value="paste" className="mt-4">
+              <Textarea
+                placeholder="Paste your code here for review..."
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="font-mono text-sm min-h-[300px]"
+              />
+            </TabsContent>
+          </Tabs>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Select value={language} onValueChange={setLanguage}>
               <SelectTrigger>
@@ -172,27 +342,23 @@ export function CodeReviewPanel() {
               </SelectContent>
             </Select>
 
-            <Button onClick={handleReview} disabled={isReviewing || !code.trim()}>
+            <Button 
+              onClick={handleReview} 
+              disabled={isReviewing || (inputMode === "files" ? selectedFiles.length === 0 : !code.trim())}
+            >
               {isReviewing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Analyzing...
+                  Analyzing{inputMode === "files" ? ` ${selectedFiles.length} files...` : "..."}
                 </>
               ) : (
                 <>
                   <FileCode className="mr-2 h-4 w-4" />
-                  Review Code
+                  Review {inputMode === "files" ? `${selectedFiles.length} File${selectedFiles.length !== 1 ? 's' : ''}` : "Code"}
                 </>
               )}
             </Button>
           </div>
-
-          <Textarea
-            placeholder="Paste your code here for review..."
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="font-mono text-sm min-h-[300px]"
-          />
 
           <Textarea
             placeholder="Optional: Add context about the code (e.g., 'This is a user authentication handler')"
@@ -216,7 +382,19 @@ export function CodeReviewPanel() {
                 {result.overallScore}/100
               </span>
             </CardTitle>
-            <CardDescription>{result.summary}</CardDescription>
+            <CardDescription>
+              {reviewedFiles.length > 0 && (
+                <div className="mb-2">
+                  <span className="font-medium">Reviewed files: </span>
+                  {reviewedFiles.map((f, i) => (
+                    <Badge key={f} variant="outline" className="mr-1 text-xs">
+                      {f.split('/').pop()}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              {result.summary}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Metrics */}
