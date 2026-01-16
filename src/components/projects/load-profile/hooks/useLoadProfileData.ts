@@ -23,30 +23,28 @@ function getAveragedProfile(
 ): number[] | null {
   if (!meters || meters.length === 0) return null;
   
-  const validMeters = meters.filter(m => 
-    m.scada_imports?.[profileKey]?.length === 24
-  );
+  // First filter to valid meters with actual data
+  const validMeters = meters.filter(m => {
+    const profile = m.scada_imports?.[profileKey];
+    if (!profile || profile.length !== 24) return false;
+    const dailyTotal = profile.reduce((sum, v) => sum + v, 0);
+    return dailyTotal >= 10; // Skip near-zero consumption (bad data)
+  });
   
   if (validMeters.length === 0) return null;
   
-  // Calculate total weight for averaging
+  // Recalculate total weight from ONLY valid meters
   const totalWeight = validMeters.reduce((sum, m) => sum + (m.weight || 1), 0);
   
-  // First normalize each profile to percentage shape (0-100 scale)
+  // Normalize each profile to percentage shape (0-100 scale)
   // Then calculate weighted average of the normalized shapes
   const normalizedAveraged: number[] = Array(24).fill(0);
   let weightedDailyTotal = 0;
-  let validMeterCount = 0;
   
   for (const meter of validMeters) {
     const profile = meter.scada_imports![profileKey]!;
     const meterWeight = (meter.weight || 1) / totalWeight;
     const dailyTotal = profile.reduce((sum, v) => sum + v, 0);
-    
-    // Skip meters with zero or near-zero consumption (bad data)
-    if (dailyTotal < 10) continue;
-    
-    validMeterCount++;
     
     // Normalize this profile to percentages
     const percentages = profile.map(v => (v / dailyTotal) * 100);
@@ -59,9 +57,6 @@ function getAveragedProfile(
     // Track weighted daily total for scaling back
     weightedDailyTotal += dailyTotal * meterWeight;
   }
-  
-  // If no valid data after filtering, return null
-  if (validMeterCount === 0 || weightedDailyTotal < 1) return null;
   
   // Scale the averaged percentages back to actual kWh values
   // using the weighted average daily consumption
