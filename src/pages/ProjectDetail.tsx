@@ -441,13 +441,43 @@ export default function ProjectDetail() {
   const { data: tenants } = useQuery({
     queryKey: ["project-tenants", id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Fetch tenants with their direct scada_imports relation
+      const { data: tenantsData, error: tenantsError } = await supabase
         .from("project_tenants")
         .select(`*, shop_types(*), scada_imports(shop_name, area_sqm, load_profile_weekday, load_profile_weekend, raw_data, date_range_start, date_range_end)`)
         .eq("project_id", id)
         .order("name");
-      if (error) throw error;
-      return data;
+      if (tenantsError) throw tenantsError;
+      if (!tenantsData) return [];
+
+      // Fetch all tenant_meters for these tenants (multi-meter assignments)
+      const tenantIds = tenantsData.map(t => t.id);
+      const { data: tenantMetersData, error: metersError } = await supabase
+        .from("project_tenant_meters")
+        .select(`
+          id, 
+          tenant_id, 
+          scada_import_id, 
+          weight, 
+          scada_imports:scada_import_id(id, shop_name, site_name, area_sqm, load_profile_weekday, load_profile_weekend)
+        `)
+        .in("tenant_id", tenantIds);
+      if (metersError) throw metersError;
+
+      // Group tenant_meters by tenant_id
+      const metersByTenant: Record<string, typeof tenantMetersData> = {};
+      for (const meter of tenantMetersData || []) {
+        if (!metersByTenant[meter.tenant_id]) {
+          metersByTenant[meter.tenant_id] = [];
+        }
+        metersByTenant[meter.tenant_id].push(meter);
+      }
+
+      // Merge tenant_meters into tenants
+      return tenantsData.map(tenant => ({
+        ...tenant,
+        tenant_meters: metersByTenant[tenant.id] || []
+      }));
     },
     enabled: !!id,
   });
