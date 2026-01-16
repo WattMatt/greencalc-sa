@@ -14,8 +14,16 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Project file structure - this represents the codebase
-const PROJECT_FILES: FileNode[] = [
+export interface FileNode {
+  name: string;
+  type: "file" | "folder";
+  path?: string;
+  language?: string;
+  children?: FileNode[];
+}
+
+// Project file structure - matches actual codebase
+export const PROJECT_FILES: FileNode[] = [
   {
     name: "src",
     type: "folder",
@@ -37,6 +45,7 @@ const PROJECT_FILES: FileNode[] = [
             type: "folder",
             children: [
               { name: "CodeReviewPanel.tsx", type: "file", path: "src/components/code-review/CodeReviewPanel.tsx", language: "typescript" },
+              { name: "ProjectFileBrowser.tsx", type: "file", path: "src/components/code-review/ProjectFileBrowser.tsx", language: "typescript" },
             ]
           },
           {
@@ -66,6 +75,8 @@ const PROJECT_FILES: FileNode[] = [
               { name: "CsvImportWizard.tsx", type: "file", path: "src/components/loadprofiles/CsvImportWizard.tsx", language: "typescript" },
               { name: "LoadProfileEditor.tsx", type: "file", path: "src/components/loadprofiles/LoadProfileEditor.tsx", language: "typescript" },
               { name: "MeterLibrary.tsx", type: "file", path: "src/components/loadprofiles/MeterLibrary.tsx", language: "typescript" },
+              { name: "MeterAnalysis.tsx", type: "file", path: "src/components/loadprofiles/MeterAnalysis.tsx", language: "typescript" },
+              { name: "ScadaImport.tsx", type: "file", path: "src/components/loadprofiles/ScadaImport.tsx", language: "typescript" },
             ]
           },
           {
@@ -76,6 +87,8 @@ const PROJECT_FILES: FileNode[] = [
               { name: "SimulationPanel.tsx", type: "file", path: "src/components/projects/SimulationPanel.tsx", language: "typescript" },
               { name: "TariffSelector.tsx", type: "file", path: "src/components/projects/TariffSelector.tsx", language: "typescript" },
               { name: "TenantManager.tsx", type: "file", path: "src/components/projects/TenantManager.tsx", language: "typescript" },
+              { name: "LoadProfileChart.tsx", type: "file", path: "src/components/projects/LoadProfileChart.tsx", language: "typescript" },
+              { name: "PVSystemConfig.tsx", type: "file", path: "src/components/projects/PVSystemConfig.tsx", language: "typescript" },
             ]
           },
           {
@@ -85,6 +98,7 @@ const PROJECT_FILES: FileNode[] = [
               { name: "ProposalExport.tsx", type: "file", path: "src/components/proposals/ProposalExport.tsx", language: "typescript" },
               { name: "ProposalPreview.tsx", type: "file", path: "src/components/proposals/ProposalPreview.tsx", language: "typescript" },
               { name: "generateProposalPDF.ts", type: "file", path: "src/components/proposals/generateProposalPDF.ts", language: "typescript" },
+              { name: "BrandingForm.tsx", type: "file", path: "src/components/proposals/BrandingForm.tsx", language: "typescript" },
             ]
           },
           {
@@ -94,6 +108,17 @@ const PROJECT_FILES: FileNode[] = [
               { name: "TariffBuilder.tsx", type: "file", path: "src/components/tariffs/TariffBuilder.tsx", language: "typescript" },
               { name: "TariffList.tsx", type: "file", path: "src/components/tariffs/TariffList.tsx", language: "typescript" },
               { name: "EskomTariffMatrix.tsx", type: "file", path: "src/components/tariffs/EskomTariffMatrix.tsx", language: "typescript" },
+              { name: "TOUPeriodBuilder.tsx", type: "file", path: "src/components/tariffs/TOUPeriodBuilder.tsx", language: "typescript" },
+            ]
+          },
+          {
+            name: "simulation",
+            type: "folder",
+            children: [
+              { name: "AccuracyBadge.tsx", type: "file", path: "src/components/simulation/AccuracyBadge.tsx", language: "typescript" },
+              { name: "ModeCard.tsx", type: "file", path: "src/components/simulation/ModeCard.tsx", language: "typescript" },
+              { name: "QuickEstimateForm.tsx", type: "file", path: "src/components/simulation/QuickEstimateForm.tsx", language: "typescript" },
+              { name: "QuickEstimateResults.tsx", type: "file", path: "src/components/simulation/QuickEstimateResults.tsx", language: "typescript" },
             ]
           },
           {
@@ -117,6 +142,7 @@ const PROJECT_FILES: FileNode[] = [
           { name: "useProjectStore.ts", type: "file", path: "src/hooks/useProjectStore.ts", language: "typescript" },
           { name: "useSolcastForecast.ts", type: "file", path: "src/hooks/useSolcastForecast.ts", language: "typescript" },
           { name: "useTOUCalculation.ts", type: "file", path: "src/hooks/useTOUCalculation.ts", language: "typescript" },
+          { name: "useSimulationPresets.ts", type: "file", path: "src/hooks/useSimulationPresets.ts", language: "typescript" },
         ]
       },
       {
@@ -133,6 +159,8 @@ const PROJECT_FILES: FileNode[] = [
           { name: "ProposalBuilder.tsx", type: "file", path: "src/pages/ProposalBuilder.tsx", language: "typescript" },
           { name: "Settings.tsx", type: "file", path: "src/pages/Settings.tsx", language: "typescript" },
           { name: "TariffManagement.tsx", type: "file", path: "src/pages/TariffManagement.tsx", language: "typescript" },
+          { name: "CodeReview.tsx", type: "file", path: "src/pages/CodeReview.tsx", language: "typescript" },
+          { name: "QuickEstimate.tsx", type: "file", path: "src/pages/QuickEstimate.tsx", language: "typescript" },
         ]
       },
       {
@@ -178,20 +206,13 @@ const PROJECT_FILES: FileNode[] = [
           { name: "generate-proposal-narrative/index.ts", type: "file", path: "supabase/functions/generate-proposal-narrative/index.ts", language: "typescript" },
           { name: "process-tariff-file/index.ts", type: "file", path: "supabase/functions/process-tariff-file/index.ts", language: "typescript" },
           { name: "solcast-forecast/index.ts", type: "file", path: "supabase/functions/solcast-forecast/index.ts", language: "typescript" },
+          { name: "fetch-project-files/index.ts", type: "file", path: "supabase/functions/fetch-project-files/index.ts", language: "typescript" },
         ]
       },
       { name: "config.toml", type: "file", path: "supabase/config.toml", language: "toml" },
     ]
   },
 ];
-
-interface FileNode {
-  name: string;
-  type: "file" | "folder";
-  path?: string;
-  language?: string;
-  children?: FileNode[];
-}
 
 interface ProjectFileBrowserProps {
   selectedFiles: string[];
@@ -211,7 +232,7 @@ function getFileIcon(name: string, language?: string) {
   return <FileText className="h-4 w-4 text-muted-foreground" />;
 }
 
-function getAllFilePaths(nodes: FileNode[]): string[] {
+export function getAllFilePaths(nodes: FileNode[]): string[] {
   const paths: string[] = [];
   for (const node of nodes) {
     if (node.type === "file" && node.path) {
@@ -247,7 +268,6 @@ function FileTreeNode({
   const isExpanded = expandedFolders.has(folderPath);
 
   if (node.type === "folder") {
-    // Check if any children match the search
     const allChildPaths = getAllFilePaths(node.children || []);
     const hasMatchingChildren = searchQuery 
       ? allChildPaths.some(p => p.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -296,7 +316,6 @@ function FileTreeNode({
     );
   }
 
-  // File node
   if (searchQuery && !node.path?.toLowerCase().includes(searchQuery.toLowerCase())) {
     return null;
   }
@@ -323,7 +342,7 @@ function FileTreeNode({
 }
 
 export function ProjectFileBrowser({ selectedFiles, onSelectionChange }: ProjectFileBrowserProps) {
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["src", "src/components", "src/pages"]));
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["src", "src/components", "src/pages", "src/hooks"]));
   const [searchQuery, setSearchQuery] = useState("");
 
   const toggleFolder = (path: string) => {
