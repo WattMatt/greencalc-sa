@@ -28,6 +28,7 @@ const Auth = lazy(() => import("./pages/Auth"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
 const Install = lazy(() => import("./pages/Install"));
+const CodeReview = lazy(() => import("./pages/CodeReview"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -85,6 +86,7 @@ function AppRoutes() {
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/profile" element={<ProfileSettings />} />
                     <Route path="/install" element={<Install />} />
+                    <Route path="/code-review" element={<CodeReview />} />
                     
                     <Route path="*" element={<NotFound />} />
                   </Routes>
