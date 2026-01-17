@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -248,6 +248,8 @@ export function MultiMeterSelector({
   const filteredMeters = useMemo(() => {
     const query = searchQuery.toLowerCase();
     return availableMeters.filter(m => {
+      // Exclude already assigned meters
+      if (assignedIds.has(m.id)) return false;
       const name = (m.shop_name || m.site_name || "").toLowerCase();
       return name.includes(query);
     }).sort((a, b) => {
@@ -256,7 +258,7 @@ export function MultiMeterSelector({
       const bDiff = Math.abs((b.area_sqm || 0) - tenantArea);
       return aDiff - bDiff;
     });
-  }, [availableMeters, searchQuery, tenantArea]);
+  }, [availableMeters, searchQuery, tenantArea, assignedIds]);
 
   // Group meters by shop name for easier selection
   const groupedMeters = useMemo(() => {
@@ -569,7 +571,6 @@ export function MultiMeterSelector({
                       }
                     >
                       {group.meters.map((meter) => {
-                        const isAssigned = assignedIds.has(meter.id);
                         const otherTenants = meterToOtherTenants.get(meter.id);
                         const isAssignedElsewhere = otherTenants && otherTenants.length > 0;
                         const dailyKwh = meter.load_profile_weekday
@@ -581,21 +582,17 @@ export function MultiMeterSelector({
                             key={meter.id}
                             value={`${meter.shop_name || ""} ${meter.site_name || ""}`}
                             onSelect={() => {
-                              if (!isAssigned && !isAssignedElsewhere) {
+                              if (!isAssignedElsewhere) {
                                 addMeter.mutate(meter.id);
-                              } else if (isAssignedElsewhere) {
+                              } else {
                                 toast.error(`Already assigned to: ${otherTenants!.join(", ")}`);
                               }
                             }}
-                            disabled={isAssigned}
                             className={`flex items-center gap-2 ${isAssignedElsewhere ? "opacity-60" : ""}`}
                           >
-                            <Checkbox 
-                              checked={isAssigned} 
-                              className="pointer-events-none"
-                            />
+                            <Plus className="h-3 w-3 text-muted-foreground" />
                             <div className="flex-1 min-w-0 flex items-center gap-1">
-                              <span className={`text-xs ${isAssigned ? "text-muted-foreground" : "text-muted-foreground"}`}>
+                              <span className="text-xs">
                                 {meter.site_name || "Unknown Site"}
                               </span>
                               <span className="text-xs text-muted-foreground/60">
@@ -649,7 +646,6 @@ export function MultiMeterSelector({
                   {groupedMeters.ungrouped.length > 0 && (
                     <CommandGroup heading="Other Meters">
                       {groupedMeters.ungrouped.map((meter) => {
-                        const isAssigned = assignedIds.has(meter.id);
                         const otherTenants = meterToOtherTenants.get(meter.id);
                         const isAssignedElsewhere = otherTenants && otherTenants.length > 0;
                         const dailyKwh = meter.load_profile_weekday
@@ -661,21 +657,17 @@ export function MultiMeterSelector({
                             key={meter.id}
                             value={`${meter.shop_name || ""} ${meter.site_name || ""}`}
                             onSelect={() => {
-                              if (!isAssigned && !isAssignedElsewhere) {
+                              if (!isAssignedElsewhere) {
                                 addMeter.mutate(meter.id);
-                              } else if (isAssignedElsewhere) {
+                              } else {
                                 toast.error(`Already assigned to: ${otherTenants!.join(", ")}`);
                               }
                             }}
-                            disabled={isAssigned}
                             className={`flex items-center gap-2 ${isAssignedElsewhere ? "opacity-60" : ""}`}
                           >
-                            <Checkbox 
-                              checked={isAssigned} 
-                              className="pointer-events-none"
-                            />
+                            <Plus className="h-3 w-3 text-muted-foreground" />
                             <div className="flex-1 min-w-0 flex items-center gap-1">
-                              <span className={isAssigned ? "text-muted-foreground" : ""}>
+                              <span>
                                 {formatMeterName(meter)}
                               </span>
                               {isAssignedElsewhere && (
