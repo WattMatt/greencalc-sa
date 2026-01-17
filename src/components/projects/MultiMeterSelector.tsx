@@ -258,6 +258,44 @@ export function MultiMeterSelector({
     });
   }, [availableMeters, searchQuery, tenantArea]);
 
+  // Group meters by shop name for easier selection
+  const groupedMeters = useMemo(() => {
+    const groups = new Map<string, ScadaImport[]>();
+    const ungrouped: ScadaImport[] = [];
+    
+    for (const meter of filteredMeters) {
+      const shopName = meter.shop_name?.trim();
+      if (shopName) {
+        // Normalize shop name for grouping (case-insensitive)
+        const normalizedName = shopName.toLowerCase();
+        const existing = groups.get(normalizedName);
+        if (existing) {
+          existing.push(meter);
+        } else {
+          groups.set(normalizedName, [meter]);
+        }
+      } else {
+        ungrouped.push(meter);
+      }
+    }
+    
+    // Convert to array and sort by group size (larger groups first) then by name
+    const sortedGroups = Array.from(groups.entries())
+      .map(([key, meters]) => ({
+        name: meters[0].shop_name!, // Use the original case from first meter
+        normalizedName: key,
+        meters: meters.sort((a, b) => (a.site_name || "").localeCompare(b.site_name || "")),
+        count: meters.length
+      }))
+      .sort((a, b) => {
+        // Sort by count (more meters first), then alphabetically
+        if (b.count !== a.count) return b.count - a.count;
+        return a.name.localeCompare(b.name);
+      });
+    
+    return { groups: sortedGroups, ungrouped };
+  }, [filteredMeters]);
+
   const averagedProfile = useMemo(() => 
     calculateAveragedProfile(assignedMeters, tenantArea, singleProfile), 
     [assignedMeters, tenantArea, singleProfile]
@@ -514,83 +552,176 @@ export function MultiMeterSelector({
                 value={searchQuery}
                 onValueChange={setSearchQuery}
               />
-              <CommandList className="max-h-[200px]">
+              <CommandList className="max-h-[250px]">
                 <CommandEmpty>No meters found.</CommandEmpty>
-                <CommandGroup>
-                  <TooltipProvider>
-                    {filteredMeters.map((meter) => {
-                      const isAssigned = assignedIds.has(meter.id);
-                      const otherTenants = meterToOtherTenants.get(meter.id);
-                      const isAssignedElsewhere = otherTenants && otherTenants.length > 0;
-                      const dailyKwh = meter.load_profile_weekday
-                        ? meter.load_profile_weekday.reduce((s, v) => s + v, 0)
-                        : 0;
-                      
-                      const meterItem = (
-                        <CommandItem
-                          key={meter.id}
-                          value={`${meter.shop_name || ""} ${meter.site_name || ""}`}
-                          onSelect={() => {
-                            if (!isAssigned && !isAssignedElsewhere) {
-                              addMeter.mutate(meter.id);
-                            } else if (isAssignedElsewhere) {
-                              toast.error(`Already assigned to: ${otherTenants!.join(", ")}`);
-                            }
-                          }}
-                          disabled={isAssigned}
-                          className={`flex items-center gap-2 ${isAssignedElsewhere ? "opacity-60" : ""}`}
-                        >
-                          <Checkbox 
-                            checked={isAssigned} 
-                            className="pointer-events-none"
-                          />
-                          <div className="flex-1 min-w-0 flex items-center gap-1">
-                            <span className={isAssigned ? "text-muted-foreground" : ""}>
-                              {formatMeterName(meter)}
-                            </span>
-                            {isAssignedElsewhere && (
-                              <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 ml-auto">
-                            {isAssignedElsewhere && (
-                              <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-                                In use
-                              </Badge>
-                            )}
-                            <Badge 
-                              variant={meter.data_points ? "secondary" : "outline"} 
-                              className="text-xs font-mono"
-                            >
-                              {formatDataPoints(meter.data_points)}
-                            </Badge>
-                            {dailyKwh > 0 && (
-                              <Badge variant="outline" className="text-xs">
-                                {Math.round(dailyKwh)} kWh/day
-                              </Badge>
-                            )}
-                          </div>
-                        </CommandItem>
-                      );
-
-                      if (isAssignedElsewhere) {
-                        return (
-                          <Tooltip key={meter.id}>
-                            <TooltipTrigger asChild>
-                              {meterItem}
-                            </TooltipTrigger>
-                            <TooltipContent side="left">
-                              <p className="text-xs">Already assigned to: {otherTenants!.join(", ")}</p>
-                              <p className="text-xs text-muted-foreground">Each meter should only be assigned once</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        );
+                <TooltipProvider>
+                  {/* Grouped meters by shop name */}
+                  {groupedMeters.groups.map((group) => (
+                    <CommandGroup 
+                      key={group.normalizedName} 
+                      heading={
+                        <span className="flex items-center gap-2">
+                          <span>{group.name}</span>
+                          <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                            {group.count} {group.count === 1 ? 'meter' : 'meters'}
+                          </Badge>
+                        </span>
                       }
-                      
-                      return meterItem;
-                    })}
-                  </TooltipProvider>
-                </CommandGroup>
+                    >
+                      {group.meters.map((meter) => {
+                        const isAssigned = assignedIds.has(meter.id);
+                        const otherTenants = meterToOtherTenants.get(meter.id);
+                        const isAssignedElsewhere = otherTenants && otherTenants.length > 0;
+                        const dailyKwh = meter.load_profile_weekday
+                          ? meter.load_profile_weekday.reduce((s, v) => s + v, 0)
+                          : 0;
+                        
+                        const meterItem = (
+                          <CommandItem
+                            key={meter.id}
+                            value={`${meter.shop_name || ""} ${meter.site_name || ""}`}
+                            onSelect={() => {
+                              if (!isAssigned && !isAssignedElsewhere) {
+                                addMeter.mutate(meter.id);
+                              } else if (isAssignedElsewhere) {
+                                toast.error(`Already assigned to: ${otherTenants!.join(", ")}`);
+                              }
+                            }}
+                            disabled={isAssigned}
+                            className={`flex items-center gap-2 ${isAssignedElsewhere ? "opacity-60" : ""}`}
+                          >
+                            <Checkbox 
+                              checked={isAssigned} 
+                              className="pointer-events-none"
+                            />
+                            <div className="flex-1 min-w-0 flex items-center gap-1">
+                              <span className={`text-xs ${isAssigned ? "text-muted-foreground" : "text-muted-foreground"}`}>
+                                {meter.site_name || "Unknown Site"}
+                              </span>
+                              <span className="text-xs text-muted-foreground/60">
+                                ({meter.area_sqm ? `${Math.round(meter.area_sqm)} m²` : "No area"})
+                              </span>
+                              {isAssignedElsewhere && (
+                                <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 ml-auto">
+                              {isAssignedElsewhere && (
+                                <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                                  In use
+                                </Badge>
+                              )}
+                              <Badge 
+                                variant={meter.data_points ? "secondary" : "outline"} 
+                                className="text-xs font-mono"
+                              >
+                                {formatDataPoints(meter.data_points)}
+                              </Badge>
+                              {dailyKwh > 0 && (
+                                <Badge variant="outline" className="text-xs">
+                                  {Math.round(dailyKwh)} kWh/day
+                                </Badge>
+                              )}
+                            </div>
+                          </CommandItem>
+                        );
+
+                        if (isAssignedElsewhere) {
+                          return (
+                            <Tooltip key={meter.id}>
+                              <TooltipTrigger asChild>
+                                {meterItem}
+                              </TooltipTrigger>
+                              <TooltipContent side="left">
+                                <p className="text-xs">Already assigned to: {otherTenants!.join(", ")}</p>
+                                <p className="text-xs text-muted-foreground">Each meter should only be assigned once</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        }
+                        
+                        return meterItem;
+                      })}
+                    </CommandGroup>
+                  ))}
+                  
+                  {/* Ungrouped meters (no shop name) */}
+                  {groupedMeters.ungrouped.length > 0 && (
+                    <CommandGroup heading="Other Meters">
+                      {groupedMeters.ungrouped.map((meter) => {
+                        const isAssigned = assignedIds.has(meter.id);
+                        const otherTenants = meterToOtherTenants.get(meter.id);
+                        const isAssignedElsewhere = otherTenants && otherTenants.length > 0;
+                        const dailyKwh = meter.load_profile_weekday
+                          ? meter.load_profile_weekday.reduce((s, v) => s + v, 0)
+                          : 0;
+                        
+                        const meterItem = (
+                          <CommandItem
+                            key={meter.id}
+                            value={`${meter.shop_name || ""} ${meter.site_name || ""}`}
+                            onSelect={() => {
+                              if (!isAssigned && !isAssignedElsewhere) {
+                                addMeter.mutate(meter.id);
+                              } else if (isAssignedElsewhere) {
+                                toast.error(`Already assigned to: ${otherTenants!.join(", ")}`);
+                              }
+                            }}
+                            disabled={isAssigned}
+                            className={`flex items-center gap-2 ${isAssignedElsewhere ? "opacity-60" : ""}`}
+                          >
+                            <Checkbox 
+                              checked={isAssigned} 
+                              className="pointer-events-none"
+                            />
+                            <div className="flex-1 min-w-0 flex items-center gap-1">
+                              <span className={isAssigned ? "text-muted-foreground" : ""}>
+                                {formatMeterName(meter)}
+                              </span>
+                              {isAssignedElsewhere && (
+                                <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 ml-auto">
+                              {isAssignedElsewhere && (
+                                <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                                  In use
+                                </Badge>
+                              )}
+                              <Badge 
+                                variant={meter.data_points ? "secondary" : "outline"} 
+                                className="text-xs font-mono"
+                              >
+                                {formatDataPoints(meter.data_points)}
+                              </Badge>
+                              {dailyKwh > 0 && (
+                                <Badge variant="outline" className="text-xs">
+                                  {Math.round(dailyKwh)} kWh/day
+                                </Badge>
+                              )}
+                            </div>
+                          </CommandItem>
+                        );
+
+                        if (isAssignedElsewhere) {
+                          return (
+                            <Tooltip key={meter.id}>
+                              <TooltipTrigger asChild>
+                                {meterItem}
+                              </TooltipTrigger>
+                              <TooltipContent side="left">
+                                <p className="text-xs">Already assigned to: {otherTenants!.join(", ")}</p>
+                                <p className="text-xs text-muted-foreground">Each meter should only be assigned once</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        }
+                        
+                        return meterItem;
+                      })}
+                    </CommandGroup>
+                  )}
+                </TooltipProvider>
               </CommandList>
             </Command>
           </div>
