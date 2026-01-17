@@ -4,10 +4,12 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
-import { Settings2, ChevronDown, Cloud, RefreshCw, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Settings2, ChevronDown, Cloud, RefreshCw, Loader2, FolderOpen } from "lucide-react";
 import { DisplayUnit } from "../types";
 import { SolcastPVProfile } from "../hooks/useSolcastPVProfile";
 import { SavePresetDialog, PresetConfig } from "./SavePresetDialog";
+import { useSimulationPresets } from "@/hooks/useSimulationPresets";
 
 interface ChartSettingsProps {
   showAdvancedSettings: boolean;
@@ -40,6 +42,10 @@ interface ChartSettingsProps {
   // Diversity factor
   diversityFactor?: number;
   setDiversityFactor?: (factor: number) => void;
+  // Callbacks to apply loaded preset values
+  setShowPVProfile?: (show: boolean) => void;
+  setShowBattery?: (show: boolean) => void;
+  setUseSolcast?: (use: boolean) => void;
 }
 
 export function ChartSettings({
@@ -70,7 +76,30 @@ export function ChartSettings({
   setSystemLosses,
   diversityFactor = 1.0,
   setDiversityFactor,
+  setShowPVProfile,
+  setShowBattery,
+  setUseSolcast,
 }: ChartSettingsProps) {
+  const { presets, isLoading: presetsLoading } = useSimulationPresets();
+
+  const handleApplyPreset = (presetId: string) => {
+    const preset = presets.find(p => p.id === presetId);
+    if (!preset?.config) return;
+
+    const config = preset.config as PresetConfig;
+    
+    // Apply all settings from the preset
+    if (config.dcAcRatio !== undefined) setDcAcRatio(config.dcAcRatio);
+    if (config.batteryCapacity !== undefined) setBatteryCapacity(config.batteryCapacity);
+    if (config.batteryPower !== undefined) setBatteryPower(config.batteryPower);
+    if (config.systemLosses !== undefined && setSystemLosses) setSystemLosses(config.systemLosses);
+    if (config.powerFactor !== undefined) setPowerFactor(config.powerFactor);
+    if (config.diversityFactor !== undefined && setDiversityFactor) setDiversityFactor(config.diversityFactor);
+    if (config.showPVProfile !== undefined && setShowPVProfile) setShowPVProfile(config.showPVProfile);
+    if (config.showBattery !== undefined && setShowBattery) setShowBattery(config.showBattery);
+    if (config.show1to1Comparison !== undefined) setShow1to1Comparison(config.show1to1Comparison);
+    if (config.useSolcast !== undefined && setUseSolcast) setUseSolcast(config.useSolcast);
+  };
   // Build current config for preset saving
   const currentConfig: PresetConfig = {
     dcAcRatio,
@@ -95,6 +124,26 @@ export function ChartSettings({
             <ChevronDown className={`h-3 w-3 transition-transform ${showAdvancedSettings ? "rotate-180" : ""}`} />
           </Button>
         </CollapsibleTrigger>
+        
+        {/* Load Preset Selector */}
+        {presets.length > 0 && (
+          <Select onValueChange={handleApplyPreset}>
+            <SelectTrigger className="w-[140px] h-7 text-xs">
+              <FolderOpen className="h-3 w-3 mr-1" />
+              <SelectValue placeholder="Load preset..." />
+            </SelectTrigger>
+            <SelectContent>
+              {presets.map((preset) => (
+                <SelectItem key={preset.id} value={preset.id} className="text-xs">
+                  {preset.name}
+                  {preset.is_default && <Badge variant="secondary" className="ml-1 text-[9px] py-0">Default</Badge>}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {presetsLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+        
         <SavePresetDialog config={currentConfig} />
       </div>
       <CollapsibleContent className="mb-4 p-3 rounded-lg bg-muted/50 space-y-3">
