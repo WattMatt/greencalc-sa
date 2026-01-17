@@ -147,35 +147,25 @@ export function ChartSettings({
         <SavePresetDialog config={currentConfig} />
       </div>
       <CollapsibleContent className="mb-4 p-3 rounded-lg bg-muted/50 space-y-3">
-        {/* Check if any settings are available */}
-        {!showPVProfile && !showBattery && displayUnit !== "kva" && !setDiversityFactor ? (
-          <div className="text-sm text-muted-foreground py-2">
-            <p className="font-medium mb-1">No settings available</p>
-            <p className="text-xs">Enable PV Profile or Battery simulation, or switch to kVA display to access additional settings.</p>
+        {/* Row 1: Basic settings - Diversity Factor always shown first */}
+        <div className="flex flex-wrap gap-6">
+          {/* Diversity Factor - Always shown */}
+          <div className="w-44 space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Diversity Factor</span>
+              <span className="font-medium">{(diversityFactor * 100).toFixed(0)}%</span>
+            </div>
+            <Slider
+              value={[diversityFactor * 100]}
+              onValueChange={([v]) => setDiversityFactor?.(v / 100)}
+              min={50}
+              max={100}
+              step={5}
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Reduces combined peak by {((1 - diversityFactor) * 100).toFixed(0)}%
+            </p>
           </div>
-        ) : (
-          <>
-            {/* Row 1: Basic settings */}
-            <div className="flex flex-wrap gap-6">
-              {/* Diversity Factor - Always shown */}
-              {setDiversityFactor && (
-                <div className="w-44 space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Diversity Factor</span>
-                    <span className="font-medium">{(diversityFactor * 100).toFixed(0)}%</span>
-                  </div>
-                  <Slider
-                    value={[diversityFactor * 100]}
-                    onValueChange={([v]) => setDiversityFactor(v / 100)}
-                    min={50}
-                    max={100}
-                    step={5}
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    Reduces combined peak by {((1 - diversityFactor) * 100).toFixed(0)}%
-                  </p>
-                </div>
-              )}
               {displayUnit === "kva" && (
                 <div className="w-40 space-y-1">
                   <div className="flex justify-between text-xs">
@@ -287,8 +277,6 @@ export function ChartSettings({
                 )}
               </div>
             )}
-          </>
-        )}
       </CollapsibleContent>
     </Collapsible>
   );
