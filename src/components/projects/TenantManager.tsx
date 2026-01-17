@@ -23,7 +23,7 @@ import { MultiMeterSelector } from "./MultiMeterSelector";
 import { AccuracyBadge, AccuracySummary, getAccuracyLevel } from "@/components/simulation/AccuracyBadge";
 import { CsvImportWizard, WizardParseConfig } from "@/components/loadprofiles/CsvImportWizard";
 import { detectCsvType, buildMismatchErrorMessage } from "@/components/loadprofiles/utils/csvTypeDetection";
-import { MeterProfilePreview } from "@/components/loadprofiles/MeterProfilePreview";
+import { ScaledMeterPreview } from "./ScaledMeterPreview";
 
 interface Tenant {
   id: string;
@@ -174,7 +174,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   const [multiMeterTenant, setMultiMeterTenant] = useState<{ id: string; name: string; area: number } | null>(null);
   
   // Profile preview state
-  const [previewMeter, setPreviewMeter] = useState<ScadaImport | null>(null);
+  const [previewContext, setPreviewContext] = useState<{ meter: ScadaImport; tenant: Tenant } | null>(null);
 
   // Fetch multi-meter counts for all tenants
   const { data: tenantMeterCounts = {} } = useQuery({
@@ -622,13 +622,13 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8"
-                                  onClick={() => setPreviewMeter(assignedProfile)}
+                                  onClick={() => setPreviewContext({ meter: assignedProfile, tenant })}
                                 >
                                   <Eye className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Preview load profile</p>
+                                <p>Preview scaled load profile</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
@@ -764,27 +764,30 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         />
       )}
       
-      {/* Meter Profile Preview Dialog */}
-      <MeterProfilePreview
-        isOpen={!!previewMeter}
-        onClose={() => setPreviewMeter(null)}
-        meter={previewMeter ? {
-          id: previewMeter.id,
-          site_name: previewMeter.site_name,
-          shop_name: previewMeter.shop_name,
-          shop_number: previewMeter.shop_number || null,
-          meter_label: previewMeter.meter_label || null,
-          meter_color: previewMeter.meter_color || null,
-          load_profile_weekday: previewMeter.load_profile_weekday,
-          load_profile_weekend: previewMeter.load_profile_weekend,
-          date_range_start: previewMeter.date_range_start || null,
-          date_range_end: previewMeter.date_range_end || null,
-          data_points: previewMeter.data_points,
-          weekday_days: previewMeter.weekday_days || null,
-          weekend_days: previewMeter.weekend_days || null,
-          processed_at: previewMeter.processed_at || null,
-          area_sqm: previewMeter.area_sqm,
+      {/* Scaled Meter Profile Preview Dialog */}
+      <ScaledMeterPreview
+        isOpen={!!previewContext}
+        onClose={() => setPreviewContext(null)}
+        meter={previewContext?.meter ? {
+          id: previewContext.meter.id,
+          site_name: previewContext.meter.site_name,
+          shop_name: previewContext.meter.shop_name,
+          shop_number: previewContext.meter.shop_number || null,
+          meter_label: previewContext.meter.meter_label || null,
+          meter_color: previewContext.meter.meter_color || null,
+          load_profile_weekday: previewContext.meter.load_profile_weekday,
+          load_profile_weekend: previewContext.meter.load_profile_weekend,
+          date_range_start: previewContext.meter.date_range_start || null,
+          date_range_end: previewContext.meter.date_range_end || null,
+          data_points: previewContext.meter.data_points,
+          weekday_days: previewContext.meter.weekday_days || null,
+          weekend_days: previewContext.meter.weekend_days || null,
+          processed_at: previewContext.meter.processed_at || null,
+          area_sqm: previewContext.meter.area_sqm,
         } : null}
+        tenantName={previewContext?.tenant.name || ""}
+        tenantArea={Number(previewContext?.tenant.area_sqm) || 0}
+        shopTypeIntensity={previewContext?.tenant.shop_types?.kwh_per_sqm_month}
       />
     </div>
   );
