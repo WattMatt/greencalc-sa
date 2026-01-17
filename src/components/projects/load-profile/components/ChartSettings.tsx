@@ -37,6 +37,9 @@ interface ChartSettingsProps {
   // System losses
   systemLosses?: number;
   setSystemLosses?: (losses: number) => void;
+  // Diversity factor
+  diversityFactor?: number;
+  setDiversityFactor?: (factor: number) => void;
 }
 
 export function ChartSettings({
@@ -65,6 +68,8 @@ export function ChartSettings({
   hasLocation,
   systemLosses = 0.14,
   setSystemLosses,
+  diversityFactor = 1.0,
+  setDiversityFactor,
 }: ChartSettingsProps) {
   // Build current config for preset saving
   const currentConfig: PresetConfig = {
@@ -77,6 +82,7 @@ export function ChartSettings({
     showBattery,
     show1to1Comparison,
     useSolcast: useSolcast || false,
+    diversityFactor,
   };
 
   return (
@@ -93,7 +99,7 @@ export function ChartSettings({
       </div>
       <CollapsibleContent className="mb-4 p-3 rounded-lg bg-muted/50 space-y-3">
         {/* Check if any settings are available */}
-        {!showPVProfile && !showBattery && displayUnit !== "kva" ? (
+        {!showPVProfile && !showBattery && displayUnit !== "kva" && !setDiversityFactor ? (
           <div className="text-sm text-muted-foreground py-2">
             <p className="font-medium mb-1">No settings available</p>
             <p className="text-xs">Enable PV Profile or Battery simulation, or switch to kVA display to access additional settings.</p>
@@ -102,6 +108,25 @@ export function ChartSettings({
           <>
             {/* Row 1: Basic settings */}
             <div className="flex flex-wrap gap-6">
+              {/* Diversity Factor - Always shown */}
+              {setDiversityFactor && (
+                <div className="w-44 space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Diversity Factor</span>
+                    <span className="font-medium">{(diversityFactor * 100).toFixed(0)}%</span>
+                  </div>
+                  <Slider
+                    value={[diversityFactor * 100]}
+                    onValueChange={([v]) => setDiversityFactor(v / 100)}
+                    min={50}
+                    max={100}
+                    step={5}
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Reduces combined peak by {((1 - diversityFactor) * 100).toFixed(0)}%
+                  </p>
+                </div>
+              )}
               {displayUnit === "kva" && (
                 <div className="w-40 space-y-1">
                   <div className="flex justify-between text-xs">

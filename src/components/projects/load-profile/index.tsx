@@ -43,6 +43,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [systemLosses, setSystemLosses] = useState(0.14);
+  const [diversityFactor, setDiversityFactor] = useState(1.0); // 1.0 = no reduction, 0.8 = 20% reduction
   const [dateMode, setDateMode] = useState<DateMode>("average");
   const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
@@ -129,6 +130,7 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
     batteryPower,
     solcastProfile: useSolcast ? solcastProfile : undefined,
     systemLosses,
+    diversityFactor,
   });
 
   // Use appropriate data based on mode
@@ -258,6 +260,9 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
             // System losses
             systemLosses={systemLosses}
             setSystemLosses={setSystemLosses}
+            // Diversity factor
+            diversityFactor={diversityFactor}
+            setDiversityFactor={setDiversityFactor}
           />
 
           {/* No data message for month mode */}
