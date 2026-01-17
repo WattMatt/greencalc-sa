@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ChevronsUpDown, Check, Layers, MoreVertical } from "lucide-react";
+import { ChevronsUpDown, Check, Layers, MoreVertical, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Plus, Upload, Trash2, Download, Pencil, RotateCcw, Settings2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
 import { TenantProfileMatcher } from "./TenantProfileMatcher";
@@ -22,6 +23,7 @@ import { MultiMeterSelector } from "./MultiMeterSelector";
 import { AccuracyBadge, AccuracySummary, getAccuracyLevel } from "@/components/simulation/AccuracyBadge";
 import { CsvImportWizard, WizardParseConfig } from "@/components/loadprofiles/CsvImportWizard";
 import { detectCsvType, buildMismatchErrorMessage } from "@/components/loadprofiles/utils/csvTypeDetection";
+import { MeterProfilePreview } from "@/components/loadprofiles/MeterProfilePreview";
 
 interface Tenant {
   id: string;
@@ -50,6 +52,14 @@ interface ScadaImport {
   data_points: number | null;
   load_profile_weekday: number[] | null;
   load_profile_weekend: number[] | null;
+  meter_label?: string | null;
+  meter_color?: string | null;
+  date_range_start?: string | null;
+  date_range_end?: string | null;
+  weekday_days?: number | null;
+  weekend_days?: number | null;
+  processed_at?: string | null;
+  shop_number?: string | null;
 }
 
 interface TenantManagerProps {
@@ -162,6 +172,9 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   
   // Multi-meter selector state
   const [multiMeterTenant, setMultiMeterTenant] = useState<{ id: string; name: string; area: number } | null>(null);
+  
+  // Profile preview state
+  const [previewMeter, setPreviewMeter] = useState<ScadaImport | null>(null);
 
   // Fetch multi-meter counts for all tenants
   const { data: tenantMeterCounts = {} } = useQuery({
@@ -193,7 +206,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     queryFn: async () => {
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend")
+        .select("id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend, meter_label, meter_color, date_range_start, date_range_end, weekday_days, weekend_days, processed_at, shop_number")
         .order("shop_name");
       if (error) throw error;
       return data as ScadaImport[];
@@ -600,6 +613,26 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                             {meterCount}
                           </Badge>
                         )}
+                        {/* Preview button for assigned profile */}
+                        {assignedProfile && assignedProfile.data_points && assignedProfile.data_points > 0 && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => setPreviewMeter(assignedProfile)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Preview load profile</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
@@ -730,6 +763,29 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
           }}
         />
       )}
+      
+      {/* Meter Profile Preview Dialog */}
+      <MeterProfilePreview
+        isOpen={!!previewMeter}
+        onClose={() => setPreviewMeter(null)}
+        meter={previewMeter ? {
+          id: previewMeter.id,
+          site_name: previewMeter.site_name,
+          shop_name: previewMeter.shop_name,
+          shop_number: previewMeter.shop_number || null,
+          meter_label: previewMeter.meter_label || null,
+          meter_color: previewMeter.meter_color || null,
+          load_profile_weekday: previewMeter.load_profile_weekday,
+          load_profile_weekend: previewMeter.load_profile_weekend,
+          date_range_start: previewMeter.date_range_start || null,
+          date_range_end: previewMeter.date_range_end || null,
+          data_points: previewMeter.data_points,
+          weekday_days: previewMeter.weekday_days || null,
+          weekend_days: previewMeter.weekend_days || null,
+          processed_at: previewMeter.processed_at || null,
+          area_sqm: previewMeter.area_sqm,
+        } : null}
+      />
     </div>
   );
 }
