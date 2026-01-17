@@ -150,18 +150,40 @@ export function ChartSettings({
         {/* Row 1: Basic settings - Diversity Factor always shown first */}
         <div className="flex flex-wrap gap-6">
           {/* Diversity Factor - Always shown */}
-          <div className="w-44 space-y-1">
+          <div className="space-y-1.5">
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Diversity Factor</span>
               <span className="font-medium">{(diversityFactor * 100).toFixed(0)}%</span>
             </div>
-            <Slider
-              value={[diversityFactor * 100]}
-              onValueChange={([v]) => setDiversityFactor?.(v / 100)}
-              min={50}
-              max={100}
-              step={5}
-            />
+            {/* Preset buttons */}
+            <div className="flex gap-1 flex-wrap">
+              {[
+                { label: "Shopping Centre", value: 0.80 },
+                { label: "Office Park", value: 0.85 },
+                { label: "Industrial", value: 0.90 },
+                { label: "Mixed Use", value: 0.75 },
+                { label: "None", value: 1.0 },
+              ].map((preset) => (
+                <Button
+                  key={preset.label}
+                  variant={diversityFactor === preset.value ? "default" : "outline"}
+                  size="sm"
+                  className="h-6 text-[10px] px-2"
+                  onClick={() => setDiversityFactor?.(preset.value)}
+                >
+                  {preset.label} ({(preset.value * 100).toFixed(0)}%)
+                </Button>
+              ))}
+            </div>
+            <div className="w-48">
+              <Slider
+                value={[diversityFactor * 100]}
+                onValueChange={([v]) => setDiversityFactor?.(v / 100)}
+                min={50}
+                max={100}
+                step={5}
+              />
+            </div>
             <p className="text-[10px] text-muted-foreground">
               Reduces combined peak by {((1 - diversityFactor) * 100).toFixed(0)}%
             </p>
