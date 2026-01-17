@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Info, RotateCcw, HelpCircle, Sun, Moon, Monitor, Settings2, ExternalLink, Bell, Sparkles } from "lucide-react";
+import { Info, RotateCcw, HelpCircle, Sun, Moon, Monitor, Settings2, ExternalLink, Bell, Sparkles, Zap } from "lucide-react";
 import { NotificationSettings } from "@/components/pwa";
 import { useTour, TOURS, ContentEnhancerDemo, resetWelcomeModal } from "@/components/onboarding";
 import { useTheme } from "next-themes";
@@ -15,6 +15,7 @@ import {
   defaultAPIIntegrationConfig,
   type APIIntegrationConfig 
 } from "@/components/projects/simulation";
+import { DeratingSettingsCard } from "@/components/settings/DeratingSettingsCard";
 
 export default function Settings() {
   const { completedTours, resetAllTours } = useTour();
@@ -41,6 +42,10 @@ export default function Settings() {
           <TabsTrigger value="general" className="flex items-center gap-2">
             <Settings2 className="h-4 w-4" />
             General
+          </TabsTrigger>
+          <TabsTrigger value="derating" className="flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Derating
           </TabsTrigger>
           <TabsTrigger value="notifications" className="flex items-center gap-2">
             <Bell className="h-4 w-4" />
@@ -186,6 +191,40 @@ export default function Settings() {
                   <p><strong>Data Source:</strong> Municipal tariff schedules</p>
                   <p><strong>Last Updated:</strong> 2024/2025 Financial Year</p>
                 </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="derating" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <DeratingSettingsCard />
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle className="text-card-foreground">About Derating</CardTitle>
+                <CardDescription>Understanding derating factors</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm text-muted-foreground">
+                <p>
+                  <strong>Diversity Factor:</strong> Accounts for the fact that not all loads operate at maximum simultaneously. 
+                  Shopping centres typically use 80% as tenants have different peak hours.
+                </p>
+                <p>
+                  <strong>DC/AC Ratio:</strong> Oversizing PV panels relative to inverter capacity improves morning/evening generation 
+                  and accounts for panel degradation.
+                </p>
+                <p>
+                  <strong>System Losses:</strong> Combined losses from inverter efficiency, wiring, mismatch, and other factors. 
+                  Typically 10-14% for well-designed systems.
+                </p>
+                <p>
+                  <strong>Temperature Derating:</strong> Solar panel output decreases as temperature increases. 
+                  South African conditions typically require 3-5% derating.
+                </p>
+                <p>
+                  <strong>Soiling Losses:</strong> Dust and dirt accumulation on panels. 
+                  Urban areas typically 1-2%, dusty/industrial areas 3-5%.
+                </p>
               </CardContent>
             </Card>
           </div>
