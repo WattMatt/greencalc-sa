@@ -263,6 +263,10 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
             // Diversity factor
             diversityFactor={diversityFactor}
             setDiversityFactor={setDiversityFactor}
+            // Preset application callbacks
+            setShowPVProfile={setShowPVProfile}
+            setShowBattery={setShowBattery}
+            setUseSolcast={toggleSolcast}
           />
 
           {/* No data message for month mode */}
