@@ -19,6 +19,7 @@ import { TOULegend } from "./components/TOULegend";
 import { TopContributors } from "./components/TopContributors";
 import { DateMode } from "./components/DateModeSelector";
 import { MethodologySection, solarMethodology, batteryMethodology, financialMethodology, touMethodology } from "@/components/simulation/MethodologySection";
+import { useDeratingSettings } from "@/hooks/useDeratingSettings";
 
 interface LoadProfileChartProps {
   tenants: Tenant[];
@@ -29,21 +30,24 @@ interface LoadProfileChartProps {
 }
 
 export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitude, longitude }: LoadProfileChartProps) {
+  // Get global derating settings as defaults
+  const { settings: globalDeratingSettings } = useDeratingSettings();
+  
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kwh");
-  const [powerFactor, setPowerFactor] = useState(0.9);
+  const [powerFactor, setPowerFactor] = useState(() => globalDeratingSettings.powerFactor);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Wednesday");
   const [showTOU, setShowTOU] = useState(true);
   const [showPVProfile, setShowPVProfile] = useState(false);
   const [showBattery, setShowBattery] = useState(false);
   const [batteryCapacity, setBatteryCapacity] = useState(500);
   const [batteryPower, setBatteryPower] = useState(250);
-  const [dcAcRatio, setDcAcRatio] = useState(1.3);
+  const [dcAcRatio, setDcAcRatio] = useState(() => globalDeratingSettings.dcAcRatio);
   const [show1to1Comparison, setShow1to1Comparison] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
-  const [systemLosses, setSystemLosses] = useState(0.14);
-  const [diversityFactor, setDiversityFactor] = useState(1.0); // 1.0 = no reduction, 0.8 = 20% reduction
+  const [systemLosses, setSystemLosses] = useState(() => globalDeratingSettings.systemLosses);
+  const [diversityFactor, setDiversityFactor] = useState(() => globalDeratingSettings.diversityFactor);
   const [dateMode, setDateMode] = useState<DateMode>("average");
   const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
