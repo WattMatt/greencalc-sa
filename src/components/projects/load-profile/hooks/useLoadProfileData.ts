@@ -77,6 +77,7 @@ interface UseLoadProfileDataProps {
   batteryPower: number;
   solcastProfile?: SolcastPVProfile;
   systemLosses?: number; // 0-1, default 0.14 (14% losses)
+  diversityFactor?: number; // 0-1, default 1.0 (no reduction)
 }
 
 // Temperature derating coefficient (%/°C above 25°C)
@@ -97,6 +98,7 @@ export function useLoadProfileData({
   batteryPower,
   solcastProfile,
   systemLosses = 0.14,
+  diversityFactor = 1.0,
 }: UseLoadProfileDataProps) {
   const isWeekend = selectedDay === "Saturday" || selectedDay === "Sunday";
 
@@ -251,7 +253,7 @@ export function useLoadProfileData({
     return hourlyData;
   }, [tenants, shopTypes, selectedDay]);
 
-  // Convert to display unit and add PV/battery
+  // Convert to display unit, apply diversity factor, and add PV/battery
   const chartData = useMemo((): ChartDataPoint[] => {
     const baseData = baseChartData.map((hourData, index) => {
       const result: ChartDataPoint = { hour: hourData.hour, total: 0 };
@@ -259,7 +261,9 @@ export function useLoadProfileData({
       Object.keys(hourData).forEach((key) => {
         if (key === "hour") return;
         const kwhValue = hourData[key] as number;
-        const value = displayUnit === "kwh" ? kwhValue : kwhValue / powerFactor;
+        // Apply diversity factor to reduce combined load
+        const diversifiedKwh = kwhValue * diversityFactor;
+        const value = displayUnit === "kwh" ? diversifiedKwh : diversifiedKwh / powerFactor;
         result[key] = value;
         if (key === "total") result.total = value;
       });
@@ -335,6 +339,7 @@ export function useLoadProfileData({
     baseChartData,
     displayUnit,
     powerFactor,
+    diversityFactor,
     showPVProfile,
     maxPvAcKva,
     dcCapacityKwp,

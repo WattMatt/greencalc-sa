@@ -26,6 +26,7 @@ export interface PresetConfig {
   showBattery: boolean;
   show1to1Comparison: boolean;
   useSolcast: boolean;
+  diversityFactor?: number;
 }
 
 interface SavePresetDialogProps {
@@ -126,6 +127,13 @@ export function SavePresetDialog({ config }: SavePresetDialogProps) {
               
               <span className="text-muted-foreground">Battery Enabled:</span>
               <span className="font-medium">{config.showBattery ? "Yes" : "No"}</span>
+              
+              {config.diversityFactor !== undefined && (
+                <>
+                  <span className="text-muted-foreground">Diversity Factor:</span>
+                  <span className="font-medium">{(config.diversityFactor * 100).toFixed(0)}%</span>
+                </>
+              )}
             </div>
           </div>
         </div>
