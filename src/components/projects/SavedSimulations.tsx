@@ -148,6 +148,7 @@ export function SavedSimulations({
     },
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["project-simulations", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["last-simulation", projectId] });
       toast.success("Simulation saved successfully");
       setSaveDialogOpen(false);
       setSimulationName("");
