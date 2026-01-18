@@ -94,7 +94,7 @@ export function ChartSettings({
     if (config.batteryPower !== undefined) setBatteryPower(config.batteryPower);
     if (config.systemLosses !== undefined && setSystemLosses) setSystemLosses(config.systemLosses);
     if (config.powerFactor !== undefined) setPowerFactor(config.powerFactor);
-    if (config.diversityFactor !== undefined && setDiversityFactor) setDiversityFactor(config.diversityFactor);
+    if (config.diversity?.diversityFactor !== undefined && setDiversityFactor) setDiversityFactor(config.diversity.diversityFactor);
     if (config.showPVProfile !== undefined && setShowPVProfile) setShowPVProfile(config.showPVProfile);
     if (config.showBattery !== undefined && setShowBattery) setShowBattery(config.showBattery);
     if (config.show1to1Comparison !== undefined) setShow1to1Comparison(config.show1to1Comparison);
@@ -111,7 +111,10 @@ export function ChartSettings({
     showBattery,
     show1to1Comparison,
     useSolcast: useSolcast || false,
-    diversityFactor,
+    diversity: {
+      diversityFactor,
+      buildingType: null, // Could be enhanced to track building type
+    },
   };
 
   return (

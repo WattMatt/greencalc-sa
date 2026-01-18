@@ -5,6 +5,9 @@ const STORAGE_KEY = "derating-settings";
 /**
  * Derating Settings - Applied to PV system simulations over plant lifespan
  * These factors affect solar generation calculations and financial projections
+ * 
+ * NOTE: Diversity Factor has been moved to useDiversitySettings hook
+ * for load profile calculations
  */
 export interface DeratingSettings {
   // PV System Performance Factors
@@ -19,9 +22,6 @@ export interface DeratingSettings {
   
   // Annual Degradation
   annualDegradation: number;   // Panel efficiency loss per year
-  
-  // Legacy - kept for backwards compatibility
-  diversityFactor: number;
 }
 
 const defaultSettings: DeratingSettings = {
@@ -32,7 +32,6 @@ const defaultSettings: DeratingSettings = {
   soilingLosses: 0.02,
   cableLosses: 0.02,
   annualDegradation: 0.005, // 0.5% per year
-  diversityFactor: 0.85, // Legacy, use useDiversitySettings instead
 };
 
 export function useDeratingSettings() {
