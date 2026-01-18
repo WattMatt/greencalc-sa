@@ -2,68 +2,52 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { RotateCcw, Zap, Sun, ThermometerSun, Cable } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { RotateCcw, Zap, Sun, ThermometerSun, Cable, CheckCircle2, TrendingDown } from "lucide-react";
 import { useDeratingSettings } from "@/hooks/useDeratingSettings";
 import { toast } from "sonner";
 
-const DIVERSITY_PRESETS = [
-  { label: "Shopping Centre", value: 0.80 },
-  { label: "Office Park", value: 0.85 },
-  { label: "Industrial", value: 0.90 },
-  { label: "Mixed Use", value: 0.75 },
-];
-
 export function DeratingSettingsCard() {
-  const { settings, updateSetting, resetToDefaults } = useDeratingSettings();
+  const { settings, updateSetting, resetToDefaults, getCombinedDeratingFactor } = useDeratingSettings();
 
   const handleReset = () => {
     resetToDefaults();
     toast.success("Derating settings reset to defaults");
   };
 
+  const combinedFactor = getCombinedDeratingFactor();
+
   return (
     <Card className="bg-card border-border">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-card-foreground">
-          <Zap className="h-5 w-5" />
-          Derating Settings
-        </CardTitle>
-        <CardDescription>
-          Default derating factors applied to all new projects
-        </CardDescription>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-card-foreground">
+              <Zap className="h-5 w-5" />
+              PV System Derating
+            </CardTitle>
+            <CardDescription>
+              Applied to solar simulations over the plant lifespan
+            </CardDescription>
+          </div>
+          <Badge variant="secondary" className="flex items-center gap-1">
+            <CheckCircle2 className="h-3 w-3" />
+            Auto-saved
+          </Badge>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Diversity Factor with Presets */}
-        <div className="space-y-3">
+        {/* Combined Factor Display */}
+        <div className="p-4 rounded-lg bg-muted/50 space-y-2">
           <div className="flex items-center justify-between">
-            <Label className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-muted-foreground" />
-              Diversity Factor
-            </Label>
-            <span className="text-sm font-medium">{(settings.diversityFactor * 100).toFixed(0)}%</span>
+            <p className="text-sm font-medium text-foreground flex items-center gap-2">
+              <TrendingDown className="h-4 w-4" />
+              Combined Derating Factor
+            </p>
+            <span className="text-xl font-bold text-primary">{(combinedFactor * 100).toFixed(1)}%</span>
           </div>
-          <div className="flex gap-1 flex-wrap">
-            {DIVERSITY_PRESETS.map((preset) => (
-              <Button
-                key={preset.label}
-                variant={settings.diversityFactor === preset.value ? "default" : "outline"}
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => updateSetting("diversityFactor", preset.value)}
-              >
-                {preset.label} ({(preset.value * 100).toFixed(0)}%)
-              </Button>
-            ))}
-          </div>
-          <Slider
-            value={[settings.diversityFactor * 100]}
-            onValueChange={([v]) => updateSetting("diversityFactor", v / 100)}
-            min={50}
-            max={100}
-            step={5}
-          />
           <p className="text-xs text-muted-foreground">
-            Reduces combined peak demand by {((1 - settings.diversityFactor) * 100).toFixed(0)}%
+            Effective solar output after all losses: {(combinedFactor * 100).toFixed(1)}% of rated capacity
           </p>
         </div>
 
@@ -169,10 +153,37 @@ export function DeratingSettingsCard() {
           />
         </div>
 
+        {/* Annual Degradation */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-muted-foreground" />
+              Annual Degradation
+            </Label>
+            <span className="text-sm font-medium">{(settings.annualDegradation * 100).toFixed(1)}%/yr</span>
+          </div>
+          <Slider
+            value={[settings.annualDegradation * 1000]}
+            onValueChange={([v]) => updateSetting("annualDegradation", v / 1000)}
+            min={3}
+            max={10}
+            step={1}
+          />
+          <p className="text-xs text-muted-foreground">
+            Panel efficiency loss per year (typically 0.4-0.7%)
+          </p>
+        </div>
+
         <Button variant="outline" onClick={handleReset} className="w-full">
           <RotateCcw className="h-4 w-4 mr-2" />
           Reset to Defaults
         </Button>
+
+        <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+          <p className="text-xs text-primary font-medium">
+            ✓ Settings are automatically saved and applied as defaults for all new project simulations
+          </p>
+        </div>
       </CardContent>
     </Card>
   );

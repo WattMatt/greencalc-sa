@@ -3,8 +3,9 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { RotateCcw, Users, Building2, Factory, Warehouse, Store, Hotel, School, Hospital, Plus, Save, Trash2 } from "lucide-react";
-import { useDeratingSettings } from "@/hooks/useDeratingSettings";
+import { Badge } from "@/components/ui/badge";
+import { RotateCcw, Users, Building2, Factory, Warehouse, Store, Hotel, School, Hospital, Plus, Save, Trash2, CheckCircle2 } from "lucide-react";
+import { useDiversitySettings } from "@/hooks/useDiversitySettings";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -18,20 +19,20 @@ const DIVERSITY_PRESETS = [
   { label: "Healthcare", value: 0.88, icon: Hospital, description: "Critical systems, consistent demand" },
 ];
 
-interface CustomProfile {
-  name: string;
-  value: number;
-}
-
 export function DiversitySettingsCard() {
-  const { settings, updateSetting } = useDeratingSettings();
-  const [customProfiles, setCustomProfiles] = useState<CustomProfile[]>([]);
+  const { settings, updateSetting, addCustomProfile, removeCustomProfile } = useDiversitySettings();
   const [newProfileName, setNewProfileName] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const handlePresetClick = (value: number) => {
+  const handlePresetClick = (label: string, value: number) => {
     updateSetting("diversityFactor", value);
-    toast.success(`Diversity factor set to ${(value * 100).toFixed(0)}%`);
+    updateSetting("buildingType", label);
+    toast.success(`Diversity factor set to ${(value * 100).toFixed(0)}% (${label})`);
+  };
+
+  const handleSliderChange = (value: number) => {
+    updateSetting("diversityFactor", value);
+    updateSetting("buildingType", null); // Clear building type when manually adjusted
   };
 
   const handleSaveCustomProfile = () => {
@@ -39,25 +40,22 @@ export function DiversitySettingsCard() {
       toast.error("Please enter a profile name");
       return;
     }
-    const newProfile: CustomProfile = {
-      name: newProfileName.trim(),
-      value: settings.diversityFactor,
-    };
-    setCustomProfiles([...customProfiles, newProfile]);
+    addCustomProfile(newProfileName.trim(), settings.diversityFactor);
+    toast.success(`Profile "${newProfileName}" saved at ${(settings.diversityFactor * 100).toFixed(0)}%`);
     setNewProfileName("");
     setShowAddForm(false);
-    toast.success(`Profile "${newProfile.name}" saved at ${(newProfile.value * 100).toFixed(0)}%`);
   };
 
   const handleDeleteCustomProfile = (index: number) => {
-    const profileName = customProfiles[index].name;
-    setCustomProfiles(customProfiles.filter((_, i) => i !== index));
+    const profileName = settings.customProfiles[index].name;
+    removeCustomProfile(index);
     toast.success(`Profile "${profileName}" deleted`);
   };
 
   const handleResetToDefault = () => {
     updateSetting("diversityFactor", 0.80);
-    toast.success("Diversity factor reset to 80%");
+    updateSetting("buildingType", "Shopping Centre");
+    toast.success("Diversity factor reset to 80% (Shopping Centre)");
   };
 
   return (
@@ -65,24 +63,37 @@ export function DiversitySettingsCard() {
       {/* Current Value Display */}
       <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-card-foreground">
-            <Users className="h-5 w-5" />
-            Diversity Factor Configuration
-          </CardTitle>
-          <CardDescription>
-            The diversity factor accounts for the fact that not all electrical loads operate at maximum demand simultaneously
-          </CardDescription>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-card-foreground">
+                <Users className="h-5 w-5" />
+                Diversity Factor Configuration
+              </CardTitle>
+              <CardDescription>
+                Applied to load profile calculations for accurate building demand modeling
+              </CardDescription>
+            </div>
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3" />
+              Auto-saved
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Main Slider */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label className="text-lg font-semibold">Current Diversity Factor</Label>
+              <div>
+                <Label className="text-lg font-semibold">Current Diversity Factor</Label>
+                {settings.buildingType && (
+                  <p className="text-sm text-muted-foreground">{settings.buildingType}</p>
+                )}
+              </div>
               <span className="text-3xl font-bold text-primary">{(settings.diversityFactor * 100).toFixed(0)}%</span>
             </div>
             <Slider
               value={[settings.diversityFactor * 100]}
-              onValueChange={([v]) => updateSetting("diversityFactor", v / 100)}
+              onValueChange={([v]) => handleSliderChange(v / 100)}
               min={50}
               max={100}
               step={1}
@@ -139,7 +150,7 @@ export function DiversitySettingsCard() {
                   key={preset.label}
                   variant={isActive ? "default" : "outline"}
                   className="h-auto py-3 px-4 flex flex-col items-start gap-1 text-left"
-                  onClick={() => handlePresetClick(preset.value)}
+                  onClick={() => handlePresetClick(preset.label, preset.value)}
                 >
                   <div className="flex items-center gap-2 w-full">
                     <Icon className="h-4 w-4" />
@@ -163,15 +174,15 @@ export function DiversitySettingsCard() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {customProfiles.length > 0 && (
+          {settings.customProfiles.length > 0 && (
             <div className="grid gap-2">
-              {customProfiles.map((profile, index) => (
+              {settings.customProfiles.map((profile, index) => (
                 <div key={index} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/30">
                   <Button
                     variant={Math.abs(settings.diversityFactor - profile.value) < 0.01 ? "default" : "ghost"}
                     size="sm"
                     className="flex-1 justify-start"
-                    onClick={() => handlePresetClick(profile.value)}
+                    onClick={() => handlePresetClick(profile.name, profile.value)}
                   >
                     {profile.name} ({(profile.value * 100).toFixed(0)}%)
                   </Button>
@@ -211,11 +222,17 @@ export function DiversitySettingsCard() {
             </Button>
           )}
 
-          {customProfiles.length === 0 && !showAddForm && (
+          {settings.customProfiles.length === 0 && !showAddForm && (
             <p className="text-xs text-muted-foreground text-center">
               No custom profiles saved yet. Adjust the slider and save a profile for quick access.
             </p>
           )}
+
+          <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+            <p className="text-xs text-primary font-medium">
+              ✓ Settings are automatically saved and applied as defaults for all new projects
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
