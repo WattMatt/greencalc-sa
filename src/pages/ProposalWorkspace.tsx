@@ -2,12 +2,28 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, FileCheck, CheckCircle, Settings, Eye, History, Save, Loader2, FileText, Share2 } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { 
+  ArrowLeft, 
+  FileCheck, 
+  CheckCircle, 
+  Settings, 
+  Eye, 
+  History, 
+  Save, 
+  Loader2, 
+  FileText, 
+  Share2,
+  ChevronRight,
+  ChevronLeft,
+  Building2,
+  Sparkles,
+  AlertCircle
+} from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -19,6 +35,7 @@ import { ProposalPreview } from "@/components/proposals/ProposalPreview";
 import { ProposalExport } from "@/components/proposals/ProposalExport";
 import { SimulationSelector } from "@/components/proposals/SimulationSelector";
 import { ShareLinkButton } from "@/components/proposals/ShareLinkButton";
+import { cn } from "@/lib/utils";
 import {
   Proposal,
   VerificationChecklist as VerificationChecklistType,
@@ -30,18 +47,24 @@ import {
 
 const proposalBuilderTour = getTour("proposalBuilder");
 
+const WORKFLOW_STEPS = [
+  { id: "simulation", label: "Select Simulation", icon: FileCheck, description: "Choose data source" },
+  { id: "verify", label: "Verify Data", icon: CheckCircle, description: "Confirm accuracy" },
+  { id: "branding", label: "Customize", icon: Building2, description: "Add branding" },
+  { id: "approval", label: "Approve", icon: Eye, description: "Sign & send" },
+];
+
 export default function ProposalWorkspace() {
   const { projectId } = useParams();
   const [searchParams] = useSearchParams();
   const proposalId = searchParams.get("id");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("simulation");
+  const [activeStep, setActiveStep] = useState(0);
   const [selectedSimulationId, setSelectedSimulationId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<'profile' | 'sandbox' | null>(null);
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null);
 
-  // Auto-start tour for first-time visitors
   useAutoTour({ tour: proposalBuilderTour });
 
   const [verificationChecklist, setVerificationChecklist] = useState<VerificationChecklistType>({
@@ -279,7 +302,6 @@ export default function ProposalWorkspace() {
       if (!projectId) throw new Error("No project selected");
 
       if (proposalId) {
-        // Update existing
         const { error } = await supabase
           .from("proposals")
           .update({
@@ -297,7 +319,6 @@ export default function ProposalWorkspace() {
           .eq("id", proposalId);
         if (error) throw error;
       } else {
-        // Create new
         const { data, error } = await supabase
           .from("proposals")
           .insert({
@@ -316,7 +337,6 @@ export default function ProposalWorkspace() {
           .select()
           .single();
         if (error) throw error;
-        // Navigate to edit mode with the new ID
         navigate(`/projects/${projectId}/proposal?id=${data.id}`, { replace: true });
       }
     },
@@ -358,6 +378,24 @@ export default function ProposalWorkspace() {
     verificationChecklist.tariff_rates_confirmed &&
     verificationChecklist.system_specs_validated;
 
+  // Step completion status
+  const getStepStatus = (stepIndex: number) => {
+    switch (stepIndex) {
+      case 0: return !!selectedSimulationId;
+      case 1: return isVerificationComplete;
+      case 2: return !!branding.company_name;
+      case 3: return !!proposalForComponents.prepared_by;
+      default: return false;
+    }
+  };
+
+  const canProceedToStep = (stepIndex: number) => {
+    if (stepIndex === 0) return true;
+    // Allow moving back freely, but require previous step completion to move forward
+    if (stepIndex <= activeStep) return true;
+    return getStepStatus(stepIndex - 1);
+  };
+
   if (loadingProposal) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -367,219 +405,353 @@ export default function ProposalWorkspace() {
   }
 
   return (
-    <div className="container max-w-7xl py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}`)}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight">Proposal Builder</h1>
-              {existingProposal && (
-                <>
-                  <Badge variant="outline">v{existingProposal.version}</Badge>
-                  <Badge className={STATUS_COLORS[existingProposal.status as Proposal["status"]]}>
-                    {STATUS_LABELS[existingProposal.status as Proposal["status"]]}
-                  </Badge>
-                </>
-              )}
+    <div className="min-h-screen bg-muted/30">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-20 bg-background border-b">
+        <div className="container max-w-7xl py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" onClick={() => navigate(`/projects/${projectId}`)}>
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-semibold">Proposal Builder</h1>
+                  {existingProposal && (
+                    <>
+                      <Badge variant="outline">v{existingProposal.version}</Badge>
+                      <Badge className={STATUS_COLORS[existingProposal.status as Proposal["status"]]}>
+                        {STATUS_LABELS[existingProposal.status as Proposal["status"]]}
+                      </Badge>
+                    </>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">{project?.name}</p>
+              </div>
             </div>
-            <p className="text-muted-foreground">
-              {project?.name || "Create client-ready proposal"}
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          {proposalId && existingProposal && (
-            <ShareLinkButton
-              proposalId={proposalId}
-              shareToken={existingProposal.share_token}
-              status={existingProposal.status}
-              projectName={project?.name}
-              onTokenGenerated={() => {
-                queryClient.invalidateQueries({ queryKey: ["proposal", proposalId] });
-              }}
-            />
-          )}
-          <Button
-            variant="outline"
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
-          >
-            {saveMutation.isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" />
-            )}
-            Save
-          </Button>
+            <div className="flex items-center gap-2">
+              {proposalVersions && proposalVersions.length > 1 && (
+                <div className="hidden md:flex items-center gap-1 mr-2">
+                  <History className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">
+                    {proposalVersions.length} versions
+                  </span>
+                </div>
+              )}
+              {proposalId && existingProposal && (
+                <ShareLinkButton
+                  proposalId={proposalId}
+                  shareToken={existingProposal.share_token}
+                  status={existingProposal.status}
+                  projectName={project?.name}
+                  onTokenGenerated={() => {
+                    queryClient.invalidateQueries({ queryKey: ["proposal", proposalId] });
+                  }}
+                />
+              )}
+              <Button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
+              >
+                {saveMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                {proposalId ? "Save" : "Create Proposal"}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Version History Bar */}
-      {proposalVersions && proposalVersions.length > 1 && (
-        <Card className="border-dashed">
-          <CardContent className="py-3">
-            <div className="flex items-center gap-4">
-              <History className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Versions:</span>
-              <div className="flex gap-2">
-                {proposalVersions.slice(0, 5).map((v) => (
-                  <Button
-                    key={v.id}
-                    variant={v.id === proposalId ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => navigate(`/projects/${projectId}/proposal?id=${v.id}`)}
+      {/* Workflow Stepper */}
+      <div className="bg-background border-b">
+        <div className="container max-w-7xl py-4">
+          <div className="flex items-center justify-between">
+            {WORKFLOW_STEPS.map((step, index) => {
+              const isActive = activeStep === index;
+              const isCompleted = getStepStatus(index);
+              const canAccess = canProceedToStep(index);
+              const StepIcon = step.icon;
+              
+              return (
+                <div key={step.id} className="flex items-center flex-1">
+                  <button
+                    onClick={() => canAccess && setActiveStep(index)}
+                    disabled={!canAccess}
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-lg transition-all w-full",
+                      isActive && "bg-primary/10 ring-2 ring-primary/20",
+                      !isActive && canAccess && "hover:bg-muted",
+                      !canAccess && "opacity-50 cursor-not-allowed"
+                    )}
                   >
-                    v{v.version}
-                    <Badge
-                      variant="outline"
-                      className={`ml-1 text-xs ${STATUS_COLORS[v.status as Proposal["status"]]}`}
-                    >
-                      {v.status}
-                    </Badge>
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                    <div className={cn(
+                      "flex items-center justify-center w-10 h-10 rounded-full shrink-0",
+                      isCompleted && "bg-primary text-primary-foreground",
+                      isActive && !isCompleted && "bg-primary/20 text-primary",
+                      !isActive && !isCompleted && "bg-muted text-muted-foreground"
+                    )}>
+                      {isCompleted ? (
+                        <CheckCircle className="h-5 w-5" />
+                      ) : (
+                        <StepIcon className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div className="hidden sm:block text-left">
+                      <p className={cn(
+                        "text-sm font-medium",
+                        isActive && "text-primary"
+                      )}>
+                        {step.label}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{step.description}</p>
+                    </div>
+                  </button>
+                  {index < WORKFLOW_STEPS.length - 1 && (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 mx-2 shrink-0 hidden lg:block" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
       {/* Main Content */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left Panel - Configuration */}
-        <div className="lg:col-span-1 space-y-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-4 w-full">
-              <TabsTrigger value="simulation" title="Select Simulation">
-                <FileCheck className="h-4 w-4" />
-              </TabsTrigger>
-              <TabsTrigger value="verify" title="Verification">
-                <CheckCircle className="h-4 w-4" />
-              </TabsTrigger>
-              <TabsTrigger value="branding" title="Branding">
-                <Settings className="h-4 w-4" />
-              </TabsTrigger>
-              <TabsTrigger value="approval" title="Approval">
-                <Eye className="h-4 w-4" />
-              </TabsTrigger>
-            </TabsList>
+      <div className="container max-w-7xl py-6">
+        <div className="grid gap-6 lg:grid-cols-5">
+          {/* Left Panel - Step Content */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Step Navigation */}
+            <div className="flex items-center justify-between">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setActiveStep(Math.max(0, activeStep - 1))}
+                disabled={activeStep === 0}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Step {activeStep + 1} of {WORKFLOW_STEPS.length}
+              </span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setActiveStep(Math.min(WORKFLOW_STEPS.length - 1, activeStep + 1))}
+                disabled={activeStep === WORKFLOW_STEPS.length - 1 || !getStepStatus(activeStep)}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
 
-            <TabsContent value="simulation" className="mt-4 space-y-4">
-              <SimulationSelector
-                simulations={simulations}
-                sandboxes={sandboxes}
-                selectedId={selectedSimulationId}
-                selectedType={selectedType}
-                onSelect={(id, type) => {
-                  setSelectedSimulationId(id);
-                  setSelectedType(type);
-                }}
-                disabled={existingProposal?.status !== 'draft' && !!existingProposal}
-              />
-            </TabsContent>
-
-            <TabsContent value="verify" className="mt-4">
-              <VerificationChecklist
-                checklist={verificationChecklist}
-                onChange={setVerificationChecklist}
-                disabled={existingProposal?.status !== "draft" && !!existingProposal}
-              />
-            </TabsContent>
-
-            <TabsContent value="branding" className="mt-4 space-y-4">
-              <BrandingForm
-                branding={branding}
-                onChange={setBranding}
-                disabled={existingProposal?.status !== "draft" && !!existingProposal}
-              />
-
-              {/* Additional text fields */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-muted-foreground" />
-                    <CardTitle className="text-base">Content</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Executive Summary</Label>
-                    <Textarea
-                      placeholder="Optional custom executive summary..."
-                      value={executiveSummary}
-                      onChange={(e) => setExecutiveSummary(e.target.value)}
-                      rows={3}
+            {/* Step Content */}
+            <ScrollArea className="h-[calc(100vh-320px)]">
+              <div className="pr-4 space-y-4">
+                {activeStep === 0 && (
+                  <>
+                    <SimulationSelector
+                      simulations={simulations}
+                      sandboxes={sandboxes}
+                      selectedId={selectedSimulationId}
+                      selectedType={selectedType}
+                      onSelect={(id, type) => {
+                        setSelectedSimulationId(id);
+                        setSelectedType(type);
+                      }}
+                      disabled={existingProposal?.status !== 'draft' && !!existingProposal}
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Assumptions</Label>
-                    <Textarea
-                      placeholder="Key assumptions for this proposal..."
-                      value={assumptions}
-                      onChange={(e) => setAssumptions(e.target.value)}
-                      rows={3}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Disclaimers</Label>
-                    <Textarea
-                      value={disclaimers}
-                      onChange={(e) => setDisclaimers(e.target.value)}
-                      rows={4}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                    
+                    {/* Quick Stats from Selected Simulation */}
+                    {simulationData && (
+                      <Card className="border-primary/20 bg-primary/5">
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-primary" />
+                            <CardTitle className="text-sm">Selected Simulation Summary</CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <p className="text-muted-foreground">Solar Capacity</p>
+                              <p className="font-semibold">{simulationData.solarCapacity} kWp</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Annual Savings</p>
+                              <p className="font-semibold">R{simulationData.annualSavings.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Payback Period</p>
+                              <p className="font-semibold">{simulationData.paybackYears.toFixed(1)} years</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">System Cost</p>
+                              <p className="font-semibold">R{simulationData.systemCost.toLocaleString()}</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </>
+                )}
 
-            <TabsContent value="approval" className="mt-4">
-              <SignaturePanel
-                proposal={proposalForComponents}
-                onUpdate={handleProposalUpdate}
-                disabled={!proposalId}
-              />
-            </TabsContent>
-          </Tabs>
-        </div>
+                {activeStep === 1 && (
+                  <>
+                    {!selectedSimulationId && (
+                      <Card className="border-amber-500/50 bg-amber-500/5">
+                        <CardContent className="py-4">
+                          <div className="flex items-center gap-2 text-amber-700">
+                            <AlertCircle className="h-4 w-4" />
+                            <p className="text-sm">Select a simulation first to verify data</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                    <VerificationChecklist
+                      checklist={verificationChecklist}
+                      onChange={setVerificationChecklist}
+                      disabled={existingProposal?.status !== "draft" && !!existingProposal}
+                    />
+                  </>
+                )}
 
-        {/* Right Panel - Preview */}
-        <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg">Proposal Preview</CardTitle>
-                  <CardDescription>
-                    Live preview of the final document
-                  </CardDescription>
-                </div>
+                {activeStep === 2 && (
+                  <>
+                    <BrandingForm
+                      branding={branding}
+                      onChange={setBranding}
+                      disabled={existingProposal?.status !== "draft" && !!existingProposal}
+                    />
+
+                    {/* Content Fields */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-muted-foreground" />
+                          <CardTitle className="text-base">Proposal Content</CardTitle>
+                        </div>
+                        <CardDescription>
+                          Customize the text content in your proposal
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Executive Summary</Label>
+                          <Textarea
+                            placeholder="Leave blank for auto-generated summary, or write your own..."
+                            value={executiveSummary}
+                            onChange={(e) => setExecutiveSummary(e.target.value)}
+                            rows={3}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Assumptions</Label>
+                          <Textarea
+                            placeholder="• 0.5% annual panel degradation&#10;• 8% annual tariff escalation"
+                            value={assumptions}
+                            onChange={(e) => setAssumptions(e.target.value)}
+                            rows={3}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Disclaimers</Label>
+                          <Textarea
+                            value={disclaimers}
+                            onChange={(e) => setDisclaimers(e.target.value)}
+                            rows={4}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Custom Notes</Label>
+                          <Textarea
+                            placeholder="Any additional notes for the client..."
+                            value={customNotes}
+                            onChange={(e) => setCustomNotes(e.target.value)}
+                            rows={2}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+
+                {activeStep === 3 && (
+                  <>
+                    {!proposalId && (
+                      <Card className="border-amber-500/50 bg-amber-500/5">
+                        <CardContent className="py-4">
+                          <div className="flex items-center gap-2 text-amber-700">
+                            <AlertCircle className="h-4 w-4" />
+                            <p className="text-sm">Save the proposal first to enable approval workflow</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                    <SignaturePanel
+                      proposal={proposalForComponents}
+                      onUpdate={handleProposalUpdate}
+                      disabled={!proposalId}
+                    />
+                  </>
+                )}
               </div>
-            </CardHeader>
-            <Separator />
-            <CardContent className="p-0">
-              <ProposalPreview
+            </ScrollArea>
+          </div>
+
+          {/* Right Panel - Live Preview */}
+          <div className="lg:col-span-3 space-y-4">
+            <Card className="sticky top-[140px]">
+              <CardHeader className="py-3 border-b">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                    <CardTitle className="text-sm font-medium">Live Preview</CardTitle>
+                  </div>
+                  {simulationData && (
+                    <Badge variant="secondary" className="text-xs">
+                      {simulationData.solarCapacity} kWp System
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[calc(100vh-320px)]">
+                  {simulationData ? (
+                    <ProposalPreview
+                      proposal={proposalForComponents}
+                      project={project}
+                      simulation={simulationData}
+                      tenants={tenants || undefined}
+                      shopTypes={shopTypes || undefined}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <FileCheck className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                      <p className="text-muted-foreground font-medium">No Simulation Selected</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Select a simulation in Step 1 to see the proposal preview
+                      </p>
+                    </div>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            {/* Export Section */}
+            {simulationData && (
+              <ProposalExport
                 proposal={proposalForComponents}
                 project={project}
-                simulation={simulationData || undefined}
-                tenants={tenants || undefined}
-                shopTypes={shopTypes || undefined}
+                simulation={simulationData}
               />
-            </CardContent>
-          </Card>
-
-          {/* Export Section */}
-          {simulationData && (
-            <ProposalExport
-              proposal={proposalForComponents}
-              project={project}
-              simulation={simulationData}
-            />
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
