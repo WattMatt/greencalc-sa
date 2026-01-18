@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.geocode-location]
 verify_jwt = false
+
+[functions.batch-geocode-projects]
+verify_jwt = false
