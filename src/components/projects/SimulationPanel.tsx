@@ -111,23 +111,8 @@ function DifferenceIndicator({ baseValue, compareValue, suffix = "", invert = fa
 }
 
 export function SimulationPanel({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false }: SimulationPanelProps) {
-  const [solarCapacity, setSolarCapacity] = useState(100);
-  // Battery values: only use defaults if system includes battery, otherwise zero
-  const [batteryCapacity, setBatteryCapacity] = useState(includesBattery ? 50 : 0);
-  const [batteryPower, setBatteryPower] = useState(includesBattery ? 25 : 0);
-  const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [useSolcast, setUseSolcast] = useState(false);
-  const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
-  const [inverterConfig, setInverterConfig] = useState<InverterConfig>(getDefaultInverterConfig);
-  
-  // Track the loaded simulation name for UI feedback
-  const [loadedSimulationName, setLoadedSimulationName] = useState<string | null>(null);
-  const [loadedSimulationDate, setLoadedSimulationDate] = useState<string | null>(null);
-  const hasInitializedFromSaved = useRef(false);
-  
-  // Fetch the most recent saved simulation to auto-load on mount
-  const { data: lastSavedSimulation, isLoading: isLoadingLastSaved } = useQuery({
+  // Fetch the most recent saved simulation FIRST
+  const { data: lastSavedSimulation, isLoading: isLoadingLastSaved, isFetched } = useQuery({
     queryKey: ["last-simulation", projectId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -140,12 +125,37 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
       if (error) throw error;
       return data;
     },
+    staleTime: 0, // Always fetch fresh data
   });
 
-  // Auto-load the last saved simulation when data arrives (only once)
+  // Extract saved values or use defaults - computed once query completes
+  const savedResultsJson = lastSavedSimulation?.results_json as any;
+  
+  const [solarCapacity, setSolarCapacity] = useState(100);
+  const [batteryCapacity, setBatteryCapacity] = useState(includesBattery ? 50 : 0);
+  const [batteryPower, setBatteryPower] = useState(includesBattery ? 25 : 0);
+  const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [useSolcast, setUseSolcast] = useState(false);
+  const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
+  const [inverterConfig, setInverterConfig] = useState<InverterConfig>(getDefaultInverterConfig);
+  
+  // Track the loaded simulation name for UI feedback
+  const [loadedSimulationName, setLoadedSimulationName] = useState<string | null>(null);
+  const [loadedSimulationDate, setLoadedSimulationDate] = useState<string | null>(null);
+  const hasInitializedFromSaved = useRef(false);
+
+  // Auto-load the last saved simulation when data arrives (only once per projectId)
   useEffect(() => {
-    if (lastSavedSimulation && !hasInitializedFromSaved.current) {
+    // Reset initialization flag when projectId changes
+    hasInitializedFromSaved.current = false;
+  }, [projectId]);
+
+  useEffect(() => {
+    if (isFetched && lastSavedSimulation && !hasInitializedFromSaved.current) {
       hasInitializedFromSaved.current = true;
+      
+      console.log("Auto-loading saved simulation:", lastSavedSimulation.name, savedResultsJson);
       
       // Load configuration values
       setSolarCapacity(lastSavedSimulation.solar_capacity_kwp || 100);
@@ -153,14 +163,13 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
       setBatteryPower(includesBattery ? (lastSavedSimulation.battery_power_kw || 25) : 0);
       
       // Load PV config if saved
-      const resultsJson = lastSavedSimulation.results_json as any;
-      if (resultsJson?.pvConfig) {
-        setPvConfig(resultsJson.pvConfig);
+      if (savedResultsJson?.pvConfig) {
+        setPvConfig(savedResultsJson.pvConfig);
       }
       
       // Load inverter config if saved
-      if (resultsJson?.inverterConfig) {
-        setInverterConfig(resultsJson.inverterConfig);
+      if (savedResultsJson?.inverterConfig) {
+        setInverterConfig(savedResultsJson.inverterConfig);
       }
       
       // Set Solcast toggle based on saved type
@@ -172,7 +181,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
       setLoadedSimulationName(lastSavedSimulation.name);
       setLoadedSimulationDate(lastSavedSimulation.created_at);
     }
-  }, [lastSavedSimulation, includesBattery]);
+  }, [isFetched, lastSavedSimulation, savedResultsJson, includesBattery]);
 
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, fetchForecast } = useSolcastForecast();
