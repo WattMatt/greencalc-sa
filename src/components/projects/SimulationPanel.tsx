@@ -70,6 +70,7 @@ interface SimulationPanelProps {
   shopTypes: ShopType[];
   systemCosts: SystemCostsData;
   onSystemCostsChange: (costs: SystemCostsData) => void;
+  includesBattery?: boolean;
 }
 
 const DEFAULT_PROFILE = Array(24).fill(4.17);
@@ -108,10 +109,11 @@ function DifferenceIndicator({ baseValue, compareValue, suffix = "", invert = fa
   );
 }
 
-export function SimulationPanel({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange }: SimulationPanelProps) {
+export function SimulationPanel({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false }: SimulationPanelProps) {
   const [solarCapacity, setSolarCapacity] = useState(100);
-  const [batteryCapacity, setBatteryCapacity] = useState(50);
-  const [batteryPower, setBatteryPower] = useState(25);
+  // Battery values: only use defaults if system includes battery, otherwise zero
+  const [batteryCapacity, setBatteryCapacity] = useState(includesBattery ? 50 : 0);
+  const [batteryPower, setBatteryPower] = useState(includesBattery ? 25 : 0);
   const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [useSolcast, setUseSolcast] = useState(false);
@@ -600,53 +602,55 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
           maxSolarKva={maxSolarKva}
         />
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Battery className="h-4 w-4" />
-              Battery Storage
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <Label className="text-xs">Capacity</Label>
-                <span className="text-xs text-muted-foreground">{batteryCapacity} kWh</span>
+        {includesBattery && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Battery className="h-4 w-4" />
+                Battery Storage
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <Label className="text-xs">Capacity</Label>
+                  <span className="text-xs text-muted-foreground">{batteryCapacity} kWh</span>
+                </div>
+                <Slider
+                  value={[batteryCapacity]}
+                  onValueChange={([v]) => setBatteryCapacity(v)}
+                  min={0}
+                  max={200}
+                  step={10}
+                />
               </div>
-              <Slider
-                value={[batteryCapacity]}
-                onValueChange={([v]) => setBatteryCapacity(v)}
-                min={0}
-                max={200}
-                step={10}
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <Label className="text-xs">Power</Label>
-                <span className="text-xs text-muted-foreground">{batteryPower} kW</span>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <Label className="text-xs">Power</Label>
+                  <span className="text-xs text-muted-foreground">{batteryPower} kW</span>
+                </div>
+                <Slider
+                  value={[batteryPower]}
+                  onValueChange={([v]) => setBatteryPower(v)}
+                  min={5}
+                  max={100}
+                  step={5}
+                />
               </div>
-              <Slider
-                value={[batteryPower]}
-                onValueChange={([v]) => setBatteryPower(v)}
-                min={5}
-                max={100}
-                step={5}
-              />
-            </div>
-            {/* Battery utilization (tariff-independent) */}
-            <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
-              <div className="flex justify-between">
-                <span>Daily cycles</span>
-                <span className="text-foreground">{energyResults.batteryCycles.toFixed(2)}</span>
+              {/* Battery utilization (tariff-independent) */}
+              <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>Daily cycles</span>
+                  <span className="text-foreground">{energyResults.batteryCycles.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Energy throughput</span>
+                  <span className="text-foreground">{energyResults.totalBatteryDischarge.toFixed(0)} kWh</span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span>Energy throughput</span>
-                <span className="text-foreground">{energyResults.totalBatteryDischarge.toFixed(0)} kWh</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Financial Summary - only show if tariff is selected */}
         {hasFinancialData ? (
@@ -738,8 +742,8 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
         projectId={projectId}
         currentConfig={{
           solarCapacity,
-          batteryCapacity,
-          batteryPower,
+          batteryCapacity: includesBattery ? batteryCapacity : 0,
+          batteryPower: includesBattery ? batteryPower : 0,
           pvConfig,
           usingSolcast: !!usingRealData,
         }}
@@ -757,12 +761,15 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
         }}
         onLoadSimulation={(config) => {
           setSolarCapacity(config.solarCapacity);
-          setBatteryCapacity(config.batteryCapacity);
-          setBatteryPower(config.batteryPower);
+          if (includesBattery) {
+            setBatteryCapacity(config.batteryCapacity);
+            setBatteryPower(config.batteryPower);
+          }
           if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
             setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
           }
         }}
+        includesBattery={includesBattery}
       />
 
       {/* Advanced Results Display */}

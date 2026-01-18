@@ -58,6 +58,7 @@ interface SavedSimulationsProps {
     batteryPower: number;
     pvConfig: any;
   }) => void;
+  includesBattery?: boolean;
 }
 
 interface SavedSimulation {
@@ -83,6 +84,7 @@ export function SavedSimulations({
   currentConfig,
   currentResults,
   onLoadSimulation,
+  includesBattery = false,
 }: SavedSimulationsProps) {
   const queryClient = useQueryClient();
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -252,12 +254,14 @@ export function SavedSimulations({
                     <p className="text-muted-foreground">Solar Capacity</p>
                     <p className="font-medium">{currentConfig.solarCapacity} kWp</p>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Battery</p>
-                    <p className="font-medium">
-                      {currentConfig.batteryCapacity} kWh / {currentConfig.batteryPower} kW
-                    </p>
-                  </div>
+                  {includesBattery && (
+                    <div>
+                      <p className="text-muted-foreground">Battery</p>
+                      <p className="font-medium">
+                        {currentConfig.batteryCapacity} kWh / {currentConfig.batteryPower} kW
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <p className="text-muted-foreground">Annual Savings</p>
                     <p className="font-medium text-green-600">
@@ -334,14 +338,16 @@ export function SavedSimulations({
                       </TableCell>
                     ))}
                   </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Battery</TableCell>
-                    {comparedSimulations.map((sim) => (
-                      <TableCell key={sim.id} className="text-center">
-                        {sim.battery_capacity_kwh} kWh
-                      </TableCell>
-                    ))}
-                  </TableRow>
+                  {includesBattery && (
+                    <TableRow>
+                      <TableCell className="font-medium">Battery</TableCell>
+                      {comparedSimulations.map((sim) => (
+                        <TableCell key={sim.id} className="text-center">
+                          {sim.battery_capacity_kwh} kWh
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  )}
                   <TableRow>
                     <TableCell className="font-medium">Annual Savings</TableCell>
                     {comparedSimulations.map((sim) => (
@@ -408,7 +414,8 @@ export function SavedSimulations({
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {sim.solar_capacity_kwp} kWp • {sim.battery_capacity_kwh} kWh •{" "}
+                      {sim.solar_capacity_kwp} kWp
+                      {includesBattery && sim.battery_capacity_kwh ? ` • ${sim.battery_capacity_kwh} kWh` : ""} •{" "}
                       R{Math.round(sim.annual_solar_savings || 0).toLocaleString()}/yr •{" "}
                       {format(new Date(sim.created_at), "dd MMM yyyy")}
                     </p>

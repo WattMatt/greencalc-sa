@@ -38,9 +38,10 @@ interface SimulationModesProps {
   shopTypes: ShopType[];
   systemCosts: SystemCostsData;
   onSystemCostsChange: (costs: SystemCostsData) => void;
+  includesBattery?: boolean;
 }
 
-export function SimulationModes({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange }: SimulationModesProps) {
+export function SimulationModes({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false }: SimulationModesProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeMode, setActiveMode] = useState("profile-builder");
@@ -112,6 +113,7 @@ export function SimulationModes({ projectId, project, tenants, shopTypes, system
           shopTypes={shopTypes}
           systemCosts={systemCosts}
           onSystemCostsChange={onSystemCostsChange}
+          includesBattery={includesBattery}
         />
       </TabsContent>
 
