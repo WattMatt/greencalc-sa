@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -106,22 +106,49 @@ const TabWithStatus = ({
 const DashboardTabContent = ({ 
   projectId, 
   project, 
-  tenants 
+  tenants,
+  onProjectUpdate
 }: { 
   projectId: string;
-  project: { name: string; location: string | null; connection_size_kva: number | null };
+  project: { 
+    name: string; 
+    location: string | null; 
+    connection_size_kva: number | null;
+    description: string | null;
+    total_area_sqm: number | null;
+  };
   tenants: { area_sqm: number; scada_import_id: string | null }[];
+  onProjectUpdate: () => void;
 }) => {
+  const queryClient = useQueryClient();
+  
+  // Parse stored metadata from description JSON if available
+  const storedMetadata = useMemo(() => {
+    try {
+      if (project.description) {
+        const parsed = JSON.parse(project.description);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      }
+    } catch {
+      // Not JSON, treat as plain description
+    }
+    return null;
+  }, [project.description]);
+  
   const [params, setParams] = useState<DashboardParams>({
     name: project.name || "",
     location: project.location || "",
-    totalArea: tenants.reduce((sum, t) => sum + Number(t.area_sqm || 0), 0),
+    totalArea: project.total_area_sqm || tenants.reduce((sum, t) => sum + Number(t.area_sqm || 0), 0),
     capacity: project.connection_size_kva || 0,
-    systemType: "Solar",
-    clientName: "",
-    budget: 0,
-    targetDate: undefined,
+    systemType: storedMetadata?.systemType || "Solar",
+    clientName: storedMetadata?.clientName || "",
+    budget: storedMetadata?.budget || 0,
+    targetDate: storedMetadata?.targetDate ? new Date(storedMetadata.targetDate) : undefined,
   });
+  
+  const [isSaving, setIsSaving] = useState(false);
 
   const workflowSteps: WorkflowStep[] = [
     { id: 1, name: "Resource Analysis", status: tenants.length > 0 ? "complete" : "pending" },
@@ -150,9 +177,41 @@ const DashboardTabContent = ({
     setParams(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleSave = () => {
-    console.log("Saving parameters:", params);
-    toast.success("Parameters saved");
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      // Store additional metadata as JSON in description field
+      const metadata = {
+        systemType: params.systemType,
+        clientName: params.clientName,
+        budget: params.budget,
+        targetDate: params.targetDate?.toISOString(),
+      };
+      
+      const { error } = await supabase
+        .from("projects")
+        .update({
+          name: params.name,
+          location: params.location,
+          connection_size_kva: params.capacity || null,
+          total_area_sqm: params.totalArea || null,
+          description: JSON.stringify(metadata),
+        })
+        .eq("id", projectId);
+      
+      if (error) throw error;
+      
+      // Invalidate and refetch project data
+      await queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      onProjectUpdate();
+      
+      toast.success("Project parameters saved");
+    } catch (error) {
+      console.error("Error saving project:", error);
+      toast.error("Failed to save project parameters");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -290,9 +349,13 @@ const DashboardTabContent = ({
               </Popover>
             </div>
 
-            <Button onClick={handleSave} className="w-full h-8 mt-2" size="sm">
-              <Save className="mr-2 h-3 w-3" />
-              Save Parameters
+            <Button onClick={handleSave} className="w-full h-8 mt-2" size="sm" disabled={isSaving}>
+              {isSaving ? (
+                <span className="animate-spin mr-2 h-3 w-3 border border-current border-t-transparent rounded-full" />
+              ) : (
+                <Save className="mr-2 h-3 w-3" />
+              )}
+              {isSaving ? "Saving..." : "Save Parameters"}
             </Button>
           </CardContent>
         </Card>
@@ -786,7 +849,12 @@ export default function ProjectDetail() {
         </TooltipProvider>
 
         <TabsContent value="overview" className="mt-6">
-          <DashboardTabContent projectId={id!} project={project} tenants={tenants || []} />
+          <DashboardTabContent 
+            projectId={id!} 
+            project={project} 
+            tenants={tenants || []} 
+            onProjectUpdate={() => queryClient.invalidateQueries({ queryKey: ["project", id] })}
+          />
         </TabsContent>
 
         <TabsContent value="tenants" className="mt-6">
