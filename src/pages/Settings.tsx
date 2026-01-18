@@ -5,12 +5,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Settings as SettingsIcon, Bell, Moon, Sun, Monitor, HelpCircle, RotateCcw, Zap, ExternalLink } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Moon, Sun, Monitor, HelpCircle, RotateCcw, Zap, ExternalLink, Users } from "lucide-react";
 import { NotificationSettings } from "@/components/pwa/NotificationSettings";
 import { ContentEnhancerDemo } from "@/components/onboarding/ContentEnhancerDemo";
 import { APIIntegrationConfigPanel, APIIntegrationStatus } from "@/components/projects/simulation";
 import { APIIntegrationConfig, defaultAPIIntegrationConfig } from "@/components/projects/simulation/APIIntegrationTypes";
 import { DeratingSettingsCard } from "@/components/settings/DeratingSettingsCard";
+import { DiversitySettingsCard } from "@/components/settings/DiversitySettingsCard";
 import { useTour } from "@/components/onboarding/TourContext";
 
 export default function Settings() {
@@ -34,10 +35,14 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="bg-muted/50">
+        <TabsList className="bg-muted/50 flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="general" className="flex items-center gap-2">
             <SettingsIcon className="h-4 w-4" />
             General
+          </TabsTrigger>
+          <TabsTrigger value="diversity" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Diversity
           </TabsTrigger>
           <TabsTrigger value="derating" className="flex items-center gap-2">
             <Zap className="h-4 w-4" />
@@ -184,6 +189,10 @@ export default function Settings() {
           </div>
         </TabsContent>
 
+        <TabsContent value="diversity" className="space-y-6">
+          <DiversitySettingsCard />
+        </TabsContent>
+
         <TabsContent value="derating" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
             <DeratingSettingsCard />
@@ -194,10 +203,6 @@ export default function Settings() {
               </CardHeader>
               <CardContent className="space-y-4 text-sm text-muted-foreground">
                 <p>
-                  <strong className="text-foreground">Diversity Factor:</strong> Accounts for the fact that not all loads operate at maximum simultaneously. 
-                  Shopping centres typically use 80% as tenants have different peak hours.
-                </p>
-                <p>
                   <strong className="text-foreground">DC/AC Ratio:</strong> Oversizing PV panels relative to inverter capacity improves morning/evening generation 
                   and accounts for panel degradation.
                 </p>
@@ -206,12 +211,20 @@ export default function Settings() {
                   Typically 10-14% for well-designed systems.
                 </p>
                 <p>
+                  <strong className="text-foreground">Power Factor:</strong> Ratio of real power to apparent power. 
+                  Industrial loads often have lower power factors due to inductive equipment.
+                </p>
+                <p>
                   <strong className="text-foreground">Temperature Derating:</strong> Solar panel output decreases as temperature increases. 
                   South African conditions typically require 3-5% derating.
                 </p>
                 <p>
                   <strong className="text-foreground">Soiling Losses:</strong> Dust and dirt accumulation on panels. 
                   Urban areas typically 1-2%, dusty/industrial areas 3-5%.
+                </p>
+                <p>
+                  <strong className="text-foreground">Cable Losses:</strong> Power lost in DC and AC cabling. 
+                  Properly sized systems should have less than 2% total cable losses.
                 </p>
               </CardContent>
             </Card>
