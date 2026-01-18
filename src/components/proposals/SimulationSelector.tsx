@@ -63,7 +63,10 @@ export function SimulationSelector({
         <RadioGroup
           value={selectedId ? `${selectedType}-${selectedId}` : ""}
           onValueChange={(value) => {
-            const [type, id] = value.split("-");
+            // Split only on the first dash to preserve UUID structure
+            const dashIndex = value.indexOf("-");
+            const type = value.substring(0, dashIndex);
+            const id = value.substring(dashIndex + 1);
             onSelect(id, type as 'profile' | 'sandbox');
           }}
           disabled={disabled}
