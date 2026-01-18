@@ -20,6 +20,7 @@ interface SystemCostsManagerProps {
   onChange: (costs: SystemCostsData) => void;
   solarCapacity?: number;
   batteryCapacity?: number;
+  includesBattery?: boolean; // Whether system includes battery storage
 }
 
 const COST_PRESETS = [
@@ -61,11 +62,14 @@ export function SystemCostsManager({
   costs, 
   onChange, 
   solarCapacity = 100, 
-  batteryCapacity = 50 
+  batteryCapacity = 50,
+  includesBattery = true
 }: SystemCostsManagerProps) {
+  const effectiveBatteryCapacity = includesBattery ? batteryCapacity : 0;
+  
   const totalSystemCost = 
     (solarCapacity * costs.solarCostPerKwp) + 
-    (batteryCapacity * costs.batteryCostPerKwh) + 
+    (effectiveBatteryCapacity * costs.batteryCostPerKwh) + 
     costs.installationCost;
 
   const handleInputChange = (field: keyof SystemCostsData, value: string) => {
@@ -149,10 +153,12 @@ export function SystemCostsManager({
                       <span className="text-muted-foreground">Solar</span>
                       <span>R{preset.solarCostPerKwp.toLocaleString()}/kWp</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Battery</span>
-                      <span>R{preset.batteryCostPerKwh.toLocaleString()}/kWh</span>
-                    </div>
+                    {includesBattery && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Battery</span>
+                        <span>R{preset.batteryCostPerKwh.toLocaleString()}/kWh</span>
+                      </div>
+                    )}
                   </div>
                 </button>
               );
@@ -225,57 +231,59 @@ export function SystemCostsManager({
           </CardContent>
         </Card>
 
-        {/* Battery Costs */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Battery className="h-4 w-4 text-green-500" />
-              Battery Storage Costs
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <Label className="text-xs">Cost per kWh Capacity</Label>
-                <span className="text-xs text-muted-foreground">
-                  R{costs.batteryCostPerKwh.toLocaleString()}
-                </span>
-              </div>
-              <Slider
-                value={[costs.batteryCostPerKwh]}
-                onValueChange={([v]) => onChange({ ...costs, batteryCostPerKwh: v })}
-                min={3000}
-                max={15000}
-                step={500}
-              />
-              <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>R3,000</span>
-                <span>R15,000</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Or enter exact value</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">R</span>
-                <Input
-                  type="number"
-                  value={costs.batteryCostPerKwh}
-                  onChange={(e) => handleInputChange("batteryCostPerKwh", e.target.value)}
-                  className="h-9"
-                  min={0}
-                  step={100}
+        {/* Battery Costs - Only shown if system includes battery */}
+        {includesBattery && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Battery className="h-4 w-4 text-green-500" />
+                Battery Storage Costs
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <Label className="text-xs">Cost per kWh Capacity</Label>
+                  <span className="text-xs text-muted-foreground">
+                    R{costs.batteryCostPerKwh.toLocaleString()}
+                  </span>
+                </div>
+                <Slider
+                  value={[costs.batteryCostPerKwh]}
+                  onValueChange={([v]) => onChange({ ...costs, batteryCostPerKwh: v })}
+                  min={3000}
+                  max={15000}
+                  step={500}
                 />
-                <span className="text-muted-foreground text-sm">/kWh</span>
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>R3,000</span>
+                  <span>R15,000</span>
+                </div>
               </div>
-            </div>
-            <div className="pt-2 border-t">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Battery total ({batteryCapacity} kWh)</span>
-                <span className="font-medium">R{(batteryCapacity * costs.batteryCostPerKwh).toLocaleString()}</span>
+              <div className="space-y-2">
+                <Label className="text-xs">Or enter exact value</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">R</span>
+                  <Input
+                    type="number"
+                    value={costs.batteryCostPerKwh}
+                    onChange={(e) => handleInputChange("batteryCostPerKwh", e.target.value)}
+                    className="h-9"
+                    min={0}
+                    step={100}
+                  />
+                  <span className="text-muted-foreground text-sm">/kWh</span>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="pt-2 border-t">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Battery total ({batteryCapacity} kWh)</span>
+                  <span className="font-medium">R{(batteryCapacity * costs.batteryCostPerKwh).toLocaleString()}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Installation Costs */}
         <Card>
@@ -355,10 +363,12 @@ export function SystemCostsManager({
                 <span className="text-muted-foreground">Solar ({solarCapacity} kWp)</span>
                 <span>R{(solarCapacity * costs.solarCostPerKwp).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between gap-8">
-                <span className="text-muted-foreground">Battery ({batteryCapacity} kWh)</span>
-                <span>R{(batteryCapacity * costs.batteryCostPerKwh).toLocaleString()}</span>
-              </div>
+              {includesBattery && (
+                <div className="flex justify-between gap-8">
+                  <span className="text-muted-foreground">Battery ({batteryCapacity} kWh)</span>
+                  <span>R{(effectiveBatteryCapacity * costs.batteryCostPerKwh).toLocaleString()}</span>
+                </div>
+              )}
               <div className="flex justify-between gap-8">
                 <span className="text-muted-foreground">Installation</span>
                 <span>R{costs.installationCost.toLocaleString()}</span>

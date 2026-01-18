@@ -33,7 +33,7 @@ interface DashboardParams {
   location: string;
   totalArea: number;
   capacity: number;
-  systemType: "Solar" | "Wind" | "Hybrid" | "";
+  systemType: "Solar" | "Solar + Battery" | "Hybrid" | "";
   clientName: string;
   budget: number;
   targetDate: Date | undefined;
@@ -292,11 +292,16 @@ const DashboardTabContent = ({
                   <SelectValue placeholder="Select system type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Solar">Solar</SelectItem>
-                  <SelectItem value="Wind">Wind</SelectItem>
-                  <SelectItem value="Hybrid">Hybrid</SelectItem>
+                  <SelectItem value="Solar">Solar (Grid-tied)</SelectItem>
+                  <SelectItem value="Solar + Battery">Solar + Battery</SelectItem>
+                  <SelectItem value="Hybrid">Hybrid (Solar/Wind + Battery)</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-[10px] text-muted-foreground">
+                {params.systemType === "Solar" && "Grid-tied solar without battery storage"}
+                {params.systemType === "Solar + Battery" && "Solar with battery backup/load shifting"}
+                {params.systemType === "Hybrid" && "Combined renewable sources with storage"}
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -500,6 +505,24 @@ export default function ProjectDetail() {
     },
     enabled: !!id,
   });
+
+  // Parse system type from project description metadata
+  const projectSystemType = useMemo(() => {
+    try {
+      if (project?.description) {
+        const parsed = JSON.parse(project.description);
+        if (parsed && typeof parsed === 'object' && parsed.systemType) {
+          return parsed.systemType as string;
+        }
+      }
+    } catch {
+      // Not JSON, ignore
+    }
+    return "Solar"; // Default to grid-tied solar
+  }, [project?.description]);
+
+  // Check if system includes battery
+  const systemIncludesBattery = projectSystemType === "Solar + Battery" || projectSystemType === "Hybrid";
 
   const { data: tenants } = useQuery({
     queryKey: ["project-tenants", id],
@@ -881,6 +904,7 @@ export default function ProjectDetail() {
             onChange={setSystemCosts}
             solarCapacity={100}
             batteryCapacity={50}
+            includesBattery={systemIncludesBattery}
           />
         </TabsContent>
 
