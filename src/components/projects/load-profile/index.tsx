@@ -20,6 +20,7 @@ import { TopContributors } from "./components/TopContributors";
 import { DateMode } from "./components/DateModeSelector";
 import { MethodologySection, solarMethodology, batteryMethodology, financialMethodology, touMethodology } from "@/components/simulation/MethodologySection";
 import { useDeratingSettings } from "@/hooks/useDeratingSettings";
+import { useDiversitySettings } from "@/hooks/useDiversitySettings";
 
 interface LoadProfileChartProps {
   tenants: Tenant[];
@@ -30,8 +31,9 @@ interface LoadProfileChartProps {
 }
 
 export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitude, longitude }: LoadProfileChartProps) {
-  // Get global derating settings as defaults
+  // Get global settings as defaults - Diversity for load profiles, Derating for PV simulations
   const { settings: globalDeratingSettings } = useDeratingSettings();
+  const { settings: globalDiversitySettings } = useDiversitySettings();
   
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kwh");
   const [powerFactor, setPowerFactor] = useState(() => globalDeratingSettings.powerFactor);
@@ -47,7 +49,8 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [systemLosses, setSystemLosses] = useState(() => globalDeratingSettings.systemLosses);
-  const [diversityFactor, setDiversityFactor] = useState(() => globalDeratingSettings.diversityFactor);
+  // Use diversity settings for load profile diversity factor
+  const [diversityFactor, setDiversityFactor] = useState(() => globalDiversitySettings.diversityFactor);
   const [dateMode, setDateMode] = useState<DateMode>("average");
   const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
