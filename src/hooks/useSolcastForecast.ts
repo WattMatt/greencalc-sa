@@ -76,6 +76,13 @@ export function useSolcastForecast() {
       }
 
       if (!response.success) {
+        // Check for quota exceeded error from edge function
+        if (response.errorCode === 'QUOTA_EXCEEDED') {
+          const quotaMessage = 'Solcast API quota exceeded. Using default solar profiles instead.';
+          toast.warning(quotaMessage, { duration: 6000 });
+          setError(quotaMessage);
+          return null;
+        }
         throw new Error(response.error || 'Failed to fetch solar forecast');
       }
 
@@ -85,8 +92,8 @@ export function useSolcastForecast() {
       let errorMessage = err.message || 'Failed to fetch solar forecast';
       
       // Handle Solcast API quota exceeded error gracefully
-      if (errorMessage.includes('402') || errorMessage.includes('PaymentRequired') || errorMessage.includes('Transaction Limit')) {
-        errorMessage = 'Solcast API quota exceeded. The simulation will use default solar profiles instead.';
+      if (errorMessage.includes('402') || errorMessage.includes('PaymentRequired') || errorMessage.includes('Transaction Limit') || errorMessage.includes('QUOTA_EXCEEDED')) {
+        errorMessage = 'Solcast API quota exceeded. Using default solar profiles instead.';
         toast.warning(errorMessage, { duration: 6000 });
       } else {
         toast.error(errorMessage);

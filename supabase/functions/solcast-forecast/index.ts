@@ -62,6 +62,22 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Solcast API error:', response.status, errorText);
+      
+      // For quota exceeded (402) errors, return a 200 with success: false so the client can handle gracefully
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Solcast API quota exceeded. Please wait for your quota to reset or upgrade your plan.',
+            errorCode: 'QUOTA_EXCEEDED'
+          }),
+          { 
+            status: 200,  // Return 200 so client can handle gracefully
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+      
       throw new Error(`Solcast API error: ${response.status} - ${errorText}`);
     }
 
