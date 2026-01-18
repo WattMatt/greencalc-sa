@@ -935,6 +935,7 @@ export default function ProjectDetail() {
             shopTypes={shopTypes || []}
             systemCosts={systemCosts}
             onSystemCostsChange={setSystemCosts}
+            includesBattery={systemIncludesBattery}
           />
         </TabsContent>
 
