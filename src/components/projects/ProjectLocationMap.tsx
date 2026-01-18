@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Sun, Cloud, Thermometer, RefreshCw, Navigation, Zap } from "lucide-react";
+import { MapPin, Sun, Cloud, Thermometer, RefreshCw, Navigation, Zap, Locate } from "lucide-react";
 import { toast } from "sonner";
 import { useSolcastForecast, SolcastForecastResponse } from "@/hooks/useSolcastForecast";
 import mapboxgl from "mapbox-gl";
@@ -39,6 +39,8 @@ export function ProjectLocationMap({
 
   const [pendingCoords, setPendingCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
+  const [geocodeAttempted, setGeocodeAttempted] = useState(false);
 
   // Fetch Mapbox token
   const { data: mapboxToken } = useQuery({
@@ -76,6 +78,62 @@ export function ProjectLocationMap({
       toast.error(`Failed to save location: ${error.message}`);
     },
   });
+
+  // Auto-geocode when we have location text but no coordinates
+  const geocodeLocation = useCallback(async () => {
+    if (!location || latitude || longitude || geocodeAttempted) return;
+    
+    setIsGeocoding(true);
+    setGeocodeAttempted(true);
+    
+    try {
+      console.log(`Auto-geocoding location: ${location}`);
+      const { data, error } = await supabase.functions.invoke("geocode-location", {
+        body: { 
+          project_id: projectId,
+          location,
+          save_to_project: true 
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.latitude && data.longitude) {
+        toast.success(`Location found: ${data.place_name}`);
+        queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+        onLocationUpdate?.(data.latitude, data.longitude);
+        
+        // Update marker and fly to location
+        if (map.current && mapLoaded) {
+          updateMarker(data.latitude, data.longitude, false);
+          map.current.flyTo({ center: [data.longitude, data.latitude], zoom: 12 });
+        }
+        
+        // Fetch forecast
+        fetchForecast({ latitude: data.latitude, longitude: data.longitude, hours: 168 });
+      } else {
+        toast.warning("Could not find coordinates for this location");
+      }
+    } catch (err) {
+      console.error("Geocoding failed:", err);
+      toast.error("Failed to geocode location");
+    } finally {
+      setIsGeocoding(false);
+    }
+  }, [location, latitude, longitude, geocodeAttempted, projectId, mapLoaded, queryClient, onLocationUpdate, fetchForecast]);
+
+  // Trigger auto-geocode when map loads and we have location but no coords
+  useEffect(() => {
+    if (mapLoaded && location && !latitude && !longitude && !geocodeAttempted) {
+      geocodeLocation();
+    }
+  }, [mapLoaded, location, latitude, longitude, geocodeAttempted, geocodeLocation]);
+
+  // Manual geocode button handler
+  const handleManualGeocode = () => {
+    setGeocodeAttempted(false);
+    setTimeout(() => geocodeLocation(), 100);
+  };
 
   // Initialize map
   useEffect(() => {
@@ -228,15 +286,48 @@ export function ProjectLocationMap({
             <div className="relative">
               <div ref={mapContainer} className="w-full h-[400px] rounded-b-lg" />
               
-              {/* Instructions overlay */}
-              {!hasCoordinates && !pendingCoords && mapLoaded && (
+              {/* Geocoding in progress overlay */}
+              {isGeocoding && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-sm rounded-b-lg z-10">
+                  <div className="text-center p-4">
+                    <Locate className="h-8 w-8 mx-auto mb-2 text-primary animate-pulse" />
+                    <p className="text-sm font-medium">Finding coordinates...</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Geocoding: {location}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Instructions overlay - show when no coordinates and not geocoding */}
+              {!hasCoordinates && !pendingCoords && !isGeocoding && mapLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm rounded-b-lg">
                   <div className="text-center p-4">
                     <Navigation className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm font-medium">Click on the map to set site location</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      This will be used for solar irradiance forecasts
-                    </p>
+                    {location ? (
+                      <>
+                        <p className="text-sm font-medium">Could not auto-locate: {location}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Click on the map to set location manually
+                        </p>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="mt-3"
+                          onClick={handleManualGeocode}
+                        >
+                          <Locate className="h-3.5 w-3.5 mr-1" />
+                          Try Geocode Again
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium">Click on the map to set site location</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          This will be used for solar irradiance forecasts
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
