@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Building2, Trash2, ArrowRight, RefreshCw, Search, X, LayoutGrid, List, ArrowUpDown } from "lucide-react";
+import { Plus, Building2, Trash2, ArrowRight, RefreshCw, Search, X, LayoutGrid, List, ArrowUpDown, Map } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { ProjectsOverviewMap } from "@/components/projects/ProjectsOverviewMap";
 
 export default function Projects() {
   const navigate = useNavigate();
@@ -23,7 +24,7 @@ export default function Projects() {
   const [searchQuery, setSearchQuery] = useState("");
   const [locationFilter, setLocationFilter] = useState<string>("all");
   const [tariffFilter, setTariffFilter] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "list" | "map">("grid");
   const [sortBy, setSortBy] = useState<string>("date-desc");
 
   const handleSyncExternal = async () => {
@@ -282,12 +283,15 @@ export default function Projects() {
         )}
         
         <div className="ml-auto">
-          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as "grid" | "list")}>
+          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as "grid" | "list" | "map")}>
             <ToggleGroupItem value="grid" aria-label="Grid view" size="sm">
               <LayoutGrid className="h-4 w-4" />
             </ToggleGroupItem>
             <ToggleGroupItem value="list" aria-label="List view" size="sm">
               <List className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="map" aria-label="Map view" size="sm">
+              <Map className="h-4 w-4" />
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
@@ -336,6 +340,17 @@ export default function Projects() {
             </Button>
           </CardContent>
         </Card>
+      ) : viewMode === "map" ? (
+        <ProjectsOverviewMap
+          projects={filteredProjects?.map(p => ({
+            id: p.id,
+            name: p.name,
+            location: p.location,
+            latitude: p.latitude,
+            longitude: p.longitude,
+          })) || []}
+          onProjectClick={(id) => navigate(`/projects/${id}`)}
+        />
       ) : viewMode === "grid" ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredProjects?.map((project) => (
