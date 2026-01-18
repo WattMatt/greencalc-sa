@@ -6,6 +6,7 @@ import { useState } from "react";
 import type { Proposal, SimulationData, ProposalBranding } from "./types";
 import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
+import { ProposalLocationMap } from "./ProposalLocationMap";
 
 interface ProposalPreviewProps {
   proposal: Partial<Proposal>;
@@ -130,14 +131,13 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
               <p className="font-medium">{simulation?.tariffName || "Standard"}</p>
             </div>
           </div>
-          {/* Map Placeholder */}
-          <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center p-6 bg-muted/20 min-h-[200px]">
-            <MapPin className="h-12 w-12 text-muted-foreground/40 mb-2" />
-            <p className="text-sm text-muted-foreground text-center">Site Location Map</p>
-            <p className="text-xs text-muted-foreground/60 text-center mt-1">
-              {project?.location || "Coordinates not set"}
-            </p>
-          </div>
+          {/* Actual Map */}
+          <ProposalLocationMap
+            latitude={project?.latitude}
+            longitude={project?.longitude}
+            location={project?.location}
+            projectName={project?.name}
+          />
         </div>
       </div>
 
@@ -164,8 +164,8 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
               tenants={tenants}
               shopTypes={shopTypes}
               connectionSizeKva={project?.connection_size_kva}
-              latitude={-33.9249} // Default or project data
-              longitude={18.4241}
+              latitude={project?.latitude ?? -33.9249}
+              longitude={project?.longitude ?? 18.4241}
             />
           </div>
         </div>
