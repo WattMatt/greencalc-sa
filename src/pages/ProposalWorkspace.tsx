@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { 
   ArrowLeft, 
   FileCheck, 
@@ -88,6 +89,7 @@ export default function ProposalWorkspace() {
   const [executiveSummary, setExecutiveSummary] = useState("");
   const [customNotes, setCustomNotes] = useState("");
   const [assumptions, setAssumptions] = useState("");
+  const [showSystemDesign, setShowSystemDesign] = useState(false);
   const [disclaimers, setDisclaimers] = useState(
     "This proposal is based on estimated consumption data and solar irradiance forecasts. Actual performance may vary based on weather conditions, equipment degradation, and other factors. Financial projections assume current tariff rates and do not account for future rate changes. All figures are estimates only."
   );
@@ -676,6 +678,19 @@ export default function ProposalWorkspace() {
                             rows={2}
                           />
                         </div>
+                        <Separator className="my-4" />
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label>Include System Design</Label>
+                            <p className="text-xs text-muted-foreground">
+                              Show PV layout diagram if configured
+                            </p>
+                          </div>
+                          <Switch
+                            checked={showSystemDesign}
+                            onCheckedChange={setShowSystemDesign}
+                          />
+                        </div>
                       </CardContent>
                     </Card>
                   </>
@@ -729,6 +744,7 @@ export default function ProposalWorkspace() {
                       simulation={simulationData}
                       tenants={tenants || undefined}
                       shopTypes={shopTypes || undefined}
+                      showSystemDesign={showSystemDesign}
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center py-16 text-center">

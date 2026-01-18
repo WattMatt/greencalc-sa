@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sun, Battery, Zap, TrendingUp, Calendar, MapPin, Building2, ChevronDown, ChevronUp, LayoutDashboard, BarChart3 } from "lucide-react";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import type { Proposal, SimulationData, ProposalBranding } from "./types";
 import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
@@ -14,13 +16,34 @@ interface ProposalPreviewProps {
   simulation?: SimulationData;
   tenants?: any[];
   shopTypes?: any[];
+  showSystemDesign?: boolean;
 }
 
-export function ProposalPreview({ proposal, project, simulation, tenants, shopTypes }: ProposalPreviewProps) {
+export function ProposalPreview({ proposal, project, simulation, tenants, shopTypes, showSystemDesign }: ProposalPreviewProps) {
   const branding = proposal.branding as ProposalBranding;
   const primaryColor = branding?.primary_color || "#22c55e";
   const secondaryColor = branding?.secondary_color || "#0f172a";
   const [showFullProjection, setShowFullProjection] = useState(false);
+
+  // Check if PV layout exists for this project
+  const { data: pvLayout } = useQuery({
+    queryKey: ["pv-layout-exists", project?.id],
+    queryFn: async () => {
+      if (!project?.id) return null;
+      const { data, error } = await supabase
+        .from("pv_layouts")
+        .select("id, pv_arrays")
+        .eq("project_id", project.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!project?.id,
+  });
+
+  // Only show system design if explicitly enabled AND there's a layout with arrays
+  const hasSystemDesign = showSystemDesign && pvLayout?.pv_arrays && 
+    Array.isArray(pvLayout.pv_arrays) && pvLayout.pv_arrays.length > 0;
 
   // Generate 25-year projection
   const generateProjection = () => {
@@ -141,16 +164,18 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
         </div>
       </div>
 
-      {/* System Design */}
-      <div className="p-6 border-b">
-        <h2 className="text-lg font-semibold mb-3 flex items-center gap-2" style={{ color: primaryColor }}>
-          <LayoutDashboard className="h-5 w-5" />
-          System Design
-        </h2>
-        <div className="rounded-lg border overflow-hidden">
-          <FloorPlanMarkup projectId={project?.id} readOnly={true} />
+      {/* System Design - only show if enabled and has PV arrays */}
+      {hasSystemDesign && (
+        <div className="p-6 border-b">
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2" style={{ color: primaryColor }}>
+            <LayoutDashboard className="h-5 w-5" />
+            System Design
+          </h2>
+          <div className="rounded-lg border overflow-hidden">
+            <FloorPlanMarkup projectId={project?.id} readOnly={true} />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Load Analysis */}
       {tenants && shopTypes && (
