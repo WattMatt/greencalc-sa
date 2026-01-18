@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -147,6 +147,17 @@ const DashboardTabContent = ({
     budget: storedMetadata?.budget || 0,
     targetDate: storedMetadata?.targetDate ? new Date(storedMetadata.targetDate) : undefined,
   });
+  
+  // Sync params with database values when project data changes (e.g., from header input)
+  useEffect(() => {
+    setParams(prev => ({
+      ...prev,
+      name: project.name || prev.name,
+      location: project.location || prev.location,
+      totalArea: project.total_area_sqm || prev.totalArea,
+      capacity: project.connection_size_kva || prev.capacity,
+    }));
+  }, [project.name, project.location, project.total_area_sqm, project.connection_size_kva]);
   
   const [isSaving, setIsSaving] = useState(false);
 
