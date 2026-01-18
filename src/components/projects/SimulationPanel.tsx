@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2 } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
 import { useSolcastForecast } from "@/hooks/useSolcastForecast";
 import { ReportToggle } from "@/components/reports/ReportToggle";
 import { SavedSimulations } from "./SavedSimulations";
@@ -119,6 +120,54 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
   const [useSolcast, setUseSolcast] = useState(false);
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
   const [inverterConfig, setInverterConfig] = useState<InverterConfig>(getDefaultInverterConfig);
+  
+  // Track the loaded simulation name for UI feedback
+  const [loadedSimulationName, setLoadedSimulationName] = useState<string | null>(null);
+  const [loadedSimulationDate, setLoadedSimulationDate] = useState<string | null>(null);
+  const hasInitializedFromSaved = useRef(false);
+  
+  // Fetch the most recent saved simulation to auto-load on mount
+  const { data: lastSavedSimulation, isLoading: isLoadingLastSaved } = useQuery({
+    queryKey: ["last-simulation", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_simulations")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+      return data;
+    },
+  });
+
+  // Auto-load the last saved simulation when data arrives (only once)
+  useEffect(() => {
+    if (lastSavedSimulation && !hasInitializedFromSaved.current) {
+      hasInitializedFromSaved.current = true;
+      
+      // Load configuration values
+      setSolarCapacity(lastSavedSimulation.solar_capacity_kwp || 100);
+      setBatteryCapacity(includesBattery ? (lastSavedSimulation.battery_capacity_kwh || 50) : 0);
+      setBatteryPower(includesBattery ? (lastSavedSimulation.battery_power_kw || 25) : 0);
+      
+      // Load PV config if saved
+      const resultsJson = lastSavedSimulation.results_json as any;
+      if (resultsJson?.pvConfig) {
+        setPvConfig(resultsJson.pvConfig);
+      }
+      
+      // Set Solcast toggle based on saved type
+      if (lastSavedSimulation.simulation_type === "solcast") {
+        setUseSolcast(true);
+      }
+      
+      // Track what we loaded for UI feedback
+      setLoadedSimulationName(lastSavedSimulation.name);
+      setLoadedSimulationDate(lastSavedSimulation.created_at);
+    }
+  }, [lastSavedSimulation, includesBattery]);
 
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, fetchForecast } = useSolcastForecast();
@@ -353,6 +402,33 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
           )}
         </div>
       </div>
+
+      {/* Loaded Simulation Indicator */}
+      {isLoadingLastSaved ? (
+        <Card className="border-muted bg-muted/30">
+          <CardContent className="py-3 flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              Loading last saved simulation...
+            </p>
+          </CardContent>
+        </Card>
+      ) : loadedSimulationName ? (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-3 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-primary" />
+            <p className="text-sm">
+              <span className="text-muted-foreground">Loaded: </span>
+              <span className="font-medium">{loadedSimulationName}</span>
+              {loadedSimulationDate && (
+                <span className="text-muted-foreground ml-2">
+                  • {format(new Date(loadedSimulationDate), "dd MMM yyyy HH:mm")}
+                </span>
+              )}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Connection Size Warning */}
       {!connectionSizeKva && (
@@ -768,6 +844,9 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
           if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
             setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
           }
+          // Track which simulation was loaded for UI feedback
+          setLoadedSimulationName(config.simulationName);
+          setLoadedSimulationDate(config.simulationDate);
         }}
         includesBattery={includesBattery}
       />

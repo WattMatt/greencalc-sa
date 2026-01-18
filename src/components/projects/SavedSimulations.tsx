@@ -57,6 +57,8 @@ interface SavedSimulationsProps {
     batteryCapacity: number;
     batteryPower: number;
     pvConfig: any;
+    simulationName: string;
+    simulationDate: string;
   }) => void;
   includesBattery?: boolean;
 }
@@ -203,6 +205,8 @@ export function SavedSimulations({
       batteryCapacity: sim.battery_capacity_kwh || 50,
       batteryPower: sim.battery_power_kw || 25,
       pvConfig: resultsJson?.pvConfig || {},
+      simulationName: sim.name,
+      simulationDate: sim.created_at,
     });
     toast.success(`Loaded configuration: ${sim.name}`);
   };
