@@ -122,6 +122,22 @@ const DashboardTabContent = ({
 }) => {
   const queryClient = useQueryClient();
   
+  // Fetch the latest saved simulation for KPIs
+  const { data: latestSimulation } = useQuery({
+    queryKey: ["latest-simulation-kpi", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_simulations")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // Parse stored metadata from description JSON if available
   const storedMetadata = useMemo(() => {
     try {
@@ -161,11 +177,15 @@ const DashboardTabContent = ({
   
   const [isSaving, setIsSaving] = useState(false);
 
+  // Extract simulation results for KPIs
+  const simulationResults = latestSimulation?.results_json as any;
+  const hasSimulation = !!latestSimulation;
+
   const workflowSteps: WorkflowStep[] = [
     { id: 1, name: "Resource Analysis", status: tenants.length > 0 ? "complete" : "pending" },
-    { id: 2, name: "System Design", status: "pending" },
-    { id: 3, name: "Energy Configuration", status: "pending" },
-    { id: 4, name: "Financial Analysis", status: "pending" },
+    { id: 2, name: "System Design", status: latestSimulation?.solar_capacity_kwp ? "complete" : "pending" },
+    { id: 3, name: "Energy Configuration", status: simulationResults?.totalDailyLoad ? "complete" : "pending" },
+    { id: 4, name: "Financial Analysis", status: latestSimulation?.annual_solar_savings ? "complete" : "pending" },
     { id: 5, name: "Proposal Draft", status: "pending" },
     { id: 6, name: "Client Review", status: "pending" },
     { id: 7, name: "Approval Workflow", status: "pending" },
@@ -173,13 +193,27 @@ const DashboardTabContent = ({
     { id: 9, name: "Portal Setup", status: "pending" },
   ];
 
+  // Calculate KPIs from real simulation data
+  const annualSolarYield = hasSimulation && simulationResults?.totalDailySolar 
+    ? (simulationResults.totalDailySolar * 365) / 1000 // Convert to MWh
+    : 0;
+  
+  const selfCoverageRate = hasSimulation && simulationResults?.totalDailyLoad && simulationResults?.totalSolarUsed
+    ? (simulationResults.totalSolarUsed / simulationResults.totalDailyLoad) * 100
+    : 0;
+
+  // CO2 avoided: ~0.9 kg CO2 per kWh for South African grid
+  const co2Avoided = annualSolarYield * 0.9; // tonnes CO2
+
   const kpis: KPIData = {
-    annualYield: 245.8,
-    savings: 480000,
-    roi: 18.5,
-    selfCoverage: 78.5,
-    co2Avoided: 198.4,
-    gridImpact: -45,
+    annualYield: annualSolarYield,
+    savings: latestSimulation?.annual_solar_savings || 0,
+    roi: latestSimulation?.roi_percentage || simulationResults?.roi || 0,
+    selfCoverage: selfCoverageRate,
+    co2Avoided: co2Avoided,
+    gridImpact: hasSimulation && simulationResults?.totalDailyLoad && simulationResults?.totalGridImport
+      ? -((1 - simulationResults.totalGridImport / simulationResults.totalDailyLoad) * 100)
+      : 0,
   };
 
   const completedSteps = workflowSteps.filter(s => s.status === "complete").length;
@@ -421,64 +455,79 @@ const DashboardTabContent = ({
         {/* KPI Grid */}
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-base">Key Performance Indicators</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Key Performance Indicators</CardTitle>
+              {latestSimulation && (
+                <Badge variant="secondary" className="text-xs">
+                  From: {latestSimulation.name}
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 rounded-lg border bg-card">
-                <div className="flex items-center gap-2 mb-1">
-                  <Sun className="h-3 w-3 text-amber-500" />
-                  <span className="text-xs text-muted-foreground">Annual Yield</span>
-                </div>
-                <p className="text-xl font-bold">{kpis.annualYield}</p>
-                <span className="text-xs text-muted-foreground">MWh</span>
+            {!hasSimulation ? (
+              <div className="text-center py-6">
+                <Zap className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">No simulation saved yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Run a simulation in the Simulation tab to see KPIs here</p>
               </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Sun className="h-3 w-3 text-amber-500" />
+                    <span className="text-xs text-muted-foreground">Annual Yield</span>
+                  </div>
+                  <p className="text-xl font-bold">{kpis.annualYield.toFixed(1)}</p>
+                  <span className="text-xs text-muted-foreground">MWh</span>
+                </div>
 
-              <div className="p-3 rounded-lg border bg-card">
-                <div className="flex items-center gap-2 mb-1">
-                  <DollarSign className="h-3 w-3 text-emerald-500" />
-                  <span className="text-xs text-muted-foreground">Savings</span>
+                <div className="p-3 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-1">
+                    <DollarSign className="h-3 w-3 text-emerald-500" />
+                    <span className="text-xs text-muted-foreground">Savings</span>
+                  </div>
+                  <p className="text-xl font-bold">{formatCurrency(kpis.savings)}</p>
+                  <span className="text-xs text-muted-foreground">/year</span>
                 </div>
-                <p className="text-xl font-bold">{formatCurrency(kpis.savings)}</p>
-                <span className="text-xs text-muted-foreground">/year</span>
-              </div>
 
-              <div className="p-3 rounded-lg border bg-card">
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp className="h-3 w-3 text-blue-500" />
-                  <span className="text-xs text-muted-foreground">ROI</span>
+                <div className="p-3 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="h-3 w-3 text-blue-500" />
+                    <span className="text-xs text-muted-foreground">ROI</span>
+                  </div>
+                  <p className="text-xl font-bold">{kpis.roi.toFixed(1)}%</p>
+                  <span className="text-xs text-muted-foreground">return</span>
                 </div>
-                <p className="text-xl font-bold">{kpis.roi}%</p>
-                <span className="text-xs text-muted-foreground">return</span>
-              </div>
 
-              <div className="p-3 rounded-lg border bg-card">
-                <div className="flex items-center gap-2 mb-1">
-                  <Battery className="h-3 w-3 text-purple-500" />
-                  <span className="text-xs text-muted-foreground">Self-Coverage</span>
+                <div className="p-3 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Battery className="h-3 w-3 text-purple-500" />
+                    <span className="text-xs text-muted-foreground">Self-Coverage</span>
+                  </div>
+                  <p className="text-xl font-bold">{kpis.selfCoverage.toFixed(1)}%</p>
+                  <span className="text-xs text-muted-foreground">of load</span>
                 </div>
-                <p className="text-xl font-bold">{kpis.selfCoverage}%</p>
-                <span className="text-xs text-muted-foreground">of load</span>
-              </div>
 
-              <div className="p-3 rounded-lg border bg-card">
-                <div className="flex items-center gap-2 mb-1">
-                  <Leaf className="h-3 w-3 text-green-500" />
-                  <span className="text-xs text-muted-foreground">CO₂ Avoided</span>
+                <div className="p-3 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Leaf className="h-3 w-3 text-green-500" />
+                    <span className="text-xs text-muted-foreground">CO₂ Avoided</span>
+                  </div>
+                  <p className="text-xl font-bold">{kpis.co2Avoided.toFixed(1)}</p>
+                  <span className="text-xs text-muted-foreground">tons/year</span>
                 </div>
-                <p className="text-xl font-bold">{kpis.co2Avoided}</p>
-                <span className="text-xs text-muted-foreground">tons/year</span>
-              </div>
 
-              <div className="p-3 rounded-lg border bg-card">
-                <div className="flex items-center gap-2 mb-1">
-                  <Zap className="h-3 w-3 text-orange-500" />
-                  <span className="text-xs text-muted-foreground">Grid Impact</span>
+                <div className="p-3 rounded-lg border bg-card">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Zap className="h-3 w-3 text-orange-500" />
+                    <span className="text-xs text-muted-foreground">Grid Impact</span>
+                  </div>
+                  <p className="text-xl font-bold">{kpis.gridImpact.toFixed(1)}%</p>
+                  <span className="text-xs text-muted-foreground">reduction</span>
                 </div>
-                <p className="text-xl font-bold">{kpis.gridImpact}%</p>
-                <span className="text-xs text-muted-foreground">reduction</span>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
