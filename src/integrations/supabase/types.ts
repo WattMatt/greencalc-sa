@@ -383,8 +383,10 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          latitude: number | null
           location: string | null
           logo_url: string | null
+          longitude: number | null
           name: string
           tariff_id: string | null
           total_area_sqm: number | null
@@ -395,8 +397,10 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          latitude?: number | null
           location?: string | null
           logo_url?: string | null
+          longitude?: number | null
           name: string
           tariff_id?: string | null
           total_area_sqm?: number | null
@@ -407,8 +411,10 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          latitude?: number | null
           location?: string | null
           logo_url?: string | null
+          longitude?: number | null
           name?: string
           tariff_id?: string | null
           total_area_sqm?: number | null

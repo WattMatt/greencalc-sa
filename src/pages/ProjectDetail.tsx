@@ -20,6 +20,7 @@ import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { SolarForecastCard } from "@/components/projects/SolarForecastCard";
 import { ReportBuilder } from "@/components/reports/builder";
 import { ProjectOverview } from "@/components/projects/ProjectOverview";
+import { ProjectLocationMap } from "@/components/projects/ProjectLocationMap";
 import { ProposalManager } from "@/components/projects/ProposalManager";
 import { SystemCostsManager, SystemCostsData } from "@/components/projects/SystemCostsManager";
 import { DEFAULT_SYSTEM_COSTS } from "@/components/projects/simulation/FinancialAnalysis";
@@ -953,8 +954,8 @@ export default function ProjectDetail() {
             tenants={tenants || []}
             shopTypes={shopTypes || []}
             connectionSizeKva={project.connection_size_kva}
-            latitude={-33.9249} // Cape Town default - TODO: Add project coordinates
-            longitude={18.4241}
+            latitude={project.latitude ?? -33.9249}
+            longitude={project.longitude ?? 18.4241}
           />
         </TabsContent>
 
@@ -993,7 +994,15 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="solar-forecast" className="mt-6">
-          <SolarForecastCard projectLocation={project.location || undefined} />
+          <ProjectLocationMap
+            projectId={id!}
+            latitude={project.latitude}
+            longitude={project.longitude}
+            location={project.location}
+            onLocationUpdate={() => {
+              queryClient.invalidateQueries({ queryKey: ["project", id] });
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="proposals" className="mt-6">
