@@ -50,6 +50,11 @@ interface SavedSimulationsProps {
     batteryPower: number;
     pvConfig: any;
     usingSolcast: boolean;
+    inverterConfig?: {
+      inverterSize: number;
+      inverterCount: number;
+      dcAcRatio: number;
+    };
   };
   currentResults: SimulationResult;
   onLoadSimulation: (config: {
@@ -59,6 +64,11 @@ interface SavedSimulationsProps {
     pvConfig: any;
     simulationName: string;
     simulationDate: string;
+    inverterConfig?: {
+      inverterSize: number;
+      inverterCount: number;
+      dcAcRatio: number;
+    };
   }) => void;
   includesBattery?: boolean;
 }
@@ -131,6 +141,7 @@ export function SavedSimulations({
           ...currentResults,
           pvConfig: currentConfig.pvConfig,
           usingSolcast: currentConfig.usingSolcast,
+          inverterConfig: currentConfig.inverterConfig,
         },
       });
       if (error) throw error;
@@ -207,6 +218,7 @@ export function SavedSimulations({
       pvConfig: resultsJson?.pvConfig || {},
       simulationName: sim.name,
       simulationDate: sim.created_at,
+      inverterConfig: resultsJson?.inverterConfig,
     });
     toast.success(`Loaded configuration: ${sim.name}`);
   };

@@ -158,6 +158,11 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
         setPvConfig(resultsJson.pvConfig);
       }
       
+      // Load inverter config if saved
+      if (resultsJson?.inverterConfig) {
+        setInverterConfig(resultsJson.inverterConfig);
+      }
+      
       // Set Solcast toggle based on saved type
       if (lastSavedSimulation.simulation_type === "solcast") {
         setUseSolcast(true);
@@ -822,6 +827,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
           batteryPower: includesBattery ? batteryPower : 0,
           pvConfig,
           usingSolcast: !!usingRealData,
+          inverterConfig,
         }}
         currentResults={{
           totalDailyLoad: energyResults.totalDailyLoad,
@@ -843,6 +849,10 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
           }
           if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
             setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
+          }
+          // Load inverter config if present
+          if (config.inverterConfig) {
+            setInverterConfig(config.inverterConfig);
           }
           // Track which simulation was loaded for UI feedback
           setLoadedSimulationName(config.simulationName);
