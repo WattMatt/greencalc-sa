@@ -136,8 +136,8 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(1)
-        .single();
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+        .maybeSingle();
+      if (error) throw error;
       return data;
     },
   });
