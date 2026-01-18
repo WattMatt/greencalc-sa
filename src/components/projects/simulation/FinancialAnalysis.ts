@@ -109,8 +109,13 @@ export function calculateFinancials(
   const dailyFixedCost = fixedMonthlyCharge / 30;
 
   // === Grid-only scenario ===
+  // Energy costs are daily (kWh × R/kWh)
   const gridOnlyEnergyCost = totalDailyLoad * averageRatePerKwh;
-  const gridOnlyDemandCost = peakLoad * demandChargePerKva;
+  // Demand charges are MONTHLY (kVA × R/kVA/month), pro-rated daily
+  // Note: Peak load in kW, assuming power factor ~0.9 for kVA conversion
+  const powerFactor = 0.9;
+  const peakLoadKva = peakLoad / powerFactor;
+  const gridOnlyDemandCost = (peakLoadKva * demandChargePerKva) / 30; // Pro-rate monthly charge to daily
   const gridOnlyFixedCost = dailyFixedCost;
   const gridOnlyDailyCost = gridOnlyEnergyCost + gridOnlyDemandCost + gridOnlyFixedCost;
   const gridOnlyMonthlyCost = gridOnlyDailyCost * 30;
@@ -118,7 +123,9 @@ export function calculateFinancials(
 
   // === With solar+battery scenario ===
   const solarEnergyCost = totalGridImport * averageRatePerKwh;
-  const solarDemandCost = peakGridImport * demandChargePerKva;
+  // Reduced peak demand with solar (pro-rated monthly charge)
+  const peakGridImportKva = peakGridImport / powerFactor;
+  const solarDemandCost = (peakGridImportKva * demandChargePerKva) / 30; // Pro-rate monthly charge to daily
   const solarFixedCost = dailyFixedCost; // Fixed charges typically remain
   const dailyExportRevenue = totalGridExport * exportRatePerKwh;
   
