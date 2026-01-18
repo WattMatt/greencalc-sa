@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.fetch-github-files]
 verify_jwt = false
+
+[functions.geocode-location]
+verify_jwt = false
