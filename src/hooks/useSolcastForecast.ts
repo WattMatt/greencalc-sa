@@ -82,9 +82,17 @@ export function useSolcastForecast() {
       setData(response);
       return response;
     } catch (err: any) {
-      const errorMessage = err.message || 'Failed to fetch solar forecast';
+      let errorMessage = err.message || 'Failed to fetch solar forecast';
+      
+      // Handle Solcast API quota exceeded error gracefully
+      if (errorMessage.includes('402') || errorMessage.includes('PaymentRequired') || errorMessage.includes('Transaction Limit')) {
+        errorMessage = 'Solcast API quota exceeded. The simulation will use default solar profiles instead.';
+        toast.warning(errorMessage, { duration: 6000 });
+      } else {
+        toast.error(errorMessage);
+      }
+      
       setError(errorMessage);
-      toast.error(errorMessage);
       return null;
     } finally {
       setIsLoading(false);
