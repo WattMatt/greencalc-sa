@@ -523,10 +523,10 @@ export default function ProposalWorkspace() {
       </div>
 
       {/* Main Content */}
-      <div className="container max-w-7xl py-6">
-        <div className="grid gap-6 lg:grid-cols-5">
+      <div className="w-full px-4 lg:px-6 py-6">
+        <div className="grid gap-6 lg:grid-cols-12">
           {/* Left Panel - Step Content */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="lg:col-span-4 xl:col-span-3 space-y-4">
             {/* Step Navigation */}
             <div className="flex items-center justify-between">
               <Button 
@@ -720,7 +720,7 @@ export default function ProposalWorkspace() {
           </div>
 
           {/* Right Panel - Live Preview */}
-          <div className="lg:col-span-3 space-y-4">
+          <div className="lg:col-span-8 xl:col-span-9 space-y-4">
             <Card className="sticky top-[140px]">
               <CardHeader className="py-3 border-b">
                 <div className="flex items-center justify-between">
