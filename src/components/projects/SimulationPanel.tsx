@@ -184,15 +184,16 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
   }, [isFetched, lastSavedSimulation, savedResultsJson, includesBattery]);
 
   // Solcast forecast hook
-  const { data: solcastData, isLoading: solcastLoading, fetchForecast } = useSolcastForecast();
+  const { data: solcastData, isLoading: solcastLoading, error: solcastError, fetchForecast } = useSolcastForecast();
 
   // Get location coordinates from PV config location
   const selectedLocation = SA_SOLAR_LOCATIONS[pvConfig.location];
   const hasCoordinates = selectedLocation?.lat !== undefined;
 
   // Fetch Solcast data when enabled and location is available
+  // Don't retry if there was an error (e.g., quota exceeded)
   useEffect(() => {
-    if (useSolcast && hasCoordinates && !solcastData && !solcastLoading) {
+    if (useSolcast && hasCoordinates && !solcastData && !solcastLoading && !solcastError) {
       fetchForecast({
         latitude: selectedLocation.lat,
         longitude: SA_LOCATION_LONGITUDES[pvConfig.location] ?? 28.0,
@@ -200,7 +201,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
         period: 'PT60M'
       });
     }
-  }, [useSolcast, hasCoordinates, pvConfig.location]);
+  }, [useSolcast, hasCoordinates, pvConfig.location, solcastError]);
 
   // Process Solcast data into hourly average profile
   const solcastHourlyProfile = useMemo<HourlyIrradianceData[] | undefined>(() => {
