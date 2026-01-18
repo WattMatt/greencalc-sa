@@ -33,16 +33,18 @@ serve(async (req) => {
     const externalData = await externalResponse.json();
     console.log(`Fetched ${externalData.total_projects} projects with ${externalData.total_tenants} tenants from external API`);
     
-    // Log the first project's fields to see available logo fields
+    // Log the first project's fields to see available fields including coordinates
     if (externalData.projects && externalData.projects.length > 0) {
       const sampleProject = externalData.projects[0];
       console.log("Sample project fields:", JSON.stringify(Object.keys(sampleProject)));
-      console.log("Sample project logo fields:", JSON.stringify({
+      console.log("Sample project coordinate/logo fields:", JSON.stringify({
         logo_url: sampleProject.logo_url,
         client_logo_url: sampleProject.client_logo_url,
-        logo: sampleProject.logo,
-        image_url: sampleProject.image_url,
-        image: sampleProject.image,
+        latitude: sampleProject.latitude,
+        longitude: sampleProject.longitude,
+        lat: sampleProject.lat,
+        lng: sampleProject.lng,
+        coordinates: sampleProject.coordinates,
       }));
     }
 
@@ -58,7 +60,7 @@ serve(async (req) => {
 
     // Sync projects
     for (const project of externalData.projects || []) {
-      // Map external project to local schema
+      // Map external project to local schema - include coordinates if available
       const projectData = {
         id: project.id,
         name: project.name,
@@ -67,6 +69,8 @@ serve(async (req) => {
           ? `${project.city}, ${project.province}` 
           : project.city || project.province || null,
         logo_url: project.logo_url || project.client_logo_url || null,
+        latitude: project.latitude || project.lat || null,
+        longitude: project.longitude || project.lng || null,
         updated_at: new Date().toISOString(),
       };
 
