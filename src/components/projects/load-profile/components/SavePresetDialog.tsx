@@ -16,17 +16,34 @@ import {
 import { Save, Loader2 } from "lucide-react";
 import { useSimulationPresets, CreatePresetInput } from "@/hooks/useSimulationPresets";
 
+// Derating settings for PV simulations
+export interface DeratingPresetConfig {
+  dcAcRatio: number;
+  systemLosses: number;
+  powerFactor: number;
+}
+
+// Diversity settings for load profiles
+export interface DiversityPresetConfig {
+  diversityFactor: number;
+  buildingType?: string | null;
+}
+
+// Combined preset config
 export interface PresetConfig {
+  // Derating (PV simulation)
   dcAcRatio: number;
   batteryCapacity: number;
   batteryPower: number;
   systemLosses: number;
   powerFactor: number;
+  // Display options
   showPVProfile: boolean;
   showBattery: boolean;
   show1to1Comparison: boolean;
   useSolcast: boolean;
-  diversityFactor?: number;
+  // Diversity (load profiles) - now explicitly separate
+  diversity?: DiversityPresetConfig;
 }
 
 interface SavePresetDialogProps {
@@ -128,10 +145,13 @@ export function SavePresetDialog({ config }: SavePresetDialogProps) {
               <span className="text-muted-foreground">Battery Enabled:</span>
               <span className="font-medium">{config.showBattery ? "Yes" : "No"}</span>
               
-              {config.diversityFactor !== undefined && (
+              {config.diversity && (
                 <>
                   <span className="text-muted-foreground">Diversity Factor:</span>
-                  <span className="font-medium">{(config.diversityFactor * 100).toFixed(0)}%</span>
+                  <span className="font-medium">
+                    {(config.diversity.diversityFactor * 100).toFixed(0)}%
+                    {config.diversity.buildingType && ` (${config.diversity.buildingType})`}
+                  </span>
                 </>
               )}
             </div>
