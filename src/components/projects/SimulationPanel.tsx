@@ -172,6 +172,11 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
         setInverterConfig(savedResultsJson.inverterConfig);
       }
       
+      // Load system costs if saved
+      if (savedResultsJson?.systemCosts) {
+        onSystemCostsChange(savedResultsJson.systemCosts);
+      }
+      
       // Set Solcast toggle based on saved type
       if (lastSavedSimulation.simulation_type === "solcast") {
         setUseSolcast(true);
@@ -181,7 +186,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
       setLoadedSimulationName(lastSavedSimulation.name);
       setLoadedSimulationDate(lastSavedSimulation.created_at);
     }
-  }, [isFetched, lastSavedSimulation, savedResultsJson, includesBattery]);
+  }, [isFetched, lastSavedSimulation, savedResultsJson, includesBattery, onSystemCostsChange]);
 
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, error: solcastError, fetchForecast } = useSolcastForecast();
@@ -838,6 +843,7 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
           pvConfig,
           usingSolcast: !!usingRealData,
           inverterConfig,
+          systemCosts,
         }}
         currentResults={{
           totalDailyLoad: energyResults.totalDailyLoad,
@@ -863,6 +869,10 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
           // Load inverter config if present
           if (config.inverterConfig) {
             setInverterConfig(config.inverterConfig);
+          }
+          // Load system costs if present
+          if (config.systemCosts) {
+            onSystemCostsChange(config.systemCosts);
           }
           // Track which simulation was loaded for UI feedback
           setLoadedSimulationName(config.simulationName);
