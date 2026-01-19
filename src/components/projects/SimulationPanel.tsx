@@ -913,7 +913,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 <div className="grid grid-cols-2 hover:bg-muted/50">
                   <div className="px-3 py-1.5 text-muted-foreground">ZAR / kWh (1st Year)</div>
                   <div className="px-3 py-1.5 text-right font-medium">
-                    {(blendedRateBreakdown.annual ?? tariffData.averageRatePerKwh).toFixed(2)}
+                    {(financialResults.systemCost / (energyResults.totalDailySolar * 365)).toFixed(2)}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 hover:bg-muted/50">
@@ -937,7 +937,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 <div className="grid grid-cols-2 hover:bg-muted/50">
                   <div className="px-3 py-1.5 text-muted-foreground">Initial Yield</div>
                   <div className="px-3 py-1.5 text-right font-medium">
-                    {((energyResults.totalDailySolar * 365 / solarCapacity) / 10).toFixed(2)}%
+                    {((financialResults.annualSavings / financialResults.systemCost) * 100).toFixed(2)}%
                   </div>
                 </div>
                 <div className="grid grid-cols-2 hover:bg-muted/50">
