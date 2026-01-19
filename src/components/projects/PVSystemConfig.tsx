@@ -82,6 +82,7 @@ interface PVSystemConfigProps {
   onChange: (config: PVSystemConfigData) => void;
   maxSolarKva?: number | null;
   solarCapacity: number;
+  projectLocation?: string | null;
 }
 
 export function getDefaultPVConfig(): PVSystemConfigData {
@@ -239,7 +240,7 @@ export function generateAverageSolcastProfile(
   return result;
 }
 
-export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity }: PVSystemConfigProps) {
+export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity, projectLocation }: PVSystemConfigProps) {
   const [showLosses, setShowLosses] = useState(false);
   const location = SA_SOLAR_LOCATIONS[config.location];
 
@@ -290,42 +291,57 @@ export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity }:
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Location Selection */}
+        {/* Location Display */}
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-xs flex items-center gap-1">
               <MapPin className="h-3 w-3" />
               Location
             </Label>
-            <Select
-              value={config.location}
-              onValueChange={(v: LocationKey) => {
-                const loc = SA_SOLAR_LOCATIONS[v];
-                updateConfig({
-                  location: v,
-                  tilt: loc.optimalTilt
-                });
-              }}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(SA_SOLAR_LOCATIONS).map(([key, loc]) => (
-                  <SelectItem key={key} value={key} className="text-xs">
-                    <div className="flex items-center justify-between w-full gap-4">
-                      <span>{loc.name}</span>
-                      <span className="text-muted-foreground">{loc.ghi} kWh/m²/day</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="flex gap-2 text-[10px] text-muted-foreground">
-              <span>GHI: {location.ghi} kWh/m²/day</span>
-              <span>•</span>
-              <span>DNI: {location.dni} kWh/m²/day</span>
-            </div>
+            {projectLocation ? (
+              <>
+                <div className="h-8 px-3 flex items-center rounded-md border bg-muted/50 text-xs font-medium">
+                  {projectLocation}
+                </div>
+                <div className="flex gap-2 text-[10px] text-muted-foreground">
+                  <span>GHI: {location.ghi} kWh/m²/day</span>
+                  <span>•</span>
+                  <span>DNI: {location.dni} kWh/m²/day</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <Select
+                  value={config.location}
+                  onValueChange={(v: LocationKey) => {
+                    const loc = SA_SOLAR_LOCATIONS[v];
+                    updateConfig({
+                      location: v,
+                      tilt: loc.optimalTilt
+                    });
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(SA_SOLAR_LOCATIONS).map(([key, loc]) => (
+                      <SelectItem key={key} value={key} className="text-xs">
+                        <div className="flex items-center justify-between w-full gap-4">
+                          <span>{loc.name}</span>
+                          <span className="text-muted-foreground">{loc.ghi} kWh/m²/day</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex gap-2 text-[10px] text-muted-foreground">
+                  <span>GHI: {location.ghi} kWh/m²/day</span>
+                  <span>•</span>
+                  <span>DNI: {location.dni} kWh/m²/day</span>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="space-y-2">
