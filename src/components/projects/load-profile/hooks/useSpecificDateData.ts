@@ -119,12 +119,18 @@ export function useSpecificDateData({
     if (!selectedDate) return null;
 
     const dateStr = selectedDate.toISOString().split("T")[0];
-    const hourlyData: { hour: string; total: number; [key: string]: number | string }[] = [];
+    // Track both sum and count for proper averaging of kW readings
+    const hourlyData: { 
+      hour: string; 
+      total: number; 
+      _counts: { [key: string]: number };
+      [key: string]: number | string | { [key: string]: number };
+    }[] = [];
 
-    // Initialize hourly buckets
+    // Initialize hourly buckets with count tracking
     for (let h = 0; h < 24; h++) {
       const hourLabel = `${h.toString().padStart(2, "0")}:00`;
-      hourlyData.push({ hour: hourLabel, total: 0 });
+      hourlyData.push({ hour: hourLabel, total: 0, _counts: {} });
     }
 
     let hasDataForDate = false;
@@ -141,14 +147,15 @@ export function useSpecificDateData({
           hasDataForDate = true;
           const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
           const areaScaleFactor = scadaArea > 0 ? tenantArea / scadaArea : 1;
+          const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
 
           dateData.forEach((point) => {
             const hour = parseInt(point.time?.split(":")[0] || "0", 10);
             if (hour >= 0 && hour < 24) {
-              const kwhValue = (point.value || 0) * areaScaleFactor;
-              const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
-              hourlyData[hour][key] = ((hourlyData[hour][key] as number) || 0) + kwhValue;
-              hourlyData[hour].total += kwhValue;
+              const kwValue = (point.value || 0) * areaScaleFactor;
+              // Accumulate sum and count for averaging
+              hourlyData[hour][key] = ((hourlyData[hour][key] as number) || 0) + kwValue;
+              hourlyData[hour]._counts[key] = (hourlyData[hour]._counts[key] || 0) + 1;
             }
           });
         }
@@ -165,27 +172,35 @@ export function useSpecificDateData({
           ? shopType?.load_profile_weekend || shopType?.load_profile_weekday
           : shopType?.load_profile_weekday;
         const profileArray = profile?.length === 24 ? profile.map(Number) : Array(24).fill(4.17);
+        const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
 
         for (let h = 0; h < 24; h++) {
           const hourlyKwh = dailyKwh * (profileArray[h] / 100);
-          const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
+          // Estimates are already hourly averages, count = 1
           hourlyData[h][key] = ((hourlyData[h][key] as number) || 0) + hourlyKwh;
-          hourlyData[h].total += hourlyKwh;
+          hourlyData[h]._counts[key] = 1;
         }
       }
     });
 
     if (!hasDataForDate) return null;
 
-    // Convert to display unit
+    // Convert sums to averages for each tenant, then convert to display unit
     return hourlyData.map((hourData) => {
-      const result: ChartDataPoint = { hour: hourData.hour, total: 0 };
+      const result: ChartDataPoint = { hour: hourData.hour as string, total: 0 };
+      const counts = hourData._counts as { [key: string]: number };
+      
       Object.keys(hourData).forEach((key) => {
-        if (key === "hour") return;
-        const kwhValue = hourData[key] as number;
-        const value = displayUnit === "kw" ? kwhValue : kwhValue / powerFactor;
+        if (key === "hour" || key === "_counts" || key === "total") return;
+        
+        const sumValue = hourData[key] as number;
+        const count = counts[key] || 1;
+        // AVERAGE kW readings within the hour (for 30-min intervals, this divides by 2)
+        const avgKw = sumValue / count;
+        
+        const value = displayUnit === "kw" ? avgKw : avgKw / powerFactor;
         result[key] = value;
-        if (key === "total") result.total = value;
+        result.total += value;
       });
       return result;
     });
