@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, forwardRef, useImperativeHandle, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BarChart3, Zap, FlaskConical, FileCheck, Plus, ArrowRight } from "lucide-react";
-import { SimulationPanel } from "./SimulationPanel";
+import { SimulationPanel, SimulationPanelRef } from "./SimulationPanel";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -41,10 +41,24 @@ interface SimulationModesProps {
   includesBattery?: boolean;
 }
 
-export function SimulationModes({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false }: SimulationModesProps) {
+export interface SimulationModesRef {
+  saveIfNeeded: () => Promise<void>;
+}
+
+export const SimulationModes = forwardRef<SimulationModesRef, SimulationModesProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false }, ref) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeMode, setActiveMode] = useState("profile-builder");
+  const simulationPanelRef = useRef<SimulationPanelRef>(null);
+
+  // Expose saveIfNeeded to parent
+  useImperativeHandle(ref, () => ({
+    saveIfNeeded: async () => {
+      if (simulationPanelRef.current) {
+        await simulationPanelRef.current.autoSave();
+      }
+    }
+  }), []);
 
   // Fetch sandboxes for this project
   const { data: projectSandboxes } = useQuery({
@@ -107,6 +121,7 @@ export function SimulationModes({ projectId, project, tenants, shopTypes, system
       {/* Profile Builder - Main simulation */}
       <TabsContent value="profile-builder">
         <SimulationPanel
+          ref={simulationPanelRef}
           projectId={projectId}
           project={project}
           tenants={tenants}
@@ -265,4 +280,4 @@ export function SimulationModes({ projectId, project, tenants, shopTypes, system
       </TabsContent>
     </Tabs>
   );
-}
+});
