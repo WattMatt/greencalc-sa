@@ -15,6 +15,7 @@ export interface TenantMeter {
     area_sqm: number | null;
     load_profile_weekday: number[] | null;
     load_profile_weekend: number[] | null;
+    detected_interval_minutes?: number | null;
   };
 }
 
@@ -36,6 +37,7 @@ export interface Tenant {
     area_sqm: number | null;
     load_profile_weekday: number[] | null;
     load_profile_weekend?: number[] | null;
+    detected_interval_minutes?: number | null;
     // raw_data comes from DB as Json, we cast to RawDataPoint[] when using
     raw_data?: unknown;
     date_range_start?: string | null;

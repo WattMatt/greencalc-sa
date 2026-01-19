@@ -159,7 +159,7 @@ export default function ProposalWorkspace() {
       if (!projectId) return [];
       const { data, error } = await supabase
         .from("project_tenants")
-        .select(`*, shop_types(*), scada_imports(shop_name, area_sqm, load_profile_weekday, load_profile_weekend, raw_data, date_range_start, date_range_end)`)
+        .select(`*, shop_types(*), scada_imports(shop_name, area_sqm, load_profile_weekday, load_profile_weekend, raw_data, date_range_start, date_range_end, detected_interval_minutes)`)
         .eq("project_id", projectId)
         .order("name");
       if (error) throw error;

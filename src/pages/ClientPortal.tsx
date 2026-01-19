@@ -62,7 +62,7 @@ export default function ClientPortal() {
       if (!proposal?.project_id) return [];
       const { data, error } = await supabase
         .from("project_tenants")
-        .select(`*, shop_types(*), scada_imports(shop_name, area_sqm, load_profile_weekday, load_profile_weekend, raw_data, date_range_start, date_range_end)`)
+        .select(`*, shop_types(*), scada_imports(shop_name, area_sqm, load_profile_weekday, load_profile_weekend, raw_data, date_range_start, date_range_end, detected_interval_minutes)`)
         .eq("project_id", proposal.project_id)
         .order("name");
       if (error) throw error;
