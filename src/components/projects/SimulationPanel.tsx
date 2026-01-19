@@ -338,6 +338,67 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     [energyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity]
   );
 
+  // Calculate basic financial metrics (NPV, IRR, LCOE) without requiring advanced simulation
+  const basicFinancialMetrics = useMemo(() => {
+    const projectLifeYears = 25;
+    const discountRate = 0.10; // 10% default
+    const reinvestmentRate = 0.06; // 6% for MIRR
+    const annualSavings = financialResults.annualSavings;
+    const systemCost = financialResults.systemCost;
+    const annualGeneration = energyResults.totalDailySolar * 365;
+    
+    // Build cash flows: Year 0 is negative (investment), Years 1-25 are savings
+    const cashFlows = [-systemCost];
+    for (let y = 1; y <= projectLifeYears; y++) {
+      cashFlows.push(annualSavings);
+    }
+    
+    // NPV calculation
+    let npv = -systemCost;
+    for (let y = 1; y <= projectLifeYears; y++) {
+      npv += annualSavings / Math.pow(1 + discountRate, y);
+    }
+    
+    // IRR calculation (Newton-Raphson approximation)
+    let irr = 0.1; // Start guess
+    for (let iter = 0; iter < 50; iter++) {
+      let npvAtRate = -systemCost;
+      let derivativeNpv = 0;
+      for (let y = 1; y <= projectLifeYears; y++) {
+        const discountFactor = Math.pow(1 + irr, y);
+        npvAtRate += annualSavings / discountFactor;
+        derivativeNpv -= y * annualSavings / Math.pow(1 + irr, y + 1);
+      }
+      if (Math.abs(derivativeNpv) < 1e-10) break;
+      const newIrr = irr - npvAtRate / derivativeNpv;
+      if (Math.abs(newIrr - irr) < 1e-6) break;
+      irr = newIrr;
+    }
+    
+    // MIRR calculation
+    // Future value of positive cash flows at reinvestment rate
+    let fvPositive = 0;
+    for (let y = 1; y <= projectLifeYears; y++) {
+      fvPositive += annualSavings * Math.pow(1 + reinvestmentRate, projectLifeYears - y);
+    }
+    // Present value of negative cash flows at discount rate (just the initial investment)
+    const pvNegative = systemCost;
+    const mirr = pvNegative > 0 ? Math.pow(fvPositive / pvNegative, 1 / projectLifeYears) - 1 : 0;
+    
+    // LCOE calculation (simplified: system cost / lifetime generation)
+    const lifetimeGeneration = annualGeneration * projectLifeYears * 0.9; // ~10% average degradation
+    const lcoe = lifetimeGeneration > 0 ? systemCost / lifetimeGeneration : 0;
+    
+    return {
+      npv,
+      irr: irr * 100, // Convert to percentage
+      mirr: mirr * 100,
+      lcoe,
+      projectLifeYears,
+      discountRate: discountRate * 100,
+    };
+  }, [financialResults, energyResults]);
+
   // Annual scaling
   const annualEnergy = useMemo(() => scaleToAnnual(energyResults), [energyResults]);
 
@@ -889,43 +950,40 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 </span>
               </div>
               
-              {/* Advanced Metrics (if available) */}
-              {advancedResults && (
-                <>
-                  <div className="border-t my-2" />
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">LCOE</span>
-                    <span className="font-medium">
-                      R{advancedResults.lcoe.toFixed(4)}/kWh
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">NPV</span>
-                    <span className={`font-medium ${advancedResults.npv >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      R{Math.round(advancedResults.npv).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">IRR</span>
-                    <span className="font-medium">
-                      {advancedResults.irr.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">MIRR</span>
-                    <span className="font-medium">
-                      {advancedResults.mirr.toFixed(1)}%
-                    </span>
-                  </div>
-                </>
-              )}
+              {/* Advanced Financial Metrics - always calculated */}
+              <div className="border-t my-2" />
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">LCOE</span>
+                <span className="font-medium">
+                  R{(advancedResults?.lcoe ?? basicFinancialMetrics.lcoe).toFixed(4)}/kWh
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">NPV</span>
+                <span className={`font-medium ${(advancedResults?.npv ?? basicFinancialMetrics.npv) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  R{Math.round(advancedResults?.npv ?? basicFinancialMetrics.npv).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">IRR</span>
+                <span className="font-medium">
+                  {(advancedResults?.irr ?? basicFinancialMetrics.irr).toFixed(1)}%
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">MIRR</span>
+                <span className="font-medium">
+                  {(advancedResults?.mirr ?? basicFinancialMetrics.mirr).toFixed(1)}%
+                </span>
+              </div>
               
-              {/* Prompt to enable advanced if not enabled */}
-              {!advancedResults && (
-                <p className="text-xs text-muted-foreground mt-2 italic">
-                  Enable Advanced Simulation for NPV, IRR, MIRR & LCOE
-                </p>
-              )}
+              {/* Note about calculation basis */}
+              <p className="text-xs text-muted-foreground mt-2 italic">
+                {advancedResults 
+                  ? "Using advanced model with degradation & escalation"
+                  : `Based on ${basicFinancialMetrics.projectLifeYears}yr life, ${basicFinancialMetrics.discountRate}% discount rate`
+                }
+              </p>
             </CardContent>
           </Card>
         ) : (
