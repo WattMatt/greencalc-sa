@@ -886,6 +886,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         </Card>
         <Card>
           <CardHeader className="pb-2">
+            <CardDescription>Annual Production</CardDescription>
+            <CardTitle className="text-2xl text-amber-600">
+              {Math.round(energyResults.totalDailySolar * 365).toLocaleString()} kWh
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
             <CardDescription>Grid Import</CardDescription>
             <CardTitle className="text-2xl">{Math.round(energyResults.totalGridImport)} kWh</CardTitle>
           </CardHeader>
