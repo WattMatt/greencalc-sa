@@ -78,11 +78,11 @@ function BlendedSolarRateCard({ rates }: { rates: any[] }) {
           <Calculator className="h-3 w-3" /> Calculation Methodology
         </p>
         <ul className="list-disc list-inside space-y-0.5 ml-1">
-          <li>Sunshine hours: Summer 06:00-19:00, Winter 07:00-17:00</li>
+          <li>Core sunshine hours: Summer 06:00-19:00, Winter 07:00-17:00</li>
           <li>Solar curve weighted by typical PV output (peaks at noon)</li>
-          <li>TOU periods: Peak 07-10 & 18-20, Standard 06-07 & 10-18 & 20-22</li>
-          <li>Energy contribution = hours × relative solar output</li>
-          <li>Blended rate = Σ(energy contribution × rate) / total energy</li>
+          <li><strong>Peak TOU excluded</strong> (07-10 & 18-20 have low solar output)</li>
+          <li>Blended rate uses Standard (10:00-18:00) + Off-Peak only</li>
+          <li>Blended = Σ(Standard + Off-Peak energy × rate) / total energy</li>
         </ul>
       </div>
     </div>
