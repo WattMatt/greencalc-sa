@@ -34,12 +34,6 @@ export function FilePreviewDialog({ open, onOpenChange, fileName, filePath }: Fi
     if (open && filePath) {
       loadFilePreview();
     }
-    return () => {
-      // Cleanup PDF URL when dialog closes
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl);
-      }
-    };
   }, [open, filePath]);
 
   const loadFilePreview = async () => {
@@ -49,20 +43,22 @@ export function FilePreviewDialog({ open, onOpenChange, fileName, filePath }: Fi
     setPdfUrl(null);
 
     try {
-      // Download file from storage
-      const { data: fileData, error: downloadError } = await supabase.storage
-        .from("tariff-uploads")
-        .download(filePath);
-
-      if (downloadError) throw downloadError;
-
       if (fileType === 'pdf') {
-        // Create blob URL for PDF viewing
-        const blob = new Blob([fileData], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        setPdfUrl(url);
+        // For PDFs, create a signed URL that works with iframe
+        const { data: signedUrlData, error: signedError } = await supabase.storage
+          .from("tariff-uploads")
+          .createSignedUrl(filePath, 3600); // 1 hour expiry
+
+        if (signedError) throw signedError;
+        setPdfUrl(signedUrlData.signedUrl);
       } else {
-        // Parse Excel file
+        // Download and parse Excel file
+        const { data: fileData, error: downloadError } = await supabase.storage
+          .from("tariff-uploads")
+          .download(filePath);
+
+        if (downloadError) throw downloadError;
+
         const arrayBuffer = await fileData.arrayBuffer();
         const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
         
