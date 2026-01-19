@@ -150,11 +150,23 @@ export function FilePreviewDialog({ open, onOpenChange, fileName, filePath }: Fi
               </Button>
             </div>
           ) : fileType === 'pdf' && pdfUrl ? (
-            <iframe 
-              src={pdfUrl} 
+            <object 
+              data={pdfUrl}
+              type="application/pdf"
               className="w-full h-[60vh] border rounded-md"
               title={fileName}
-            />
+            >
+              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                <FileText className="h-12 w-12 mb-4" />
+                <p className="text-center mb-4">
+                  Your browser cannot display this PDF inline.
+                </p>
+                <Button variant="outline" onClick={handleDownload}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF to view
+                </Button>
+              </div>
+            </object>
           ) : sheets.length > 0 ? (
             <Tabs value={activeSheet} onValueChange={setActiveSheet} className="h-full flex flex-col">
               <ScrollArea className="w-full">
