@@ -91,11 +91,14 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
-                const pv = Number(payload.find((p) => p.dataKey === "pvGeneration")?.value) || 0;
-                const load = Number(payload.find((p) => p.dataKey === "total")?.value) || 0;
-                const dcOutput = Number(payload.find((p) => p.dataKey === "pvDcOutput")?.value) || 0;
-                const clipping = Number(payload.find((p) => p.dataKey === "pvClipping")?.value) || 0;
-                const baseline = Number(payload.find((p) => p.dataKey === "pv1to1Baseline")?.value) || 0;
+                
+                // Get values from the chart data directly, not just from visible payload
+                const dataPoint = chartData.find(d => d.hour === label);
+                const pv = dataPoint?.pvGeneration || 0;
+                const load = dataPoint?.total || 0;
+                const dcOutput = dataPoint?.pvDcOutput || 0;
+                const clipping = dataPoint?.pvClipping || 0;
+                const baseline = dataPoint?.pv1to1Baseline || 0;
                 const hourNum = parseInt(label?.toString() || "0");
                 const period = getTOUPeriod(hourNum, isWeekend);
 
