@@ -80,7 +80,7 @@ export function LoadProfileChart({
       setBatteryPower(simulatedBatteryPowerKw);
     }
   }, [simulatedBatteryPowerKw]);
-  const [show1to1Comparison, setShow1to1Comparison] = useState(false);
+  const [show1to1Comparison, setShow1to1Comparison] = useState(true);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
