@@ -189,16 +189,16 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
               }}
             />
 
-            {/* 1:1 Baseline Comparison Area (gray - smallest curve) */}
+            {/* 1:1 Baseline Comparison Line (gray dotted - shows what a 1:1 system would produce) */}
             {show1to1Comparison && dcAcRatio > 1 && (
-              <Area 
+              <Line 
                 type="monotone" 
                 dataKey="pv1to1Baseline" 
                 stroke="hsl(var(--muted-foreground))" 
-                strokeWidth={1.5} 
+                strokeWidth={2} 
                 strokeDasharray="4 4"
-                fill="url(#pv1to1Gradient)" 
-                dot={false} 
+                dot={false}
+                name="1:1 Baseline"
               />
             )}
 
