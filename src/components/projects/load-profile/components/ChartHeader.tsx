@@ -111,8 +111,8 @@ export function ChartHeader({
         
         {/* Unit Toggle */}
         <div className="flex items-center gap-2">
-          <Button variant={displayUnit === "kwh" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setDisplayUnit("kwh")}>
-            kWh
+          <Button variant={displayUnit === "kw" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setDisplayUnit("kw")}>
+            kW
           </Button>
           <Button variant={displayUnit === "kva" ? "default" : "outline"} size="sm" className="h-7 text-xs" onClick={() => setDisplayUnit("kva")}>
             kVA

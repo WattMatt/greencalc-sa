@@ -224,7 +224,7 @@ export function useMonthlyData({
         
         // Average across days in the month
         const avgKwh = hourData[key] / daysInMonth;
-        const value = displayUnit === "kwh" ? avgKwh : avgKwh / powerFactor;
+        const value = displayUnit === "kw" ? avgKwh : avgKwh / powerFactor;
         
         dataPoint[key] = value;
         dataPoint.total += value;
