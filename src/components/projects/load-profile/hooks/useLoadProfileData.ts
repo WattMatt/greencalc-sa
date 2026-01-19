@@ -263,7 +263,7 @@ export function useLoadProfileData({
         const kwhValue = hourData[key] as number;
         // Apply diversity factor to reduce combined load
         const diversifiedKwh = kwhValue * diversityFactor;
-        const value = displayUnit === "kwh" ? diversifiedKwh : diversifiedKwh / powerFactor;
+        const value = displayUnit === "kw" ? diversifiedKwh : diversifiedKwh / powerFactor;
         result[key] = value;
         if (key === "total") result.total = value;
       });

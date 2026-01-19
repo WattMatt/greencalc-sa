@@ -50,7 +50,7 @@ export function LoadProfileChart({
   const { settings: globalDeratingSettings } = useDeratingSettings();
   const { settings: globalDiversitySettings } = useDiversitySettings();
   
-  const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kwh");
+  const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kw");
   const [powerFactor, setPowerFactor] = useState(() => globalDeratingSettings.powerFactor);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Wednesday");
   const [showTOU, setShowTOU] = useState(true);
@@ -107,7 +107,7 @@ export function LoadProfileChart({
   }, [maxPvAcKva, effectiveDcAcRatio]);
 
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
-  const unit = displayUnit === "kwh" ? "kWh" : "kVA";
+  const unit = displayUnit === "kw" ? "kW" : "kVA";
 
   // Solcast PV profile hook
   const {

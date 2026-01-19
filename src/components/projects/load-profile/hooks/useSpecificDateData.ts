@@ -183,7 +183,7 @@ export function useSpecificDateData({
       Object.keys(hourData).forEach((key) => {
         if (key === "hour") return;
         const kwhValue = hourData[key] as number;
-        const value = displayUnit === "kwh" ? kwhValue : kwhValue / powerFactor;
+        const value = displayUnit === "kw" ? kwhValue : kwhValue / powerFactor;
         result[key] = value;
         if (key === "total") result.total = value;
       });
