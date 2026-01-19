@@ -1077,8 +1077,8 @@ export default function ProjectDetail() {
           <SystemCostsManager
             costs={systemCosts}
             onChange={setSystemCosts}
-            solarCapacity={100}
-            batteryCapacity={50}
+            solarCapacity={latestSimulation?.solar_capacity_kwp ?? 100}
+            batteryCapacity={latestSimulation?.battery_capacity_kwh ?? 50}
             includesBattery={systemIncludesBattery}
           />
         </TabsContent>
