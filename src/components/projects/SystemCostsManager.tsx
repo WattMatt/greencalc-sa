@@ -285,34 +285,7 @@ export function SystemCostsManager({
           </Card>
         )}
 
-        {/* Installation Costs */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Wrench className="h-4 w-4 text-blue-500" />
-              Installation & Setup
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-xs">Fixed Installation Cost</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">R</span>
-                <Input
-                  type="number"
-                  value={costs.installationCost}
-                  onChange={(e) => handleInputChange("installationCost", e.target.value)}
-                  className="h-9"
-                  min={0}
-                  step={5000}
-                />
-              </div>
-              <p className="text-[10px] text-muted-foreground">
-                Grid connection, permits, project management, etc.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Installation costs are included in R/kWp rate */}
 
         {/* Maintenance Costs */}
         <Card>
