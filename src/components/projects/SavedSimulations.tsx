@@ -254,69 +254,9 @@ export function SavedSimulations({
 
   return (
     <div className="space-y-4">
-      {/* Save and Actions Bar */}
+      {/* Actions Bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-2">
-                <Save className="h-4 w-4" />
-                Save Current
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Save Simulation</DialogTitle>
-                <DialogDescription>
-                  Save the current configuration and results for future comparison.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Simulation Name</Label>
-                  <Input
-                    placeholder="e.g., 150kWp with 100kWh battery"
-                    value={simulationName}
-                    onChange={(e) => setSimulationName(e.target.value)}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Solar Capacity</p>
-                    <p className="font-medium">{currentConfig.solarCapacity} kWp</p>
-                  </div>
-                  {includesBattery && (
-                    <div>
-                      <p className="text-muted-foreground">Battery</p>
-                      <p className="font-medium">
-                        {currentConfig.batteryCapacity} kWh / {currentConfig.batteryPower} kW
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-muted-foreground">Annual Savings</p>
-                    <p className="font-medium text-green-600">
-                      R{Math.round(currentResults.annualSavings).toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Payback</p>
-                    <p className="font-medium">{currentResults.paybackYears.toFixed(1)} years</p>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSave} disabled={saveMutation.isPending}>
-                  {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Save Simulation
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
           {selectedForCompare.length >= 2 && (
             <Button
               variant="outline"
@@ -331,7 +271,7 @@ export function SavedSimulations({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          {savedSimulations?.length || 0} saved simulations
+          {savedSimulations?.length || 0} saved simulations • Auto-saves on tab change
         </p>
       </div>
 

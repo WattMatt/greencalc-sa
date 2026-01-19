@@ -15,7 +15,7 @@ import { format } from "date-fns";
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { TariffSelector } from "@/components/projects/TariffSelector";
-import { SimulationModes } from "@/components/projects/SimulationModes";
+import { SimulationModes, SimulationModesRef } from "@/components/projects/SimulationModes";
 import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { SolarForecastCard } from "@/components/projects/SolarForecastCard";
 import { ReportBuilder } from "@/components/reports/builder";
@@ -601,12 +601,17 @@ export default function ProjectDetail() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
   const dashboardRef = useRef<DashboardTabContentRef>(null);
+  const simulationRef = useRef<SimulationModesRef>(null);
   
   // Handle tab change - save before switching
   const handleTabChange = async (newTab: string) => {
     // Save any unsaved changes in dashboard tab before switching
     if (activeTab === "overview" && dashboardRef.current) {
       await dashboardRef.current.saveIfNeeded();
+    }
+    // Auto-save simulation when leaving simulation tab
+    if (activeTab === "simulation" && simulationRef.current) {
+      await simulationRef.current.saveIfNeeded();
     }
     setActiveTab(newTab);
   };
@@ -1047,6 +1052,7 @@ export default function ProjectDetail() {
 
         <TabsContent value="simulation" className="mt-6">
           <SimulationModes
+            ref={simulationRef}
             projectId={id!}
             project={project}
             tenants={tenants || []}

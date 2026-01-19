@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -74,6 +74,10 @@ interface SimulationPanelProps {
   includesBattery?: boolean;
 }
 
+export interface SimulationPanelRef {
+  autoSave: () => Promise<void>;
+}
+
 const DEFAULT_PROFILE = Array(24).fill(4.17);
 
 // Longitude values for SA cities (matching SA_SOLAR_LOCATIONS)
@@ -110,7 +114,9 @@ function DifferenceIndicator({ baseValue, compareValue, suffix = "", invert = fa
   );
 }
 
-export function SimulationPanel({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false }: SimulationPanelProps) {
+export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false }, ref) => {
+  const queryClient = useQueryClient();
+  
   // Fetch the most recent saved simulation FIRST
   const { data: lastSavedSimulation, isLoading: isLoadingLastSaved, isFetched } = useQuery({
     queryKey: ["last-simulation", projectId],
@@ -358,6 +364,77 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
       advancedConfig
     );
   }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, solarCapacity, batteryCapacity, advancedConfig]);
+
+  // Auto-save mutation - upserts simulation on tab change
+  const autoSaveMutation = useMutation({
+    mutationFn: async () => {
+      const simulationName = `Auto-saved ${format(new Date(), "MMM d, HH:mm")}`;
+      
+      // Check if we have an existing simulation to update
+      const existingId = lastSavedSimulation?.id;
+      
+      const simulationData = {
+        project_id: projectId,
+        name: existingId ? lastSavedSimulation.name : simulationName,
+        simulation_type: useSolcast ? "solcast" : "generic",
+        solar_capacity_kwp: solarCapacity,
+        battery_capacity_kwh: includesBattery ? batteryCapacity : 0,
+        battery_power_kw: includesBattery ? batteryPower : 0,
+        solar_orientation: pvConfig.location,
+        solar_tilt_degrees: pvConfig.tilt,
+        annual_solar_savings: hasFinancialData ? financialResults.annualSavings : 0,
+        annual_grid_cost: energyResults.totalGridImport * 2.5 * 365,
+        payback_years: hasFinancialData ? financialResults.paybackYears : 0,
+        roi_percentage: hasFinancialData ? financialResults.roi : 0,
+        results_json: JSON.parse(JSON.stringify({
+          totalDailyLoad: energyResults.totalDailyLoad,
+          totalDailySolar: energyResults.totalDailySolar,
+          totalGridImport: energyResults.totalGridImport,
+          totalSolarUsed: energyResults.totalSolarUsed,
+          annualSavings: hasFinancialData ? financialResults.annualSavings : 0,
+          systemCost: financialResults.systemCost,
+          paybackYears: hasFinancialData ? financialResults.paybackYears : 0,
+          roi: hasFinancialData ? financialResults.roi : 0,
+          peakDemand: energyResults.peakLoad,
+          newPeakDemand: energyResults.peakGridImport,
+          pvConfig,
+          usingSolcast: !!useSolcast,
+          inverterConfig,
+          systemCosts,
+        })),
+      };
+
+      if (existingId) {
+        // Update existing simulation
+        const { error } = await supabase
+          .from("project_simulations")
+          .update(simulationData)
+          .eq("id", existingId);
+        if (error) throw error;
+      } else {
+        // Insert new simulation
+        const { error } = await supabase
+          .from("project_simulations")
+          .insert(simulationData);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-simulations", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["last-simulation", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project-latest-simulation", projectId] });
+    },
+  });
+
+  // Expose autoSave method to parent
+  useImperativeHandle(ref, () => ({
+    autoSave: async () => {
+      // Only auto-save if we have tenants (valid simulation)
+      if (tenants.length > 0) {
+        await autoSaveMutation.mutateAsync();
+      }
+    }
+  }), [autoSaveMutation, tenants.length]);
 
   // Empty states
   if (tenants.length === 0) {
@@ -1283,4 +1360,4 @@ export function SimulationPanel({ projectId, project, tenants, shopTypes, system
       </Tabs>
     </div>
   );
-}
+});
