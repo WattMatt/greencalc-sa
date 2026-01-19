@@ -20,6 +20,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
   const peakDc = Math.max(...chartData.map((d) => d.pvDcOutput || 0));
   const totalClipping = chartData.reduce((sum, d) => sum + (d.pvClipping || 0), 0);
   const energyGained = totalPv - total1to1;
+  const netBenefit = energyGained - totalClipping;
 
   // Y-axis must accommodate the DC curve going above AC limit
   const yAxisMax = dcAcRatio > 1 ? Math.max(peakDc * 1.1, (maxPvAcKva || 0) * 1.3) : undefined;
@@ -79,7 +80,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
       
       {/* Stats badges for DC/AC comparison */}
       {dcAcRatio > 1 && (
-        <div className="flex gap-2 text-[10px]">
+        <div className="flex flex-wrap gap-2 text-[10px]">
           {energyGained > 0 && (
             <Badge variant="outline" className="text-emerald-600 border-emerald-600/30 bg-emerald-500/10">
               +{energyGained.toFixed(0)} {unit} gained vs 1:1
@@ -87,7 +88,20 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
           )}
           {totalClipping > 0 && (
             <Badge variant="outline" className="text-orange-600 border-orange-600/30 bg-orange-500/10">
-              {totalClipping.toFixed(0)} {unit} clipped ({((totalClipping / totalDc) * 100).toFixed(1)}%)
+              -{totalClipping.toFixed(0)} {unit} clipped ({((totalClipping / totalDc) * 100).toFixed(1)}%)
+            </Badge>
+          )}
+          {/* Net benefit annotation */}
+          {(energyGained > 0 || totalClipping > 0) && (
+            <Badge 
+              variant="outline" 
+              className={`font-semibold ${
+                netBenefit >= 0 
+                  ? "text-blue-600 border-blue-600/30 bg-blue-500/10" 
+                  : "text-red-600 border-red-600/30 bg-red-500/10"
+              }`}
+            >
+              Net: {netBenefit >= 0 ? "+" : ""}{netBenefit.toFixed(0)} {unit} ({netBenefit >= 0 ? "✓" : "✗"} oversizing {netBenefit >= 0 ? "beneficial" : "not beneficial"})
             </Badge>
           )}
         </div>
