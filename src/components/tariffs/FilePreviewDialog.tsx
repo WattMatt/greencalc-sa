@@ -43,26 +43,20 @@ export function FilePreviewDialog({ open, onOpenChange, fileName, filePath }: Fi
     setPdfUrl(null);
 
     try {
+      // Download file from storage
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from("tariff-uploads")
+        .download(filePath);
+
+      if (downloadError) throw downloadError;
+
       if (fileType === 'pdf') {
-        // For PDFs, create a signed URL that works with iframe
-        const { data: signedUrlData, error: signedError } = await supabase.storage
-          .from("tariff-uploads")
-          .createSignedUrl(filePath, 3600); // 1 hour expiry
-
-        if (signedError) throw signedError;
-        
-        // The signedUrl from Supabase is relative, construct full URL
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const fullPdfUrl = `${supabaseUrl}/storage/v1${signedUrlData.signedUrl}`;
-        setPdfUrl(fullPdfUrl);
+        // Create blob URL for PDF viewing
+        const blob = new Blob([fileData], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+        setPdfUrl(blobUrl);
       } else {
-        // Download and parse Excel file
-        const { data: fileData, error: downloadError } = await supabase.storage
-          .from("tariff-uploads")
-          .download(filePath);
-
-        if (downloadError) throw downloadError;
-
+        // Parse Excel file
         const arrayBuffer = await fileData.arrayBuffer();
         const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
         
