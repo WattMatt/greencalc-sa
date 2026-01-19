@@ -178,10 +178,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         setInverterConfig(savedResultsJson.inverterConfig);
       }
       
-      // Load system costs if saved
-      if (savedResultsJson?.systemCosts) {
-        onSystemCostsChange(savedResultsJson.systemCosts);
-      }
+      // System costs are now loaded by ProjectDetail.tsx on initial load
+      // to ensure consistency between Costs tab and Simulation tab
       
       // Set Solcast toggle based on saved type
       if (lastSavedSimulation.simulation_type === "solcast") {

@@ -623,6 +623,47 @@ export default function ProjectDetail() {
     installationCost: DEFAULT_SYSTEM_COSTS.installationCost ?? 0,
     maintenancePerYear: DEFAULT_SYSTEM_COSTS.maintenancePerYear ?? 0,
   });
+  
+  // Track if costs were initialized from saved simulation
+  const costsInitializedRef = useRef(false);
+  
+  // Fetch last saved simulation to initialize costs
+  const { data: lastSavedSimulation } = useQuery({
+    queryKey: ["last-saved-simulation-costs", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_simulations")
+        .select("results_json")
+        .eq("project_id", id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+  
+  // Initialize costs from last saved simulation (only once per project)
+  useEffect(() => {
+    if (!costsInitializedRef.current && lastSavedSimulation?.results_json) {
+      const savedCosts = (lastSavedSimulation.results_json as any)?.systemCosts;
+      if (savedCosts) {
+        setSystemCosts({
+          solarCostPerKwp: savedCosts.solarCostPerKwp ?? DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
+          batteryCostPerKwh: savedCosts.batteryCostPerKwh ?? DEFAULT_SYSTEM_COSTS.batteryCostPerKwh,
+          installationCost: savedCosts.installationCost ?? DEFAULT_SYSTEM_COSTS.installationCost ?? 0,
+          maintenancePerYear: savedCosts.maintenancePerYear ?? DEFAULT_SYSTEM_COSTS.maintenancePerYear ?? 0,
+        });
+        costsInitializedRef.current = true;
+      }
+    }
+  }, [lastSavedSimulation]);
+  
+  // Reset initialization flag when project changes
+  useEffect(() => {
+    costsInitializedRef.current = false;
+  }, [id]);
 
   const { data: project, isLoading } = useQuery({
     queryKey: ["project", id],
