@@ -718,7 +718,7 @@ export default function ProjectDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("project_simulations")
-        .select("id, solar_capacity_kwp, battery_capacity_kwh, battery_power_kw")
+        .select("id, solar_capacity_kwp, battery_capacity_kwh, battery_power_kw, results_json")
         .eq("project_id", id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -1023,6 +1023,7 @@ export default function ProjectDetail() {
             simulatedSolarCapacityKwp={latestSimulation?.solar_capacity_kwp}
             simulatedBatteryCapacityKwh={latestSimulation?.battery_capacity_kwh}
             simulatedBatteryPowerKw={latestSimulation?.battery_power_kw}
+            simulatedDcAcRatio={(latestSimulation?.results_json as any)?.pvConfig?.dcAcRatio}
           />
         </TabsContent>
 

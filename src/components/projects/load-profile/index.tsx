@@ -32,6 +32,7 @@ interface LoadProfileChartProps {
   simulatedSolarCapacityKwp?: number | null;
   simulatedBatteryCapacityKwh?: number | null;
   simulatedBatteryPowerKw?: number | null;
+  simulatedDcAcRatio?: number | null;
 }
 
 export function LoadProfileChart({ 
@@ -43,6 +44,7 @@ export function LoadProfileChart({
   simulatedSolarCapacityKwp,
   simulatedBatteryCapacityKwh,
   simulatedBatteryPowerKw,
+  simulatedDcAcRatio,
 }: LoadProfileChartProps) {
   // Get global settings as defaults - Diversity for load profiles, Derating for PV simulations
   const { settings: globalDeratingSettings } = useDeratingSettings();
@@ -57,7 +59,8 @@ export function LoadProfileChart({
   // Use simulated battery values if available, otherwise defaults
   const [batteryCapacity, setBatteryCapacity] = useState(() => simulatedBatteryCapacityKwh || 500);
   const [batteryPower, setBatteryPower] = useState(() => simulatedBatteryPowerKw || 250);
-  const [dcAcRatio, setDcAcRatio] = useState(() => globalDeratingSettings.dcAcRatio);
+  // Use simulated DC/AC ratio if available, otherwise fall back to global settings
+  const [dcAcRatio, setDcAcRatio] = useState(() => simulatedDcAcRatio || globalDeratingSettings.dcAcRatio);
   const [show1to1Comparison, setShow1to1Comparison] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
