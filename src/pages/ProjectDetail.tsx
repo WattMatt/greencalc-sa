@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -117,6 +117,10 @@ const DashboardTabContent = ({
     connection_size_kva: number | null;
     description: string | null;
     total_area_sqm: number | null;
+    client_name: string | null;
+    budget: number | null;
+    target_date: string | null;
+    system_type: string | null;
   };
   tenants: { area_sqm: number; scada_import_id: string | null }[];
   onProjectUpdate: () => void;
@@ -139,30 +143,15 @@ const DashboardTabContent = ({
     },
   });
 
-  // Parse stored metadata from description JSON if available
-  const storedMetadata = useMemo(() => {
-    try {
-      if (project.description) {
-        const parsed = JSON.parse(project.description);
-        if (parsed && typeof parsed === 'object') {
-          return parsed;
-        }
-      }
-    } catch {
-      // Not JSON, treat as plain description
-    }
-    return null;
-  }, [project.description]);
-  
   const [params, setParams] = useState<DashboardParams>({
     name: project.name || "",
     location: project.location || "",
     totalArea: project.total_area_sqm || tenants.reduce((sum, t) => sum + Number(t.area_sqm || 0), 0),
     capacity: project.connection_size_kva || 0,
-    systemType: storedMetadata?.systemType || "Solar",
-    clientName: storedMetadata?.clientName || "",
-    budget: storedMetadata?.budget || 0,
-    targetDate: storedMetadata?.targetDate ? new Date(storedMetadata.targetDate) : undefined,
+    systemType: (project.system_type as DashboardParams['systemType']) || "Solar",
+    clientName: project.client_name || "",
+    budget: project.budget || 0,
+    targetDate: project.target_date ? new Date(project.target_date) : undefined,
   });
   
   // Sync params with database values when project data changes (e.g., from header input)
@@ -173,8 +162,12 @@ const DashboardTabContent = ({
       location: project.location || prev.location,
       totalArea: project.total_area_sqm || prev.totalArea,
       capacity: project.connection_size_kva || prev.capacity,
+      systemType: (project.system_type as DashboardParams['systemType']) || prev.systemType,
+      clientName: project.client_name || prev.clientName,
+      budget: project.budget || prev.budget,
+      targetDate: project.target_date ? new Date(project.target_date) : prev.targetDate,
     }));
-  }, [project.name, project.location, project.total_area_sqm, project.connection_size_kva]);
+  }, [project.name, project.location, project.total_area_sqm, project.connection_size_kva, project.system_type, project.client_name, project.budget, project.target_date]);
   
   const [isSaving, setIsSaving] = useState(false);
 
@@ -226,14 +219,6 @@ const DashboardTabContent = ({
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // Store additional metadata as JSON in description field
-      const metadata = {
-        systemType: params.systemType,
-        clientName: params.clientName,
-        budget: params.budget,
-        targetDate: params.targetDate?.toISOString(),
-      };
-      
       const { error } = await supabase
         .from("projects")
         .update({
@@ -241,7 +226,10 @@ const DashboardTabContent = ({
           location: params.location,
           connection_size_kva: params.capacity || null,
           total_area_sqm: params.totalArea || null,
-          description: JSON.stringify(metadata),
+          system_type: params.systemType || "Solar",
+          client_name: params.clientName || null,
+          budget: params.budget || null,
+          target_date: params.targetDate?.toISOString().split('T')[0] || null,
         })
         .eq("id", projectId);
       
@@ -567,20 +555,8 @@ export default function ProjectDetail() {
     enabled: !!id,
   });
 
-  // Parse system type from project description metadata
-  const projectSystemType = useMemo(() => {
-    try {
-      if (project?.description) {
-        const parsed = JSON.parse(project.description);
-        if (parsed && typeof parsed === 'object' && parsed.systemType) {
-          return parsed.systemType as string;
-        }
-      }
-    } catch {
-      // Not JSON, ignore
-    }
-    return "Solar"; // Default to grid-tied solar
-  }, [project?.description]);
+  // Get system type from project
+  const projectSystemType = project?.system_type || "Solar";
 
   // Check if system includes battery
   const systemIncludesBattery = projectSystemType === "Solar + Battery" || projectSystemType === "Hybrid";

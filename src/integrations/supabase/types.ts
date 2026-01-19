@@ -379,6 +379,8 @@ export type Database = {
       }
       projects: {
         Row: {
+          budget: number | null
+          client_name: string | null
           connection_size_kva: number | null
           created_at: string
           description: string | null
@@ -388,11 +390,15 @@ export type Database = {
           logo_url: string | null
           longitude: number | null
           name: string
+          system_type: string | null
+          target_date: string | null
           tariff_id: string | null
           total_area_sqm: number | null
           updated_at: string
         }
         Insert: {
+          budget?: number | null
+          client_name?: string | null
           connection_size_kva?: number | null
           created_at?: string
           description?: string | null
@@ -402,11 +408,15 @@ export type Database = {
           logo_url?: string | null
           longitude?: number | null
           name: string
+          system_type?: string | null
+          target_date?: string | null
           tariff_id?: string | null
           total_area_sqm?: number | null
           updated_at?: string
         }
         Update: {
+          budget?: number | null
+          client_name?: string | null
           connection_size_kva?: number | null
           created_at?: string
           description?: string | null
@@ -416,6 +426,8 @@ export type Database = {
           logo_url?: string | null
           longitude?: number | null
           name?: string
+          system_type?: string | null
+          target_date?: string | null
           tariff_id?: string | null
           total_area_sqm?: number | null
           updated_at?: string
