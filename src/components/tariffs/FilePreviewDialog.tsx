@@ -50,7 +50,11 @@ export function FilePreviewDialog({ open, onOpenChange, fileName, filePath }: Fi
           .createSignedUrl(filePath, 3600); // 1 hour expiry
 
         if (signedError) throw signedError;
-        setPdfUrl(signedUrlData.signedUrl);
+        
+        // The signedUrl from Supabase is relative, construct full URL
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const fullPdfUrl = `${supabaseUrl}/storage/v1${signedUrlData.signedUrl}`;
+        setPdfUrl(fullPdfUrl);
       } else {
         // Download and parse Excel file
         const { data: fileData, error: downloadError } = await supabase.storage
