@@ -712,19 +712,25 @@ export default function ProjectDetail() {
     enabled: !!id,
   });
 
-  // Fetch simulation count for status tracking
-  const { data: simulationCount = 0 } = useQuery({
-    queryKey: ["project-simulations-count", id],
+  // Fetch latest simulation for PV capacity and status tracking
+  const { data: latestSimulation } = useQuery({
+    queryKey: ["project-latest-simulation", id],
     queryFn: async () => {
-      const { count, error } = await supabase
+      const { data, error } = await supabase
         .from("project_simulations")
-        .select("id", { count: "exact", head: true })
-        .eq("project_id", id);
+        .select("id, solar_capacity_kwp, battery_capacity_kwh, battery_power_kw")
+        .eq("project_id", id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
       if (error) throw error;
-      return count || 0;
+      return data;
     },
     enabled: !!id,
   });
+
+  // Use simulation count derived from latest simulation query
+  const simulationCount = latestSimulation ? 1 : 0; // Simplified - count can be fetched separately if needed
 
   // Fetch PV layout for status tracking
   const { data: pvLayout } = useQuery({
@@ -1014,6 +1020,9 @@ export default function ProjectDetail() {
             connectionSizeKva={project.connection_size_kva}
             latitude={project.latitude ?? -33.9249}
             longitude={project.longitude ?? 18.4241}
+            simulatedSolarCapacityKwp={latestSimulation?.solar_capacity_kwp}
+            simulatedBatteryCapacityKwh={latestSimulation?.battery_capacity_kwh}
+            simulatedBatteryPowerKw={latestSimulation?.battery_power_kw}
           />
         </TabsContent>
 

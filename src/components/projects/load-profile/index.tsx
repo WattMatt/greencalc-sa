@@ -28,9 +28,22 @@ interface LoadProfileChartProps {
   connectionSizeKva?: number | null;
   latitude?: number | null;
   longitude?: number | null;
+  // Simulated system parameters from saved simulation
+  simulatedSolarCapacityKwp?: number | null;
+  simulatedBatteryCapacityKwh?: number | null;
+  simulatedBatteryPowerKw?: number | null;
 }
 
-export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitude, longitude }: LoadProfileChartProps) {
+export function LoadProfileChart({ 
+  tenants, 
+  shopTypes, 
+  connectionSizeKva, 
+  latitude, 
+  longitude,
+  simulatedSolarCapacityKwp,
+  simulatedBatteryCapacityKwh,
+  simulatedBatteryPowerKw,
+}: LoadProfileChartProps) {
   // Get global settings as defaults - Diversity for load profiles, Derating for PV simulations
   const { settings: globalDeratingSettings } = useDeratingSettings();
   const { settings: globalDiversitySettings } = useDiversitySettings();
@@ -41,8 +54,9 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
   const [showTOU, setShowTOU] = useState(true);
   const [showPVProfile, setShowPVProfile] = useState(false);
   const [showBattery, setShowBattery] = useState(false);
-  const [batteryCapacity, setBatteryCapacity] = useState(500);
-  const [batteryPower, setBatteryPower] = useState(250);
+  // Use simulated battery values if available, otherwise defaults
+  const [batteryCapacity, setBatteryCapacity] = useState(() => simulatedBatteryCapacityKwh || 500);
+  const [batteryPower, setBatteryPower] = useState(() => simulatedBatteryPowerKw || 250);
   const [dcAcRatio, setDcAcRatio] = useState(() => globalDeratingSettings.dcAcRatio);
   const [show1to1Comparison, setShow1to1Comparison] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
@@ -56,7 +70,11 @@ export function LoadProfileChart({ tenants, shopTypes, connectionSizeKva, latitu
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
 
-  const maxPvAcKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
+  // Maximum possible PV based on connection (for reference)
+  const maxPossiblePvKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
+  
+  // Use simulated solar capacity if available, otherwise fall back to maximum possible
+  const maxPvAcKva = simulatedSolarCapacityKwp ?? maxPossiblePvKva;
   const dcCapacityKwp = maxPvAcKva ? maxPvAcKva * dcAcRatio : null;
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
   const unit = displayUnit === "kwh" ? "kWh" : "kVA";
