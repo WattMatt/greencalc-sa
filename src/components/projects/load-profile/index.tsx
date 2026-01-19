@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tenant, ShopType, DAYS_OF_WEEK, DayOfWeek, DisplayUnit, Annotation } from "./types";
 import { useLoadProfileData } from "./hooks/useLoadProfileData";
@@ -61,6 +61,25 @@ export function LoadProfileChart({
   const [batteryPower, setBatteryPower] = useState(() => simulatedBatteryPowerKw || 250);
   // Use simulated DC/AC ratio if available, otherwise fall back to global settings
   const [dcAcRatio, setDcAcRatio] = useState(() => simulatedDcAcRatio || globalDeratingSettings.dcAcRatio);
+  
+  // Sync simulated values when they become available (after query loads)
+  useEffect(() => {
+    if (simulatedDcAcRatio !== undefined && simulatedDcAcRatio !== null) {
+      setDcAcRatio(simulatedDcAcRatio);
+    }
+  }, [simulatedDcAcRatio]);
+  
+  useEffect(() => {
+    if (simulatedBatteryCapacityKwh !== undefined && simulatedBatteryCapacityKwh !== null) {
+      setBatteryCapacity(simulatedBatteryCapacityKwh);
+    }
+  }, [simulatedBatteryCapacityKwh]);
+  
+  useEffect(() => {
+    if (simulatedBatteryPowerKw !== undefined && simulatedBatteryPowerKw !== null) {
+      setBatteryPower(simulatedBatteryPowerKw);
+    }
+  }, [simulatedBatteryPowerKw]);
   const [show1to1Comparison, setShow1to1Comparison] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
