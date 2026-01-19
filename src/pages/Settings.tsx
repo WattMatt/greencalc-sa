@@ -5,18 +5,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Settings as SettingsIcon, Bell, Moon, Sun, Monitor, HelpCircle, RotateCcw, Zap, ExternalLink, Users } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Moon, Sun, Monitor, HelpCircle, RotateCcw, Zap, ExternalLink, Users, Building2 } from "lucide-react";
 import { NotificationSettings } from "@/components/pwa/NotificationSettings";
 import { ContentEnhancerDemo } from "@/components/onboarding/ContentEnhancerDemo";
 import { APIIntegrationConfigPanel, APIIntegrationStatus } from "@/components/projects/simulation";
 import { APIIntegrationConfig, defaultAPIIntegrationConfig } from "@/components/projects/simulation/APIIntegrationTypes";
 import { DeratingSettingsCard } from "@/components/settings/DeratingSettingsCard";
 import { DiversitySettingsCard } from "@/components/settings/DiversitySettingsCard";
+import { BrandingSettingsCard } from "@/components/settings/BrandingSettingsCard";
 import { useTour } from "@/components/onboarding/TourContext";
 import { SettingsErrorBoundary } from "@/components/settings/SettingsErrorBoundary";
 import { SettingsLoadingSkeleton } from "@/components/settings/SettingsLoadingSkeleton";
 
-const EXPECTED_TAB_COUNT = 6;
+const EXPECTED_TAB_COUNT = 7;
 
 function SettingsContent() {
   const { theme, setTheme } = useTheme();
@@ -60,6 +61,10 @@ function SettingsContent() {
           <TabsTrigger value="general" className="flex items-center gap-2">
             <SettingsIcon className="h-4 w-4" />
             General
+          </TabsTrigger>
+          <TabsTrigger value="branding" className="flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            Branding
           </TabsTrigger>
           <TabsTrigger value="diversity" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
@@ -208,6 +213,10 @@ function SettingsContent() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="branding" className="space-y-6">
+          <BrandingSettingsCard />
         </TabsContent>
 
         <TabsContent value="diversity" className="space-y-6">
