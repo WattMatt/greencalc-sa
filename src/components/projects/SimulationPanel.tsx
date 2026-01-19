@@ -841,87 +841,81 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 Financial Summary
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+            <CardContent className="space-y-2 text-sm">
               {/* Primary Metrics */}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">System Cost</span>
-                  <span className="font-medium">R{financialResults.systemCost.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Annual Savings</span>
-                  <span className="font-medium text-green-600">R{Math.round(financialResults.annualSavings).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Payback Period</span>
-                  <span className="font-medium">{financialResults.paybackYears.toFixed(1)} years</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">ROI</span>
-                  <span className="font-medium">{financialResults.roi.toFixed(1)}%</span>
-                </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">System Cost</span>
+                <span className="font-medium">R{financialResults.systemCost.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Annual Savings</span>
+                <span className="font-medium text-green-600">R{Math.round(financialResults.annualSavings).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Payback Period</span>
+                <span className="font-medium">{financialResults.paybackYears.toFixed(1)} years</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">ROI</span>
+                <span className="font-medium">{financialResults.roi.toFixed(1)}%</span>
               </div>
               
               {/* Separator */}
               <div className="border-t my-2" />
               
               {/* Unit Cost Metrics */}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs">ZAR/kWh (1st Year)</span>
-                  <span className="font-medium text-xs">
-                    R{(blendedRateBreakdown.annual ?? tariffData.averageRatePerKwh).toFixed(4)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs">ZAR/Wp (DC)</span>
-                  <span className="font-medium text-xs">
-                    R{(financialResults.systemCost / (solarCapacity * 1000)).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs">ZAR/Wp (AC)</span>
-                  <span className="font-medium text-xs">
-                    R{(financialResults.systemCost / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs">Initial Yield</span>
-                  <span className="font-medium text-xs">
-                    {Math.round(energyResults.totalDailySolar * 365 / solarCapacity).toLocaleString()} kWh/kWp
-                  </span>
-                </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">ZAR/kWh (1st Year)</span>
+                <span className="font-medium">
+                  R{(blendedRateBreakdown.annual ?? tariffData.averageRatePerKwh).toFixed(4)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">ZAR/Wp (DC)</span>
+                <span className="font-medium">
+                  R{(financialResults.systemCost / (solarCapacity * 1000)).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">ZAR/Wp (AC)</span>
+                <span className="font-medium">
+                  R{(financialResults.systemCost / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Initial Yield</span>
+                <span className="font-medium">
+                  {Math.round(energyResults.totalDailySolar * 365 / solarCapacity).toLocaleString()} kWh/kWp
+                </span>
               </div>
               
               {/* Advanced Metrics (if available) */}
               {advancedResults && (
                 <>
                   <div className="border-t my-2" />
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground text-xs">LCOE</span>
-                      <span className="font-medium text-xs">
-                        R{advancedResults.lcoe.toFixed(4)}/kWh
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground text-xs">NPV</span>
-                      <span className={`font-medium text-xs ${advancedResults.npv >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        R{Math.round(advancedResults.npv).toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground text-xs">IRR</span>
-                      <span className="font-medium text-xs">
-                        {advancedResults.irr.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground text-xs">MIRR</span>
-                      <span className="font-medium text-xs">
-                        {advancedResults.mirr.toFixed(1)}%
-                      </span>
-                    </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">LCOE</span>
+                    <span className="font-medium">
+                      R{advancedResults.lcoe.toFixed(4)}/kWh
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">NPV</span>
+                    <span className={`font-medium ${advancedResults.npv >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      R{Math.round(advancedResults.npv).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">IRR</span>
+                    <span className="font-medium">
+                      {advancedResults.irr.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">MIRR</span>
+                    <span className="font-medium">
+                      {advancedResults.mirr.toFixed(1)}%
+                    </span>
                   </div>
                 </>
               )}
