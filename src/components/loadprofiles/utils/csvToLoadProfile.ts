@@ -487,18 +487,31 @@ export function processCSVToLoadProfile(
   
   console.log(`[processCSV] Unit type: ${valueUnit} (${isEnergy ? 'energy' : 'power'}), readings per hour per day: ~${readingsPerHourPerDay.toFixed(1)}`);
   
+  // Calculate readings per hour per day from detected interval
+  // 30-min interval = 2 readings/hour, 15-min = 4, 60-min = 1
+  const readingsPerHour = 60 / detectedInterval;
+  
   for (let h = 0; h < 24; h++) {
     const wdValues = weekdayHours[h];
     const wdDayCount = weekdayDates.size || 1;
     
     let wdHourlyValue: number;
     if (!isEnergy) {
-      // For power readings: average the power values to get typical power for this hour
+      // For power readings (kW): AVERAGE all readings to get typical power for this hour
+      // This correctly handles 30-min intervals by averaging the 2 readings per hour
       wdHourlyValue = wdValues.length > 0 
         ? wdValues.reduce((sum, v) => sum + v, 0) / wdValues.length 
         : 0;
     } else {
-      // For energy readings: sum all readings and divide by days to get avg kWh per hour
+      // For energy readings (kWh): Each reading represents energy for its interval period
+      // For 30-min intervals: 2 readings per hour, each is 0.5h of energy
+      // Sum all readings for the hour across all days, then divide by day count
+      // to get average kWh consumed in that hour per day
+      //
+      // wdValues contains: (readings per hour) × (number of days) values
+      // Total energy = sum of all readings (already in kWh for each interval)
+      // Average per day = total / days
+      // This is correct because 2 × 0.5h readings = 1h of energy per day
       const totalEnergy = wdValues.reduce((sum, v) => sum + v, 0);
       wdHourlyValue = totalEnergy / wdDayCount;
     }
@@ -509,10 +522,12 @@ export function processCSVToLoadProfile(
     
     let weHourlyValue: number;
     if (!isEnergy) {
+      // For power readings (kW): AVERAGE all readings
       weHourlyValue = weValues.length > 0 
         ? weValues.reduce((sum, v) => sum + v, 0) / weValues.length 
         : 0;
     } else {
+      // For energy readings (kWh): Sum and divide by days
       const totalEnergy = weValues.reduce((sum, v) => sum + v, 0);
       weHourlyValue = totalEnergy / weDayCount;
     }
