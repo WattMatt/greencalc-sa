@@ -169,12 +169,12 @@ export function useMonthlyData({
   const chartData = useMemo((): ChartDataPoint[] | null => {
     if (!selectedMonth) return null;
     
-    // Aggregate hourly data across all days in the month
-    const hourlyTotals: { [key: string]: { [tenantKey: string]: number; count: number } } = {};
+    // Track both sum and count per hour per tenant for proper averaging
+    const hourlyTotals: Map<string, { sums: Map<string, number>; counts: Map<string, number> }> = new Map();
     
     for (let h = 0; h < 24; h++) {
       const hourLabel = `${h.toString().padStart(2, "0")}:00`;
-      hourlyTotals[hourLabel] = { count: 0 };
+      hourlyTotals.set(hourLabel, { sums: new Map(), counts: new Map() });
     }
     
     const allDatesInMonth = new Set<string>();
@@ -200,8 +200,10 @@ export function useMonthlyData({
             const hourLabel = `${hour.toString().padStart(2, "0")}:00`;
             const scaledValue = (point.value || 0) * areaScaleFactor;
             
-            hourlyTotals[hourLabel][key] = (hourlyTotals[hourLabel][key] || 0) + scaledValue;
-            hourlyTotals[hourLabel].count = Math.max(hourlyTotals[hourLabel].count, allDatesInMonth.size);
+            const hourData = hourlyTotals.get(hourLabel)!;
+            // Accumulate sum and count for each tenant per hour
+            hourData.sums.set(key, (hourData.sums.get(key) || 0) + scaledValue);
+            hourData.counts.set(key, (hourData.counts.get(key) || 0) + 1);
           }
         });
       }
@@ -215,16 +217,20 @@ export function useMonthlyData({
     
     for (let h = 0; h < 24; h++) {
       const hourLabel = `${h.toString().padStart(2, "0")}:00`;
-      const hourData = hourlyTotals[hourLabel];
+      const hourData = hourlyTotals.get(hourLabel)!;
       
       const dataPoint: ChartDataPoint = { hour: hourLabel, total: 0 };
       
-      Object.keys(hourData).forEach((key) => {
-        if (key === 'count') return;
+      hourData.sums.forEach((sumValue, key) => {
+        const readingCount = hourData.counts.get(key) || 1;
         
-        // Average across days in the month
-        const avgKwh = hourData[key] / daysInMonth;
-        const value = displayUnit === "kw" ? avgKwh : avgKwh / powerFactor;
+        // First: average readings within each hour (for 30-min intervals)
+        // Then: average across days in the month
+        // For 30-min intervals: readingCount = daysInMonth * 2 readings per hour
+        // avgKw = sum / readingCount gives us the average kW
+        const avgKw = sumValue / readingCount;
+        
+        const value = displayUnit === "kw" ? avgKw : avgKw / powerFactor;
         
         dataPoint[key] = value;
         dataPoint.total += value;

@@ -238,20 +238,28 @@ export function useDailyConsumption(meterId: string | null): UseDailyConsumption
       const data = dailyMap.get(key)!;
       const dayOfWeek = data.date.getDay();
       
-      // Build 24-hour profile
+      // Build 24-hour profile - AVERAGE readings within each hour for kW (power) data
       const hourlyProfile: number[] = [];
       for (let h = 0; h < 24; h++) {
         const hourData = data.hourlyValues.get(h);
-        // For each hour, use the sum of kWh readings (or avg if power readings)
-        hourlyProfile.push(hourData ? hourData.total : 0);
+        // For kW (power) readings, use the AVERAGE of readings within the hour
+        hourlyProfile.push(hourData ? hourData.total / hourData.count : 0);
       }
+      
+      // Calculate correct totalKwh from kW readings
+      // For 30-min intervals (2 readings/hour), each kW reading represents 0.5 kWh
+      // For 15-min intervals (4 readings/hour), each kW reading represents 0.25 kWh
+      const readingsPerDay = data.count;
+      const avgReadingsPerHour = readingsPerDay / 24;
+      const intervalHours = avgReadingsPerHour > 1 ? 1 / avgReadingsPerHour : 1;
+      const totalKwh = data.total * intervalHours;
       
       result.push({
         date: key,
         label: format(data.date, 'EEE, MMM d'),
         dayOfWeek,
         isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
-        totalKwh: data.total,
+        totalKwh,
         peakKw: data.peak,
         peakHour: data.peakHour,
         hourlyProfile,
