@@ -903,7 +903,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   Financial Return Outputs
                 </div>
                 <div className="px-3 py-1.5 text-xs font-bold text-primary text-right uppercase tracking-wide">
-                  Stage 0
+                  {project?.location || 'Site'}
                 </div>
               </div>
               
