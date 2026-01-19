@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,8 +13,12 @@ import { APIIntegrationConfig, defaultAPIIntegrationConfig } from "@/components/
 import { DeratingSettingsCard } from "@/components/settings/DeratingSettingsCard";
 import { DiversitySettingsCard } from "@/components/settings/DiversitySettingsCard";
 import { useTour } from "@/components/onboarding/TourContext";
+import { SettingsErrorBoundary } from "@/components/settings/SettingsErrorBoundary";
+import { SettingsLoadingSkeleton } from "@/components/settings/SettingsLoadingSkeleton";
 
-export default function Settings() {
+const EXPECTED_TAB_COUNT = 6;
+
+function SettingsContent() {
   const { theme, setTheme } = useTheme();
   const [includeVAT, setIncludeVAT] = useState(true);
   const [useAverageRates, setUseAverageRates] = useState(false);
@@ -23,6 +27,23 @@ export default function Settings() {
 
   const totalTours = 5;
   const completedCount = completedTours.length;
+
+  // Verify all tabs rendered correctly
+  useEffect(() => {
+    const checkTabs = () => {
+      const tabsList = document.querySelector('[role="tablist"]');
+      if (tabsList) {
+        const tabCount = tabsList.querySelectorAll('[role="tab"]').length;
+        if (tabCount !== EXPECTED_TAB_COUNT) {
+          console.warn(`Settings: Expected ${EXPECTED_TAB_COUNT} tabs but found ${tabCount}`);
+        }
+      }
+    };
+    
+    // Check after a brief delay to ensure render is complete
+    const timer = setTimeout(checkTabs, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -247,5 +268,23 @@ export default function Settings() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function Settings() {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    return <SettingsLoadingSkeleton />;
+  }
+
+  return (
+    <SettingsErrorBoundary>
+      <SettingsContent />
+    </SettingsErrorBoundary>
   );
 }
