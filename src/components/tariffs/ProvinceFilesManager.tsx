@@ -28,8 +28,10 @@ import {
   AlertCircle,
   Zap,
   Plus,
-  Sparkles
+  Sparkles,
+  Eye
 } from "lucide-react";
+import { FilePreviewDialog } from "./FilePreviewDialog";
 
 interface Municipality {
   id: string;
@@ -77,6 +79,9 @@ export function ProvinceFilesManager() {
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [analysisInfo, setAnalysisInfo] = useState<{ sheets?: string[]; analysis?: string } | null>(null);
   const [autoReprise, setAutoReprise] = useState(true);
+  
+  // File preview state
+  const [previewFile, setPreviewFile] = useState<ProvinceFile | null>(null);
   
   // Eskom batch tracking state
   const [eskomBatchStatus, setEskomBatchStatus] = useState<{
@@ -1038,6 +1043,7 @@ export function ProvinceFilesManager() {
   }
 
   return (
+    <>
     <div className="space-y-6">
       {/* Add Province Section */}
       <Card>
@@ -1141,14 +1147,26 @@ export function ProvinceFilesManager() {
                                     <TableCell>{formatDate(file.uploadedAt)}</TableCell>
                                     <TableCell>{formatFileSize(file.size)}</TableCell>
                                     <TableCell className="text-right">
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-destructive"
-                                        onClick={() => handleDeleteFile(file.path)}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
+                                      <div className="flex items-center justify-end gap-1">
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8"
+                                          onClick={() => setPreviewFile(file)}
+                                          title="Preview file"
+                                        >
+                                          <Eye className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-destructive"
+                                          onClick={() => handleDeleteFile(file.path)}
+                                          title="Delete file"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
                                     </TableCell>
                                   </TableRow>
                                 ))}
@@ -1666,5 +1684,14 @@ export function ProvinceFilesManager() {
         </CardContent>
       </Card>
     </div>
+    
+    {/* File Preview Dialog */}
+    <FilePreviewDialog
+      open={!!previewFile}
+      onOpenChange={(open) => !open && setPreviewFile(null)}
+      fileName={previewFile?.name || ""}
+      filePath={previewFile?.path || ""}
+    />
+    </>
   );
 }
