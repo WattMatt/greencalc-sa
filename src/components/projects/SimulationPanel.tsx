@@ -639,6 +639,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             onChange={setPvConfig}
             maxSolarKva={maxSolarKva}
             solarCapacity={solarCapacity}
+            projectLocation={project?.location}
           />
         </CollapsibleContent>
       </Collapsible>
