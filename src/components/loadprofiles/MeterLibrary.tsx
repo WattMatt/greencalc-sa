@@ -571,6 +571,202 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     },
   });
 
+  // Force recalculate 30-minute interval meters to fix sum→average issue
+  const forceRecalculate30MinMeters = useMutation({
+    mutationFn: async () => {
+      console.log(`[ForceRecalc] Starting force recalculation for 30-min interval meters`);
+      
+      // Fetch all 30-min interval meters that have CSV content
+      const { data: metersToFix, error: fetchError } = await supabase
+        .from("scada_imports")
+        .select("id, shop_name, site_name, detected_interval_minutes, raw_data")
+        .eq("detected_interval_minutes", 30)
+        .not("raw_data", "is", null);
+      
+      if (fetchError) throw fetchError;
+      
+      const metersWithCsv = (metersToFix || []).filter(m => {
+        const rawData = m.raw_data as { csvContent?: string }[] | null;
+        return rawData?.[0]?.csvContent;
+      });
+      
+      if (metersWithCsv.length === 0) {
+        toast.info("No 30-minute interval meters with CSV data found");
+        return { processed: 0, failed: 0 };
+      }
+      
+      console.log(`[ForceRecalc] Found ${metersWithCsv.length} 30-min meters to recalculate`);
+      
+      let processed = 0;
+      let failed = 0;
+      const total = metersWithCsv.length;
+      
+      setCompletedMeters([]);
+      
+      for (let i = 0; i < metersWithCsv.length; i++) {
+        const meter = metersWithCsv[i];
+        const displayName = meter.shop_name || meter.site_name || meter.id.slice(0, 8);
+        
+        setReprocessProgress({
+          current: i + 1,
+          total,
+          currentMeter: `Recalculating ${displayName}...`,
+          batch: 1,
+          totalBatches: 1
+        });
+        
+        try {
+          const rawData = meter.raw_data as { csvContent?: string }[];
+          const csvContent = rawData[0].csvContent!;
+          
+          // Parse and reprocess with corrected averaging logic
+          const lines = csvContent.split('\n').filter((l: string) => l.trim());
+          let startRow = 1;
+          let isPnPScada = false;
+          
+          // Check for PnP SCADA format
+          if (lines.length >= 2) {
+            const firstLine = lines[0];
+            const meterMatch = firstLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
+            const secondLine = lines[1]?.toLowerCase() || "";
+            const hasScadaHeaders = secondLine.includes('rdate') && secondLine.includes('rtime') && secondLine.includes('kwh');
+            
+            if (meterMatch && hasScadaHeaders) {
+              isPnPScada = true;
+              startRow = 2;
+            }
+          }
+          
+          // Auto-detect delimiter
+          const sampleLine = lines[startRow - 1] || lines[0] || "";
+          const tabCount = (sampleLine.match(/\t/g) || []).length;
+          const semicolonCount = (sampleLine.match(/;/g) || []).length;
+          
+          const delimiters = {
+            tab: tabCount > 0,
+            semicolon: semicolonCount > 0,
+            comma: true,
+            space: false,
+            other: false,
+            otherChar: "",
+          };
+          
+          const delimChars = new Set<string>();
+          if (delimiters.tab) delimChars.add('\t');
+          if (delimiters.semicolon) delimChars.add(';');
+          delimChars.add(',');
+          
+          const parseRow = (line: string): string[] => {
+            const result: string[] = [];
+            let current = "";
+            let inQuotes = false;
+            for (let j = 0; j < line.length; j++) {
+              const char = line[j];
+              if (char === '"' && !inQuotes) {
+                inQuotes = true;
+              } else if (char === '"' && inQuotes) {
+                if (line[j + 1] === '"') {
+                  current += '"';
+                  j++;
+                } else {
+                  inQuotes = false;
+                }
+              } else if (!inQuotes && delimChars.has(char)) {
+                result.push(current.trim());
+                current = "";
+              } else {
+                current += char;
+              }
+            }
+            result.push(current.trim());
+            return result;
+          };
+          
+          const headerIdx = startRow - 1;
+          const headers = headerIdx < lines.length ? parseRow(lines[headerIdx]) : [];
+          const rows = lines.slice(headerIdx + 1).map(parseRow);
+          
+          const columns: ColumnConfig[] = headers.map((header, idx) => {
+            const lowerHeader = header.toLowerCase();
+            if (lowerHeader.includes('date') || lowerHeader.includes('rdate')) {
+              return { index: idx, name: header, dataType: 'date' as const, dateFormat: 'YMD' };
+            }
+            return { index: idx, name: header, dataType: 'text' as const };
+          });
+          
+          const parseConfig: WizardParseConfig = {
+            fileType: "delimited",
+            startRow,
+            delimiters,
+            treatConsecutiveAsOne: false,
+            textQualifier: '"',
+            columns,
+            detectedFormat: isPnPScada ? "pnp-scada" : undefined,
+            valueUnit: "kW", // Force kW unit to ensure averaging (not summing)
+          };
+          
+          const profile = processCSVToLoadProfile(headers, rows, parseConfig);
+          
+          if (profile.dataPoints === 0) {
+            console.warn(`[ForceRecalc] ${displayName}: Empty profile`);
+            failed++;
+            setCompletedMeters(prev => [...prev, { id: meter.id, name: displayName, status: 'failed', message: 'Empty profile' }]);
+            continue;
+          }
+          
+          console.log(`[ForceRecalc] ${displayName}: peak=${profile.peakKw.toFixed(1)}kW (was likely ~${(profile.peakKw * 2).toFixed(1)}kW before fix)`);
+          
+          const { error: updateError } = await supabase
+            .from("scada_imports")
+            .update({
+              load_profile_weekday: profile.weekdayProfile,
+              load_profile_weekend: profile.weekendProfile,
+              data_points: profile.dataPoints,
+              date_range_start: profile.dateRangeStart,
+              date_range_end: profile.dateRangeEnd,
+              weekday_days: profile.weekdayDays,
+              weekend_days: profile.weekendDays,
+              processed_at: new Date().toISOString(),
+            })
+            .eq("id", meter.id);
+          
+          if (updateError) {
+            failed++;
+            setCompletedMeters(prev => [...prev, { id: meter.id, name: displayName, status: 'failed', message: updateError.message }]);
+          } else {
+            processed++;
+            setCompletedMeters(prev => [...prev, { id: meter.id, name: displayName, status: 'success', message: 'Recalculated' }]);
+          }
+        } catch (err) {
+          console.error(`[ForceRecalc] Error processing ${displayName}:`, err);
+          failed++;
+          setCompletedMeters(prev => [...prev, { id: meter.id, name: displayName, status: 'failed', message: String(err) }]);
+        }
+        
+        // Brief pause to avoid overwhelming
+        if (i % 10 === 9) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      return { processed, failed };
+    },
+    onSuccess: ({ processed, failed }) => {
+      setReprocessProgress(null);
+      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+      queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
+      if (failed > 0) {
+        toast.warning(`Recalculated ${processed} meters, ${failed} failed`);
+      } else {
+        toast.success(`Recalculated ${processed} meters with corrected averaging`);
+      }
+    },
+    onError: (error) => {
+      setReprocessProgress(null);
+      toast.error(`Recalculation failed: ${error.message}`);
+    },
+  });
+
   const handleReprocessSelected = () => {
     if (selectedIds.size === 0) {
       toast.error("No meters selected");
@@ -1151,6 +1347,24 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                 </Button>
               );
             })()}
+            
+            {/* Fix 30-min Averaging button */}
+            {meters && meters.length > 0 && !showOneClickProcessor && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => forceRecalculate30MinMeters.mutate()}
+                disabled={forceRecalculate30MinMeters.isPending || processingQueue.length > 0}
+                className="border-amber-500/50 text-amber-600 hover:bg-amber-50"
+              >
+                {forceRecalculate30MinMeters.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4 mr-1" />
+                )}
+                Fix 30-min Averaging
+              </Button>
+            )}
             
             {/* Clear Processed button */}
             {meters && meters.some(m => m.processed_at) && !showOneClickProcessor && (
