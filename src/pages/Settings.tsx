@@ -13,6 +13,7 @@ import { APIIntegrationConfig, defaultAPIIntegrationConfig } from "@/components/
 import { DeratingSettingsCard } from "@/components/settings/DeratingSettingsCard";
 import { DiversitySettingsCard } from "@/components/settings/DiversitySettingsCard";
 import { BrandingSettingsCard } from "@/components/settings/BrandingSettingsCard";
+import { useOrganizationBranding } from "@/hooks/useOrganizationBranding";
 import { useTour } from "@/components/onboarding/TourContext";
 import { SettingsErrorBoundary } from "@/components/settings/SettingsErrorBoundary";
 import { SettingsLoadingSkeleton } from "@/components/settings/SettingsLoadingSkeleton";
@@ -25,6 +26,7 @@ function SettingsContent() {
   const [useAverageRates, setUseAverageRates] = useState(false);
   const { completedTours, resetAllTours } = useTour();
   const [apiConfig, setApiConfig] = useState<APIIntegrationConfig>(defaultAPIIntegrationConfig);
+  const { branding: orgBranding } = useOrganizationBranding();
 
   const totalTours = 5;
   const completedCount = completedTours.length;
@@ -196,9 +198,19 @@ function SettingsContent() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
-                  <div className="w-2 h-2 mt-2 rounded-full bg-primary" />
+                  {orgBranding.logo_url ? (
+                    <img 
+                      src={orgBranding.logo_url} 
+                      alt="Company logo" 
+                      className="w-10 h-10 rounded object-contain"
+                    />
+                  ) : (
+                    <div className="w-2 h-2 mt-2 rounded-full bg-primary" />
+                  )}
                   <div>
-                    <p className="font-medium text-foreground">Green Energy Financial Platform</p>
+                    <p className="font-medium text-foreground">
+                      {orgBranding.company_name || "Green Energy Financial Platform"}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       This platform helps South African users model ROI and payback periods for solar and
                       battery installations based on municipal electricity tariffs.
