@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -170,6 +170,81 @@ const DashboardTabContent = ({
   }, [project.name, project.location, project.total_area_sqm, project.connection_size_kva, project.system_type, project.client_name, project.budget, project.target_date]);
   
   const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialMount = useRef(true);
+
+  // Auto-save with debounce
+  const debouncedSave = useCallback(async () => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .update({
+          name: params.name,
+          location: params.location,
+          connection_size_kva: params.capacity || null,
+          total_area_sqm: params.totalArea || null,
+          system_type: params.systemType || "Solar",
+          client_name: params.clientName || null,
+          budget: params.budget || null,
+          target_date: params.targetDate?.toISOString().split('T')[0] || null,
+        })
+        .eq("id", projectId);
+      
+      if (error) throw error;
+      
+      // Invalidate and refetch project data
+      await queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      onProjectUpdate();
+      setHasUnsavedChanges(false);
+      
+      toast.success("Changes saved", { duration: 1500 });
+    } catch (error) {
+      console.error("Error saving project:", error);
+      toast.error("Failed to save changes");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [params, projectId, queryClient, onProjectUpdate]);
+
+  // Trigger auto-save when params change
+  useEffect(() => {
+    if (isInitialMount.current) {
+      return;
+    }
+    
+    setHasUnsavedChanges(true);
+    
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    // Set new timeout for auto-save (1.5 seconds after last change)
+    saveTimeoutRef.current = setTimeout(() => {
+      debouncedSave();
+    }, 1500);
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [params.name, params.location, params.capacity, params.totalArea, params.systemType, params.clientName, params.budget, params.targetDate, debouncedSave]);
+
+  // Mark initial mount as complete after first render
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      isInitialMount.current = false;
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Extract simulation results for KPIs
   const simulationResults = latestSimulation?.results_json as any;
@@ -217,35 +292,11 @@ const DashboardTabContent = ({
   };
 
   const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const { error } = await supabase
-        .from("projects")
-        .update({
-          name: params.name,
-          location: params.location,
-          connection_size_kva: params.capacity || null,
-          total_area_sqm: params.totalArea || null,
-          system_type: params.systemType || "Solar",
-          client_name: params.clientName || null,
-          budget: params.budget || null,
-          target_date: params.targetDate?.toISOString().split('T')[0] || null,
-        })
-        .eq("id", projectId);
-      
-      if (error) throw error;
-      
-      // Invalidate and refetch project data
-      await queryClient.invalidateQueries({ queryKey: ["project", projectId] });
-      onProjectUpdate();
-      
-      toast.success("Project parameters saved");
-    } catch (error) {
-      console.error("Error saving project:", error);
-      toast.error("Failed to save project parameters");
-    } finally {
-      setIsSaving(false);
+    // Clear any pending auto-save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
+    await debouncedSave();
   };
 
   const formatCurrency = (value: number) => {
@@ -388,14 +439,22 @@ const DashboardTabContent = ({
               </Popover>
             </div>
 
-            <Button onClick={handleSave} className="w-full h-8 mt-2" size="sm" disabled={isSaving}>
-              {isSaving ? (
-                <span className="animate-spin mr-2 h-3 w-3 border border-current border-t-transparent rounded-full" />
-              ) : (
-                <Save className="mr-2 h-3 w-3" />
+            <div className="flex items-center gap-2 mt-2">
+              <Button onClick={handleSave} className="flex-1 h-8" size="sm" disabled={isSaving}>
+                {isSaving ? (
+                  <span className="animate-spin mr-2 h-3 w-3 border border-current border-t-transparent rounded-full" />
+                ) : (
+                  <Save className="mr-2 h-3 w-3" />
+                )}
+                {isSaving ? "Saving..." : "Save Now"}
+              </Button>
+              {hasUnsavedChanges && !isSaving && (
+                <span className="text-xs text-muted-foreground">Auto-saving...</span>
               )}
-              {isSaving ? "Saving..." : "Save Parameters"}
-            </Button>
+              {!hasUnsavedChanges && !isSaving && (
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
