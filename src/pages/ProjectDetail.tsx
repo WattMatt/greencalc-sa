@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -103,13 +103,12 @@ const TabWithStatus = ({
   </Tooltip>
 );
 
-// Dashboard Tab Content Component
-const DashboardTabContent = ({ 
-  projectId, 
-  project, 
-  tenants,
-  onProjectUpdate
-}: { 
+// Expose save function for tab change
+interface DashboardTabContentRef {
+  saveIfNeeded: () => Promise<void>;
+}
+
+interface DashboardTabContentProps {
   projectId: string;
   project: { 
     name: string; 
@@ -124,7 +123,15 @@ const DashboardTabContent = ({
   };
   tenants: { area_sqm: number; scada_import_id: string | null }[];
   onProjectUpdate: () => void;
-}) => {
+}
+
+// Dashboard Tab Content Component
+const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabContentProps>(({ 
+  projectId, 
+  project, 
+  tenants,
+  onProjectUpdate
+}, ref) => {
   const queryClient = useQueryClient();
   
   // Fetch the latest saved simulation for KPIs
@@ -171,14 +178,15 @@ const DashboardTabContent = ({
   
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialMount = useRef(true);
+  const lastSavedParams = useRef(JSON.stringify(params));
 
-  // Auto-save with debounce
-  const debouncedSave = useCallback(async () => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
+  // Save function - called on blur or tab change
+  const saveParams = useCallback(async () => {
+    // Check if anything actually changed
+    const currentParamsStr = JSON.stringify(params);
+    if (currentParamsStr === lastSavedParams.current) {
+      return; // No changes to save
     }
     
     setIsSaving(true);
@@ -199,7 +207,7 @@ const DashboardTabContent = ({
       
       if (error) throw error;
       
-      // Invalidate and refetch project data
+      lastSavedParams.current = currentParamsStr;
       await queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       onProjectUpdate();
       setHasUnsavedChanges(false);
@@ -213,38 +221,26 @@ const DashboardTabContent = ({
     }
   }, [params, projectId, queryClient, onProjectUpdate]);
 
-  // Trigger auto-save when params change
+  // Expose saveIfNeeded to parent via ref for tab change saving
+  useImperativeHandle(ref, () => ({
+    saveIfNeeded: async () => {
+      if (hasUnsavedChanges) {
+        await saveParams();
+      }
+    }
+  }), [hasUnsavedChanges, saveParams]);
+
+  // Track unsaved changes
   useEffect(() => {
     if (isInitialMount.current) {
+      isInitialMount.current = false;
+      lastSavedParams.current = JSON.stringify(params);
       return;
     }
     
-    setHasUnsavedChanges(true);
-    
-    // Clear existing timeout
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    
-    // Set new timeout for auto-save (1.5 seconds after last change)
-    saveTimeoutRef.current = setTimeout(() => {
-      debouncedSave();
-    }, 1500);
-    
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [params.name, params.location, params.capacity, params.totalArea, params.systemType, params.clientName, params.budget, params.targetDate, debouncedSave]);
-
-  // Mark initial mount as complete after first render
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      isInitialMount.current = false;
-    }, 500);
-    return () => clearTimeout(timer);
-  }, []);
+    const currentParamsStr = JSON.stringify(params);
+    setHasUnsavedChanges(currentParamsStr !== lastSavedParams.current);
+  }, [params]);
 
   // Extract simulation results for KPIs
   const simulationResults = latestSimulation?.results_json as any;
@@ -292,11 +288,14 @@ const DashboardTabContent = ({
   };
 
   const handleSave = async () => {
-    // Clear any pending auto-save
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
+    await saveParams();
+  };
+  
+  // Handle field blur - save when leaving any input
+  const handleFieldBlur = () => {
+    if (hasUnsavedChanges) {
+      saveParams();
     }
-    await debouncedSave();
   };
 
   const formatCurrency = (value: number) => {
@@ -326,6 +325,7 @@ const DashboardTabContent = ({
                 id="name"
                 value={params.name}
                 onChange={(e) => handleParamChange("name", e.target.value)}
+                onBlur={handleFieldBlur}
                 placeholder="Enter project name"
                 className="h-8"
               />
@@ -337,6 +337,7 @@ const DashboardTabContent = ({
                 id="location"
                 value={params.location}
                 onChange={(e) => handleParamChange("location", e.target.value)}
+                onBlur={handleFieldBlur}
                 placeholder="Enter location"
                 className="h-8"
               />
@@ -350,6 +351,7 @@ const DashboardTabContent = ({
                   type="number"
                   value={params.totalArea || ""}
                   onChange={(e) => handleParamChange("totalArea", Number(e.target.value))}
+                  onBlur={handleFieldBlur}
                   placeholder="0"
                   className="h-8"
                 />
@@ -361,6 +363,7 @@ const DashboardTabContent = ({
                   type="number"
                   value={params.capacity || ""}
                   onChange={(e) => handleParamChange("capacity", Number(e.target.value))}
+                  onBlur={handleFieldBlur}
                   placeholder="0"
                   className="h-8"
                 />
@@ -371,7 +374,11 @@ const DashboardTabContent = ({
               <Label className="text-xs">System Type</Label>
               <Select
                 value={params.systemType}
-                onValueChange={(value) => handleParamChange("systemType", value)}
+                onValueChange={(value) => {
+                  handleParamChange("systemType", value);
+                  // Save immediately for select changes
+                  setTimeout(() => saveParams(), 0);
+                }}
               >
                 <SelectTrigger className="h-8">
                   <SelectValue placeholder="Select system type" />
@@ -395,6 +402,7 @@ const DashboardTabContent = ({
                 id="clientName"
                 value={params.clientName}
                 onChange={(e) => handleParamChange("clientName", e.target.value)}
+                onBlur={handleFieldBlur}
                 placeholder="Enter client name"
                 className="h-8"
               />
@@ -407,6 +415,7 @@ const DashboardTabContent = ({
                 type="number"
                 value={params.budget || ""}
                 onChange={(e) => handleParamChange("budget", Number(e.target.value))}
+                onBlur={handleFieldBlur}
                 placeholder="0"
                 className="h-8"
               />
@@ -431,7 +440,11 @@ const DashboardTabContent = ({
                   <Calendar
                     mode="single"
                     selected={params.targetDate}
-                    onSelect={(date) => handleParamChange("targetDate", date)}
+                    onSelect={(date) => {
+                      handleParamChange("targetDate", date);
+                      // Save immediately for calendar selection
+                      setTimeout(() => saveParams(), 0);
+                    }}
                     initialFocus
                     className="pointer-events-auto"
                   />
@@ -440,17 +453,14 @@ const DashboardTabContent = ({
             </div>
 
             <div className="flex items-center gap-2 mt-2">
-              <Button onClick={handleSave} className="flex-1 h-8" size="sm" disabled={isSaving}>
+              <Button onClick={handleSave} className="flex-1 h-8" size="sm" disabled={isSaving || !hasUnsavedChanges}>
                 {isSaving ? (
                   <span className="animate-spin mr-2 h-3 w-3 border border-current border-t-transparent rounded-full" />
                 ) : (
                   <Save className="mr-2 h-3 w-3" />
                 )}
-                {isSaving ? "Saving..." : "Save Now"}
+                {isSaving ? "Saving..." : hasUnsavedChanges ? "Save" : "Saved"}
               </Button>
-              {hasUnsavedChanges && !isSaving && (
-                <span className="text-xs text-muted-foreground">Auto-saving...</span>
-              )}
               {!hasUnsavedChanges && !isSaving && (
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
               )}
@@ -581,13 +591,25 @@ const DashboardTabContent = ({
       </div>
     </div>
   );
-};
+});
+
+DashboardTabContent.displayName = "DashboardTabContent";
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
+  const dashboardRef = useRef<DashboardTabContentRef>(null);
+  
+  // Handle tab change - save before switching
+  const handleTabChange = async (newTab: string) => {
+    // Save any unsaved changes in dashboard tab before switching
+    if (activeTab === "overview" && dashboardRef.current) {
+      await dashboardRef.current.saveIfNeeded();
+    }
+    setActiveTab(newTab);
+  };
   
   // System costs state (for payback calculations)
   const [systemCosts, setSystemCosts] = useState<SystemCostsData>({
@@ -921,7 +943,7 @@ export default function ProjectDetail() {
       </div>
 
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TooltipProvider delayDuration={300}>
           <TabsList className="flex-wrap h-auto gap-1">
             <TabWithStatus value="overview" status={tabStatuses.overview.status} tooltip={tabStatuses.overview.tooltip}>
@@ -969,6 +991,7 @@ export default function ProjectDetail() {
 
         <TabsContent value="overview" className="mt-6">
           <DashboardTabContent 
+            ref={dashboardRef}
             projectId={id!} 
             project={project} 
             tenants={tenants || []} 
