@@ -24,6 +24,13 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
   // Y-axis must accommodate the DC curve going above AC limit
   const yAxisMax = dcAcRatio > 1 ? Math.max(peakDc * 1.1, (maxPvAcKva || 0) * 1.3) : undefined;
 
+  // Compute gain zone data: the difference between AC output and 1:1 baseline (only positive gains)
+  const chartDataWithGain = chartData.map(d => ({
+    ...d,
+    // Gain is where AC output exceeds 1:1 baseline (morning/evening benefit from oversizing)
+    pvGainZone: Math.max(0, (d.pvGeneration || 0) - (d.pv1to1Baseline || 0)),
+  }));
+
   return (
     <div className="space-y-1 mt-4 pt-4 border-t">
       <div className="flex items-center justify-between">
@@ -56,10 +63,16 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
             </span>
           ) : null}
           {show1to1Comparison && dcAcRatio > 1 && (
-            <span className="flex items-center gap-1 text-muted-foreground">
-              <div className="w-3 h-0.5 border-b-2 border-dashed border-muted-foreground" />
-              1:1: {total1to1.toFixed(0)} {unit}
-            </span>
+            <>
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <div className="w-3 h-0.5 border-b-2 border-dashed border-muted-foreground" />
+                1:1: {total1to1.toFixed(0)} {unit}
+              </span>
+              <span className="flex items-center gap-1 text-emerald-600">
+                <div className="w-2 h-2 rounded-sm bg-emerald-500/50" />
+                Gain
+              </span>
+            </>
           )}
         </div>
       </div>
@@ -82,11 +95,15 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
       
       <div className="h-[180px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <ComposedChart data={chartDataWithGain} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="pvAcGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="hsl(38 92% 50%)" stopOpacity={0.6} />
                 <stop offset="95%" stopColor="hsl(38 92% 50%)" stopOpacity={0.1} />
+              </linearGradient>
+              <linearGradient id="pvGainGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="hsl(142 76% 36%)" stopOpacity={0.5} />
+                <stop offset="95%" stopColor="hsl(142 76% 36%)" stopOpacity={0.1} />
               </linearGradient>
               <linearGradient id="pv1to1Gradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="hsl(var(--muted-foreground))" stopOpacity={0.2} />
@@ -148,12 +165,13 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
                 
-                const dataPoint = chartData.find(d => d.hour === label);
+                const dataPoint = chartDataWithGain.find(d => d.hour === label);
                 const pv = dataPoint?.pvGeneration || 0;
                 const load = dataPoint?.total || 0;
                 const dcOutput = dataPoint?.pvDcOutput || 0;
                 const clipping = dataPoint?.pvClipping || 0;
                 const baseline = dataPoint?.pv1to1Baseline || 0;
+                const gain = dataPoint?.pvGainZone || 0;
                 const hourNum = parseInt(label?.toString() || "0");
                 const period = getTOUPeriod(hourNum, isWeekend);
 
@@ -183,6 +201,9 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
                     {show1to1Comparison && dcAcRatio > 1 && (
                       <p className="text-muted-foreground">1:1 Baseline: {baseline.toFixed(1)} {unit}</p>
                     )}
+                    {show1to1Comparison && dcAcRatio > 1 && gain > 0 && (
+                      <p className="text-emerald-600">Energy Gained: +{gain.toFixed(1)} {unit}</p>
+                    )}
                     <p className="text-muted-foreground border-t pt-1 mt-1">Site Load: {load.toFixed(1)} {unit}</p>
                   </div>
                 );
@@ -199,6 +220,19 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
                 strokeDasharray="4 4"
                 dot={false}
                 name="1:1 Baseline"
+              />
+            )}
+
+            {/* Gain Zone: shaded area showing energy gained from oversizing (between 1:1 baseline and AC output) */}
+            {show1to1Comparison && dcAcRatio > 1 && (
+              <Area
+                type="monotone"
+                dataKey="pvGainZone"
+                stroke="none"
+                fill="url(#pvGainGradient)"
+                stackId="gainStack"
+                baseValue="dataMin"
+                name="Energy Gained"
               />
             )}
 
