@@ -55,10 +55,14 @@ export interface TariffRate {
 /**
  * Calculate blended solar rate for a specific season
  * 
- * This calculates the effective tariff rate during sunshine hours,
- * weighted by the solar production curve. Solar produces most energy
- * during Standard TOU periods (10:00-18:00), so this typically results
- * in a rate lower than the simple average of all TOU rates.
+ * This calculates the effective tariff rate during CORE sunshine hours only,
+ * weighted by the solar production curve. Peak TOU periods (7-10am, 6-8pm) are
+ * EXCLUDED from the blended rate calculation because:
+ * 1. Morning peak (7-10am): Solar is still ramping up, output is 35-75% of max
+ * 2. Evening peak (6-8pm): Solar is tapering off, output is 10-30% of max
+ * 
+ * Industry practice treats these as incidental generation and calculates the
+ * blended rate using only Standard hours (10:00-18:00) when solar peaks.
  * 
  * @param rates - Array of tariff rates with time_of_use and season
  * @param season - 'summer' (Low/Summer) or 'winter' (High/Winter)
@@ -74,6 +78,7 @@ export function calculateBlendedSolarRate(rates: TariffRate[], season: 'summer' 
   const offPeakRate = rates.find(r => r.time_of_use === 'Off-Peak' && r.season === seasonFilter)?.rate_per_kwh || 0;
   
   // Calculate energy-weighted hours during sunshine
+  // Peak hours are tracked but EXCLUDED from blended rate calculation
   let peakEnergy = 0, standardEnergy = 0, offPeakEnergy = 0;
   let peakHours = 0, standardHours = 0, offPeakHours = 0;
   
@@ -93,10 +98,13 @@ export function calculateBlendedSolarRate(rates: TariffRate[], season: 'summer' 
   }
   
   const totalEnergy = peakEnergy + standardEnergy + offPeakEnergy;
+  // For blended rate, use only Standard + Off-Peak (exclude Peak)
+  const blendedEnergy = standardEnergy + offPeakEnergy;
   
-  // Calculate blended rate weighted by solar production
-  const blendedRate = totalEnergy > 0
-    ? (peakEnergy * peakRate + standardEnergy * standardRate + offPeakEnergy * offPeakRate) / totalEnergy
+  // Calculate blended rate weighted by solar production during Standard/Off-Peak only
+  // Peak is excluded as per industry practice for solar valuation
+  const blendedRate = blendedEnergy > 0
+    ? (standardEnergy * standardRate + offPeakEnergy * offPeakRate) / blendedEnergy
     : 0;
   
   const breakdown = [
