@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, FileText, Table, Loader2, CheckCircle, Image, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { pdfMake, COLORS, loadImageAsBase64, formatCurrency } from "@/lib/pdfmake/pdfmakeConfig";
-import { createBasicTable, createKeyValueTable, createCashflowTable, createMetricsGrid, createTOUTable, createSectionHeader } from "@/lib/pdfmake/tables";
+import { pdfMake, COLORS, loadImageAsBase64, formatCurrency, defaultStyles } from "@/lib/pdfmake/pdfmakeConfig";
+import { createBasicTable, createKeyValueTable, createCashflowTable, createMetricsGrid, createTOUTable, createSectionHeader, createComparisonTable, createMonthlyTable, createFinancialTable } from "@/lib/pdfmake/tables";
 import type { Content, TDocumentDefinitions } from "pdfmake/interfaces";
 import html2canvas from "html2canvas";
 import { supabase } from "@/integrations/supabase/client";
@@ -157,6 +157,23 @@ function HiddenPaybackChart({ data, chartRef }: { data: ReportData; chartRef: Re
   );
 }
 
+// Segment titles for display
+const SEGMENT_TITLES: Record<SegmentType, string> = {
+  executive_summary: "Executive Summary",
+  dcac_comparison: "DC/AC Ratio Analysis",
+  energy_flow: "Energy Flow Diagram",
+  monthly_yield: "Monthly Yield Analysis",
+  payback_timeline: "Payback Timeline",
+  sensitivity_analysis: "Sensitivity Analysis",
+  savings_breakdown: "Savings Breakdown",
+  environmental_impact: "Environmental Impact",
+  engineering_specs: "Engineering Specifications",
+  ai_infographics: "AI Infographics",
+  tariff_details: "Tariff Analysis",
+  sizing_comparison: "Sizing Alternatives",
+  custom_notes: "Notes & Annotations"
+};
+
 export function ReportExport({ 
   reportName, 
   segments, 
@@ -178,21 +195,11 @@ export function ReportExport({
     trackEvent('view', { metadata: { reportName } });
   }, []);
 
-  const hexToRgb = (hex: string) => {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16)
-    } : { r: 34, g: 197, b: 94 };
-  };
-
   const enabledSegments = segments.filter(s => s.enabled).sort((a, b) => a.order - b.order);
 
   const captureChart = useCallback(async (ref: React.RefObject<HTMLDivElement>): Promise<string | null> => {
     if (!ref.current) return null;
     try {
-      // Wait for recharts to render
       await new Promise(resolve => setTimeout(resolve, 100));
       const canvas = await html2canvas(ref.current, {
         backgroundColor: '#ffffff',
@@ -207,7 +214,7 @@ export function ReportExport({
     }
   }, []);
 
-  // Fetch cached infographics from storage - cache key must match InfographicGenerator
+  // Fetch cached infographics from storage
   const fetchCachedInfographics = async (): Promise<Map<string, string>> => {
     const infographics = new Map<string, string>();
     if (!projectId) return infographics;
@@ -215,7 +222,6 @@ export function ReportExport({
     const types = ["executive", "system", "savings", "environmental", "engineering"];
     
     for (const type of types) {
-      // Cache key format matches InfographicGenerator: solarKwp-batteryKwh-savings-type
       const cacheKey = `${reportData.simulation.solar_capacity_kwp}-${reportData.simulation.battery_capacity_kwh}-${reportData.financials.annual_savings}-${type}`.replace(/\./g, '_');
       const filePath = `${projectId}/${cacheKey}.png`;
       
@@ -239,12 +245,9 @@ export function ReportExport({
   const exportToPDF = async () => {
     setExporting("pdf");
     try {
-      const primaryColor = branding?.primary_color || "#22c55e";
-      const secondaryColor = branding?.secondary_color || "#0f172a";
-      const primary = hexToRgb(primaryColor);
-      const secondary = hexToRgb(secondaryColor);
+      const primaryColor = branding?.primary_color || COLORS.primary;
       
-      // Capture charts and fetch infographics in parallel
+      // Capture charts in parallel
       toast.info("Preparing report assets...");
       const [dcAcImage, monthlyImage, paybackImage, cachedInfographics] = await Promise.all([
         captureChart(dcAcChartRef),
@@ -259,168 +262,189 @@ export function ReportExport({
         payback_timeline: paybackImage,
       };
 
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      let yPos = 20;
+      // Build document content
+      const content: Content[] = [];
 
       // ========== COVER PAGE ==========
-      doc.setFillColor(secondary.r, secondary.g, secondary.b);
-      doc.rect(0, 0, pageWidth, 60, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(28);
-      doc.setFont("helvetica", "bold");
-      doc.text(reportName || "Energy Analysis Report", 20, 35);
-      
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "normal");
-      doc.text(`${branding?.company_name || "Solar Energy Report"}`, 20, 50);
+      content.push(
+        {
+          canvas: [
+            {
+              type: 'rect',
+              x: 0,
+              y: 0,
+              w: 595,
+              h: 80,
+              color: COLORS.secondary,
+            }
+          ],
+          absolutePosition: { x: 0, y: 0 }
+        },
+        {
+          text: reportName || "Energy Analysis Report",
+          fontSize: 28,
+          bold: true,
+          color: COLORS.white,
+          margin: [0, 20, 0, 5],
+        },
+        {
+          text: branding?.company_name || "Solar Energy Report",
+          fontSize: 12,
+          color: COLORS.white,
+          margin: [0, 0, 0, 30],
+        },
+        {
+          text: new Date().toLocaleDateString('en-ZA', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          }),
+          fontSize: 10,
+          color: COLORS.muted,
+          margin: [0, 0, 0, 20],
+        }
+      );
 
-      doc.setTextColor(200, 200, 200);
-      doc.setFontSize(10);
-      doc.text(new Date().toLocaleDateString('en-ZA', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      }), pageWidth - 60, 35);
+      // Project summary card
+      content.push(
+        createSectionHeader("Project Overview"),
+        createKeyValueTable([
+          { key: "Site", value: reportData.project.name },
+          { key: "Location", value: reportData.project.location || "Not specified" },
+          { key: "Solar System", value: `${reportData.simulation.solar_capacity_kwp} kWp` },
+          { key: "Battery", value: `${reportData.simulation.battery_capacity_kwh} kWh` },
+        ]),
+        { text: "", margin: [0, 10, 0, 0] }
+      );
 
-      doc.setTextColor(0, 0, 0);
-      yPos = 80;
-
-      // Project Summary Card
-      doc.setFillColor(245, 245, 245);
-      doc.roundedRect(20, yPos, pageWidth - 40, 45, 3, 3, 'F');
-      
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(primary.r, primary.g, primary.b);
-      doc.text("Project Overview", 30, yPos + 12);
-      
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(60, 60, 60);
-      doc.text(`Site: ${reportData.project.name}`, 30, yPos + 25);
-      doc.text(`Location: ${reportData.project.location || 'Not specified'}`, 30, yPos + 35);
-      doc.text(`System: ${reportData.simulation.solar_capacity_kwp} kWp Solar`, pageWidth / 2, yPos + 25);
-      doc.text(`Battery: ${reportData.simulation.battery_capacity_kwh} kWh`, pageWidth / 2, yPos + 35);
-      
-      yPos += 60;
-
-      // ========== TABLE OF CONTENTS ==========
-      doc.setFontSize(16);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(primary.r, primary.g, primary.b);
-      doc.text("Report Contents", 20, yPos);
-      yPos += 10;
-
-      const segmentNames: Record<SegmentType, string> = {
-        executive_summary: "Executive Summary",
-        dcac_comparison: "DC/AC Ratio Analysis",
-        energy_flow: "Energy Flow Diagram",
-        monthly_yield: "Monthly Yield Analysis",
-        payback_timeline: "Payback Timeline",
-        sensitivity_analysis: "Sensitivity Analysis",
-        savings_breakdown: "Savings Breakdown",
-        environmental_impact: "Environmental Impact",
-        engineering_specs: "Engineering Specifications",
-        ai_infographics: "AI Infographics",
-        tariff_details: "Tariff Analysis",
-        sizing_comparison: "Sizing Alternatives",
-        custom_notes: "Notes & Annotations"
-      };
-
-      enabledSegments.forEach((segment, index) => {
-        doc.setFontSize(11);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(60, 60, 60);
-        doc.text(`${index + 1}. ${segmentNames[segment.type]}`, 30, yPos);
-        doc.text(`Page ${index + 2}`, pageWidth - 40, yPos);
-        yPos += 8;
-      });
+      // Table of Contents
+      content.push(
+        createSectionHeader("Report Contents"),
+        {
+          ul: enabledSegments.map((seg, idx) => ({
+            text: `${idx + 1}. ${SEGMENT_TITLES[seg.type]}`,
+            fontSize: 11,
+            color: COLORS.secondary,
+            margin: [0, 3, 0, 3] as [number, number, number, number],
+          })),
+          margin: [20, 0, 0, 20] as [number, number, number, number],
+        }
+      );
 
       // ========== SEGMENT PAGES ==========
       for (const segment of enabledSegments) {
-        doc.addPage();
-        yPos = 20;
-
+        content.push({ text: '', pageBreak: 'before' });
+        
         // Section header
-        doc.setFillColor(primary.r, primary.g, primary.b);
-        doc.rect(0, 0, pageWidth, 25, 'F');
-        doc.setFontSize(16);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(255, 255, 255);
-        doc.text(segmentNames[segment.type], 20, 16);
+        content.push(
+          {
+            canvas: [
+              {
+                type: 'rect',
+                x: 0,
+                y: 0,
+                w: 595,
+                h: 35,
+                color: primaryColor,
+              }
+            ],
+            absolutePosition: { x: 0, y: 0 }
+          },
+          {
+            text: SEGMENT_TITLES[segment.type],
+            fontSize: 16,
+            bold: true,
+            color: COLORS.white,
+            margin: [0, 0, 0, 30],
+          }
+        );
 
-        doc.setTextColor(0, 0, 0);
-        yPos = 40;
-
-        // Add chart image if available for this segment
+        // Add chart image if available
         const chartImage = chartImages[segment.type];
         if (chartImage) {
-          const imgWidth = pageWidth - 40;
-          const imgHeight = imgWidth * 0.5; // 2:1 aspect ratio
-          doc.addImage(chartImage, 'PNG', 20, yPos, imgWidth, imgHeight);
-          yPos += imgHeight + 15;
+          content.push({
+            image: chartImage,
+            width: 515,
+            margin: [0, 10, 0, 15] as [number, number, number, number],
+          });
         }
 
-        // Render segment content based on type
+        // Render segment-specific content
         switch (segment.type) {
           case "executive_summary":
-            renderExecutiveSummary(doc, reportData, primary, yPos);
+            content.push(...renderExecutiveSummary(reportData));
             break;
           case "dcac_comparison":
-            renderDcAcAnalysis(doc, reportData, primary, yPos);
+            content.push(...renderDcAcAnalysis(reportData));
             break;
           case "payback_timeline":
-            renderPaybackTimeline(doc, reportData, primary, yPos);
+            content.push(...renderPaybackTimeline(reportData));
             break;
           case "engineering_specs":
-            renderEngineeringSpecs(doc, reportData, primary, yPos);
+            content.push(...renderEngineeringSpecs(reportData));
             break;
           case "environmental_impact":
-            renderEnvironmentalImpact(doc, reportData, primary, yPos);
+            content.push(...renderEnvironmentalImpact(reportData));
             break;
           case "savings_breakdown":
-            renderSavingsBreakdown(doc, reportData, primary, yPos);
+            content.push(...renderSavingsBreakdown(reportData));
             break;
           case "monthly_yield":
-            renderMonthlyYield(doc, reportData, primary, yPos);
-            break;
-          case "ai_infographics":
-            await renderAIInfographics(doc, cachedInfographics, primary, yPos);
+            content.push(...renderMonthlyYield(reportData));
             break;
           case "tariff_details":
-            await renderTariffDetails(doc, reportData, primary, yPos, projectId);
+            content.push(...await renderTariffDetails(reportData, projectId));
             break;
           default:
-            doc.setFontSize(11);
-            doc.setTextColor(100, 100, 100);
-            doc.text("Content placeholder for this segment type.", 20, yPos);
+            content.push({
+              text: "Content for this segment type.",
+              fontSize: 11,
+              color: COLORS.muted,
+              margin: [0, 10, 0, 10] as [number, number, number, number],
+            });
         }
       }
 
-      // ========== FOOTER ON ALL PAGES ==========
-      const totalPages = doc.getNumberOfPages();
-      for (let i = 1; i <= totalPages; i++) {
-        doc.setPage(i);
-        doc.setFillColor(secondary.r, secondary.g, secondary.b);
-        doc.rect(0, pageHeight - 12, pageWidth, 12, 'F');
-        
-        doc.setFontSize(8);
-        doc.setTextColor(255, 255, 255);
-        const footerText = [
-          branding?.contact_email,
-          branding?.contact_phone,
-          branding?.website
-        ].filter(Boolean).join(" • ") || "Generated by Energy Analysis Platform";
-        doc.text(footerText, pageWidth / 2, pageHeight - 4, { align: 'center' });
-        doc.text(`Page ${i} of ${totalPages}`, pageWidth - 25, pageHeight - 4);
-      }
+      // Build PDF definition
+      const docDefinition: TDocumentDefinitions = {
+        pageSize: 'A4',
+        pageMargins: [40, 60, 40, 50],
+        content,
+        styles: defaultStyles,
+        footer: (currentPage, pageCount) => ({
+          columns: [
+            {
+              text: [
+                branding?.contact_email,
+                branding?.contact_phone,
+                branding?.website
+              ].filter(Boolean).join(" • ") || "Generated by Energy Analysis Platform",
+              fontSize: 8,
+              color: COLORS.muted,
+              alignment: 'center',
+            },
+            {
+              text: `Page ${currentPage} of ${pageCount}`,
+              fontSize: 8,
+              color: COLORS.muted,
+              alignment: 'right',
+              margin: [0, 0, 40, 0],
+            }
+          ],
+          margin: [40, 10, 40, 0],
+        }),
+        info: {
+          title: reportName || 'Energy Analysis Report',
+          author: branding?.company_name || 'Energy Platform',
+        },
+      };
 
-      doc.save(`${reportName || "Report"}_${new Date().toISOString().split('T')[0]}.pdf`);
+      pdfMake.createPdf(docDefinition).download(
+        `${reportName || "Report"}_${new Date().toISOString().split('T')[0]}.pdf`
+      );
+
       trackEvent('export_pdf', { metadata: { reportName, segmentCount: enabledSegments.length } });
-      toast.success("Report exported as PDF with charts");
+      toast.success("Report exported as PDF");
     } catch (error) {
       console.error("PDF export error:", error);
       toast.error("Failed to export PDF");
@@ -429,206 +453,171 @@ export function ReportExport({
     }
   };
 
-  const renderExecutiveSummary = (doc: jsPDF, data: ReportData, primary: { r: number; g: number; b: number }, yPos: number) => {
-    const pageWidth = doc.internal.pageSize.getWidth();
-    
-    // Key metrics grid
-    const metrics = [
-      { label: "Solar Capacity", value: `${data.simulation.solar_capacity_kwp} kWp` },
-      { label: "Annual Generation", value: `${data.simulation.annual_solar_generation_kwh.toLocaleString()} kWh` },
-      { label: "Annual Savings", value: `R ${data.financials.annual_savings.toLocaleString()}` },
-      { label: "Payback Period", value: `${data.financials.payback_years.toFixed(1)} years` },
+  // Render functions for each segment type
+  function renderExecutiveSummary(data: ReportData): Content[] {
+    return [
+      createMetricsGrid([
+        { label: "Solar Capacity", value: `${data.simulation.solar_capacity_kwp} kWp` },
+        { label: "Annual Generation", value: `${data.simulation.annual_solar_generation_kwh.toLocaleString()} kWh` },
+        { label: "Annual Savings", value: formatCurrency(data.financials.annual_savings) },
+        { label: "Payback Period", value: `${data.financials.payback_years.toFixed(1)} years` },
+      ]),
+      {
+        text: `This ${data.simulation.solar_capacity_kwp} kWp solar installation at ${data.project.name} is projected to generate ${data.simulation.annual_solar_generation_kwh.toLocaleString()} kWh annually. With a self-consumption rate of ${data.kpis.self_consumption_rate.toFixed(1)}% and grid independence of ${data.kpis.grid_independence.toFixed(1)}%, the system delivers estimated annual savings of ${formatCurrency(data.financials.annual_savings)} with a payback period of ${data.financials.payback_years.toFixed(1)} years.`,
+        fontSize: 10,
+        color: COLORS.secondary,
+        margin: [0, 15, 0, 10] as [number, number, number, number],
+        lineHeight: 1.4,
+      },
     ];
+  }
 
-    const cardWidth = (pageWidth - 50) / 2;
-    metrics.forEach((metric, i) => {
-      const x = 20 + (i % 2) * (cardWidth + 10);
-      const y = yPos + Math.floor(i / 2) * 35;
-      
-      doc.setFillColor(250, 250, 250);
-      doc.roundedRect(x, y, cardWidth, 30, 2, 2, 'F');
-      
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(100, 100, 100);
-      doc.text(metric.label, x + 10, y + 12);
-      
-      doc.setFontSize(16);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(primary.r, primary.g, primary.b);
-      doc.text(metric.value, x + 10, y + 24);
-    });
-
-    // Summary text
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
-    const summaryText = `This ${data.simulation.solar_capacity_kwp} kWp solar installation at ${data.project.name} is projected to generate ${data.simulation.annual_solar_generation_kwh.toLocaleString()} kWh annually. With a self-consumption rate of ${data.kpis.self_consumption_rate.toFixed(1)}% and grid independence of ${data.kpis.grid_independence.toFixed(1)}%, the system delivers estimated annual savings of R${data.financials.annual_savings.toLocaleString()} with a payback period of ${data.financials.payback_years.toFixed(1)} years.`;
-    
-    const splitText = doc.splitTextToSize(summaryText, pageWidth - 40);
-    doc.text(splitText, 20, yPos + 85);
-  };
-
-  const renderDcAcAnalysis = (doc: jsPDF, data: ReportData, primary: { r: number; g: number; b: number }, yPos: number) => {
+  function renderDcAcAnalysis(data: ReportData): Content[] {
     const dcAc = data.dcAcAnalysis;
-    
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(60, 60, 60);
-    doc.text(`DC/AC Ratio: ${data.simulation.dc_ac_ratio}%`, 20, yPos);
-    yPos += 15;
+    return [
+      {
+        text: `DC/AC Ratio: ${data.simulation.dc_ac_ratio}%`,
+        fontSize: 11,
+        bold: true,
+        color: COLORS.secondary,
+        margin: [0, 0, 0, 10] as [number, number, number, number],
+      },
+      createComparisonTable(
+        ["Metric", "1:1 Baseline", "Oversized DC", "Difference"],
+        [
+          {
+            metric: "Annual Production (kWh)",
+            before: dcAc.baseline_annual_kwh.toLocaleString(),
+            after: dcAc.oversized_annual_kwh.toLocaleString(),
+            difference: `+${dcAc.net_gain_kwh.toLocaleString()}`,
+          },
+          {
+            metric: "Clipping Loss (kWh)",
+            before: "0",
+            after: dcAc.clipping_loss_kwh.toLocaleString(),
+            difference: `${dcAc.clipping_percent.toFixed(1)}%`,
+          },
+          {
+            metric: "Additional Capture (kWh)",
+            before: "0",
+            after: dcAc.additional_capture_kwh.toLocaleString(),
+            difference: "-",
+          },
+          {
+            metric: "Net Gain",
+            before: "-",
+            after: "-",
+            difference: `+${dcAc.net_gain_percent.toFixed(1)}%`,
+          },
+        ]
+      ),
+    ];
+  }
 
-    autoTable(doc, {
-      startY: yPos,
-      head: [['Metric', '1:1 Baseline', 'Oversized DC', 'Difference']],
-      body: [
-        ['Annual Production (kWh)', dcAc.baseline_annual_kwh.toLocaleString(), dcAc.oversized_annual_kwh.toLocaleString(), `+${dcAc.net_gain_kwh.toLocaleString()}`],
-        ['Clipping Loss (kWh)', '0', dcAc.clipping_loss_kwh.toLocaleString(), `${dcAc.clipping_percent.toFixed(1)}%`],
-        ['Additional Capture (kWh)', '0', dcAc.additional_capture_kwh.toLocaleString(), '-'],
-        ['Net Gain', '-', '-', `+${dcAc.net_gain_percent.toFixed(1)}%`],
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
-      styles: { fontSize: 10 },
-      margin: { left: 20, right: 20 },
-    });
-  };
-
-  const renderPaybackTimeline = (doc: jsPDF, data: ReportData, primary: { r: number; g: number; b: number }, yPos: number) => {
+  function renderPaybackTimeline(data: ReportData): Content[] {
     const fin = data.financials;
-    
-    autoTable(doc, {
-      startY: yPos,
-      head: [['Year', 'Cumulative Savings (R)', 'Net Position (R)', 'Status']],
-      body: fin.yearly_cashflows.slice(0, 15).map(cf => [
-        cf.year.toString(),
-        cf.cumulative_savings.toLocaleString(),
-        cf.net_position.toLocaleString(),
-        cf.net_position >= 0 ? '✓ Profit' : 'Investment'
-      ]),
-      theme: 'striped',
-      headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
-      styles: { fontSize: 9 },
-      margin: { left: 20, right: 20 },
-    });
+    return [
+      createCashflowTable(
+        fin.yearly_cashflows.slice(0, 15).map(cf => ({
+          year: cf.year,
+          cumulative_savings: cf.cumulative_savings,
+          cumulative_cost: cf.cumulative_cost,
+          net_position: cf.net_position,
+        }))
+      ),
+      {
+        text: `Breakeven at Year ${fin.payback_years.toFixed(1)} | 25-Year ROI: ${fin.roi_percent.toFixed(0)}%`,
+        fontSize: 12,
+        bold: true,
+        color: COLORS.primary,
+        margin: [0, 15, 0, 0] as [number, number, number, number],
+      },
+    ];
+  }
 
-    const finalY = (doc as any).lastAutoTable.finalY + 15;
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(primary.r, primary.g, primary.b);
-    doc.text(`Breakeven at Year ${fin.payback_years.toFixed(1)} | 25-Year ROI: ${fin.roi_percent.toFixed(0)}%`, 20, finalY);
-  };
-
-  const renderEngineeringSpecs = (doc: jsPDF, data: ReportData, primary: { r: number; g: number; b: number }, yPos: number) => {
+  function renderEngineeringSpecs(data: ReportData): Content[] {
     const kpis = data.kpis;
-    
-    autoTable(doc, {
-      startY: yPos,
-      head: [['Engineering KPI', 'Value', 'Description']],
-      body: [
-        ['Specific Yield', `${kpis.specific_yield.toFixed(0)} kWh/kWp`, 'Energy per installed DC capacity'],
-        ['Performance Ratio', `${kpis.performance_ratio.toFixed(1)}%`, 'Actual vs theoretical output'],
-        ['Capacity Factor', `${kpis.capacity_factor.toFixed(1)}%`, 'Average vs peak capacity'],
-        ['LCOE', `R ${kpis.lcoe.toFixed(2)}/kWh`, 'Levelized cost of energy'],
-        ['Self-Consumption Rate', `${kpis.self_consumption_rate.toFixed(1)}%`, 'PV energy used on-site'],
-        ['Solar Coverage', `${kpis.solar_coverage.toFixed(1)}%`, 'Load met by PV'],
-        ['Grid Independence', `${kpis.grid_independence.toFixed(1)}%`, 'Load met by PV+battery'],
-        ['Peak Shaving', `${kpis.peak_shaving_kw.toFixed(1)} kW`, 'Peak demand reduction'],
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
-      styles: { fontSize: 10 },
-      margin: { left: 20, right: 20 },
-    });
-  };
+    return [
+      createBasicTable(
+        ["Engineering KPI", "Value", "Description"],
+        [
+          ["Specific Yield", `${kpis.specific_yield.toFixed(0)} kWh/kWp`, "Energy per installed DC capacity"],
+          ["Performance Ratio", `${kpis.performance_ratio.toFixed(1)}%`, "Actual vs theoretical output"],
+          ["Capacity Factor", `${kpis.capacity_factor.toFixed(1)}%`, "Average vs peak capacity"],
+          ["LCOE", `R ${kpis.lcoe.toFixed(2)}/kWh`, "Levelized cost of energy"],
+          ["Self-Consumption Rate", `${kpis.self_consumption_rate.toFixed(1)}%`, "PV energy used on-site"],
+          ["Solar Coverage", `${kpis.solar_coverage.toFixed(1)}%`, "Load met by PV"],
+          ["Grid Independence", `${kpis.grid_independence.toFixed(1)}%`, "Load met by PV+battery"],
+          ["Peak Shaving", `${kpis.peak_shaving_kw.toFixed(1)} kW`, "Peak demand reduction"],
+        ]
+      ),
+    ];
+  }
 
-  const renderEnvironmentalImpact = (doc: jsPDF, data: ReportData, primary: { r: number; g: number; b: number }, yPos: number) => {
+  function renderEnvironmentalImpact(data: ReportData): Content[] {
     const env = data.environmental;
-    
-    autoTable(doc, {
-      startY: yPos,
-      head: [['Environmental Metric', 'Annual Impact']],
-      body: [
-        ['CO₂ Emissions Avoided', `${env.co2_avoided_tons.toFixed(1)} tons`],
-        ['Equivalent Trees Planted', `${env.trees_equivalent.toLocaleString()} trees`],
-        ['Car Miles Avoided', `${env.car_miles_avoided.toLocaleString()} miles`],
-        ['Homes Powered Equivalent', `${env.homes_powered_equivalent.toFixed(1)} homes`],
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
-      styles: { fontSize: 11 },
-      margin: { left: 20, right: 20 },
-    });
-
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(9);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Grid emission factor: ${env.grid_emission_factor} kg CO₂/kWh (South African grid average)`, 20, finalY);
-  };
-
-  const renderSavingsBreakdown = (doc: jsPDF, data: ReportData, primary: { r: number; g: number; b: number }, yPos: number) => {
-    const fin = data.financials;
-    
-    autoTable(doc, {
-      startY: yPos,
-      head: [['Financial Metric', 'Value']],
-      body: [
-        ['System Cost', `R ${fin.system_cost.toLocaleString()}`],
-        ['Annual Grid Cost (Baseline)', `R ${fin.annual_grid_cost_baseline.toLocaleString()}`],
-        ['Annual Grid Cost (With Solar)', `R ${fin.annual_grid_cost_with_solar.toLocaleString()}`],
-        ['Annual Savings', `R ${fin.annual_savings.toLocaleString()}`],
-        ['Simple Payback', `${fin.payback_years.toFixed(1)} years`],
-        ['25-Year ROI', `${fin.roi_percent.toFixed(0)}%`],
-        ['NPV (Net Present Value)', `R ${fin.npv.toLocaleString()}`],
-        ['IRR (Internal Rate of Return)', `${fin.irr.toFixed(1)}%`],
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
-      styles: { fontSize: 11 },
-      margin: { left: 20, right: 20 },
-    });
-  };
-
-  const renderMonthlyYield = (doc: jsPDF, data: ReportData, primary: { r: number; g: number; b: number }, yPos: number) => {
-    const monthly = data.dcAcAnalysis.monthly_comparison;
-    
-    autoTable(doc, {
-      startY: yPos,
-      head: [['Month', 'Production (kWh)', 'Oversized (kWh)', 'Gain (%)']],
-      body: monthly.map(m => [
-        m.month,
-        m.baseline_kwh.toLocaleString(),
-        m.oversized_kwh.toLocaleString(),
-        `+${m.gain_percent.toFixed(1)}%`
+    return [
+      createKeyValueTable([
+        { key: "CO₂ Emissions Avoided", value: `${env.co2_avoided_tons.toFixed(1)} tons` },
+        { key: "Equivalent Trees Planted", value: `${env.trees_equivalent.toLocaleString()} trees` },
+        { key: "Car Miles Avoided", value: `${env.car_miles_avoided.toLocaleString()} miles` },
+        { key: "Homes Powered Equivalent", value: `${env.homes_powered_equivalent.toFixed(1)} homes` },
       ]),
-      theme: 'striped',
-      headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
-      styles: { fontSize: 10 },
-      margin: { left: 20, right: 20 },
-    });
-  };
+      {
+        text: `Grid emission factor: ${env.grid_emission_factor} kg CO₂/kWh (South African grid average)`,
+        fontSize: 9,
+        color: COLORS.muted,
+        margin: [0, 10, 0, 0] as [number, number, number, number],
+      },
+    ];
+  }
 
-  const renderTariffDetails = async (
-    doc: jsPDF, 
-    data: ReportData, 
-    primary: { r: number; g: number; b: number }, 
-    yPos: number,
-    pId?: string
-  ) => {
-    const pageWidth = doc.internal.pageSize.getWidth();
+  function renderSavingsBreakdown(data: ReportData): Content[] {
+    const fin = data.financials;
+    return [
+      createFinancialTable([
+        { label: "System Cost", value: fin.system_cost, format: "currency" },
+        { label: "Annual Grid Cost (Baseline)", value: fin.annual_grid_cost_baseline, format: "currency" },
+        { label: "Annual Grid Cost (With Solar)", value: fin.annual_grid_cost_with_solar, format: "currency" },
+        { label: "Annual Savings", value: fin.annual_savings, format: "currency" },
+        { label: "Simple Payback", value: fin.payback_years, format: "years" },
+        { label: "25-Year ROI", value: fin.roi_percent, format: "percentage" },
+        { label: "NPV (Net Present Value)", value: fin.npv, format: "currency" },
+        { label: "IRR (Internal Rate of Return)", value: fin.irr, format: "percentage" },
+      ]),
+    ];
+  }
+
+  function renderMonthlyYield(data: ReportData): Content[] {
+    const monthly = data.dcAcAnalysis.monthly_comparison;
+    return [
+      createMonthlyTable(
+        monthly.map(m => ({
+          month: m.month,
+          values: [
+            m.baseline_kwh.toLocaleString(),
+            m.oversized_kwh.toLocaleString(),
+            `+${m.gain_percent.toFixed(1)}%`,
+          ],
+        })),
+        ["Month", "Production (kWh)", "Oversized (kWh)", "Gain (%)"]
+      ),
+    ];
+  }
+
+  async function renderTariffDetails(data: ReportData, pId?: string): Promise<Content[]> {
+    const content: Content[] = [];
     
-    // Fetch tariff data from Supabase if we have project info
     let tariffName = "Not specified";
     let tariffType = "N/A";
     let tariffFamily = "";
     let transmissionZone = "";
     let voltageLevel = "";
-    let fixedCharges: Array<[string, string]> = [];
-    let touRates: Array<[string, string, string, string]> = [];
+    let fixedCharges: { key: string; value: string }[] = [];
+    let touRates: { season: string; period: string; rate: string; demand: string }[] = [];
 
     if (pId) {
       try {
-        // Fetch project to get tariff_id
         const { data: project } = await supabase
           .from("projects")
           .select("tariff_id")
@@ -636,7 +625,6 @@ export function ReportExport({
           .single();
 
         if (project?.tariff_id) {
-          // Fetch tariff details
           const { data: tariff } = await supabase
             .from("tariffs")
             .select(`
@@ -661,25 +649,23 @@ export function ReportExport({
             transmissionZone = tariff.transmission_zone || "";
             voltageLevel = tariff.voltage_level || "";
 
-            // Build fixed charges
             if (tariff.generation_capacity_charge) {
-              fixedCharges.push(["Generation Capacity (GCC)", `R${tariff.generation_capacity_charge.toFixed(2)}/kVA`]);
+              fixedCharges.push({ key: "Generation Capacity (GCC)", value: `R${tariff.generation_capacity_charge.toFixed(2)}/kVA` });
             }
             if (tariff.demand_charge_per_kva) {
-              fixedCharges.push(["Demand Charge", `R${tariff.demand_charge_per_kva.toFixed(2)}/kVA`]);
+              fixedCharges.push({ key: "Demand Charge", value: `R${tariff.demand_charge_per_kva.toFixed(2)}/kVA` });
             }
             if (tariff.network_access_charge) {
-              fixedCharges.push(["Network Access", `R${tariff.network_access_charge.toFixed(2)}`]);
+              fixedCharges.push({ key: "Network Access", value: `R${tariff.network_access_charge.toFixed(2)}` });
             }
             if (tariff.reactive_energy_charge) {
-              fixedCharges.push(["Reactive Energy", `R${tariff.reactive_energy_charge.toFixed(2)}/kVArh`]);
+              fixedCharges.push({ key: "Reactive Energy", value: `R${tariff.reactive_energy_charge.toFixed(2)}/kVArh` });
             }
             if (tariff.fixed_monthly_charge) {
-              fixedCharges.push(["Fixed Monthly", `R${tariff.fixed_monthly_charge.toFixed(2)}`]);
+              fixedCharges.push({ key: "Fixed Monthly", value: `R${tariff.fixed_monthly_charge.toFixed(2)}` });
             }
           }
 
-          // Fetch TOU periods
           const { data: touPeriods } = await supabase
             .from("tou_periods")
             .select("season, time_of_use, rate_per_kwh, demand_charge_per_kva")
@@ -688,12 +674,12 @@ export function ReportExport({
             .order("time_of_use");
 
           if (touPeriods && touPeriods.length > 0) {
-            touRates = touPeriods.map(p => [
-              p.season,
-              p.time_of_use,
-              `${(p.rate_per_kwh * 100).toFixed(2)}c`,
-              p.demand_charge_per_kva ? `R${p.demand_charge_per_kva.toFixed(2)}` : "-"
-            ]);
+            touRates = touPeriods.map(p => ({
+              season: p.season,
+              period: p.time_of_use,
+              rate: `${(p.rate_per_kwh * 100).toFixed(2)}c`,
+              demand: p.demand_charge_per_kva ? `R${p.demand_charge_per_kva.toFixed(2)}` : "-",
+            }));
           }
         }
       } catch (error) {
@@ -701,249 +687,63 @@ export function ReportExport({
       }
     }
 
-    // Render tariff header info
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(primary.r, primary.g, primary.b);
-    doc.text(`Selected Tariff: ${tariffName}`, 20, yPos);
-    
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(80, 80, 80);
-    const details = [tariffFamily, transmissionZone, voltageLevel].filter(Boolean).join(" • ");
-    doc.text(details || `Type: ${tariffType}`, 20, yPos + 8);
-    
-    yPos += 20;
+    content.push(
+      {
+        text: `Selected Tariff: ${tariffName}`,
+        fontSize: 12,
+        bold: true,
+        color: COLORS.primary,
+        margin: [0, 0, 0, 5] as [number, number, number, number],
+      },
+      {
+        text: [tariffFamily, transmissionZone, voltageLevel].filter(Boolean).join(" • ") || `Type: ${tariffType}`,
+        fontSize: 10,
+        color: COLORS.muted,
+        margin: [0, 0, 0, 15] as [number, number, number, number],
+      }
+    );
 
-    // Fixed charges table
     if (fixedCharges.length > 0) {
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(60, 60, 60);
-      doc.text("Fixed Monthly Charges", 20, yPos);
-      yPos += 5;
-
-      autoTable(doc, {
-        startY: yPos,
-        head: [['Charge Type', 'Rate']],
-        body: fixedCharges,
-        theme: 'striped',
-        headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
-        styles: { fontSize: 10 },
-        margin: { left: 20, right: 20 },
-        tableWidth: 'auto',
-      });
-      
-      yPos = (doc as any).lastAutoTable.finalY + 15;
+      content.push(
+        createSectionHeader("Fixed Monthly Charges"),
+        createKeyValueTable(fixedCharges),
+        { text: "", margin: [0, 10, 0, 0] }
+      );
     }
 
-    // TOU rates table
     if (touRates.length > 0) {
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(60, 60, 60);
-      doc.text("Time-of-Use Energy Rates", 20, yPos);
-      yPos += 5;
-
-      autoTable(doc, {
-        startY: yPos,
-        head: [['Season', 'Period', 'Energy Rate', 'Demand']],
-        body: touRates,
-        theme: 'striped',
-        headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
-        styles: { fontSize: 10 },
-        margin: { left: 20, right: 20 },
-      });
-
-      yPos = (doc as any).lastAutoTable.finalY + 15;
+      content.push(
+        createSectionHeader("Time-of-Use Energy Rates"),
+        createBasicTable(
+          ["Season", "Period", "Energy Rate", "Demand"],
+          touRates.map(r => [r.season, r.period, r.rate, r.demand])
+        ),
+        { text: "", margin: [0, 10, 0, 0] }
+      );
     }
 
-    // TOU Period Hour Definitions (FY2026 Updated)
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(60, 60, 60);
-    doc.text("TOU Period Definitions (FY2026)", 20, yPos);
-    yPos += 5;
-
-    autoTable(doc, {
-      startY: yPos,
-      head: [['Period', 'Weekday Hours', 'Saturday', 'Sunday']],
-      body: [
-        ['Peak', '06:00-08:00, 18:00-21:00', '07:00-12:00, 18:00-20:00', 'None'],
-        ['Standard', '08:00-18:00, 21:00-22:00', '12:00-18:00, 20:00-22:00', '18:00-21:00'],
-        ['Off-Peak', '22:00-06:00', '22:00-07:00', '21:00-18:00 (all other hours)'],
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
-      styles: { fontSize: 9 },
-      margin: { left: 20, right: 20 },
-      columnStyles: {
-        0: { cellWidth: 25, fontStyle: 'bold' },
-      },
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY + 15;
-
-    // Cost Comparison: Grid-Only vs Solar+Battery
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(60, 60, 60);
-    doc.text("Cost Comparison by TOU Period", 20, yPos);
-    yPos += 5;
-
-    // Estimate costs per period (simplified for demonstration)
-    const peakRate = 849.20; // c/kWh High Season Peak
-    const standardRate = 246.83;
-    const offPeakRate = 145.74;
-    const solarOffset = 0.85; // 85% offset during peak/standard
-
-    autoTable(doc, {
-      startY: yPos,
-      head: [['TOU Period', 'Grid Only (c/kWh)', 'With Solar+Battery', 'Savings']],
-      body: [
-        ['Peak (High Season)', `${peakRate.toFixed(0)}c`, `${(peakRate * (1 - solarOffset)).toFixed(0)}c`, `${(solarOffset * 100).toFixed(0)}%`],
-        ['Standard (High Season)', `${standardRate.toFixed(0)}c`, `${(standardRate * (1 - solarOffset * 0.8)).toFixed(0)}c`, `${(solarOffset * 0.8 * 100).toFixed(0)}%`],
-        ['Off-Peak', `${offPeakRate.toFixed(0)}c`, `${(offPeakRate * 0.7).toFixed(0)}c`, '30% (battery)'],
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [primary.r, primary.g, primary.b], textColor: [255, 255, 255] },
-      styles: { fontSize: 9 },
-      margin: { left: 20, right: 20 },
-      columnStyles: {
-        3: { textColor: [34, 197, 94] }, // Green for savings
-      },
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY + 15;
-
-    // Seasonal Calendar
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(60, 60, 60);
-    doc.text("Seasonal Calendar", 20, yPos);
-    yPos += 8;
-
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const highDemandMonths = [5, 6, 7]; // June, July, August (0-indexed)
-    const boxWidth = (pageWidth - 40) / 12;
-    const boxHeight = 15;
-
-    months.forEach((month, i) => {
-      const x = 20 + i * boxWidth;
-      const isHighDemand = highDemandMonths.includes(i);
-      
-      // Draw box
-      if (isHighDemand) {
-        doc.setFillColor(254, 202, 202); // Red-ish for high demand
-      } else {
-        doc.setFillColor(187, 247, 208); // Green-ish for low demand
+    // TOU Period Definitions - use basic table for custom layout
+    content.push(
+      createSectionHeader("TOU Period Definitions (FY2026)"),
+      createBasicTable(
+        ["Period", "Weekday Hours", "Saturday", "Sunday"],
+        [
+          ["Peak", "06:00-08:00, 18:00-21:00", "07:00-12:00, 18:00-20:00", "None"],
+          ["Standard", "08:00-18:00, 21:00-22:00", "12:00-18:00, 20:00-22:00", "18:00-21:00"],
+          ["Off-Peak", "22:00-06:00", "22:00-07:00", "21:00-18:00 (all other)"],
+        ]
+      ),
+      {
+        text: "⚡ Solar Impact: System generates during Peak hours (06:00-08:00, 18:00-21:00), offsetting the highest-cost energy periods.",
+        fontSize: 10,
+        italics: true,
+        color: COLORS.primary,
+        margin: [0, 15, 0, 0] as [number, number, number, number],
       }
-      doc.rect(x, yPos, boxWidth - 1, boxHeight, 'F');
-      
-      // Draw month label
-      doc.setTextColor(isHighDemand ? 185 : 22, isHighDemand ? 28 : 163, isHighDemand ? 28 : 74);
-      doc.text(month, x + boxWidth / 2 - 4, yPos + 10);
-    });
+    );
 
-    yPos += boxHeight + 10;
-
-    // Legend
-    doc.setFillColor(254, 202, 202);
-    doc.rect(20, yPos, 10, 8, 'F');
-    doc.setFontSize(8);
-    doc.setTextColor(100, 100, 100);
-    doc.text("High Demand Season (Jun-Aug) - Higher rates apply", 35, yPos + 6);
-
-    doc.setFillColor(187, 247, 208);
-    doc.rect(pageWidth / 2, yPos, 10, 8, 'F');
-    doc.text("Low Demand Season - Lower rates apply", pageWidth / 2 + 15, yPos + 6);
-
-    yPos += 20;
-
-    // Solar impact note
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "italic");
-    doc.setTextColor(primary.r, primary.g, primary.b);
-    const impactNote = "⚡ Solar Impact: System generates during Peak hours (06:00-08:00, 18:00-21:00), offsetting the highest-cost energy periods.";
-    const splitNote = doc.splitTextToSize(impactNote, pageWidth - 40);
-    doc.text(splitNote, 20, yPos);
-  };
-
-  const renderAIInfographics = async (
-    doc: jsPDF, 
-    infographics: Map<string, string>, 
-    primary: { r: number; g: number; b: number }, 
-    yPos: number
-  ) => {
-    const pageWidth = doc.internal.pageSize.getWidth();
-    
-    if (infographics.size === 0) {
-      doc.setFontSize(11);
-      doc.setTextColor(100, 100, 100);
-      doc.text("AI Infographics are being generated. Please regenerate report later.", 20, yPos);
-      return;
-    }
-
-    const infographicLabels: Record<string, string> = {
-      executive: "Executive Summary",
-      system: "System Overview", 
-      savings: "Savings Breakdown",
-      environmental: "Environmental Impact",
-      engineering: "Engineering Specs"
-    };
-
-    let currentY = yPos;
-    const imgWidth = (pageWidth - 50) / 2;
-    const imgHeight = imgWidth * 0.6;
-    let col = 0;
-
-    for (const [type, url] of infographics) {
-      try {
-        // Fetch image and convert to base64
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-
-        const x = 20 + col * (imgWidth + 10);
-        
-        // Add image
-        doc.addImage(base64, 'PNG', x, currentY, imgWidth, imgHeight);
-        
-        // Add label below image
-        doc.setFontSize(9);
-        doc.setTextColor(primary.r, primary.g, primary.b);
-        doc.setFont("helvetica", "bold");
-        doc.text(infographicLabels[type] || type, x + imgWidth / 2, currentY + imgHeight + 5, { align: 'center' });
-
-        col++;
-        if (col >= 2) {
-          col = 0;
-          currentY += imgHeight + 20;
-          
-          // Check if we need a new page
-          if (currentY + imgHeight > doc.internal.pageSize.getHeight() - 30) {
-            doc.addPage();
-            doc.setFillColor(primary.r, primary.g, primary.b);
-            doc.rect(0, 0, pageWidth, 25, 'F');
-            doc.setFontSize(16);
-            doc.setFont("helvetica", "bold");
-            doc.setTextColor(255, 255, 255);
-            doc.text("AI Infographics (continued)", 20, 16);
-            currentY = 40;
-          }
-        }
-      } catch (error) {
-        console.error(`Failed to add infographic ${type}:`, error);
-      }
-    }
-  };
+    return content;
+  }
 
   const exportToExcel = () => {
     setExporting("excel");
