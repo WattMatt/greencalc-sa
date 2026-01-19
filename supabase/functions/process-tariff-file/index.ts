@@ -780,13 +780,14 @@ Extract ALL variants of ${currentBatch?.name || "Eskom"} tariffs:
 - No fixed charges for prepaid variants
 
 === KEY RULES ===
-1. RATE CONVERSION: c/kWh → R/kWh (divide by 100). 392.75 c/kWh → 3.9275 R/kWh
-2. VOLTAGE LEVELS: LV (<500V), MV (500V-66kV), HV (>66kV)
-3. Include transmission zone in tariff name AND set transmission_zone field
-4. Include Local/Non-local authority variants
-5. Include Key Customer variants for large power users
-6. Note NMD (Notified Maximum Demand) requirements in tariff_name
-7. SET is_unbundled: true for ALL Eskom tariffs!
+1. **CRITICAL - USE VAT-EXCLUSIVE RATES**: Extract values from the "Excl VAT" columns/rows, NOT "Incl VAT"! Eskom documents show both - ALWAYS use the VAT-exclusive values.
+2. RATE CONVERSION: c/kWh → R/kWh (divide by 100). Example: 341.09 c/kWh (excl VAT) → 3.4109 R/kWh
+3. VOLTAGE LEVELS: LV (<500V), MV (500V-66kV), HV (>66kV)
+4. Include transmission zone in tariff name AND set transmission_zone field
+5. Include Local/Non-local authority variants
+6. Include Key Customer variants for large power users
+7. Note NMD (Notified Maximum Demand) requirements in tariff_name
+8. SET is_unbundled: true for ALL Eskom tariffs!
 
 Extract EVERY ${currentBatch?.name || ""} variant with ALL unbundled components!`
         : `TASK: Extract electricity tariffs for "${municipality}" municipality.
@@ -831,6 +832,7 @@ ${municipalityText.slice(0, 15000)}
    - "Energy Charge (c/kWh)" → rates array with rate_per_kwh
    
 5. RATE CONVERSION:
+   - **CRITICAL: Use VAT-EXCLUSIVE rates** - look for "Excl VAT" columns/rows in the source
    - If rate is in c/kWh (like 303.02), convert to R/kWh by dividing by 100 → 3.0302
    - If rate is already in R/kWh (like 3.03), use as-is
 
@@ -922,8 +924,9 @@ Find the Active Energy table showing Peak/Standard/Off-Peak by High/Low Demand S
 - "Network Access Charge" or "R/kVA" → demand_charge_per_kva
 
 === PRECISION RULE ===
+**USE VAT-EXCLUSIVE VALUES ONLY** - Eskom documents have both "Excl VAT" and "Incl VAT" columns. ALWAYS extract from "Excl VAT"!
 Preserve EXACT values - convert c/kWh to R/kWh by dividing by 100.
-If source says 392.75 c/kWh → extract as 3.9275 R/kWh
+Example: If source shows 341.09 c/kWh (Excl VAT) and 392.25 c/kWh (Incl VAT) → extract as 3.4109 R/kWh
 
 Extract ALL tariffs with their COMPLETE rate data!`;
 
