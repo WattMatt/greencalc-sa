@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -25,48 +25,63 @@ const defaultBranding: OrganizationBranding = {
   address: null,
 };
 
+// Simple event emitter for branding updates
+const brandingListeners: Set<() => void> = new Set();
+
+export function notifyBrandingUpdate() {
+  brandingListeners.forEach(listener => listener());
+}
+
 export function useOrganizationBranding() {
   const { user } = useAuth();
   const [branding, setBranding] = useState<OrganizationBranding>(defaultBranding);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  const loadBranding = useCallback(async () => {
     if (!user) {
       setIsLoading(false);
       return;
     }
 
-    const loadBranding = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("organization_branding")
-          .select("*")
-          .eq("user_id", user.id)
-          .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from("organization_branding")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-        if (error) throw error;
-        if (data) {
-          setBranding({
-            id: data.id,
-            company_name: data.company_name,
-            logo_url: data.logo_url,
-            primary_color: data.primary_color || "#3b82f6",
-            secondary_color: data.secondary_color || "#1e40af",
-            contact_email: data.contact_email,
-            contact_phone: data.contact_phone,
-            website: data.website,
-            address: data.address,
-          });
-        }
-      } catch (error) {
-        console.error("Error loading organization branding:", error);
-      } finally {
-        setIsLoading(false);
+      if (error) throw error;
+      if (data) {
+        setBranding({
+          id: data.id,
+          company_name: data.company_name,
+          logo_url: data.logo_url,
+          primary_color: data.primary_color || "#3b82f6",
+          secondary_color: data.secondary_color || "#1e40af",
+          contact_email: data.contact_email,
+          contact_phone: data.contact_phone,
+          website: data.website,
+          address: data.address,
+        });
       }
-    };
-
-    loadBranding();
+    } catch (error) {
+      console.error("Error loading organization branding:", error);
+    } finally {
+      setIsLoading(false);
+    }
   }, [user]);
 
-  return { branding, isLoading };
+  useEffect(() => {
+    loadBranding();
+  }, [loadBranding]);
+
+  // Subscribe to branding updates
+  useEffect(() => {
+    brandingListeners.add(loadBranding);
+    return () => {
+      brandingListeners.delete(loadBranding);
+    };
+  }, [loadBranding]);
+
+  return { branding, isLoading, refetch: loadBranding };
 }

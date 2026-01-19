@@ -7,18 +7,7 @@ import { Building2, Upload, Loader2, Trash2, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-
-interface OrganizationBranding {
-  id?: string;
-  company_name: string | null;
-  logo_url: string | null;
-  primary_color: string;
-  secondary_color: string;
-  contact_email: string | null;
-  contact_phone: string | null;
-  website: string | null;
-  address: string | null;
-}
+import { notifyBrandingUpdate, OrganizationBranding } from "@/hooks/useOrganizationBranding";
 
 const defaultBranding: OrganizationBranding = {
   company_name: null,
@@ -172,6 +161,7 @@ export function BrandingSettingsCard() {
         .upsert(payload, { onConflict: "user_id" });
 
       if (error) throw error;
+      notifyBrandingUpdate(); // Notify other components to refetch
       toast.success("Branding settings saved");
     } catch (error) {
       console.error("Error saving branding:", error);
