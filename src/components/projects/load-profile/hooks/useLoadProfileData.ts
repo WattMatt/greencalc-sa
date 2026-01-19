@@ -14,28 +14,46 @@ import {
 } from "../types";
 import { SolcastPVProfile } from "./useSolcastPVProfile";
 
-// Average sub-hourly kW profile to hourly values
+// Correct profile for interval and ensure proper averaging
 // For 30-min intervals (48 values), average each pair to get 24 hourly values
 // For 15-min intervals (96 values), average each group of 4 to get 24 hourly values
-function averageProfileToHourly(profile: number[]): number[] {
-  if (profile.length === 24) return profile;
-  
-  const hourlyProfile: number[] = Array(24).fill(0);
-  
+// IMPORTANT: If profile has 24 values but detected_interval is 30, the values were
+// incorrectly summed during import and need to be halved to get proper averages
+function correctProfileForInterval(
+  profile: number[], 
+  detectedIntervalMinutes?: number | null
+): number[] {
+  // Handle sub-hourly profiles that need averaging
   if (profile.length === 48) {
     // 30-minute intervals - average each pair of readings
+    const hourlyProfile: number[] = Array(24).fill(0);
     for (let h = 0; h < 24; h++) {
       const idx = h * 2;
       hourlyProfile[h] = (profile[idx] + profile[idx + 1]) / 2;
     }
+    return hourlyProfile;
   } else if (profile.length === 96) {
     // 15-minute intervals - average each group of 4 readings
+    const hourlyProfile: number[] = Array(24).fill(0);
     for (let h = 0; h < 24; h++) {
       const idx = h * 4;
       hourlyProfile[h] = (profile[idx] + profile[idx + 1] + profile[idx + 2] + profile[idx + 3]) / 4;
     }
+    return hourlyProfile;
+  } else if (profile.length === 24) {
+    // Already hourly - but check if values were incorrectly summed for 30-min data
+    // If detected_interval_minutes is 30, values are doubled and need halving
+    if (detectedIntervalMinutes === 30) {
+      return profile.map(v => v / 2);
+    }
+    // If detected_interval_minutes is 15, values are quadrupled and need quartering
+    if (detectedIntervalMinutes === 15) {
+      return profile.map(v => v / 4);
+    }
+    return profile;
   } else {
     // Unknown interval - try to proportionally map to 24 hours
+    const hourlyProfile: number[] = Array(24).fill(0);
     const ratio = profile.length / 24;
     for (let h = 0; h < 24; h++) {
       const startIdx = Math.floor(h * ratio);
@@ -48,9 +66,8 @@ function averageProfileToHourly(profile: number[]): number[] {
       }
       hourlyProfile[h] = count > 0 ? sum / count : 0;
     }
+    return hourlyProfile;
   }
-  
-  return hourlyProfile;
 }
 
 // Calculate averaged kW profile from multiple meters
@@ -82,8 +99,9 @@ function getAveragedProfileKw(
   
   for (const meter of validMeters) {
     const rawProfile = meter.scada_imports![profileKey]!;
-    // Convert to hourly by averaging sub-hourly readings
-    const profile = averageProfileToHourly(rawProfile);
+    const detectedInterval = meter.scada_imports?.detected_interval_minutes;
+    // Correct for interval - handles summed vs averaged issue
+    const profile = correctProfileForInterval(rawProfile, detectedInterval);
     const meterWeight = (meter.weight || 1) / totalWeight;
     const meterArea = meter.scada_imports!.area_sqm!;
     
@@ -194,20 +212,21 @@ export function useLoadProfileData({
         return;
       }
       
-      // Single SCADA profile - values are kW per interval, average to hourly
+      // Single SCADA profile - values are kW per interval, correct for interval
       const scadaWeekdayRaw = tenant.scada_imports?.load_profile_weekday;
       const scadaWeekendRaw = tenant.scada_imports?.load_profile_weekend || scadaWeekdayRaw;
+      const detectedInterval = tenant.scada_imports?.detected_interval_minutes;
       
       if (scadaWeekdayRaw && [24, 48, 96].includes(scadaWeekdayRaw.length)) {
         const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
-        // Average to hourly first, then sum for daily kWh
-        const scadaWeekday = averageProfileToHourly(scadaWeekdayRaw);
+        // Correct for interval first (handles summed vs averaged), then sum for daily kWh
+        const scadaWeekday = correctProfileForInterval(scadaWeekdayRaw, detectedInterval);
         const dailyKwh = scadaWeekday.reduce((sum, v) => sum + v, 0);
         const kwhPerSqm = scadaArea > 0 ? dailyKwh / scadaArea : 0;
         weekdayTotal += tenantArea * kwhPerSqm;
         
         if (scadaWeekendRaw && [24, 48, 96].includes(scadaWeekendRaw.length)) {
-          const scadaWeekend = averageProfileToHourly(scadaWeekendRaw);
+          const scadaWeekend = correctProfileForInterval(scadaWeekendRaw, detectedInterval);
           const weekendDailyKwh = scadaWeekend.reduce((sum, v) => sum + v, 0);
           const weekendKwhPerSqm = scadaArea > 0 ? weekendDailyKwh / scadaArea : 0;
           weekendTotal += tenantArea * weekendKwhPerSqm;
@@ -265,11 +284,12 @@ export function useLoadProfileData({
         const scadaWeekdayRaw = tenant.scada_imports?.load_profile_weekday;
         const scadaWeekendRaw = tenant.scada_imports?.load_profile_weekend;
         const scadaProfileRaw = isWeekendDay ? scadaWeekendRaw || scadaWeekdayRaw : scadaWeekdayRaw;
+        const detectedInterval = tenant.scada_imports?.detected_interval_minutes;
 
         if (scadaProfileRaw && [24, 48, 96].includes(scadaProfileRaw.length)) {
           const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
-          // Average to hourly first, then scale
-          const scadaProfile = averageProfileToHourly(scadaProfileRaw);
+          // Correct for interval (handles summed vs averaged issue), then scale
+          const scadaProfile = correctProfileForInterval(scadaProfileRaw, detectedInterval);
           // Scale kW by area ratio: tenant_kW = source_kW × (tenant_area / source_area)
           const areaScale = scadaArea > 0 ? tenantArea / scadaArea : 1;
           const hourlyKw = scadaProfile[h] * areaScale * dayMultiplier;
