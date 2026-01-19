@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tenant, ShopType, DAYS_OF_WEEK, DayOfWeek, DisplayUnit, Annotation } from "./types";
 import { useLoadProfileData } from "./hooks/useLoadProfileData";
@@ -97,7 +97,12 @@ export function LoadProfileChart({
   
   // Use simulated solar capacity if available, otherwise fall back to maximum possible
   const maxPvAcKva = simulatedSolarCapacityKwp ?? maxPossiblePvKva;
-  const dcCapacityKwp = maxPvAcKva ? maxPvAcKva * dcAcRatio : null;
+  
+  // Memoize DC capacity to ensure it updates when dcAcRatio changes
+  const dcCapacityKwp = useMemo(() => {
+    return maxPvAcKva ? maxPvAcKva * dcAcRatio : null;
+  }, [maxPvAcKva, dcAcRatio]);
+
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
   const unit = displayUnit === "kwh" ? "kWh" : "kVA";
 
