@@ -276,11 +276,11 @@ export function useLoadProfileData({
         // Apply system losses and temperature derating
         const effectiveEfficiency = (1 - systemLosses) * tempDerating;
 
-        // DC output using normalized profile
+        // DC output using normalized profile (this is what the DC panels produce)
         const dcOutputRaw = pvNormalizedProfile[index] * dcCapacityKwp;
         const dcOutput = dcOutputRaw * effectiveEfficiency;
 
-        // AC output capped at inverter limit
+        // AC output capped at inverter limit (this is what gets exported after clipping)
         const pvValue = Math.min(dcOutput, maxPvAcKva);
 
         result.pvGeneration = pvValue;

@@ -98,10 +98,13 @@ export function LoadProfileChart({
   // Use simulated solar capacity if available, otherwise fall back to maximum possible
   const maxPvAcKva = simulatedSolarCapacityKwp ?? maxPossiblePvKva;
   
-  // Memoize DC capacity to ensure it updates when dcAcRatio changes
+  // Get effective DC/AC ratio - prefer simulated value if available
+  const effectiveDcAcRatio = simulatedDcAcRatio ?? dcAcRatio;
+  
+  // Calculate DC capacity using effective ratio
   const dcCapacityKwp = useMemo(() => {
-    return maxPvAcKva ? maxPvAcKva * dcAcRatio : null;
-  }, [maxPvAcKva, dcAcRatio]);
+    return maxPvAcKva ? maxPvAcKva * effectiveDcAcRatio : null;
+  }, [maxPvAcKva, effectiveDcAcRatio]);
 
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
   const unit = displayUnit === "kwh" ? "kWh" : "kVA";
@@ -176,7 +179,7 @@ export function LoadProfileChart({
     showPVProfile: dateMode === "average" && showPVProfile,
     maxPvAcKva,
     dcCapacityKwp,
-    dcAcRatio,
+    dcAcRatio: effectiveDcAcRatio,
     showBattery: dateMode === "average" && showBattery,
     batteryCapacity,
     batteryPower,
@@ -292,7 +295,7 @@ export function LoadProfileChart({
             setPowerFactor={setPowerFactor}
             showPVProfile={showPVProfile}
             maxPvAcKva={maxPvAcKva}
-            dcAcRatio={dcAcRatio}
+            dcAcRatio={effectiveDcAcRatio}
             setDcAcRatio={setDcAcRatio}
             dcCapacityKwp={dcCapacityKwp}
             show1to1Comparison={show1to1Comparison}
@@ -344,7 +347,7 @@ export function LoadProfileChart({
               chartData={chartData}
               showTOU={showTOU}
               isWeekend={effectiveIsWeekend}
-              dcAcRatio={dcAcRatio}
+              dcAcRatio={effectiveDcAcRatio}
               show1to1Comparison={show1to1Comparison}
               unit={unit}
             />
@@ -362,8 +365,8 @@ export function LoadProfileChart({
 
 
           {/* Over-Paneling Summary */}
-          {showPVProfile && maxPvAcKva && overPanelingStats && dcAcRatio > 1 && dateMode === "average" && (
-            <OverPanelingAnalysis stats={overPanelingStats} dcAcRatio={dcAcRatio} />
+          {showPVProfile && maxPvAcKva && overPanelingStats && effectiveDcAcRatio > 1 && dateMode === "average" && (
+            <OverPanelingAnalysis stats={overPanelingStats} dcAcRatio={effectiveDcAcRatio} />
           )}
 
           {/* Battery Chart */}
