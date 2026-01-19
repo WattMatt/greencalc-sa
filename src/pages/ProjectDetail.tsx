@@ -902,7 +902,7 @@ export default function ProjectDetail() {
         {project.logo_url && (
           <div className="h-14 w-14 rounded-lg border bg-background flex items-center justify-center overflow-hidden flex-shrink-0">
             <img 
-              src={project.logo_url} 
+              src={`${project.logo_url}?t=${Date.now()}`} 
               alt={`${project.name} logo`}
               className="h-12 w-12 object-contain"
               onError={(e) => {
