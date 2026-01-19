@@ -893,97 +893,77 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           </Card>
         )}
 
-        {/* Financial Summary - only show if tariff is selected */}
+        {/* Financial Return Outputs - only show if tariff is selected */}
         {hasFinancialData ? (
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Financial Summary
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {/* Primary Metrics */}
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">System Cost</span>
-                <span className="font-medium">R{financialResults.systemCost.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Annual Savings</span>
-                <span className="font-medium text-green-600">R{Math.round(financialResults.annualSavings).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Payback Period</span>
-                <span className="font-medium">{financialResults.paybackYears.toFixed(1)} years</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">ROI</span>
-                <span className="font-medium">{financialResults.roi.toFixed(1)}%</span>
+            <CardContent className="p-0">
+              {/* Table Header */}
+              <div className="grid grid-cols-2 border-b border-primary bg-primary/10">
+                <div className="px-3 py-1.5 text-xs font-bold text-primary uppercase tracking-wide">
+                  Financial Return Outputs
+                </div>
+                <div className="px-3 py-1.5 text-xs font-bold text-primary text-right uppercase tracking-wide">
+                  Stage 0
+                </div>
               </div>
               
-              {/* Separator */}
-              <div className="border-t my-2" />
-              
-              {/* Unit Cost Metrics */}
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">ZAR/kWh (1st Year)</span>
-                <span className="font-medium">
-                  R{(blendedRateBreakdown.annual ?? tariffData.averageRatePerKwh).toFixed(4)}
-                </span>
+              {/* Table Rows */}
+              <div className="divide-y divide-border text-sm">
+                <div className="grid grid-cols-2 hover:bg-muted/50">
+                  <div className="px-3 py-1.5 text-muted-foreground">ZAR / kWh (1st Year)</div>
+                  <div className="px-3 py-1.5 text-right font-medium">
+                    {(blendedRateBreakdown.annual ?? tariffData.averageRatePerKwh).toFixed(2)}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 hover:bg-muted/50">
+                  <div className="px-3 py-1.5 text-muted-foreground">ZAR / Wp (DC)</div>
+                  <div className="px-3 py-1.5 text-right font-medium">
+                    {(financialResults.systemCost / (solarCapacity * 1000)).toFixed(2)}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 hover:bg-muted/50">
+                  <div className="px-3 py-1.5 text-muted-foreground">ZAR / Wp (AC)</div>
+                  <div className="px-3 py-1.5 text-right font-medium">
+                    {(financialResults.systemCost / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 hover:bg-muted/50">
+                  <div className="px-3 py-1.5 text-muted-foreground">LCOE (ZAR/kWh)</div>
+                  <div className="px-3 py-1.5 text-right font-medium">
+                    {(advancedResults?.lcoe ?? basicFinancialMetrics.lcoe).toFixed(2)}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 hover:bg-muted/50">
+                  <div className="px-3 py-1.5 text-muted-foreground">Initial Yield</div>
+                  <div className="px-3 py-1.5 text-right font-medium">
+                    {((energyResults.totalDailySolar * 365 / solarCapacity) / 10).toFixed(2)}%
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 hover:bg-muted/50">
+                  <div className="px-3 py-1.5 text-muted-foreground">IRR</div>
+                  <div className="px-3 py-1.5 text-right font-medium">
+                    {(advancedResults?.irr ?? basicFinancialMetrics.irr).toFixed(2)}%
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 hover:bg-muted/50">
+                  <div className="px-3 py-1.5 text-muted-foreground">MIRR</div>
+                  <div className="px-3 py-1.5 text-right font-medium">
+                    {(advancedResults?.mirr ?? basicFinancialMetrics.mirr).toFixed(2)}%
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 hover:bg-muted/50">
+                  <div className="px-3 py-1.5 text-muted-foreground">Payback Period</div>
+                  <div className="px-3 py-1.5 text-right font-medium">
+                    {financialResults.paybackYears.toFixed(2)}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 hover:bg-muted/50">
+                  <div className="px-3 py-1.5 text-muted-foreground">NPV</div>
+                  <div className={`px-3 py-1.5 text-right font-medium ${(advancedResults?.npv ?? basicFinancialMetrics.npv) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {Math.round(advancedResults?.npv ?? basicFinancialMetrics.npv).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">ZAR/Wp (DC)</span>
-                <span className="font-medium">
-                  R{(financialResults.systemCost / (solarCapacity * 1000)).toFixed(2)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">ZAR/Wp (AC)</span>
-                <span className="font-medium">
-                  R{(financialResults.systemCost / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Initial Yield</span>
-                <span className="font-medium">
-                  {Math.round(energyResults.totalDailySolar * 365 / solarCapacity).toLocaleString()} kWh/kWp
-                </span>
-              </div>
-              
-              {/* Advanced Financial Metrics - always calculated */}
-              <div className="border-t my-2" />
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">LCOE</span>
-                <span className="font-medium">
-                  R{(advancedResults?.lcoe ?? basicFinancialMetrics.lcoe).toFixed(4)}/kWh
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">NPV</span>
-                <span className={`font-medium ${(advancedResults?.npv ?? basicFinancialMetrics.npv) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  R{Math.round(advancedResults?.npv ?? basicFinancialMetrics.npv).toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">IRR</span>
-                <span className="font-medium">
-                  {(advancedResults?.irr ?? basicFinancialMetrics.irr).toFixed(1)}%
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">MIRR</span>
-                <span className="font-medium">
-                  {(advancedResults?.mirr ?? basicFinancialMetrics.mirr).toFixed(1)}%
-                </span>
-              </div>
-              
-              {/* Note about calculation basis */}
-              <p className="text-xs text-muted-foreground mt-2 italic">
-                {advancedResults 
-                  ? "Using advanced model with degradation & escalation"
-                  : `Based on ${basicFinancialMetrics.projectLifeYears}yr life, ${basicFinancialMetrics.discountRate}% discount rate`
-                }
-              </p>
             </CardContent>
           </Card>
         ) : (
