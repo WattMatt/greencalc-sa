@@ -52,10 +52,14 @@ export function useOrganizationBranding() {
 
       if (error) throw error;
       if (data) {
+        // Add cache buster to logo URL to prevent stale images
+        const logoUrl = data.logo_url 
+          ? `${data.logo_url}?t=${Date.now()}` 
+          : null;
         setBranding({
           id: data.id,
           company_name: data.company_name,
-          logo_url: data.logo_url,
+          logo_url: logoUrl,
           primary_color: data.primary_color || "#3b82f6",
           secondary_color: data.secondary_color || "#1e40af",
           contact_email: data.contact_email,

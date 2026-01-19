@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,41 +28,49 @@ export function BrandingSettingsCard() {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Load branding function
+  const loadBranding = useCallback(async () => {
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from("organization_branding")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) {
+        // Add cache buster to logo URL if it exists
+        const logoUrl = data.logo_url 
+          ? `${data.logo_url}?t=${Date.now()}` 
+          : null;
+        setBranding({
+          id: data.id,
+          company_name: data.company_name,
+          logo_url: logoUrl,
+          primary_color: data.primary_color || "#3b82f6",
+          secondary_color: data.secondary_color || "#1e40af",
+          contact_email: data.contact_email,
+          contact_phone: data.contact_phone,
+          website: data.website,
+          address: data.address,
+        });
+      }
+    } catch (error) {
+      console.error("Error loading branding:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
   // Load branding on mount
   useEffect(() => {
-    if (!user) return;
-    
-    const loadBranding = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("organization_branding")
-          .select("*")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (error) throw error;
-        if (data) {
-          setBranding({
-            id: data.id,
-            company_name: data.company_name,
-            logo_url: data.logo_url,
-            primary_color: data.primary_color || "#3b82f6",
-            secondary_color: data.secondary_color || "#1e40af",
-            contact_email: data.contact_email,
-            contact_phone: data.contact_phone,
-            website: data.website,
-            address: data.address,
-          });
-        }
-      } catch (error) {
-        console.error("Error loading branding:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     loadBranding();
-  }, [user]);
+  }, [loadBranding]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -147,7 +155,7 @@ export function BrandingSettingsCard() {
       const payload = {
         user_id: user.id,
         company_name: branding.company_name,
-        logo_url: branding.logo_url?.split("?")[0] || null, // Remove cache buster
+        logo_url: branding.logo_url?.split("?")[0] || null, // Remove cache buster for storage
         primary_color: branding.primary_color,
         secondary_color: branding.secondary_color,
         contact_email: branding.contact_email,
@@ -161,7 +169,9 @@ export function BrandingSettingsCard() {
         .upsert(payload, { onConflict: "user_id" });
 
       if (error) throw error;
-      notifyBrandingUpdate(); // Notify other components to refetch
+      
+      // Notify other components and reload to ensure sync
+      notifyBrandingUpdate();
       toast.success("Branding settings saved");
     } catch (error) {
       console.error("Error saving branding:", error);
