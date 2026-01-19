@@ -43,6 +43,7 @@ import { AdvancedConfigComparison } from "./simulation/AdvancedConfigComparison"
 import { LoadSheddingAnalysisPanel } from "./simulation/LoadSheddingAnalysisPanel";
 import { InverterSizing, InverterConfig, getDefaultInverterConfig } from "./InverterSizing";
 import { SystemCostsData } from "./SystemCostsManager";
+import { calculateAnnualBlendedRate, getBlendedRateBreakdown } from "@/lib/tariffCalculations";
 
 interface Tenant {
   id: string;
@@ -308,15 +309,17 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // ========================================
   // PHASE 2: Financial Analysis (tariff-dependent)
   // ========================================
+  // Calculate blended solar rate (energy-weighted by solar production curve)
+  const blendedRateBreakdown = useMemo(() => getBlendedRateBreakdown(tariffRates), [tariffRates]);
+  
   const tariffData: TariffData = useMemo(() => ({
     fixedMonthlyCharge: Number(tariff?.fixed_monthly_charge || 0),
     demandChargePerKva: Number(tariff?.demand_charge_per_kva || 0),
     networkAccessCharge: Number(tariff?.network_access_charge || 0),
-    averageRatePerKwh: tariffRates?.length
-      ? tariffRates.reduce((sum, r) => sum + Number(r.rate_per_kwh), 0) / tariffRates.length
-      : 2.5,
+    // Use blended solar rate instead of simple average for accurate financial modeling
+    averageRatePerKwh: blendedRateBreakdown.annual ?? 2.5,
     exportRatePerKwh: 0, // No feed-in tariff by default
-  }), [tariff, tariffRates]);
+  }), [tariff, blendedRateBreakdown]);
 
   const financialResults = useMemo(() =>
     calculateFinancials(energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity),
@@ -399,6 +402,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           usingSolcast: !!useSolcast,
           inverterConfig,
           systemCosts,
+          // Blended solar rate for IRR/financial modeling
+          blendedSolarRate: blendedRateBreakdown.annual,
+          tariffBreakdown: {
+            summer: blendedRateBreakdown.summer,
+            winter: blendedRateBreakdown.winter,
+          },
         })),
       };
 
