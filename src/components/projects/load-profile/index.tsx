@@ -350,6 +350,7 @@ export function LoadProfileChart({
               dcAcRatio={effectiveDcAcRatio}
               show1to1Comparison={show1to1Comparison}
               unit={unit}
+              maxPvAcKva={maxPvAcKva}
             />
           )}
 
