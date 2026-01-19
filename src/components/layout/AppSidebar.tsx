@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useTheme } from "next-themes";
 import { SyncStatus } from "@/components/pwa";
+import { useOrganizationBranding } from "@/hooks/useOrganizationBranding";
 import {
   Sidebar,
   SidebarContent,
@@ -48,6 +49,7 @@ export function AppSidebar() {
   const { user, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const { branding: orgBranding } = useOrganizationBranding();
   const isCollapsed = state === "collapsed";
 
   const toggleTheme = () => {
@@ -80,13 +82,25 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-              <Zap className="h-6 w-6 text-primary-foreground" />
-            </div>
+            {orgBranding.logo_url ? (
+              <img 
+                src={orgBranding.logo_url} 
+                alt="Company logo" 
+                className="h-10 w-10 rounded-lg object-contain"
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+                <Zap className="h-6 w-6 text-primary-foreground" />
+              </div>
+            )}
             {!isCollapsed && (
               <div className="flex flex-col">
-                <span className="font-semibold text-sidebar-foreground">Green Energy</span>
-                <span className="text-xs text-muted-foreground">Financial Platform</span>
+                <span className="font-semibold text-sidebar-foreground">
+                  {orgBranding.company_name ? orgBranding.company_name.split(' ').slice(0, 2).join(' ') : "Green Energy"}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {orgBranding.company_name ? orgBranding.company_name.split(' ').slice(2, 4).join(' ') || "Platform" : "Financial Platform"}
+                </span>
               </div>
             )}
           </div>
