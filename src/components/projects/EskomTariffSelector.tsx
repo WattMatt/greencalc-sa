@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -26,6 +28,15 @@ interface TariffRate {
   network_charge_per_kwh?: number;
   ancillary_charge_per_kwh?: number;
   energy_charge_per_kwh?: number;
+  electrification_rural_per_kwh?: number;
+  affordability_subsidy_per_kwh?: number;
+  // VAT-inclusive variants
+  rate_per_kwh_incl_vat?: number;
+  network_charge_per_kwh_incl_vat?: number;
+  ancillary_charge_per_kwh_incl_vat?: number;
+  energy_charge_per_kwh_incl_vat?: number;
+  electrification_rural_per_kwh_incl_vat?: number;
+  affordability_subsidy_per_kwh_incl_vat?: number;
 }
 
 interface Tariff {
@@ -42,6 +53,11 @@ interface Tariff {
   reactive_energy_charge: number | null;
   administration_charge_per_day: number | null;
   service_charge_per_day: number | null;
+  legacy_charge_per_kwh: number | null;
+  // VAT-inclusive tariff-level fields
+  fixed_monthly_charge_incl_vat?: number | null;
+  demand_charge_per_kva_incl_vat?: number | null;
+  legacy_charge_per_kwh_incl_vat?: number | null;
   tariff_rates?: TariffRate[];
 }
 
@@ -67,6 +83,7 @@ export function EskomTariffSelector({
 }: EskomTariffSelectorProps) {
   const [expandedZones, setExpandedZones] = useState<Set<string>>(new Set());
   const [activeFamily, setActiveFamily] = useState<string>("");
+  const [showVatInclusive, setShowVatInclusive] = useState<boolean>(false);
 
   const { data: tariffs, isLoading } = useQuery({
     queryKey: ["eskom-tariffs", municipalityId],
@@ -159,6 +176,18 @@ export function EskomTariffSelector({
 
   return (
     <div className="space-y-4">
+      {/* VAT Toggle */}
+      <div className="flex items-center justify-end space-x-2 pb-2 border-b">
+        <Label htmlFor="vat-toggle" className="text-sm text-muted-foreground">
+          Show VAT-inclusive rates
+        </Label>
+        <Switch
+          id="vat-toggle"
+          checked={showVatInclusive}
+          onCheckedChange={setShowVatInclusive}
+        />
+      </div>
+
       {/* Tariff Family Tabs */}
       <Tabs value={activeFamily} onValueChange={setActiveFamily}>
         <TabsList className="flex flex-wrap h-auto gap-1 bg-muted/50 p-1">
@@ -306,27 +335,37 @@ export function EskomTariffSelector({
                                           <div className="mt-2 pt-2 border-t border-dashed">
                                             <div className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
                                               <Zap className="h-3 w-3" />
-                                              Energy Rates (c/kWh)
+                                              Energy Rates (c/kWh) {showVatInclusive ? "(Incl VAT)" : "(Excl VAT)"}
                                             </div>
                                             <div className="grid grid-cols-3 md:grid-cols-6 gap-1">
-                                              {tariff.tariff_rates.map(rate => (
-                                                <div 
-                                                  key={rate.id}
-                                                  className={cn(
-                                                    "p-1.5 rounded text-xs text-center",
-                                                    rate.time_of_use === "Peak" && "bg-red-500/10 text-red-700 dark:text-red-400",
-                                                    rate.time_of_use === "Standard" && "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
-                                                    rate.time_of_use === "Off-Peak" && "bg-green-500/10 text-green-700 dark:text-green-400",
-                                                    !["Peak", "Standard", "Off-Peak"].includes(rate.time_of_use) && "bg-muted"
-                                                  )}
-                                                >
-                                                  <div className="font-semibold">{(rate.rate_per_kwh * 100).toFixed(1)}c</div>
-                                                  <div className="text-[10px] opacity-80 truncate">
-                                                    {rate.time_of_use} {rate.season?.includes("High") ? "H" : rate.season?.includes("Low") ? "L" : ""}
+                                              {tariff.tariff_rates.map(rate => {
+                                                const displayRate = showVatInclusive && rate.rate_per_kwh_incl_vat
+                                                  ? rate.rate_per_kwh_incl_vat
+                                                  : rate.rate_per_kwh;
+                                                return (
+                                                  <div 
+                                                    key={rate.id}
+                                                    className={cn(
+                                                      "p-1.5 rounded text-xs text-center",
+                                                      rate.time_of_use === "Peak" && "bg-red-500/10 text-red-700 dark:text-red-400",
+                                                      rate.time_of_use === "Standard" && "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+                                                      rate.time_of_use === "Off-Peak" && "bg-green-500/10 text-green-700 dark:text-green-400",
+                                                      !["Peak", "Standard", "Off-Peak"].includes(rate.time_of_use) && "bg-muted"
+                                                    )}
+                                                  >
+                                                    <div className="font-semibold">{(displayRate * 100).toFixed(1)}c</div>
+                                                    <div className="text-[10px] opacity-80 truncate">
+                                                      {rate.time_of_use} {rate.season?.includes("High") ? "H" : rate.season?.includes("Low") ? "L" : ""}
+                                                    </div>
                                                   </div>
-                                                </div>
-                                              ))}
+                                                );
+                                              })}
                                             </div>
+                                            
+                                            {/* Unbundled Breakdown for first rate as example */}
+                                            {tariff.tariff_rates.length > 0 && (
+                                              <UnbundledBreakdown rate={tariff.tariff_rates[0]} showVatInclusive={showVatInclusive} />
+                                            )}
                                           </div>
                                         )}
                                       </button>
@@ -438,31 +477,99 @@ export function EskomTariffSelector({
               <div className="mt-3 pt-3 border-t">
                 <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
                   <Zap className="h-3 w-3" />
-                  Energy Rates (c/kWh)
+                  Energy Rates (c/kWh) {showVatInclusive ? "(Incl VAT)" : "(Excl VAT)"}
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  {selectedTariff.tariff_rates.map(rate => (
-                    <div 
-                      key={rate.id}
-                      className={cn(
-                        "p-2 rounded text-xs",
-                        rate.time_of_use === "Peak" && "bg-red-500/10 border border-red-500/30",
-                        rate.time_of_use === "Standard" && "bg-yellow-500/10 border border-yellow-500/30",
-                        rate.time_of_use === "Off-Peak" && "bg-green-500/10 border border-green-500/30",
-                        !["Peak", "Standard", "Off-Peak"].includes(rate.time_of_use) && "bg-muted"
-                      )}
-                    >
-                      <div className="font-medium">{(rate.rate_per_kwh * 100).toFixed(2)}c</div>
-                      <div className="text-muted-foreground">
-                        {rate.time_of_use} • {rate.season?.replace("High/", "").replace("Low/", "")}
+                  {selectedTariff.tariff_rates.map(rate => {
+                    const displayRate = showVatInclusive && rate.rate_per_kwh_incl_vat
+                      ? rate.rate_per_kwh_incl_vat
+                      : rate.rate_per_kwh;
+                    return (
+                      <div 
+                        key={rate.id}
+                        className={cn(
+                          "p-2 rounded text-xs",
+                          rate.time_of_use === "Peak" && "bg-red-500/10 border border-red-500/30",
+                          rate.time_of_use === "Standard" && "bg-yellow-500/10 border border-yellow-500/30",
+                          rate.time_of_use === "Off-Peak" && "bg-green-500/10 border border-green-500/30",
+                          !["Peak", "Standard", "Off-Peak"].includes(rate.time_of_use) && "bg-muted"
+                        )}
+                      >
+                        <div className="font-medium">{(displayRate * 100).toFixed(2)}c</div>
+                        <div className="text-muted-foreground">
+                          {rate.time_of_use} • {rate.season?.replace("High/", "").replace("Low/", "")}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+                
+                {/* Full Unbundled Breakdown */}
+                <UnbundledBreakdown rate={selectedTariff.tariff_rates[0]} showVatInclusive={showVatInclusive} expanded />
               </div>
             )}
           </CardContent>
         </Card>
+      )}
+    </div>
+  );
+}
+
+// Unbundled rate breakdown component
+function UnbundledBreakdown({ 
+  rate, 
+  showVatInclusive,
+  expanded = false 
+}: { 
+  rate: TariffRate; 
+  showVatInclusive: boolean;
+  expanded?: boolean;
+}) {
+  const hasBreakdown = rate.energy_charge_per_kwh || rate.network_charge_per_kwh || 
+                       rate.ancillary_charge_per_kwh || rate.electrification_rural_per_kwh || 
+                       rate.affordability_subsidy_per_kwh;
+  
+  if (!hasBreakdown) return null;
+
+  const getDisplayValue = (exclVat: number | undefined, inclVat: number | undefined) => {
+    if (showVatInclusive && inclVat) return inclVat;
+    return exclVat || 0;
+  };
+
+  return (
+    <div className={cn("mt-2 pt-2 border-t border-dashed text-xs space-y-1", expanded && "bg-muted/30 p-2 rounded")}>
+      <div className="text-muted-foreground font-medium mb-1">
+        Unbundled Breakdown {showVatInclusive ? "(Incl VAT)" : "(Excl VAT)"}:
+      </div>
+      {rate.energy_charge_per_kwh && (
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Active Energy:</span>
+          <span>{(getDisplayValue(rate.energy_charge_per_kwh, rate.energy_charge_per_kwh_incl_vat) * 100).toFixed(2)}c</span>
+        </div>
+      )}
+      {rate.network_charge_per_kwh && (
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Network Demand:</span>
+          <span>{(getDisplayValue(rate.network_charge_per_kwh, rate.network_charge_per_kwh_incl_vat) * 100).toFixed(2)}c</span>
+        </div>
+      )}
+      {rate.ancillary_charge_per_kwh && (
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Ancillary:</span>
+          <span>{(getDisplayValue(rate.ancillary_charge_per_kwh, rate.ancillary_charge_per_kwh_incl_vat) * 100).toFixed(2)}c</span>
+        </div>
+      )}
+      {rate.electrification_rural_per_kwh && (
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Elec & Rural Subsidy:</span>
+          <span>{(getDisplayValue(rate.electrification_rural_per_kwh, rate.electrification_rural_per_kwh_incl_vat) * 100).toFixed(2)}c</span>
+        </div>
+      )}
+      {rate.affordability_subsidy_per_kwh && (
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Affordability Subsidy:</span>
+          <span>{(getDisplayValue(rate.affordability_subsidy_per_kwh, rate.affordability_subsidy_per_kwh_incl_vat) * 100).toFixed(2)}c</span>
+        </div>
       )}
     </div>
   );
