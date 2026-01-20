@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet, CheckCircle2, AlertCircle, Lock, Circle, CalendarIcon, Save, TrendingUp, Leaf, Battery, Building2 } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet, CheckCircle2, AlertCircle, Lock, Circle, CalendarIcon, Save, TrendingUp, Leaf, Battery, Building2, MapPin } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { TenantManager } from "@/components/projects/TenantManager";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
@@ -132,6 +133,8 @@ interface DashboardTabContentProps {
     budget: number | null;
     target_date: string | null;
     system_type: string | null;
+    latitude: number | null;
+    longitude: number | null;
   };
   tenants: { area_sqm: number; scada_import_id: string | null }[];
   latestSimulation: SimulationData; // Single source of truth - passed from parent
@@ -176,6 +179,7 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
   
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [mapDialogOpen, setMapDialogOpen] = useState(false);
   const isInitialMount = useRef(true);
   const lastSavedParams = useRef(JSON.stringify(params));
 
@@ -330,7 +334,37 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="location" className="text-xs">Location</Label>
+              <div className="flex items-center gap-1">
+                <Label htmlFor="location" className="text-xs">Location</Label>
+                <Dialog open={mapDialogOpen} onOpenChange={setMapDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-5 w-5 p-0 text-muted-foreground hover:text-primary"
+                      title="Open map to set location"
+                    >
+                      <MapPin className="h-3.5 w-3.5" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-4xl h-[80vh]">
+                    <DialogHeader>
+                      <DialogTitle>Project Location</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex-1 h-full min-h-[500px]">
+                      <ProjectLocationMap
+                        projectId={projectId}
+                        latitude={project.latitude}
+                        longitude={project.longitude}
+                        location={params.location}
+                        onLocationUpdate={() => {
+                          queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+                        }}
+                      />
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
               <Input
                 id="location"
                 value={params.location}
