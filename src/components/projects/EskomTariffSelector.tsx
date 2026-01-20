@@ -330,43 +330,13 @@ export function EskomTariffSelector({
                                           )}
                                         </div>
                                           
-                                        {/* Energy Rates by Season/TOU */}
+                                        {/* Energy Rates using new grid layout */}
                                         {tariff.tariff_rates && tariff.tariff_rates.length > 0 && (
-                                          <div className="mt-2 pt-2 border-t border-dashed">
-                                            <div className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
-                                              <Zap className="h-3 w-3" />
-                                              Energy Rates (c/kWh) {showVatInclusive ? "(Incl VAT)" : "(Excl VAT)"}
-                                            </div>
-                                            <div className="grid grid-cols-3 md:grid-cols-6 gap-1">
-                                              {tariff.tariff_rates.map(rate => {
-                                                const displayRate = showVatInclusive && rate.rate_per_kwh_incl_vat
-                                                  ? rate.rate_per_kwh_incl_vat
-                                                  : rate.rate_per_kwh;
-                                                return (
-                                                  <div 
-                                                    key={rate.id}
-                                                    className={cn(
-                                                      "p-1.5 rounded text-xs text-center",
-                                                      rate.time_of_use === "Peak" && "bg-red-500/10 text-red-700 dark:text-red-400",
-                                                      rate.time_of_use === "Standard" && "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
-                                                      rate.time_of_use === "Off-Peak" && "bg-green-500/10 text-green-700 dark:text-green-400",
-                                                      !["Peak", "Standard", "Off-Peak"].includes(rate.time_of_use) && "bg-muted"
-                                                    )}
-                                                  >
-                                                    <div className="font-semibold">{(displayRate * 100).toFixed(1)}c</div>
-                                                    <div className="text-[10px] opacity-80 truncate">
-                                                      {rate.time_of_use} {rate.season?.includes("High") ? "H" : rate.season?.includes("Low") ? "L" : ""}
-                                                    </div>
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                            
-                                            {/* Unbundled Breakdown for first rate as example */}
-                                            {tariff.tariff_rates.length > 0 && (
-                                              <UnbundledBreakdown rate={tariff.tariff_rates[0]} showVatInclusive={showVatInclusive} />
-                                            )}
-                                          </div>
+                                          <UnbundledBreakdown 
+                                            rates={tariff.tariff_rates} 
+                                            tariff={tariff}
+                                            showVatInclusive={showVatInclusive} 
+                                          />
                                         )}
                                       </button>
                                     );
@@ -472,40 +442,14 @@ export function EskomTariffSelector({
               )}
             </div>
 
-            {/* Rate Matrix */}
+            {/* Full Rate Matrix using new grid layout */}
             {selectedTariff.tariff_rates && selectedTariff.tariff_rates.length > 0 && (
               <div className="mt-3 pt-3 border-t">
-                <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                  <Zap className="h-3 w-3" />
-                  Energy Rates (c/kWh) {showVatInclusive ? "(Incl VAT)" : "(Excl VAT)"}
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {selectedTariff.tariff_rates.map(rate => {
-                    const displayRate = showVatInclusive && rate.rate_per_kwh_incl_vat
-                      ? rate.rate_per_kwh_incl_vat
-                      : rate.rate_per_kwh;
-                    return (
-                      <div 
-                        key={rate.id}
-                        className={cn(
-                          "p-2 rounded text-xs",
-                          rate.time_of_use === "Peak" && "bg-red-500/10 border border-red-500/30",
-                          rate.time_of_use === "Standard" && "bg-yellow-500/10 border border-yellow-500/30",
-                          rate.time_of_use === "Off-Peak" && "bg-green-500/10 border border-green-500/30",
-                          !["Peak", "Standard", "Off-Peak"].includes(rate.time_of_use) && "bg-muted"
-                        )}
-                      >
-                        <div className="font-medium">{(displayRate * 100).toFixed(2)}c</div>
-                        <div className="text-muted-foreground">
-                          {rate.time_of_use} • {rate.season?.replace("High/", "").replace("Low/", "")}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                
-                {/* Full Unbundled Breakdown */}
-                <UnbundledBreakdown rate={selectedTariff.tariff_rates[0]} showVatInclusive={showVatInclusive} expanded />
+                <UnbundledBreakdown 
+                  rates={selectedTariff.tariff_rates} 
+                  tariff={selectedTariff}
+                  showVatInclusive={showVatInclusive} 
+                />
               </div>
             )}
           </CardContent>
@@ -515,62 +459,178 @@ export function EskomTariffSelector({
   );
 }
 
-// Unbundled rate breakdown component
-function UnbundledBreakdown({ 
-  rate, 
-  showVatInclusive,
-  expanded = false 
-}: { 
-  rate: TariffRate; 
-  showVatInclusive: boolean;
-  expanded?: boolean;
-}) {
-  const hasBreakdown = rate.energy_charge_per_kwh || rate.network_charge_per_kwh || 
-                       rate.ancillary_charge_per_kwh || rate.electrification_rural_per_kwh || 
-                       rate.affordability_subsidy_per_kwh;
-  
-  if (!hasBreakdown) return null;
+// Helper to organize rates by season and TOU period
+function organizeRatesBySeason(rates: TariffRate[]) {
+  const findRate = (season: string, tou: string) =>
+    rates.find(r =>
+      r.season?.toLowerCase().includes(season.toLowerCase()) &&
+      r.time_of_use === tou
+    );
 
-  const getDisplayValue = (exclVat: number | undefined, inclVat: number | undefined) => {
-    if (showVatInclusive && inclVat) return inclVat;
-    return exclVat || 0;
+  return {
+    highSeason: {
+      peak: findRate("high", "Peak"),
+      standard: findRate("high", "Standard"),
+      offPeak: findRate("high", "Off-Peak")
+    },
+    lowSeason: {
+      peak: findRate("low", "Peak"),
+      standard: findRate("low", "Standard"),
+      offPeak: findRate("low", "Off-Peak")
+    }
+  };
+}
+
+// Rate block component for consistent styling
+function RateBlock({ 
+  value, 
+  label, 
+  variant 
+}: { 
+  value: number | null | undefined; 
+  label: string; 
+  variant: 'peak' | 'standard' | 'offpeak' | 'neutral' | 'blue' | 'subsidy' | 'empty';
+}) {
+  if (variant === 'empty') {
+    return <div className="p-1.5 rounded bg-transparent" />;
+  }
+
+  const variantStyles = {
+    peak: 'bg-red-500/10 text-red-700 dark:text-red-400',
+    standard: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
+    offpeak: 'bg-green-500/10 text-green-700 dark:text-green-400',
+    neutral: 'bg-slate-500/10 text-slate-700 dark:text-slate-300',
+    blue: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
+    subsidy: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
   };
 
+  const displayValue = value != null ? (value * 100).toFixed(2) : '—';
+
   return (
-    <div className={cn("mt-2 pt-2 border-t border-dashed text-xs space-y-1", expanded && "bg-muted/30 p-2 rounded")}>
-      <div className="text-muted-foreground font-medium mb-1">
-        Unbundled Breakdown {showVatInclusive ? "(Incl VAT)" : "(Excl VAT)"}:
+    <div className={`p-1.5 rounded text-center ${variantStyles[variant]}`}>
+      <div className="font-semibold text-xs">{displayValue}c</div>
+      <div className="text-[10px] text-muted-foreground truncate">{label}</div>
+    </div>
+  );
+}
+
+// Unbundled breakdown component using grid layout
+function UnbundledBreakdown({ 
+  rates, 
+  tariff, 
+  showVatInclusive 
+}: { 
+  rates: TariffRate[]; 
+  tariff: Tariff;
+  showVatInclusive: boolean; 
+}) {
+  const organized = organizeRatesBySeason(rates);
+  
+  // Get a sample rate for unbundled charges (they're the same across all periods)
+  const sampleRate = rates[0];
+  if (!sampleRate) return null;
+
+  // Get rate values based on VAT preference
+  const getRate = (rate: TariffRate | undefined, field: keyof TariffRate, fieldIncl: keyof TariffRate) => {
+    if (!rate) return null;
+    return showVatInclusive ? (rate[fieldIncl] as number | null) : (rate[field] as number | null);
+  };
+
+  const getLegacyCharge = () => {
+    return showVatInclusive ? tariff.legacy_charge_per_kwh_incl_vat : tariff.legacy_charge_per_kwh;
+  };
+
+  // Get network demand from Peak rate (only applies to Peak/Standard)
+  const networkDemand = getRate(organized.highSeason.peak, 'network_charge_per_kwh', 'network_charge_per_kwh_incl_vat');
+
+  return (
+    <div className="space-y-2 mt-2 pt-2 border-t border-dashed">
+      <div className="text-[10px] text-muted-foreground font-medium">
+        Rates (c/kWh) {showVatInclusive ? "(Incl VAT)" : "(Excl VAT)"}
       </div>
-      {rate.energy_charge_per_kwh && (
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Active Energy:</span>
-          <span>{(getDisplayValue(rate.energy_charge_per_kwh, rate.energy_charge_per_kwh_incl_vat) * 100).toFixed(2)}c</span>
+      
+      {/* Row 1: High Season Energy Rates */}
+      <div>
+        <div className="text-[10px] text-muted-foreground mb-1">High Season (Winter)</div>
+        <div className="grid grid-cols-3 gap-1">
+          <RateBlock 
+            value={getRate(organized.highSeason.peak, 'energy_charge_per_kwh', 'energy_charge_per_kwh_incl_vat')} 
+            label="Peak" 
+            variant="peak" 
+          />
+          <RateBlock 
+            value={getRate(organized.highSeason.standard, 'energy_charge_per_kwh', 'energy_charge_per_kwh_incl_vat')} 
+            label="Standard" 
+            variant="standard" 
+          />
+          <RateBlock 
+            value={getRate(organized.highSeason.offPeak, 'energy_charge_per_kwh', 'energy_charge_per_kwh_incl_vat')} 
+            label="Off-Peak" 
+            variant="offpeak" 
+          />
         </div>
-      )}
-      {rate.network_charge_per_kwh && (
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Network Demand:</span>
-          <span>{(getDisplayValue(rate.network_charge_per_kwh, rate.network_charge_per_kwh_incl_vat) * 100).toFixed(2)}c</span>
+      </div>
+
+      {/* Row 2: Low Season Energy Rates */}
+      <div>
+        <div className="text-[10px] text-muted-foreground mb-1">Low Season (Summer)</div>
+        <div className="grid grid-cols-3 gap-1">
+          <RateBlock 
+            value={getRate(organized.lowSeason.peak, 'energy_charge_per_kwh', 'energy_charge_per_kwh_incl_vat')} 
+            label="Peak" 
+            variant="peak" 
+          />
+          <RateBlock 
+            value={getRate(organized.lowSeason.standard, 'energy_charge_per_kwh', 'energy_charge_per_kwh_incl_vat')} 
+            label="Standard" 
+            variant="standard" 
+          />
+          <RateBlock 
+            value={getRate(organized.lowSeason.offPeak, 'energy_charge_per_kwh', 'energy_charge_per_kwh_incl_vat')} 
+            label="Off-Peak" 
+            variant="offpeak" 
+          />
         </div>
-      )}
-      {rate.ancillary_charge_per_kwh && (
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Ancillary:</span>
-          <span>{(getDisplayValue(rate.ancillary_charge_per_kwh, rate.ancillary_charge_per_kwh_incl_vat) * 100).toFixed(2)}c</span>
+      </div>
+
+      {/* Row 3: Fixed Per-kWh Charges */}
+      <div>
+        <div className="text-[10px] text-muted-foreground mb-1">Unbundled Charges</div>
+        <div className="grid grid-cols-3 gap-1">
+          <RateBlock 
+            value={getLegacyCharge()} 
+            label="Legacy" 
+            variant="neutral" 
+          />
+          <RateBlock 
+            value={getRate(sampleRate, 'ancillary_charge_per_kwh', 'ancillary_charge_per_kwh_incl_vat')} 
+            label="Ancillary" 
+            variant="neutral" 
+          />
+          <RateBlock 
+            value={networkDemand} 
+            label="Network Demand" 
+            variant="blue" 
+          />
         </div>
-      )}
-      {rate.electrification_rural_per_kwh && (
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Elec & Rural Subsidy:</span>
-          <span>{(getDisplayValue(rate.electrification_rural_per_kwh, rate.electrification_rural_per_kwh_incl_vat) * 100).toFixed(2)}c</span>
+      </div>
+
+      {/* Row 4: Subsidy Charges */}
+      <div>
+        <div className="grid grid-cols-3 gap-1">
+          <RateBlock 
+            value={getRate(sampleRate, 'electrification_rural_per_kwh', 'electrification_rural_per_kwh_incl_vat')} 
+            label="Elec & Rural" 
+            variant="subsidy" 
+          />
+          <RateBlock 
+            value={getRate(sampleRate, 'affordability_subsidy_per_kwh', 'affordability_subsidy_per_kwh_incl_vat')} 
+            label="Affordability" 
+            variant="subsidy" 
+          />
+          <RateBlock value={null} label="" variant="empty" />
         </div>
-      )}
-      {rate.affordability_subsidy_per_kwh && (
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Affordability Subsidy:</span>
-          <span>{(getDisplayValue(rate.affordability_subsidy_per_kwh, rate.affordability_subsidy_per_kwh_incl_vat) * 100).toFixed(2)}c</span>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
