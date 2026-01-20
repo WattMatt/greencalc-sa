@@ -6,12 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2 } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { useSolcastForecast } from "@/hooks/useSolcastForecast";
+import { usePVGISProfile, PVGISTMYResponse, PVGISMonthlyResponse } from "@/hooks/usePVGISProfile";
 import { ReportToggle } from "@/components/reports/ReportToggle";
 import { SavedSimulations } from "./SavedSimulations";
 import {
@@ -44,6 +46,9 @@ import { LoadSheddingAnalysisPanel } from "./simulation/LoadSheddingAnalysisPane
 import { InverterSizing, InverterConfig, getDefaultInverterConfig } from "./InverterSizing";
 import { SystemCostsData } from "./SystemCostsManager";
 import { calculateAnnualBlendedRate, getBlendedRateBreakdown } from "@/lib/tariffCalculations";
+
+// Solar data source type
+type SolarDataSource = "solcast" | "pvgis_monthly" | "pvgis_tmy";
 
 interface Tenant {
   id: string;
@@ -143,7 +148,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [batteryPower, setBatteryPower] = useState(includesBattery ? 25 : 0);
   const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [useSolcast, setUseSolcast] = useState(false);
+  const [solarDataSource, setSolarDataSource] = useState<SolarDataSource>("pvgis_monthly");
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
   const [inverterConfig, setInverterConfig] = useState<InverterConfig>(getDefaultInverterConfig);
   
@@ -182,9 +187,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       // System costs are now loaded by ProjectDetail.tsx on initial load
       // to ensure consistency between Costs tab and Simulation tab
       
-      // Set Solcast toggle based on saved type
-      if (lastSavedSimulation.simulation_type === "solcast") {
-        setUseSolcast(true);
+      // Set solar data source based on saved type
+      const savedType = lastSavedSimulation.simulation_type;
+      if (savedType === "solcast" || savedType === "pvgis_monthly" || savedType === "pvgis_tmy") {
+        setSolarDataSource(savedType);
+      } else if (savedType === "generic") {
+        setSolarDataSource("pvgis_monthly"); // Default to PVGIS monthly for legacy "generic" saves
       }
       
       // Track what we loaded for UI feedback
@@ -195,29 +203,69 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, error: solcastError, fetchForecast } = useSolcastForecast();
+  
+  // PVGIS data hook
+  const {
+    tmyData: pvgisTmyData,
+    monthlyData: pvgisMonthlyData,
+    isLoadingTMY: pvgisLoadingTMY,
+    isLoadingMonthly: pvgisLoadingMonthly,
+    fetchTMY,
+    fetchMonthlyRadiation,
+  } = usePVGISProfile();
 
-  // Get location coordinates from PV config location
+  // Get location coordinates from PV config location or project
   const selectedLocation = SA_SOLAR_LOCATIONS[pvConfig.location];
-  const hasCoordinates = selectedLocation?.lat !== undefined;
+  const hasCoordinates = selectedLocation?.lat !== undefined || (project?.latitude && project?.longitude);
+  const effectiveLat = project?.latitude ?? selectedLocation?.lat;
+  const effectiveLng = project?.longitude ?? SA_LOCATION_LONGITUDES[pvConfig.location] ?? 28.0;
 
-  // Fetch Solcast data when enabled and location is available
-  // Don't retry if there was an error (e.g., quota exceeded)
+  // Fetch Solcast data when selected and location is available
   useEffect(() => {
-    if (useSolcast && hasCoordinates && !solcastData && !solcastLoading && !solcastError) {
+    if (solarDataSource === "solcast" && hasCoordinates && !solcastData && !solcastLoading && !solcastError) {
       fetchForecast({
-        latitude: selectedLocation.lat,
-        longitude: SA_LOCATION_LONGITUDES[pvConfig.location] ?? 28.0,
+        latitude: effectiveLat,
+        longitude: effectiveLng,
         hours: 168,
         period: 'PT60M'
       });
     }
-  }, [useSolcast, hasCoordinates, pvConfig.location, solcastError]);
+  }, [solarDataSource, hasCoordinates, effectiveLat, effectiveLng, solcastError]);
+
+  // Fetch PVGIS TMY data when selected
+  useEffect(() => {
+    if (solarDataSource === "pvgis_tmy" && hasCoordinates && !pvgisTmyData && !pvgisLoadingTMY) {
+      fetchTMY({ latitude: effectiveLat, longitude: effectiveLng, projectId });
+    }
+  }, [solarDataSource, hasCoordinates, effectiveLat, effectiveLng, pvgisTmyData, pvgisLoadingTMY, projectId]);
+
+  // Fetch PVGIS Monthly data when selected
+  useEffect(() => {
+    if (solarDataSource === "pvgis_monthly" && hasCoordinates && !pvgisMonthlyData && !pvgisLoadingMonthly) {
+      fetchMonthlyRadiation({ latitude: effectiveLat, longitude: effectiveLng, projectId });
+    }
+  }, [solarDataSource, hasCoordinates, effectiveLat, effectiveLng, pvgisMonthlyData, pvgisLoadingMonthly, projectId]);
 
   // Process Solcast data into hourly average profile
   const solcastHourlyProfile = useMemo<HourlyIrradianceData[] | undefined>(() => {
     if (!solcastData?.hourly || solcastData.hourly.length === 0) return undefined;
     return generateAverageSolcastProfile(solcastData.hourly);
   }, [solcastData]);
+
+  // Generate PVGIS hourly profiles from TMY/Monthly data
+  const pvgisHourlyProfile = useMemo<HourlyIrradianceData[] | undefined>(() => {
+    const activeData = solarDataSource === "pvgis_tmy" ? pvgisTmyData : pvgisMonthlyData;
+    if (!activeData?.typicalDay?.hourlyGhi) return undefined;
+    
+    // Convert PVGIS typicalDay to HourlyIrradianceData format
+    return activeData.typicalDay.hourlyGhi.map((ghi, hour) => ({
+      hour,
+      ghi,
+      dni: activeData.typicalDay.hourlyDni?.[hour] ?? 0,
+      dhi: activeData.typicalDay.hourlyDhi?.[hour] ?? 0,
+      temp: activeData.typicalDay.hourlyTemp?.[hour] ?? 25,
+    }));
+  }, [solarDataSource, pvgisTmyData, pvgisMonthlyData]);
 
   // Fetch tariff data (for financial analysis only)
   const { data: tariffRates } = useQuery({
@@ -269,18 +317,33 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return profile;
   }, [tenants, shopTypes]);
 
-  // Generate solar profiles - both with Solcast and without (for comparison)
+  // Generate solar profiles - both with real data and generic (for comparison)
   const solarProfileSolcast = useMemo(() => {
     if (!solcastHourlyProfile) return null;
     return generateSolarProfile(pvConfig, solarCapacity, solcastHourlyProfile);
   }, [pvConfig, solarCapacity, solcastHourlyProfile]);
 
+  const solarProfilePVGIS = useMemo(() => {
+    if (!pvgisHourlyProfile) return null;
+    return generateSolarProfile(pvConfig, solarCapacity, pvgisHourlyProfile);
+  }, [pvConfig, solarCapacity, pvgisHourlyProfile]);
+
   const solarProfileGeneric = useMemo(() => {
     return generateSolarProfile(pvConfig, solarCapacity, undefined);
   }, [pvConfig, solarCapacity]);
 
-  // Active solar profile based on toggle
-  const solarProfile = useSolcast && solarProfileSolcast ? solarProfileSolcast : solarProfileGeneric;
+  // Active solar profile based on data source selection
+  const solarProfile = useMemo(() => {
+    switch (solarDataSource) {
+      case "solcast":
+        return solarProfileSolcast ?? solarProfileGeneric;
+      case "pvgis_monthly":
+      case "pvgis_tmy":
+        return solarProfilePVGIS ?? solarProfileGeneric;
+      default:
+        return solarProfileGeneric;
+    }
+  }, [solarDataSource, solarProfileSolcast, solarProfilePVGIS, solarProfileGeneric]);
 
   // ========================================
   // PHASE 1: Energy Simulation (tariff-independent)
@@ -440,7 +503,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       const simulationData = {
         project_id: projectId,
         name: existingId ? lastSavedSimulation.name : simulationName,
-        simulation_type: useSolcast ? "solcast" : "generic",
+        simulation_type: solarDataSource,
         solar_capacity_kwp: solarCapacity,
         battery_capacity_kwh: includesBattery ? batteryCapacity : 0,
         battery_power_kw: includesBattery ? batteryPower : 0,
@@ -462,7 +525,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           peakDemand: energyResults.peakLoad,
           newPeakDemand: energyResults.peakGridImport,
           pvConfig,
-          usingSolcast: !!useSolcast,
+          solarDataSource,
           inverterConfig,
           systemCosts,
           // Blended solar rate for IRR/financial modeling
@@ -528,8 +591,26 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const systemEfficiency = calculateSystemEfficiency(pvConfig);
 
   // Data source indicator
-  const usingRealData = useSolcast && solcastHourlyProfile;
-  const avgDailyGhi = solcastData?.summary?.average_daily_ghi_kwh_m2;
+  const isLoadingData = solarDataSource === "solcast" ? solcastLoading 
+    : solarDataSource === "pvgis_tmy" ? pvgisLoadingTMY 
+    : pvgisLoadingMonthly;
+  
+  const hasRealData = solarDataSource === "solcast" ? !!solcastHourlyProfile
+    : !!pvgisHourlyProfile;
+  
+  // Get the active data source's peak sun hours for display
+  const activeDataSourceLabel = useMemo(() => {
+    if (solarDataSource === "solcast" && solcastData?.summary?.average_daily_ghi_kwh_m2) {
+      return `Solcast: ${solcastData.summary.average_daily_ghi_kwh_m2.toFixed(1)} kWh/m²/day`;
+    }
+    if (solarDataSource === "pvgis_monthly" && pvgisMonthlyData?.summary?.peakSunHours) {
+      return `PVGIS 19-Yr: ${pvgisMonthlyData.summary.peakSunHours.toFixed(1)} kWh/m²/day`;
+    }
+    if (solarDataSource === "pvgis_tmy" && pvgisTmyData?.summary?.peakSunHours) {
+      return `PVGIS TMY: ${pvgisTmyData.summary.peakSunHours.toFixed(1)} kWh/m²/day`;
+    }
+    return `${selectedLocation.ghi} kWh/m²/day`;
+  }, [solarDataSource, solcastData, pvgisMonthlyData, pvgisTmyData, selectedLocation.ghi]);
 
 
   return (
@@ -539,32 +620,65 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           <h2 className="text-lg font-semibold">Energy Simulation</h2>
           <p className="text-sm text-muted-foreground">
             Model solar and battery energy flows • {selectedLocation.name}
-            {usingRealData ? (
-              <span className="text-primary"> (Solcast: {avgDailyGhi?.toFixed(1)} kWh/m²/day)</span>
+            {hasRealData ? (
+              <span className="text-primary"> ({activeDataSourceLabel})</span>
             ) : (
               <span> ({selectedLocation.ghi} kWh/m²/day)</span>
             )}
           </p>
         </div>
-        {/* Solcast Toggle */}
+        {/* Solar Data Source Toggle */}
         <div className="flex items-center gap-2">
-          <Button
-            variant={useSolcast ? "default" : "outline"}
-            size="sm"
-            onClick={() => setUseSolcast(!useSolcast)}
-            disabled={solcastLoading}
-            className="gap-2"
+          <ToggleGroup
+            type="single"
+            value={solarDataSource}
+            onValueChange={(value) => value && setSolarDataSource(value as SolarDataSource)}
+            className="border rounded-lg p-0.5"
           >
-            {solcastLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Cloud className="h-4 w-4" />
-            )}
-            {useSolcast ? "Using Solcast" : "Use Solcast Forecast"}
-          </Button>
-          {usingRealData && (
+            <ToggleGroupItem
+              value="solcast"
+              size="sm"
+              className="text-xs gap-1 px-3"
+              disabled={solcastLoading}
+            >
+              {solcastLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Cloud className="h-3 w-3" />
+              )}
+              Solcast
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="pvgis_monthly"
+              size="sm"
+              className="text-xs gap-1 px-3"
+              disabled={pvgisLoadingMonthly}
+            >
+              {pvgisLoadingMonthly ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Database className="h-3 w-3" />
+              )}
+              PVGIS
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="pvgis_tmy"
+              size="sm"
+              className="text-xs gap-1 px-3"
+              disabled={pvgisLoadingTMY}
+            >
+              {pvgisLoadingTMY ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Database className="h-3 w-3" />
+              )}
+              TMY
+            </ToggleGroupItem>
+          </ToggleGroup>
+          
+          {hasRealData && (
             <Badge variant="outline" className="text-xs text-primary border-primary">
-              Real Irradiance Data
+              {solarDataSource === "solcast" ? "Forecast" : solarDataSource === "pvgis_tmy" ? "Typical Year" : "19-Yr Avg"}
             </Badge>
           )}
         </div>
@@ -926,7 +1040,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           batteryCapacity: includesBattery ? batteryCapacity : 0,
           batteryPower: includesBattery ? batteryPower : 0,
           pvConfig,
-          usingSolcast: !!usingRealData,
+          usingSolcast: solarDataSource === "solcast",
           inverterConfig,
           systemCosts,
         }}

@@ -56,6 +56,14 @@ export interface PVGISMonthlyAverage {
   yearsAveraged: number;
 }
 
+export interface PVGISTypicalDay {
+  normalizedProfile: number[];
+  hourlyGhi: number[];
+  hourlyDni: number[];
+  hourlyDhi: number[];
+  hourlyTemp: number[];
+}
+
 export interface PVGISMonthlyResponse {
   success: boolean;
   source: "pvgis";
@@ -72,6 +80,7 @@ export interface PVGISMonthlyResponse {
   };
   radiationDatabase: string;
   summary: PVGISSummary;
+  typicalDay: PVGISTypicalDay;
   monthly: PVGISMonthlyAverage[];
   rawMonthlyData?: unknown[];
   error?: string;
