@@ -11,7 +11,8 @@ import { DEFAULT_SYSTEM_COSTS } from "./simulation/FinancialAnalysis";
 export interface SystemCostsData {
   solarCostPerKwp: number;
   batteryCostPerKwh: number;
-  maintenancePerYear: number;
+  maintenancePercentage: number; // Percentage of total system cost (e.g., 1.5 = 1.5%)
+  maintenancePerYear: number; // Calculated Rand value
 }
 
 interface SystemCostsManagerProps {
@@ -28,28 +29,28 @@ const COST_PRESETS = [
     description: "Entry-level components, basic installation",
     solarCostPerKwp: 8500,
     batteryCostPerKwh: 5500,
-    maintenancePerYear: 2000,
+    maintenancePercentage: 1.0,
   },
   {
     name: "Standard",
     description: "Quality Tier-1 panels, reputable brands",
     solarCostPerKwp: 11000,
     batteryCostPerKwh: 7500,
-    maintenancePerYear: 5000,
+    maintenancePercentage: 1.5,
   },
   {
     name: "Premium",
     description: "Top-tier equipment, extended warranties",
     solarCostPerKwp: 14000,
     batteryCostPerKwh: 9500,
-    maintenancePerYear: 8000,
+    maintenancePercentage: 2.0,
   },
   {
     name: "Commercial",
     description: "Large-scale C&I pricing",
     solarCostPerKwp: 9500,
     batteryCostPerKwh: 6500,
-    maintenancePerYear: 15000,
+    maintenancePercentage: 1.25,
   },
 ];
 
@@ -66,16 +67,52 @@ export function SystemCostsManager({
     (solarCapacity * costs.solarCostPerKwp) + 
     (effectiveBatteryCapacity * costs.batteryCostPerKwh);
 
+  // Calculate maintenance from percentage
+  const calculatedMaintenancePerYear = totalSystemCost * (costs.maintenancePercentage / 100);
+
+  // Local state for percentage input
+  const [percentageInput, setPercentageInput] = useState(costs.maintenancePercentage.toString());
+
+  // Sync local input with props
+  useEffect(() => {
+    setPercentageInput(costs.maintenancePercentage.toString());
+  }, [costs.maintenancePercentage]);
+
+  // Auto-sync calculated maintenance to parent whenever inputs change
+  useEffect(() => {
+    if (Math.abs(costs.maintenancePerYear - calculatedMaintenancePerYear) > 0.01) {
+      onChange({ ...costs, maintenancePerYear: calculatedMaintenancePerYear });
+    }
+  }, [calculatedMaintenancePerYear, costs, onChange]);
+
   const handleInputChange = (field: keyof SystemCostsData, value: string) => {
     const numValue = parseFloat(value) || 0;
     onChange({ ...costs, [field]: numValue });
+  };
+
+  const handlePercentageInputBlur = () => {
+    const parsed = parseFloat(percentageInput);
+    if (!isNaN(parsed) && parsed >= 0.5 && parsed <= 3.0) {
+      onChange({ ...costs, maintenancePercentage: parsed });
+    } else {
+      setPercentageInput(costs.maintenancePercentage.toString());
+    }
+  };
+
+  const handlePercentageInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handlePercentageInputBlur();
+    } else if (e.key === "Escape") {
+      setPercentageInput(costs.maintenancePercentage.toString());
+    }
   };
 
   const applyPreset = (preset: typeof COST_PRESETS[0]) => {
     onChange({
       solarCostPerKwp: preset.solarCostPerKwp,
       batteryCostPerKwh: preset.batteryCostPerKwh,
-      maintenancePerYear: preset.maintenancePerYear,
+      maintenancePercentage: preset.maintenancePercentage,
+      maintenancePerYear: 0, // Will be recalculated
     });
   };
 
@@ -83,7 +120,8 @@ export function SystemCostsManager({
     onChange({
       solarCostPerKwp: DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
       batteryCostPerKwh: DEFAULT_SYSTEM_COSTS.batteryCostPerKwh,
-      maintenancePerYear: DEFAULT_SYSTEM_COSTS.maintenancePerYear ?? 0,
+      maintenancePercentage: DEFAULT_SYSTEM_COSTS.maintenancePercentage ?? 1.5,
+      maintenancePerYear: 0,
     });
   };
 
@@ -91,7 +129,7 @@ export function SystemCostsManager({
     p => 
       p.solarCostPerKwp === costs.solarCostPerKwp &&
       p.batteryCostPerKwh === costs.batteryCostPerKwh &&
-      p.maintenancePerYear === costs.maintenancePerYear
+      p.maintenancePercentage === costs.maintenancePercentage
   );
 
   return (
@@ -121,7 +159,7 @@ export function SystemCostsManager({
               const isActive = 
                 preset.solarCostPerKwp === costs.solarCostPerKwp &&
                 preset.batteryCostPerKwh === costs.batteryCostPerKwh &&
-                preset.maintenancePerYear === costs.maintenancePerYear;
+                preset.maintenancePercentage === costs.maintenancePercentage;
 
               return (
                 <button
@@ -275,31 +313,56 @@ export function SystemCostsManager({
           </Card>
         )}
 
-        {/* Maintenance Costs */}
+        {/* Maintenance Costs - Percentage Based */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Calculator className="h-4 w-4 text-purple-500" />
+              <Calculator className="h-4 w-4 text-primary" />
               Annual Maintenance
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label className="text-xs">Annual O&M Cost</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">R</span>
-                <Input
-                  type="number"
-                  value={costs.maintenancePerYear}
-                  onChange={(e) => handleInputChange("maintenancePerYear", e.target.value)}
-                  className="h-9"
-                  min={0}
-                  step={1000}
-                />
-                <span className="text-muted-foreground text-sm">/year</span>
+              <div className="flex justify-between items-center">
+                <Label className="text-xs">O&M Percentage</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={percentageInput}
+                    onChange={(e) => setPercentageInput(e.target.value)}
+                    onBlur={handlePercentageInputBlur}
+                    onKeyDown={handlePercentageInputKeyDown}
+                    className="h-6 w-14 text-xs text-right px-2"
+                    min={0.5}
+                    max={3.0}
+                    step={0.1}
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
               </div>
-              <p className="text-[10px] text-muted-foreground">
-                Cleaning, monitoring, inspections, inverter servicing
+              <Slider
+                value={[costs.maintenancePercentage]}
+                onValueChange={([v]) => onChange({ ...costs, maintenancePercentage: v })}
+                min={0.5}
+                max={3.0}
+                step={0.1}
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>0.5%</span>
+                <span>1.5% (Standard)</span>
+                <span>3.0%</span>
+              </div>
+            </div>
+            
+            <div className="pt-3 border-t bg-muted/30 -mx-6 px-6 -mb-6 pb-4 rounded-b-lg">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground">Calculated Annual Cost</span>
+                <span className="font-semibold text-sm">
+                  R{calculatedMaintenancePerYear.toLocaleString(undefined, { maximumFractionDigits: 0 })}/year
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {costs.maintenancePercentage}% of R{totalSystemCost.toLocaleString()} total system cost
               </p>
             </div>
           </CardContent>
@@ -331,8 +394,8 @@ export function SystemCostsManager({
                 </div>
               )}
               <div className="flex justify-between gap-8 pt-1 border-t">
-                <span className="text-muted-foreground">Annual O&M</span>
-                <span>R{costs.maintenancePerYear.toLocaleString()}/yr</span>
+                <span className="text-muted-foreground">Annual O&M ({costs.maintenancePercentage}%)</span>
+                <span>R{calculatedMaintenancePerYear.toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr</span>
               </div>
             </div>
           </div>
