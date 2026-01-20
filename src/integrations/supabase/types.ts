@@ -325,6 +325,50 @@ export type Database = {
           },
         ]
       }
+      project_solar_data: {
+        Row: {
+          created_at: string
+          data_json: Json
+          data_type: string
+          fetched_at: string
+          id: string
+          latitude: number
+          longitude: number
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_json: Json
+          data_type: string
+          fetched_at?: string
+          id?: string
+          latitude: number
+          longitude: number
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_json?: Json
+          data_type?: string
+          fetched_at?: string
+          id?: string
+          latitude?: number
+          longitude?: number
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_solar_data_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_tenant_meters: {
         Row: {
           created_at: string

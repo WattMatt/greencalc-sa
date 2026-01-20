@@ -10,7 +10,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { MapPin, Sun, Cloud, Thermometer, RefreshCw, Navigation, Zap, Locate, Database, Radio, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { useSolcastForecast, SolcastForecastResponse } from "@/hooks/useSolcastForecast";
-import { usePVGISProfile, PVGISResponse } from "@/hooks/usePVGISProfile";
+import { usePVGISProfile, PVGISTMYResponse, PVGISMonthlyResponse } from "@/hooks/usePVGISProfile";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
@@ -28,7 +28,7 @@ const SA_BOUNDS = {
   zoom: 5,
 };
 
-type DataSource = "pvgis" | "solcast";
+type DataSource = "pvgis_monthly" | "pvgis_tmy" | "solcast";
 
 export function ProjectLocationMap({
   projectId,
@@ -46,7 +46,7 @@ export function ProjectLocationMap({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [geocodeAttempted, setGeocodeAttempted] = useState(false);
-  const [dataSource, setDataSource] = useState<DataSource>("pvgis");
+  const [dataSource, setDataSource] = useState<DataSource>("pvgis_monthly");
   
   // Editable coordinate inputs
   const [editLat, setEditLat] = useState<string>("");
@@ -67,8 +67,8 @@ export function ProjectLocationMap({
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, error: solcastError, fetchForecast } = useSolcastForecast();
 
-  // PVGIS TMY hook
-  const { data: pvgisData, isLoading: pvgisLoading, error: pvgisError, fetchProfile: fetchPVGIS } = usePVGISProfile();
+  // PVGIS hooks (TMY and Monthly)
+  const { tmyData, monthlyData, isLoadingTMY, isLoadingMonthly, tmyError, monthlyError, fetchTMY, fetchMonthlyRadiation, fetchBothDatasets } = usePVGISProfile();
 
   // Save location mutation
   const saveLocation = useMutation({
@@ -89,7 +89,7 @@ export function ProjectLocationMap({
       if (dataSource === "solcast") {
         fetchForecast({ latitude: lat, longitude: lng, hours: 168 });
       } else {
-        fetchPVGIS({ latitude: lat, longitude: lng });
+        fetchBothDatasets({ latitude: lat, longitude: lng, projectId });
       }
     },
     onError: (error: Error) => {
@@ -130,7 +130,7 @@ export function ProjectLocationMap({
         if (dataSource === "solcast") {
           fetchForecast({ latitude: data.latitude, longitude: data.longitude, hours: 168 });
         } else {
-          fetchPVGIS({ latitude: data.latitude, longitude: data.longitude });
+          fetchBothDatasets({ latitude: data.latitude, longitude: data.longitude, projectId });
         }
       } else {
         toast.warning("Could not find coordinates for this location");
@@ -141,7 +141,7 @@ export function ProjectLocationMap({
     } finally {
       setIsGeocoding(false);
     }
-  }, [location, latitude, longitude, geocodeAttempted, projectId, mapLoaded, queryClient, onLocationUpdate, fetchForecast, fetchPVGIS, dataSource]);
+  }, [location, latitude, longitude, geocodeAttempted, projectId, mapLoaded, queryClient, onLocationUpdate, fetchForecast, fetchBothDatasets, dataSource]);
 
   // Trigger auto-geocode when map loads
   useEffect(() => {
@@ -283,15 +283,15 @@ export function ProjectLocationMap({
     if (latitude && longitude) {
       if (dataSource === "solcast" && !solcastData && !solcastLoading) {
         fetchForecast({ latitude, longitude, hours: 168 });
-      } else if (dataSource === "pvgis" && !pvgisData && !pvgisLoading) {
-        fetchPVGIS({ latitude, longitude });
+      } else if ((dataSource === "pvgis_tmy" || dataSource === "pvgis_monthly") && !tmyData && !monthlyData && !isLoadingTMY && !isLoadingMonthly) {
+        fetchBothDatasets({ latitude, longitude, projectId });
       }
     }
-  }, [latitude, longitude, dataSource, solcastData, solcastLoading, pvgisData, pvgisLoading, fetchForecast, fetchPVGIS]);
+  }, [latitude, longitude, dataSource, solcastData, solcastLoading, tmyData, monthlyData, isLoadingTMY, isLoadingMonthly, fetchForecast, fetchBothDatasets, projectId]);
 
   // Handle data source change
   const handleDataSourceChange = (value: string) => {
-    if (value === "pvgis" || value === "solcast") {
+    if (value === "pvgis_monthly" || value === "pvgis_tmy" || value === "solcast") {
       setDataSource(value);
       const lat = pendingCoords?.lat ?? latitude;
       const lng = pendingCoords?.lng ?? longitude;
@@ -299,8 +299,8 @@ export function ProjectLocationMap({
       if (lat && lng) {
         if (value === "solcast" && !solcastData) {
           fetchForecast({ latitude: lat, longitude: lng, hours: 168 });
-        } else if (value === "pvgis" && !pvgisData) {
-          fetchPVGIS({ latitude: lat, longitude: lng });
+        } else if ((value === "pvgis_tmy" || value === "pvgis_monthly") && !tmyData && !monthlyData) {
+          fetchBothDatasets({ latitude: lat, longitude: lng, projectId });
         }
       }
     }
@@ -329,14 +329,15 @@ export function ProjectLocationMap({
       if (dataSource === "solcast") {
         fetchForecast({ latitude: lat, longitude: lng, hours: 168 });
       } else {
-        fetchPVGIS({ latitude: lat, longitude: lng });
+        fetchBothDatasets({ latitude: lat, longitude: lng, projectId });
       }
     }
   };
 
   const hasCoordinates = !!(latitude && longitude);
-  const isLoading = dataSource === "solcast" ? solcastLoading : pvgisLoading;
-  const currentError = dataSource === "solcast" ? solcastError : pvgisError;
+  const isLoading = dataSource === "solcast" ? solcastLoading : (isLoadingTMY || isLoadingMonthly);
+  const currentError = dataSource === "solcast" ? solcastError : (tmyError || monthlyError);
+  const pvgisData = dataSource === "pvgis_tmy" ? tmyData : monthlyData;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -539,8 +540,8 @@ export function ProjectLocationMap({
             </div>
           ) : dataSource === "solcast" && solcastData ? (
             <SolcastSummaryDisplay data={solcastData} />
-          ) : dataSource === "pvgis" && pvgisData ? (
-            <PVGISSummaryDisplay data={pvgisData} />
+          ) : (dataSource === "pvgis_tmy" || dataSource === "pvgis_monthly") && pvgisData ? (
+            <PVGISSummaryDisplay data={pvgisData} dataType={dataSource} />
           ) : (
             <div className="text-center py-8">
               <Zap className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
@@ -553,8 +554,8 @@ export function ProjectLocationMap({
   );
 }
 
-// PVGIS TMY display component
-function PVGISSummaryDisplay({ data }: { data: PVGISResponse }) {
+// PVGIS display component (works for both TMY and Monthly)
+function PVGISSummaryDisplay({ data, dataType }: { data: PVGISTMYResponse | PVGISMonthlyResponse; dataType: "pvgis_tmy" | "pvgis_monthly" }) {
   const { summary, monthly } = data;
 
   // Month names for display
