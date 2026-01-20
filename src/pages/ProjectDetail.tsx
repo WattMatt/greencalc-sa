@@ -690,7 +690,7 @@ export default function ProjectDetail() {
   // Check if system includes battery
   const systemIncludesBattery = projectSystemType === "Solar + Battery" || projectSystemType === "Hybrid";
 
-  const { data: tenants } = useQuery({
+  const { data: tenants, isLoading: isLoadingTenants } = useQuery({
     queryKey: ["project-tenants", id],
     queryFn: async () => {
       // Fetch tenants with their direct scada_imports relation
@@ -761,7 +761,7 @@ export default function ProjectDetail() {
   });
 
   // Fetch latest simulation for PV capacity and status tracking
-  const { data: latestSimulation } = useQuery({
+  const { data: latestSimulation, isLoading: isLoadingSimulation } = useQuery({
     queryKey: ["project-latest-simulation", id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -827,7 +827,10 @@ export default function ProjectDetail() {
   const connectionSize = project?.connection_size_kva;
   const maxSolarKva = connectionSize ? connectionSize * 0.7 : null;
 
-  if (isLoading) {
+  // Wait for all critical queries to load before rendering
+  const isLoadingCritical = isLoading || isLoadingTenants || isLoadingSimulation;
+  
+  if (isLoadingCritical) {
     return (
       <div className="space-y-6">
         <div className="h-8 bg-muted rounded w-48 animate-pulse" />
