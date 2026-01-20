@@ -33,10 +33,8 @@ const TOU_PERIODS: Record<SeasonType, Record<DayType, TOUPeriod[]>> = {
     ],
     Sunday: [
       { start: 0, end: 7, type: "Off-Peak" },
-      { start: 7, end: 12, type: "Standard" },
-      { start: 12, end: 18, type: "Off-Peak" },
-      { start: 18, end: 20, type: "Standard" }, // NEW 2025 Sunday evening period
-      { start: 20, end: 24, type: "Off-Peak" },
+      { start: 7, end: 12, type: "Standard" },  // 5h Standard
+      { start: 12, end: 24, type: "Off-Peak" }, // Corrected: No evening Standard on Sunday - 12h Off-Peak
     ],
   },
   Low: {
@@ -56,10 +54,8 @@ const TOU_PERIODS: Record<SeasonType, Record<DayType, TOUPeriod[]>> = {
     ],
     Sunday: [
       { start: 0, end: 7, type: "Off-Peak" },
-      { start: 7, end: 12, type: "Standard" },
-      { start: 12, end: 18, type: "Off-Peak" },
-      { start: 18, end: 20, type: "Standard" }, // NEW 2025 Sunday evening period
-      { start: 20, end: 24, type: "Off-Peak" },
+      { start: 7, end: 12, type: "Standard" },  // 5h Standard
+      { start: 12, end: 24, type: "Off-Peak" }, // Corrected: No evening Standard on Sunday - 12h Off-Peak
     ],
   },
 };
