@@ -8,30 +8,38 @@ const corsHeaders = {
 interface PVGISRequest {
   latitude: number;
   longitude: number;
+  startyear?: number;
+  endyear?: number;
 }
 
 interface PVGISTMYHour {
   "time(UTC)": string;
-  "T2m": number; // Temperature at 2m (°C)
-  "RH": number; // Relative humidity (%)
-  "G(h)": number; // Global horizontal irradiance (W/m²)
-  "Gb(n)": number; // Direct normal irradiance (W/m²)
-  "Gd(h)": number; // Diffuse horizontal irradiance (W/m²)
-  "IR(h)": number; // Infrared radiation (W/m²)
-  "WS10m": number; // Wind speed at 10m (m/s)
-  "WD10m": number; // Wind direction at 10m (°)
-  "SP": number; // Surface pressure (Pa)
+  "T2m": number;        // Temperature at 2m height (°C)
+  "G(h)": number;       // Global horizontal irradiance (W/m²)
+  "Gb(n)": number;      // Direct normal irradiance (W/m²)
+  "Gd(h)": number;      // Diffuse horizontal irradiance (W/m²)
+  "IR(h)": number;      // Infrared radiation (W/m²)
+  "WS10m": number;      // Wind speed at 10m (m/s)
+  "WD10m": number;      // Wind direction at 10m (°)
+  "SP": number;         // Surface pressure (Pa)
+  "RH": number;         // Relative humidity (%)
 }
 
 interface PVGISResponse {
   inputs: {
-    location: { latitude: number; longitude: number; elevation: number };
+    location: {
+      latitude: number;
+      longitude: number;
+      elevation: number;
+    };
+    meteo_data: {
+      radiation_db: string;
+      year_min: number;
+      year_max: number;
+    };
   };
   outputs: {
     tmy_hourly: PVGISTMYHour[];
-  };
-  meta: {
-    inputs: { meteo_data: { radiation_db: string; meteo_db: string } };
   };
 }
 
@@ -42,160 +50,129 @@ serve(async (req) => {
   }
 
   try {
-    const { latitude, longitude }: PVGISRequest = await req.json();
+    const { latitude, longitude, startyear = 2005, endyear = 2023 }: PVGISRequest = await req.json();
+
+    console.log(`Fetching PVGIS TMY for lat=${latitude}, lon=${longitude}, years=${startyear}-${endyear}`);
 
     if (!latitude || !longitude) {
       return new Response(
-        JSON.stringify({ success: false, error: "Latitude and longitude are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: false, error: "Missing latitude or longitude" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
       );
     }
 
-    console.log(`Fetching PVGIS TMY data for: ${latitude}, ${longitude}`);
-
-    // Fetch TMY data from PVGIS API
+    // Construct PVGIS TMY API URL with year range
     const pvgisUrl = new URL("https://re.jrc.ec.europa.eu/api/v5_3/tmy");
     pvgisUrl.searchParams.set("lat", latitude.toString());
     pvgisUrl.searchParams.set("lon", longitude.toString());
+    pvgisUrl.searchParams.set("startyear", startyear.toString());
+    pvgisUrl.searchParams.set("endyear", endyear.toString());
     pvgisUrl.searchParams.set("outputformat", "json");
-    pvgisUrl.searchParams.set("browser", "0"); // Get raw data, not browser-formatted
+
+    console.log(`PVGIS TMY URL: ${pvgisUrl.toString()}`);
 
     const response = await fetch(pvgisUrl.toString());
-
+    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("PVGIS API error:", response.status, errorText);
+      console.error(`PVGIS API error: ${response.status} - ${errorText}`);
       
-      // Handle specific PVGIS errors
-      if (response.status === 400 || errorText.includes("outside")) {
+      // Check if it's an "out of bounds" error
+      if (response.status === 400 && errorText.includes("location")) {
         return new Response(
-          JSON.stringify({
-            success: false,
-            error: "Location outside PVGIS coverage area. PVGIS covers Europe, Africa, most of Asia, and the Americas between 60°N and 60°S.",
-          }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ success: false, error: "Location not covered by PVGIS database" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
         );
       }
-
-      return new Response(
-        JSON.stringify({ success: false, error: `PVGIS API error: ${response.status}` }),
-        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      
+      throw new Error(`PVGIS API error: ${response.status}`);
     }
 
-    const pvgisData: PVGISResponse = await response.json();
-    const hourlyData = pvgisData.outputs.tmy_hourly;
+    const data: PVGISResponse = await response.json();
+    const hourlyData = data.outputs.tmy_hourly;
 
-    if (!hourlyData || hourlyData.length === 0) {
-      return new Response(
-        JSON.stringify({ success: false, error: "No TMY data available for this location" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    console.log(`Received ${hourlyData.length} hourly records`);
 
-    console.log(`Received ${hourlyData.length} hourly TMY records`);
+    // Process hourly data into typical day profile (24-hour averages)
+    const typicalDayProfile = Array(24).fill(null).map(() => ({
+      ghi: 0,
+      dni: 0,
+      dhi: 0,
+      temp: 0,
+      count: 0,
+    }));
 
-    // Process TMY data into a typical daily profile
-    // TMY has 8760 hours (365 days × 24 hours)
-    // We'll calculate the average for each hour of the day across the entire year
-    const hourlyAverages: {
-      ghi: number[];
-      dni: number[];
-      dhi: number[];
-      temp: number[];
-      counts: number[];
-    } = {
-      ghi: Array(24).fill(0),
-      dni: Array(24).fill(0),
-      dhi: Array(24).fill(0),
-      temp: Array(24).fill(0),
-      counts: Array(24).fill(0),
-    };
-
-    // Also calculate monthly averages for seasonal analysis
-    const monthlyData: {
-      [month: number]: { ghi: number; dni: number; count: number };
-    } = {};
+    let totalGhi = 0;
+    let peakGhi = 0;
+    let totalTemp = 0;
 
     for (const hour of hourlyData) {
-      // Parse time format: "YYYYMMDD:HHMM"
-      const timeStr = hour["time(UTC)"];
-      const hourOfDay = parseInt(timeStr.slice(9, 11), 10);
-      const month = parseInt(timeStr.slice(4, 6), 10);
+      const hourOfDay = parseInt(hour["time(UTC)"].substring(9, 11));
+      
+      typicalDayProfile[hourOfDay].ghi += hour["G(h)"];
+      typicalDayProfile[hourOfDay].dni += hour["Gb(n)"];
+      typicalDayProfile[hourOfDay].dhi += hour["Gd(h)"];
+      typicalDayProfile[hourOfDay].temp += hour.T2m;
+      typicalDayProfile[hourOfDay].count++;
 
-      hourlyAverages.ghi[hourOfDay] += hour["G(h)"] || 0;
-      hourlyAverages.dni[hourOfDay] += hour["Gb(n)"] || 0;
-      hourlyAverages.dhi[hourOfDay] += hour["Gd(h)"] || 0;
-      hourlyAverages.temp[hourOfDay] += hour["T2m"] || 0;
-      hourlyAverages.counts[hourOfDay]++;
-
-      // Monthly aggregation
-      if (!monthlyData[month]) {
-        monthlyData[month] = { ghi: 0, dni: 0, count: 0 };
-      }
-      monthlyData[month].ghi += hour["G(h)"] || 0;
-      monthlyData[month].dni += hour["Gb(n)"] || 0;
-      monthlyData[month].count++;
+      totalGhi += hour["G(h)"];
+      peakGhi = Math.max(peakGhi, hour["G(h)"]);
+      totalTemp += hour.T2m;
     }
 
-    // Calculate final hourly averages
-    const typicalDayProfile = {
-      hourlyGhi: hourlyAverages.ghi.map((sum, i) =>
-        hourlyAverages.counts[i] > 0 ? sum / hourlyAverages.counts[i] : 0
-      ),
-      hourlyDni: hourlyAverages.dni.map((sum, i) =>
-        hourlyAverages.counts[i] > 0 ? sum / hourlyAverages.counts[i] : 0
-      ),
-      hourlyDhi: hourlyAverages.dhi.map((sum, i) =>
-        hourlyAverages.counts[i] > 0 ? sum / hourlyAverages.counts[i] : 0
-      ),
-      hourlyTemp: hourlyAverages.temp.map((sum, i) =>
-        hourlyAverages.counts[i] > 0 ? sum / hourlyAverages.counts[i] : 0
-      ),
-    };
+    // Calculate averages
+    const hourlyGhi = typicalDayProfile.map(h => h.count > 0 ? h.ghi / h.count : 0);
+    const hourlyDni = typicalDayProfile.map(h => h.count > 0 ? h.dni / h.count : 0);
+    const hourlyDhi = typicalDayProfile.map(h => h.count > 0 ? h.dhi / h.count : 0);
+    const hourlyTemp = typicalDayProfile.map(h => h.count > 0 ? h.temp / h.count : 0);
 
-    // Calculate peak GHI
-    const peakGhi = Math.max(...typicalDayProfile.hourlyGhi);
-
-    // Calculate normalized profile (0-1)
-    const normalizedProfile = typicalDayProfile.hourlyGhi.map((v) =>
-      peakGhi > 0 ? v / peakGhi : 0
-    );
-
-    // Calculate daily totals (sum of hourly values = Wh/m²)
-    const dailyGhiWh = typicalDayProfile.hourlyGhi.reduce((sum, v) => sum + v, 0);
+    // Calculate summary metrics
+    const dailyGhiWh = hourlyGhi.reduce((sum, v) => sum + v, 0);
     const dailyGhiKwh = dailyGhiWh / 1000;
-    const peakSunHours = dailyGhiKwh; // PSH = kWh/m²/day
+    const peakSunHours = dailyGhiKwh; // Peak sun hours = kWh/m²/day at 1 kW/m² reference
+    const avgTemp = totalTemp / hourlyData.length;
+    const annualGhiKwh = (totalGhi / hourlyData.length) * 8760 / 1000;
 
-    // Average temperature
-    const avgTemp =
-      typicalDayProfile.hourlyTemp.reduce((sum, v) => sum + v, 0) / 24;
+    // Normalize GHI profile to 0-1 scale for solar generation modeling
+    const maxGhi = Math.max(...hourlyGhi);
+    const normalizedProfile = hourlyGhi.map(v => maxGhi > 0 ? v / maxGhi : 0);
 
-    // Monthly breakdown
-    const monthlyBreakdown = Object.entries(monthlyData)
-      .map(([month, data]) => ({
-        month: parseInt(month, 10),
-        avgDailyGhi: data.count > 0 ? (data.ghi / data.count) * 24 / 1000 : 0, // kWh/m²/day
-        avgDailyDni: data.count > 0 ? (data.dni / data.count) * 24 / 1000 : 0,
-      }))
-      .sort((a, b) => a.month - b.month);
-
-    // Annual total
-    const annualGhiKwh = monthlyBreakdown.reduce(
-      (sum, m) => sum + m.avgDailyGhi * 30.44, // Average days per month
-      0
-    );
+    // Calculate monthly breakdown
+    const monthlyBreakdown: { month: number; avgDailyGhi: number; avgDailyDni: number; avgTemp: number }[] = [];
+    
+    for (let month = 1; month <= 12; month++) {
+      const monthStr = month.toString().padStart(2, "0");
+      const monthHours = hourlyData.filter(h => h["time(UTC)"].substring(4, 6) === monthStr);
+      
+      if (monthHours.length > 0) {
+        const daysInMonth = monthHours.length / 24;
+        const monthGhi = monthHours.reduce((sum, h) => sum + h["G(h)"], 0);
+        const monthDni = monthHours.reduce((sum, h) => sum + h["Gb(n)"], 0);
+        const monthTemp = monthHours.reduce((sum, h) => sum + h.T2m, 0);
+        
+        monthlyBreakdown.push({
+          month,
+          avgDailyGhi: (monthGhi / daysInMonth) / 1000, // Convert Wh to kWh
+          avgDailyDni: (monthDni / daysInMonth) / 1000,
+          avgTemp: monthTemp / monthHours.length,
+        });
+      }
+    }
 
     const result = {
       success: true,
       source: "pvgis",
       dataType: "tmy",
-      location: {
-        latitude,
-        longitude,
-        elevation: pvgisData.inputs?.location?.elevation || null,
+      yearRange: {
+        start: startyear,
+        end: endyear,
       },
-      radiationDatabase: pvgisData.meta?.inputs?.meteo_data?.radiation_db || "PVGIS-SARAH2",
+      location: {
+        latitude: data.inputs.location.latitude,
+        longitude: data.inputs.location.longitude,
+        elevation: data.inputs.location.elevation,
+      },
+      radiationDatabase: data.inputs.meteo_data.radiation_db,
       summary: {
         peakGhi,
         dailyGhiKwh,
@@ -205,30 +182,27 @@ serve(async (req) => {
       },
       typicalDay: {
         normalizedProfile,
-        hourlyGhi: typicalDayProfile.hourlyGhi,
-        hourlyDni: typicalDayProfile.hourlyDni,
-        hourlyDhi: typicalDayProfile.hourlyDhi,
-        hourlyTemp: typicalDayProfile.hourlyTemp,
+        hourlyGhi,
+        hourlyDni,
+        hourlyDhi,
+        hourlyTemp,
       },
       monthly: monthlyBreakdown,
     };
 
-    console.log("PVGIS TMY processed successfully:", {
-      peakSunHours: result.summary.peakSunHours.toFixed(2),
-      avgTemp: result.summary.avgTemp.toFixed(1),
-    });
+    console.log(`Processed TMY: Peak Sun Hours: ${peakSunHours.toFixed(2)}, Annual GHI: ${annualGhiKwh.toFixed(0)} kWh/m²`);
 
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("PVGIS Edge Function error:", error);
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error occurred",
-      }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify(result),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to fetch PVGIS data";
+    console.error("Error processing PVGIS TMY:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: errorMessage }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
     );
   }
 });
