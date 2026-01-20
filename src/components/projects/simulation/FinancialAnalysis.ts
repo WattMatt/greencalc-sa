@@ -31,9 +31,8 @@ export interface TariffData {
 }
 
 export interface SystemCosts {
-  solarCostPerKwp: number; // R/kWp installed
+  solarCostPerKwp: number; // R/kWp installed (includes installation)
   batteryCostPerKwh: number; // R/kWh capacity
-  installationCost?: number; // Fixed R amount
   maintenancePerYear?: number; // R/year
 }
 
@@ -101,7 +100,6 @@ export function calculateFinancials(
   const {
     solarCostPerKwp,
     batteryCostPerKwh,
-    installationCost = 0,
     maintenancePerYear = 0,
   } = systemCosts;
 
@@ -144,8 +142,7 @@ export function calculateFinancials(
   // === Investment analysis ===
   const systemCost = 
     (solarCapacity * solarCostPerKwp) + 
-    (batteryCapacity * batteryCostPerKwh) + 
-    installationCost;
+    (batteryCapacity * batteryCostPerKwh);
   
   const netAnnualSavings = annualSavings - maintenancePerYear;
   const paybackYears = netAnnualSavings > 0 
@@ -218,9 +215,8 @@ export function compareTariffs(
  * Updated to reflect current market pricing
  */
 export const DEFAULT_SYSTEM_COSTS: SystemCosts = {
-  solarCostPerKwp: 11000, // R11,000 per kWp installed (prices declining)
+  solarCostPerKwp: 11000, // R11,000 per kWp installed (includes installation)
   batteryCostPerKwh: 7500, // R7,500 per kWh (LFP battery costs declining)
-  installationCost: 0, // Included in per-unit costs
   maintenancePerYear: 0, // Often minimal for first years
 };
 

@@ -58,7 +58,6 @@ interface SavedSimulationsProps {
     systemCosts?: {
       solarCostPerKwp: number;
       batteryCostPerKwh: number;
-      installationCost: number;
       maintenancePerYear: number;
     };
   };

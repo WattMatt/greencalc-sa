@@ -721,23 +721,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 </p>
               </div>
               <div className="space-y-2">
-                <Label className="text-xs">Installation Cost (R)</Label>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground text-sm">R</span>
-                  <input
-                    type="number"
-                    value={systemCosts.installationCost}
-                    onChange={(e) => onSystemCostsChange({ ...systemCosts, installationCost: Number(e.target.value) || 0 })}
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    min={0}
-                    step={1000}
-                  />
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  Fixed installation cost
-                </p>
-              </div>
-              <div className="space-y-2">
                 <Label className="text-xs">Annual Maintenance (R/year)</Label>
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground text-sm">R</span>
@@ -760,7 +743,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 <div className="text-sm">
                   <span className="text-muted-foreground">Total System Cost: </span>
                   <span className="font-semibold">
-                    R{((solarCapacity * systemCosts.solarCostPerKwp) + (batteryCapacity * systemCosts.batteryCostPerKwh) + systemCosts.installationCost).toLocaleString()}
+                    R{((solarCapacity * systemCosts.solarCostPerKwp) + (batteryCapacity * systemCosts.batteryCostPerKwh)).toLocaleString()}
                   </span>
                 </div>
                 <Button
@@ -769,7 +752,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   onClick={() => onSystemCostsChange({
                     solarCostPerKwp: DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
                     batteryCostPerKwh: DEFAULT_SYSTEM_COSTS.batteryCostPerKwh,
-                    installationCost: DEFAULT_SYSTEM_COSTS.installationCost ?? 0,
                     maintenancePerYear: DEFAULT_SYSTEM_COSTS.maintenancePerYear ?? 0,
                   })}
                 >

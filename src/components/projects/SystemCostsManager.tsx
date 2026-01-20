@@ -11,7 +11,6 @@ import { DEFAULT_SYSTEM_COSTS } from "./simulation/FinancialAnalysis";
 export interface SystemCostsData {
   solarCostPerKwp: number;
   batteryCostPerKwh: number;
-  installationCost: number;
   maintenancePerYear: number;
 }
 
@@ -29,7 +28,6 @@ const COST_PRESETS = [
     description: "Entry-level components, basic installation",
     solarCostPerKwp: 8500,
     batteryCostPerKwh: 5500,
-    installationCost: 15000,
     maintenancePerYear: 2000,
   },
   {
@@ -37,7 +35,6 @@ const COST_PRESETS = [
     description: "Quality Tier-1 panels, reputable brands",
     solarCostPerKwp: 11000,
     batteryCostPerKwh: 7500,
-    installationCost: 25000,
     maintenancePerYear: 5000,
   },
   {
@@ -45,7 +42,6 @@ const COST_PRESETS = [
     description: "Top-tier equipment, extended warranties",
     solarCostPerKwp: 14000,
     batteryCostPerKwh: 9500,
-    installationCost: 50000,
     maintenancePerYear: 8000,
   },
   {
@@ -53,7 +49,6 @@ const COST_PRESETS = [
     description: "Large-scale C&I pricing",
     solarCostPerKwp: 9500,
     batteryCostPerKwh: 6500,
-    installationCost: 100000,
     maintenancePerYear: 15000,
   },
 ];
@@ -69,8 +64,7 @@ export function SystemCostsManager({
   
   const totalSystemCost = 
     (solarCapacity * costs.solarCostPerKwp) + 
-    (effectiveBatteryCapacity * costs.batteryCostPerKwh) + 
-    costs.installationCost;
+    (effectiveBatteryCapacity * costs.batteryCostPerKwh);
 
   const handleInputChange = (field: keyof SystemCostsData, value: string) => {
     const numValue = parseFloat(value) || 0;
@@ -81,7 +75,6 @@ export function SystemCostsManager({
     onChange({
       solarCostPerKwp: preset.solarCostPerKwp,
       batteryCostPerKwh: preset.batteryCostPerKwh,
-      installationCost: preset.installationCost,
       maintenancePerYear: preset.maintenancePerYear,
     });
   };
@@ -90,7 +83,6 @@ export function SystemCostsManager({
     onChange({
       solarCostPerKwp: DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
       batteryCostPerKwh: DEFAULT_SYSTEM_COSTS.batteryCostPerKwh,
-      installationCost: DEFAULT_SYSTEM_COSTS.installationCost ?? 0,
       maintenancePerYear: DEFAULT_SYSTEM_COSTS.maintenancePerYear ?? 0,
     });
   };
@@ -99,7 +91,6 @@ export function SystemCostsManager({
     p => 
       p.solarCostPerKwp === costs.solarCostPerKwp &&
       p.batteryCostPerKwh === costs.batteryCostPerKwh &&
-      p.installationCost === costs.installationCost &&
       p.maintenancePerYear === costs.maintenancePerYear
   );
 
@@ -130,7 +121,6 @@ export function SystemCostsManager({
               const isActive = 
                 preset.solarCostPerKwp === costs.solarCostPerKwp &&
                 preset.batteryCostPerKwh === costs.batteryCostPerKwh &&
-                preset.installationCost === costs.installationCost &&
                 preset.maintenancePerYear === costs.maintenancePerYear;
 
               return (
@@ -285,8 +275,6 @@ export function SystemCostsManager({
           </Card>
         )}
 
-        {/* Installation costs are included in R/kWp rate */}
-
         {/* Maintenance Costs */}
         <Card>
           <CardHeader className="pb-3">
@@ -342,10 +330,6 @@ export function SystemCostsManager({
                   <span>R{(effectiveBatteryCapacity * costs.batteryCostPerKwh).toLocaleString()}</span>
                 </div>
               )}
-              <div className="flex justify-between gap-8">
-                <span className="text-muted-foreground">Installation</span>
-                <span>R{costs.installationCost.toLocaleString()}</span>
-              </div>
               <div className="flex justify-between gap-8 pt-1 border-t">
                 <span className="text-muted-foreground">Annual O&M</span>
                 <span>R{costs.maintenancePerYear.toLocaleString()}/yr</span>

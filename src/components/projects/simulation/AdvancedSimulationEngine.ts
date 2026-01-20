@@ -242,8 +242,7 @@ export function runAdvancedSimulation(
   // Calculate initial system cost
   const initialCost = 
     solarCapacity * systemCosts.solarCostPerKwp +
-    batteryCapacity * systemCosts.batteryCostPerKwh +
-    (systemCosts.installationCost ?? 0);
+    batteryCapacity * systemCosts.batteryCostPerKwh;
   
   const yearlyProjections: YearlyProjection[] = [];
   const cashFlows: number[] = [-initialCost]; // Year 0 is investment
