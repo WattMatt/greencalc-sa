@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import { DollarSign, Sun, Battery, Calculator, RotateCcw, TrendingUp, AlertCircle } from "lucide-react";
+import { DollarSign, Sun, Battery, Calculator, RotateCcw, TrendingUp, AlertCircle, Percent } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { DEFAULT_SYSTEM_COSTS } from "./simulation/FinancialAnalysis";
 
 export interface SystemCostsData {
@@ -14,6 +15,15 @@ export interface SystemCostsData {
   solarMaintenancePercentage: number; // Percentage of solar cost (e.g., 3.5 = 3.5%)
   batteryMaintenancePercentage: number; // Percentage of battery cost (e.g., 1.5 = 1.5%)
   maintenancePerYear: number; // Calculated total Rand value
+  
+  // Financial Return Parameters
+  costOfCapital: number;           // % - General WACC
+  cpi: number;                     // % - Inflation
+  electricityInflation: number;    // % - Tariff escalation
+  projectDurationYears: number;    // years
+  lcoeDiscountRate: number;        // % - NPV discount rate (Cost of Capital for LCOE calc)
+  mirrFinanceRate: number;         // % - Interest paid on money used in cash flows
+  mirrReinvestmentRate: number;    // % - Interest received on cash flows as reinvested
 }
 
 interface SystemCostsManagerProps {
@@ -144,6 +154,7 @@ export function SystemCostsManager({
 
   const applyPreset = (preset: typeof COST_PRESETS[0]) => {
     onChange({
+      ...costs, // Preserve financial parameters
       solarCostPerKwp: preset.solarCostPerKwp,
       batteryCostPerKwh: preset.batteryCostPerKwh,
       solarMaintenancePercentage: preset.solarMaintenancePercentage,
@@ -159,6 +170,14 @@ export function SystemCostsManager({
       solarMaintenancePercentage: DEFAULT_SYSTEM_COSTS.solarMaintenancePercentage ?? 3.5,
       batteryMaintenancePercentage: DEFAULT_SYSTEM_COSTS.batteryMaintenancePercentage ?? 1.5,
       maintenancePerYear: 0,
+      // Financial Return Parameters
+      costOfCapital: DEFAULT_SYSTEM_COSTS.costOfCapital ?? 9.0,
+      cpi: DEFAULT_SYSTEM_COSTS.cpi ?? 6.0,
+      electricityInflation: DEFAULT_SYSTEM_COSTS.electricityInflation ?? 10.0,
+      projectDurationYears: DEFAULT_SYSTEM_COSTS.projectDurationYears ?? 20,
+      lcoeDiscountRate: DEFAULT_SYSTEM_COSTS.lcoeDiscountRate ?? 9.0,
+      mirrFinanceRate: DEFAULT_SYSTEM_COSTS.mirrFinanceRate ?? 9.0,
+      mirrReinvestmentRate: DEFAULT_SYSTEM_COSTS.mirrReinvestmentRate ?? 10.0,
     });
   };
 
@@ -482,6 +501,270 @@ export function SystemCostsManager({
           </CardContent>
         </Card>
       </div>
+
+      {/* Financial Return Inputs */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Percent className="h-4 w-4 text-primary" />
+            Financial Return Inputs
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Parameters for NPV, IRR, MIRR, and LCOE calculations
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Main Financial Parameters - 2x2 Grid */}
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Cost of Capital */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label className="text-xs">Cost of Capital (WACC)</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={costs.costOfCapital}
+                    onChange={(e) => onChange({ ...costs, costOfCapital: parseFloat(e.target.value) || 0 })}
+                    className="h-6 w-16 text-xs text-right px-2"
+                    min={0}
+                    max={30}
+                    step={0.5}
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
+              </div>
+              <Slider
+                value={[costs.costOfCapital]}
+                onValueChange={([v]) => onChange({ ...costs, costOfCapital: v })}
+                min={0}
+                max={30}
+                step={0.5}
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>0%</span>
+                <span>15%</span>
+                <span>30%</span>
+              </div>
+            </div>
+
+            {/* CPI (Inflation) */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label className="text-xs">CPI (Inflation)</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={costs.cpi}
+                    onChange={(e) => onChange({ ...costs, cpi: parseFloat(e.target.value) || 0 })}
+                    className="h-6 w-16 text-xs text-right px-2"
+                    min={0}
+                    max={20}
+                    step={0.5}
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
+              </div>
+              <Slider
+                value={[costs.cpi]}
+                onValueChange={([v]) => onChange({ ...costs, cpi: v })}
+                min={0}
+                max={20}
+                step={0.5}
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>0%</span>
+                <span>10%</span>
+                <span>20%</span>
+              </div>
+            </div>
+
+            {/* Electricity Inflation */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label className="text-xs">Electricity Inflation</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={costs.electricityInflation}
+                    onChange={(e) => onChange({ ...costs, electricityInflation: parseFloat(e.target.value) || 0 })}
+                    className="h-6 w-16 text-xs text-right px-2"
+                    min={0}
+                    max={25}
+                    step={0.5}
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
+              </div>
+              <Slider
+                value={[costs.electricityInflation]}
+                onValueChange={([v]) => onChange({ ...costs, electricityInflation: v })}
+                min={0}
+                max={25}
+                step={0.5}
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>0%</span>
+                <span>12.5%</span>
+                <span>25%</span>
+              </div>
+            </div>
+
+            {/* Project Duration */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label className="text-xs">Project Duration</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={costs.projectDurationYears}
+                    onChange={(e) => onChange({ ...costs, projectDurationYears: parseInt(e.target.value) || 20 })}
+                    className="h-6 w-16 text-xs text-right px-2"
+                    min={5}
+                    max={35}
+                    step={1}
+                  />
+                  <span className="text-xs text-muted-foreground">yrs</span>
+                </div>
+              </div>
+              <Slider
+                value={[costs.projectDurationYears]}
+                onValueChange={([v]) => onChange({ ...costs, projectDurationYears: v })}
+                min={5}
+                max={35}
+                step={1}
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>5 yrs</span>
+                <span>20 yrs</span>
+                <span>35 yrs</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Cost of Capital for LCOE calc */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <div>
+                <Label className="text-xs">Cost of Capital (LCOE calc)</Label>
+                <p className="text-[10px] text-muted-foreground">Used as NPV discount rate</p>
+              </div>
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  value={costs.lcoeDiscountRate}
+                  onChange={(e) => onChange({ ...costs, lcoeDiscountRate: parseFloat(e.target.value) || 0 })}
+                  className="h-6 w-16 text-xs text-right px-2"
+                  min={0}
+                  max={25}
+                  step={0.5}
+                />
+                <span className="text-xs text-muted-foreground">%</span>
+              </div>
+            </div>
+            <Slider
+              value={[costs.lcoeDiscountRate]}
+              onValueChange={([v]) => onChange({ ...costs, lcoeDiscountRate: v })}
+              min={0}
+              max={25}
+              step={0.5}
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>0%</span>
+              <span>12.5%</span>
+              <span>25%</span>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Calculated Value: Adjusted Discount Rate */}
+          <div className="p-3 bg-muted/50 rounded-lg">
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="text-sm font-medium">Adjusted Discount Rate</span>
+                <p className="text-[10px] text-muted-foreground">Cost of Capital + CPI</p>
+              </div>
+              <span className="text-lg font-bold text-primary">
+                {(costs.costOfCapital + costs.cpi).toFixed(2)}%
+              </span>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* MIRR Parameters */}
+          <div>
+            <h4 className="text-xs font-medium mb-3 text-muted-foreground uppercase tracking-wide">MIRR Parameters</h4>
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* MIRR Finance Rate */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <Label className="text-xs">Finance Rate</Label>
+                    <p className="text-[10px] text-muted-foreground">Interest paid on cash flows</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={costs.mirrFinanceRate}
+                      onChange={(e) => onChange({ ...costs, mirrFinanceRate: parseFloat(e.target.value) || 0 })}
+                      className="h-6 w-16 text-xs text-right px-2"
+                      min={0}
+                      max={25}
+                      step={0.5}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[costs.mirrFinanceRate]}
+                  onValueChange={([v]) => onChange({ ...costs, mirrFinanceRate: v })}
+                  min={0}
+                  max={25}
+                  step={0.5}
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>0%</span>
+                  <span>25%</span>
+                </div>
+              </div>
+
+              {/* MIRR Re-investment Rate */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <Label className="text-xs">Re-investment Rate</Label>
+                    <p className="text-[10px] text-muted-foreground">Interest received on reinvestment</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={costs.mirrReinvestmentRate}
+                      onChange={(e) => onChange({ ...costs, mirrReinvestmentRate: parseFloat(e.target.value) || 0 })}
+                      className="h-6 w-16 text-xs text-right px-2"
+                      min={0}
+                      max={25}
+                      step={0.5}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[costs.mirrReinvestmentRate]}
+                  onValueChange={([v]) => onChange({ ...costs, mirrReinvestmentRate: v })}
+                  min={0}
+                  max={25}
+                  step={0.5}
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>0%</span>
+                  <span>25%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Total Summary */}
       <Card className="bg-primary/5 border-primary/20">

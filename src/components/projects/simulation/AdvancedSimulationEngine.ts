@@ -197,6 +197,42 @@ export function calculateIRR(
 }
 
 /**
+ * Calculate MIRR (Modified Internal Rate of Return)
+ * Uses separate finance rate for negative cash flows and reinvestment rate for positive cash flows
+ */
+export function calculateMIRR(
+  cashFlows: number[],
+  financeRate: number,      // Interest rate paid on money used in cash flows
+  reinvestmentRate: number  // Interest rate received on reinvestment
+): number {
+  const n = cashFlows.length - 1;
+  if (n <= 0) return 0;
+  
+  // Present value of negative cash flows at finance rate
+  let pvNegative = 0;
+  for (let t = 0; t < cashFlows.length; t++) {
+    if (cashFlows[t] < 0) {
+      pvNegative += cashFlows[t] / Math.pow(1 + financeRate / 100, t);
+    }
+  }
+  
+  // Future value of positive cash flows at reinvestment rate
+  let fvPositive = 0;
+  for (let t = 0; t < cashFlows.length; t++) {
+    if (cashFlows[t] > 0) {
+      fvPositive += cashFlows[t] * Math.pow(1 + reinvestmentRate / 100, n - t);
+    }
+  }
+  
+  // MIRR formula: (FV of positive / |PV of negative|)^(1/n) - 1
+  if (pvNegative === 0 || fvPositive === 0) return 0;
+  
+  const mirr = Math.pow(-fvPositive / pvNegative, 1 / n) - 1;
+  
+  return mirr * 100;
+}
+
+/**
  * Calculate LCOE (Levelized Cost of Energy)
  */
 export function calculateLCOE(
@@ -345,15 +381,21 @@ export function runAdvancedSimulation(
     lifetimeGeneration += yearlyGeneration;
   }
   
-  // Calculate summary metrics
-  const npv = calculateNPV(cashFlows, financial.enabled ? financial.discountRate : 10);
+  // Calculate summary metrics using systemCosts financial parameters
+  const discountRate = systemCosts.lcoeDiscountRate ?? (financial.enabled ? financial.discountRate : 10);
+  const npv = calculateNPV(cashFlows, discountRate);
   const irr = calculateIRR(cashFlows);
-  const mirr = irr; // Simplified - would need reinvestment rate for true MIRR
+  
+  // Calculate true MIRR using finance and reinvestment rates from systemCosts
+  const mirrFinanceRate = systemCosts.mirrFinanceRate ?? 9;
+  const mirrReinvestmentRate = systemCosts.mirrReinvestmentRate ?? 10;
+  const mirr = calculateMIRR(cashFlows, mirrFinanceRate, mirrReinvestmentRate);
+  
   const lcoe = calculateLCOE(
     initialCost,
     yearlyGenerations,
     yearlyMaintenanceCosts,
-    financial.enabled ? financial.discountRate : 10
+    discountRate
   );
   
   // Calculate sensitivity if enabled

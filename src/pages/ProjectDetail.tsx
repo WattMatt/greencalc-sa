@@ -625,6 +625,14 @@ export default function ProjectDetail() {
     solarMaintenancePercentage: DEFAULT_SYSTEM_COSTS.solarMaintenancePercentage ?? 3.5,
     batteryMaintenancePercentage: DEFAULT_SYSTEM_COSTS.batteryMaintenancePercentage ?? 1.5,
     maintenancePerYear: 0,
+    // Financial Return Parameters
+    costOfCapital: DEFAULT_SYSTEM_COSTS.costOfCapital ?? 9.0,
+    cpi: DEFAULT_SYSTEM_COSTS.cpi ?? 6.0,
+    electricityInflation: DEFAULT_SYSTEM_COSTS.electricityInflation ?? 10.0,
+    projectDurationYears: DEFAULT_SYSTEM_COSTS.projectDurationYears ?? 20,
+    lcoeDiscountRate: DEFAULT_SYSTEM_COSTS.lcoeDiscountRate ?? 9.0,
+    mirrFinanceRate: DEFAULT_SYSTEM_COSTS.mirrFinanceRate ?? 9.0,
+    mirrReinvestmentRate: DEFAULT_SYSTEM_COSTS.mirrReinvestmentRate ?? 10.0,
   });
   
   // Track if costs were initialized from saved simulation
@@ -658,6 +666,14 @@ export default function ProjectDetail() {
           solarMaintenancePercentage: savedCosts.solarMaintenancePercentage ?? savedCosts.maintenancePercentage ?? DEFAULT_SYSTEM_COSTS.solarMaintenancePercentage ?? 3.5,
           batteryMaintenancePercentage: savedCosts.batteryMaintenancePercentage ?? DEFAULT_SYSTEM_COSTS.batteryMaintenancePercentage ?? 1.5,
           maintenancePerYear: savedCosts.maintenancePerYear ?? 0,
+          // Financial Return Parameters
+          costOfCapital: savedCosts.costOfCapital ?? DEFAULT_SYSTEM_COSTS.costOfCapital ?? 9.0,
+          cpi: savedCosts.cpi ?? DEFAULT_SYSTEM_COSTS.cpi ?? 6.0,
+          electricityInflation: savedCosts.electricityInflation ?? DEFAULT_SYSTEM_COSTS.electricityInflation ?? 10.0,
+          projectDurationYears: savedCosts.projectDurationYears ?? DEFAULT_SYSTEM_COSTS.projectDurationYears ?? 20,
+          lcoeDiscountRate: savedCosts.lcoeDiscountRate ?? DEFAULT_SYSTEM_COSTS.lcoeDiscountRate ?? 9.0,
+          mirrFinanceRate: savedCosts.mirrFinanceRate ?? DEFAULT_SYSTEM_COSTS.mirrFinanceRate ?? 9.0,
+          mirrReinvestmentRate: savedCosts.mirrReinvestmentRate ?? DEFAULT_SYSTEM_COSTS.mirrReinvestmentRate ?? 10.0,
         });
         costsInitializedRef.current = true;
       }

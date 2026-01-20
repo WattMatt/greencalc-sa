@@ -338,22 +338,24 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     [energyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity]
   );
 
-  // Calculate basic financial metrics (NPV, IRR, LCOE) without requiring advanced simulation
+  // Calculate basic financial metrics (NPV, IRR, LCOE) using systemCosts parameters
   const basicFinancialMetrics = useMemo(() => {
-    const projectLifeYears = 25;
-    const discountRate = 0.10; // 10% default
-    const reinvestmentRate = 0.06; // 6% for MIRR
+    // Use financial parameters from systemCosts
+    const projectLifeYears = systemCosts.projectDurationYears ?? 25;
+    const discountRate = (systemCosts.lcoeDiscountRate ?? 9) / 100; // Convert from % to decimal
+    const financeRate = (systemCosts.mirrFinanceRate ?? 9) / 100;
+    const reinvestmentRate = (systemCosts.mirrReinvestmentRate ?? 10) / 100;
     const annualSavings = financialResults.annualSavings;
     const systemCost = financialResults.systemCost;
     const annualGeneration = energyResults.totalDailySolar * 365;
     
-    // Build cash flows: Year 0 is negative (investment), Years 1-25 are savings
+    // Build cash flows: Year 0 is negative (investment), Years 1-n are savings
     const cashFlows = [-systemCost];
     for (let y = 1; y <= projectLifeYears; y++) {
       cashFlows.push(annualSavings);
     }
     
-    // NPV calculation
+    // NPV calculation using lcoeDiscountRate
     let npv = -systemCost;
     for (let y = 1; y <= projectLifeYears; y++) {
       npv += annualSavings / Math.pow(1 + discountRate, y);
@@ -375,14 +377,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       irr = newIrr;
     }
     
-    // MIRR calculation
+    // MIRR calculation using mirrFinanceRate and mirrReinvestmentRate
     // Future value of positive cash flows at reinvestment rate
     let fvPositive = 0;
     for (let y = 1; y <= projectLifeYears; y++) {
       fvPositive += annualSavings * Math.pow(1 + reinvestmentRate, projectLifeYears - y);
     }
-    // Present value of negative cash flows at discount rate (just the initial investment)
-    const pvNegative = systemCost;
+    // Present value of negative cash flows at finance rate (just the initial investment)
+    const pvNegative = systemCost; // Already discounted at t=0
     const mirr = pvNegative > 0 ? Math.pow(fvPositive / pvNegative, 1 / projectLifeYears) - 1 : 0;
     
     // LCOE calculation (simplified: system cost / lifetime generation)
@@ -395,9 +397,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       mirr: mirr * 100,
       lcoe,
       projectLifeYears,
-      discountRate: discountRate * 100,
+      discountRate: discountRate * 100, // Convert back to percentage for display
     };
-  }, [financialResults, energyResults]);
+  }, [financialResults, energyResults, systemCosts]);
 
   // Annual scaling
   const annualEnergy = useMemo(() => scaleToAnnual(energyResults), [energyResults]);
@@ -963,6 +965,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               solarMaintenancePercentage: config.systemCosts.solarMaintenancePercentage ?? legacyCosts.maintenancePercentage ?? 3.5,
               batteryMaintenancePercentage: config.systemCosts.batteryMaintenancePercentage ?? 1.5,
               maintenancePerYear: config.systemCosts.maintenancePerYear ?? 0,
+              // Financial Return Parameters
+              costOfCapital: config.systemCosts.costOfCapital ?? 9.0,
+              cpi: config.systemCosts.cpi ?? 6.0,
+              electricityInflation: config.systemCosts.electricityInflation ?? 10.0,
+              projectDurationYears: config.systemCosts.projectDurationYears ?? 20,
+              lcoeDiscountRate: config.systemCosts.lcoeDiscountRate ?? 9.0,
+              mirrFinanceRate: config.systemCosts.mirrFinanceRate ?? 9.0,
+              mirrReinvestmentRate: config.systemCosts.mirrReinvestmentRate ?? 10.0,
             });
           }
           // Track which simulation was loaded for UI feedback
