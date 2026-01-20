@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.batch-geocode-projects]
 verify_jwt = false
+
+[functions.pvgis-tmy]
+verify_jwt = false
