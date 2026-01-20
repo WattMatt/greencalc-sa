@@ -108,6 +108,18 @@ interface DashboardTabContentRef {
   saveIfNeeded: () => Promise<void>;
 }
 
+// Type for simulation data passed from parent
+type SimulationData = {
+  id: string;
+  name: string;
+  solar_capacity_kwp: number | null;
+  battery_capacity_kwh: number | null;
+  battery_power_kw: number | null;
+  annual_solar_savings: number | null;
+  roi_percentage: number | null;
+  results_json: any;
+} | null;
+
 interface DashboardTabContentProps {
   projectId: string;
   project: { 
@@ -122,6 +134,7 @@ interface DashboardTabContentProps {
     system_type: string | null;
   };
   tenants: { area_sqm: number; scada_import_id: string | null }[];
+  latestSimulation: SimulationData; // Single source of truth - passed from parent
   onProjectUpdate: () => void;
 }
 
@@ -130,25 +143,10 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
   projectId, 
   project, 
   tenants,
+  latestSimulation, // Now passed from parent - single source of truth
   onProjectUpdate
 }, ref) => {
   const queryClient = useQueryClient();
-  
-  // Fetch the latest saved simulation for KPIs
-  const { data: latestSimulation } = useQuery({
-    queryKey: ["latest-simulation-kpi", projectId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("project_simulations")
-        .select("*")
-        .eq("project_id", projectId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
 
   const [params, setParams] = useState<DashboardParams>({
     name: project.name || "",
@@ -766,7 +764,7 @@ export default function ProjectDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("project_simulations")
-        .select("id, solar_capacity_kwp, battery_capacity_kwh, battery_power_kw, results_json")
+        .select("id, name, solar_capacity_kwp, battery_capacity_kwh, battery_power_kw, annual_solar_savings, roi_percentage, results_json")
         .eq("project_id", id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -1052,6 +1050,7 @@ export default function ProjectDetail() {
             projectId={id!} 
             project={project} 
             tenants={tenants || []} 
+            latestSimulation={latestSimulation || null}
             onProjectUpdate={() => queryClient.invalidateQueries({ queryKey: ["project", id] })}
           />
         </TabsContent>
