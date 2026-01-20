@@ -4,9 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { MapPin, Sun, Cloud, Thermometer, RefreshCw, Navigation, Zap, Locate, Database, Radio } from "lucide-react";
+import { MapPin, Sun, Cloud, Thermometer, RefreshCw, Navigation, Zap, Locate, Database, Radio, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { useSolcastForecast, SolcastForecastResponse } from "@/hooks/useSolcastForecast";
 import { usePVGISProfile, PVGISResponse } from "@/hooks/usePVGISProfile";
@@ -46,6 +47,11 @@ export function ProjectLocationMap({
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [geocodeAttempted, setGeocodeAttempted] = useState(false);
   const [dataSource, setDataSource] = useState<DataSource>("pvgis");
+  
+  // Editable coordinate inputs
+  const [editLat, setEditLat] = useState<string>("");
+  const [editLng, setEditLng] = useState<string>("");
+  const [isEditingCoords, setIsEditingCoords] = useState(false);
 
   // Fetch Mapbox token
   const { data: mapboxToken } = useQuery({
@@ -178,6 +184,10 @@ export function ProjectLocationMap({
     map.current.on("click", (e) => {
       const { lng, lat } = e.lngLat;
       setPendingCoords({ lat, lng });
+      // Update editable inputs when clicking map
+      setEditLat(lat.toFixed(6));
+      setEditLng(lng.toFixed(6));
+      setIsEditingCoords(false);
       updateMarker(lat, lng, true);
     });
 
@@ -197,31 +207,69 @@ export function ProjectLocationMap({
     } else {
       const el = document.createElement("div");
       el.className = "custom-marker";
+      // Dropped pin SVG icon
+      const fillColor = isPending ? "#f59e0b" : "hsl(var(--primary))";
       el.innerHTML = `
-        <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-lg border-2 border-white">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <circle cx="12" cy="12" r="4"/>
-            <line x1="21.17" x2="12" y1="8" y2="8"/>
-            <line x1="3.95" x2="8.54" y1="6.06" y2="14"/>
-            <line x1="10.88" x2="15.46" y1="21.94" y2="14"/>
+        <div style="transform: translateY(-50%);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="${fillColor}" class="drop-shadow-lg">
+            <path d="M12 0C7.58 0 4 3.58 4 8c0 5.25 8 13 8 13s8-7.75 8-13c0-4.42-3.58-8-8-8zm0 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/>
           </svg>
         </div>
       `;
 
-      marker.current = new mapboxgl.Marker({ element: el, anchor: "center" })
+      marker.current = new mapboxgl.Marker({ element: el, anchor: "bottom" })
         .setLngLat([lng, lat])
         .addTo(map.current);
     }
 
+    // Update pin color based on pending state
     const markerEl = marker.current.getElement();
-    const innerDiv = markerEl.querySelector("div");
-    if (innerDiv) {
-      innerDiv.className = isPending
-        ? "w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white animate-pulse"
-        : "w-8 h-8 bg-primary rounded-full flex items-center justify-center shadow-lg border-2 border-white";
+    const svg = markerEl.querySelector("svg");
+    if (svg) {
+      const fillColor = isPending ? "#f59e0b" : "hsl(var(--primary))";
+      svg.setAttribute("fill", fillColor);
     }
   }, []);
+
+  // Sync edit fields with coordinates
+  useEffect(() => {
+    const lat = pendingCoords?.lat ?? latitude;
+    const lng = pendingCoords?.lng ?? longitude;
+    if (lat && lng && !isEditingCoords) {
+      setEditLat(lat.toFixed(6));
+      setEditLng(lng.toFixed(6));
+    }
+  }, [latitude, longitude, pendingCoords, isEditingCoords]);
+
+  // Handle manual coordinate input
+  const handleCoordinateChange = (type: "lat" | "lng", value: string) => {
+    if (type === "lat") setEditLat(value);
+    else setEditLng(value);
+    setIsEditingCoords(true);
+  };
+
+  const handleApplyManualCoords = () => {
+    const lat = parseFloat(editLat);
+    const lng = parseFloat(editLng);
+    
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      toast.error("Invalid coordinates. Latitude: -90 to 90, Longitude: -180 to 180");
+      return;
+    }
+    
+    setPendingCoords({ lat, lng });
+    updateMarker(lat, lng, true);
+    map.current?.flyTo({ center: [lng, lat], zoom: 12 });
+    setIsEditingCoords(false);
+  };
+
+  const handleCancelCoordEdit = () => {
+    setIsEditingCoords(false);
+    const lat = pendingCoords?.lat ?? latitude;
+    const lng = pendingCoords?.lng ?? longitude;
+    setEditLat(lat?.toFixed(6) || "");
+    setEditLng(lng?.toFixed(6) || "");
+  };
 
   useEffect(() => {
     if (mapLoaded && latitude && longitude && !pendingCoords) {
@@ -294,24 +342,61 @@ export function ProjectLocationMap({
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* Map */}
       <Card className="lg:col-span-2">
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-2 space-y-3">
+          {/* Row 1: Title + Location Name */}
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base">
               <MapPin className="h-4 w-4" />
               Site Location
             </CardTitle>
-            <div className="flex items-center gap-2">
-              {location && (
-                <Badge variant="outline" className="text-xs">
-                  {location}
-                </Badge>
-              )}
-              {hasCoordinates && (
-                <Badge variant="secondary" className="text-xs font-mono">
-                  {latitude?.toFixed(4)}, {longitude?.toFixed(4)}
-                </Badge>
-              )}
+            {location && (
+              <Badge variant="outline" className="text-xs">
+                {location}
+              </Badge>
+            )}
+          </div>
+          
+          {/* Row 2: Editable Coordinates */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 flex-1">
+              <span className="text-xs text-muted-foreground w-7">Lat:</span>
+              <Input
+                type="text"
+                value={editLat}
+                onChange={(e) => handleCoordinateChange("lat", e.target.value)}
+                placeholder="-34.0000"
+                className="h-7 text-xs font-mono flex-1"
+              />
             </div>
+            <div className="flex items-center gap-1 flex-1">
+              <span className="text-xs text-muted-foreground w-8">Long:</span>
+              <Input
+                type="text"
+                value={editLng}
+                onChange={(e) => handleCoordinateChange("lng", e.target.value)}
+                placeholder="18.7013"
+                className="h-7 text-xs font-mono flex-1"
+              />
+            </div>
+            {isEditingCoords && (
+              <div className="flex gap-1">
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  className="h-7 w-7" 
+                  onClick={handleCancelCoordEdit}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+                <Button 
+                  size="icon" 
+                  className="h-7 w-7" 
+                  onClick={handleApplyManualCoords}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
