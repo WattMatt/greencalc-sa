@@ -622,7 +622,8 @@ export default function ProjectDetail() {
   const [systemCosts, setSystemCosts] = useState<SystemCostsData>({
     solarCostPerKwp: DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
     batteryCostPerKwh: DEFAULT_SYSTEM_COSTS.batteryCostPerKwh,
-    maintenancePerYear: DEFAULT_SYSTEM_COSTS.maintenancePerYear ?? 0,
+    maintenancePercentage: DEFAULT_SYSTEM_COSTS.maintenancePercentage ?? 1.5,
+    maintenancePerYear: 0,
   });
   
   // Track if costs were initialized from saved simulation
@@ -653,7 +654,8 @@ export default function ProjectDetail() {
         setSystemCosts({
           solarCostPerKwp: savedCosts.solarCostPerKwp ?? DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
           batteryCostPerKwh: savedCosts.batteryCostPerKwh ?? DEFAULT_SYSTEM_COSTS.batteryCostPerKwh,
-          maintenancePerYear: savedCosts.maintenancePerYear ?? DEFAULT_SYSTEM_COSTS.maintenancePerYear ?? 0,
+          maintenancePercentage: savedCosts.maintenancePercentage ?? DEFAULT_SYSTEM_COSTS.maintenancePercentage ?? 1.5,
+          maintenancePerYear: savedCosts.maintenancePerYear ?? 0,
         });
         costsInitializedRef.current = true;
       }
