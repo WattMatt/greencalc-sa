@@ -1138,45 +1138,72 @@ export type Database = {
       }
       tariff_rates: {
         Row: {
+          affordability_subsidy_per_kwh: number | null
+          affordability_subsidy_per_kwh_incl_vat: number | null
           ancillary_charge_per_kwh: number | null
+          ancillary_charge_per_kwh_incl_vat: number | null
           block_end_kwh: number | null
           block_start_kwh: number | null
           created_at: string
           demand_charge_per_kva: number | null
+          demand_charge_per_kva_incl_vat: number | null
+          electrification_rural_per_kwh: number | null
+          electrification_rural_per_kwh_incl_vat: number | null
           energy_charge_per_kwh: number | null
+          energy_charge_per_kwh_incl_vat: number | null
           id: string
           network_charge_per_kwh: number | null
+          network_charge_per_kwh_incl_vat: number | null
           rate_per_kwh: number
+          rate_per_kwh_incl_vat: number | null
           reactive_energy_charge: number | null
           season: Database["public"]["Enums"]["season_type"]
           tariff_id: string
           time_of_use: Database["public"]["Enums"]["time_of_use_type"]
         }
         Insert: {
+          affordability_subsidy_per_kwh?: number | null
+          affordability_subsidy_per_kwh_incl_vat?: number | null
           ancillary_charge_per_kwh?: number | null
+          ancillary_charge_per_kwh_incl_vat?: number | null
           block_end_kwh?: number | null
           block_start_kwh?: number | null
           created_at?: string
           demand_charge_per_kva?: number | null
+          demand_charge_per_kva_incl_vat?: number | null
+          electrification_rural_per_kwh?: number | null
+          electrification_rural_per_kwh_incl_vat?: number | null
           energy_charge_per_kwh?: number | null
+          energy_charge_per_kwh_incl_vat?: number | null
           id?: string
           network_charge_per_kwh?: number | null
+          network_charge_per_kwh_incl_vat?: number | null
           rate_per_kwh: number
+          rate_per_kwh_incl_vat?: number | null
           reactive_energy_charge?: number | null
           season?: Database["public"]["Enums"]["season_type"]
           tariff_id: string
           time_of_use?: Database["public"]["Enums"]["time_of_use_type"]
         }
         Update: {
+          affordability_subsidy_per_kwh?: number | null
+          affordability_subsidy_per_kwh_incl_vat?: number | null
           ancillary_charge_per_kwh?: number | null
+          ancillary_charge_per_kwh_incl_vat?: number | null
           block_end_kwh?: number | null
           block_start_kwh?: number | null
           created_at?: string
           demand_charge_per_kva?: number | null
+          demand_charge_per_kva_incl_vat?: number | null
+          electrification_rural_per_kwh?: number | null
+          electrification_rural_per_kwh_incl_vat?: number | null
           energy_charge_per_kwh?: number | null
+          energy_charge_per_kwh_incl_vat?: number | null
           id?: string
           network_charge_per_kwh?: number | null
+          network_charge_per_kwh_incl_vat?: number | null
           rate_per_kwh?: number
+          rate_per_kwh_incl_vat?: number | null
           reactive_energy_charge?: number | null
           season?: Database["public"]["Enums"]["season_type"]
           tariff_id?: string
@@ -1195,6 +1222,7 @@ export type Database = {
       tariffs: {
         Row: {
           administration_charge_per_day: number | null
+          administration_charge_per_day_incl_vat: number | null
           amperage_limit: string | null
           capacity_kva: number | null
           category_id: string
@@ -1203,19 +1231,26 @@ export type Database = {
           critical_peak_rate: number | null
           customer_category: string | null
           demand_charge_per_kva: number | null
+          demand_charge_per_kva_incl_vat: number | null
           fixed_monthly_charge: number | null
+          fixed_monthly_charge_incl_vat: number | null
           generation_capacity_charge: number | null
+          generation_capacity_charge_incl_vat: number | null
           has_seasonal_rates: boolean | null
           id: string
           is_prepaid: boolean | null
           is_unbundled: boolean | null
           legacy_charge_per_kwh: number | null
+          legacy_charge_per_kwh_incl_vat: number | null
           municipality_id: string
           name: string
           network_access_charge: number | null
+          network_access_charge_incl_vat: number | null
           phase_type: Database["public"]["Enums"]["phase_type"] | null
           reactive_energy_charge: number | null
+          reactive_energy_charge_incl_vat: number | null
           service_charge_per_day: number | null
+          service_charge_per_day_incl_vat: number | null
           tariff_family: string | null
           tariff_type: Database["public"]["Enums"]["tariff_type"]
           transmission_zone:
@@ -1226,6 +1261,7 @@ export type Database = {
         }
         Insert: {
           administration_charge_per_day?: number | null
+          administration_charge_per_day_incl_vat?: number | null
           amperage_limit?: string | null
           capacity_kva?: number | null
           category_id: string
@@ -1234,19 +1270,26 @@ export type Database = {
           critical_peak_rate?: number | null
           customer_category?: string | null
           demand_charge_per_kva?: number | null
+          demand_charge_per_kva_incl_vat?: number | null
           fixed_monthly_charge?: number | null
+          fixed_monthly_charge_incl_vat?: number | null
           generation_capacity_charge?: number | null
+          generation_capacity_charge_incl_vat?: number | null
           has_seasonal_rates?: boolean | null
           id?: string
           is_prepaid?: boolean | null
           is_unbundled?: boolean | null
           legacy_charge_per_kwh?: number | null
+          legacy_charge_per_kwh_incl_vat?: number | null
           municipality_id: string
           name: string
           network_access_charge?: number | null
+          network_access_charge_incl_vat?: number | null
           phase_type?: Database["public"]["Enums"]["phase_type"] | null
           reactive_energy_charge?: number | null
+          reactive_energy_charge_incl_vat?: number | null
           service_charge_per_day?: number | null
+          service_charge_per_day_incl_vat?: number | null
           tariff_family?: string | null
           tariff_type?: Database["public"]["Enums"]["tariff_type"]
           transmission_zone?:
@@ -1257,6 +1300,7 @@ export type Database = {
         }
         Update: {
           administration_charge_per_day?: number | null
+          administration_charge_per_day_incl_vat?: number | null
           amperage_limit?: string | null
           capacity_kva?: number | null
           category_id?: string
@@ -1265,19 +1309,26 @@ export type Database = {
           critical_peak_rate?: number | null
           customer_category?: string | null
           demand_charge_per_kva?: number | null
+          demand_charge_per_kva_incl_vat?: number | null
           fixed_monthly_charge?: number | null
+          fixed_monthly_charge_incl_vat?: number | null
           generation_capacity_charge?: number | null
+          generation_capacity_charge_incl_vat?: number | null
           has_seasonal_rates?: boolean | null
           id?: string
           is_prepaid?: boolean | null
           is_unbundled?: boolean | null
           legacy_charge_per_kwh?: number | null
+          legacy_charge_per_kwh_incl_vat?: number | null
           municipality_id?: string
           name?: string
           network_access_charge?: number | null
+          network_access_charge_incl_vat?: number | null
           phase_type?: Database["public"]["Enums"]["phase_type"] | null
           reactive_energy_charge?: number | null
+          reactive_energy_charge_incl_vat?: number | null
           service_charge_per_day?: number | null
+          service_charge_per_day_incl_vat?: number | null
           tariff_family?: string | null
           tariff_type?: Database["public"]["Enums"]["tariff_type"]
           transmission_zone?:

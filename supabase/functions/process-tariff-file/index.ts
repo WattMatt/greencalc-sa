@@ -29,6 +29,12 @@ interface ExtractedTariff {
   legacy_charge_per_kwh?: number;
   service_charge_per_day?: number;
   administration_charge_per_day?: number;
+  // VAT-inclusive tariff-level fields
+  legacy_charge_per_kwh_incl_vat?: number;
+  service_charge_per_day_incl_vat?: number;
+  administration_charge_per_day_incl_vat?: number;
+  demand_charge_per_kva_incl_vat?: number;
+  fixed_monthly_charge_incl_vat?: number;
   rates: Array<{
     rate_per_kwh: number;
     block_start_kwh?: number;
@@ -36,10 +42,19 @@ interface ExtractedTariff {
     season?: string;
     time_of_use?: string;
     reactive_energy_charge?: number;
-    // Unbundled rate components
+    // Unbundled rate components (VAT-exclusive)
     network_charge_per_kwh?: number;
     ancillary_charge_per_kwh?: number;
     energy_charge_per_kwh?: number;
+    electrification_rural_per_kwh?: number;
+    affordability_subsidy_per_kwh?: number;
+    // VAT-inclusive rate components
+    rate_per_kwh_incl_vat?: number;
+    network_charge_per_kwh_incl_vat?: number;
+    ancillary_charge_per_kwh_incl_vat?: number;
+    energy_charge_per_kwh_incl_vat?: number;
+    electrification_rural_per_kwh_incl_vat?: number;
+    affordability_subsidy_per_kwh_incl_vat?: number;
   }>;
 }
 
@@ -752,12 +767,22 @@ Eskom's 2025-2026 tariffs are FULLY UNBUNDLED. You MUST extract these components
 - service_charge_per_day: R/day (daily service/retail fee)
 - administration_charge_per_day: R/day (daily admin fee)
 
-**RATE-LEVEL UNBUNDLED FIELDS (extract if available):**
-For each TOU rate, try to extract the separate components:
-- rate_per_kwh: Total combined energy rate in R/kWh
-- network_charge_per_kwh: Network component (Transmission + Distribution) in R/kWh
-- energy_charge_per_kwh: Pure energy component (excluding legacy, network) in R/kWh
-- ancillary_charge_per_kwh: Ancillary services component in R/kWh
+**RATE-LEVEL UNBUNDLED FIELDS (extract ALL of these for EACH TOU rate):**
+For each TOU rate, extract BOTH VAT-exclusive and VAT-inclusive values:
+- rate_per_kwh: Total combined energy rate in R/kWh (VAT-EXCLUSIVE - primary)
+- rate_per_kwh_incl_vat: Total combined energy rate in R/kWh (VAT-INCLUSIVE - secondary)
+- network_charge_per_kwh: Network Demand Charge c/kWh (Peak & Standard only) - VAT-EXCLUSIVE
+- network_charge_per_kwh_incl_vat: Network Demand Charge c/kWh - VAT-INCLUSIVE
+- energy_charge_per_kwh: Active Energy charge c/kWh - VAT-EXCLUSIVE
+- energy_charge_per_kwh_incl_vat: Active Energy charge c/kWh - VAT-INCLUSIVE
+- ancillary_charge_per_kwh: Ancillary Service Charge c/kWh - VAT-EXCLUSIVE (typically 0.41c for 2025-26)
+- ancillary_charge_per_kwh_incl_vat: Ancillary Service Charge c/kWh - VAT-INCLUSIVE
+- electrification_rural_per_kwh: Electrification & Rural Subsidy c/kWh - VAT-EXCLUSIVE (typically 4.94c for 2025-26)
+- electrification_rural_per_kwh_incl_vat: Electrification & Rural Subsidy c/kWh - VAT-INCLUSIVE
+- affordability_subsidy_per_kwh: Affordability Subsidy Charge c/kWh - VAT-EXCLUSIVE (typically 4.69c for 2025-26)
+- affordability_subsidy_per_kwh_incl_vat: Affordability Subsidy Charge c/kWh - VAT-INCLUSIVE
+
+CONVERSION: All c/kWh values must be converted to R/kWh (divide by 100). Example: 4.94 c/kWh → 0.0494 R/kWh
 
 === EXTRACTION FOCUS: ${currentBatch?.name?.toUpperCase() || "ESKOM TARIFFS"} ===
 
@@ -780,7 +805,7 @@ Extract ALL variants of ${currentBatch?.name || "Eskom"} tariffs:
 - No fixed charges for prepaid variants
 
 === KEY RULES ===
-1. **CRITICAL - USE VAT-EXCLUSIVE RATES**: Extract values from the "Excl VAT" columns/rows, NOT "Incl VAT"! Eskom documents show both - ALWAYS use the VAT-exclusive values.
+1. **CRITICAL - EXTRACT BOTH VAT-EXCLUSIVE AND VAT-INCLUSIVE**: Eskom documents show both "Excl VAT" and "Incl VAT" columns. Extract BOTH values - use the VAT-exclusive for the primary field (rate_per_kwh, energy_charge_per_kwh, etc.) and VAT-inclusive for the _incl_vat variant field.
 2. RATE CONVERSION: c/kWh → R/kWh (divide by 100). Example: 341.09 c/kWh (excl VAT) → 3.4109 R/kWh
 3. VOLTAGE LEVELS: LV (<500V), MV (500V-66kV), HV (>66kV)
 4. Include transmission zone in tariff name AND set transmission_zone field
@@ -1002,10 +1027,19 @@ Extract ALL tariffs with their COMPLETE rate data!`;
                                   season: { type: "string", enum: ["All Year", "High/Winter", "Low/Summer"] },
                                   time_of_use: { type: "string", enum: ["Any", "Peak", "Standard", "Off-Peak", "High Demand", "Low Demand"], description: "For IBT with blocks, use 'Any'" },
                                   reactive_energy_charge: { type: "number", description: "Reactive energy charge for this TOU period if varies" },
-                                  // Unbundled rate components
-                                  network_charge_per_kwh: { type: "number", description: "Network component in R/kWh (Transmission + Distribution)" },
-                                  ancillary_charge_per_kwh: { type: "number", description: "Ancillary services in R/kWh" },
-                                  energy_charge_per_kwh: { type: "number", description: "Pure energy component in R/kWh (excluding legacy, network)" }
+                                  // Unbundled rate components (VAT-exclusive - primary values)
+                                  network_charge_per_kwh: { type: "number", description: "Network component in R/kWh (Transmission + Distribution) - VAT EXCLUSIVE" },
+                                  ancillary_charge_per_kwh: { type: "number", description: "Ancillary services in R/kWh - VAT EXCLUSIVE" },
+                                  energy_charge_per_kwh: { type: "number", description: "Pure energy component in R/kWh (excluding legacy, network) - VAT EXCLUSIVE" },
+                                  electrification_rural_per_kwh: { type: "number", description: "Electrification & Rural Subsidy in R/kWh - VAT EXCLUSIVE" },
+                                  affordability_subsidy_per_kwh: { type: "number", description: "Affordability Subsidy Charge in R/kWh - VAT EXCLUSIVE" },
+                                  // VAT-inclusive rate components (secondary values)
+                                  rate_per_kwh_incl_vat: { type: "number", description: "Total rate in R/kWh INCLUDING VAT" },
+                                  network_charge_per_kwh_incl_vat: { type: "number", description: "Network component in R/kWh INCLUDING VAT" },
+                                  ancillary_charge_per_kwh_incl_vat: { type: "number", description: "Ancillary services in R/kWh INCLUDING VAT" },
+                                  energy_charge_per_kwh_incl_vat: { type: "number", description: "Energy component in R/kWh INCLUDING VAT" },
+                                  electrification_rural_per_kwh_incl_vat: { type: "number", description: "Electrification & Rural Subsidy in R/kWh INCLUDING VAT" },
+                                  affordability_subsidy_per_kwh_incl_vat: { type: "number", description: "Affordability Subsidy in R/kWh INCLUDING VAT" }
                                 },
                                 required: ["rate_per_kwh"]
                               }
@@ -1200,7 +1234,7 @@ Extract ALL tariffs with their COMPLETE rate data!`;
             reactive_energy_charge: tariff.reactive_energy_charge || 0,
             capacity_kva: tariff.capacity_kva || null,
             customer_category: tariff.customer_category || tariff.category,
-            // Unbundled Eskom 2025-2026 fields
+            // Unbundled Eskom 2025-2026 fields (VAT-exclusive)
             is_unbundled: tariff.is_unbundled || false,
             tariff_family: tariff.tariff_family || null,
             transmission_zone: tariff.transmission_zone || null,
@@ -1208,6 +1242,12 @@ Extract ALL tariffs with their COMPLETE rate data!`;
             legacy_charge_per_kwh: tariff.legacy_charge_per_kwh || null,
             service_charge_per_day: tariff.service_charge_per_day || null,
             administration_charge_per_day: tariff.administration_charge_per_day || null,
+            // VAT-inclusive tariff-level fields
+            legacy_charge_per_kwh_incl_vat: tariff.legacy_charge_per_kwh_incl_vat || null,
+            service_charge_per_day_incl_vat: tariff.service_charge_per_day_incl_vat || null,
+            administration_charge_per_day_incl_vat: tariff.administration_charge_per_day_incl_vat || null,
+            demand_charge_per_kva_incl_vat: tariff.demand_charge_per_kva_incl_vat || null,
+            fixed_monthly_charge_incl_vat: tariff.fixed_monthly_charge_incl_vat || null,
           };
 
           let tariffId: string;
@@ -1255,16 +1295,26 @@ Extract ALL tariffs with their COMPLETE rate data!`;
             for (const rate of tariff.rates) {
               await supabase.from("tariff_rates").insert({
                 tariff_id: tariffId,
+                // VAT-exclusive (primary values)
                 rate_per_kwh: rate.rate_per_kwh,
                 block_start_kwh: rate.block_start_kwh || 0,
                 block_end_kwh: rate.block_end_kwh || null,
                 season: rate.season || "All Year",
                 time_of_use: rate.time_of_use || "Any",
                 reactive_energy_charge: rate.reactive_energy_charge || null,
-                // Unbundled rate components
+                // Unbundled rate components (VAT-exclusive)
                 network_charge_per_kwh: rate.network_charge_per_kwh || null,
                 ancillary_charge_per_kwh: rate.ancillary_charge_per_kwh || null,
                 energy_charge_per_kwh: rate.energy_charge_per_kwh || null,
+                electrification_rural_per_kwh: rate.electrification_rural_per_kwh || null,
+                affordability_subsidy_per_kwh: rate.affordability_subsidy_per_kwh || null,
+                // VAT-inclusive rate components
+                rate_per_kwh_incl_vat: rate.rate_per_kwh_incl_vat || null,
+                network_charge_per_kwh_incl_vat: rate.network_charge_per_kwh_incl_vat || null,
+                ancillary_charge_per_kwh_incl_vat: rate.ancillary_charge_per_kwh_incl_vat || null,
+                energy_charge_per_kwh_incl_vat: rate.energy_charge_per_kwh_incl_vat || null,
+                electrification_rural_per_kwh_incl_vat: rate.electrification_rural_per_kwh_incl_vat || null,
+                affordability_subsidy_per_kwh_incl_vat: rate.affordability_subsidy_per_kwh_incl_vat || null,
               });
             }
           }
