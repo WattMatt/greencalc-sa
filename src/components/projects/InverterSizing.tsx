@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,6 +76,19 @@ export function InverterSizing({
   onSolarCapacityChange,
   maxSolarKva,
 }: InverterSizingProps) {
+  // State for editable inputs
+  const [dcAcInputValue, setDcAcInputValue] = useState(config.dcAcRatio.toFixed(2));
+  const [inverterSizeInput, setInverterSizeInput] = useState(config.inverterSize.toString());
+
+  // Sync input values when config changes externally
+  useEffect(() => {
+    setDcAcInputValue(config.dcAcRatio.toFixed(2));
+  }, [config.dcAcRatio]);
+
+  useEffect(() => {
+    setInverterSizeInput(config.inverterSize.toString());
+  }, [config.inverterSize]);
+
   const validSizes = useMemo(
     () => calculateValidSizes(config.inverterSize, config.dcAcRatio, 10),
     [config.inverterSize, config.dcAcRatio]
@@ -93,6 +107,9 @@ export function InverterSizing({
 
   // Check against connection limit (AC capacity vs kVA limit)
   const exceedsConnectionLimit = maxSolarKva && currentAcCapacity > maxSolarKva;
+
+  // Check if inverter size matches a preset
+  const matchesPreset = INVERTER_SIZES.some(inv => inv.kw === config.inverterSize);
 
   const handleInverterSizeChange = (size: number) => {
     const newConfig = { ...config, inverterSize: size };
@@ -116,6 +133,54 @@ export function InverterSizing({
     // DC/AC ratio doesn't change the system size, only the panel capacity
   };
 
+  // DC/AC Ratio input handlers
+  const handleDcAcInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setDcAcInputValue(e.target.value);
+  };
+
+  const handleDcAcInputBlur = () => {
+    const value = parseFloat(dcAcInputValue);
+    if (!isNaN(value) && value >= 1.0 && value <= 1.5) {
+      handleDcAcRatioChange(Math.round(value * 100) / 100);
+    } else {
+      setDcAcInputValue(config.dcAcRatio.toFixed(2)); // Reset to current value
+    }
+  };
+
+  const handleDcAcInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleDcAcInputBlur();
+      (e.target as HTMLInputElement).blur();
+    } else if (e.key === "Escape") {
+      setDcAcInputValue(config.dcAcRatio.toFixed(2));
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
+  // Inverter size input handlers
+  const handleInverterSizeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInverterSizeInput(e.target.value);
+  };
+
+  const handleInverterSizeInputBlur = () => {
+    const value = parseFloat(inverterSizeInput);
+    if (!isNaN(value) && value >= 1 && value <= 500) {
+      handleInverterSizeChange(Math.round(value * 10) / 10); // Allow 1 decimal place
+    } else {
+      setInverterSizeInput(config.inverterSize.toString()); // Reset to current value
+    }
+  };
+
+  const handleInverterSizeInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleInverterSizeInputBlur();
+      (e.target as HTMLInputElement).blur();
+    } else if (e.key === "Escape") {
+      setInverterSizeInput(config.inverterSize.toString());
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
   const snapToNearest = () => {
     handleInverterCountChange(nearestValid.inverterCount);
   };
@@ -133,27 +198,56 @@ export function InverterSizing({
       </CardHeader>
 
       <CardContent className="space-y-4">
-          {/* Inverter Size Selection */}
+        {/* Inverter Size Selection */}
           <div className="space-y-2">
             <Label className="text-xs">Inverter Size (AC)</Label>
-            <Select
-              value={config.inverterSize.toString()}
-              onValueChange={(v) => handleInverterSizeChange(Number(v))}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {INVERTER_SIZES.map((inv) => (
-                  <SelectItem key={inv.kw} value={inv.kw.toString()} className="text-xs">
-                    <div className="flex items-center justify-between gap-4 w-full">
-                      <span className="font-medium">{inv.label}</span>
-                      <span className="text-muted-foreground">{inv.typical}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              <Select
+                value={matchesPreset ? config.inverterSize.toString() : "custom"}
+                onValueChange={(v) => {
+                  if (v !== "custom") {
+                    handleInverterSizeChange(Number(v));
+                  }
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs flex-1">
+                  <SelectValue placeholder="Select size">
+                    {matchesPreset 
+                      ? INVERTER_SIZES.find(inv => inv.kw === config.inverterSize)?.label 
+                      : "Custom"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {!matchesPreset && (
+                    <SelectItem value="custom" className="text-xs">
+                      <span className="font-medium">Custom ({config.inverterSize} kW)</span>
+                    </SelectItem>
+                  )}
+                  {INVERTER_SIZES.map((inv) => (
+                    <SelectItem key={inv.kw} value={inv.kw.toString()} className="text-xs">
+                      <div className="flex items-center justify-between gap-4 w-full">
+                        <span className="font-medium">{inv.label}</span>
+                        <span className="text-muted-foreground">{inv.typical}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  value={inverterSizeInput}
+                  onChange={handleInverterSizeInputChange}
+                  onBlur={handleInverterSizeInputBlur}
+                  onKeyDown={handleInverterSizeInputKeyDown}
+                  min={1}
+                  max={500}
+                  step={0.1}
+                  className="w-16 h-8 text-xs text-right px-2"
+                />
+                <span className="text-xs text-muted-foreground">kW</span>
+              </div>
+            </div>
           </div>
 
           {/* Inverter Count */}
@@ -211,7 +305,17 @@ export function InverterSizing({
                   </Tooltip>
                 </TooltipProvider>
               </Label>
-              <span className="text-xs font-medium">{config.dcAcRatio.toFixed(2)}</span>
+              <Input
+                type="number"
+                value={dcAcInputValue}
+                onChange={handleDcAcInputChange}
+                onBlur={handleDcAcInputBlur}
+                onKeyDown={handleDcAcInputKeyDown}
+                min={1.0}
+                max={1.5}
+                step={0.01}
+                className="w-16 h-6 text-xs text-right px-2"
+              />
             </div>
             <Slider
               value={[config.dcAcRatio]}
