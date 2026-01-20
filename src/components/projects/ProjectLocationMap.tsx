@@ -508,9 +508,13 @@ export function ProjectLocationMap({
             onValueChange={handleDataSourceChange}
             className="justify-start mt-2"
           >
-            <ToggleGroupItem value="pvgis" size="sm" className="text-xs gap-1">
+            <ToggleGroupItem value="pvgis_monthly" size="sm" className="text-xs gap-1">
               <Database className="h-3 w-3" />
-              PVGIS (TMY)
+              Monthly Avg
+            </ToggleGroupItem>
+            <ToggleGroupItem value="pvgis_tmy" size="sm" className="text-xs gap-1">
+              <Database className="h-3 w-3" />
+              TMY
             </ToggleGroupItem>
             <ToggleGroupItem value="solcast" size="sm" className="text-xs gap-1">
               <Radio className="h-3 w-3" />
@@ -607,8 +611,12 @@ function PVGISSummaryDisplay({ data, dataType }: { data: PVGISTMYResponse | PVGI
 
       {/* Data source */}
       <div className="text-xs text-muted-foreground text-center pt-2 border-t">
-        <Badge variant="secondary" className="text-xs">TMY</Badge>
-        <span className="ml-2">Powered by PVGIS • Typical Year Data</span>
+        <Badge variant="secondary" className="text-xs">
+          {dataType === "pvgis_monthly" ? "19-Yr Avg" : "TMY"}
+        </Badge>
+        <span className="ml-2">
+          PVGIS • {dataType === "pvgis_monthly" ? "2005-2023 Average" : "Typical Year"}
+        </span>
       </div>
     </div>
   );
