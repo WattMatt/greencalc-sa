@@ -613,6 +613,10 @@ export default function ProjectDetail() {
     if (activeTab === "simulation" && simulationRef.current) {
       await simulationRef.current.saveIfNeeded();
     }
+    // Auto-save costs when leaving costs tab (persists via simulation)
+    if (activeTab === "costs" && simulationRef.current) {
+      await simulationRef.current.saveIfNeeded();
+    }
     setActiveTab(newTab);
   };
   
