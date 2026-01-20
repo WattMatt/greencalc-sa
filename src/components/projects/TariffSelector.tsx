@@ -16,6 +16,59 @@ import {
   type BlendedRateCalculation,
 } from "@/lib/tariffCalculations";
 
+// Helper function to organize energy rates by season and TOU period
+const organizeEnergyRates = (rates: any[]) => {
+  const touOrder: Record<string, number> = { 'Peak': 0, 'Standard': 1, 'Off-Peak': 2 };
+  
+  return [...rates].sort((a, b) => {
+    const seasonA = a.season?.includes('High') || a.season?.includes('Winter') ? 0 : 1;
+    const seasonB = b.season?.includes('High') || b.season?.includes('Winter') ? 0 : 1;
+    const seasonCompare = seasonA - seasonB;
+    if (seasonCompare !== 0) return seasonCompare;
+    return (touOrder[a.time_of_use] || 0) - (touOrder[b.time_of_use] || 0);
+  });
+};
+
+// Helper function to calculate combined rate including all unbundled charges
+const calculateCombinedRate = (rate: any, tariff: any) => {
+  const base = Number(rate.rate_per_kwh) || 0;
+  const legacy = Number(tariff?.legacy_charge_per_kwh) || 0;
+  const network = Number(rate.network_charge_per_kwh) || 0;
+  const ancillary = Number(rate.ancillary_charge_per_kwh) || 0;
+  const elecRural = Number(rate.electrification_rural_per_kwh) || 0;
+  const affordability = Number(rate.affordability_subsidy_per_kwh) || 0;
+  
+  return base + legacy + network + ancillary + elecRural + affordability;
+};
+
+// Rate card component with TOU-based styling
+function RateCard({ rate, tariff }: { rate: any; tariff: any }) {
+  const combinedRate = calculateCombinedRate(rate, tariff);
+  
+  const bgColor = rate.time_of_use === 'Peak' 
+    ? 'bg-red-500/10 border-red-500/20' 
+    : rate.time_of_use === 'Standard' 
+    ? 'bg-yellow-500/10 border-yellow-500/20' 
+    : 'bg-green-500/10 border-green-500/20';
+  
+  const textColor = rate.time_of_use === 'Peak'
+    ? 'text-red-700 dark:text-red-400'
+    : rate.time_of_use === 'Standard'
+    ? 'text-yellow-700 dark:text-yellow-400'
+    : 'text-green-700 dark:text-green-400';
+
+  return (
+    <div className={`p-2 rounded border text-sm ${bgColor}`}>
+      <div className={`font-semibold ${textColor}`}>
+        R{combinedRate.toFixed(4)}/kWh
+      </div>
+      <div className="text-xs text-muted-foreground">
+        {rate.time_of_use}
+      </div>
+    </div>
+  );
+}
+
 function BlendedSolarRateCard({ rates }: { rates: any[] }) {
   const summerCalc = useMemo(() => calculateBlendedSolarRate(rates, 'summer'), [rates]);
   const winterCalc = useMemo(() => calculateBlendedSolarRate(rates, 'winter'), [rates]);
@@ -358,21 +411,30 @@ export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffS
 
             {selectedTariff.tariff_rates && selectedTariff.tariff_rates.length > 0 && (
               <div className="mt-4 pt-4 border-t">
-                <span className="text-sm text-muted-foreground">Energy Rates</span>
-                <div className="mt-2 grid gap-2 md:grid-cols-3">
-                  {selectedTariff.tariff_rates.map((rate: any) => (
-                    <div
-                      key={rate.id}
-                      className="p-2 rounded bg-muted/50 text-sm"
-                    >
-                      <div className="font-medium">
-                        R{Number(rate.rate_per_kwh).toFixed(4)}/kWh
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {rate.time_of_use} • {rate.season}
-                      </div>
-                    </div>
-                  ))}
+                <span className="text-sm text-muted-foreground">Energy Rates (incl. unbundled charges)</span>
+                
+                {/* High Season Row */}
+                <div className="mt-3">
+                  <span className="text-xs text-muted-foreground mb-1 block">High Season (Winter)</span>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    {organizeEnergyRates(selectedTariff.tariff_rates)
+                      .filter((r: any) => r.season?.includes('High') || r.season?.includes('Winter'))
+                      .map((rate: any) => (
+                        <RateCard key={rate.id} rate={rate} tariff={selectedTariff} />
+                      ))}
+                  </div>
+                </div>
+                
+                {/* Low Season Row */}
+                <div className="mt-3">
+                  <span className="text-xs text-muted-foreground mb-1 block">Low Season (Summer)</span>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    {organizeEnergyRates(selectedTariff.tariff_rates)
+                      .filter((r: any) => r.season?.includes('Low') || r.season?.includes('Summer'))
+                      .map((rate: any) => (
+                        <RateCard key={rate.id} rate={rate} tariff={selectedTariff} />
+                      ))}
+                  </div>
                 </div>
               </div>
             )}
