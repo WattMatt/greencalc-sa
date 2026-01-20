@@ -65,63 +65,66 @@ function RateCard({ rate, tariff }: { rate: any; tariff: any }) {
     : 'text-green-700 dark:text-green-400';
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className={`p-2 rounded border text-sm cursor-help ${bgColor}`}>
-            <div className={`font-semibold ${textColor}`}>
-              R{combinedRate.toFixed(4)}/kWh
+    <div className={`p-2 rounded border text-sm relative ${bgColor}`}>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="absolute top-1 right-1 text-muted-foreground hover:text-foreground transition-colors">
+              <Info className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="w-56 p-3" side="top">
+            <p className="font-medium text-xs mb-2">Rate Breakdown</p>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Active Energy</span>
+                <span>R{base.toFixed(4)}</span>
+              </div>
+              {legacy > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Legacy Charge</span>
+                  <span>R{legacy.toFixed(4)}</span>
+                </div>
+              )}
+              {network > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Network Demand</span>
+                  <span>R{network.toFixed(4)}</span>
+                </div>
+              )}
+              {ancillary > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Ancillary Service</span>
+                  <span>R{ancillary.toFixed(4)}</span>
+                </div>
+              )}
+              {elecRural > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Elec & Rural Subsidy</span>
+                  <span>R{elecRural.toFixed(4)}</span>
+                </div>
+              )}
+              {affordability > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Affordability Subsidy</span>
+                  <span>R{affordability.toFixed(4)}</span>
+                </div>
+              )}
+              <div className="flex justify-between pt-1 border-t font-medium">
+                <span>Total</span>
+                <span>R{combinedRate.toFixed(4)}</span>
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground">
-              {rate.time_of_use}
-            </div>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent className="w-56 p-3" side="top">
-          <p className="font-medium text-xs mb-2">Rate Breakdown</p>
-          <div className="space-y-1 text-xs">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Active Energy</span>
-              <span>R{base.toFixed(4)}</span>
-            </div>
-            {legacy > 0 && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Legacy Charge</span>
-                <span>R{legacy.toFixed(4)}</span>
-              </div>
-            )}
-            {network > 0 && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Network Demand</span>
-                <span>R{network.toFixed(4)}</span>
-              </div>
-            )}
-            {ancillary > 0 && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Ancillary Service</span>
-                <span>R{ancillary.toFixed(4)}</span>
-              </div>
-            )}
-            {elecRural > 0 && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Elec & Rural Subsidy</span>
-                <span>R{elecRural.toFixed(4)}</span>
-              </div>
-            )}
-            {affordability > 0 && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Affordability Subsidy</span>
-                <span>R{affordability.toFixed(4)}</span>
-              </div>
-            )}
-            <div className="flex justify-between pt-1 border-t font-medium">
-              <span>Total</span>
-              <span>R{combinedRate.toFixed(4)}</span>
-            </div>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <div className={`font-semibold ${textColor}`}>
+        R{combinedRate.toFixed(4)}/kWh
+      </div>
+      <div className="text-xs text-muted-foreground">
+        {rate.time_of_use}
+      </div>
+    </div>
   );
 }
 
