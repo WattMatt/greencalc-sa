@@ -33,8 +33,9 @@ export interface TariffData {
 export interface SystemCosts {
   solarCostPerKwp: number; // R/kWp installed (includes installation)
   batteryCostPerKwh: number; // R/kWh capacity
-  maintenancePercentage?: number; // Percentage of total system cost (e.g., 1.5 = 1.5%)
-  maintenancePerYear?: number; // R/year - calculated from percentage
+  solarMaintenancePercentage?: number; // Percentage of solar cost (e.g., 3.5 = 3.5%)
+  batteryMaintenancePercentage?: number; // Percentage of battery cost (e.g., 1.5 = 1.5%)
+  maintenancePerYear?: number; // R/year - calculated from both percentages
 }
 
 export interface FinancialResults {
@@ -218,8 +219,9 @@ export function compareTariffs(
 export const DEFAULT_SYSTEM_COSTS: SystemCosts = {
   solarCostPerKwp: 11000, // R11,000 per kWp installed (includes installation)
   batteryCostPerKwh: 7500, // R7,500 per kWh (LFP battery costs declining)
-  maintenancePercentage: 1.5, // 1.5% of total system cost per year
-  maintenancePerYear: 0, // Calculated from percentage
+  solarMaintenancePercentage: 3.5, // 3.5% of solar cost per year
+  batteryMaintenancePercentage: 1.5, // 1.5% of battery cost per year
+  maintenancePerYear: 0, // Calculated from both percentages
 };
 
 /**

@@ -955,10 +955,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           }
           // Load system costs if present
           if (config.systemCosts) {
+            // Handle legacy data that may have old maintenancePercentage field
+            const legacyCosts = config.systemCosts as any;
             onSystemCostsChange({
               solarCostPerKwp: config.systemCosts.solarCostPerKwp,
               batteryCostPerKwh: config.systemCosts.batteryCostPerKwh,
-              maintenancePercentage: config.systemCosts.maintenancePercentage ?? 1.5,
+              solarMaintenancePercentage: config.systemCosts.solarMaintenancePercentage ?? legacyCosts.maintenancePercentage ?? 3.5,
+              batteryMaintenancePercentage: config.systemCosts.batteryMaintenancePercentage ?? 1.5,
               maintenancePerYear: config.systemCosts.maintenancePerYear ?? 0,
             });
           }
