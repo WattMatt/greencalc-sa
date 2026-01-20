@@ -5,9 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MapPin, Sun, Cloud, Thermometer, RefreshCw, Navigation, Zap, Locate } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { MapPin, Sun, Cloud, Thermometer, RefreshCw, Navigation, Zap, Locate, Database, Radio } from "lucide-react";
 import { toast } from "sonner";
 import { useSolcastForecast, SolcastForecastResponse } from "@/hooks/useSolcastForecast";
+import { usePVGISProfile, PVGISResponse } from "@/hooks/usePVGISProfile";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
@@ -25,6 +27,8 @@ const SA_BOUNDS = {
   zoom: 5,
 };
 
+type DataSource = "pvgis" | "solcast";
+
 export function ProjectLocationMap({
   projectId,
   latitude,
@@ -41,6 +45,7 @@ export function ProjectLocationMap({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [geocodeAttempted, setGeocodeAttempted] = useState(false);
+  const [dataSource, setDataSource] = useState<DataSource>("pvgis");
 
   // Fetch Mapbox token
   const { data: mapboxToken } = useQuery({
@@ -50,11 +55,14 @@ export function ProjectLocationMap({
       if (error) throw error;
       return data.token as string;
     },
-    staleTime: 1000 * 60 * 60, // 1 hour
+    staleTime: 1000 * 60 * 60,
   });
 
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, error: solcastError, fetchForecast } = useSolcastForecast();
+
+  // PVGIS TMY hook
+  const { data: pvgisData, isLoading: pvgisLoading, error: pvgisError, fetchProfile: fetchPVGIS } = usePVGISProfile();
 
   // Save location mutation
   const saveLocation = useMutation({
@@ -71,8 +79,12 @@ export function ProjectLocationMap({
       setPendingCoords(null);
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       onLocationUpdate?.(lat, lng);
-      // Fetch forecast for new location
-      fetchForecast({ latitude: lat, longitude: lng, hours: 168 });
+      // Fetch data based on selected source
+      if (dataSource === "solcast") {
+        fetchForecast({ latitude: lat, longitude: lng, hours: 168 });
+      } else {
+        fetchPVGIS({ latitude: lat, longitude: lng });
+      }
     },
     onError: (error: Error) => {
       toast.error(`Failed to save location: ${error.message}`);
@@ -103,14 +115,17 @@ export function ProjectLocationMap({
         queryClient.invalidateQueries({ queryKey: ["project", projectId] });
         onLocationUpdate?.(data.latitude, data.longitude);
         
-        // Update marker and fly to location
         if (map.current && mapLoaded) {
           updateMarker(data.latitude, data.longitude, false);
           map.current.flyTo({ center: [data.longitude, data.latitude], zoom: 12 });
         }
         
-        // Fetch forecast
-        fetchForecast({ latitude: data.latitude, longitude: data.longitude, hours: 168 });
+        // Fetch based on selected source
+        if (dataSource === "solcast") {
+          fetchForecast({ latitude: data.latitude, longitude: data.longitude, hours: 168 });
+        } else {
+          fetchPVGIS({ latitude: data.latitude, longitude: data.longitude });
+        }
       } else {
         toast.warning("Could not find coordinates for this location");
       }
@@ -120,16 +135,15 @@ export function ProjectLocationMap({
     } finally {
       setIsGeocoding(false);
     }
-  }, [location, latitude, longitude, geocodeAttempted, projectId, mapLoaded, queryClient, onLocationUpdate, fetchForecast]);
+  }, [location, latitude, longitude, geocodeAttempted, projectId, mapLoaded, queryClient, onLocationUpdate, fetchForecast, fetchPVGIS, dataSource]);
 
-  // Trigger auto-geocode when map loads and we have location but no coords
+  // Trigger auto-geocode when map loads
   useEffect(() => {
     if (mapLoaded && location && !latitude && !longitude && !geocodeAttempted) {
       geocodeLocation();
     }
   }, [mapLoaded, location, latitude, longitude, geocodeAttempted, geocodeLocation]);
 
-  // Manual geocode button handler
   const handleManualGeocode = () => {
     setGeocodeAttempted(false);
     setTimeout(() => geocodeLocation(), 100);
@@ -161,7 +175,6 @@ export function ProjectLocationMap({
       setMapLoaded(true);
     });
 
-    // Click to set location
     map.current.on("click", (e) => {
       const { lng, lat } = e.lngLat;
       setPendingCoords({ lat, lng });
@@ -176,7 +189,6 @@ export function ProjectLocationMap({
     };
   }, [mapboxToken]);
 
-  // Update marker position
   const updateMarker = useCallback((lat: number, lng: number, isPending = false) => {
     if (!map.current) return;
 
@@ -202,7 +214,6 @@ export function ProjectLocationMap({
         .addTo(map.current);
     }
 
-    // Update marker style based on pending state
     const markerEl = marker.current.getElement();
     const innerDiv = markerEl.querySelector("div");
     if (innerDiv) {
@@ -212,7 +223,6 @@ export function ProjectLocationMap({
     }
   }, []);
 
-  // Set initial marker if coordinates exist
   useEffect(() => {
     if (mapLoaded && latitude && longitude && !pendingCoords) {
       updateMarker(latitude, longitude, false);
@@ -220,12 +230,33 @@ export function ProjectLocationMap({
     }
   }, [mapLoaded, latitude, longitude, pendingCoords, updateMarker]);
 
-  // Fetch Solcast data when we have coordinates
+  // Fetch data when we have coordinates
   useEffect(() => {
-    if (latitude && longitude && !solcastData && !solcastLoading) {
-      fetchForecast({ latitude, longitude, hours: 168 });
+    if (latitude && longitude) {
+      if (dataSource === "solcast" && !solcastData && !solcastLoading) {
+        fetchForecast({ latitude, longitude, hours: 168 });
+      } else if (dataSource === "pvgis" && !pvgisData && !pvgisLoading) {
+        fetchPVGIS({ latitude, longitude });
+      }
     }
-  }, [latitude, longitude, solcastData, solcastLoading, fetchForecast]);
+  }, [latitude, longitude, dataSource, solcastData, solcastLoading, pvgisData, pvgisLoading, fetchForecast, fetchPVGIS]);
+
+  // Handle data source change
+  const handleDataSourceChange = (value: string) => {
+    if (value === "pvgis" || value === "solcast") {
+      setDataSource(value);
+      const lat = pendingCoords?.lat ?? latitude;
+      const lng = pendingCoords?.lng ?? longitude;
+      
+      if (lat && lng) {
+        if (value === "solcast" && !solcastData) {
+          fetchForecast({ latitude: lat, longitude: lng, hours: 168 });
+        } else if (value === "pvgis" && !pvgisData) {
+          fetchPVGIS({ latitude: lat, longitude: lng });
+        }
+      }
+    }
+  };
 
   const handleSaveLocation = () => {
     if (pendingCoords) {
@@ -247,13 +278,17 @@ export function ProjectLocationMap({
     const lat = pendingCoords?.lat ?? latitude;
     const lng = pendingCoords?.lng ?? longitude;
     if (lat && lng) {
-      fetchForecast({ latitude: lat, longitude: lng, hours: 168 });
+      if (dataSource === "solcast") {
+        fetchForecast({ latitude: lat, longitude: lng, hours: 168 });
+      } else {
+        fetchPVGIS({ latitude: lat, longitude: lng });
+      }
     }
   };
 
   const hasCoordinates = !!(latitude && longitude);
-  const displayLat = pendingCoords?.lat ?? latitude;
-  const displayLng = pendingCoords?.lng ?? longitude;
+  const isLoading = dataSource === "solcast" ? solcastLoading : pvgisLoading;
+  const currentError = dataSource === "solcast" ? solcastError : pvgisError;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -286,7 +321,6 @@ export function ProjectLocationMap({
             <div className="relative">
               <div ref={mapContainer} className="w-full h-[400px] rounded-b-lg" />
               
-              {/* Geocoding in progress overlay */}
               {isGeocoding && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-sm rounded-b-lg z-10">
                   <div className="text-center p-4">
@@ -299,7 +333,6 @@ export function ProjectLocationMap({
                 </div>
               )}
 
-              {/* Instructions overlay - show when no coordinates and not geocoding */}
               {!hasCoordinates && !pendingCoords && !isGeocoding && mapLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm rounded-b-lg">
                   <div className="text-center p-4">
@@ -324,7 +357,7 @@ export function ProjectLocationMap({
                       <>
                         <p className="text-sm font-medium">Click on the map to set site location</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          This will be used for solar irradiance forecasts
+                          This will be used for solar irradiance data
                         </p>
                       </>
                     )}
@@ -332,7 +365,6 @@ export function ProjectLocationMap({
                 </div>
               )}
 
-              {/* Pending location actions */}
               {pendingCoords && (
                 <div className="absolute bottom-4 left-4 right-4 bg-background/95 backdrop-blur-sm rounded-lg p-3 border shadow-lg">
                   <div className="flex items-center justify-between gap-4">
@@ -362,13 +394,13 @@ export function ProjectLocationMap({
         </CardContent>
       </Card>
 
-      {/* Solar Forecast Panel */}
+      {/* Solar Data Panel */}
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base">
               <Sun className="h-4 w-4 text-amber-500" />
-              Solar Forecast
+              Solar Data
             </CardTitle>
             {(hasCoordinates || pendingCoords) && (
               <Button
@@ -376,39 +408,58 @@ export function ProjectLocationMap({
                 variant="ghost"
                 className="h-7 w-7"
                 onClick={handleRefreshForecast}
-                disabled={solcastLoading}
+                disabled={isLoading}
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${solcastLoading ? "animate-spin" : ""}`} />
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
               </Button>
             )}
           </div>
+          
+          {/* Data Source Toggle */}
+          <ToggleGroup 
+            type="single" 
+            value={dataSource} 
+            onValueChange={handleDataSourceChange}
+            className="justify-start mt-2"
+          >
+            <ToggleGroupItem value="pvgis" size="sm" className="text-xs gap-1">
+              <Database className="h-3 w-3" />
+              PVGIS (TMY)
+            </ToggleGroupItem>
+            <ToggleGroupItem value="solcast" size="sm" className="text-xs gap-1">
+              <Radio className="h-3 w-3" />
+              Solcast
+            </ToggleGroupItem>
+          </ToggleGroup>
         </CardHeader>
         <CardContent>
           {!hasCoordinates && !pendingCoords ? (
             <div className="text-center py-8">
               <MapPin className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">Set site location to view forecast</p>
+              <p className="text-sm text-muted-foreground">Set site location to view data</p>
             </div>
-          ) : solcastLoading ? (
+          ) : isLoading ? (
             <div className="space-y-3">
               <Skeleton className="h-16 w-full" />
               <Skeleton className="h-16 w-full" />
               <Skeleton className="h-16 w-full" />
             </div>
-          ) : solcastError ? (
+          ) : currentError ? (
             <div className="text-center py-8">
               <Cloud className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">{solcastError}</p>
+              <p className="text-sm text-muted-foreground">{currentError}</p>
               <Button size="sm" variant="outline" className="mt-2" onClick={handleRefreshForecast}>
                 Try Again
               </Button>
             </div>
-          ) : solcastData ? (
+          ) : dataSource === "solcast" && solcastData ? (
             <SolcastSummaryDisplay data={solcastData} />
+          ) : dataSource === "pvgis" && pvgisData ? (
+            <PVGISSummaryDisplay data={pvgisData} />
           ) : (
             <div className="text-center py-8">
               <Zap className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">Loading forecast data...</p>
+              <p className="text-sm text-muted-foreground">Loading solar data...</p>
             </div>
           )}
         </CardContent>
@@ -417,11 +468,69 @@ export function ProjectLocationMap({
   );
 }
 
+// PVGIS TMY display component
+function PVGISSummaryDisplay({ data }: { data: PVGISResponse }) {
+  const { summary, monthly } = data;
+
+  // Month names for display
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  return (
+    <div className="space-y-4">
+      {/* Key metrics */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-amber-500/10 rounded-lg p-3 text-center">
+          <Sun className="h-5 w-5 mx-auto mb-1 text-amber-500" />
+          <div className="text-lg font-bold">{summary.peakSunHours.toFixed(1)}</div>
+          <div className="text-xs text-muted-foreground">Peak Sun Hours</div>
+        </div>
+        <div className="bg-primary/10 rounded-lg p-3 text-center">
+          <Zap className="h-5 w-5 mx-auto mb-1 text-primary" />
+          <div className="text-lg font-bold">{summary.dailyGhiKwh.toFixed(1)}</div>
+          <div className="text-xs text-muted-foreground">kWh/m²/day</div>
+        </div>
+      </div>
+
+      {/* Annual total */}
+      <div className="bg-muted/30 rounded-lg p-3 text-center">
+        <div className="text-2xl font-bold text-primary">{summary.annualGhiKwh.toFixed(0)}</div>
+        <div className="text-xs text-muted-foreground">kWh/m²/year</div>
+      </div>
+
+      {/* Monthly breakdown */}
+      <div>
+        <div className="text-xs font-medium text-muted-foreground mb-2">Monthly Average (kWh/m²/day)</div>
+        <div className="grid grid-cols-4 gap-1">
+          {monthly.map((m) => (
+            <div
+              key={m.month}
+              className="text-center py-1.5 px-1 rounded bg-muted/30"
+            >
+              <div className="text-xs text-muted-foreground">{monthNames[m.month - 1]}</div>
+              <div className="text-xs font-mono font-medium">{m.avgDailyGhi.toFixed(1)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Temperature */}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground border-t pt-3">
+        <Thermometer className="h-3.5 w-3.5" />
+        <span>Avg Temperature: {summary.avgTemp.toFixed(1)}°C</span>
+      </div>
+
+      {/* Data source */}
+      <div className="text-xs text-muted-foreground text-center pt-2 border-t">
+        <Badge variant="secondary" className="text-xs">TMY</Badge>
+        <span className="ml-2">Powered by PVGIS • Typical Year Data</span>
+      </div>
+    </div>
+  );
+}
+
 // Solcast summary display component
 function SolcastSummaryDisplay({ data }: { data: SolcastForecastResponse }) {
   const { summary, daily } = data;
-
-  // Get next 7 days for mini forecast
   const next7Days = daily?.slice(0, 7) || [];
 
   return (
@@ -473,7 +582,7 @@ function SolcastSummaryDisplay({ data }: { data: SolcastForecastResponse }) {
         </div>
       </div>
 
-      {/* Temperature range if available */}
+      {/* Temperature */}
       {next7Days[0]?.air_temp_avg !== null && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground border-t pt-3">
           <Thermometer className="h-3.5 w-3.5" />
@@ -485,7 +594,8 @@ function SolcastSummaryDisplay({ data }: { data: SolcastForecastResponse }) {
 
       {/* Data source */}
       <div className="text-xs text-muted-foreground text-center pt-2 border-t">
-        Powered by Solcast • {summary.total_forecast_days} days forecast
+        <Badge variant="secondary" className="text-xs">Forecast</Badge>
+        <span className="ml-2">Powered by Solcast • {summary.total_forecast_days} days</span>
       </div>
     </div>
   );
