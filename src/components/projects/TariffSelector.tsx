@@ -41,9 +41,16 @@ const calculateCombinedRate = (rate: any, tariff: any) => {
   return base + legacy + network + ancillary + elecRural + affordability;
 };
 
-// Rate card component with TOU-based styling
+// Rate card component with TOU-based styling and breakdown tooltip
 function RateCard({ rate, tariff }: { rate: any; tariff: any }) {
   const combinedRate = calculateCombinedRate(rate, tariff);
+  
+  const base = Number(rate.rate_per_kwh) || 0;
+  const legacy = Number(tariff?.legacy_charge_per_kwh) || 0;
+  const network = Number(rate.network_charge_per_kwh) || 0;
+  const ancillary = Number(rate.ancillary_charge_per_kwh) || 0;
+  const elecRural = Number(rate.electrification_rural_per_kwh) || 0;
+  const affordability = Number(rate.affordability_subsidy_per_kwh) || 0;
   
   const bgColor = rate.time_of_use === 'Peak' 
     ? 'bg-red-500/10 border-red-500/20' 
@@ -58,14 +65,63 @@ function RateCard({ rate, tariff }: { rate: any; tariff: any }) {
     : 'text-green-700 dark:text-green-400';
 
   return (
-    <div className={`p-2 rounded border text-sm ${bgColor}`}>
-      <div className={`font-semibold ${textColor}`}>
-        R{combinedRate.toFixed(4)}/kWh
-      </div>
-      <div className="text-xs text-muted-foreground">
-        {rate.time_of_use}
-      </div>
-    </div>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={`p-2 rounded border text-sm cursor-help ${bgColor}`}>
+            <div className={`font-semibold ${textColor}`}>
+              R{combinedRate.toFixed(4)}/kWh
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {rate.time_of_use}
+            </div>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent className="w-56 p-3" side="top">
+          <p className="font-medium text-xs mb-2">Rate Breakdown</p>
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Active Energy</span>
+              <span>R{base.toFixed(4)}</span>
+            </div>
+            {legacy > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Legacy Charge</span>
+                <span>R{legacy.toFixed(4)}</span>
+              </div>
+            )}
+            {network > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Network Demand</span>
+                <span>R{network.toFixed(4)}</span>
+              </div>
+            )}
+            {ancillary > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ancillary Service</span>
+                <span>R{ancillary.toFixed(4)}</span>
+              </div>
+            )}
+            {elecRural > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Elec & Rural Subsidy</span>
+                <span>R{elecRural.toFixed(4)}</span>
+              </div>
+            )}
+            {affordability > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Affordability Subsidy</span>
+                <span>R{affordability.toFixed(4)}</span>
+              </div>
+            )}
+            <div className="flex justify-between pt-1 border-t font-medium">
+              <span>Total</span>
+              <span>R{combinedRate.toFixed(4)}</span>
+            </div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
