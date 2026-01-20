@@ -61,6 +61,14 @@ interface SavedSimulationsProps {
       solarMaintenancePercentage: number;
       batteryMaintenancePercentage: number;
       maintenancePerYear: number;
+      // Financial Return Parameters
+      costOfCapital?: number;
+      cpi?: number;
+      electricityInflation?: number;
+      projectDurationYears?: number;
+      lcoeDiscountRate?: number;
+      mirrFinanceRate?: number;
+      mirrReinvestmentRate?: number;
     };
   };
   currentResults: SimulationResult;
@@ -82,6 +90,14 @@ interface SavedSimulationsProps {
       solarMaintenancePercentage: number;
       batteryMaintenancePercentage: number;
       maintenancePerYear: number;
+      // Financial Return Parameters
+      costOfCapital?: number;
+      cpi?: number;
+      electricityInflation?: number;
+      projectDurationYears?: number;
+      lcoeDiscountRate?: number;
+      mirrFinanceRate?: number;
+      mirrReinvestmentRate?: number;
     };
   }) => void;
   includesBattery?: boolean;

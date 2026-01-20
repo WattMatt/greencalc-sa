@@ -36,6 +36,15 @@ export interface SystemCosts {
   solarMaintenancePercentage?: number; // Percentage of solar cost (e.g., 3.5 = 3.5%)
   batteryMaintenancePercentage?: number; // Percentage of battery cost (e.g., 1.5 = 1.5%)
   maintenancePerYear?: number; // R/year - calculated from both percentages
+  
+  // Financial Return Parameters
+  costOfCapital?: number;           // % - General WACC (default: 9)
+  cpi?: number;                     // % - Inflation (default: 6)
+  electricityInflation?: number;    // % - Tariff escalation (default: 10)
+  projectDurationYears?: number;    // years (default: 20)
+  lcoeDiscountRate?: number;        // % - NPV discount rate (default: 9)
+  mirrFinanceRate?: number;         // % - Interest paid on money used in cash flows (default: 9)
+  mirrReinvestmentRate?: number;    // % - Interest received on reinvestment (default: 10)
 }
 
 export interface FinancialResults {
@@ -222,6 +231,15 @@ export const DEFAULT_SYSTEM_COSTS: SystemCosts = {
   solarMaintenancePercentage: 3.5, // 3.5% of solar cost per year
   batteryMaintenancePercentage: 1.5, // 1.5% of battery cost per year
   maintenancePerYear: 0, // Calculated from both percentages
+  
+  // Financial Return Parameters
+  costOfCapital: 9.0,           // % - General WACC
+  cpi: 6.0,                     // % - Inflation
+  electricityInflation: 10.0,   // % - Tariff escalation
+  projectDurationYears: 20,     // years
+  lcoeDiscountRate: 9.0,        // % - NPV discount rate
+  mirrFinanceRate: 9.0,         // % - Interest paid on money used in cash flows
+  mirrReinvestmentRate: 10.0,   // % - Interest received on reinvestment
 };
 
 /**

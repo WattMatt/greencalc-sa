@@ -42,6 +42,7 @@ export {
   runAdvancedSimulation,
   calculateNPV,
   calculateIRR,
+  calculateMIRR,
   calculateLCOE,
   getPanelEfficiency,
   getBatteryCapacityRemaining,
