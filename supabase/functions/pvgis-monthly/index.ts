@@ -40,6 +40,60 @@ interface PVGISMonthlyResponse {
   };
 }
 
+// Generate a synthetic typical day profile from daily average GHI
+function generateTypicalDayProfile(avgDailyGhi: number, latitude: number) {
+  // Approximate sunrise/sunset based on latitude (simplified for SA latitudes)
+  // SA is roughly -22 to -35 latitude
+  const absLat = Math.abs(latitude);
+  const sunriseHour = 5 + (absLat - 25) * 0.05; // ~5-6am
+  const sunsetHour = 19 - (absLat - 25) * 0.05; // ~18-19pm
+  const solarNoon = 12;
+  const daylightHours = sunsetHour - sunriseHour;
+  
+  // Generate hourly values using a smooth bell curve (cosine approximation)
+  const hourlyGhi: number[] = [];
+  const normalizedProfile: number[] = [];
+  let totalGhi = 0;
+  
+  for (let hour = 0; hour < 24; hour++) {
+    let ghi = 0;
+    if (hour >= sunriseHour && hour <= sunsetHour) {
+      // Cosine curve centered at solar noon
+      const hourAngle = ((hour - solarNoon) / (daylightHours / 2)) * (Math.PI / 2);
+      ghi = Math.max(0, Math.cos(hourAngle));
+    }
+    hourlyGhi.push(ghi);
+    totalGhi += ghi;
+  }
+  
+  // Scale to match daily GHI and calculate normalized profile
+  const scaleFactor = totalGhi > 0 ? avgDailyGhi / totalGhi : 0;
+  for (let hour = 0; hour < 24; hour++) {
+    hourlyGhi[hour] *= scaleFactor;
+    normalizedProfile[hour] = totalGhi > 0 ? (hourlyGhi[hour] / avgDailyGhi) : 0;
+  }
+  
+  // Generate temperature profile (cooler at night, warmer in afternoon)
+  const hourlyTemp: number[] = [];
+  const avgTemp = 20; // Base temperature
+  for (let hour = 0; hour < 24; hour++) {
+    const tempOffset = 8 * Math.cos(((hour - 14) / 12) * Math.PI);
+    hourlyTemp.push(avgTemp + tempOffset);
+  }
+  
+  // DNI/DHI approximations (simplified ratios)
+  const hourlyDni = hourlyGhi.map(ghi => ghi * 0.7); // Direct ~70% of GHI
+  const hourlyDhi = hourlyGhi.map(ghi => ghi * 0.3); // Diffuse ~30% of GHI
+  
+  return {
+    normalizedProfile,
+    hourlyGhi,
+    hourlyDni,
+    hourlyDhi,
+    hourlyTemp,
+  };
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -137,6 +191,11 @@ serve(async (req) => {
     const peakSunHours = avgDailyGhi; // PSH = kWh/m²/day at 1kW/m² reference
     const avgTemp = monthlyAverages.reduce((sum, m) => sum + m.avgTemp, 0) / monthlyAverages.length;
 
+    // Generate synthetic typical day profile based on solar geometry
+    // Using a parabolic approximation for daylight hours (sunrise ~6am, sunset ~6pm for equator-ish)
+    // Adjusted based on latitude for South African locations
+    const solarProfile = generateTypicalDayProfile(avgDailyGhi, latitude);
+
     const result = {
       success: true,
       source: "pvgis",
@@ -158,6 +217,7 @@ serve(async (req) => {
         annualGhiKwh,
         avgTemp,
       },
+      typicalDay: solarProfile,
       monthly: monthlyAverages,
       rawMonthlyData: monthlyData, // Include raw data for detailed analysis
     };
