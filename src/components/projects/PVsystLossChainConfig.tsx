@@ -44,7 +44,7 @@ interface PVsystLossChainConfigProps {
   };
 }
 
-// Helper for slider with info tooltip
+// Helper for slider with info tooltip and sign indicator
 function LossSlider({
   label,
   value,
@@ -54,6 +54,7 @@ function LossSlider({
   step = 0.01,
   suffix = "%",
   description,
+  isGain = false, // If true, positive value = gain (+), negative = loss (-). If false, positive = loss (-), negative = gain (+)
 }: {
   label: string;
   value: number;
@@ -63,6 +64,7 @@ function LossSlider({
   step?: number;
   suffix?: string;
   description?: string;
+  isGain?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value.toFixed(4));
@@ -99,6 +101,32 @@ function LossSlider({
     setIsEditing(true);
   };
 
+  // Determine sign prefix and color based on value and isGain
+  const getSignAndColor = () => {
+    if (value === 0) {
+      return { sign: '', colorClass: 'text-muted-foreground' };
+    }
+    
+    // isGain=true: positive=gain(+green), negative=loss(-red)
+    // isGain=false: positive=loss(-red), negative=gain(+green)
+    if (isGain) {
+      if (value > 0) {
+        return { sign: '+', colorClass: 'text-primary' }; // Gain - use primary color
+      } else {
+        return { sign: '-', colorClass: 'text-destructive' }; // Loss - use destructive color
+      }
+    } else {
+      if (value > 0) {
+        return { sign: '-', colorClass: 'text-destructive' }; // Loss - use destructive color
+      } else {
+        return { sign: '+', colorClass: 'text-primary' }; // Gain - use primary color
+      }
+    }
+  };
+
+  const { sign, colorClass } = getSignAndColor();
+  const displayValue = Math.abs(value).toFixed(4);
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -132,11 +160,11 @@ function LossSlider({
           />
         ) : (
           <span
-            className="text-xs font-medium text-muted-foreground cursor-pointer hover:text-primary hover:underline"
+            className={`text-xs font-medium cursor-pointer hover:underline ${colorClass}`}
             onClick={handleClick}
             title="Click to edit"
           >
-            {value.toFixed(4)}{suffix}
+            {sign}{displayValue}{suffix}
           </span>
         )}
       </div>
@@ -361,6 +389,7 @@ export function PVsystLossChainConfig({
               step={0.01}
               suffix="%"
               description="Loss/gain from tilted surface vs horizontal. Negative = gain (typical for tilted panels)"
+              isGain={true}
             />
             {/* 2. Near Shadings: irradiance loss */}
             <LossSlider
@@ -369,6 +398,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateIrradiance("nearShadingLoss", v)}
               max={15}
               description="Near shading from surrounding objects, horizon, and module self-shading"
+              isGain={false}
             />
             {/* 3. IAM factor on global */}
             <LossSlider
@@ -377,6 +407,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateIrradiance("iamLoss", v)}
               max={5}
               description="Incidence Angle Modifier - reflection losses at high angles"
+              isGain={false}
             />
             {/* 4. Soiling loss factor */}
             <LossSlider
@@ -385,6 +416,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateIrradiance("soilingLoss", v)}
               max={10}
               description="Dust, dirt, and debris accumulation on modules"
+              isGain={false}
             />
           </CollapsibleContent>
         </Collapsible>
@@ -413,6 +445,7 @@ export function PVsystLossChainConfig({
               step={0.01}
               suffix="%"
               description="Module power degradation loss as a fixed percentage"
+              isGain={false}
             />
             
             {/* 2. PV loss due to irradiance level */}
@@ -423,6 +456,7 @@ export function PVsystLossChainConfig({
               max={3}
               step={0.1}
               description="Low-light efficiency losses (typically 0.5-1.5%)"
+              isGain={false}
             />
             
             {/* 3. PV loss due to temperature */}
@@ -433,6 +467,7 @@ export function PVsystLossChainConfig({
               max={20}
               step={0.01}
               description="Temperature-induced power loss (typically 5-15% depending on climate)"
+              isGain={false}
             />
             
             {/* 4. Spectral correction */}
@@ -443,6 +478,7 @@ export function PVsystLossChainConfig({
               max={2}
               step={0.1}
               description="Spectral mismatch between actual and STC spectrum"
+              isGain={false}
             />
             
             {/* 5. Shadings: Electrical Loss detailed module calc. */}
@@ -452,6 +488,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateIrradiance("electricalShadingLoss", v)}
               max={10}
               description="Electrical losses from partial shading on module strings"
+              isGain={false}
             />
             
             {/* 6. Module quality loss */}
@@ -459,9 +496,11 @@ export function PVsystLossChainConfig({
               label="Module quality loss"
               value={config.array.moduleQualityLoss}
               onChange={(v) => updateArray("moduleQualityLoss", v)}
+              min={-5}
               max={3}
               step={0.1}
-              description="Manufacturer power tolerance and binning (typically 0-1%)"
+              description="Manufacturer power tolerance and binning. Negative = gain (positive tolerance)"
+              isGain={true}
             />
             
             {/* 7. LID - Light induced degradation */}
@@ -471,6 +510,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateArray("lidLoss", v)}
               max={5}
               description="First-year light-induced degradation (typically 1-3%)"
+              isGain={false}
             />
             
             {/* 8. Module array mismatch loss */}
@@ -480,6 +520,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateArray("mismatchLoss", v)}
               max={8}
               description="Including 1.7% for degradation dispersion"
+              isGain={false}
             />
             
             {/* 9. Ohmic wiring loss */}
@@ -489,6 +530,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateArray("ohmicLoss", v)}
               max={5}
               description="DC cable and connection losses"
+              isGain={false}
             />
           </CollapsibleContent>
         </Collapsible>
@@ -514,6 +556,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateInverter("operationEfficiency", v)}
               max={5}
               description="Inverter conversion efficiency loss (typically 1-3%)"
+              isGain={false}
             />
             <LossSlider
               label="Inverter Loss over nominal inv. power"
@@ -521,6 +564,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateInverter("overNominalPower", v)}
               max={2}
               description="Losses when inverter operates above nominal power"
+              isGain={false}
             />
             <LossSlider
               label="Inverter Loss due to max. input current"
@@ -528,6 +572,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateInverter("maxInputCurrent", v)}
               max={2}
               description="Losses when input current exceeds inverter limits"
+              isGain={false}
             />
             <LossSlider
               label="Inverter Loss over nominal inv. voltage"
@@ -535,6 +580,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateInverter("overNominalVoltage", v)}
               max={2}
               description="Losses when voltage exceeds inverter nominal range"
+              isGain={false}
             />
             <LossSlider
               label="Inverter Loss due to power threshold"
@@ -542,6 +588,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateInverter("powerThreshold", v)}
               max={2}
               description="Losses at low power levels below operating threshold"
+              isGain={false}
             />
             <LossSlider
               label="Inverter Loss due to voltage threshold"
@@ -549,6 +596,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateInverter("voltageThreshold", v)}
               max={2}
               description="Losses when voltage is below operating threshold"
+              isGain={false}
             />
             <LossSlider
               label="Night consumption"
@@ -556,6 +604,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateInverter("nightConsumption", v)}
               max={1}
               description="Standby power consumption during non-production hours"
+              isGain={false}
             />
           </CollapsibleContent>
         </Collapsible>
@@ -581,6 +630,7 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateAfterInverter("availabilityLoss", v)}
               max={5}
               description="Downtime for maintenance, faults, and grid outages"
+              isGain={false}
             />
           </CollapsibleContent>
         </Collapsible>
