@@ -2,29 +2,56 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Building2, Palette, Mail, Phone, Globe, MapPin } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Building2, Palette, Mail, Phone, Globe, MapPin, Sparkles, Settings } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { ProposalBranding } from "./types";
 
 interface BrandingFormProps {
   branding: ProposalBranding;
   onChange: (branding: ProposalBranding) => void;
   disabled?: boolean;
+  autoPopulated?: boolean;
 }
 
-export function BrandingForm({ branding, onChange, disabled }: BrandingFormProps) {
+export function BrandingForm({ branding, onChange, disabled, autoPopulated }: BrandingFormProps) {
   const update = (field: keyof ProposalBranding, value: string) => {
     onChange({ ...branding, [field]: value || null });
   };
 
+  const hasOrgBranding = !!branding.company_name;
+
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <Building2 className="h-5 w-5 text-muted-foreground" />
-          <CardTitle className="text-base">Company Branding</CardTitle>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-base">Company Branding</CardTitle>
+          </div>
+          {hasOrgBranding && autoPopulated && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-primary/30 text-primary bg-primary/5">
+              <Sparkles className="h-2.5 w-2.5 mr-1" />
+              From Settings
+            </Badge>
+          )}
         </div>
-        <CardDescription>
-          Customize the proposal with your company details
+        <CardDescription className="flex items-center justify-between">
+          <span>
+            {hasOrgBranding 
+              ? "Auto-filled from your organization settings" 
+              : "Add your company details to the proposal"
+            }
+          </span>
+          {!hasOrgBranding && (
+            <Link 
+              to="/settings" 
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+            >
+              <Settings className="h-3 w-3" />
+              Set up in Settings
+            </Link>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
