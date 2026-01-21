@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +34,7 @@ import { BrandingForm } from "@/components/proposals/BrandingForm";
 import { SignaturePanel } from "@/components/proposals/SignaturePanel";
 import { ProposalPreview } from "@/components/proposals/ProposalPreview";
 import { ProposalExport } from "@/components/proposals/ProposalExport";
+import { ProposalPrintView } from "@/components/proposals/ProposalPrintView";
 import { SimulationSelector } from "@/components/proposals/SimulationSelector";
 import { ShareLinkButton } from "@/components/proposals/ShareLinkButton";
 import { cn } from "@/lib/utils";
@@ -92,6 +93,7 @@ export default function ProposalWorkspace() {
   const [assumptions, setAssumptions] = useState("");
   const [showSystemDesign, setShowSystemDesign] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<ProposalTemplateId>("modern");
+  const printViewRef = useRef<HTMLDivElement>(null);
   const [disclaimers, setDisclaimers] = useState(
     "This proposal is based on estimated consumption data and solar irradiance forecasts. Actual performance may vary based on weather conditions, equipment degradation, and other factors. Financial projections assume current tariff rates and do not account for future rate changes. All figures are estimates only."
   );
@@ -733,6 +735,10 @@ export default function ProposalWorkspace() {
                     simulation={simulationData}
                     selectedTemplate={selectedTemplate}
                     onTemplateChange={setSelectedTemplate}
+                    printViewRef={printViewRef}
+                    tenants={tenants || undefined}
+                    shopTypes={shopTypes || undefined}
+                    showSystemDesign={showSystemDesign}
                   />
                 </div>
               )}
@@ -782,6 +788,20 @@ export default function ProposalWorkspace() {
           </div>
         </div>
       </div>
+
+      {/* Hidden Print View for WYSIWYG PDF capture */}
+      {simulationData && (
+        <ProposalPrintView
+          ref={printViewRef}
+          proposal={proposalForComponents}
+          project={project}
+          simulation={simulationData}
+          tenants={tenants || undefined}
+          shopTypes={shopTypes || undefined}
+          showSystemDesign={showSystemDesign}
+          templateId={selectedTemplate}
+        />
+      )}
     </div>
   );
 }
