@@ -610,9 +610,15 @@ export function PVsystLossChainConfig({
               Losses after the inverter
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">
-                -{config.lossesAfterInverter.availabilityLoss.toFixed(1)}%
-              </Badge>
+              {(() => {
+                const total = config.lossesAfterInverter.availabilityLoss;
+                const sign = total >= 0 ? '-' : '+';
+                return (
+                  <Badge variant="outline" className="text-xs">
+                    {sign}{Math.abs(total).toFixed(1)}%
+                  </Badge>
+                );
+              })()}
               <ChevronDown className={`h-4 w-4 transition-transform ${showAfterInverter ? "rotate-180" : ""}`} />
             </div>
           </CollapsibleTrigger>
