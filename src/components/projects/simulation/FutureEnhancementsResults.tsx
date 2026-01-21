@@ -436,7 +436,7 @@ function calculateCarbonResults(config: FutureEnhancementsConfig, annualGenerati
     : annualGeneration;
 
   const annualCo2Avoided = effectiveGeneration * carbon.gridEmissionFactor; // kg
-  const lifetimeCo2Avoided = annualCo2Avoided * 25; // 25-year lifetime
+  const lifetimeCo2Avoided = annualCo2Avoided * 20; // 20-year lifetime
 
   // Equivalent calculations
   const equivalentTreesPlanted = annualCo2Avoided / 21; // ~21kg CO2 per tree per year

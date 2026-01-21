@@ -29,9 +29,9 @@ export function DegradationProjection({
   }, [dailyGHI, capacityKwp, ambientTemp, config]);
 
   const year1Output = projection[0]?.annualEGridKwh ?? 0;
-  const year25Output = projection[24]?.annualEGridKwh ?? 0;
-  const totalDegradation = projection[24]?.cumulativeDegradation ?? 0;
-  const lifetimeProduction = projection.reduce((sum, yr) => sum + yr.annualEGridKwh, 0);
+  const year20Output = projection[19]?.annualEGridKwh ?? 0;
+  const totalDegradation = projection[19]?.cumulativeDegradation ?? 0;
+  const lifetimeProduction = projection.slice(0, 20).reduce((sum, yr) => sum + yr.annualEGridKwh, 0);
 
   // Format large numbers
   const formatEnergy = (kwh: number) => {
@@ -46,10 +46,10 @@ export function DegradationProjection({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm font-medium">25-Year Degradation</CardTitle>
+            <CardTitle className="text-sm font-medium">20-Year Degradation</CardTitle>
           </div>
           <Badge variant="outline" className="text-xs">
-            -{totalDegradation.toFixed(1)}% by Year 25
+            -{totalDegradation.toFixed(1)}% by Year 20
           </Badge>
         </div>
         <CardDescription className="text-xs">
@@ -65,14 +65,14 @@ export function DegradationProjection({
             <div className="text-xs text-muted-foreground">PR {projection[0]?.performanceRatio.toFixed(1)}%</div>
           </div>
           <div className="text-center p-2 bg-muted/50 rounded-lg">
-            <div className="text-xs text-muted-foreground">Year 25</div>
-            <div className="text-sm font-semibold">{formatEnergy(year25Output)}</div>
-            <div className="text-xs text-muted-foreground">PR {projection[24]?.performanceRatio.toFixed(1)}%</div>
+            <div className="text-xs text-muted-foreground">Year 20</div>
+            <div className="text-sm font-semibold">{formatEnergy(year20Output)}</div>
+            <div className="text-xs text-muted-foreground">PR {projection[19]?.performanceRatio.toFixed(1)}%</div>
           </div>
           <div className="text-center p-2 bg-primary/10 rounded-lg">
             <div className="text-xs text-muted-foreground">Lifetime</div>
             <div className="text-sm font-semibold text-primary">{formatEnergy(lifetimeProduction)}</div>
-            <div className="text-xs text-muted-foreground">25 years</div>
+            <div className="text-xs text-muted-foreground">20 years</div>
           </div>
         </div>
 
@@ -156,7 +156,7 @@ export function DegradationProjection({
             </TableHeader>
             <TableBody>
               {projection
-                .filter((_, i) => i === 0 || (i + 1) % 5 === 0 || i === 24)
+                .filter((_, i) => i === 0 || (i + 1) % 5 === 0 || i === 19)
                 .map((yr) => (
                   <TableRow key={yr.year}>
                     <TableCell className="text-xs font-medium py-1.5">

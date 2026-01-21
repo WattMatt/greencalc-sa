@@ -19,7 +19,7 @@ const PROPOSAL_PROMPT = `Develop the Proposal Builder Mode for creating client-r
    - Site Overview with map and satellite imagery
    - System Specification table (panels, inverters, batteries)
    - Energy Analysis (generation, consumption, coverage)
-   - Financial Analysis (25-year cash flow projection)
+   - Financial Analysis (20-year cash flow projection)
    - Assumptions & Disclaimers
    - Appendix with detailed hourly/monthly data
 4. Add company branding options:

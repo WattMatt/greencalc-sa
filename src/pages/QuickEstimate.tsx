@@ -61,19 +61,19 @@ export default function QuickEstimate() {
       // Simple payback
       const paybackYears = systemCost / annualSavings;
       
-      // 25-year ROI with escalation
+      // 20-year ROI with escalation
       let totalSavings = 0;
-      for (let year = 1; year <= 25; year++) {
+      for (let year = 1; year <= 20; year++) {
         const escalatedRate = tariffRate * Math.pow(1 + tariffEscalation / 100, year - 1);
         const yearlyGeneration = annualGeneration * Math.pow(0.995, year - 1); // 0.5% degradation
         const yearlySelfConsumption = yearlyGeneration * selfConsumptionRatio;
         totalSavings += yearlySelfConsumption * escalatedRate;
       }
-      const roi25Years = ((totalSavings - systemCost) / systemCost) * 100;
+      const roi20Years = ((totalSavings - systemCost) / systemCost) * 100;
       
       // LCOE
-      const totalGeneration25Years = annualGeneration * 25 * 0.9; // Average with degradation
-      const lcoe = systemCost / totalGeneration25Years;
+      const totalGeneration20Years = annualGeneration * 20 * 0.9; // Average with degradation
+      const lcoe = systemCost / totalGeneration20Years;
       
       setResults({
         annualGeneration,
@@ -84,7 +84,7 @@ export default function QuickEstimate() {
         annualSavings,
         systemCost,
         paybackYears,
-        roi25Years,
+        roi20Years,
         lcoe,
         assumptions: {
           peakSunHours,

@@ -37,7 +37,7 @@ export function calculateEngineeringKPIs(params: {
     peakDemandKw,
     peakDemandWithSolarKw,
     systemCost,
-    systemLifeYears = 25
+    systemLifeYears = 20
   } = params;
 
   // Specific Yield (kWh/kWp)
@@ -149,7 +149,7 @@ export function calculateFinancialSummary(params: {
     annualGridCostBaseline,
     annualGridCostWithSolar,
     discountRate = 0.08, // 8% default
-    systemLifeYears = 25,
+    systemLifeYears = 20,
     annualDegradation = 0.005, // 0.5% per year
     tariffEscalation = 0.10 // 10% annual tariff increase (SA context)
   } = params;

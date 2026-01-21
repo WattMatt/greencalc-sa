@@ -135,7 +135,7 @@ export const DEFAULT_FINANCIAL_CONFIG: AdvancedFinancialConfig = {
   tariffEscalationRate: 10.0, // SA tariffs have been rising ~10%/year
   inflationRate: 5.5,
   discountRate: 10.0,
-  projectLifetimeYears: 25,
+  projectLifetimeYears: 20,
   sensitivityEnabled: false,
   sensitivityVariation: 20,
 };
@@ -283,7 +283,7 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
         tariffEscalationRate: 10.0,
         inflationRate: 5.5,
         discountRate: 10.0,
-        projectLifetimeYears: 25,
+        projectLifetimeYears: 20,
         sensitivityEnabled: true,
         sensitivityVariation: 20,
       },

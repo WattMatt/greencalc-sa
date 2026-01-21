@@ -16,7 +16,7 @@ export interface QuickEstimateOutput {
   annualSavings: number;
   systemCost: number;
   paybackYears: number;
-  roi25Years: number;
+  roi20Years: number;
   lcoe: number;
   
   // Assumptions used
@@ -146,9 +146,9 @@ export function QuickEstimateResults({ results }: QuickEstimateResultsProps) {
             <div>
               <div className="flex items-center justify-center gap-1">
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                <p className="text-xl font-bold">{results.roi25Years.toFixed(0)}%</p>
+                <p className="text-xl font-bold">{results.roi20Years.toFixed(0)}%</p>
               </div>
-              <p className="text-xs text-muted-foreground">25-Year ROI</p>
+              <p className="text-xs text-muted-foreground">20-Year ROI</p>
             </div>
             <div>
               <p className="text-xl font-bold">R{results.lcoe.toFixed(2)}</p>

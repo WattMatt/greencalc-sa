@@ -1327,7 +1327,7 @@ function SegmentPreviewContent({
     case "environmental_impact":
       const co2 = simulationData.co2AvoidedTons || 120;
       const treesEquiv = Math.round(co2 * 45);
-      const lifetime25 = co2 * 25;
+      const lifetime20 = co2 * 20;
       
       return (
         <div className="space-y-3">
@@ -1361,10 +1361,10 @@ function SegmentPreviewContent({
             </div>
           </div>
           
-          {/* 25-year impact bar */}
+          {/* 20-year impact bar */}
           <div className="bg-emerald-100 dark:bg-emerald-950/40 rounded-lg p-2 text-center">
-            <p className="text-[8px] text-muted-foreground">25-Year Lifetime Impact</p>
-            <p className="text-sm font-bold text-emerald-600">{lifetime25.toLocaleString()} tonnes CO₂</p>
+            <p className="text-[8px] text-muted-foreground">20-Year Lifetime Impact</p>
+            <p className="text-sm font-bold text-emerald-600">{lifetime20.toLocaleString()} tonnes CO₂</p>
           </div>
         </div>
       );
