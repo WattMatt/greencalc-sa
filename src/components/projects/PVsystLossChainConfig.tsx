@@ -343,16 +343,16 @@ export function PVsystLossChainConfig({
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2 space-y-3 px-2">
-            {/* 1. Module Degradation Loss (for year #X) - DISPLAY ONLY */}
-            <div className="p-2 bg-muted/30 rounded-lg">
-              <div className="flex items-center justify-between text-xs">
-                <span>Module Degradation Loss (for year #{config.operationYear})</span>
-                <Badge variant="secondary">{result.cumulativeDegradation.toFixed(2)}%</Badge>
-              </div>
-              <div className="text-[10px] text-muted-foreground mt-1">
-                LID ({config.array.lidLoss}%) + {Math.max(0, config.operationYear - 1)} × {config.array.annualDegradation}%/yr
-              </div>
-            </div>
+            {/* 1. Module Degradation Loss (for year #X) */}
+            <LossSlider
+              label={`Module Degradation Loss (for year #${config.operationYear})`}
+              value={config.array.annualDegradation}
+              onChange={(v) => updateArray("annualDegradation", v)}
+              max={2}
+              step={0.01}
+              suffix="%/yr"
+              description={`Annual degradation rate. Total cumulative: ${result.cumulativeDegradation.toFixed(2)}% (LID ${config.array.lidLoss}% + ${Math.max(0, config.operationYear - 1)} × ${config.array.annualDegradation}%/yr)`}
+            />
             
             {/* 2. PV loss due to irradiance level */}
             <LossSlider
