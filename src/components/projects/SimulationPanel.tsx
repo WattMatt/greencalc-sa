@@ -50,9 +50,11 @@ import { calculateAnnualBlendedRate, getBlendedRateBreakdown } from "@/lib/tarif
 import { 
   type LossCalculationMode, 
   type PVsystLossChainConfig, 
+  type AnnualPVsystResult,
   DEFAULT_PVSYST_CONFIG,
   calculateHourlyPVsystOutput,
-  calculatePVsystLossChain 
+  calculatePVsystLossChain,
+  calculateAnnualPVsystOutput
 } from "@/lib/pvsystLossChain";
 import { PVsystLossChainConfig as PVsystLossChainConfigPanel } from "./PVsystLossChainConfig";
 
@@ -378,42 +380,92 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return generateSolarProfile(pvConfig, solarCapacity, undefined);
   }, [pvConfig, solarCapacity]);
 
-  // PVsyst mode uses the detailed loss chain calculation with actual module data
-  const solarProfilePVsyst = useMemo(() => {
-    // Get hourly GHI and temperature data
-    const activeProfile = solarDataSource === "solcast" 
-      ? solcastHourlyProfile 
-      : pvgisHourlyProfile;
+  // Calculate annual GHI from PVGIS monthly data (for annual PVsyst calculation)
+  const annualGHI = useMemo(() => {
+    const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     
-    if (lossCalculationMode !== "pvsyst" || !activeProfile) {
+    if (solarDataSource === "pvgis_monthly" && pvgisMonthlyData?.monthly) {
+      // Sum up (avgDailyGhi * daysInMonth) for each month
+      return pvgisMonthlyData.monthly.reduce((sum, m) => {
+        const days = daysInMonth[m.month - 1] || 30;
+        return sum + (m.avgDailyGhi * days);
+      }, 0);
+    }
+    
+    if (solarDataSource === "pvgis_tmy" && pvgisTmyData?.summary?.annualGhiKwh) {
+      return pvgisTmyData.summary.annualGhiKwh;
+    }
+    
+    // Fallback to daily GHI × 365
+    if (pvgisHourlyProfile) {
+      const dailySum = pvgisHourlyProfile.reduce((sum, h) => sum + h.ghi / 1000, 0); // Convert W/m² to kWh/m²
+      return dailySum * 365;
+    }
+    
+    // Use location default
+    return selectedLocation.ghi * 365;
+  }, [solarDataSource, pvgisMonthlyData, pvgisTmyData, pvgisHourlyProfile, selectedLocation.ghi]);
+
+  // PVsyst ANNUAL calculation result (matching Excel methodology)
+  const annualPVsystResult = useMemo<AnnualPVsystResult | null>(() => {
+    if (lossCalculationMode !== "pvsyst") {
       return null;
     }
     
-    // Use AC capacity from inverter config for consistency with module metrics
-    const acCapacityKw = inverterConfig.inverterSize * inverterConfig.inverterCount;
+    // DC capacity for specific yield calculation
+    const dcCapacityKwp = inverterConfig.inverterSize * inverterConfig.inverterCount * inverterConfig.dcAcRatio;
     
-    // Extract hourly GHI (W/m²) and temperature arrays
-    const hourlyGhi = activeProfile.map(h => h.ghi);
-    const hourlyTemp = activeProfile.map(h => (h as any).temp ?? 25);
-    
-    // Create config with actual module-derived collector area and efficiency
+    // Create config with actual module-derived values
     const configWithModuleData: PVsystLossChainConfig = {
       ...pvsystConfig,
       stcEfficiency: moduleMetrics.stcEfficiency,
       collectorAreaM2: moduleMetrics.collectorAreaM2,
     };
     
-    // Calculate hourly output using PVsyst loss chain with physical module data
-    const hourlyResults = calculateHourlyPVsystOutput(
-      hourlyGhi,
-      hourlyTemp,
-      acCapacityKw,
+    // Calculate annual output using Excel methodology
+    const result = calculateAnnualPVsystOutput(
+      annualGHI,
+      moduleMetrics.collectorAreaM2,
+      moduleMetrics.stcEfficiency,
+      dcCapacityKwp,
       configWithModuleData,
       true  // Enable debug logging
     );
     
-    return hourlyResults.map(r => r.eGridKwh);
-  }, [lossCalculationMode, solarDataSource, solcastHourlyProfile, pvgisHourlyProfile, pvsystConfig, moduleMetrics, inverterConfig]);
+    console.log('=== Annual PVsyst Result ===');
+    console.log('E_Grid:', result.eGrid.toFixed(0), 'kWh/year');
+    console.log('Specific Yield:', result.specificYield.toFixed(0), 'kWh/kWp/year');
+    
+    return result;
+  }, [lossCalculationMode, annualGHI, moduleMetrics, pvsystConfig, inverterConfig]);
+
+  // PVsyst HOURLY calculation for daily profile chart (derived from annual proportionally)
+  const solarProfilePVsyst = useMemo(() => {
+    // Get hourly GHI profile for daily shape
+    const activeProfile = solarDataSource === "solcast" 
+      ? solcastHourlyProfile 
+      : pvgisHourlyProfile;
+    
+    if (lossCalculationMode !== "pvsyst" || !activeProfile || !annualPVsystResult) {
+      return null;
+    }
+    
+    // Calculate daily E_Grid from annual result
+    const dailyEGrid = annualPVsystResult.eGrid / 365;
+    
+    // Get the hourly GHI shape (normalized to total = 1)
+    const hourlyGhi = activeProfile.map(h => h.ghi);
+    const totalDailyGhi = hourlyGhi.reduce((a, b) => a + b, 0);
+    
+    if (totalDailyGhi <= 0) {
+      return Array(24).fill(0);
+    }
+    
+    // Distribute daily E_Grid according to hourly GHI shape
+    const hourlyProfile = hourlyGhi.map(ghi => (ghi / totalDailyGhi) * dailyEGrid);
+    
+    return hourlyProfile;
+  }, [lossCalculationMode, solarDataSource, solcastHourlyProfile, pvgisHourlyProfile, annualPVsystResult]);
 
   // Active solar profile based on data source and loss calculation mode
   const solarProfile = useMemo(() => {
@@ -958,12 +1010,18 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
               <div className="flex justify-between">
                 <span>Expected daily output</span>
-                <span className="text-foreground">{energyResults.totalDailySolar.toFixed(0)} kWh</span>
+                <span className="text-foreground">
+                  {annualPVsystResult 
+                    ? Math.round(annualPVsystResult.eGrid / 365).toLocaleString()
+                    : energyResults.totalDailySolar.toFixed(0)} kWh
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>Specific yield</span>
                 <span className="text-foreground">
-                  {((energyResults.totalDailySolar * 365) / solarCapacity).toFixed(0)} kWh/kWp/yr
+                  {annualPVsystResult 
+                    ? Math.round(annualPVsystResult.specificYield).toLocaleString()
+                    : ((energyResults.totalDailySolar * 365) / solarCapacity).toFixed(0)} kWh/kWp/yr
                 </span>
               </div>
             </div>
@@ -1048,7 +1106,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 <div className="grid grid-cols-2 hover:bg-muted/50">
                   <div className="px-3 py-1.5 text-muted-foreground">ZAR / kWh (1st Year)</div>
                   <div className="px-3 py-1.5 text-right font-medium">
-                    {(financialResults.systemCost / (energyResults.totalDailySolar * 365)).toFixed(2)}
+                    {(financialResults.systemCost / (annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365)).toFixed(2)}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 hover:bg-muted/50">
@@ -1138,9 +1196,16 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Annual Production</CardDescription>
-            <CardTitle className="text-2xl text-amber-600">
-              {Math.round(energyResults.totalDailySolar * 365).toLocaleString()} kWh
+            <CardTitle className="text-2xl text-chart-2">
+              {annualPVsystResult 
+                ? Math.round(annualPVsystResult.eGrid).toLocaleString()
+                : Math.round(energyResults.totalDailySolar * 365).toLocaleString()} kWh
             </CardTitle>
+            {annualPVsystResult && (
+              <p className="text-xs text-muted-foreground">
+                {Math.round(annualPVsystResult.specificYield).toLocaleString()} kWh/kWp • PR: {annualPVsystResult.performanceRatio.toFixed(1)}%
+              </p>
+            )}
           </CardHeader>
         </Card>
         <Card>
