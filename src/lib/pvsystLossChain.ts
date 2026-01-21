@@ -274,21 +274,23 @@ export function calculatePVsystLossChain(
   // Build loss breakdown for waterfall visualization
   // ========================================
   const startEnergy = theoreticalOutput;
-  const transpositionGain = (config.transpositionFactor - 1) * 100;
+  // Transposition loss is stored as a percentage - negative of it represents gain
+  const transpositionGain = -config.irradiance.transpositionLoss;
   
   const lossBreakdown: LossBreakdownItem[] = [
     { stage: "GHI Input", lossPercent: 0, energyAfter: startEnergy },
-    { stage: "Transposition", lossPercent: -transpositionGain, energyAfter: poaIrradiance * capacityKwp, isGain: true },
+    { stage: "Transposition", lossPercent: transpositionGain, energyAfter: poaIrradiance * capacityKwp, isGain: transpositionGain < 0 },
+    { stage: "Near Shading", lossPercent: config.irradiance.nearShadingLoss, energyAfter: 0 },
     { stage: "IAM", lossPercent: config.irradiance.iamLoss, energyAfter: 0 },
     { stage: "Soiling", lossPercent: config.irradiance.soilingLoss, energyAfter: effectiveIrradiance * capacityKwp },
     // Array losses in Excel order:
+    { stage: "LID", lossPercent: config.array.lidLoss, energyAfter: 0 },
     { stage: `Module Degradation (Yr ${config.operationYear})`, lossPercent: cumulativeDegradation, energyAfter: 0 },
     { stage: "Irradiance Level", lossPercent: config.array.irradianceLevelLoss, energyAfter: 0 },
     { stage: "Temperature", lossPercent: temperatureLoss, energyAfter: 0 },
     { stage: "Spectral Correction", lossPercent: config.irradiance.spectralLoss, energyAfter: 0 },
     { stage: "Shading Electrical", lossPercent: config.irradiance.electricalShadingLoss, energyAfter: 0 },
-    { stage: "Module Quality", lossPercent: config.array.moduleQualityLoss, energyAfter: 0 },
-    { stage: "LID", lossPercent: config.array.lidLoss, energyAfter: 0 },
+    { stage: "Module Quality", lossPercent: config.array.moduleQualityLoss, energyAfter: 0, isGain: config.array.moduleQualityLoss < 0 },
     { stage: "Mismatch", lossPercent: config.array.mismatchLoss, energyAfter: 0 },
     { stage: "Ohmic Wiring", lossPercent: config.array.ohmicLoss, energyAfter: arrayMPP },
     // System losses - Inverter sub-losses:

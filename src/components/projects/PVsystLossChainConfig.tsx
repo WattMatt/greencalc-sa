@@ -637,6 +637,38 @@ export function PVsystLossChainConfig({
         <LossWaterfallChart
           breakdown={result.lossBreakdown}
           performanceRatio={result.performanceRatio}
+          editable={true}
+          onLossChange={(stage, newValue) => {
+            // Map stage names to config updates
+            const stageToConfigMap: Record<string, () => void> = {
+              'Transposition': () => updateIrradiance('transpositionLoss', -newValue),
+              'Near Shading': () => updateIrradiance('nearShadingLoss', newValue),
+              'IAM': () => updateIrradiance('iamLoss', newValue),
+              'Soiling': () => updateIrradiance('soilingLoss', newValue),
+              'LID': () => updateArray('lidLoss', newValue),
+              'Irradiance Level': () => updateArray('irradianceLevelLoss', newValue),
+              'Temperature': () => updateArray('temperatureLoss', newValue),
+              'Spectral Correction': () => updateIrradiance('spectralLoss', newValue),
+              'Shading Electrical': () => updateIrradiance('electricalShadingLoss', newValue),
+              'Module Quality': () => updateArray('moduleQualityLoss', -newValue),
+              'Mismatch': () => updateArray('mismatchLoss', newValue),
+              'Ohmic Wiring': () => updateArray('ohmicLoss', newValue),
+              'Inverter (Efficiency)': () => updateInverter('operationEfficiency', newValue),
+              'Inverter (Over Nominal Power)': () => updateInverter('overNominalPower', newValue),
+              'Inverter (Max Input Current)': () => updateInverter('maxInputCurrent', newValue),
+              'Inverter (Over Nominal Voltage)': () => updateInverter('overNominalVoltage', newValue),
+              'Inverter (Power Threshold)': () => updateInverter('powerThreshold', newValue),
+              'Inverter (Voltage Threshold)': () => updateInverter('voltageThreshold', newValue),
+              'Night Consumption': () => updateInverter('nightConsumption', newValue),
+              'System Unavailability': () => updateAfterInverter('availabilityLoss', newValue),
+            };
+            // Handle dynamic stage names (Module Degradation with year)
+            if (stage.startsWith('Module Degradation')) {
+              updateArray('moduleDegradationLoss', newValue);
+            } else {
+              stageToConfigMap[stage]?.();
+            }
+          }}
         />
 
         {/* 25-Year Projection */}
