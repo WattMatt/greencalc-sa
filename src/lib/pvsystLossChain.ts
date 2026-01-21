@@ -21,17 +21,31 @@ export interface ArrayLosses {
   ohmicLoss: number;            // DC wiring losses (e.g., 1.10)
 }
 
+export interface InverterLosses {
+  operationEfficiency: number;     // Inverter Loss during operation (efficiency)
+  overNominalPower: number;        // Inverter Loss over nominal inv. power
+  maxInputCurrent: number;         // Inverter Loss due to max. input current
+  overNominalVoltage: number;      // Inverter Loss over nominal inv. voltage
+  powerThreshold: number;          // Inverter Loss due to power threshold
+  voltageThreshold: number;        // Inverter Loss due to voltage threshold
+  nightConsumption: number;        // Night consumption
+}
+
 export interface SystemLosses {
-  inverterLoss: number;       // Inverter efficiency loss (e.g., 1.55)
+  inverter: InverterLosses;   // Detailed inverter losses
   acWiringLoss: number;       // AC cable losses (e.g., 0.50)
   transformerLoss: number;    // If applicable (e.g., 0.50)
-  availabilityLoss: number;   // Downtime (e.g., 1.76)
+}
+
+export interface LossesAfterInverter {
+  availabilityLoss: number;   // System unavailability / Downtime (e.g., 1.76)
 }
 
 export interface PVsystLossChainConfig {
   irradiance: IrradianceLosses;
   array: ArrayLosses;
   system: SystemLosses;
+  lossesAfterInverter: LossesAfterInverter;
   operationYear: number;       // Year of operation (1-25) for degradation
   cellTempCoefficient: number; // %/°C (typically -0.35 to -0.45)
   noct: number;                // Nominal Operating Cell Temperature (typically 45°C)
@@ -92,9 +106,19 @@ export const DEFAULT_PVSYST_CONFIG: PVsystLossChainConfig = {
     ohmicLoss: 1.10,             // Ohmic wiring loss
   },
   system: {
-    inverterLoss: 1.55,
+    inverter: {
+      operationEfficiency: 1.55,   // Inverter Loss during operation (efficiency)
+      overNominalPower: 0.10,      // Inverter Loss over nominal inv. power
+      maxInputCurrent: 0.05,       // Inverter Loss due to max. input current
+      overNominalVoltage: 0.05,    // Inverter Loss over nominal inv. voltage
+      powerThreshold: 0.20,        // Inverter Loss due to power threshold
+      voltageThreshold: 0.05,      // Inverter Loss due to voltage threshold
+      nightConsumption: 0.10,      // Night consumption
+    },
     acWiringLoss: 0.50,
     transformerLoss: 0,
+  },
+  lossesAfterInverter: {
     availabilityLoss: 1.76,
   },
   operationYear: 1,
@@ -213,11 +237,21 @@ export function calculatePVsystLossChain(
   // ========================================
   // Step 7: E_Grid (after system losses)
   // ========================================
+  // Calculate total inverter loss from all sub-components
+  const totalInverterLoss = 
+    config.system.inverter.operationEfficiency +
+    config.system.inverter.overNominalPower +
+    config.system.inverter.maxInputCurrent +
+    config.system.inverter.overNominalVoltage +
+    config.system.inverter.powerThreshold +
+    config.system.inverter.voltageThreshold +
+    config.system.inverter.nightConsumption;
+  
   const systemFactor = 
-    (1 - config.system.inverterLoss / 100) *
+    (1 - totalInverterLoss / 100) *
     (1 - config.system.acWiringLoss / 100) *
     (1 - config.system.transformerLoss / 100) *
-    (1 - config.system.availabilityLoss / 100);
+    (1 - config.lossesAfterInverter.availabilityLoss / 100);
   const eGrid = arrayMPP * systemFactor;
   
   // ========================================
@@ -248,10 +282,17 @@ export function calculatePVsystLossChain(
     { stage: "LID", lossPercent: config.array.lidLoss, energyAfter: 0 },
     { stage: "Mismatch", lossPercent: config.array.mismatchLoss, energyAfter: 0 },
     { stage: "Ohmic Wiring", lossPercent: config.array.ohmicLoss, energyAfter: arrayMPP },
-    // System losses:
-    { stage: "Inverter", lossPercent: config.system.inverterLoss, energyAfter: 0 },
+    // System losses - Inverter sub-losses:
+    { stage: "Inverter (Efficiency)", lossPercent: config.system.inverter.operationEfficiency, energyAfter: 0 },
+    { stage: "Inverter (Over Nominal Power)", lossPercent: config.system.inverter.overNominalPower, energyAfter: 0 },
+    { stage: "Inverter (Max Input Current)", lossPercent: config.system.inverter.maxInputCurrent, energyAfter: 0 },
+    { stage: "Inverter (Over Nominal Voltage)", lossPercent: config.system.inverter.overNominalVoltage, energyAfter: 0 },
+    { stage: "Inverter (Power Threshold)", lossPercent: config.system.inverter.powerThreshold, energyAfter: 0 },
+    { stage: "Inverter (Voltage Threshold)", lossPercent: config.system.inverter.voltageThreshold, energyAfter: 0 },
+    { stage: "Night Consumption", lossPercent: config.system.inverter.nightConsumption, energyAfter: 0 },
     { stage: "AC Wiring", lossPercent: config.system.acWiringLoss, energyAfter: 0 },
-    { stage: "Availability", lossPercent: config.system.availabilityLoss, energyAfter: eGrid },
+    // Losses after inverter:
+    { stage: "System Unavailability", lossPercent: config.lossesAfterInverter.availabilityLoss, energyAfter: eGrid },
   ];
   
   // Filter out zero transformer loss if not applicable
@@ -333,11 +374,21 @@ export function calculateHourlyPVsystOutput(
       (1 - config.array.moduleQualityLoss / 100) *
       (1 - config.array.mismatchLoss / 100) *
       (1 - config.array.ohmicLoss / 100);
+    // Calculate total inverter loss
+    const totalInverterLoss = 
+      config.system.inverter.operationEfficiency +
+      config.system.inverter.overNominalPower +
+      config.system.inverter.maxInputCurrent +
+      config.system.inverter.overNominalVoltage +
+      config.system.inverter.powerThreshold +
+      config.system.inverter.voltageThreshold +
+      config.system.inverter.nightConsumption;
+    
     const systemFactor = 
-      (1 - config.system.inverterLoss / 100) *
+      (1 - totalInverterLoss / 100) *
       (1 - config.system.acWiringLoss / 100) *
       (1 - config.system.transformerLoss / 100) *
-      (1 - config.system.availabilityLoss / 100);
+      (1 - config.lossesAfterInverter.availabilityLoss / 100);
     
     const eGridKwh = hourlyGhiKwhM2 * capacityKwp * poaFactor * opticalFactor * arrayFactor * systemFactor;
     
