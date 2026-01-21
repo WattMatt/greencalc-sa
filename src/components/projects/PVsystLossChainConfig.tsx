@@ -196,13 +196,6 @@ export function PVsystLossChainConfig({
     });
   };
 
-  const updateSystem = (key: "acWiringLoss" | "transformerLoss", value: number) => {
-    onChange({
-      ...config,
-      system: { ...config.system, [key]: value },
-    });
-  };
-
   const updateAfterInverter = (key: keyof ConfigType["lossesAfterInverter"], value: number) => {
     onChange({
       ...config,
@@ -474,7 +467,7 @@ export function PVsystLossChainConfig({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                -{(totalInverterLoss + config.system.acWiringLoss + config.system.transformerLoss).toFixed(1)}%
+                -{totalInverterLoss.toFixed(4)}%
               </Badge>
               <ChevronDown className={`h-4 w-4 transition-transform ${showSystem ? "rotate-180" : ""}`} />
             </div>
@@ -528,20 +521,6 @@ export function PVsystLossChainConfig({
               onChange={(v) => updateInverter("nightConsumption", v)}
               max={1}
               description="Standby power consumption during non-production hours"
-            />
-            <LossSlider
-              label="AC Wiring Loss"
-              value={config.system.acWiringLoss}
-              onChange={(v) => updateSystem("acWiringLoss", v)}
-              max={3}
-              description="AC cable and connection losses"
-            />
-            <LossSlider
-              label="Transformer Loss"
-              value={config.system.transformerLoss}
-              onChange={(v) => updateSystem("transformerLoss", v)}
-              max={3}
-              description="MV transformer losses (if applicable)"
             />
           </CollapsibleContent>
         </Collapsible>
