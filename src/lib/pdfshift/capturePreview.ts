@@ -86,8 +86,145 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
   const formatDate = () => new Date().toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" });
 
   // Calculate page count
-  let pageCount = 5; // Cover, Site, Specs, Financial, Terms
+  let pageCount = 6; // Cover, Site, Charts, Specs, Financial, Terms
   if (tenants && tenants.length > 0) pageCount++;
+
+  // Generate SVG charts
+  const generatePaybackChartSVG = (): string => {
+    if (!simulation || projection.length === 0) return '';
+    
+    const width = 550;
+    const height = 200;
+    const padding = { top: 20, right: 50, bottom: 30, left: 60 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+    
+    const maxCumulative = Math.max(...projection.map(p => p.cumulative), simulation.systemCost * 1.1);
+    const xScale = (year: number) => padding.left + ((year - 1) / 24) * chartWidth;
+    const yScale = (value: number) => height - padding.bottom - (value / maxCumulative) * chartHeight;
+    
+    // Generate area path
+    const areaPath = projection.map((p, i) => 
+      `${i === 0 ? 'M' : 'L'} ${xScale(p.year)} ${yScale(p.cumulative)}`
+    ).join(' ') + ` L ${xScale(25)} ${height - padding.bottom} L ${xScale(1)} ${height - padding.bottom} Z`;
+    
+    // Generate line path
+    const linePath = projection.map((p, i) => 
+      `${i === 0 ? 'M' : 'L'} ${xScale(p.year)} ${yScale(p.cumulative)}`
+    ).join(' ');
+    
+    const investmentY = yScale(simulation.systemCost);
+    const paybackX = paybackYear > 0 ? xScale(paybackYear) : 0;
+    
+    // Grid lines
+    const gridLines = [0, 0.25, 0.5, 0.75, 1].map(pct => 
+      `<line x1="${padding.left}" y1="${padding.top + (1-pct) * chartHeight}" x2="${width - padding.right}" y2="${padding.top + (1-pct) * chartHeight}" stroke="#e5e7eb" stroke-dasharray="3 3"/>`
+    ).join('');
+    
+    // Y-axis labels
+    const yLabels = [0, 0.25, 0.5, 0.75, 1].map(pct => 
+      `<text x="${padding.left - 8}" y="${padding.top + (1-pct) * chartHeight + 4}" font-size="9" fill="#6b7280" text-anchor="end">R${(maxCumulative * pct / 1000000).toFixed(1)}M</text>`
+    ).join('');
+    
+    // X-axis labels
+    const xLabels = [1, 5, 10, 15, 20, 25].map(year => 
+      `<text x="${xScale(year)}" y="${height - padding.bottom + 15}" font-size="9" fill="#6b7280" text-anchor="middle">${year}</text>`
+    ).join('');
+    
+    // Payback marker
+    const paybackMarker = paybackYear > 0 ? `
+      <line x1="${paybackX}" y1="${padding.top}" x2="${paybackX}" y2="${height - padding.bottom}" stroke="${primaryColor}" stroke-width="2"/>
+      <circle cx="${paybackX}" cy="${yScale(projection[paybackYear-1]?.cumulative || 0)}" r="5" fill="${primaryColor}"/>
+      <rect x="${paybackX - 35}" y="${padding.top - 5}" width="70" height="18" rx="4" fill="${primaryColor}"/>
+      <text x="${paybackX}" y="${padding.top + 8}" font-size="9" fill="white" text-anchor="middle" font-weight="600">Payback: Yr ${paybackYear}</text>
+    ` : '';
+    
+    return `
+      <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto;">
+        ${gridLines}
+        ${yLabels}
+        ${xLabels}
+        <line x1="${padding.left}" y1="${investmentY}" x2="${width - padding.right}" y2="${investmentY}" stroke="#ef4444" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="${width - padding.right + 4}" y="${investmentY + 4}" font-size="9" fill="#ef4444">Investment</text>
+        <path d="${areaPath}" fill="${primaryColor}" fill-opacity="0.15"/>
+        <path d="${linePath}" fill="none" stroke="${primaryColor}" stroke-width="2.5"/>
+        ${paybackMarker}
+        <text x="${width / 2}" y="${height - 5}" font-size="10" fill="#6b7280" text-anchor="middle">Year</text>
+      </svg>
+    `;
+  };
+
+  const generateEnergyFlowDonutSVG = (): string => {
+    if (!simulation) return '';
+    
+    const width = 280;
+    const height = 180;
+    const centerX = 90;
+    const centerY = 90;
+    const outerRadius = 70;
+    const innerRadius = 45;
+    
+    const selfConsumption = Math.max(0, simulation.annualSolarGeneration - simulation.annualGridExport);
+    const total = selfConsumption + simulation.annualGridImport + simulation.annualGridExport;
+    
+    if (total === 0) return '';
+    
+    const data = [
+      { name: 'Solar Self-Use', value: selfConsumption, color: primaryColor },
+      { name: 'Grid Import', value: simulation.annualGridImport, color: '#ef4444' },
+      { name: 'Grid Export', value: simulation.annualGridExport, color: '#3b82f6' },
+    ].filter(d => d.value > 0);
+    
+    const totalConsumption = selfConsumption + simulation.annualGridImport;
+    const solarCoverage = totalConsumption > 0 ? ((selfConsumption / totalConsumption) * 100).toFixed(0) : '0';
+    
+    // Calculate arc paths
+    let currentAngle = -Math.PI / 2; // Start at top
+    const arcs = data.map(d => {
+      const angle = (d.value / total) * 2 * Math.PI;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + angle;
+      currentAngle = endAngle;
+      
+      const x1 = centerX + outerRadius * Math.cos(startAngle);
+      const y1 = centerY + outerRadius * Math.sin(startAngle);
+      const x2 = centerX + outerRadius * Math.cos(endAngle);
+      const y2 = centerY + outerRadius * Math.sin(endAngle);
+      const x3 = centerX + innerRadius * Math.cos(endAngle);
+      const y3 = centerY + innerRadius * Math.sin(endAngle);
+      const x4 = centerX + innerRadius * Math.cos(startAngle);
+      const y4 = centerY + innerRadius * Math.sin(startAngle);
+      
+      const largeArc = angle > Math.PI ? 1 : 0;
+      
+      return {
+        ...d,
+        path: `M ${x1} ${y1} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${x4} ${y4} Z`,
+        percentage: ((d.value / total) * 100).toFixed(0),
+      };
+    });
+    
+    // Donut segments
+    const segments = arcs.map(arc => 
+      `<path d="${arc.path}" fill="${arc.color}" stroke="white" stroke-width="2"/>`
+    ).join('');
+    
+    // Legend
+    const legend = data.map((d, i) => `
+      <rect x="175" y="${30 + i * 45}" width="12" height="12" rx="2" fill="${d.color}"/>
+      <text x="192" y="${39 + i * 45}" font-size="10" fill="#374151">${d.name}</text>
+      <text x="192" y="${52 + i * 45}" font-size="9" fill="#6b7280">${formatNumber(d.value)} kWh</text>
+    `).join('');
+    
+    return `
+      <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto;">
+        ${segments}
+        <text x="${centerX}" y="${centerY - 5}" font-size="18" font-weight="700" fill="${primaryColor}" text-anchor="middle">${solarCoverage}%</text>
+        <text x="${centerX}" y="${centerY + 12}" font-size="9" fill="#6b7280" text-anchor="middle">Solar Coverage</text>
+        ${legend}
+      </svg>
+    `;
+  };
 
   // Convert logo to base64 if present
   let logoBase64 = '';
@@ -507,8 +644,8 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
     </div>
   </div>
 
-  ${tenants && tenants.length > 0 ? `
-  <!-- Page 3: Load Analysis -->
+  <!-- Page 3: Visual Analysis -->
+  ${simulation ? `
   <div class="page">
     <div class="header" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
       <div class="header-left">
@@ -521,6 +658,78 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
       <div class="header-right">
         <span class="version-badge" style="background-color: ${primaryColor}; color: white;">v${proposal.version || 1}</span>
         <span class="page-number" style="color: ${headerSubtextColor};">Page 3 of ${pageCount}</span>
+      </div>
+    </div>
+    
+    <div class="content">
+      <div class="section-title" style="color: ${primaryColor};">Financial Outlook</div>
+      
+      <div style="background-color: ${template.colors.cardBg}; padding: ${sectionPadding}; border-radius: ${borderRadius}; box-shadow: ${boxShadow}; margin-bottom: ${sectionGap};">
+        <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: ${template.colors.textPrimary};">Cumulative Savings vs Investment</h4>
+        ${generatePaybackChartSVG()}
+        <p style="font-size: 10px; color: ${template.colors.textSecondary}; margin-top: 8px;">
+          The chart shows cumulative savings over 25 years. Payback occurs when savings exceed the initial investment (red dashed line).
+        </p>
+      </div>
+      
+      <div class="section-title" style="color: ${primaryColor};">Energy Distribution</div>
+      
+      <div style="display: flex; gap: ${sectionGap};">
+        <div style="flex: 1; background-color: ${template.colors.cardBg}; padding: ${sectionPadding}; border-radius: ${borderRadius}; box-shadow: ${boxShadow};">
+          <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: ${template.colors.textPrimary};">Annual Energy Flow</h4>
+          ${generateEnergyFlowDonutSVG()}
+        </div>
+        
+        <div style="flex: 1; background-color: ${template.colors.cardBg}; padding: ${sectionPadding}; border-radius: ${borderRadius}; box-shadow: ${boxShadow};">
+          <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: ${template.colors.textPrimary};">Key Metrics</h4>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; justify-content: space-between; padding: 10px; background: ${primaryColor}10; border-radius: 6px;">
+              <span style="font-size: 11px; color: ${template.colors.textSecondary};">Annual Generation</span>
+              <span style="font-size: 11px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(simulation.annualSolarGeneration)} kWh</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 10px; background: ${primaryColor}10; border-radius: 6px;">
+              <span style="font-size: 11px; color: ${template.colors.textSecondary};">Grid Import Avoided</span>
+              <span style="font-size: 11px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(Math.max(0, simulation.annualSolarGeneration - simulation.annualGridExport))} kWh</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 10px; background: ${primaryColor}10; border-radius: 6px;">
+              <span style="font-size: 11px; color: ${template.colors.textSecondary};">CO₂ Offset (est.)</span>
+              <span style="font-size: 11px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(Math.round(simulation.annualSolarGeneration * 0.9))} kg/year</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 10px; background: ${primaryColor}10; border-radius: 6px;">
+              <span style="font-size: 11px; color: ${template.colors.textSecondary};">25-Year Savings</span>
+              <span style="font-size: 11px; font-weight: 600; color: ${template.colors.textPrimary};">${formatCurrency(Math.round(projection[24]?.cumulative || 0))}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="footer" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="footer-content">
+        ${branding?.contact_email ? `<span>${branding.contact_email}</span>` : ''}
+        ${branding?.contact_email && branding?.contact_phone ? '<span>•</span>' : ''}
+        ${branding?.contact_phone ? `<span>${branding.contact_phone}</span>` : ''}
+        ${branding?.website ? '<span>•</span>' : ''}
+        ${branding?.website ? `<span>${branding.website}</span>` : ''}
+      </div>
+    </div>
+  </div>
+  ` : ''}
+
+  ${tenants && tenants.length > 0 ? `
+  <!-- Page 4: Load Analysis -->
+  <div class="page">
+    <div class="header" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="header-logo" />` : ''}
+        <div>
+          <div class="header-title">${branding?.company_name || 'Solar Installation Proposal'}</div>
+          <div class="header-subtitle" style="color: ${headerSubtextColor};">${project?.name || 'Project'}</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="version-badge" style="background-color: ${primaryColor}; color: white;">v${proposal.version || 1}</span>
+        <span class="page-number" style="color: ${headerSubtextColor};">Page 4 of ${pageCount}</span>
       </div>
     </div>
     
@@ -575,7 +784,7 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
       </div>
       <div class="header-right">
         <span class="version-badge" style="background-color: ${primaryColor}; color: white;">v${proposal.version || 1}</span>
-        <span class="page-number" style="color: ${headerSubtextColor};">Page ${tenants && tenants.length > 0 ? 4 : 3} of ${pageCount}</span>
+        <span class="page-number" style="color: ${headerSubtextColor};">Page ${tenants && tenants.length > 0 ? 5 : 4} of ${pageCount}</span>
       </div>
     </div>
     
@@ -658,7 +867,7 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
       </div>
       <div class="header-right">
         <span class="version-badge" style="background-color: ${primaryColor}; color: white;">v${proposal.version || 1}</span>
-        <span class="page-number" style="color: ${headerSubtextColor};">Page ${tenants && tenants.length > 0 ? 5 : 4} of ${pageCount}</span>
+        <span class="page-number" style="color: ${headerSubtextColor};">Page ${tenants && tenants.length > 0 ? 6 : 5} of ${pageCount}</span>
       </div>
     </div>
     
