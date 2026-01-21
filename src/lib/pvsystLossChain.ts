@@ -33,8 +33,6 @@ export interface InverterLosses {
 
 export interface SystemLosses {
   inverter: InverterLosses;   // Detailed inverter losses
-  acWiringLoss: number;       // AC cable losses (e.g., 0.50)
-  transformerLoss: number;    // If applicable (e.g., 0.50)
 }
 
 export interface LossesAfterInverter {
@@ -115,8 +113,6 @@ export const DEFAULT_PVSYST_CONFIG: PVsystLossChainConfig = {
       voltageThreshold: 0.05,      // Inverter Loss due to voltage threshold
       nightConsumption: 0.10,      // Night consumption
     },
-    acWiringLoss: 0.50,
-    transformerLoss: 0,
   },
   lossesAfterInverter: {
     availabilityLoss: 1.76,
@@ -249,8 +245,6 @@ export function calculatePVsystLossChain(
   
   const systemFactor = 
     (1 - totalInverterLoss / 100) *
-    (1 - config.system.acWiringLoss / 100) *
-    (1 - config.system.transformerLoss / 100) *
     (1 - config.lossesAfterInverter.availabilityLoss / 100);
   const eGrid = arrayMPP * systemFactor;
   
@@ -290,19 +284,9 @@ export function calculatePVsystLossChain(
     { stage: "Inverter (Power Threshold)", lossPercent: config.system.inverter.powerThreshold, energyAfter: 0 },
     { stage: "Inverter (Voltage Threshold)", lossPercent: config.system.inverter.voltageThreshold, energyAfter: 0 },
     { stage: "Night Consumption", lossPercent: config.system.inverter.nightConsumption, energyAfter: 0 },
-    { stage: "AC Wiring", lossPercent: config.system.acWiringLoss, energyAfter: 0 },
     // Losses after inverter:
     { stage: "System Unavailability", lossPercent: config.lossesAfterInverter.availabilityLoss, energyAfter: eGrid },
   ];
-  
-  // Filter out zero transformer loss if not applicable
-  if (config.system.transformerLoss > 0) {
-    lossBreakdown.splice(lossBreakdown.length - 1, 0, {
-      stage: "Transformer",
-      lossPercent: config.system.transformerLoss,
-      energyAfter: 0,
-    });
-  }
   
   return {
     ghiInput: dailyGHI,
@@ -386,8 +370,6 @@ export function calculateHourlyPVsystOutput(
     
     const systemFactor = 
       (1 - totalInverterLoss / 100) *
-      (1 - config.system.acWiringLoss / 100) *
-      (1 - config.system.transformerLoss / 100) *
       (1 - config.lossesAfterInverter.availabilityLoss / 100);
     
     const eGridKwh = hourlyGhiKwhM2 * capacityKwp * poaFactor * opticalFactor * arrayFactor * systemFactor;
