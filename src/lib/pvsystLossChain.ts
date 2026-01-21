@@ -570,10 +570,13 @@ export function calculateAnnualPVsystOutput(
   
   // ========================================
   // Step 1: GlobHor → GlobInc (Transposition)
+  // Convert transpositionLoss % to factor: loss of 0.13% means factor of 0.9987
+  // Negative loss = gain (e.g., -5% loss = 1.05 factor)
   // ========================================
   const globHor = annualGHI;
-  const globInc = globHor * config.transpositionFactor;
-  const transpositionLoss = (1 - config.transpositionFactor) * 100;
+  const transpositionLoss = config.irradiance.transpositionLoss ?? 0.13;
+  const transpositionFactor = 1 - (transpositionLoss / 100);
+  const globInc = globHor * transpositionFactor;
   
   breakdown.push({ 
     stage: 'GlobHor (Global Horizontal)', 
@@ -613,7 +616,8 @@ export function calculateAnnualPVsystOutput(
   if (debug) {
     console.log('=== Annual PVsyst Calculation ===');
     console.log('GlobHor:', globHor.toFixed(0), 'kWh/m²/year');
-    console.log('GlobInc:', globInc.toFixed(0), 'kWh/m² (transposition:', config.transpositionFactor, ')');
+    console.log('Transposition Loss:', transpositionLoss.toFixed(4), '% (factor:', transpositionFactor.toFixed(6), ')');
+    console.log('GlobInc:', globInc.toFixed(0), 'kWh/m²');
     console.log('GlobEff:', globEff.toFixed(0), 'kWh/m²');
   }
   
@@ -822,12 +826,22 @@ export function calculateAnnualPVsystOutput(
   // ========================================
   // Step 7: Apply System Unavailability to get E_Grid
   // ========================================
-  const eGrid = eOutInv * (1 - config.lossesAfterInverter.availabilityLoss / 100);
+  const availabilityLoss = config.lossesAfterInverter.availabilityLoss;
+  const availabilityFactor = 1 - (availabilityLoss / 100);
+  const eGrid = eOutInv * availabilityFactor;
+  
+  if (debug) {
+    console.log('=== System Unavailability ===');
+    console.log('EOutInv:', eOutInv.toFixed(0), 'kWh');
+    console.log('System Unavailability Loss:', availabilityLoss.toFixed(4), '%');
+    console.log('Availability Factor:', availabilityFactor.toFixed(6));
+    console.log('E_Grid:', eGrid.toFixed(0), 'kWh/year');
+  }
   
   breakdown.push({ 
     stage: 'System Unavailability → E_Grid', 
     valueKwh: eGrid, 
-    lossPercent: config.lossesAfterInverter.availabilityLoss 
+    lossPercent: availabilityLoss 
   });
   
   // ========================================
