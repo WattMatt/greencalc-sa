@@ -719,54 +719,61 @@ export default function ProposalWorkspace() {
             </ScrollArea>
           </div>
 
-          {/* Right Panel - Live Preview */}
-          <div className="lg:col-span-8 xl:col-span-9 space-y-4">
-            <Card className="sticky top-[140px]">
-              <CardHeader className="py-3 border-b">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Eye className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-sm font-medium">Live Preview</CardTitle>
-                  </div>
-                  {simulationData && (
-                    <Badge variant="secondary" className="text-xs">
-                      {simulationData.solarCapacity} kWp System
-                    </Badge>
-                  )}
+          {/* Right Panel - Live Preview with Template Selector */}
+          <div className="lg:col-span-8 xl:col-span-9">
+            <div className="grid lg:grid-cols-12 gap-4">
+              {/* Template Selector - Left of Preview */}
+              {simulationData && (
+                <div className="lg:col-span-3 space-y-4">
+                  <ProposalExport
+                    proposal={proposalForComponents}
+                    project={project}
+                    simulation={simulationData}
+                  />
                 </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-320px)]">
-                  {simulationData ? (
-                    <ProposalPreview
-                      proposal={proposalForComponents}
-                      project={project}
-                      simulation={simulationData}
-                      tenants={tenants || undefined}
-                      shopTypes={shopTypes || undefined}
-                      showSystemDesign={showSystemDesign}
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                      <FileCheck className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                      <p className="text-muted-foreground font-medium">No Simulation Selected</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Select a simulation in Step 1 to see the proposal preview
-                      </p>
+              )}
+              
+              {/* Live Preview - Right Side */}
+              <div className={simulationData ? "lg:col-span-9" : "lg:col-span-12"}>
+                <Card className="sticky top-[140px]">
+                  <CardHeader className="py-3 border-b">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Live Preview</CardTitle>
+                      </div>
+                      {simulationData && (
+                        <Badge variant="secondary" className="text-xs">
+                          {simulationData.solarCapacity} kWp System
+                        </Badge>
+                      )}
                     </div>
-                  )}
-                </ScrollArea>
-              </CardContent>
-            </Card>
-
-            {/* Export Section */}
-            {simulationData && (
-              <ProposalExport
-                proposal={proposalForComponents}
-                project={project}
-                simulation={simulationData}
-              />
-            )}
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <ScrollArea className="h-[calc(100vh-320px)]">
+                      {simulationData ? (
+                        <ProposalPreview
+                          proposal={proposalForComponents}
+                          project={project}
+                          simulation={simulationData}
+                          tenants={tenants || undefined}
+                          shopTypes={shopTypes || undefined}
+                          showSystemDesign={showSystemDesign}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                          <FileCheck className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                          <p className="text-muted-foreground font-medium">No Simulation Selected</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Select a simulation in Step 1 to see the proposal preview
+                          </p>
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </div>
         </div>
       </div>
