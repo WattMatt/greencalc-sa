@@ -105,6 +105,26 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
     }
   }
 
+  // Generate static map image URL if coordinates available
+  let staticMapUrl = '';
+  if (project?.latitude && project?.longitude) {
+    try {
+      const { data, error } = await (await import("@/integrations/supabase/client")).supabase.functions.invoke("get-mapbox-token");
+      if (!error && data?.token) {
+        const lng = project.longitude;
+        const lat = project.latitude;
+        const zoom = 15;
+        const width = 600;
+        const height = 300;
+        // Create marker with custom styling
+        const marker = `pin-l+${primaryColor.replace('#', '')}(${lng},${lat})`;
+        staticMapUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${marker}/${lng},${lat},${zoom}/${width}x${height}@2x?access_token=${data.token}`;
+      }
+    } catch (e) {
+      console.warn('Failed to generate static map URL:', e);
+    }
+  }
+
   // Build HTML
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -447,7 +467,21 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
       </div>
       
       ${project?.latitude && project?.longitude ? `
-      <div class="section-title" style="color: ${primaryColor}; margin-top: 24px;">Coordinates</div>
+      <div class="section-title" style="color: ${primaryColor}; margin-top: 24px;">Site Location</div>
+      ${staticMapUrl ? `
+      <div style="position: relative; border-radius: ${borderRadius}; overflow: hidden; margin-bottom: 16px; box-shadow: ${boxShadow};">
+        <img src="${staticMapUrl}" alt="Site Location Map" style="width: 100%; height: auto; display: block;" />
+        <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(0,0,0,0.7), transparent); padding: 12px 16px;">
+          <div style="display: flex; align-items: center; gap: 8px; color: white;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            <div>
+              <div style="font-size: 12px; font-weight: 600;">${project?.location || project?.name || 'Project Location'}</div>
+              <div style="font-size: 10px; opacity: 0.8;">${project.latitude.toFixed(4)}°, ${project.longitude.toFixed(4)}°</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      ` : `
       <div class="info-grid">
         <div class="info-card" style="background-color: ${template.colors.cardBg};">
           <div class="info-label" style="color: ${template.colors.textSecondary};">Latitude</div>
@@ -458,6 +492,7 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
           <div class="info-value" style="color: ${template.colors.textPrimary};">${project.longitude.toFixed(6)}</div>
         </div>
       </div>
+      `}
       ` : ''}
     </div>
     
