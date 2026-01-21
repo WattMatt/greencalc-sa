@@ -623,6 +623,9 @@ export default function ProposalWorkspace() {
                       checklist={verificationChecklist}
                       onChange={setVerificationChecklist}
                       disabled={existingProposal?.status !== "draft" && !!existingProposal}
+                      project={project}
+                      tenants={tenants}
+                      simulationData={simulationData}
                     />
                   </>
                 )}
