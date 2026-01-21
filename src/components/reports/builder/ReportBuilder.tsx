@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { ReportSegment, SegmentType } from "../types";
 import { Separator } from "@/components/ui/separator";
-import { generateProfessionalPDF } from "./pdf/generatePDF";
+import { generateReportPDF } from "@/lib/pdfshift";
 
 // Segment definitions with icons
 const SEGMENT_OPTIONS: Array<{
@@ -335,7 +335,7 @@ export function ReportBuilder({
     }
   }, [projectDetails, projectName, simulationData, aiNarratives]);
 
-  // Generate PDF using new professional PDF generator
+  // Generate PDF using PDFShift
   const handleGeneratePDF = async () => {
     if (enabledSegments.length === 0) {
       toast.error("Please select at least one segment");
@@ -345,15 +345,7 @@ export function ReportBuilder({
     setIsGenerating(true);
     
     try {
-      // Create ReportSegment array from selected segments
-      const reportSegments: ReportSegment[] = enabledSegments.map((seg, index) => ({
-        id: seg.id,
-        type: seg.id,
-        enabled: true,
-        order: index,
-      }));
-
-      await generateProfessionalPDF(reportSegments, {
+      const result = await generateReportPDF({
         reportName,
         projectName,
         simulationData: {
@@ -378,20 +370,24 @@ export function ReportBuilder({
         branding: branding ? {
           company_name: branding.company_name,
           logo_url: branding.logo_url,
-          client_logo_url: branding.client_logo_url,
           primary_color: branding.primary_color,
-          secondary_color: branding.secondary_color,
           contact_email: branding.contact_email,
           contact_phone: branding.contact_phone,
           website: branding.website,
-          address: branding.address,
         } : undefined,
-        aiNarratives,
-        aiNarrativeEnabled,
-        editedNarratives,
+        segments: enabledSegments.map((seg, index) => ({
+          type: seg.id,
+          enabled: true,
+          order: index,
+        })),
+        aiNarratives: aiNarrativeEnabled ? aiNarratives : undefined,
       });
       
-      toast.success("PDF generated successfully!");
+      if (result.success) {
+        toast.success("PDF generated successfully!");
+      } else {
+        toast.error(result.error || "Failed to generate PDF");
+      }
     } catch (error) {
       console.error("PDF generation failed:", error);
       toast.error("Failed to generate PDF");

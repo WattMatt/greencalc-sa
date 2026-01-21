@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import type { Proposal, SimulationData, ProposalBranding } from "./types";
 import { ProposalTemplateId, PROPOSAL_TEMPLATES } from "./templates/types";
 import { TemplateSelector } from "./templates/TemplateSelector";
-import { generateProposalPDF } from "./generateProposalPDF";
+import { generateProposalPDF } from "@/lib/pdfshift";
 import {
   PaybackChart,
   EnergyFlowDonut,
@@ -98,20 +98,52 @@ export function ProposalExport({ proposal, project, simulation, disabled }: Prop
         };
       }
 
-      // Load logo
-      const logoBase64 = await loadLogoBase64();
-
-      // Generate PDF
-      await generateProposalPDF({
-        proposal,
-        project,
-        simulation,
-        template: selectedTemplate,
+      // Generate PDF using PDFShift
+      const result = await generateProposalPDF({
+        proposal: {
+          version: proposal.version,
+          executive_summary: proposal.executive_summary || undefined,
+          assumptions: proposal.assumptions || undefined,
+          disclaimers: proposal.disclaimers || undefined,
+          prepared_by: proposal.prepared_by || undefined,
+          client_signature: proposal.client_signature || undefined,
+        },
+        project: {
+          name: project?.name,
+          location: project?.location,
+          total_area_sqm: project?.total_area_sqm,
+          connection_size_kva: project?.connection_size_kva,
+        },
+        simulation: simulation ? {
+          solarCapacity: simulation.solarCapacity,
+          batteryCapacity: simulation.batteryCapacity,
+          batteryPower: simulation.batteryPower,
+          annualSolarGeneration: simulation.annualSolarGeneration,
+          annualGridImport: simulation.annualGridImport,
+          annualGridExport: simulation.annualGridExport,
+          annualSavings: simulation.annualSavings,
+          paybackYears: simulation.paybackYears,
+          roiPercentage: simulation.roiPercentage,
+          systemCost: simulation.systemCost,
+          tariffName: simulation.tariffName,
+        } : undefined,
+        branding: branding ? {
+          company_name: branding.company_name || undefined,
+          logo_url: branding.logo_url || undefined,
+          primary_color: branding.primary_color,
+          secondary_color: branding.secondary_color,
+          contact_email: branding.contact_email || undefined,
+          contact_phone: branding.contact_phone || undefined,
+          website: branding.website || undefined,
+        } : undefined,
         charts,
-        logoBase64,
       });
 
-      toast.success("Proposal exported as PDF");
+      if (result.success) {
+        toast.success("Proposal exported as PDF");
+      } else {
+        toast.error(result.error || "Failed to export proposal");
+      }
     } catch (error) {
       console.error("Export error:", error);
       toast.error("Failed to export proposal");

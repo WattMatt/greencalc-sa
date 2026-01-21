@@ -62,3 +62,6 @@ verify_jwt = false
 
 [functions.pvgis-monthly]
 verify_jwt = false
+
+[functions.generate-pdf]
+verify_jwt = false

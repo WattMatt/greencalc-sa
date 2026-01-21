@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,9 +9,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Copy, Download, Share2 } from "lucide-react";
+import { Copy, Download, Share2, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ScenarioConfig, ScenarioResults } from "./ScenarioCard";
+import { generateSandboxPDF } from "@/lib/pdfshift";
 
 interface ScenarioData {
   id: "A" | "B" | "C";
@@ -46,6 +48,7 @@ export function DraftReportDialog({
   scenarios,
   clonedFromProject,
 }: DraftReportDialogProps) {
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
   const generateReportText = () => {
     const lines = [
       "═══════════════════════════════════════════════════════",
@@ -113,6 +116,42 @@ export function DraftReportDialog({
     toast.success("Report downloaded");
   };
 
+  const handleExportPDF = async () => {
+    setIsExportingPDF(true);
+    try {
+      const result = await generateSandboxPDF({
+        sandboxName,
+        clonedFromProject,
+        scenarios: scenarios.map(s => ({
+          id: s.id,
+          config: {
+            solarCapacity: s.config.solarCapacity,
+            batteryCapacity: s.config.batteryCapacity,
+            dcAcRatio: s.config.dcAcRatio,
+          },
+          results: s.results ? {
+            annualGeneration: s.results.annualGeneration,
+            selfConsumption: s.results.selfConsumption,
+            systemCost: s.results.systemCost,
+            annualSavings: s.results.annualSavings,
+            paybackYears: s.results.paybackYears,
+          } : undefined,
+        })),
+      });
+
+      if (result.success) {
+        toast.success("PDF exported successfully");
+      } else {
+        toast.error(result.error || "Failed to export PDF");
+      }
+    } catch (error) {
+      console.error("PDF export error:", error);
+      toast.error("Failed to export PDF");
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
@@ -147,7 +186,15 @@ export function DraftReportDialog({
           </Button>
           <Button variant="outline" onClick={handleDownload}>
             <Download className="h-4 w-4 mr-2" />
-            Download
+            Download TXT
+          </Button>
+          <Button variant="outline" onClick={handleExportPDF} disabled={isExportingPDF}>
+            {isExportingPDF ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4 mr-2" />
+            )}
+            Export PDF
           </Button>
           <Button onClick={() => onOpenChange(false)}>
             Close
