@@ -38,6 +38,7 @@ import { ProposalPrintView } from "@/components/proposals/ProposalPrintView";
 import { SimulationSelector } from "@/components/proposals/SimulationSelector";
 import { ShareLinkButton } from "@/components/proposals/ShareLinkButton";
 import { cn } from "@/lib/utils";
+import { useOrganizationBranding } from "@/hooks/useOrganizationBranding";
 import {
   Proposal,
   VerificationChecklist as VerificationChecklistType,
@@ -87,6 +88,10 @@ export default function ProposalWorkspace() {
     website: null,
     address: null,
   });
+  const [brandingAutoPopulated, setBrandingAutoPopulated] = useState(false);
+
+  // Fetch organization branding to auto-populate
+  const { branding: orgBranding, isLoading: loadingOrgBranding } = useOrganizationBranding();
 
   const [executiveSummary, setExecutiveSummary] = useState("");
   const [customNotes, setCustomNotes] = useState("");
@@ -97,6 +102,23 @@ export default function ProposalWorkspace() {
   const [disclaimers, setDisclaimers] = useState(
     "This proposal is based on estimated consumption data and solar irradiance forecasts. Actual performance may vary based on weather conditions, equipment degradation, and other factors. Financial projections assume current tariff rates and do not account for future rate changes. All figures are estimates only."
   );
+
+  // Auto-populate branding from organization settings (only for new proposals)
+  useEffect(() => {
+    if (!proposalId && !brandingAutoPopulated && !loadingOrgBranding && orgBranding.company_name) {
+      setBranding({
+        company_name: orgBranding.company_name,
+        logo_url: orgBranding.logo_url,
+        primary_color: orgBranding.primary_color || "#22c55e",
+        secondary_color: orgBranding.secondary_color || "#0f172a",
+        contact_email: orgBranding.contact_email,
+        contact_phone: orgBranding.contact_phone,
+        website: orgBranding.website,
+        address: orgBranding.address,
+      });
+      setBrandingAutoPopulated(true);
+    }
+  }, [proposalId, orgBranding, loadingOrgBranding, brandingAutoPopulated]);
 
   // Fetch project
   const { data: project } = useQuery({
@@ -636,6 +658,7 @@ export default function ProposalWorkspace() {
                       branding={branding}
                       onChange={setBranding}
                       disabled={existingProposal?.status !== "draft" && !!existingProposal}
+                      autoPopulated={brandingAutoPopulated}
                     />
 
                     {/* Content Fields */}
