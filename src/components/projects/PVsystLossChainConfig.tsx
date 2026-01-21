@@ -441,7 +441,7 @@ export function PVsystLossChainConfig({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                -{totalInverterLoss.toFixed(4)}%
+                -{totalInverterLoss.toFixed(1)}%
               </Badge>
               <ChevronDown className={`h-4 w-4 transition-transform ${showSystem ? "rotate-180" : ""}`} />
             </div>
