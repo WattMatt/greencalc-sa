@@ -67,7 +67,7 @@ function LossSlider({
   isGain?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(value.toFixed(4));
+  const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -80,10 +80,13 @@ function LossSlider({
   const handleBlur = () => {
     setIsEditing(false);
     const parsed = parseFloat(editValue);
-    if (!isNaN(parsed) && parsed >= min && parsed <= max) {
-      onChange(parsed);
-    } else {
-      setEditValue(value.toFixed(4));
+    // Allow any valid number within the min/max range (4 decimal precision)
+    if (!isNaN(parsed)) {
+      // Clamp to valid range
+      const clamped = Math.max(min, Math.min(max, parsed));
+      // Round to 4 decimal places to avoid floating point issues
+      const rounded = Math.round(clamped * 10000) / 10000;
+      onChange(rounded);
     }
   };
 
@@ -92,12 +95,12 @@ function LossSlider({
       handleBlur();
     } else if (e.key === "Escape") {
       setIsEditing(false);
-      setEditValue(value.toFixed(4));
     }
   };
 
   const handleClick = () => {
-    setEditValue(value.toFixed(4));
+    // Show current value with 4 decimal places
+    setEditValue(Math.abs(value).toFixed(4));
     setIsEditing(true);
   };
 
@@ -167,9 +170,13 @@ function LossSlider({
         )}
       </div>
       <Slider
-        value={[value]}
-        onValueChange={([v]) => onChange(v)}
-        min={min}
+        value={[Math.abs(value)]}
+        onValueChange={([v]) => {
+          // Slider uses step for coarse control, preserve sign for negative-allowed values
+          const newValue = value < 0 ? -v : v;
+          onChange(newValue);
+        }}
+        min={Math.max(0, min)}
         max={max}
         step={step}
         className="py-1"
