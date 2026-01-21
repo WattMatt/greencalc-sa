@@ -442,12 +442,20 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     // DC capacity for specific yield calculation
     const dcCapacityKwp = inverterConfig.inverterSize * inverterConfig.inverterCount * inverterConfig.dcAcRatio;
     
-    // Create config with actual module-derived values
+    // Create config with actual module-derived values - explicitly include lossesAfterInverter
     const configWithModuleData: PVsystLossChainConfig = {
       ...pvsystConfig,
       stcEfficiency: moduleMetrics.stcEfficiency,
       collectorAreaM2: moduleMetrics.collectorAreaM2,
+      lossesAfterInverter: {
+        ...DEFAULT_PVSYST_CONFIG.lossesAfterInverter,
+        ...pvsystConfig.lossesAfterInverter,
+      },
     };
+    
+    console.log('=== Config Verification ===');
+    console.log('pvsystConfig.lossesAfterInverter:', pvsystConfig.lossesAfterInverter);
+    console.log('configWithModuleData.lossesAfterInverter:', configWithModuleData.lossesAfterInverter);
     
     // Calculate annual output using Excel methodology
     const result = calculateAnnualPVsystOutput(
