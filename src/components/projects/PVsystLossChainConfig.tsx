@@ -148,21 +148,19 @@ function LossSlider({
         {isEditing ? (
           <Input
             ref={inputRef}
-            type="number"
+            type="text"
+            inputMode="decimal"
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
-            className="h-5 w-20 text-xs text-right px-1 py-0"
-            step={0.0001}
-            min={min}
-            max={max}
+            className="h-5 w-24 text-xs text-right px-1 py-0"
           />
         ) : (
           <span
             className={`text-xs font-medium cursor-pointer hover:underline ${colorClass}`}
             onClick={handleClick}
-            title="Click to edit"
+            title="Click to edit (4 decimal places)"
           >
             {sign}{displayValue}{suffix}
           </span>
