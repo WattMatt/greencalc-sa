@@ -16,7 +16,6 @@ import {
   Info,
   CloudRain,
   Layers,
-  Cable,
   Activity
 } from "lucide-react";
 import { 
@@ -101,10 +100,21 @@ export function PVsystLossChainConfig({
   const [showIrradiance, setShowIrradiance] = useState(true);
   const [showArray, setShowArray] = useState(false);
   const [showSystem, setShowSystem] = useState(false);
+  const [showAfterInverter, setShowAfterInverter] = useState(false);
   const [showDegradation, setShowDegradation] = useState(false);
 
   // Calculate results in real-time
   const result = calculatePVsystLossChain(dailyGHI, capacityKwp, ambientTemp, config);
+
+  // Calculate total inverter loss for display
+  const totalInverterLoss = 
+    config.system.inverter.operationEfficiency +
+    config.system.inverter.overNominalPower +
+    config.system.inverter.maxInputCurrent +
+    config.system.inverter.overNominalVoltage +
+    config.system.inverter.powerThreshold +
+    config.system.inverter.voltageThreshold +
+    config.system.inverter.nightConsumption;
 
   // Update helper functions
   const updateIrradiance = (key: keyof ConfigType["irradiance"], value: number) => {
@@ -121,10 +131,27 @@ export function PVsystLossChainConfig({
     });
   };
 
-  const updateSystem = (key: keyof ConfigType["system"], value: number) => {
+  const updateInverter = (key: keyof ConfigType["system"]["inverter"], value: number) => {
+    onChange({
+      ...config,
+      system: { 
+        ...config.system, 
+        inverter: { ...config.system.inverter, [key]: value } 
+      },
+    });
+  };
+
+  const updateSystem = (key: "acWiringLoss" | "transformerLoss", value: number) => {
     onChange({
       ...config,
       system: { ...config.system, [key]: value },
+    });
+  };
+
+  const updateAfterInverter = (key: keyof ConfigType["lossesAfterInverter"], value: number) => {
+    onChange({
+      ...config,
+      lossesAfterInverter: { ...config.lossesAfterInverter, [key]: value },
     });
   };
 
@@ -387,23 +414,65 @@ export function PVsystLossChainConfig({
         <Collapsible open={showSystem} onOpenChange={setShowSystem}>
           <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:bg-muted/50 rounded-lg px-2">
             <div className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-green-500" />
+              <Zap className="h-4 w-4 text-primary" />
               System Losses
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                -{(config.system.inverterLoss + config.system.acWiringLoss + config.system.transformerLoss + config.system.availabilityLoss).toFixed(1)}%
+                -{(totalInverterLoss + config.system.acWiringLoss + config.system.transformerLoss).toFixed(1)}%
               </Badge>
               <ChevronDown className={`h-4 w-4 transition-transform ${showSystem ? "rotate-180" : ""}`} />
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2 space-y-3 px-2">
             <LossSlider
-              label="Inverter Loss"
-              value={config.system.inverterLoss}
-              onChange={(v) => updateSystem("inverterLoss", v)}
+              label="Inverter Loss during operation (efficiency)"
+              value={config.system.inverter.operationEfficiency}
+              onChange={(v) => updateInverter("operationEfficiency", v)}
               max={5}
               description="Inverter conversion efficiency loss (typically 1-3%)"
+            />
+            <LossSlider
+              label="Inverter Loss over nominal inv. power"
+              value={config.system.inverter.overNominalPower}
+              onChange={(v) => updateInverter("overNominalPower", v)}
+              max={2}
+              description="Losses when inverter operates above nominal power"
+            />
+            <LossSlider
+              label="Inverter Loss due to max. input current"
+              value={config.system.inverter.maxInputCurrent}
+              onChange={(v) => updateInverter("maxInputCurrent", v)}
+              max={2}
+              description="Losses when input current exceeds inverter limits"
+            />
+            <LossSlider
+              label="Inverter Loss over nominal inv. voltage"
+              value={config.system.inverter.overNominalVoltage}
+              onChange={(v) => updateInverter("overNominalVoltage", v)}
+              max={2}
+              description="Losses when voltage exceeds inverter nominal range"
+            />
+            <LossSlider
+              label="Inverter Loss due to power threshold"
+              value={config.system.inverter.powerThreshold}
+              onChange={(v) => updateInverter("powerThreshold", v)}
+              max={2}
+              description="Losses at low power levels below operating threshold"
+            />
+            <LossSlider
+              label="Inverter Loss due to voltage threshold"
+              value={config.system.inverter.voltageThreshold}
+              onChange={(v) => updateInverter("voltageThreshold", v)}
+              max={2}
+              description="Losses when voltage is below operating threshold"
+            />
+            <LossSlider
+              label="Night consumption"
+              value={config.system.inverter.nightConsumption}
+              onChange={(v) => updateInverter("nightConsumption", v)}
+              max={1}
+              description="Standby power consumption during non-production hours"
             />
             <LossSlider
               label="AC Wiring Loss"
@@ -419,10 +488,28 @@ export function PVsystLossChainConfig({
               max={3}
               description="MV transformer losses (if applicable)"
             />
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* Losses after the inverter */}
+        <Collapsible open={showAfterInverter} onOpenChange={setShowAfterInverter}>
+          <CollapsibleTrigger className="flex items-center justify-between w-full py-2 text-sm font-medium hover:bg-muted/50 rounded-lg px-2">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-muted-foreground" />
+              Losses after the inverter
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs">
+                -{config.lossesAfterInverter.availabilityLoss.toFixed(1)}%
+              </Badge>
+              <ChevronDown className={`h-4 w-4 transition-transform ${showAfterInverter ? "rotate-180" : ""}`} />
+            </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2 space-y-3 px-2">
             <LossSlider
-              label="Availability Loss"
-              value={config.system.availabilityLoss}
-              onChange={(v) => updateSystem("availabilityLoss", v)}
+              label="System unavailability"
+              value={config.lossesAfterInverter.availabilityLoss}
+              onChange={(v) => updateAfterInverter("availabilityLoss", v)}
               max={5}
               description="Downtime for maintenance, faults, and grid outages"
             />
