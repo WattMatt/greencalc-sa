@@ -370,9 +370,15 @@ export function PVsystLossChainConfig({
               Irradiance Losses
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">
-                -{((config.irradiance.transpositionLoss ?? 0.13) + config.irradiance.nearShadingLoss + config.irradiance.iamLoss + config.irradiance.soilingLoss).toFixed(1)}%
-              </Badge>
+              {(() => {
+                const total = (config.irradiance.transpositionLoss ?? 0.13) + config.irradiance.nearShadingLoss + config.irradiance.iamLoss + config.irradiance.soilingLoss;
+                const sign = total >= 0 ? '-' : '+';
+                return (
+                  <Badge variant="outline" className="text-xs">
+                    {sign}{Math.abs(total).toFixed(1)}%
+                  </Badge>
+                );
+              })()}
               <ChevronDown className={`h-4 w-4 transition-transform ${showIrradiance ? "rotate-180" : ""}`} />
             </div>
           </CollapsibleTrigger>
@@ -422,9 +428,15 @@ export function PVsystLossChainConfig({
               Array Losses
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">
-                -{(config.array.lidLoss + config.array.moduleDegradationLoss + config.array.irradianceLevelLoss + config.array.temperatureLoss + config.irradiance.spectralLoss + config.irradiance.electricalShadingLoss + config.array.moduleQualityLoss + config.array.mismatchLoss + config.array.ohmicLoss).toFixed(1)}%
-              </Badge>
+              {(() => {
+                const total = config.array.lidLoss + config.array.moduleDegradationLoss + config.array.irradianceLevelLoss + config.array.temperatureLoss + config.irradiance.spectralLoss + config.irradiance.electricalShadingLoss + config.array.moduleQualityLoss + config.array.mismatchLoss + config.array.ohmicLoss;
+                const sign = total >= 0 ? '-' : '+';
+                return (
+                  <Badge variant="outline" className="text-xs">
+                    {sign}{Math.abs(total).toFixed(1)}%
+                  </Badge>
+                );
+              })()}
               <ChevronDown className={`h-4 w-4 transition-transform ${showArray ? "rotate-180" : ""}`} />
             </div>
           </CollapsibleTrigger>
@@ -526,9 +538,14 @@ export function PVsystLossChainConfig({
               System Losses
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">
-                -{totalInverterLoss.toFixed(1)}%
-              </Badge>
+              {(() => {
+                const sign = totalInverterLoss >= 0 ? '-' : '+';
+                return (
+                  <Badge variant="outline" className="text-xs">
+                    {sign}{Math.abs(totalInverterLoss).toFixed(1)}%
+                  </Badge>
+                );
+              })()}
               <ChevronDown className={`h-4 w-4 transition-transform ${showSystem ? "rotate-180" : ""}`} />
             </div>
           </CollapsibleTrigger>
