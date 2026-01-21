@@ -6,6 +6,7 @@
 // ============================================================================
 
 export interface IrradianceLosses {
+  transpositionLoss: number;  // Global incident in coll. plane loss % (negative = gain, e.g., 0.13 for -0.13%)
   nearShadingLoss: number;    // Near Shadings: irradiance loss (e.g., 0.94)
   iamLoss: number;            // IAM factor on global (e.g., 2.57)
   soilingLoss: number;        // Soiling loss factor (e.g., 3.00)
@@ -47,7 +48,7 @@ export interface PVsystLossChainConfig {
   system: SystemLosses;
   lossesAfterInverter: LossesAfterInverter;
   operationYear: number;       // Year of operation (1-25) for degradation
-  transpositionFactor: number; // POA gain from tilted surface (e.g., 1.08)
+  transpositionFactor?: number; // DEPRECATED: Use irradiance.transpositionLoss instead
   stcEfficiency: number;       // Module STC efficiency (e.g., 0.2149 for 21.49%)
   collectorAreaM2?: number;    // Optional: actual physical collector area from module dimensions
 }
@@ -92,6 +93,7 @@ export interface HourlyLossResult {
 
 export const DEFAULT_PVSYST_CONFIG: PVsystLossChainConfig = {
   irradiance: {
+    transpositionLoss: 0.13,       // Global incident in coll. plane (-0.13% loss, was 0.9987x factor)
     nearShadingLoss: 0.9300,       // Near Shadings: irradiance loss (FShdGl = -0.93%)
     iamLoss: 2.5700,               // IAM factor on global (FIAMGl = -2.57%)
     soilingLoss: 3.0000,           // Soiling loss factor (FSlgGl = -3.00%)
@@ -122,7 +124,6 @@ export const DEFAULT_PVSYST_CONFIG: PVsystLossChainConfig = {
     availabilityLoss: 2.0710,      // System unavailability
   },
   operationYear: 10,               // Default to year 10 to match 3.80% degradation
-  transpositionFactor: 0.9987,     // Global incident in coll. plane (-0.13% in Excel GlobInc)
   stcEfficiency: 0.2149,           // Module STC efficiency (21.49% for 600W modules)
 };
 
@@ -188,9 +189,13 @@ export function calculatePVsystLossChain(
   const collectorAreaM2 = config.collectorAreaM2 ?? (capacityKwp * 1000) / (config.stcEfficiency * 1000);
   
   // ========================================
-  // Step 2: GHI to POA (transposition gain)
+  // Step 2: GHI to POA (transposition loss/gain)
+  // Convert transpositionLoss % to factor: loss of 0.13% means factor of 0.9987
+  // Negative loss = gain (e.g., -5% loss = 1.05 factor)
   // ========================================
-  const poaIrradiance = dailyGHI * config.transpositionFactor;
+  const transpositionLoss = config.irradiance.transpositionLoss ?? 0.13;
+  const transpositionFactor = 1 - (transpositionLoss / 100);
+  const poaIrradiance = dailyGHI * transpositionFactor;
   
   // ========================================
   // Step 3: Effective Irradiance (optical losses only - no spectral here)
