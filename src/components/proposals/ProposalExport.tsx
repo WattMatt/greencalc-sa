@@ -1,12 +1,12 @@
-import { useState, useRef } from "react";
+import { useState, useRef, RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, FileText, Table, Loader2, Image } from "lucide-react";
+import { Download, FileText, Table, Loader2, Image, Eye } from "lucide-react";
 import { toast } from "sonner";
 import type { Proposal, SimulationData, ProposalBranding } from "./types";
 import { ProposalTemplateId, PROPOSAL_TEMPLATES } from "./templates/types";
 import { TemplateSelector } from "./templates/TemplateSelector";
-import { generateProposalPDF } from "@/lib/pdfshift";
+import { generateWYSIWYGPDF } from "@/lib/pdfshift/capturePreview";
 import {
   PaybackChart,
   EnergyFlowDonut,
@@ -23,9 +23,13 @@ interface ProposalExportProps {
   disabled?: boolean;
   selectedTemplate: ProposalTemplateId;
   onTemplateChange: (template: ProposalTemplateId) => void;
+  printViewRef?: RefObject<HTMLDivElement>;
+  tenants?: any[];
+  shopTypes?: any[];
+  showSystemDesign?: boolean;
 }
 
-export function ProposalExport({ proposal, project, simulation, disabled, selectedTemplate, onTemplateChange }: ProposalExportProps) {
+export function ProposalExport({ proposal, project, simulation, disabled, selectedTemplate, onTemplateChange, printViewRef, tenants, shopTypes, showSystemDesign }: ProposalExportProps) {
   const [exporting, setExporting] = useState<string | null>(null);
   const [includeCharts, setIncludeCharts] = useState(true);
 
@@ -77,71 +81,29 @@ export function ProposalExport({ proposal, project, simulation, disabled, select
   };
 
   const exportToPDF = async () => {
+    if (!printViewRef?.current) {
+      toast.error("Print view not ready. Please try again.");
+      return;
+    }
+
     setExporting("pdf");
     try {
-      // Capture charts if enabled
-      let charts: { payback?: string; energyFlow?: string; monthlyGeneration?: string } = {};
+      // Wait for print view to fully render
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      if (includeCharts && simulation) {
-        // Wait for charts to render
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      const projectName = project?.name || 'Proposal';
+      const version = proposal.version || 1;
+      const filename = `${projectName.replace(/\s+/g, "_")}_v${version}.pdf`;
 
-        const [payback, energyFlow, monthlyGen] = await Promise.all([
-          paybackChartRef.current?.captureImage(),
-          energyFlowRef.current?.captureImage(),
-          monthlyGenRef.current?.captureImage(),
-        ]);
-
-        charts = {
-          payback: payback || undefined,
-          energyFlow: energyFlow || undefined,
-          monthlyGeneration: monthlyGen || undefined,
-        };
-      }
-
-      // Generate PDF using PDFShift
-      const result = await generateProposalPDF({
-        proposal: {
-          version: proposal.version,
-          executive_summary: proposal.executive_summary || undefined,
-          assumptions: proposal.assumptions || undefined,
-          disclaimers: proposal.disclaimers || undefined,
-          prepared_by: proposal.prepared_by || undefined,
-          client_signature: proposal.client_signature || undefined,
-        },
-        project: {
-          name: project?.name,
-          location: project?.location,
-          total_area_sqm: project?.total_area_sqm,
-          connection_size_kva: project?.connection_size_kva,
-        },
-        simulation: simulation ? {
-          solarCapacity: simulation.solarCapacity,
-          batteryCapacity: simulation.batteryCapacity,
-          batteryPower: simulation.batteryPower,
-          annualSolarGeneration: simulation.annualSolarGeneration,
-          annualGridImport: simulation.annualGridImport,
-          annualGridExport: simulation.annualGridExport,
-          annualSavings: simulation.annualSavings,
-          paybackYears: simulation.paybackYears,
-          roiPercentage: simulation.roiPercentage,
-          systemCost: simulation.systemCost,
-          tariffName: simulation.tariffName,
-        } : undefined,
-        branding: branding ? {
-          company_name: branding.company_name || undefined,
-          logo_url: branding.logo_url || undefined,
-          primary_color: branding.primary_color,
-          secondary_color: branding.secondary_color,
-          contact_email: branding.contact_email || undefined,
-          contact_phone: branding.contact_phone || undefined,
-          website: branding.website || undefined,
-        } : undefined,
-        charts,
-      });
+      // Use WYSIWYG capture for true preview-to-PDF fidelity
+      const result = await generateWYSIWYGPDF(
+        printViewRef.current,
+        filename,
+        { title: `${projectName} - Solar Proposal` }
+      );
 
       if (result.success) {
-        toast.success("Proposal exported as PDF");
+        toast.success("Proposal exported as PDF (WYSIWYG)");
       } else {
         toast.error(result.error || "Failed to export proposal");
       }
