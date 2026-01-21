@@ -284,7 +284,7 @@ export function PVsystLossChainConfig({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                -{(config.irradiance.shadingLoss + config.irradiance.iamLoss + config.irradiance.soilingLoss).toFixed(1)}%
+                -{(config.irradiance.nearShadingLoss + config.irradiance.iamLoss + config.irradiance.soilingLoss).toFixed(1)}%
               </Badge>
               <ChevronDown className={`h-4 w-4 transition-transform ${showIrradiance ? "rotate-180" : ""}`} />
             </div>
@@ -304,8 +304,8 @@ export function PVsystLossChainConfig({
             {/* 2. Near Shadings: irradiance loss */}
             <LossSlider
               label="Near Shadings: irradiance loss"
-              value={config.irradiance.shadingLoss}
-              onChange={(v) => updateIrradiance("shadingLoss", v)}
+              value={config.irradiance.nearShadingLoss}
+              onChange={(v) => updateIrradiance("nearShadingLoss", v)}
               max={15}
               description="Near shading from surrounding objects, horizon, and module self-shading"
             />
@@ -337,7 +337,7 @@ export function PVsystLossChainConfig({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                -{(result.cumulativeDegradation + config.array.irradianceLevelLoss + config.array.temperatureLoss + config.irradiance.spectralLoss + config.irradiance.shadingLoss + config.array.moduleQualityLoss + config.array.lidLoss + config.array.mismatchLoss + config.array.ohmicLoss).toFixed(1)}%
+                -{(result.cumulativeDegradation + config.array.irradianceLevelLoss + config.array.temperatureLoss + config.irradiance.spectralLoss + config.irradiance.electricalShadingLoss + config.array.moduleQualityLoss + config.array.lidLoss + config.array.mismatchLoss + config.array.ohmicLoss).toFixed(1)}%
               </Badge>
               <ChevronDown className={`h-4 w-4 transition-transform ${showArray ? "rotate-180" : ""}`} />
             </div>
@@ -387,8 +387,8 @@ export function PVsystLossChainConfig({
             {/* 5. Shadings: Electrical Loss detailed module calc. */}
             <LossSlider
               label="Shadings: Electrical Loss detailed module calc."
-              value={config.irradiance.shadingLoss}
-              onChange={(v) => updateIrradiance("shadingLoss", v)}
+              value={config.irradiance.electricalShadingLoss}
+              onChange={(v) => updateIrradiance("electricalShadingLoss", v)}
               max={10}
               description="Electrical losses from partial shading on module strings"
             />
