@@ -97,27 +97,27 @@ export const DEFAULT_PVSYST_CONFIG: PVsystLossChainConfig = {
     electricalShadingLoss: 0.2300, // Shadings: Electrical Loss detailed module calc
   },
   array: {
-    irradianceLevelLoss: 0.4200,   // PV loss due to irradiance level
-    temperatureLoss: 4.9200,       // PV loss due to temperature
+    irradianceLevelLoss: 0.4170,   // PV loss due to irradiance level
+    temperatureLoss: 4.9160,       // PV loss due to temperature
     moduleQualityLoss: -0.7500,    // Module quality loss (gain)
     lidLoss: 2.0000,               // LID - Light induced degradation
     annualDegradation: 0.2000,     // For cumulative calculation (3.80% at year 10 = 2% LID + 9*0.2%)
-    mismatchLoss: 3.4000,          // Including 1.4% for degradation dispersion
-    ohmicLoss: 1.0600,             // Ohmic wiring loss
+    mismatchLoss: 3.3960,          // Including 1.4% for degradation dispersion
+    ohmicLoss: 1.0610,             // Ohmic wiring loss
   },
   system: {
     inverter: {
       operationEfficiency: 1.5300,   // Inverter Loss during operation (efficiency)
-      overNominalPower: 1.0400,      // Inverter Loss over nominal inv. power
+      overNominalPower: 1.0370,      // Inverter Loss over nominal inv. power
       maxInputCurrent: 0.0000,       // Inverter Loss due to max. input current
       overNominalVoltage: 0.0000,    // Inverter Loss over nominal inv. voltage
-      powerThreshold: 0.0000,        // Inverter Loss due to power threshold
-      voltageThreshold: 0.0000,      // Inverter Loss due to voltage threshold
-      nightConsumption: 0.0100,      // Night consumption
+      powerThreshold: 0.0040,        // Inverter Loss due to power threshold
+      voltageThreshold: 0.0010,      // Inverter Loss due to voltage threshold
+      nightConsumption: 0.0090,      // Night consumption
     },
   },
   lossesAfterInverter: {
-    availabilityLoss: 2.0700,      // System unavailability
+    availabilityLoss: 2.0710,      // System unavailability
   },
   operationYear: 10,               // Default to year 10 to match 3.80% degradation
   transpositionFactor: 1.0013,     // Global incident in coll. plane (0.13% gain)
