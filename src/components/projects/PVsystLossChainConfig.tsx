@@ -263,6 +263,23 @@ export function PVsystLossChainConfig({
           </div>
         </div>
 
+        {/* Module STC Efficiency */}
+        <div className="space-y-2 px-2">
+          <LossSlider
+            label="Module STC Efficiency"
+            value={(config.stcEfficiency ?? 0.2149) * 100}
+            onChange={(v) => onChange({ ...config, stcEfficiency: v / 100 })}
+            min={15}
+            max={25}
+            step={0.01}
+            suffix="%"
+            description="Module nameplate efficiency at Standard Test Conditions (1000 W/m², 25°C). Typical: 21.49% for 450W panels"
+          />
+          <div className="text-xs text-muted-foreground">
+            Collector Area: {((capacityKwp * 1000) / ((config.stcEfficiency ?? 0.2149) * 1000)).toFixed(1)} m²
+          </div>
+        </div>
+
         {/* Year Selector */}
         <div className="flex items-center gap-3">
           <Label className="text-xs">Operation Year:</Label>

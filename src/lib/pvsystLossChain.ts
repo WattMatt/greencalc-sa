@@ -48,6 +48,7 @@ export interface PVsystLossChainConfig {
   lossesAfterInverter: LossesAfterInverter;
   operationYear: number;       // Year of operation (1-25) for degradation
   transpositionFactor: number; // POA gain from tilted surface (e.g., 1.08)
+  stcEfficiency: number;       // Module STC efficiency (e.g., 0.2149 for 21.49%)
 }
 
 export interface LossBreakdownItem {
@@ -121,6 +122,7 @@ export const DEFAULT_PVSYST_CONFIG: PVsystLossChainConfig = {
   },
   operationYear: 10,               // Default to year 10 to match 3.80% degradation
   transpositionFactor: 1.0013,     // Global incident in coll. plane (0.13% gain)
+  stcEfficiency: 0.2149,           // Module STC efficiency (21.49% for typical 450W panels)
 };
 
 // ============================================================================
@@ -178,36 +180,47 @@ export function calculatePVsystLossChain(
   ambientTemp: number,        // Average daily temperature °C
   config: PVsystLossChainConfig
 ): LossChainResult {
-  // Theoretical output at STC (reference for PR calculation)
-  const theoreticalOutput = dailyGHI * capacityKwp;
+  // ========================================
+  // Step 1: Calculate Collector Area (PVsyst methodology)
+  // Area = (Capacity in Wp) / (STC Efficiency × 1000 W/m²)
+  // ========================================
+  const collectorAreaM2 = (capacityKwp * 1000) / (config.stcEfficiency * 1000);
   
   // ========================================
-  // Step 1: GHI to POA (transposition gain)
+  // Step 2: GHI to POA (transposition gain)
   // ========================================
   const poaIrradiance = dailyGHI * config.transpositionFactor;
   
   // ========================================
-  // Step 2: Effective Irradiance (optical losses)
+  // Step 3: Effective Irradiance (optical losses only - no spectral here)
   // ========================================
   const opticalFactor = 
     (1 - config.irradiance.nearShadingLoss / 100) *
     (1 - config.irradiance.iamLoss / 100) *
-    (1 - config.irradiance.soilingLoss / 100) *
-    (1 - config.irradiance.spectralLoss / 100);
+    (1 - config.irradiance.soilingLoss / 100);
   const effectiveIrradiance = poaIrradiance * opticalFactor;
   
   // ========================================
-  // Step 3: Array Nominal at STC
+  // Step 4: Total Energy on Collectors (kWh)
   // ========================================
-  const arrayNominalSTC = effectiveIrradiance * capacityKwp;
+  const totalEnergyOnCollectors = effectiveIrradiance * collectorAreaM2;
   
   // ========================================
-  // Step 4: Temperature Loss (from config)
+  // Step 5: Array Nominal at STC (EArrNom)
+  // EArrNom = Total Energy × STC Efficiency
+  // ========================================
+  const arrayNominalSTC = totalEnergyOnCollectors * config.stcEfficiency;
+  
+  // Theoretical output at STC (reference for PR calculation)
+  const theoreticalOutput = dailyGHI * capacityKwp;
+  
+  // ========================================
+  // Step 6: Temperature Loss (from config)
   // ========================================
   const temperatureLoss = config.array.temperatureLoss;
   
   // ========================================
-  // Step 5: Degradation (cumulative)
+  // Step 7: Degradation (cumulative)
   // ========================================
   const cumulativeDegradation = calculateCumulativeDegradation(
     config.operationYear,
@@ -216,22 +229,23 @@ export function calculatePVsystLossChain(
   );
   
   // ========================================
-  // Step 6: Array at MPP (after all array losses)
+  // Step 8: Array at MPP (EArrMPP - after all array losses)
+  // Apply losses sequentially from EArrNom
   // ========================================
   const arrayFactor = 
-    (1 - temperatureLoss / 100) *
     (1 - cumulativeDegradation / 100) *
     (1 - config.array.irradianceLevelLoss / 100) *
+    (1 - temperatureLoss / 100) *
+    (1 - config.irradiance.spectralLoss / 100) *
+    (1 - config.irradiance.electricalShadingLoss / 100) *
     (1 - config.array.moduleQualityLoss / 100) *
     (1 - config.array.mismatchLoss / 100) *
-    (1 - config.array.ohmicLoss / 100) *
-    (1 - config.irradiance.electricalShadingLoss / 100);
+    (1 - config.array.ohmicLoss / 100);
   const arrayMPP = arrayNominalSTC * arrayFactor;
   
   // ========================================
-  // Step 7: E_Grid (after system losses)
+  // Step 9: Inverter Output (EOutInv)
   // ========================================
-  // Calculate total inverter loss from all sub-components
   const totalInverterLoss = 
     config.system.inverter.operationEfficiency +
     config.system.inverter.overNominalPower +
@@ -241,10 +255,14 @@ export function calculatePVsystLossChain(
     config.system.inverter.voltageThreshold +
     config.system.inverter.nightConsumption;
   
-  const systemFactor = 
-    (1 - totalInverterLoss / 100) *
-    (1 - config.lossesAfterInverter.availabilityLoss / 100);
-  const eGrid = arrayMPP * systemFactor;
+  const inverterFactor = (1 - totalInverterLoss / 100);
+  const eOutInv = arrayMPP * inverterFactor;
+  
+  // ========================================
+  // Step 10: E_Grid (after system unavailability)
+  // ========================================
+  const systemFactor = (1 - config.lossesAfterInverter.availabilityLoss / 100);
+  const eGrid = eOutInv * systemFactor;
   
   // ========================================
   // Calculate Performance Ratio
@@ -281,7 +299,7 @@ export function calculatePVsystLossChain(
     { stage: "Inverter (Over Nominal Voltage)", lossPercent: config.system.inverter.overNominalVoltage, energyAfter: 0 },
     { stage: "Inverter (Power Threshold)", lossPercent: config.system.inverter.powerThreshold, energyAfter: 0 },
     { stage: "Inverter (Voltage Threshold)", lossPercent: config.system.inverter.voltageThreshold, energyAfter: 0 },
-    { stage: "Night Consumption", lossPercent: config.system.inverter.nightConsumption, energyAfter: 0 },
+    { stage: "Night Consumption", lossPercent: config.system.inverter.nightConsumption, energyAfter: eOutInv },
     // Losses after inverter:
     { stage: "System Unavailability", lossPercent: config.lossesAfterInverter.availabilityLoss, energyAfter: eGrid },
   ];
@@ -314,6 +332,16 @@ export function calculateHourlyPVsystOutput(
 ): HourlyLossResult[] {
   const results: HourlyLossResult[] = [];
   
+  // Calculate collector area once (PVsyst methodology)
+  const collectorAreaM2 = (capacityKwp * 1000) / (config.stcEfficiency * 1000);
+  
+  // Pre-calculate cumulative degradation (same for all hours)
+  const cumulativeDegradation = calculateCumulativeDegradation(
+    config.operationYear,
+    config.array.lidLoss,
+    config.array.annualDegradation
+  );
+  
   for (let hour = 0; hour < 24; hour++) {
     const ghiWm2 = hourlyGhi[hour] ?? 0;
     const ambientTemp = hourlyTemp[hour] ?? 25;
@@ -335,28 +363,35 @@ export function calculateHourlyPVsystOutput(
     const tempLoss = config.array.temperatureLoss;
     const cellTemp = ambientTemp + 20; // Approximate cell temp for display
     
-    // Cumulative degradation
-    const cumulativeDegradation = calculateCumulativeDegradation(
-      config.operationYear,
-      config.array.lidLoss,
-      config.array.annualDegradation
-    );
+    // Step 1: Apply transposition factor
+    const poaIrradiance = hourlyGhiKwhM2 * config.transpositionFactor;
     
-    // Apply full loss chain
-    const poaFactor = config.transpositionFactor;
+    // Step 2: Apply optical losses (no spectral here - it's in array losses)
     const opticalFactor = 
       (1 - config.irradiance.nearShadingLoss / 100) *
       (1 - config.irradiance.iamLoss / 100) *
-      (1 - config.irradiance.soilingLoss / 100) *
-      (1 - config.irradiance.spectralLoss / 100);
+      (1 - config.irradiance.soilingLoss / 100);
+    const effectiveIrradiance = poaIrradiance * opticalFactor;
+    
+    // Step 3: Total energy on collectors (kWh for this hour)
+    const totalEnergyOnCollectors = effectiveIrradiance * collectorAreaM2;
+    
+    // Step 4: Array Nominal at STC (EArrNom)
+    const arrayNominalSTC = totalEnergyOnCollectors * config.stcEfficiency;
+    
+    // Step 5: Apply array losses sequentially
     const arrayFactor =
-      (1 - tempLoss / 100) *
       (1 - cumulativeDegradation / 100) *
       (1 - config.array.irradianceLevelLoss / 100) *
+      (1 - tempLoss / 100) *
+      (1 - config.irradiance.spectralLoss / 100) *
+      (1 - config.irradiance.electricalShadingLoss / 100) *
       (1 - config.array.moduleQualityLoss / 100) *
       (1 - config.array.mismatchLoss / 100) *
       (1 - config.array.ohmicLoss / 100);
-    // Calculate total inverter loss
+    const arrayMPP = arrayNominalSTC * arrayFactor;
+    
+    // Step 6: Calculate total inverter loss and apply
     const totalInverterLoss = 
       config.system.inverter.operationEfficiency +
       config.system.inverter.overNominalPower +
@@ -365,12 +400,10 @@ export function calculateHourlyPVsystOutput(
       config.system.inverter.powerThreshold +
       config.system.inverter.voltageThreshold +
       config.system.inverter.nightConsumption;
+    const eOutInv = arrayMPP * (1 - totalInverterLoss / 100);
     
-    const systemFactor = 
-      (1 - totalInverterLoss / 100) *
-      (1 - config.lossesAfterInverter.availabilityLoss / 100);
-    
-    const eGridKwh = hourlyGhiKwhM2 * capacityKwp * poaFactor * opticalFactor * arrayFactor * systemFactor;
+    // Step 7: Apply system unavailability
+    const eGridKwh = eOutInv * (1 - config.lossesAfterInverter.availabilityLoss / 100);
     
     results.push({
       hour,
