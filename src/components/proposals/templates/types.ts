@@ -24,13 +24,69 @@ export interface ProposalTemplate {
       h3: number;
     };
     bodySize: number;
+    headingWeight: 'normal' | 'medium' | 'semibold' | 'bold' | 'extrabold';
   };
   layout: {
     headerStyle: 'full-width' | 'centered' | 'minimal';
-    sectionSpacing: number;
+    sectionSpacing: 'compact' | 'normal' | 'relaxed' | 'spacious';
+    cardStyle: 'rounded' | 'sharp' | 'subtle' | 'none';
     useCards: boolean;
     showIcons: boolean;
     tableStyle: 'striped' | 'bordered' | 'minimal';
+    borderWidth: 'none' | 'thin' | 'medium' | 'thick';
+    shadowStyle: 'none' | 'subtle' | 'medium' | 'pronounced';
+  };
+}
+
+// Helper to get Tailwind classes from template settings
+export function getTemplateStyles(template: ProposalTemplate) {
+  // Section spacing
+  const sectionSpacingMap = {
+    compact: { gap: 'gap-3', mb: 'mb-4', p: 'p-3' },
+    normal: { gap: 'gap-4', mb: 'mb-6', p: 'p-4' },
+    relaxed: { gap: 'gap-6', mb: 'mb-8', p: 'p-5' },
+    spacious: { gap: 'gap-8', mb: 'mb-10', p: 'p-6' },
+  };
+
+  // Card border radius
+  const cardRadiusMap = {
+    rounded: 'rounded-xl',
+    sharp: 'rounded-none',
+    subtle: 'rounded-md',
+    none: 'rounded-none border-0',
+  };
+
+  // Heading weight
+  const headingWeightMap = {
+    normal: 'font-normal',
+    medium: 'font-medium',
+    semibold: 'font-semibold',
+    bold: 'font-bold',
+    extrabold: 'font-extrabold',
+  };
+
+  // Border width
+  const borderWidthMap = {
+    none: 'border-0',
+    thin: 'border',
+    medium: 'border-2',
+    thick: 'border-4',
+  };
+
+  // Shadow style
+  const shadowMap = {
+    none: 'shadow-none',
+    subtle: 'shadow-sm',
+    medium: 'shadow-md',
+    pronounced: 'shadow-lg',
+  };
+
+  return {
+    sectionSpacing: sectionSpacingMap[template.layout.sectionSpacing],
+    cardRadius: cardRadiusMap[template.layout.cardStyle],
+    headingWeight: headingWeightMap[template.typography.headingWeight],
+    borderWidth: borderWidthMap[template.layout.borderWidth],
+    shadow: shadowMap[template.layout.shadowStyle],
   };
 }
 
@@ -53,13 +109,17 @@ export const PROPOSAL_TEMPLATES: Record<ProposalTemplateId, ProposalTemplate> = 
       bodyFont: 'helvetica',
       headingSizes: { h1: 24, h2: 16, h3: 14 },
       bodySize: 10,
+      headingWeight: 'bold',
     },
     layout: {
       headerStyle: 'full-width',
-      sectionSpacing: 15,
+      sectionSpacing: 'normal',
+      cardStyle: 'rounded',
       useCards: true,
       showIcons: true,
       tableStyle: 'striped',
+      borderWidth: 'medium',
+      shadowStyle: 'medium',
     },
   },
   classic: {
@@ -80,13 +140,17 @@ export const PROPOSAL_TEMPLATES: Record<ProposalTemplateId, ProposalTemplate> = 
       bodyFont: 'times',
       headingSizes: { h1: 22, h2: 14, h3: 12 },
       bodySize: 11,
+      headingWeight: 'semibold',
     },
     layout: {
       headerStyle: 'centered',
-      sectionSpacing: 12,
+      sectionSpacing: 'compact',
+      cardStyle: 'sharp',
       useCards: false,
       showIcons: false,
       tableStyle: 'bordered',
+      borderWidth: 'thin',
+      shadowStyle: 'none',
     },
   },
   premium: {
@@ -107,13 +171,17 @@ export const PROPOSAL_TEMPLATES: Record<ProposalTemplateId, ProposalTemplate> = 
       bodyFont: 'helvetica',
       headingSizes: { h1: 26, h2: 18, h3: 14 },
       bodySize: 10,
+      headingWeight: 'extrabold',
     },
     layout: {
       headerStyle: 'full-width',
-      sectionSpacing: 20,
+      sectionSpacing: 'spacious',
+      cardStyle: 'subtle',
       useCards: true,
       showIcons: true,
       tableStyle: 'minimal',
+      borderWidth: 'thick',
+      shadowStyle: 'pronounced',
     },
   },
   minimal: {
@@ -134,13 +202,17 @@ export const PROPOSAL_TEMPLATES: Record<ProposalTemplateId, ProposalTemplate> = 
       bodyFont: 'helvetica',
       headingSizes: { h1: 20, h2: 14, h3: 12 },
       bodySize: 10,
+      headingWeight: 'medium',
     },
     layout: {
       headerStyle: 'minimal',
-      sectionSpacing: 10,
+      sectionSpacing: 'relaxed',
+      cardStyle: 'none',
       useCards: false,
       showIcons: false,
       tableStyle: 'minimal',
+      borderWidth: 'none',
+      shadowStyle: 'none',
     },
   },
 };

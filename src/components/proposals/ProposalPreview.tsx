@@ -6,10 +6,11 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Proposal, SimulationData, ProposalBranding } from "./types";
-import { ProposalTemplateId, PROPOSAL_TEMPLATES } from "./templates/types";
+import { ProposalTemplateId, PROPOSAL_TEMPLATES, getTemplateStyles } from "./templates/types";
 import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { ProposalLocationMap } from "./ProposalLocationMap";
+import { cn } from "@/lib/utils";
 
 interface ProposalPreviewProps {
   proposal: Partial<Proposal>;
@@ -23,6 +24,7 @@ interface ProposalPreviewProps {
 
 export function ProposalPreview({ proposal, project, simulation, tenants, shopTypes, showSystemDesign, templateId = "modern" }: ProposalPreviewProps) {
   const template = PROPOSAL_TEMPLATES[templateId];
+  const templateStyles = getTemplateStyles(template);
   const branding = proposal.branding as ProposalBranding;
   // Use template colors as defaults, allow branding to override
   const primaryColor = branding?.primary_color || template.colors.accentColor;
@@ -218,13 +220,13 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
         >
           <PageHeader />
           
-          <div className="flex-1 overflow-auto p-6">
+          <div className={cn("flex-1 overflow-auto", templateStyles.sectionSpacing.p)}>
             {/* Cover & Summary Page */}
             {currentPageId === "cover" && (
               <div>
                 {/* Large Header for Cover */}
-                <div className="text-center mb-8 py-8 border-b">
-                  <h1 className="text-3xl font-bold mb-2" style={{ color: primaryColor }}>
+                <div className={cn("text-center py-8", templateStyles.sectionSpacing.mb, template.layout.cardStyle !== 'none' && "border-b")}>
+                  <h1 className={cn("text-3xl mb-2", templateStyles.headingWeight)} style={{ color: primaryColor }}>
                     Solar PV Installation Proposal
                   </h1>
                   <p className="text-xl text-muted-foreground">
@@ -240,9 +242,9 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
                 </div>
 
                 {/* Executive Summary */}
-                <div className="mb-6">
-                  <h2 className="text-lg font-semibold mb-3 flex items-center gap-2" style={{ color: primaryColor }}>
-                    <Zap className="h-5 w-5" />
+                <div className={templateStyles.sectionSpacing.mb}>
+                  <h2 className={cn("text-lg mb-3 flex items-center gap-2", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+                    {template.layout.showIcons && <Zap className="h-5 w-5" />}
                     Executive Summary
                   </h2>
                   <p className="text-muted-foreground">
@@ -256,32 +258,32 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
                 </div>
 
                 {/* Key Highlights */}
-                <div className="grid grid-cols-2 gap-4">
-                  <Card className="border-2" style={{ borderColor: primaryColor + "40" }}>
-                    <CardContent className="pt-4 text-center">
-                      <Sun className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />
-                      <p className="text-3xl font-bold">{simulation?.solarCapacity || 0} kWp</p>
+                <div className={cn("grid grid-cols-2", templateStyles.sectionSpacing.gap)}>
+                  <Card className={cn(templateStyles.cardRadius, templateStyles.borderWidth, templateStyles.shadow)} style={{ borderColor: primaryColor + "40" }}>
+                    <CardContent className={cn("pt-4 text-center", templateStyles.sectionSpacing.p)}>
+                      {template.layout.showIcons && <Sun className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />}
+                      <p className={cn("text-3xl", templateStyles.headingWeight)}>{simulation?.solarCapacity || 0} kWp</p>
                       <p className="text-sm text-muted-foreground">Solar Capacity</p>
                     </CardContent>
                   </Card>
-                  <Card className="border-2" style={{ borderColor: primaryColor + "40" }}>
-                    <CardContent className="pt-4 text-center">
-                      <TrendingUp className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />
-                      <p className="text-3xl font-bold">R{(simulation?.annualSavings || 0).toLocaleString()}</p>
+                  <Card className={cn(templateStyles.cardRadius, templateStyles.borderWidth, templateStyles.shadow)} style={{ borderColor: primaryColor + "40" }}>
+                    <CardContent className={cn("pt-4 text-center", templateStyles.sectionSpacing.p)}>
+                      {template.layout.showIcons && <TrendingUp className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />}
+                      <p className={cn("text-3xl", templateStyles.headingWeight)}>R{(simulation?.annualSavings || 0).toLocaleString()}</p>
                       <p className="text-sm text-muted-foreground">Annual Savings</p>
                     </CardContent>
                   </Card>
-                  <Card className="border-2" style={{ borderColor: primaryColor + "40" }}>
-                    <CardContent className="pt-4 text-center">
-                      <Calendar className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />
-                      <p className="text-3xl font-bold">{paybackYear || (simulation?.paybackYears || 0).toFixed(1)}</p>
+                  <Card className={cn(templateStyles.cardRadius, templateStyles.borderWidth, templateStyles.shadow)} style={{ borderColor: primaryColor + "40" }}>
+                    <CardContent className={cn("pt-4 text-center", templateStyles.sectionSpacing.p)}>
+                      {template.layout.showIcons && <Calendar className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />}
+                      <p className={cn("text-3xl", templateStyles.headingWeight)}>{paybackYear || (simulation?.paybackYears || 0).toFixed(1)}</p>
                       <p className="text-sm text-muted-foreground">Payback (years)</p>
                     </CardContent>
                   </Card>
-                  <Card className="border-2" style={{ borderColor: primaryColor + "40" }}>
-                    <CardContent className="pt-4 text-center">
-                      <Battery className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />
-                      <p className="text-3xl font-bold">{simulation?.batteryCapacity || 0} kWh</p>
+                  <Card className={cn(templateStyles.cardRadius, templateStyles.borderWidth, templateStyles.shadow)} style={{ borderColor: primaryColor + "40" }}>
+                    <CardContent className={cn("pt-4 text-center", templateStyles.sectionSpacing.p)}>
+                      {template.layout.showIcons && <Battery className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />}
+                      <p className={cn("text-3xl", templateStyles.headingWeight)}>{simulation?.batteryCapacity || 0} kWh</p>
                       <p className="text-sm text-muted-foreground">Battery Storage</p>
                     </CardContent>
                   </Card>
@@ -292,13 +294,13 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
             {/* Site Overview Page */}
             {currentPageId === "site" && (
               <div>
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: primaryColor }}>
-                  <MapPin className="h-5 w-5" />
+                <h2 className={cn("text-lg mb-4 flex items-center gap-2", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+                  {template.layout.showIcons && <MapPin className="h-5 w-5" />}
                   Site Overview
                 </h2>
-                <div className="grid grid-cols-1 gap-6">
+                <div className={cn("grid grid-cols-1", templateStyles.sectionSpacing.gap)}>
                   {/* Map */}
-                  <div className="h-64">
+                  <div className={cn("h-64 overflow-hidden", templateStyles.cardRadius)}>
                     <ProposalLocationMap
                       latitude={project?.latitude}
                       longitude={project?.longitude}
@@ -308,25 +310,25 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
                   </div>
                   
                   {/* Site Details */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 rounded-lg bg-muted/50">
+                  <div className={cn("grid grid-cols-2", templateStyles.sectionSpacing.gap)}>
+                    <div className={cn(templateStyles.sectionSpacing.p, templateStyles.cardRadius, template.layout.useCards ? "bg-muted/50" : "border-b pb-2")}>
                       <p className="text-xs text-muted-foreground">Location</p>
-                      <p className="font-medium">{project?.location || "Not specified"}</p>
+                      <p className={cn("font-medium", templateStyles.headingWeight === 'font-extrabold' && 'font-semibold')}>{project?.location || "Not specified"}</p>
                     </div>
-                    <div className="p-3 rounded-lg bg-muted/50">
+                    <div className={cn(templateStyles.sectionSpacing.p, templateStyles.cardRadius, template.layout.useCards ? "bg-muted/50" : "border-b pb-2")}>
                       <p className="text-xs text-muted-foreground">Total Area</p>
-                      <p className="font-medium">{project?.total_area_sqm?.toLocaleString() || "—"} m²</p>
+                      <p className={cn("font-medium", templateStyles.headingWeight === 'font-extrabold' && 'font-semibold')}>{project?.total_area_sqm?.toLocaleString() || "—"} m²</p>
                     </div>
-                    <div className="p-3 rounded-lg bg-muted/50">
+                    <div className={cn(templateStyles.sectionSpacing.p, templateStyles.cardRadius, template.layout.useCards ? "bg-muted/50" : "border-b pb-2")}>
                       <p className="text-xs text-muted-foreground">Connection Size</p>
-                      <p className="font-medium">{project?.connection_size_kva || "—"} kVA</p>
+                      <p className={cn("font-medium", templateStyles.headingWeight === 'font-extrabold' && 'font-semibold')}>{project?.connection_size_kva || "—"} kVA</p>
                     </div>
-                    <div className="p-3 rounded-lg bg-muted/50">
+                    <div className={cn(templateStyles.sectionSpacing.p, templateStyles.cardRadius, template.layout.useCards ? "bg-muted/50" : "border-b pb-2")}>
                       <p className="text-xs text-muted-foreground">Tariff</p>
-                      <p className="font-medium">{simulation?.tariffName || "Standard"}</p>
+                      <p className={cn("font-medium", templateStyles.headingWeight === 'font-extrabold' && 'font-semibold')}>{simulation?.tariffName || "Standard"}</p>
                     </div>
                     {project?.latitude && project?.longitude && (
-                      <div className="p-3 rounded-lg bg-muted/50 col-span-2">
+                      <div className={cn(templateStyles.sectionSpacing.p, templateStyles.cardRadius, template.layout.useCards ? "bg-muted/50" : "border-b pb-2", "col-span-2")}>
                         <p className="text-xs text-muted-foreground">Coordinates</p>
                         <p className="font-medium font-mono text-sm">
                           {project.latitude.toFixed(6)}, {project.longitude.toFixed(6)}
@@ -341,11 +343,11 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
             {/* System Design Page */}
             {currentPageId === "design" && hasSystemDesign && (
               <div>
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: primaryColor }}>
-                  <LayoutDashboard className="h-5 w-5" />
+                <h2 className={cn("text-lg mb-4 flex items-center gap-2", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+                  {template.layout.showIcons && <LayoutDashboard className="h-5 w-5" />}
                   System Design
                 </h2>
-                <div className="rounded-lg border overflow-hidden">
+                <div className={cn("border overflow-hidden", templateStyles.cardRadius)}>
                   <FloorPlanMarkup projectId={project?.id} readOnly={true} />
                 </div>
               </div>
@@ -354,11 +356,11 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
             {/* Load Analysis Page */}
             {currentPageId === "load" && tenants && shopTypes && (
               <div>
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: primaryColor }}>
-                  <BarChart3 className="h-5 w-5" />
+                <h2 className={cn("text-lg mb-4 flex items-center gap-2", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+                  {template.layout.showIcons && <BarChart3 className="h-5 w-5" />}
                   Load Analysis
                 </h2>
-                <div className="grid gap-6">
+                <div className={cn("grid", templateStyles.sectionSpacing.gap)}>
                   <LoadProfileChart
                     tenants={tenants}
                     shopTypes={shopTypes}
@@ -373,49 +375,49 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
             {/* System Specification Page */}
             {currentPageId === "specs" && (
               <div>
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: primaryColor }}>
-                  <Sun className="h-5 w-5" />
+                <h2 className={cn("text-lg mb-4 flex items-center gap-2", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+                  {template.layout.showIcons && <Sun className="h-5 w-5" />}
                   System Specification
                 </h2>
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <Card className="border-2" style={{ borderColor: primaryColor + "40" }}>
-                    <CardContent className="pt-4">
+                <div className={cn("grid grid-cols-2", templateStyles.sectionSpacing.gap, templateStyles.sectionSpacing.mb)}>
+                  <Card className={cn(templateStyles.cardRadius, templateStyles.borderWidth, templateStyles.shadow)} style={{ borderColor: primaryColor + "40" }}>
+                    <CardContent className={cn("pt-4", templateStyles.sectionSpacing.p)}>
                       <div className="flex items-center gap-2 mb-2">
-                        <Sun className="h-4 w-4" style={{ color: primaryColor }} />
+                        {template.layout.showIcons && <Sun className="h-4 w-4" style={{ color: primaryColor }} />}
                         <span className="text-sm text-muted-foreground">Solar Capacity</span>
                       </div>
-                      <p className="text-2xl font-bold">{simulation?.solarCapacity || 0} kWp</p>
+                      <p className={cn("text-2xl", templateStyles.headingWeight)}>{simulation?.solarCapacity || 0} kWp</p>
                     </CardContent>
                   </Card>
-                  <Card className="border-2" style={{ borderColor: primaryColor + "40" }}>
-                    <CardContent className="pt-4">
+                  <Card className={cn(templateStyles.cardRadius, templateStyles.borderWidth, templateStyles.shadow)} style={{ borderColor: primaryColor + "40" }}>
+                    <CardContent className={cn("pt-4", templateStyles.sectionSpacing.p)}>
                       <div className="flex items-center gap-2 mb-2">
-                        <Battery className="h-4 w-4" style={{ color: primaryColor }} />
+                        {template.layout.showIcons && <Battery className="h-4 w-4" style={{ color: primaryColor }} />}
                         <span className="text-sm text-muted-foreground">Battery Storage</span>
                       </div>
-                      <p className="text-2xl font-bold">{simulation?.batteryCapacity || 0} kWh</p>
+                      <p className={cn("text-2xl", templateStyles.headingWeight)}>{simulation?.batteryCapacity || 0} kWh</p>
                       <p className="text-xs text-muted-foreground">{simulation?.batteryPower || 0} kW power</p>
                     </CardContent>
                   </Card>
-                  <Card className="border-2" style={{ borderColor: primaryColor + "40" }}>
-                    <CardContent className="pt-4">
+                  <Card className={cn(templateStyles.cardRadius, templateStyles.borderWidth, templateStyles.shadow)} style={{ borderColor: primaryColor + "40" }}>
+                    <CardContent className={cn("pt-4", templateStyles.sectionSpacing.p)}>
                       <div className="flex items-center gap-2 mb-2">
-                        <Zap className="h-4 w-4" style={{ color: primaryColor }} />
+                        {template.layout.showIcons && <Zap className="h-4 w-4" style={{ color: primaryColor }} />}
                         <span className="text-sm text-muted-foreground">Annual Generation</span>
                       </div>
-                      <p className="text-2xl font-bold">
+                      <p className={cn("text-2xl", templateStyles.headingWeight)}>
                         {(simulation?.annualSolarGeneration || 0).toLocaleString()}
                       </p>
                       <p className="text-xs text-muted-foreground">kWh/year</p>
                     </CardContent>
                   </Card>
-                  <Card className="border-2" style={{ borderColor: primaryColor + "40" }}>
-                    <CardContent className="pt-4">
+                  <Card className={cn(templateStyles.cardRadius, templateStyles.borderWidth, templateStyles.shadow)} style={{ borderColor: primaryColor + "40" }}>
+                    <CardContent className={cn("pt-4", templateStyles.sectionSpacing.p)}>
                       <div className="flex items-center gap-2 mb-2">
-                        <TrendingUp className="h-4 w-4" style={{ color: primaryColor }} />
+                        {template.layout.showIcons && <TrendingUp className="h-4 w-4" style={{ color: primaryColor }} />}
                         <span className="text-sm text-muted-foreground">Specific Yield</span>
                       </div>
-                      <p className="text-2xl font-bold">
+                      <p className={cn("text-2xl", templateStyles.headingWeight)}>
                         {simulation?.solarCapacity ? ((simulation.annualSolarGeneration || 0) / simulation.solarCapacity).toFixed(0) : 0}
                       </p>
                       <p className="text-xs text-muted-foreground">kWh/kWp/year</p>
@@ -424,20 +426,20 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
                 </div>
 
                 {/* Energy Flow Summary */}
-                <div className="p-4 rounded-lg border-2 mt-4" style={{ borderColor: primaryColor + "40" }}>
-                  <h4 className="font-semibold mb-3">Annual Energy Flow</h4>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className={cn("mt-4", templateStyles.sectionSpacing.p, templateStyles.cardRadius, templateStyles.borderWidth)} style={{ borderColor: primaryColor + "40" }}>
+                  <h4 className={cn("mb-3", templateStyles.headingWeight)}>Annual Energy Flow</h4>
+                  <div className={cn("grid grid-cols-3 text-sm", templateStyles.sectionSpacing.gap)}>
                     <div>
                       <p className="text-muted-foreground">Solar Generation</p>
-                      <p className="font-bold text-lg">{(simulation?.annualSolarGeneration || 0).toLocaleString()} kWh</p>
+                      <p className={cn("text-lg", templateStyles.headingWeight)}>{(simulation?.annualSolarGeneration || 0).toLocaleString()} kWh</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Grid Import</p>
-                      <p className="font-bold text-lg">{(simulation?.annualGridImport || 0).toLocaleString()} kWh</p>
+                      <p className={cn("text-lg", templateStyles.headingWeight)}>{(simulation?.annualGridImport || 0).toLocaleString()} kWh</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Grid Export</p>
-                      <p className="font-bold text-lg">{(simulation?.annualGridExport || 0).toLocaleString()} kWh</p>
+                      <p className={cn("text-lg", templateStyles.headingWeight)}>{(simulation?.annualGridExport || 0).toLocaleString()} kWh</p>
                     </div>
                   </div>
                 </div>
@@ -447,28 +449,28 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
             {/* Financial Analysis Page */}
             {currentPageId === "financial" && (
               <div>
-                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: primaryColor }}>
-                  <TrendingUp className="h-5 w-5" />
+                <h2 className={cn("text-lg mb-4 flex items-center gap-2", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+                  {template.layout.showIcons && <TrendingUp className="h-5 w-5" />}
                   Financial Analysis
                 </h2>
 
                 {/* Key Metrics */}
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="p-4 rounded-lg" style={{ backgroundColor: primaryColor + "10" }}>
+                <div className={cn("grid grid-cols-2", templateStyles.sectionSpacing.gap, templateStyles.sectionSpacing.mb)}>
+                  <div className={cn(templateStyles.sectionSpacing.p, templateStyles.cardRadius)} style={{ backgroundColor: primaryColor + "10" }}>
                     <p className="text-xs text-muted-foreground">System Cost</p>
-                    <p className="text-xl font-bold">R{(simulation?.systemCost || 0).toLocaleString()}</p>
+                    <p className={cn("text-xl", templateStyles.headingWeight)}>R{(simulation?.systemCost || 0).toLocaleString()}</p>
                   </div>
-                  <div className="p-4 rounded-lg" style={{ backgroundColor: primaryColor + "10" }}>
+                  <div className={cn(templateStyles.sectionSpacing.p, templateStyles.cardRadius)} style={{ backgroundColor: primaryColor + "10" }}>
                     <p className="text-xs text-muted-foreground">Annual Savings</p>
-                    <p className="text-xl font-bold">R{(simulation?.annualSavings || 0).toLocaleString()}</p>
+                    <p className={cn("text-xl", templateStyles.headingWeight)}>R{(simulation?.annualSavings || 0).toLocaleString()}</p>
                   </div>
-                  <div className="p-4 rounded-lg" style={{ backgroundColor: primaryColor + "10" }}>
+                  <div className={cn(templateStyles.sectionSpacing.p, templateStyles.cardRadius)} style={{ backgroundColor: primaryColor + "10" }}>
                     <p className="text-xs text-muted-foreground">Payback Period</p>
-                    <p className="text-xl font-bold">{paybackYear || (simulation?.paybackYears || 0).toFixed(1)} years</p>
+                    <p className={cn("text-xl", templateStyles.headingWeight)}>{paybackYear || (simulation?.paybackYears || 0).toFixed(1)} years</p>
                   </div>
-                  <div className="p-4 rounded-lg" style={{ backgroundColor: primaryColor + "10" }}>
+                  <div className={cn(templateStyles.sectionSpacing.p, templateStyles.cardRadius)} style={{ backgroundColor: primaryColor + "10" }}>
                     <p className="text-xs text-muted-foreground">25-Year ROI</p>
-                    <p className="text-xl font-bold">{projection[24]?.roi.toFixed(0) || simulation?.roiPercentage || 0}%</p>
+                    <p className={cn("text-xl", templateStyles.headingWeight)}>{projection[24]?.roi.toFixed(0) || simulation?.roiPercentage || 0}%</p>
                   </div>
                 </div>
 
@@ -532,20 +534,20 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
 
                 {/* 25-Year Totals */}
                 {projection.length > 0 && (
-                  <div className="mt-4 p-4 rounded-lg border-2" style={{ borderColor: primaryColor + "40" }}>
-                    <h4 className="font-semibold mb-2">25-Year Summary</h4>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div className={cn("mt-4", templateStyles.sectionSpacing.p, templateStyles.cardRadius, templateStyles.borderWidth)} style={{ borderColor: primaryColor + "40" }}>
+                    <h4 className={cn("mb-2", templateStyles.headingWeight)}>25-Year Summary</h4>
+                    <div className={cn("grid grid-cols-3 text-sm", templateStyles.sectionSpacing.gap)}>
                       <div>
                         <p className="text-muted-foreground">Total Generation</p>
-                        <p className="font-bold">{projection.reduce((sum, r) => sum + r.generation, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh</p>
+                        <p className={templateStyles.headingWeight}>{projection.reduce((sum, r) => sum + r.generation, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Total Savings</p>
-                        <p className="font-bold">R{projection[24]?.cumulative.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}</p>
+                        <p className={templateStyles.headingWeight}>R{projection[24]?.cumulative.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Net Profit</p>
-                        <p className="font-bold" style={{ color: primaryColor }}>
+                        <p className={templateStyles.headingWeight} style={{ color: primaryColor }}>
                           R{((projection[24]?.cumulative || 0) - (simulation?.systemCost || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </p>
                       </div>
@@ -559,22 +561,22 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
             {currentPageId === "terms" && (
               <div>
                 {/* Assumptions & Disclaimers */}
-                <div className="mb-6">
-                  <h2 className="text-lg font-semibold mb-3 flex items-center gap-2" style={{ color: primaryColor }}>
-                    <Calendar className="h-5 w-5" />
+                <div className={templateStyles.sectionSpacing.mb}>
+                  <h2 className={cn("text-lg mb-3 flex items-center gap-2", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+                    {template.layout.showIcons && <Calendar className="h-5 w-5" />}
                     Assumptions & Disclaimers
                   </h2>
-                  <div className="space-y-3 text-sm text-muted-foreground">
-                    <div className="p-3 rounded-lg bg-muted/50">
+                  <div className={cn("space-y-3 text-sm text-muted-foreground", templateStyles.sectionSpacing.gap)}>
+                    <div className={cn("p-3", templateStyles.cardRadius, template.layout.useCards ? "bg-muted/50" : "border-l-2 pl-4")} style={{ borderColor: template.layout.useCards ? undefined : primaryColor }}>
                       <p className="font-medium text-foreground mb-1">Assumptions</p>
                       <p className="whitespace-pre-line">{proposal.assumptions || "• 0.5% annual panel degradation\n• 8% annual tariff escalation\n• Standard weather conditions"}</p>
                     </div>
-                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                    <div className={cn("p-3 bg-amber-500/10 border border-amber-500/30", templateStyles.cardRadius)}>
                       <p className="font-medium text-foreground mb-1">Disclaimers</p>
                       <p>{proposal.disclaimers}</p>
                     </div>
                     {proposal.custom_notes && (
-                      <div className="p-3 rounded-lg bg-muted/50">
+                      <div className={cn("p-3", templateStyles.cardRadius, template.layout.useCards ? "bg-muted/50" : "border-l-2 pl-4")} style={{ borderColor: template.layout.useCards ? undefined : primaryColor }}>
                         <p className="font-medium text-foreground mb-1">Additional Notes</p>
                         <p>{proposal.custom_notes}</p>
                       </div>
