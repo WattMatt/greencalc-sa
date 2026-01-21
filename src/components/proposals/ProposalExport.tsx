@@ -21,11 +21,12 @@ interface ProposalExportProps {
   project: any;
   simulation?: SimulationData;
   disabled?: boolean;
+  selectedTemplate: ProposalTemplateId;
+  onTemplateChange: (template: ProposalTemplateId) => void;
 }
 
-export function ProposalExport({ proposal, project, simulation, disabled }: ProposalExportProps) {
+export function ProposalExport({ proposal, project, simulation, disabled, selectedTemplate, onTemplateChange }: ProposalExportProps) {
   const [exporting, setExporting] = useState<string | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<ProposalTemplateId>("modern");
   const [includeCharts, setIncludeCharts] = useState(true);
 
   // Chart refs for capturing
@@ -224,7 +225,7 @@ export function ProposalExport({ proposal, project, simulation, disabled }: Prop
       {/* Template Selector */}
       <TemplateSelector
         selectedTemplate={selectedTemplate}
-        onSelect={setSelectedTemplate}
+        onSelect={onTemplateChange}
       />
 
       {/* Export Options */}
