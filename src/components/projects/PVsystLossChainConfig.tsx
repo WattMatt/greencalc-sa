@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   ChevronDown, 
+  ChevronUp,
   Sun, 
   Thermometer, 
   Zap, 
@@ -152,6 +153,7 @@ export function PVsystLossChainConfig({
   ambientTemp = 25,
   className,
 }: PVsystLossChainConfigProps) {
+  const [isOpen, setIsOpen] = useState(false);
   const [showIrradiance, setShowIrradiance] = useState(false);
   const [showArray, setShowArray] = useState(false);
   const [showSystem, setShowSystem] = useState(false);
@@ -208,30 +210,39 @@ export function PVsystLossChainConfig({
   };
 
   return (
-    <Card className={className}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4" />
-            <CardTitle className="text-sm font-medium">PVsyst Loss Chain</CardTitle>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge 
-              variant={result.performanceRatio >= 75 ? "default" : "secondary"}
-              className="text-xs"
-            >
-              PR: {result.performanceRatio.toFixed(1)}%
-            </Badge>
-            <Button variant="ghost" size="sm" onClick={resetToDefaults} className="h-7 px-2">
-              <RotateCcw className="h-3 w-3" />
-            </Button>
-          </div>
-        </div>
-        <CardDescription className="text-xs">
-          Configure detailed loss factors matching PVsyst methodology
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Card className={`border-dashed ${className || ''}`}>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">PVsyst Loss Chain</CardTitle>
+                <Badge 
+                  variant={result.performanceRatio >= 75 ? "default" : "secondary"}
+                  className="text-xs"
+                >
+                  PR: {result.performanceRatio.toFixed(1)}%
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={(e) => { e.stopPropagation(); resetToDefaults(); }} 
+                  className="h-7 px-2"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                  {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="space-y-4 pt-0">
         {/* Key Metrics Summary */}
         <div className="grid grid-cols-4 gap-2 text-center">
           <div className="p-2 bg-muted/50 rounded-lg">
@@ -548,7 +559,9 @@ export function PVsystLossChainConfig({
             />
           </CollapsibleContent>
         </Collapsible>
-      </CardContent>
-    </Card>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
