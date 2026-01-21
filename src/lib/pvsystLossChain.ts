@@ -329,7 +329,8 @@ export function calculateHourlyPVsystOutput(
   hourlyGhi: number[],        // 24-hour GHI in W/m²
   hourlyTemp: number[],       // 24-hour ambient temperature °C
   capacityKwp: number,
-  config: PVsystLossChainConfig
+  config: PVsystLossChainConfig,
+  debug: boolean = false      // Enable detailed console logging
 ): HourlyLossResult[] {
   const results: HourlyLossResult[] = [];
   
@@ -342,6 +343,17 @@ export function calculateHourlyPVsystOutput(
     config.array.lidLoss,
     config.array.annualDegradation
   );
+  
+  if (debug) {
+    console.log("=== PVsyst Calculation Debug ===");
+    console.log("Capacity (kWp):", capacityKwp);
+    console.log("Collector Area (m²):", collectorAreaM2.toFixed(2));
+    console.log("STC Efficiency:", config.stcEfficiency);
+    console.log("Config collectorAreaM2 override:", config.collectorAreaM2);
+    console.log("Cumulative Degradation (%):", cumulativeDegradation.toFixed(2));
+  }
+  
+  let firstSunlightLogged = false;
   
   for (let hour = 0; hour < 24; hour++) {
     const ghiWm2 = hourlyGhi[hour] ?? 0;
@@ -406,12 +418,39 @@ export function calculateHourlyPVsystOutput(
     // Step 7: Apply system unavailability
     const eGridKwh = eOutInv * (1 - config.lossesAfterInverter.availabilityLoss / 100);
     
+    // Debug logging for first sunlight hour
+    if (debug && !firstSunlightLogged) {
+      firstSunlightLogged = true;
+      console.log(`--- First Sunlight Hour (${hour}) ---`);
+      console.log("Input GHI (W/m²):", ghiWm2);
+      console.log("Hourly kWh/m²:", hourlyGhiKwhM2.toFixed(4));
+      console.log("POA Irradiance:", poaIrradiance.toFixed(4));
+      console.log("Optical Factor:", opticalFactor.toFixed(4));
+      console.log("Effective Irradiance:", effectiveIrradiance.toFixed(4));
+      console.log("Total Energy on Collectors (kWh):", totalEnergyOnCollectors.toFixed(2));
+      console.log("Array Nominal STC (EArrNom):", arrayNominalSTC.toFixed(2));
+      console.log("Array Factor:", arrayFactor.toFixed(4));
+      console.log("Array MPP (EArrMPP):", arrayMPP.toFixed(2));
+      console.log("Inverter Output:", eOutInv.toFixed(2));
+      console.log("E_Grid (kWh):", eGridKwh.toFixed(2));
+    }
+    
     results.push({
       hour,
       eGridKwh: Math.max(0, eGridKwh),
       temperatureLoss: tempLoss,
       cellTemp,
     });
+  }
+  
+  // Daily summary logging
+  if (debug) {
+    const totalDailyGhi = hourlyGhi.reduce((a, b) => a + b, 0);
+    const totalDailyEGrid = results.reduce((a, b) => a + b.eGridKwh, 0);
+    console.log("=== Daily Summary ===");
+    console.log("Total Daily GHI (W/m² sum):", totalDailyGhi.toFixed(0));
+    console.log("Total Daily E_Grid (kWh):", totalDailyEGrid.toFixed(2));
+    console.log("Annual Production (× 365):", (totalDailyEGrid * 365).toFixed(0), "kWh");
   }
   
   return results;
