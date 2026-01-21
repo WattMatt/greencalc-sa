@@ -337,7 +337,7 @@ export function PVsystLossChainConfig({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                -{(result.cumulativeDegradation + config.array.irradianceLevelLoss + result.temperatureLoss + config.irradiance.spectralLoss + config.irradiance.shadingLoss + config.array.moduleQualityLoss + config.array.lidLoss + config.array.mismatchLoss + config.array.ohmicLoss).toFixed(1)}%
+                -{(result.cumulativeDegradation + config.array.irradianceLevelLoss + config.array.temperatureLoss + config.irradiance.spectralLoss + config.irradiance.shadingLoss + config.array.moduleQualityLoss + config.array.lidLoss + config.array.mismatchLoss + config.array.ohmicLoss).toFixed(1)}%
               </Badge>
               <ChevronDown className={`h-4 w-4 transition-transform ${showArray ? "rotate-180" : ""}`} />
             </div>
@@ -364,40 +364,14 @@ export function PVsystLossChainConfig({
               description="Low-light efficiency losses (typically 0.5-1.5%)"
             />
             
-            {/* 3. PV loss due to temperature - DISPLAY ONLY */}
-            <div className="p-2 bg-muted/30 rounded-lg">
-              <div className="flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1">
-                  <Thermometer className="h-3 w-3" />
-                  PV loss due to temperature
-                </span>
-                <Badge variant={result.temperatureLoss > 8 ? "destructive" : "secondary"}>
-                  {result.temperatureLoss.toFixed(2)}%
-                </Badge>
-              </div>
-              <div className="text-[10px] text-muted-foreground mt-1">
-                Calculated from Tcell × {Math.abs(config.cellTempCoefficient)}%/°C (ambient: {ambientTemp}°C)
-              </div>
-            </div>
+            {/* 3. PV loss due to temperature */}
             <LossSlider
-              label="Temp Coefficient"
-              value={Math.abs(config.cellTempCoefficient)}
-              onChange={(v) => onChange({ ...config, cellTempCoefficient: -v })}
-              min={0.2}
-              max={0.6}
+              label="PV loss due to temperature"
+              value={config.array.temperatureLoss}
+              onChange={(v) => updateArray("temperatureLoss", v)}
+              max={20}
               step={0.01}
-              suffix="%/°C"
-              description="Power temperature coefficient (typically -0.35 to -0.45 for mono-Si)"
-            />
-            <LossSlider
-              label="NOCT"
-              value={config.noct}
-              onChange={(v) => onChange({ ...config, noct: v })}
-              min={40}
-              max={55}
-              step={1}
-              suffix="°C"
-              description="Nominal Operating Cell Temperature (typically 44-47°C)"
+              description="Temperature-induced power loss (typically 5-15% depending on climate)"
             />
             
             {/* 4. Spectral correction */}

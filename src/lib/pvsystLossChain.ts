@@ -14,6 +14,7 @@ export interface IrradianceLosses {
 
 export interface ArrayLosses {
   irradianceLevelLoss: number;  // PV loss due to irradiance level (e.g., 0.80)
+  temperatureLoss: number;      // PV loss due to temperature (e.g., 8.00)
   moduleQualityLoss: number;    // Module quality loss (e.g., 0.50)
   lidLoss: number;              // Light-Induced Degradation first year (e.g., 2.00)
   annualDegradation: number;    // % per year (e.g., 0.50)
@@ -45,8 +46,6 @@ export interface PVsystLossChainConfig {
   system: SystemLosses;
   lossesAfterInverter: LossesAfterInverter;
   operationYear: number;       // Year of operation (1-25) for degradation
-  cellTempCoefficient: number; // %/°C (typically -0.35 to -0.45)
-  noct: number;                // Nominal Operating Cell Temperature (typically 45°C)
   transpositionFactor: number; // POA gain from tilted surface (e.g., 1.08)
 }
 
@@ -97,6 +96,7 @@ export const DEFAULT_PVSYST_CONFIG: PVsystLossChainConfig = {
   },
   array: {
     irradianceLevelLoss: 0.80,   // PV loss due to irradiance level
+    temperatureLoss: 8.00,       // PV loss due to temperature
     moduleQualityLoss: 0.50,     // Module quality loss
     lidLoss: 2.00,               // LID - Light induced degradation
     annualDegradation: 0.50,     // For cumulative calculation
@@ -118,8 +118,6 @@ export const DEFAULT_PVSYST_CONFIG: PVsystLossChainConfig = {
     availabilityLoss: 1.76,
   },
   operationYear: 1,
-  cellTempCoefficient: -0.40, // %/°C for typical mono-Si
-  noct: 45,
   transpositionFactor: 1.08, // Typical gain from tilted surface in SA
 };
 
@@ -202,12 +200,9 @@ export function calculatePVsystLossChain(
   const arrayNominalSTC = effectiveIrradiance * capacityKwp;
   
   // ========================================
-  // Step 4: Temperature Loss (dynamic calculation)
+  // Step 4: Temperature Loss (from config)
   // ========================================
-  // Approximate peak irradiance for temp calculation (W/m²)
-  const peakIrradianceWm2 = (dailyGHI * 1000) / 5; // Rough estimate: spread over 5 peak hours
-  const cellTemp = calculateCellTemperature(ambientTemp, peakIrradianceWm2, config.noct);
-  const temperatureLoss = calculateTemperatureLoss(cellTemp, config.cellTempCoefficient);
+  const temperatureLoss = config.array.temperatureLoss;
   
   // ========================================
   // Step 5: Degradation (cumulative)
@@ -333,9 +328,9 @@ export function calculateHourlyPVsystOutput(
     // Convert W/m² to kWh/m² for this hour
     const hourlyGhiKwhM2 = ghiWm2 / 1000;
     
-    // Cell temperature for this hour
-    const cellTemp = calculateCellTemperature(ambientTemp, ghiWm2, config.noct);
-    const tempLoss = calculateTemperatureLoss(cellTemp, config.cellTempCoefficient);
+    // Use configured temperature loss
+    const tempLoss = config.array.temperatureLoss;
+    const cellTemp = ambientTemp + 20; // Approximate cell temp for display
     
     // Cumulative degradation
     const cumulativeDegradation = calculateCumulativeDegradation(
