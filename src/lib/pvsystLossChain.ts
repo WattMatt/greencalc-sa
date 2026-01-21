@@ -655,25 +655,30 @@ export function calculateAnnualPVsystOutput(
   
   // ========================================
   // Step 5: Apply Array Losses sequentially to get EArrMPP
-  // Order: Degradation → Irradiance Level → Temperature → Spectral → 
-  //        Electrical Shading → Module Quality (gain) → LID → Mismatch → Ohmic
+  // Order: LID → Annual Degradation → Irradiance Level → Temperature → Spectral → 
+  //        Electrical Shading → Module Quality (gain) → Mismatch → Ohmic
   // ========================================
-  const cumulativeDegradation = calculateCumulativeDegradation(
-    config.operationYear,
-    config.array.lidLoss,
-    config.array.annualDegradation
-  );
-  
   let currentValue = eArrNom;
   
-  // Apply degradation
-  const afterDegradation = currentValue * (1 - cumulativeDegradation / 100);
+  // Step 5a: Apply LID - Light Induced Degradation (separate loss)
+  const afterLID = currentValue * (1 - config.array.lidLoss / 100);
   breakdown.push({ 
-    stage: `Module Degradation (Year ${config.operationYear})`, 
-    valueKwh: afterDegradation, 
-    lossPercent: cumulativeDegradation 
+    stage: 'LID - Light Induced Degradation', 
+    valueKwh: afterLID, 
+    lossPercent: config.array.lidLoss  // e.g., 2.0000%
   });
-  currentValue = afterDegradation;
+  currentValue = afterLID;
+  
+  // Step 5b: Apply Annual Degradation (separate loss based on operation year)
+  const annualDegYears = Math.max(0, config.operationYear - 1);
+  const annualDegPercent = annualDegYears * config.array.annualDegradation;
+  const afterAnnualDeg = currentValue * (1 - annualDegPercent / 100);
+  breakdown.push({ 
+    stage: `Annual Degradation (Year ${config.operationYear}: ${annualDegYears} × ${config.array.annualDegradation.toFixed(4)}%)`, 
+    valueKwh: afterAnnualDeg, 
+    lossPercent: annualDegPercent  // e.g., 1.8000% for Year 10
+  });
+  currentValue = afterAnnualDeg;
   
   // Apply irradiance level loss
   const afterIrradianceLevel = currentValue * (1 - config.array.irradianceLevelLoss / 100);
@@ -721,11 +726,6 @@ export function calculateAnnualPVsystOutput(
   });
   currentValue = afterModuleQuality;
   
-  // Note: LID is included in cumulative degradation, but we track separately for Year 1
-  // For Year 1, cumulativeDegradation = lidLoss
-  // For Year 2+, cumulativeDegradation = lidLoss + (year-1) * annualDegradation
-  // So we don't apply LID again here
-  
   // Apply mismatch loss
   const afterMismatch = currentValue * (1 - config.array.mismatchLoss / 100);
   breakdown.push({ 
@@ -744,8 +744,9 @@ export function calculateAnnualPVsystOutput(
   });
   
   if (debug) {
-    console.log('Cumulative Degradation:', cumulativeDegradation.toFixed(2), '%');
-    console.log('EArrMPP:', eArrMPP.toFixed(0), 'kWh');
+    console.log('LID Loss:', config.array.lidLoss.toFixed(4), '%');
+    console.log('Annual Degradation (Year ' + config.operationYear + '):', annualDegPercent.toFixed(4), '%');
+    console.log('EArrMPP:', eArrMPP.toFixed(4), 'kWh');
   }
   
   // ========================================
