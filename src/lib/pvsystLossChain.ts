@@ -274,35 +274,36 @@ export function calculatePVsystLossChain(
   // Build loss breakdown for waterfall visualization
   // ========================================
   const startEnergy = theoreticalOutput;
-  // Transposition loss is stored as a percentage - negative of it represents gain
-  const transpositionGain = -config.irradiance.transpositionLoss;
   
+  // Loss breakdown uses NEGATIVE values for losses, POSITIVE for gains
+  // This matches waterfall chart expectations: negative = reduces, positive = increases
   const lossBreakdown: LossBreakdownItem[] = [
     { stage: "GHI Input", lossPercent: 0, energyAfter: startEnergy },
-    { stage: "Transposition", lossPercent: transpositionGain, energyAfter: poaIrradiance * capacityKwp, isGain: transpositionGain < 0 },
-    { stage: "Near Shading", lossPercent: config.irradiance.nearShadingLoss, energyAfter: 0 },
-    { stage: "IAM", lossPercent: config.irradiance.iamLoss, energyAfter: 0 },
-    { stage: "Soiling", lossPercent: config.irradiance.soilingLoss, energyAfter: effectiveIrradiance * capacityKwp },
+    { stage: "Transposition", lossPercent: -config.irradiance.transpositionLoss, energyAfter: poaIrradiance * capacityKwp, isGain: config.irradiance.transpositionLoss < 0 },
+    { stage: "Near Shading", lossPercent: -config.irradiance.nearShadingLoss, energyAfter: 0 },
+    { stage: "IAM", lossPercent: -config.irradiance.iamLoss, energyAfter: 0 },
+    { stage: "Soiling", lossPercent: -config.irradiance.soilingLoss, energyAfter: effectiveIrradiance * capacityKwp },
     // Array losses in Excel order:
-    { stage: "LID", lossPercent: config.array.lidLoss, energyAfter: 0 },
-    { stage: `Module Degradation (Yr ${config.operationYear})`, lossPercent: cumulativeDegradation, energyAfter: 0 },
-    { stage: "Irradiance Level", lossPercent: config.array.irradianceLevelLoss, energyAfter: 0 },
-    { stage: "Temperature", lossPercent: temperatureLoss, energyAfter: 0 },
-    { stage: "Spectral Correction", lossPercent: config.irradiance.spectralLoss, energyAfter: 0 },
-    { stage: "Shading Electrical", lossPercent: config.irradiance.electricalShadingLoss, energyAfter: 0 },
-    { stage: "Module Quality", lossPercent: config.array.moduleQualityLoss, energyAfter: 0, isGain: config.array.moduleQualityLoss < 0 },
-    { stage: "Mismatch", lossPercent: config.array.mismatchLoss, energyAfter: 0 },
-    { stage: "Ohmic Wiring", lossPercent: config.array.ohmicLoss, energyAfter: arrayMPP },
+    { stage: "LID", lossPercent: -config.array.lidLoss, energyAfter: 0 },
+    { stage: `Module Degradation (Yr ${config.operationYear})`, lossPercent: -cumulativeDegradation, energyAfter: 0 },
+    { stage: "Irradiance Level", lossPercent: -config.array.irradianceLevelLoss, energyAfter: 0 },
+    { stage: "Temperature", lossPercent: -temperatureLoss, energyAfter: 0 },
+    { stage: "Spectral Correction", lossPercent: -config.irradiance.spectralLoss, energyAfter: 0 },
+    { stage: "Shading Electrical", lossPercent: -config.irradiance.electricalShadingLoss, energyAfter: 0 },
+    // Module Quality: negative config value = gain, so we negate to get positive for display
+    { stage: "Module Quality", lossPercent: -config.array.moduleQualityLoss, energyAfter: 0, isGain: config.array.moduleQualityLoss < 0 },
+    { stage: "Mismatch", lossPercent: -config.array.mismatchLoss, energyAfter: 0 },
+    { stage: "Ohmic Wiring", lossPercent: -config.array.ohmicLoss, energyAfter: arrayMPP },
     // System losses - Inverter sub-losses:
-    { stage: "Inverter (Efficiency)", lossPercent: config.system.inverter.operationEfficiency, energyAfter: 0 },
-    { stage: "Inverter (Over Nominal Power)", lossPercent: config.system.inverter.overNominalPower, energyAfter: 0 },
-    { stage: "Inverter (Max Input Current)", lossPercent: config.system.inverter.maxInputCurrent, energyAfter: 0 },
-    { stage: "Inverter (Over Nominal Voltage)", lossPercent: config.system.inverter.overNominalVoltage, energyAfter: 0 },
-    { stage: "Inverter (Power Threshold)", lossPercent: config.system.inverter.powerThreshold, energyAfter: 0 },
-    { stage: "Inverter (Voltage Threshold)", lossPercent: config.system.inverter.voltageThreshold, energyAfter: 0 },
-    { stage: "Night Consumption", lossPercent: config.system.inverter.nightConsumption, energyAfter: eOutInv },
+    { stage: "Inverter (Efficiency)", lossPercent: -config.system.inverter.operationEfficiency, energyAfter: 0 },
+    { stage: "Inverter (Over Nominal Power)", lossPercent: -config.system.inverter.overNominalPower, energyAfter: 0 },
+    { stage: "Inverter (Max Input Current)", lossPercent: -config.system.inverter.maxInputCurrent, energyAfter: 0 },
+    { stage: "Inverter (Over Nominal Voltage)", lossPercent: -config.system.inverter.overNominalVoltage, energyAfter: 0 },
+    { stage: "Inverter (Power Threshold)", lossPercent: -config.system.inverter.powerThreshold, energyAfter: 0 },
+    { stage: "Inverter (Voltage Threshold)", lossPercent: -config.system.inverter.voltageThreshold, energyAfter: 0 },
+    { stage: "Night Consumption", lossPercent: -config.system.inverter.nightConsumption, energyAfter: eOutInv },
     // Losses after inverter:
-    { stage: "System Unavailability", lossPercent: config.lossesAfterInverter.availabilityLoss, energyAfter: eGrid },
+    { stage: "System Unavailability", lossPercent: -config.lossesAfterInverter.availabilityLoss, energyAfter: eGrid },
   ];
   
   return {
@@ -579,7 +580,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'GlobInc (Transposition)', 
     valueKwhM2: globInc, 
-    lossPercent: transpositionLoss,
+    lossPercent: -transpositionLoss,  // Negative = loss
     isGain: transpositionLoss < 0
   });
   
@@ -594,17 +595,17 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'Near Shadings (FShdGl)', 
     valueKwhM2: afterNearShading, 
-    lossPercent: config.irradiance.nearShadingLoss 
+    lossPercent: -config.irradiance.nearShadingLoss  // Negative = loss
   });
   breakdown.push({ 
     stage: 'IAM Factor (FIAMGl)', 
     valueKwhM2: afterIAM, 
-    lossPercent: config.irradiance.iamLoss 
+    lossPercent: -config.irradiance.iamLoss  // Negative = loss
   });
   breakdown.push({ 
     stage: 'Soiling (FSlgGl) → GlobEff', 
     valueKwhM2: globEff, 
-    lossPercent: config.irradiance.soilingLoss 
+    lossPercent: -config.irradiance.soilingLoss  // Negative = loss
   });
   
   if (debug) {
@@ -659,7 +660,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'LID - Light Induced Degradation', 
     valueKwh: afterLID, 
-    lossPercent: config.array.lidLoss  // e.g., 2.0000%
+    lossPercent: -config.array.lidLoss  // Negative = loss
   });
   currentValue = afterLID;
   
@@ -668,7 +669,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'Module Degradation Loss', 
     valueKwh: afterModuleDeg, 
-    lossPercent: config.array.moduleDegradationLoss  // e.g., 3.8000%
+    lossPercent: -config.array.moduleDegradationLoss  // Negative = loss
   });
   currentValue = afterModuleDeg;
   
@@ -677,7 +678,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'PV Loss - Irradiance Level', 
     valueKwh: afterIrradianceLevel, 
-    lossPercent: config.array.irradianceLevelLoss 
+    lossPercent: -config.array.irradianceLevelLoss  // Negative = loss
   });
   currentValue = afterIrradianceLevel;
   
@@ -686,7 +687,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'PV Loss - Temperature', 
     valueKwh: afterTemperature, 
-    lossPercent: config.array.temperatureLoss 
+    lossPercent: -config.array.temperatureLoss  // Negative = loss
   });
   currentValue = afterTemperature;
   
@@ -695,7 +696,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'Spectral Correction', 
     valueKwh: afterSpectral, 
-    lossPercent: config.irradiance.spectralLoss 
+    lossPercent: -config.irradiance.spectralLoss  // Negative = loss
   });
   currentValue = afterSpectral;
   
@@ -704,16 +705,16 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'Shadings - Electrical Loss', 
     valueKwh: afterElectricalShading, 
-    lossPercent: config.irradiance.electricalShadingLoss 
+    lossPercent: -config.irradiance.electricalShadingLoss  // Negative = loss
   });
   currentValue = afterElectricalShading;
   
-  // Apply module quality (can be negative = gain)
+  // Apply module quality (negative config value = gain, so we negate to get positive for display)
   const afterModuleQuality = currentValue * (1 - config.array.moduleQualityLoss / 100);
   breakdown.push({ 
     stage: 'Module Quality', 
     valueKwh: afterModuleQuality, 
-    lossPercent: config.array.moduleQualityLoss,
+    lossPercent: -config.array.moduleQualityLoss,  // Negate: if config is -0.75 (gain), output is +0.75
     isGain: config.array.moduleQualityLoss < 0
   });
   currentValue = afterModuleQuality;
@@ -723,7 +724,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'Module Mismatch', 
     valueKwh: afterMismatch, 
-    lossPercent: config.array.mismatchLoss 
+    lossPercent: -config.array.mismatchLoss  // Negative = loss
   });
   currentValue = afterMismatch;
   
@@ -732,7 +733,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'Ohmic Wiring → EArrMPP', 
     valueKwh: eArrMPP, 
-    lossPercent: config.array.ohmicLoss 
+    lossPercent: -config.array.ohmicLoss  // Negative = loss
   });
   
   if (debug) {
@@ -751,7 +752,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'Inverter - Efficiency', 
     valueKwh: afterInvEfficiency, 
-    lossPercent: config.system.inverter.operationEfficiency 
+    lossPercent: -config.system.inverter.operationEfficiency  // Negative = loss
   });
   currentValue = afterInvEfficiency;
   
@@ -760,7 +761,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'Inverter - Over Nominal Power', 
     valueKwh: afterOverPower, 
-    lossPercent: config.system.inverter.overNominalPower 
+    lossPercent: -config.system.inverter.overNominalPower  // Negative = loss
   });
   currentValue = afterOverPower;
   
@@ -770,7 +771,7 @@ export function calculateAnnualPVsystOutput(
     breakdown.push({ 
       stage: 'Inverter - Max Input Current', 
       valueKwh: afterMaxCurrent, 
-      lossPercent: config.system.inverter.maxInputCurrent 
+      lossPercent: -config.system.inverter.maxInputCurrent  // Negative = loss
     });
     currentValue = afterMaxCurrent;
   }
@@ -781,7 +782,7 @@ export function calculateAnnualPVsystOutput(
     breakdown.push({ 
       stage: 'Inverter - Over Nominal Voltage', 
       valueKwh: afterMaxVoltage, 
-      lossPercent: config.system.inverter.overNominalVoltage 
+      lossPercent: -config.system.inverter.overNominalVoltage  // Negative = loss
     });
     currentValue = afterMaxVoltage;
   }
@@ -791,7 +792,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'Inverter - Power Threshold', 
     valueKwh: afterPowerThreshold, 
-    lossPercent: config.system.inverter.powerThreshold 
+    lossPercent: -config.system.inverter.powerThreshold  // Negative = loss
   });
   currentValue = afterPowerThreshold;
   
@@ -800,7 +801,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'Inverter - Voltage Threshold', 
     valueKwh: afterVoltageThreshold, 
-    lossPercent: config.system.inverter.voltageThreshold 
+    lossPercent: -config.system.inverter.voltageThreshold  // Negative = loss
   });
   currentValue = afterVoltageThreshold;
   
@@ -809,7 +810,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'Night Consumption → EOutInv', 
     valueKwh: eOutInv, 
-    lossPercent: config.system.inverter.nightConsumption 
+    lossPercent: -config.system.inverter.nightConsumption  // Negative = loss
   });
   
   if (debug) {
@@ -838,7 +839,7 @@ export function calculateAnnualPVsystOutput(
   breakdown.push({ 
     stage: 'System Unavailability → E_Grid', 
     valueKwh: eGrid, 
-    lossPercent: availabilityLoss 
+    lossPercent: -availabilityLoss  // Negative = loss
   });
   
   // ========================================
