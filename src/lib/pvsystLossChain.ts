@@ -826,23 +826,21 @@ export function calculateAnnualPVsystOutput(
   // ========================================
   // Step 7: Apply System Unavailability to get E_Grid
   // ========================================
+  // ALWAYS log this critical calculation for debugging
+  console.log('=== E_GRID FINAL CALCULATION ===');
+  console.log('EOutInv (input):', eOutInv.toFixed(2), 'kWh');
+  console.log('config.lossesAfterInverter:', JSON.stringify(config.lossesAfterInverter));
+  
   // Defensive check: use default 2.071% if lossesAfterInverter is missing
-  if (debug) {
-    console.log('=== Config Check ===');
-    console.log('lossesAfterInverter:', config.lossesAfterInverter);
-    console.log('availabilityLoss value:', config.lossesAfterInverter?.availabilityLoss);
-  }
   const availabilityLoss = config.lossesAfterInverter?.availabilityLoss ?? 2.071;
   const availabilityFactor = 1 - (availabilityLoss / 100);
   const eGrid = eOutInv * availabilityFactor;
   
-  if (debug) {
-    console.log('=== System Unavailability ===');
-    console.log('EOutInv:', eOutInv.toFixed(0), 'kWh');
-    console.log('System Unavailability Loss:', availabilityLoss.toFixed(4), '%');
-    console.log('Availability Factor:', availabilityFactor.toFixed(6));
-    console.log('E_Grid:', eGrid.toFixed(0), 'kWh/year');
-  }
+  console.log('availabilityLoss used:', availabilityLoss.toFixed(4), '%');
+  console.log('availabilityFactor:', availabilityFactor.toFixed(6));
+  console.log('E_Grid (result):', eGrid.toFixed(2), 'kWh');
+  console.log('Expected if 2.071%:', (eOutInv * 0.97929).toFixed(2), 'kWh');
+  console.log('=== END E_GRID CALCULATION ===');
   
   breakdown.push({ 
     stage: 'System Unavailability → E_Grid', 
