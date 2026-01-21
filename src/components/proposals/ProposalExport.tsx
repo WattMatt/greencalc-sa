@@ -81,29 +81,32 @@ export function ProposalExport({ proposal, project, simulation, disabled, select
   };
 
   const exportToPDF = async () => {
-    if (!printViewRef?.current) {
-      toast.error("Print view not ready. Please try again.");
-      return;
-    }
-
     setExporting("pdf");
     try {
-      // Wait for print view to fully render
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Wait a moment for any pending state updates
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const projectName = project?.name || 'Proposal';
       const version = proposal.version || 1;
       const filename = `${projectName.replace(/\s+/g, "_")}_v${version}.pdf`;
 
-      // Use WYSIWYG capture for true preview-to-PDF fidelity
+      // Use new HTML generation approach for true WYSIWYG
       const result = await generateWYSIWYGPDF(
-        printViewRef.current,
-        filename,
-        { title: `${projectName} - Solar Proposal` }
+        {
+          proposal,
+          project,
+          simulation,
+          tenants,
+          shopTypes,
+          showSystemDesign,
+          templateId: selectedTemplate,
+          title: `${projectName} - Solar Proposal`,
+        },
+        filename
       );
 
       if (result.success) {
-        toast.success("Proposal exported as PDF (WYSIWYG)");
+        toast.success("Proposal exported as PDF");
       } else {
         toast.error(result.error || "Failed to export proposal");
       }
