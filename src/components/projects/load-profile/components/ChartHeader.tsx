@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { format, addDays, subDays, addMonths, subMonths, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -141,32 +141,116 @@ export function ChartHeader({
             </div>
           )}
 
-          {/* Monthly stats info */}
-          {dateMode === "month" && selectedMonth && monthlyStats && (
-            <div className="flex items-center gap-3">
-              <div>
-                <span className="font-medium text-sm">
-                  {availableMonths.find(m => m.value === selectedMonth)?.label || selectedMonth}
-                </span>
-                <Badge variant="secondary" className="ml-2 text-[10px]">
-                  {monthlyStats.daysWithData} days
-                </Badge>
+          {/* Month Navigation */}
+          {dateMode === "month" && (
+            <div className="flex items-center gap-1">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8"
+                disabled={!selectedMonth || availableMonths.length === 0}
+                onClick={() => {
+                  if (!selectedMonth || !onMonthChange) return;
+                  const currentIndex = availableMonths.findIndex(m => m.value === selectedMonth);
+                  // availableMonths is sorted most recent first, so "prev" means older (higher index)
+                  if (currentIndex < availableMonths.length - 1) {
+                    onMonthChange(availableMonths[currentIndex + 1].value);
+                  }
+                }}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="min-w-[140px] text-center">
+                {selectedMonth && monthlyStats ? (
+                  <>
+                    <span className="font-medium text-sm">
+                      {availableMonths.find(m => m.value === selectedMonth)?.label || selectedMonth}
+                    </span>
+                    <Badge variant="secondary" className="ml-2 text-[10px]">
+                      {monthlyStats.daysWithData}d
+                    </Badge>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground text-sm">Select month</span>
+                )}
               </div>
-              <div className="text-xs text-muted-foreground border-l pl-3">
-                <span className="font-medium text-foreground">{Math.round(monthlyStats.totalKwh).toLocaleString()}</span> kWh total
-                <span className="mx-2">·</span>
-                <span className="font-medium text-foreground">{Math.round(monthlyStats.peakKw)}</span> kW peak
-              </div>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8"
+                disabled={!selectedMonth || availableMonths.length === 0}
+                onClick={() => {
+                  if (!selectedMonth || !onMonthChange) return;
+                  const currentIndex = availableMonths.findIndex(m => m.value === selectedMonth);
+                  // "next" means more recent (lower index)
+                  if (currentIndex > 0) {
+                    onMonthChange(availableMonths[currentIndex - 1].value);
+                  }
+                }}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              {monthlyStats && (
+                <div className="text-xs text-muted-foreground border-l pl-3 ml-2">
+                  <span className="font-medium text-foreground">{Math.round(monthlyStats.totalKwh).toLocaleString()}</span> kWh
+                  <span className="mx-2">·</span>
+                  <span className="font-medium text-foreground">{Math.round(monthlyStats.peakKw)}</span> kW peak
+                </div>
+              )}
             </div>
           )}
 
-          {/* Specific date info */}
-          {dateMode === "specific" && specificDate && (
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{format(specificDate, "EEEE, d MMMM yyyy")}</span>
-              <Badge variant={isWeekend ? "secondary" : "outline"} className="text-[10px]">
-                {isWeekend ? "Weekend" : "Weekday"}
-              </Badge>
+          {/* Day Navigation */}
+          {dateMode === "specific" && (
+            <div className="flex items-center gap-1">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8"
+                disabled={!specificDate || availableDates.length === 0}
+                onClick={() => {
+                  if (!specificDate) return;
+                  // Find the previous available date
+                  const currentDateStr = specificDate.toISOString().split("T")[0];
+                  const sortedDates = [...availableDates].sort((a, b) => a.getTime() - b.getTime());
+                  const currentIndex = sortedDates.findIndex(d => d.toISOString().split("T")[0] === currentDateStr);
+                  if (currentIndex > 0) {
+                    onSpecificDateChange(sortedDates[currentIndex - 1]);
+                  }
+                }}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="min-w-[200px] text-center">
+                {specificDate ? (
+                  <>
+                    <span className="font-medium">{format(specificDate, "EEE, d MMM yyyy")}</span>
+                    <Badge variant={isWeekend ? "secondary" : "outline"} className="ml-2 text-[10px]">
+                      {isWeekend ? "WE" : "WD"}
+                    </Badge>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground text-sm">Select date</span>
+                )}
+              </div>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8"
+                disabled={!specificDate || availableDates.length === 0}
+                onClick={() => {
+                  if (!specificDate) return;
+                  // Find the next available date
+                  const currentDateStr = specificDate.toISOString().split("T")[0];
+                  const sortedDates = [...availableDates].sort((a, b) => a.getTime() - b.getTime());
+                  const currentIndex = sortedDates.findIndex(d => d.toISOString().split("T")[0] === currentDateStr);
+                  if (currentIndex < sortedDates.length - 1) {
+                    onSpecificDateChange(sortedDates[currentIndex + 1]);
+                  }
+                }}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           )}
         </div>
@@ -186,14 +270,14 @@ export function ChartHeader({
               <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
               TOU
             </Label>
-            {maxPvAcKva && dateMode === "average" && (
+            {maxPvAcKva && (
               <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
                 <Switch checked={showPVProfile} onCheckedChange={setShowPVProfile} className="scale-75" />
                 <Sun className="h-3 w-3 text-amber-500" />
                 PV
               </Label>
             )}
-            {showPVProfile && maxPvAcKva && dateMode === "average" && (
+            {showPVProfile && maxPvAcKva && (
               <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
                 <Switch checked={showBattery} onCheckedChange={setShowBattery} className="scale-75" />
                 <Battery className="h-3 w-3 text-green-500" />

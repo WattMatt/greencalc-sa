@@ -342,7 +342,7 @@ export function LoadProfileChart({
           <LoadChart chartData={chartData} showTOU={showTOU} isWeekend={effectiveIsWeekend} unit={unit} />
 
           {/* PV Generation Chart */}
-          {showPVProfile && maxPvAcKva && dateMode === "average" && (
+          {showPVProfile && maxPvAcKva && chartData && (
             <SolarChart
               chartData={chartData}
               showTOU={showTOU}
@@ -355,7 +355,7 @@ export function LoadProfileChart({
           )}
 
           {/* Grid Flow Chart */}
-          {showPVProfile && maxPvAcKva && dateMode === "average" && (
+          {showPVProfile && maxPvAcKva && chartData && (
             <GridFlowChart
               chartData={chartData}
               showTOU={showTOU}
@@ -371,7 +371,7 @@ export function LoadProfileChart({
           )}
 
           {/* Battery Chart */}
-          {showBattery && showPVProfile && maxPvAcKva && dateMode === "average" && (
+          {showBattery && showPVProfile && maxPvAcKva && chartData && (
             <BatteryChart chartData={chartData} batteryCapacity={batteryCapacity} batteryPower={batteryPower} />
           )}
 
