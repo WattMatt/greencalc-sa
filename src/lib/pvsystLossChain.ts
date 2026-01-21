@@ -6,10 +6,11 @@
 // ============================================================================
 
 export interface IrradianceLosses {
-  shadingLoss: number;        // % (e.g., 3.78)
-  iamLoss: number;            // Incidence Angle Modifier (e.g., 2.29)
-  soilingLoss: number;        // % (e.g., 3.00)
-  spectralLoss: number;       // % (e.g., 0.5)
+  nearShadingLoss: number;    // Near Shadings: irradiance loss (e.g., 0.94)
+  iamLoss: number;            // IAM factor on global (e.g., 2.57)
+  soilingLoss: number;        // Soiling loss factor (e.g., 3.00)
+  spectralLoss: number;       // Spectral correction (e.g., 1.05)
+  electricalShadingLoss: number; // Shadings: Electrical Loss detailed module calc (e.g., 0.23)
 }
 
 export interface ArrayLosses {
@@ -89,36 +90,37 @@ export interface HourlyLossResult {
 
 export const DEFAULT_PVSYST_CONFIG: PVsystLossChainConfig = {
   irradiance: {
-    shadingLoss: 3.78,
-    iamLoss: 2.29,
-    soilingLoss: 3.00,
-    spectralLoss: 0.5,
+    nearShadingLoss: 0.94,       // Near Shadings: irradiance loss
+    iamLoss: 2.57,               // IAM factor on global
+    soilingLoss: 3.00,           // Soiling loss factor
+    spectralLoss: 1.05,          // Spectral correction
+    electricalShadingLoss: 0.23, // Shadings: Electrical Loss detailed module calc
   },
   array: {
-    irradianceLevelLoss: 0.80,   // PV loss due to irradiance level
-    temperatureLoss: 8.00,       // PV loss due to temperature
-    moduleQualityLoss: 0.50,     // Module quality loss
+    irradianceLevelLoss: 0.42,   // PV loss due to irradiance level
+    temperatureLoss: 4.92,       // PV loss due to temperature
+    moduleQualityLoss: -0.75,    // Module quality loss (gain)
     lidLoss: 2.00,               // LID - Light induced degradation
-    annualDegradation: 0.50,     // For cumulative calculation
-    mismatchLoss: 3.68,          // Including 1.7% for degradation dispersion
-    ohmicLoss: 1.10,             // Ohmic wiring loss
+    annualDegradation: 0.20,     // For cumulative calculation (3.80% at year 10 = 2% LID + 9*0.2%)
+    mismatchLoss: 3.40,          // Including 1.4% for degradation dispersion
+    ohmicLoss: 1.06,             // Ohmic wiring loss
   },
   system: {
     inverter: {
-      operationEfficiency: 1.55,   // Inverter Loss during operation (efficiency)
-      overNominalPower: 0.10,      // Inverter Loss over nominal inv. power
-      maxInputCurrent: 0.05,       // Inverter Loss due to max. input current
-      overNominalVoltage: 0.05,    // Inverter Loss over nominal inv. voltage
-      powerThreshold: 0.20,        // Inverter Loss due to power threshold
-      voltageThreshold: 0.05,      // Inverter Loss due to voltage threshold
-      nightConsumption: 0.10,      // Night consumption
+      operationEfficiency: 1.53,   // Inverter Loss during operation (efficiency)
+      overNominalPower: 1.04,      // Inverter Loss over nominal inv. power
+      maxInputCurrent: 0.00,       // Inverter Loss due to max. input current
+      overNominalVoltage: 0.00,    // Inverter Loss over nominal inv. voltage
+      powerThreshold: 0.00,        // Inverter Loss due to power threshold
+      voltageThreshold: 0.00,      // Inverter Loss due to voltage threshold
+      nightConsumption: 0.01,      // Night consumption
     },
   },
   lossesAfterInverter: {
-    availabilityLoss: 1.76,
+    availabilityLoss: 2.07,      // System unavailability
   },
-  operationYear: 1,
-  transpositionFactor: 1.08, // Typical gain from tilted surface in SA
+  operationYear: 10,             // Default to year 10 to match 3.80% degradation
+  transpositionFactor: 1.0013,   // Global incident in coll. plane (0.13% gain)
 };
 
 // ============================================================================
@@ -188,7 +190,7 @@ export function calculatePVsystLossChain(
   // Step 2: Effective Irradiance (optical losses)
   // ========================================
   const opticalFactor = 
-    (1 - config.irradiance.shadingLoss / 100) *
+    (1 - config.irradiance.nearShadingLoss / 100) *
     (1 - config.irradiance.iamLoss / 100) *
     (1 - config.irradiance.soilingLoss / 100) *
     (1 - config.irradiance.spectralLoss / 100);
@@ -222,7 +224,8 @@ export function calculatePVsystLossChain(
     (1 - config.array.irradianceLevelLoss / 100) *
     (1 - config.array.moduleQualityLoss / 100) *
     (1 - config.array.mismatchLoss / 100) *
-    (1 - config.array.ohmicLoss / 100);
+    (1 - config.array.ohmicLoss / 100) *
+    (1 - config.irradiance.electricalShadingLoss / 100);
   const arrayMPP = arrayNominalSTC * arrayFactor;
   
   // ========================================
@@ -266,7 +269,7 @@ export function calculatePVsystLossChain(
     { stage: "Irradiance Level", lossPercent: config.array.irradianceLevelLoss, energyAfter: 0 },
     { stage: "Temperature", lossPercent: temperatureLoss, energyAfter: 0 },
     { stage: "Spectral Correction", lossPercent: config.irradiance.spectralLoss, energyAfter: 0 },
-    { stage: "Shading Electrical", lossPercent: config.irradiance.shadingLoss, energyAfter: 0 },
+    { stage: "Shading Electrical", lossPercent: config.irradiance.electricalShadingLoss, energyAfter: 0 },
     { stage: "Module Quality", lossPercent: config.array.moduleQualityLoss, energyAfter: 0 },
     { stage: "LID", lossPercent: config.array.lidLoss, energyAfter: 0 },
     { stage: "Mismatch", lossPercent: config.array.mismatchLoss, energyAfter: 0 },
@@ -342,11 +345,11 @@ export function calculateHourlyPVsystOutput(
     // Apply full loss chain
     const poaFactor = config.transpositionFactor;
     const opticalFactor = 
-      (1 - config.irradiance.shadingLoss / 100) *
+      (1 - config.irradiance.nearShadingLoss / 100) *
       (1 - config.irradiance.iamLoss / 100) *
       (1 - config.irradiance.soilingLoss / 100) *
       (1 - config.irradiance.spectralLoss / 100);
-    const arrayFactor = 
+    const arrayFactor =
       (1 - tempLoss / 100) *
       (1 - cumulativeDegradation / 100) *
       (1 - config.array.irradianceLevelLoss / 100) *
