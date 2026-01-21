@@ -801,27 +801,35 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
       {/* Advanced PV Configuration (Collapsible) */}
       <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
-        <CollapsibleTrigger asChild>
-          <Button variant="outline" className="w-full justify-between">
-            <span className="flex items-center gap-2">
-              <Sun className="h-4 w-4" />
-              Advanced PV Configuration (PVWatts-style)
-              <span className="text-xs text-muted-foreground ml-2">
-                {selectedLocation.name} • {(systemEfficiency * 100).toFixed(1)}% efficiency
-              </span>
-            </span>
-            {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-4">
-          <PVSystemConfig
-            config={pvConfig}
-            onChange={setPvConfig}
-            maxSolarKva={maxSolarKva}
-            solarCapacity={solarCapacity}
-            projectLocation={project?.location}
-          />
-        </CollapsibleContent>
+        <Card className="border-dashed">
+          <CollapsibleTrigger asChild>
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sun className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Advanced PV Configuration (PVWatts-style)</CardTitle>
+                  <span className="text-xs text-muted-foreground">
+                    {selectedLocation.name} • {(systemEfficiency * 100).toFixed(1)}% efficiency
+                  </span>
+                </div>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                  {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </Button>
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="pt-0">
+              <PVSystemConfig
+                config={pvConfig}
+                onChange={setPvConfig}
+                maxSolarKva={maxSolarKva}
+                solarCapacity={solarCapacity}
+                projectLocation={project?.location}
+              />
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
       </Collapsible>
 
       {/* PVsyst Loss Chain Configuration - only show when in PVsyst mode */}
