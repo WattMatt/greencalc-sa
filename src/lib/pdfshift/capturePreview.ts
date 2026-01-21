@@ -1,146 +1,112 @@
 /**
  * WYSIWYG PDF capture utility
- * Captures the live preview DOM with computed styles for true WYSIWYG PDF generation
+ * Generates standalone HTML with inline styles for PDFShift
  */
 
-/**
- * Inline all computed styles into an element and its children
- * This ensures PDFShift renders the exact same styling
- * Uses iteration instead of recursion to avoid stack overflow
- */
-function inlineComputedStyles(originalRoot: Element, cloneRoot: Element): void {
-  // Use a stack-based approach to avoid recursion and stack overflow
-  const stack: Array<{ original: Element; clone: Element; depth: number }> = [
-    { original: originalRoot, clone: cloneRoot, depth: 0 }
-  ];
+import type { Proposal, SimulationData, ProposalBranding } from "@/components/proposals/types";
+import { ProposalTemplateId, PROPOSAL_TEMPLATES, getTemplateStyles } from "@/components/proposals/templates/types";
 
-  const maxDepth = 50; // Prevent excessive nesting
-  const processedNodes = new WeakSet<Element>(); // Prevent circular references
-
-  // Key CSS properties that affect visual appearance
-  const propertiesToInline = [
-    'background', 'background-color', 'background-image', 'background-size',
-    'border', 'border-radius', 'border-color', 'border-width', 'border-style',
-    'color', 'font-family', 'font-size', 'font-weight', 'font-style', 'line-height',
-    'text-align', 'text-decoration', 'text-transform', 'letter-spacing',
-    'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
-    'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
-    'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
-    'display', 'flex-direction', 'justify-content', 'align-items', 'gap', 'flex-wrap',
-    'grid-template-columns', 'grid-template-rows', 'grid-gap',
-    'position', 'top', 'right', 'bottom', 'left',
-    'box-shadow', 'opacity', 'overflow', 'white-space',
-    'box-sizing', 'vertical-align'
-  ];
-
-  while (stack.length > 0) {
-    const item = stack.pop();
-    if (!item) continue;
-
-    const { original, clone, depth } = item;
-
-    // Skip if already processed or too deep
-    if (processedNodes.has(original) || depth > maxDepth) continue;
-    processedNodes.add(original);
-
-    try {
-      const computedStyle = window.getComputedStyle(original);
-      const inlineStyle = (clone as HTMLElement).style;
-
-      if (inlineStyle) {
-        propertiesToInline.forEach(prop => {
-          try {
-            const value = computedStyle.getPropertyValue(prop);
-            if (value && value !== 'none' && value !== 'normal' && value !== 'auto' && value !== '0px') {
-              inlineStyle.setProperty(prop, value);
-            }
-          } catch {
-            // Skip properties that can't be read
-          }
-        });
-      }
-
-      // Add children to stack (in reverse order to maintain order)
-      const children = original.children;
-      const cloneChildren = clone.children;
-      for (let i = children.length - 1; i >= 0; i--) {
-        if (cloneChildren[i]) {
-          stack.push({ original: children[i], clone: cloneChildren[i], depth: depth + 1 });
-        }
-      }
-    } catch (error) {
-      // Skip elements that can't be processed
-      console.warn('Failed to process element:', error);
-    }
-  }
+interface CaptureOptions {
+  proposal: Partial<Proposal>;
+  project: any;
+  simulation?: SimulationData;
+  tenants?: any[];
+  shopTypes?: any[];
+  showSystemDesign?: boolean;
+  templateId?: ProposalTemplateId;
+  title?: string;
 }
 
 /**
- * Convert images to base64 data URLs
+ * Generate full standalone HTML document for PDF conversion
+ * Uses inline styles instead of Tailwind classes for PDFShift compatibility
  */
-async function convertImagesToBase64(clone: Element): Promise<void> {
-  const images = clone.querySelectorAll('img');
+export async function generateProposalHTML(options: CaptureOptions): Promise<string> {
+  const {
+    proposal,
+    project,
+    simulation,
+    tenants,
+    shopTypes,
+    showSystemDesign,
+    templateId = "modern",
+    title = "Solar Proposal",
+  } = options;
 
-  await Promise.all(Array.from(images).map(async (img) => {
+  const template = PROPOSAL_TEMPLATES[templateId];
+  const branding = proposal.branding as ProposalBranding;
+  const primaryColor = branding?.primary_color || template.colors.accentColor;
+  const secondaryColor = branding?.secondary_color || template.colors.headerBg;
+
+  // Determine text colors based on header brightness
+  const isLightHeader = template.colors.headerBg === '#ffffff' || template.colors.headerBg === '#fafaf9';
+  const headerTextColor = isLightHeader ? '#1e293b' : '#ffffff';
+  const headerSubtextColor = isLightHeader ? '#64748b' : 'rgba(255,255,255,0.7)';
+
+  // Template-based styling
+  const borderRadius = template.layout.cardStyle === 'rounded' ? '12px' : 
+                       template.layout.cardStyle === 'subtle' ? '6px' : '0';
+  const boxShadow = template.layout.shadowStyle === 'pronounced' ? '0 10px 25px -5px rgba(0,0,0,0.1)' :
+                    template.layout.shadowStyle === 'medium' ? '0 4px 12px -2px rgba(0,0,0,0.08)' :
+                    template.layout.shadowStyle === 'subtle' ? '0 1px 3px rgba(0,0,0,0.05)' : 'none';
+  const sectionPadding = template.layout.sectionSpacing === 'spacious' ? '24px' : 
+                         template.layout.sectionSpacing === 'compact' ? '12px' : '16px';
+  const sectionGap = template.layout.sectionSpacing === 'spacious' ? '24px' : 
+                     template.layout.sectionSpacing === 'compact' ? '12px' : '16px';
+  const headingWeight = template.typography.headingWeight;
+
+  // Generate 25-year projection
+  const projection: Array<{year: number; generation: number; savings: number; cumulative: number; roi: number}> = [];
+  if (simulation) {
+    let cumulativeSavings = 0;
+    const annualDegradation = 0.005;
+    const tariffEscalation = 0.08;
+
+    for (let year = 1; year <= 25; year++) {
+      const degradationFactor = Math.pow(1 - annualDegradation, year - 1);
+      const escalationFactor = Math.pow(1 + tariffEscalation, year - 1);
+      const yearSavings = simulation.annualSavings * degradationFactor * escalationFactor;
+      cumulativeSavings += yearSavings;
+
+      projection.push({
+        year,
+        generation: simulation.annualSolarGeneration * degradationFactor,
+        savings: yearSavings,
+        cumulative: cumulativeSavings,
+        roi: ((cumulativeSavings - simulation.systemCost) / simulation.systemCost) * 100,
+      });
+    }
+  }
+
+  const paybackYear = projection.find(p => p.cumulative >= (simulation?.systemCost || 0))?.year || 0;
+
+  // Helper functions
+  const formatCurrency = (value: number) => `R ${value.toLocaleString("en-ZA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const formatNumber = (value: number) => value.toLocaleString("en-ZA", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const formatDate = () => new Date().toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" });
+
+  // Calculate page count
+  let pageCount = 5; // Cover, Site, Specs, Financial, Terms
+  if (tenants && tenants.length > 0) pageCount++;
+
+  // Convert logo to base64 if present
+  let logoBase64 = '';
+  if (branding?.logo_url) {
     try {
-      const src = img.getAttribute('src');
-      if (!src || src.startsWith('data:')) return;
-
-      const response = await fetch(src);
+      const response = await fetch(branding.logo_url);
       const blob = await response.blob();
-      const base64 = await new Promise<string>((resolve) => {
+      logoBase64 = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
         reader.readAsDataURL(blob);
       });
-
-      img.setAttribute('src', base64);
-    } catch (error) {
-      console.warn('Failed to convert image to base64:', error);
+    } catch (e) {
+      console.warn('Failed to load logo:', e);
     }
-  }));
-}
-
-/**
- * Simplified HTML capture - gets outer HTML without heavy style inlining
- * Relies on inline styles already present in the React components
- */
-export async function capturePreviewAsHTML(
-  previewElement: HTMLElement,
-  options: {
-    title?: string;
-    pageWidth?: string;
-    pageMargin?: string;
-  } = {}
-): Promise<string> {
-  const { title = 'Proposal', pageWidth = '210mm', pageMargin = '10mm' } = options;
-
-  // Clone the element to avoid modifying the original
-  const clone = previewElement.cloneNode(true) as HTMLElement;
-
-  // Inline computed styles (non-recursive)
-  inlineComputedStyles(previewElement, clone);
-
-  // Convert images to base64
-  await convertImagesToBase64(clone);
-
-  // Remove interactive elements that shouldn't be in PDF
-  clone.querySelectorAll('button, [data-no-print], script').forEach(el => el.remove());
-
-  // Get the HTML content
-  const content = clone.outerHTML;
-
-  // Check content size - PDFShift has limits
-  const contentSizeKB = new Blob([content]).size / 1024;
-  console.log(`Captured HTML size: ${contentSizeKB.toFixed(1)} KB`);
-
-  if (contentSizeKB > 5000) {
-    console.warn('HTML content is very large, PDF generation may be slow');
   }
 
-  // Wrap in a full HTML document with print-optimized styles
-  const html = `
-<!DOCTYPE html>
+  // Build HTML
+  const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -149,103 +115,625 @@ export async function capturePreviewAsHTML(
   <style>
     @page {
       size: A4;
-      margin: ${pageMargin};
+      margin: 0;
     }
     
     * {
       box-sizing: border-box;
+      margin: 0;
+      padding: 0;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
     
     html, body {
-      margin: 0;
-      padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: 12px;
       line-height: 1.5;
       color: #1a1a1a;
+      background: #f5f5f5;
+    }
+    
+    .page {
+      width: 210mm;
+      min-height: 297mm;
       background: white;
-    }
-    
-    .preview-container {
-      width: ${pageWidth};
-      margin: 0 auto;
-      background: white;
-    }
-    
-    /* Ensure SVGs render correctly */
-    svg {
-      max-width: 100%;
-      height: auto;
-    }
-    
-    /* Page break utilities */
-    .page-break {
+      margin: 0 auto 20px;
+      display: flex;
+      flex-direction: column;
       page-break-after: always;
+      overflow: hidden;
     }
     
-    .avoid-break {
-      page-break-inside: avoid;
+    .page:last-child {
+      page-break-after: auto;
     }
     
-    /* Hide scroll areas overflow */
-    [data-radix-scroll-area-viewport] {
-      overflow: visible !important;
+    .header {
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
     }
     
-    /* Ensure flex containers work */
-    .flex { display: flex; }
-    .flex-col { flex-direction: column; }
-    .items-center { align-items: center; }
-    .justify-between { justify-content: space-between; }
-    .justify-center { justify-content: center; }
-    .gap-2 { gap: 0.5rem; }
-    .gap-3 { gap: 0.75rem; }
-    .gap-4 { gap: 1rem; }
-    .gap-6 { gap: 1.5rem; }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
     
-    /* Grid utilities */
-    .grid { display: grid; }
-    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .header-logo {
+      height: 32px;
+      object-fit: contain;
+    }
     
-    /* Text utilities */
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .font-bold { font-weight: 700; }
-    .font-semibold { font-weight: 600; }
-    .font-medium { font-weight: 500; }
+    .header-title {
+      font-size: 16px;
+      font-weight: 700;
+    }
     
-    /* Spacing */
-    .p-2 { padding: 0.5rem; }
-    .p-3 { padding: 0.75rem; }
-    .p-4 { padding: 1rem; }
-    .p-6 { padding: 1.5rem; }
-    .p-8 { padding: 2rem; }
-    .mb-4 { margin-bottom: 1rem; }
-    .mb-6 { margin-bottom: 1.5rem; }
-    .mb-8 { margin-bottom: 2rem; }
-    .mt-auto { margin-top: auto; }
+    .header-subtitle {
+      font-size: 11px;
+    }
     
-    /* Sizing */
-    .w-full { width: 100%; }
-    .h-full { height: 100%; }
-    .min-h-screen { min-height: 100vh; }
+    .header-right {
+      text-align: right;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
     
-    /* Borders */
-    .rounded { border-radius: 0.25rem; }
-    .rounded-lg { border-radius: 0.5rem; }
-    .rounded-xl { border-radius: 0.75rem; }
-    .border { border-width: 1px; }
+    .version-badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
     
-    /* Shrink behavior */
-    .shrink-0 { flex-shrink: 0; }
+    .page-number {
+      font-size: 11px;
+    }
+    
+    .content {
+      flex: 1;
+      padding: ${sectionPadding};
+      overflow: hidden;
+    }
+    
+    .footer {
+      padding: 12px 24px;
+      text-align: center;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    
+    .footer-content {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    
+    .section-title {
+      font-size: 16px;
+      font-weight: ${headingWeight === 'extrabold' ? '800' : headingWeight === 'bold' ? '700' : '600'};
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .hero-banner {
+      padding: 24px;
+      border-radius: ${borderRadius};
+      margin-bottom: ${sectionGap};
+    }
+    
+    .hero-title {
+      font-size: 24px;
+      font-weight: ${headingWeight === 'extrabold' ? '800' : '700'};
+      margin-bottom: 8px;
+    }
+    
+    .hero-date {
+      opacity: 0.8;
+    }
+    
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: ${sectionGap};
+      margin-bottom: ${sectionGap};
+    }
+    
+    .metric-card {
+      text-align: center;
+      padding: ${sectionPadding};
+      border-radius: ${borderRadius};
+      box-shadow: ${boxShadow};
+    }
+    
+    .metric-value {
+      font-size: 20px;
+      font-weight: ${headingWeight === 'extrabold' ? '800' : '700'};
+      margin-bottom: 4px;
+    }
+    
+    .metric-label {
+      font-size: 11px;
+    }
+    
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: ${sectionGap};
+    }
+    
+    .info-card {
+      padding: ${sectionPadding};
+      border-radius: ${borderRadius};
+      box-shadow: ${boxShadow};
+    }
+    
+    .info-label {
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+    
+    .info-value {
+      font-weight: 600;
+    }
+    
+    .spec-table, .projection-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    
+    .spec-table th, .spec-table td,
+    .projection-table th, .projection-table td {
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .spec-table th, .projection-table th {
+      font-weight: 600;
+      border-bottom-width: 2px;
+    }
+    
+    .projection-table td.right, .projection-table th.right {
+      text-align: right;
+    }
+    
+    .projection-table tr.payback {
+      font-weight: 700;
+    }
+    
+    .terms-section {
+      margin-bottom: 20px;
+    }
+    
+    .terms-section h4 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    
+    .terms-section p {
+      font-size: 11px;
+      line-height: 1.6;
+    }
+    
+    .signature-box {
+      padding: 24px;
+      border: 1px solid #e5e7eb;
+      border-radius: ${borderRadius};
+      margin-top: 20px;
+    }
+    
+    .signature-line {
+      border-top: 1px solid #1a1a1a;
+      width: 200px;
+      margin-top: 40px;
+      padding-top: 8px;
+      font-size: 11px;
+    }
   </style>
 </head>
 <body>
-  <div class="preview-container">
-    ${content}
+  <!-- Page 1: Cover & Summary -->
+  <div class="page">
+    <div class="header" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="header-logo" />` : ''}
+        <div>
+          <div class="header-title">${branding?.company_name || 'Solar Installation Proposal'}</div>
+          <div class="header-subtitle" style="color: ${headerSubtextColor};">${project?.name || 'Project'}</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="version-badge" style="background-color: ${primaryColor}; color: white;">v${proposal.version || 1}</span>
+        <span class="page-number" style="color: ${headerSubtextColor};">Page 1 of ${pageCount}</span>
+      </div>
+    </div>
+    
+    <div class="content">
+      <div class="hero-banner" style="background-color: ${primaryColor}; color: white;">
+        <div class="hero-title">Solar Installation Proposal</div>
+        <div class="hero-date">${formatDate()}</div>
+      </div>
+      
+      ${simulation ? `
+      <div class="metrics-grid">
+        <div class="metric-card" style="background-color: ${template.colors.cardBg};">
+          <div class="metric-value" style="color: ${template.colors.textPrimary};">${simulation.solarCapacity} kWp</div>
+          <div class="metric-label" style="color: ${template.colors.textSecondary};">System Size</div>
+        </div>
+        <div class="metric-card" style="background-color: ${template.colors.cardBg};">
+          <div class="metric-value" style="color: ${template.colors.textPrimary};">${formatCurrency(simulation.annualSavings)}</div>
+          <div class="metric-label" style="color: ${template.colors.textSecondary};">Annual Savings</div>
+        </div>
+        <div class="metric-card" style="background-color: ${template.colors.cardBg};">
+          <div class="metric-value" style="color: ${template.colors.textPrimary};">${simulation.paybackYears.toFixed(1)} yrs</div>
+          <div class="metric-label" style="color: ${template.colors.textSecondary};">Payback Period</div>
+        </div>
+        <div class="metric-card" style="background-color: ${template.colors.cardBg};">
+          <div class="metric-value" style="color: ${template.colors.textPrimary};">${simulation.roiPercentage.toFixed(0)}%</div>
+          <div class="metric-label" style="color: ${template.colors.textSecondary};">25-Year ROI</div>
+        </div>
+      </div>
+      ` : ''}
+      
+      <div class="section-title" style="color: ${primaryColor};">Executive Summary</div>
+      <p style="color: ${template.colors.textSecondary}; line-height: 1.7;">
+        ${proposal.executive_summary || 
+          `This proposal outlines a ${simulation?.solarCapacity || 0} kWp solar PV system installation for ${project?.name}. 
+           The system is projected to generate ${formatNumber(simulation?.annualSolarGeneration || 0)} kWh annually, 
+           resulting in estimated annual savings of ${formatCurrency(simulation?.annualSavings || 0)} 
+           with a payback period of ${(simulation?.paybackYears || 0).toFixed(1)} years.`}
+      </p>
+    </div>
+    
+    <div class="footer" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="footer-content">
+        ${branding?.contact_email ? `<span>${branding.contact_email}</span>` : ''}
+        ${branding?.contact_email && branding?.contact_phone ? '<span>•</span>' : ''}
+        ${branding?.contact_phone ? `<span>${branding.contact_phone}</span>` : ''}
+        ${branding?.website ? '<span>•</span>' : ''}
+        ${branding?.website ? `<span>${branding.website}</span>` : ''}
+      </div>
+    </div>
+  </div>
+
+  <!-- Page 2: Site Overview -->
+  <div class="page">
+    <div class="header" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="header-logo" />` : ''}
+        <div>
+          <div class="header-title">${branding?.company_name || 'Solar Installation Proposal'}</div>
+          <div class="header-subtitle" style="color: ${headerSubtextColor};">${project?.name || 'Project'}</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="version-badge" style="background-color: ${primaryColor}; color: white;">v${proposal.version || 1}</span>
+        <span class="page-number" style="color: ${headerSubtextColor};">Page 2 of ${pageCount}</span>
+      </div>
+    </div>
+    
+    <div class="content">
+      <div class="section-title" style="color: ${primaryColor};">Site Overview</div>
+      
+      <div class="info-grid" style="margin-bottom: ${sectionGap};">
+        <div class="info-card" style="background-color: ${template.colors.cardBg};">
+          <div class="info-label" style="color: ${template.colors.textSecondary};">Location</div>
+          <div class="info-value" style="color: ${template.colors.textPrimary};">${project?.location || 'Not specified'}</div>
+        </div>
+        <div class="info-card" style="background-color: ${template.colors.cardBg};">
+          <div class="info-label" style="color: ${template.colors.textSecondary};">Total Area</div>
+          <div class="info-value" style="color: ${template.colors.textPrimary};">${project?.total_area_sqm ? `${formatNumber(project.total_area_sqm)} m²` : '—'}</div>
+        </div>
+        <div class="info-card" style="background-color: ${template.colors.cardBg};">
+          <div class="info-label" style="color: ${template.colors.textSecondary};">Connection Size</div>
+          <div class="info-value" style="color: ${template.colors.textPrimary};">${project?.connection_size_kva ? `${project.connection_size_kva} kVA` : '—'}</div>
+        </div>
+        <div class="info-card" style="background-color: ${template.colors.cardBg};">
+          <div class="info-label" style="color: ${template.colors.textSecondary};">Tariff</div>
+          <div class="info-value" style="color: ${template.colors.textPrimary};">${simulation?.tariffName || 'Standard'}</div>
+        </div>
+      </div>
+      
+      ${project?.latitude && project?.longitude ? `
+      <div class="section-title" style="color: ${primaryColor}; margin-top: 24px;">Coordinates</div>
+      <div class="info-grid">
+        <div class="info-card" style="background-color: ${template.colors.cardBg};">
+          <div class="info-label" style="color: ${template.colors.textSecondary};">Latitude</div>
+          <div class="info-value" style="color: ${template.colors.textPrimary};">${project.latitude.toFixed(6)}</div>
+        </div>
+        <div class="info-card" style="background-color: ${template.colors.cardBg};">
+          <div class="info-label" style="color: ${template.colors.textSecondary};">Longitude</div>
+          <div class="info-value" style="color: ${template.colors.textPrimary};">${project.longitude.toFixed(6)}</div>
+        </div>
+      </div>
+      ` : ''}
+    </div>
+    
+    <div class="footer" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="footer-content">
+        ${branding?.contact_email ? `<span>${branding.contact_email}</span>` : ''}
+        ${branding?.contact_email && branding?.contact_phone ? '<span>•</span>' : ''}
+        ${branding?.contact_phone ? `<span>${branding.contact_phone}</span>` : ''}
+        ${branding?.website ? '<span>•</span>' : ''}
+        ${branding?.website ? `<span>${branding.website}</span>` : ''}
+      </div>
+    </div>
+  </div>
+
+  ${tenants && tenants.length > 0 ? `
+  <!-- Page 3: Load Analysis -->
+  <div class="page">
+    <div class="header" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="header-logo" />` : ''}
+        <div>
+          <div class="header-title">${branding?.company_name || 'Solar Installation Proposal'}</div>
+          <div class="header-subtitle" style="color: ${headerSubtextColor};">${project?.name || 'Project'}</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="version-badge" style="background-color: ${primaryColor}; color: white;">v${proposal.version || 1}</span>
+        <span class="page-number" style="color: ${headerSubtextColor};">Page 3 of ${pageCount}</span>
+      </div>
+    </div>
+    
+    <div class="content">
+      <div class="section-title" style="color: ${primaryColor};">Load Analysis</div>
+      
+      <table class="spec-table">
+        <thead>
+          <tr>
+            <th>Tenant</th>
+            <th>Area (m²)</th>
+            <th>Category</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tenants.slice(0, 15).map((tenant: any) => {
+            const shopType = shopTypes?.find((st: any) => st.id === tenant.shop_type_id);
+            return `
+              <tr>
+                <td>${tenant.name}</td>
+                <td>${formatNumber(tenant.area_sqm)}</td>
+                <td>${shopType?.name || '—'}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+      ${tenants.length > 15 ? `<p style="margin-top: 8px; font-size: 11px; color: ${template.colors.textSecondary};">+ ${tenants.length - 15} more tenants</p>` : ''}
+    </div>
+    
+    <div class="footer" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="footer-content">
+        ${branding?.contact_email ? `<span>${branding.contact_email}</span>` : ''}
+        ${branding?.contact_email && branding?.contact_phone ? '<span>•</span>' : ''}
+        ${branding?.contact_phone ? `<span>${branding.contact_phone}</span>` : ''}
+        ${branding?.website ? '<span>•</span>' : ''}
+        ${branding?.website ? `<span>${branding.website}</span>` : ''}
+      </div>
+    </div>
+  </div>
+  ` : ''}
+
+  <!-- System Specification Page -->
+  <div class="page">
+    <div class="header" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="header-logo" />` : ''}
+        <div>
+          <div class="header-title">${branding?.company_name || 'Solar Installation Proposal'}</div>
+          <div class="header-subtitle" style="color: ${headerSubtextColor};">${project?.name || 'Project'}</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="version-badge" style="background-color: ${primaryColor}; color: white;">v${proposal.version || 1}</span>
+        <span class="page-number" style="color: ${headerSubtextColor};">Page ${tenants && tenants.length > 0 ? 4 : 3} of ${pageCount}</span>
+      </div>
+    </div>
+    
+    <div class="content">
+      <div class="section-title" style="color: ${primaryColor};">System Specification</div>
+      
+      <table class="spec-table">
+        <tbody>
+          <tr>
+            <td style="color: ${template.colors.textSecondary};">Solar Capacity</td>
+            <td style="font-weight: 600;">${simulation?.solarCapacity || 0} kWp</td>
+          </tr>
+          <tr>
+            <td style="color: ${template.colors.textSecondary};">Battery Capacity</td>
+            <td style="font-weight: 600;">${simulation?.batteryCapacity || 0} kWh</td>
+          </tr>
+          <tr>
+            <td style="color: ${template.colors.textSecondary};">Battery Power</td>
+            <td style="font-weight: 600;">${simulation?.batteryPower || 0} kW</td>
+          </tr>
+          <tr>
+            <td style="color: ${template.colors.textSecondary};">Annual Solar Generation</td>
+            <td style="font-weight: 600;">${formatNumber(simulation?.annualSolarGeneration || 0)} kWh</td>
+          </tr>
+          <tr>
+            <td style="color: ${template.colors.textSecondary};">Annual Grid Import</td>
+            <td style="font-weight: 600;">${formatNumber(simulation?.annualGridImport || 0)} kWh</td>
+          </tr>
+          <tr>
+            <td style="color: ${template.colors.textSecondary};">Annual Grid Export</td>
+            <td style="font-weight: 600;">${formatNumber(simulation?.annualGridExport || 0)} kWh</td>
+          </tr>
+        </tbody>
+      </table>
+      
+      <div class="section-title" style="color: ${primaryColor}; margin-top: 32px;">Financial Summary</div>
+      
+      <table class="spec-table">
+        <tbody>
+          <tr>
+            <td style="color: ${template.colors.textSecondary};">System Cost</td>
+            <td style="font-weight: 600;">${formatCurrency(simulation?.systemCost || 0)}</td>
+          </tr>
+          <tr>
+            <td style="color: ${template.colors.textSecondary};">Year 1 Savings</td>
+            <td style="font-weight: 600;">${formatCurrency(simulation?.annualSavings || 0)}</td>
+          </tr>
+          <tr>
+            <td style="color: ${template.colors.textSecondary};">Payback Period</td>
+            <td style="font-weight: 600;">${(simulation?.paybackYears || 0).toFixed(1)} years</td>
+          </tr>
+          <tr>
+            <td style="color: ${template.colors.textSecondary};">25-Year ROI</td>
+            <td style="font-weight: 600;">${(simulation?.roiPercentage || 0).toFixed(0)}%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="footer" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="footer-content">
+        ${branding?.contact_email ? `<span>${branding.contact_email}</span>` : ''}
+        ${branding?.contact_email && branding?.contact_phone ? '<span>•</span>' : ''}
+        ${branding?.contact_phone ? `<span>${branding.contact_phone}</span>` : ''}
+        ${branding?.website ? '<span>•</span>' : ''}
+        ${branding?.website ? `<span>${branding.website}</span>` : ''}
+      </div>
+    </div>
+  </div>
+
+  <!-- Financial Projection Page -->
+  <div class="page">
+    <div class="header" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="header-logo" />` : ''}
+        <div>
+          <div class="header-title">${branding?.company_name || 'Solar Installation Proposal'}</div>
+          <div class="header-subtitle" style="color: ${headerSubtextColor};">${project?.name || 'Project'}</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="version-badge" style="background-color: ${primaryColor}; color: white;">v${proposal.version || 1}</span>
+        <span class="page-number" style="color: ${headerSubtextColor};">Page ${tenants && tenants.length > 0 ? 5 : 4} of ${pageCount}</span>
+      </div>
+    </div>
+    
+    <div class="content">
+      <div class="section-title" style="color: ${primaryColor};">25-Year Financial Projection</div>
+      
+      <table class="projection-table">
+        <thead>
+          <tr>
+            <th>Year</th>
+            <th class="right">Generation (kWh)</th>
+            <th class="right">Annual Savings</th>
+            <th class="right">Cumulative Savings</th>
+            <th class="right">ROI</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${projection.map(row => `
+            <tr class="${row.year === paybackYear ? 'payback' : ''}" ${row.year === paybackYear ? `style="background-color: ${primaryColor}15;"` : ''}>
+              <td>${row.year}${row.year === paybackYear ? ' ★' : ''}</td>
+              <td class="right">${formatNumber(Math.round(row.generation))}</td>
+              <td class="right">${formatCurrency(Math.round(row.savings))}</td>
+              <td class="right">${formatCurrency(Math.round(row.cumulative))}</td>
+              <td class="right">${row.roi.toFixed(0)}%</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      
+      <p style="margin-top: 12px; font-size: 10px; color: ${template.colors.textSecondary};">
+        ★ Indicates payback year. Projections assume 0.5% annual panel degradation and 8% annual tariff escalation.
+      </p>
+    </div>
+    
+    <div class="footer" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="footer-content">
+        ${branding?.contact_email ? `<span>${branding.contact_email}</span>` : ''}
+        ${branding?.contact_email && branding?.contact_phone ? '<span>•</span>' : ''}
+        ${branding?.contact_phone ? `<span>${branding.contact_phone}</span>` : ''}
+        ${branding?.website ? '<span>•</span>' : ''}
+        ${branding?.website ? `<span>${branding.website}</span>` : ''}
+      </div>
+    </div>
+  </div>
+
+  <!-- Terms & Signatures Page -->
+  <div class="page">
+    <div class="header" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="header-left">
+        ${logoBase64 ? `<img src="${logoBase64}" alt="Logo" class="header-logo" />` : ''}
+        <div>
+          <div class="header-title">${branding?.company_name || 'Solar Installation Proposal'}</div>
+          <div class="header-subtitle" style="color: ${headerSubtextColor};">${project?.name || 'Project'}</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="version-badge" style="background-color: ${primaryColor}; color: white;">v${proposal.version || 1}</span>
+        <span class="page-number" style="color: ${headerSubtextColor};">Page ${pageCount} of ${pageCount}</span>
+      </div>
+    </div>
+    
+    <div class="content">
+      <div class="section-title" style="color: ${primaryColor};">Terms & Conditions</div>
+      
+      <div class="terms-section">
+        <h4>Assumptions</h4>
+        <p style="color: ${template.colors.textSecondary};">
+          ${proposal.assumptions || 'Standard installation assumptions apply. System performance estimates are based on local irradiance data and typical meteorological year conditions.'}
+        </p>
+      </div>
+      
+      <div class="terms-section">
+        <h4>Disclaimers</h4>
+        <p style="color: ${template.colors.textSecondary};">
+          ${proposal.disclaimers || 'This proposal is based on estimated consumption data and solar irradiance forecasts. Actual performance may vary based on weather conditions, equipment degradation, and other factors.'}
+        </p>
+      </div>
+      
+      ${proposal.custom_notes ? `
+      <div class="terms-section">
+        <h4>Additional Notes</h4>
+        <p style="color: ${template.colors.textSecondary};">${proposal.custom_notes}</p>
+      </div>
+      ` : ''}
+      
+      <div class="signature-box">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 32px;">
+          <div>
+            <div style="font-weight: 600; margin-bottom: 8px;">Prepared By</div>
+            <div style="color: ${template.colors.textSecondary}; font-size: 11px;">${proposal.prepared_by || branding?.company_name || '—'}</div>
+            <div class="signature-line">Signature & Date</div>
+          </div>
+          <div>
+            <div style="font-weight: 600; margin-bottom: 8px;">Client Acceptance</div>
+            <div style="color: ${template.colors.textSecondary}; font-size: 11px;">${project?.client_name || '—'}</div>
+            <div class="signature-line">Signature & Date</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="footer" style="background-color: ${secondaryColor}; color: ${headerTextColor};">
+      <div class="footer-content">
+        ${branding?.contact_email ? `<span>${branding.contact_email}</span>` : ''}
+        ${branding?.contact_email && branding?.contact_phone ? '<span>•</span>' : ''}
+        ${branding?.contact_phone ? `<span>${branding.contact_phone}</span>` : ''}
+        ${branding?.website ? '<span>•</span>' : ''}
+        ${branding?.website ? `<span>${branding.website}</span>` : ''}
+      </div>
+    </div>
   </div>
 </body>
 </html>`;
@@ -254,32 +742,30 @@ export async function capturePreviewAsHTML(
 }
 
 /**
- * Generate WYSIWYG PDF from a preview element
+ * Generate WYSIWYG PDF using standalone HTML generation
  */
 export async function generateWYSIWYGPDF(
-  previewElement: HTMLElement,
-  filename: string,
-  options: {
-    title?: string;
-    landscape?: boolean;
-  } = {}
+  options: CaptureOptions,
+  filename: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { supabase } = await import('@/integrations/supabase/client');
 
-    console.log('Capturing preview for WYSIWYG PDF...');
-    const html = await capturePreviewAsHTML(previewElement, { title: options.title });
+    console.log('Generating proposal HTML...');
+    const html = await generateProposalHTML(options);
 
+    console.log(`Generated HTML size: ${(new Blob([html]).size / 1024).toFixed(1)} KB`);
     console.log('Sending to PDFShift...');
+    
     const { data, error } = await supabase.functions.invoke('generate-pdf', {
       body: {
         type: 'proposal',
         html,
         filename,
         options: {
-          landscape: options.landscape || false,
+          landscape: false,
           format: 'A4',
-          margin: '10mm',
+          margin: '0',
         },
       },
     });
@@ -313,10 +799,19 @@ export async function generateWYSIWYGPDF(
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    console.log(`WYSIWYG PDF downloaded: ${filename}`);
+    console.log(`PDF downloaded: ${filename}`);
     return { success: true };
   } catch (error) {
-    console.error('WYSIWYG PDF generation error:', error);
+    console.error('PDF generation error:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
+}
+
+// Legacy function for backward compatibility - now deprecated
+export async function capturePreviewAsHTML(
+  _previewElement: HTMLElement,
+  _options: { title?: string; pageWidth?: string; pageMargin?: string } = {}
+): Promise<string> {
+  console.warn('capturePreviewAsHTML is deprecated. Use generateProposalHTML instead.');
+  return '';
 }
