@@ -398,21 +398,21 @@ export function PVsystLossChainConfig({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                -{(result.cumulativeDegradation + config.array.irradianceLevelLoss + config.array.temperatureLoss + config.irradiance.spectralLoss + config.irradiance.electricalShadingLoss + config.array.moduleQualityLoss + config.array.lidLoss + config.array.mismatchLoss + config.array.ohmicLoss).toFixed(1)}%
+                -{(config.array.lidLoss + config.array.moduleDegradationLoss + config.array.irradianceLevelLoss + config.array.temperatureLoss + config.irradiance.spectralLoss + config.irradiance.electricalShadingLoss + config.array.moduleQualityLoss + config.array.mismatchLoss + config.array.ohmicLoss).toFixed(1)}%
               </Badge>
               <ChevronDown className={`h-4 w-4 transition-transform ${showArray ? "rotate-180" : ""}`} />
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2 space-y-3 px-2">
-            {/* 1. Module Degradation Loss (for year #X) */}
+            {/* 1. Module Degradation Loss */}
             <LossSlider
-              label={`Module Degradation Loss (for year #${config.operationYear})`}
-              value={config.array.annualDegradation}
-              onChange={(v) => updateArray("annualDegradation", v)}
-              max={2}
+              label="Module Degradation Loss"
+              value={config.array.moduleDegradationLoss}
+              onChange={(v) => updateArray("moduleDegradationLoss", v)}
+              max={10}
               step={0.01}
-              suffix="%/yr"
-              description={`Annual degradation rate. Total cumulative: ${result.cumulativeDegradation.toFixed(2)}% (LID ${config.array.lidLoss}% + ${Math.max(0, config.operationYear - 1)} × ${config.array.annualDegradation}%/yr)`}
+              suffix="%"
+              description="Module power degradation loss as a fixed percentage"
             />
             
             {/* 2. PV loss due to irradiance level */}

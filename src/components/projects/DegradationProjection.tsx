@@ -53,7 +53,7 @@ export function DegradationProjection({
           </Badge>
         </div>
         <CardDescription className="text-xs">
-          LID: {config.array.lidLoss}% (Year 1) + {config.array.annualDegradation}%/year
+          LID: {config.array.lidLoss}% + Module Degradation: {config.array.moduleDegradationLoss}%
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-2">
