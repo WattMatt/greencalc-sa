@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -42,7 +43,7 @@ function LossSlider({
   onChange,
   min = 0,
   max = 10,
-  step = 0.1,
+  step = 0.01,
   suffix = "%",
   description,
 }: {
@@ -55,6 +56,41 @@ function LossSlider({
   suffix?: string;
   description?: string;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value.toFixed(4));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleBlur = () => {
+    setIsEditing(false);
+    const parsed = parseFloat(editValue);
+    if (!isNaN(parsed) && parsed >= min && parsed <= max) {
+      onChange(parsed);
+    } else {
+      setEditValue(value.toFixed(4));
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleBlur();
+    } else if (e.key === "Escape") {
+      setIsEditing(false);
+      setEditValue(value.toFixed(4));
+    }
+  };
+
+  const handleClick = () => {
+    setEditValue(value.toFixed(4));
+    setIsEditing(true);
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -73,9 +109,28 @@ function LossSlider({
             </TooltipProvider>
           )}
         </Label>
-        <span className="text-xs font-medium text-muted-foreground">
-          {value.toFixed(1)}{suffix}
-        </span>
+        {isEditing ? (
+          <Input
+            ref={inputRef}
+            type="number"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            className="h-5 w-20 text-xs text-right px-1 py-0"
+            step={0.0001}
+            min={min}
+            max={max}
+          />
+        ) : (
+          <span
+            className="text-xs font-medium text-muted-foreground cursor-pointer hover:text-primary hover:underline"
+            onClick={handleClick}
+            title="Click to edit"
+          >
+            {value.toFixed(4)}{suffix}
+          </span>
+        )}
       </div>
       <Slider
         value={[value]}
@@ -97,7 +152,7 @@ export function PVsystLossChainConfig({
   ambientTemp = 25,
   className,
 }: PVsystLossChainConfigProps) {
-  const [showIrradiance, setShowIrradiance] = useState(true);
+  const [showIrradiance, setShowIrradiance] = useState(false);
   const [showArray, setShowArray] = useState(false);
   const [showSystem, setShowSystem] = useState(false);
   const [showAfterInverter, setShowAfterInverter] = useState(false);
