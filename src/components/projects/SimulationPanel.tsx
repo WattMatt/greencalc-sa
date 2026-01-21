@@ -306,6 +306,19 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     enabled: !!project.tariff_id,
   });
 
+  // Calculate module metrics for PVsyst calculations (needed before solar profile generation)
+  const moduleMetrics = useMemo(() => {
+    const selectedModule = inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule
+      ? inverterConfig.customModule
+      : getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
+    
+    const currentAcCapacity = inverterConfig.inverterSize * inverterConfig.inverterCount;
+    return {
+      ...calculateModuleMetrics(currentAcCapacity, inverterConfig.dcAcRatio, selectedModule),
+      moduleName: selectedModule.name,
+    };
+  }, [inverterConfig]);
+
   // Calculate load profile from tenants (kWh per hour)
   const loadProfile = useMemo(() => {
     const profile = Array(24).fill(0);
@@ -344,7 +357,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return generateSolarProfile(pvConfig, solarCapacity, undefined);
   }, [pvConfig, solarCapacity]);
 
-  // PVsyst mode uses the detailed loss chain calculation
+  // PVsyst mode uses the detailed loss chain calculation with actual module data
   const solarProfilePVsyst = useMemo(() => {
     // Get hourly GHI and temperature data
     const activeProfile = solarDataSource === "solcast" 
@@ -359,16 +372,23 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     const hourlyGhi = activeProfile.map(h => h.ghi);
     const hourlyTemp = activeProfile.map(h => (h as any).temp ?? 25);
     
-    // Calculate hourly output using PVsyst loss chain
+    // Create config with actual module-derived collector area and efficiency
+    const configWithModuleData: PVsystLossChainConfig = {
+      ...pvsystConfig,
+      stcEfficiency: moduleMetrics.stcEfficiency,
+      collectorAreaM2: moduleMetrics.collectorAreaM2,
+    };
+    
+    // Calculate hourly output using PVsyst loss chain with physical module data
     const hourlyResults = calculateHourlyPVsystOutput(
       hourlyGhi,
       hourlyTemp,
       solarCapacity,
-      pvsystConfig
+      configWithModuleData
     );
     
     return hourlyResults.map(r => r.eGridKwh);
-  }, [lossCalculationMode, solarDataSource, solcastHourlyProfile, pvgisHourlyProfile, solarCapacity, pvsystConfig]);
+  }, [lossCalculationMode, solarDataSource, solcastHourlyProfile, pvgisHourlyProfile, solarCapacity, pvsystConfig, moduleMetrics]);
 
   // Active solar profile based on data source and loss calculation mode
   const solarProfile = useMemo(() => {
@@ -834,32 +854,21 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       </Collapsible>
 
       {/* PVsyst Loss Chain Configuration - only show when in PVsyst mode */}
-      {lossCalculationMode === "pvsyst" && (() => {
-        // Get selected module from inverter config
-        const selectedModule = inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule
-          ? inverterConfig.customModule
-          : getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
-        
-        // Calculate module metrics
-        const currentAcCapacity = inverterConfig.inverterSize * inverterConfig.inverterCount;
-        const metrics = calculateModuleMetrics(currentAcCapacity, inverterConfig.dcAcRatio, selectedModule);
-        
-        return (
-          <PVsystLossChainConfigPanel
-            config={{ ...pvsystConfig, stcEfficiency: metrics.stcEfficiency }}
-            onChange={(newConfig) => setPvsystConfig({ ...newConfig, stcEfficiency: metrics.stcEfficiency })}
-            dailyGHI={selectedLocation.ghi}
-            capacityKwp={solarCapacity}
-            ambientTemp={25}
-            moduleMetrics={{
-              moduleCount: metrics.moduleCount,
-              collectorAreaM2: metrics.collectorAreaM2,
-              stcEfficiency: metrics.stcEfficiency,
-              moduleName: selectedModule.name,
-            }}
-          />
-        );
-      })()}
+      {lossCalculationMode === "pvsyst" && (
+        <PVsystLossChainConfigPanel
+          config={{ ...pvsystConfig, stcEfficiency: moduleMetrics.stcEfficiency }}
+          onChange={(newConfig) => setPvsystConfig({ ...newConfig, stcEfficiency: moduleMetrics.stcEfficiency })}
+          dailyGHI={selectedLocation.ghi}
+          capacityKwp={solarCapacity}
+          ambientTemp={25}
+          moduleMetrics={{
+            moduleCount: moduleMetrics.moduleCount,
+            collectorAreaM2: moduleMetrics.collectorAreaM2,
+            stcEfficiency: moduleMetrics.stcEfficiency,
+            moduleName: moduleMetrics.moduleName,
+          }}
+        />
+      )}
 
       {/* Advanced Simulation Configuration */}
       <AdvancedSimulationConfigPanel

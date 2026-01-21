@@ -49,6 +49,7 @@ export interface PVsystLossChainConfig {
   operationYear: number;       // Year of operation (1-25) for degradation
   transpositionFactor: number; // POA gain from tilted surface (e.g., 1.08)
   stcEfficiency: number;       // Module STC efficiency (e.g., 0.2149 for 21.49%)
+  collectorAreaM2?: number;    // Optional: actual physical collector area from module dimensions
 }
 
 export interface LossBreakdownItem {
@@ -182,9 +183,9 @@ export function calculatePVsystLossChain(
 ): LossChainResult {
   // ========================================
   // Step 1: Calculate Collector Area (PVsyst methodology)
-  // Area = (Capacity in Wp) / (STC Efficiency × 1000 W/m²)
+  // Use provided area from module dimensions, OR calculate from capacity/efficiency
   // ========================================
-  const collectorAreaM2 = (capacityKwp * 1000) / (config.stcEfficiency * 1000);
+  const collectorAreaM2 = config.collectorAreaM2 ?? (capacityKwp * 1000) / (config.stcEfficiency * 1000);
   
   // ========================================
   // Step 2: GHI to POA (transposition gain)
@@ -332,8 +333,8 @@ export function calculateHourlyPVsystOutput(
 ): HourlyLossResult[] {
   const results: HourlyLossResult[] = [];
   
-  // Calculate collector area once (PVsyst methodology)
-  const collectorAreaM2 = (capacityKwp * 1000) / (config.stcEfficiency * 1000);
+  // Calculate collector area once - use provided area OR calculate from capacity/efficiency
+  const collectorAreaM2 = config.collectorAreaM2 ?? (capacityKwp * 1000) / (config.stcEfficiency * 1000);
   
   // Pre-calculate cumulative degradation (same for all hours)
   const cumulativeDegradation = calculateCumulativeDegradation(
