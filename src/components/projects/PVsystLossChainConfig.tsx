@@ -271,6 +271,7 @@ export function PVsystLossChainConfig({
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2 space-y-3 px-2">
+            {/* 1. Temperature Loss (dynamic) - display only */}
             <div className="p-2 bg-muted/30 rounded-lg">
               <div className="flex items-center justify-between text-xs">
                 <span className="flex items-center gap-1">
@@ -283,6 +284,7 @@ export function PVsystLossChainConfig({
                 Based on ambient temp ({ambientTemp}°C) and NOCT ({config.noct}°C)
               </div>
             </div>
+            {/* 2. Temp Coefficient */}
             <LossSlider
               label="Temp Coefficient"
               value={Math.abs(config.cellTempCoefficient)}
@@ -293,6 +295,7 @@ export function PVsystLossChainConfig({
               suffix="%/°C"
               description="Power temperature coefficient (typically -0.35 to -0.45 for mono-Si)"
             />
+            {/* 3. NOCT */}
             <LossSlider
               label="NOCT"
               value={config.noct}
@@ -303,13 +306,15 @@ export function PVsystLossChainConfig({
               suffix="°C"
               description="Nominal Operating Cell Temperature (typically 44-47°C)"
             />
+            {/* 4. LID - Light Induced Degradation */}
             <LossSlider
-              label="LID (Year 1)"
+              label="LID - Light Induced Degradation"
               value={config.array.lidLoss}
               onChange={(v) => updateArray("lidLoss", v)}
               max={5}
               description="Light-Induced Degradation in first year (typically 1-3% for mono-Si)"
             />
+            {/* 5. Annual Degradation */}
             <LossSlider
               label="Annual Degradation"
               value={config.array.annualDegradation}
@@ -318,15 +323,17 @@ export function PVsystLossChainConfig({
               step={0.05}
               description="Yearly performance decline (typically 0.4-0.7%)"
             />
+            {/* 6. Mismatch */}
             <LossSlider
-              label="Mismatch Loss"
+              label="Mismatch"
               value={config.array.mismatchLoss}
               onChange={(v) => updateArray("mismatchLoss", v)}
               max={8}
               description="Power loss from module parameter variations"
             />
+            {/* 7. Ohmic wiring */}
             <LossSlider
-              label="Ohmic/Wiring Loss"
+              label="Ohmic wiring"
               value={config.array.ohmicLoss}
               onChange={(v) => updateArray("ohmicLoss", v)}
               max={5}
