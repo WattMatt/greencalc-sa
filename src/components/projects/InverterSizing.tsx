@@ -389,7 +389,7 @@ export function InverterSizing({
                     step={0.001}
                   />
                 </div>
-                <div className="space-y-1">
+              <div className="space-y-1">
                   <Label className="text-[10px]">Length (m)</Label>
                   <Input
                     type="number"
@@ -399,6 +399,18 @@ export function InverterSizing({
                     min={0.5}
                     max={3}
                     step={0.001}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px]">Efficiency (%)</Label>
+                  <Input
+                    type="number"
+                    value={config.customModule?.efficiency || 21.49}
+                    onChange={(e) => handleCustomModuleChange("efficiency", Number(e.target.value))}
+                    className="h-7 text-xs"
+                    min={10}
+                    max={30}
+                    step={0.1}
                   />
                 </div>
               </div>
