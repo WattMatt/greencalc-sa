@@ -9,9 +9,10 @@ import { forwardRef, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Proposal, SimulationData, ProposalBranding } from "./types";
-import { ProposalTemplateId, PROPOSAL_TEMPLATES } from "./templates/types";
+import { ProposalTemplateId, PROPOSAL_TEMPLATES, getTemplateStyles } from "./templates/types";
 import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { ProposalLocationMap } from "./ProposalLocationMap";
+import { cn } from "@/lib/utils";
 
 interface ProposalPrintViewProps {
   proposal: Partial<Proposal>;
@@ -26,6 +27,7 @@ interface ProposalPrintViewProps {
 export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewProps>(
   ({ proposal, project, simulation, tenants, shopTypes, showSystemDesign, templateId = "modern" }, ref) => {
     const template = PROPOSAL_TEMPLATES[templateId];
+    const templateStyles = getTemplateStyles(template);
     const branding = proposal.branding as ProposalBranding;
     const primaryColor = branding?.primary_color || template.colors.accentColor;
     const secondaryColor = branding?.secondary_color || template.colors.headerBg;
@@ -155,19 +157,26 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
       </div>
     );
 
-    // Page wrapper component
+    // Page wrapper component - apply template styles
+    const borderRadiusStyle = template.layout.cardStyle === 'rounded' ? '0.75rem' : 
+                               template.layout.cardStyle === 'subtle' ? '0.375rem' : '0';
+    
     const PageWrapper = ({ children, pageNum }: { children: React.ReactNode; pageNum: number }) => (
       <div 
-        className="bg-white border rounded-lg shadow-lg overflow-hidden flex flex-col page-break-after"
+        className="bg-white border overflow-hidden flex flex-col page-break-after"
         style={{ 
           width: "794px",
           minHeight: "1123px",
           pageBreakAfter: "always",
           marginBottom: "20px",
+          borderRadius: borderRadiusStyle,
+          boxShadow: template.layout.shadowStyle === 'pronounced' ? '0 10px 25px -5px rgba(0,0,0,0.1)' :
+                     template.layout.shadowStyle === 'medium' ? '0 4px 12px -2px rgba(0,0,0,0.08)' :
+                     template.layout.shadowStyle === 'subtle' ? '0 1px 3px rgba(0,0,0,0.05)' : 'none',
         }}
       >
         <PageHeader pageNum={pageNum} />
-        <div className="flex-1 p-6 overflow-hidden">
+        <div className={cn("flex-1 overflow-hidden", templateStyles.sectionSpacing.p)}>
           {children}
         </div>
         <PageFooter />
@@ -199,10 +208,10 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
           <div>
             {/* Hero Section */}
             <div 
-              className="rounded-lg p-6 text-white mb-6"
-              style={{ backgroundColor: primaryColor }}
+              className={cn("p-6 text-white", templateStyles.sectionSpacing.mb)}
+              style={{ backgroundColor: primaryColor, borderRadius: borderRadiusStyle }}
             >
-              <h2 className="text-2xl font-bold mb-2">Solar Installation Proposal</h2>
+              <h2 className={cn("text-2xl mb-2", templateStyles.headingWeight)}>Solar Installation Proposal</h2>
               <p className="text-white/80">
                 {new Date().toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" })}
               </p>
@@ -210,36 +219,37 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
 
             {/* Key Metrics */}
             {simulation && (
-              <div className="grid grid-cols-4 gap-4 mb-6">
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <Sun className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />
-                  <div className="text-2xl font-bold">{simulation.solarCapacity} kWp</div>
-                  <div className="text-xs text-gray-500">System Size</div>
+              <div className={cn("grid grid-cols-4", templateStyles.sectionSpacing.gap, templateStyles.sectionSpacing.mb)}>
+                <div className={cn("text-center", templateStyles.sectionSpacing.p)} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                  {template.layout.showIcons && <Sun className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />}
+                  <div className={cn("text-2xl", templateStyles.headingWeight)}>{simulation.solarCapacity} kWp</div>
+                  <div className="text-xs" style={{ color: template.colors.textSecondary }}>System Size</div>
                 </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <TrendingUp className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />
-                  <div className="text-2xl font-bold">{formatCurrency(simulation.annualSavings)}</div>
-                  <div className="text-xs text-gray-500">Annual Savings</div>
+                <div className={cn("text-center", templateStyles.sectionSpacing.p)} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                  {template.layout.showIcons && <TrendingUp className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />}
+                  <div className={cn("text-2xl", templateStyles.headingWeight)}>{formatCurrency(simulation.annualSavings)}</div>
+                  <div className="text-xs" style={{ color: template.colors.textSecondary }}>Annual Savings</div>
                 </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <Calendar className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />
-                  <div className="text-2xl font-bold">{simulation.paybackYears.toFixed(1)} yrs</div>
-                  <div className="text-xs text-gray-500">Payback Period</div>
+                <div className={cn("text-center", templateStyles.sectionSpacing.p)} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                  {template.layout.showIcons && <Calendar className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />}
+                  <div className={cn("text-2xl", templateStyles.headingWeight)}>{simulation.paybackYears.toFixed(1)} yrs</div>
+                  <div className="text-xs" style={{ color: template.colors.textSecondary }}>Payback Period</div>
                 </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <Zap className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />
-                  <div className="text-2xl font-bold">{simulation.roiPercentage.toFixed(0)}%</div>
-                  <div className="text-xs text-gray-500">25-Year ROI</div>
+                <div className={cn("text-center", templateStyles.sectionSpacing.p)} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                  {template.layout.showIcons && <Zap className="h-8 w-8 mx-auto mb-2" style={{ color: primaryColor }} />}
+                  <div className={cn("text-2xl", templateStyles.headingWeight)}>{simulation.roiPercentage.toFixed(0)}%</div>
+                  <div className="text-xs" style={{ color: template.colors.textSecondary }}>25-Year ROI</div>
                 </div>
               </div>
             )}
 
             {/* Executive Summary */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-3" style={{ color: primaryColor }}>
+            <div className={templateStyles.sectionSpacing.mb}>
+              <h3 className={cn("text-lg mb-3", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+                {template.layout.showIcons && <Zap className="h-5 w-5 inline mr-2" />}
                 Executive Summary
               </h3>
-              <p className="text-sm text-gray-700 leading-relaxed">
+              <p className="text-sm leading-relaxed" style={{ color: template.colors.textSecondary }}>
                 {proposal.executive_summary || 
                   `This proposal outlines a ${simulation?.solarCapacity || 0} kWp solar PV system installation for ${project?.name}. The system is projected to generate ${formatNumber(simulation?.annualSolarGeneration || 0)} kWh annually, resulting in estimated annual savings of ${formatCurrency(simulation?.annualSavings || 0)} with a payback period of ${(simulation?.paybackYears || 0).toFixed(1)} years.`}
               </p>
@@ -250,14 +260,14 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
         {/* Site Overview Page */}
         <PageWrapper pageNum={pages.find(p => p.id === "site")?.pageNum || 2}>
           <div>
-            <h3 className="text-lg font-semibold mb-4" style={{ color: primaryColor }}>
-              <MapPin className="h-5 w-5 inline mr-2" />
+            <h3 className={cn("text-lg mb-4", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+              {template.layout.showIcons && <MapPin className="h-5 w-5 inline mr-2" />}
               Site Overview
             </h3>
             
             {/* Map */}
             {project?.latitude && project?.longitude && (
-              <div className="mb-4 rounded-lg overflow-hidden border" style={{ height: "200px" }}>
+              <div className={cn("mb-4 overflow-hidden border", templateStyles.sectionSpacing.mb)} style={{ height: "200px", borderRadius: borderRadiusStyle }}>
                 <ProposalLocationMap
                   latitude={project.latitude}
                   longitude={project.longitude}
@@ -268,21 +278,21 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
             )}
             
             {/* Site Details */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="text-xs text-gray-500 mb-1">Location</div>
-                <div className="font-medium">{project?.location || "Not specified"}</div>
+            <div className={cn("grid grid-cols-2", templateStyles.sectionSpacing.gap)}>
+              <div className={templateStyles.sectionSpacing.p} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                <div className="text-xs mb-1" style={{ color: template.colors.textSecondary }}>Location</div>
+                <div className={cn("font-medium", templateStyles.headingWeight === 'font-extrabold' && 'font-semibold')}>{project?.location || "Not specified"}</div>
               </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="text-xs text-gray-500 mb-1">Total Area</div>
+              <div className={templateStyles.sectionSpacing.p} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                <div className="text-xs mb-1" style={{ color: template.colors.textSecondary }}>Total Area</div>
                 <div className="font-medium">{project?.total_area_sqm ? `${formatNumber(project.total_area_sqm)} m²` : "—"}</div>
               </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="text-xs text-gray-500 mb-1">Connection Size</div>
+              <div className={templateStyles.sectionSpacing.p} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                <div className="text-xs mb-1" style={{ color: template.colors.textSecondary }}>Connection Size</div>
                 <div className="font-medium">{project?.connection_size_kva ? `${project.connection_size_kva} kVA` : "—"}</div>
               </div>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="text-xs text-gray-500 mb-1">Tariff</div>
+              <div className={templateStyles.sectionSpacing.p} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                <div className="text-xs mb-1" style={{ color: template.colors.textSecondary }}>Tariff</div>
                 <div className="font-medium">{simulation?.tariffName || "Standard"}</div>
               </div>
             </div>
@@ -293,11 +303,11 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
         {hasSystemDesign && (
           <PageWrapper pageNum={pages.find(p => p.id === "design")?.pageNum || 3}>
             <div>
-              <h3 className="text-lg font-semibold mb-4" style={{ color: primaryColor }}>
-                <LayoutDashboard className="h-5 w-5 inline mr-2" />
+              <h3 className={cn("text-lg mb-4", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+                {template.layout.showIcons && <LayoutDashboard className="h-5 w-5 inline mr-2" />}
                 System Design
               </h3>
-              <div className="border rounded-lg overflow-hidden" style={{ height: "400px" }}>
+              <div className="border overflow-hidden" style={{ height: "400px", borderRadius: borderRadiusStyle }}>
                 <FloorPlanMarkup projectId={project?.id} readOnly />
               </div>
             </div>
@@ -308,27 +318,28 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
         {tenants && shopTypes && (
           <PageWrapper pageNum={pages.find(p => p.id === "load")?.pageNum || 4}>
             <div>
-              <h3 className="text-lg font-semibold mb-4" style={{ color: primaryColor }}>
-                <BarChart3 className="h-5 w-5 inline mr-2" />
+              <h3 className={cn("text-lg mb-4", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+                {template.layout.showIcons && <BarChart3 className="h-5 w-5 inline mr-2" />}
                 Load Analysis
               </h3>
               
               {/* Tenant Summary */}
-              <div className="mb-4">
-                <h4 className="text-sm font-medium mb-2">Tenant Summary</h4>
+              <div className={templateStyles.sectionSpacing.mb}>
+                <h4 className={cn("text-sm mb-2", templateStyles.headingWeight)}>Tenant Summary</h4>
                 <table className="w-full text-sm border-collapse">
                   <thead>
-                    <tr className="border-b">
+                    <tr className={template.layout.tableStyle === 'bordered' ? 'border border-b-2' : 'border-b'}>
                       <th className="text-left py-2 px-3">Tenant</th>
                       <th className="text-right py-2 px-3">Area (m²)</th>
                       <th className="text-left py-2 px-3">Category</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {tenants.slice(0, 10).map((tenant: any) => {
+                    {tenants.slice(0, 10).map((tenant: any, idx: number) => {
                       const shopType = shopTypes.find((st: any) => st.id === tenant.shop_type_id);
+                      const rowBg = template.layout.tableStyle === 'striped' && idx % 2 === 1 ? template.colors.cardBg : 'transparent';
                       return (
-                        <tr key={tenant.id} className="border-b">
+                        <tr key={tenant.id} className={template.layout.tableStyle === 'bordered' ? 'border' : 'border-b'} style={{ backgroundColor: rowBg }}>
                           <td className="py-2 px-3">{tenant.name}</td>
                           <td className="text-right py-2 px-3">{formatNumber(tenant.area_sqm)}</td>
                           <td className="py-2 px-3">{shopType?.name || "—"}</td>
@@ -338,14 +349,14 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
                   </tbody>
                 </table>
                 {tenants.length > 10 && (
-                  <p className="text-xs text-gray-500 mt-2">
+                  <p className="text-xs mt-2" style={{ color: template.colors.textSecondary }}>
                     + {tenants.length - 10} more tenants
                   </p>
                 )}
               </div>
 
               {/* Load Profile Note */}
-              <div className="border rounded-lg p-4 text-center text-sm text-gray-500">
+              <div className={cn("border text-center text-sm", templateStyles.sectionSpacing.p)} style={{ color: template.colors.textSecondary, borderRadius: borderRadiusStyle }}>
                 <p>See attached load profile analysis for detailed consumption patterns.</p>
               </div>
             </div>
@@ -355,46 +366,46 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
         {/* System Specification Page */}
         <PageWrapper pageNum={pages.find(p => p.id === "specs")?.pageNum || 5}>
           <div>
-            <h3 className="text-lg font-semibold mb-4" style={{ color: primaryColor }}>
-              <Sun className="h-5 w-5 inline mr-2" />
+            <h3 className={cn("text-lg mb-4", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+              {template.layout.showIcons && <Sun className="h-5 w-5 inline mr-2" />}
               System Specification
             </h3>
             
             {simulation && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="text-xs text-gray-500 mb-1">Solar Capacity</div>
-                    <div className="text-xl font-bold" style={{ color: primaryColor }}>{simulation.solarCapacity} kWp</div>
+              <div className={cn("space-y-4", templateStyles.sectionSpacing.gap)}>
+                <div className={cn("grid grid-cols-2", templateStyles.sectionSpacing.gap)}>
+                  <div className={templateStyles.sectionSpacing.p} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                    <div className="text-xs mb-1" style={{ color: template.colors.textSecondary }}>Solar Capacity</div>
+                    <div className={cn("text-xl", templateStyles.headingWeight)} style={{ color: primaryColor }}>{simulation.solarCapacity} kWp</div>
                   </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="text-xs text-gray-500 mb-1">Battery Storage</div>
-                    <div className="text-xl font-bold" style={{ color: primaryColor }}>{simulation.batteryCapacity} kWh</div>
+                  <div className={templateStyles.sectionSpacing.p} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                    <div className="text-xs mb-1" style={{ color: template.colors.textSecondary }}>Battery Storage</div>
+                    <div className={cn("text-xl", templateStyles.headingWeight)} style={{ color: primaryColor }}>{simulation.batteryCapacity} kWh</div>
                   </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="text-xs text-gray-500 mb-1">Battery Power</div>
-                    <div className="text-xl font-bold" style={{ color: primaryColor }}>{simulation.batteryPower} kW</div>
+                  <div className={templateStyles.sectionSpacing.p} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                    <div className="text-xs mb-1" style={{ color: template.colors.textSecondary }}>Battery Power</div>
+                    <div className={cn("text-xl", templateStyles.headingWeight)} style={{ color: primaryColor }}>{simulation.batteryPower} kW</div>
                   </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="text-xs text-gray-500 mb-1">System Cost</div>
-                    <div className="text-xl font-bold" style={{ color: primaryColor }}>{formatCurrency(simulation.systemCost)}</div>
+                  <div className={templateStyles.sectionSpacing.p} style={{ backgroundColor: template.colors.cardBg, borderRadius: borderRadiusStyle }}>
+                    <div className="text-xs mb-1" style={{ color: template.colors.textSecondary }}>System Cost</div>
+                    <div className={cn("text-xl", templateStyles.headingWeight)} style={{ color: primaryColor }}>{formatCurrency(simulation.systemCost)}</div>
                   </div>
                 </div>
                 
                 <div className="border-t pt-4">
-                  <h4 className="text-sm font-medium mb-3">Energy Performance</h4>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center p-3 bg-green-50 rounded-lg">
-                      <div className="text-lg font-bold text-green-600">{formatNumber(simulation.annualSolarGeneration)}</div>
-                      <div className="text-xs text-gray-500">Annual Generation (kWh)</div>
+                  <h4 className={cn("text-sm mb-3", templateStyles.headingWeight)}>Energy Performance</h4>
+                  <div className={cn("grid grid-cols-3", templateStyles.sectionSpacing.gap)}>
+                    <div className={cn("text-center", templateStyles.sectionSpacing.p)} style={{ backgroundColor: '#dcfce7', borderRadius: borderRadiusStyle }}>
+                      <div className={cn("text-lg", templateStyles.headingWeight)} style={{ color: '#16a34a' }}>{formatNumber(simulation.annualSolarGeneration)}</div>
+                      <div className="text-xs" style={{ color: template.colors.textSecondary }}>Annual Generation (kWh)</div>
                     </div>
-                    <div className="text-center p-3 bg-blue-50 rounded-lg">
-                      <div className="text-lg font-bold text-blue-600">{formatNumber(simulation.annualGridImport)}</div>
-                      <div className="text-xs text-gray-500">Grid Import (kWh)</div>
+                    <div className={cn("text-center", templateStyles.sectionSpacing.p)} style={{ backgroundColor: '#dbeafe', borderRadius: borderRadiusStyle }}>
+                      <div className={cn("text-lg", templateStyles.headingWeight)} style={{ color: '#2563eb' }}>{formatNumber(simulation.annualGridImport)}</div>
+                      <div className="text-xs" style={{ color: template.colors.textSecondary }}>Grid Import (kWh)</div>
                     </div>
-                    <div className="text-center p-3 bg-orange-50 rounded-lg">
-                      <div className="text-lg font-bold text-orange-600">{formatNumber(simulation.annualGridExport)}</div>
-                      <div className="text-xs text-gray-500">Grid Export (kWh)</div>
+                    <div className={cn("text-center", templateStyles.sectionSpacing.p)} style={{ backgroundColor: '#ffedd5', borderRadius: borderRadiusStyle }}>
+                      <div className={cn("text-lg", templateStyles.headingWeight)} style={{ color: '#ea580c' }}>{formatNumber(simulation.annualGridExport)}</div>
+                      <div className="text-xs" style={{ color: template.colors.textSecondary }}>Grid Export (kWh)</div>
                     </div>
                   </div>
                 </div>
@@ -406,14 +417,14 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
         {/* Financial Analysis Page */}
         <PageWrapper pageNum={pages.find(p => p.id === "financial")?.pageNum || 6}>
           <div>
-            <h3 className="text-lg font-semibold mb-4" style={{ color: primaryColor }}>
-              <TrendingUp className="h-5 w-5 inline mr-2" />
+            <h3 className={cn("text-lg mb-4", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+              {template.layout.showIcons && <TrendingUp className="h-5 w-5 inline mr-2" />}
               25-Year Financial Projection
             </h3>
             
             <table className="w-full text-xs border-collapse mb-4">
               <thead>
-                <tr style={{ backgroundColor: secondaryColor, color: "white" }}>
+                <tr style={{ backgroundColor: secondaryColor, color: isLightHeader ? template.colors.textPrimary : "white" }}>
                   <th className="py-2 px-2 text-left">Year</th>
                   <th className="py-2 px-2 text-right">Generation (kWh)</th>
                   <th className="py-2 px-2 text-right">Annual Savings</th>
@@ -422,24 +433,31 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
                 </tr>
               </thead>
               <tbody>
-                {projection.map((row) => (
-                  <tr 
-                    key={row.year} 
-                    className={`border-b ${row.year === paybackYear ? "bg-green-50 font-medium" : ""}`}
-                  >
-                    <td className="py-1 px-2">{row.year}</td>
-                    <td className="py-1 px-2 text-right">{formatNumber(row.generation)}</td>
-                    <td className="py-1 px-2 text-right">{formatCurrency(row.savings)}</td>
-                    <td className="py-1 px-2 text-right">{formatCurrency(row.cumulative)}</td>
-                    <td className="py-1 px-2 text-right">{row.roi.toFixed(1)}%</td>
-                  </tr>
-                ))}
+                {projection.map((row, idx) => {
+                  const rowBg = template.layout.tableStyle === 'striped' && idx % 2 === 1 ? template.colors.cardBg : 'transparent';
+                  return (
+                    <tr 
+                      key={row.year} 
+                      className={template.layout.tableStyle === 'bordered' ? 'border' : 'border-b'}
+                      style={{ 
+                        backgroundColor: row.year === paybackYear ? '#dcfce7' : rowBg,
+                        fontWeight: row.year === paybackYear ? 500 : undefined,
+                      }}
+                    >
+                      <td className="py-1 px-2">{row.year}</td>
+                      <td className="py-1 px-2 text-right">{formatNumber(row.generation)}</td>
+                      <td className="py-1 px-2 text-right">{formatCurrency(row.savings)}</td>
+                      <td className="py-1 px-2 text-right">{formatCurrency(row.cumulative)}</td>
+                      <td className="py-1 px-2 text-right">{row.roi.toFixed(1)}%</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 
             {paybackYear > 0 && (
-              <div className="p-3 bg-green-50 rounded-lg text-center">
-                <span className="text-green-700 font-medium">
+              <div className={cn("text-center", templateStyles.sectionSpacing.p)} style={{ backgroundColor: '#dcfce7', borderRadius: borderRadiusStyle }}>
+                <span style={{ color: '#16a34a' }} className={templateStyles.headingWeight}>
                   ✓ Investment payback achieved in Year {paybackYear}
                 </span>
               </div>
@@ -450,37 +468,51 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
         {/* Terms & Signatures Page */}
         <PageWrapper pageNum={pages.find(p => p.id === "terms")?.pageNum || 7}>
           <div>
-            <h3 className="text-lg font-semibold mb-4" style={{ color: primaryColor }}>
+            <h3 className={cn("text-lg mb-4", templateStyles.headingWeight)} style={{ color: primaryColor }}>
+              {template.layout.showIcons && <Calendar className="h-5 w-5 inline mr-2" />}
               Terms & Conditions
             </h3>
             
             {/* Assumptions */}
-            <div className="mb-6">
-              <h4 className="text-sm font-medium mb-2">Assumptions</h4>
-              <p className="text-xs text-gray-600 leading-relaxed whitespace-pre-line">
+            <div className={templateStyles.sectionSpacing.mb}>
+              <h4 className={cn("text-sm mb-2", templateStyles.headingWeight)}>Assumptions</h4>
+              <div className={cn("text-xs leading-relaxed whitespace-pre-line", templateStyles.sectionSpacing.p)} 
+                   style={{ 
+                     color: template.colors.textSecondary, 
+                     backgroundColor: template.layout.useCards ? template.colors.cardBg : 'transparent',
+                     borderRadius: borderRadiusStyle,
+                     borderLeft: !template.layout.useCards ? `3px solid ${primaryColor}` : undefined,
+                     paddingLeft: !template.layout.useCards ? '1rem' : undefined,
+                   }}>
                 {proposal.assumptions || "• 0.5% annual panel degradation\n• 8% annual tariff escalation\n• Standard weather conditions"}
-              </p>
+              </div>
             </div>
             
             {/* Disclaimers */}
-            <div className="mb-6">
-              <h4 className="text-sm font-medium mb-2">Disclaimers</h4>
-              <p className="text-xs text-gray-500 leading-relaxed">
+            <div className={templateStyles.sectionSpacing.mb}>
+              <h4 className={cn("text-sm mb-2", templateStyles.headingWeight)}>Disclaimers</h4>
+              <p className={cn("text-xs leading-relaxed", templateStyles.sectionSpacing.p)} 
+                 style={{ 
+                   color: template.colors.textSecondary,
+                   backgroundColor: '#fef3c7',
+                   borderRadius: borderRadiusStyle,
+                   border: '1px solid #fcd34d',
+                 }}>
                 {proposal.disclaimers || "This proposal is based on estimated consumption data and solar irradiance forecasts. Actual performance may vary."}
               </p>
             </div>
             
             {/* Signatures */}
-            <div className="grid grid-cols-2 gap-8 mt-12 pt-8 border-t">
+            <div className={cn("grid grid-cols-2 mt-12 pt-8 border-t", templateStyles.sectionSpacing.gap)}>
               <div>
-                <div className="border-b-2 border-gray-300 h-12 mb-2"></div>
-                <div className="text-sm font-medium">{proposal.prepared_by || "Prepared By"}</div>
-                <div className="text-xs text-gray-500">Company Representative</div>
+                <div className="border-b-2 h-12 mb-2" style={{ borderColor: template.colors.tableBorder }}></div>
+                <div className={cn("text-sm", templateStyles.headingWeight)}>{proposal.prepared_by || "Prepared By"}</div>
+                <div className="text-xs" style={{ color: template.colors.textSecondary }}>Company Representative</div>
               </div>
               <div>
-                <div className="border-b-2 border-gray-300 h-12 mb-2"></div>
-                <div className="text-sm font-medium">{proposal.client_signature || "Client Signature"}</div>
-                <div className="text-xs text-gray-500">Date: _______________</div>
+                <div className="border-b-2 h-12 mb-2" style={{ borderColor: template.colors.tableBorder }}></div>
+                <div className={cn("text-sm", templateStyles.headingWeight)}>{proposal.client_signature || "Client Signature"}</div>
+                <div className="text-xs" style={{ color: template.colors.textSecondary }}>Date: _______________</div>
               </div>
             </div>
           </div>
