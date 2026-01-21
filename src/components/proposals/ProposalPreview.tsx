@@ -104,10 +104,14 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
   const totalPages = pages.length;
   const currentPageId = pages[currentPage]?.id;
 
-  // Page header component
+  // Page header component - determine if we need dark or light text
+  const isLightHeader = template.colors.headerBg === '#ffffff' || template.colors.headerBg === '#fafaf9';
+  const headerTextClass = isLightHeader ? 'text-foreground' : 'text-white';
+  const headerSubtextClass = isLightHeader ? 'text-muted-foreground' : 'text-white/70';
+
   const PageHeader = () => (
     <div
-      className="p-4 text-white flex items-center justify-between shrink-0"
+      className={`p-4 flex items-center justify-between shrink-0 ${headerTextClass}`}
       style={{ backgroundColor: secondaryColor }}
     >
       <div className="flex items-center gap-3">
@@ -118,19 +122,19 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
           <h1 className="text-lg font-bold">
             {branding?.company_name || "Solar Installation Proposal"}
           </h1>
-          <p className="text-xs text-white/70">
+          <p className={`text-xs ${headerSubtextClass}`}>
             {project?.name}
           </p>
         </div>
       </div>
       <div className="text-right flex items-center gap-3">
         <Badge
-          className="text-white border-white/30 text-xs"
+          className={`${headerTextClass} border-current/30 text-xs`}
           style={{ backgroundColor: primaryColor }}
         >
           v{proposal.version || 1}
         </Badge>
-        <span className="text-xs text-white/70">
+        <span className={`text-xs ${headerSubtextClass}`}>
           Page {currentPage + 1} of {totalPages}
         </span>
       </div>
@@ -140,7 +144,7 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
   // Page footer component
   const PageFooter = () => (
     <div
-      className="p-3 text-white text-center text-xs mt-auto shrink-0"
+      className={`p-3 text-center text-xs mt-auto shrink-0 ${headerTextClass}`}
       style={{ backgroundColor: secondaryColor }}
     >
       <div className="flex items-center justify-center gap-3 flex-wrap">
