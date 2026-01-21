@@ -209,42 +209,15 @@ export function PVsystLossChainConfig({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                -{(config.irradiance.shadingLoss + config.irradiance.iamLoss + config.irradiance.soilingLoss + config.irradiance.spectralLoss).toFixed(1)}%
+                -{(config.irradiance.shadingLoss + config.irradiance.iamLoss + config.irradiance.soilingLoss).toFixed(1)}%
               </Badge>
               <ChevronDown className={`h-4 w-4 transition-transform ${showIrradiance ? "rotate-180" : ""}`} />
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2 space-y-3 px-2">
+            {/* 1. Global incident in coll. plane (Transposition Factor) */}
             <LossSlider
-              label="Shading Loss"
-              value={config.irradiance.shadingLoss}
-              onChange={(v) => updateIrradiance("shadingLoss", v)}
-              max={15}
-              description="Near shading from surrounding objects, horizon, and module self-shading"
-            />
-            <LossSlider
-              label="IAM Loss"
-              value={config.irradiance.iamLoss}
-              onChange={(v) => updateIrradiance("iamLoss", v)}
-              max={5}
-              description="Incidence Angle Modifier - reflection losses at high angles"
-            />
-            <LossSlider
-              label="Soiling Loss"
-              value={config.irradiance.soilingLoss}
-              onChange={(v) => updateIrradiance("soilingLoss", v)}
-              max={10}
-              description="Dust, dirt, and debris accumulation on modules"
-            />
-            <LossSlider
-              label="Spectral Loss"
-              value={config.irradiance.spectralLoss}
-              onChange={(v) => updateIrradiance("spectralLoss", v)}
-              max={3}
-              description="Spectral mismatch between actual and reference spectrum"
-            />
-            <LossSlider
-              label="Transposition Factor"
+              label="Global incident in coll. plane"
               value={config.transpositionFactor}
               onChange={(v) => onChange({ ...config, transpositionFactor: v })}
               min={0.9}
@@ -252,6 +225,30 @@ export function PVsystLossChainConfig({
               step={0.01}
               suffix="x"
               description="POA irradiance gain from tilted surface (typically 1.05-1.15 for SA)"
+            />
+            {/* 2. Near Shadings: irradiance loss */}
+            <LossSlider
+              label="Near Shadings: irradiance loss"
+              value={config.irradiance.shadingLoss}
+              onChange={(v) => updateIrradiance("shadingLoss", v)}
+              max={15}
+              description="Near shading from surrounding objects, horizon, and module self-shading"
+            />
+            {/* 3. IAM factor on global */}
+            <LossSlider
+              label="IAM factor on global"
+              value={config.irradiance.iamLoss}
+              onChange={(v) => updateIrradiance("iamLoss", v)}
+              max={5}
+              description="Incidence Angle Modifier - reflection losses at high angles"
+            />
+            {/* 4. Soiling loss factor */}
+            <LossSlider
+              label="Soiling loss factor"
+              value={config.irradiance.soilingLoss}
+              onChange={(v) => updateIrradiance("soilingLoss", v)}
+              max={10}
+              description="Dust, dirt, and debris accumulation on modules"
             />
           </CollapsibleContent>
         </Collapsible>
