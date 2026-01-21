@@ -45,6 +45,7 @@ import {
   STATUS_LABELS,
   STATUS_COLORS
 } from "@/components/proposals/types";
+import { ProposalTemplateId, PROPOSAL_TEMPLATES } from "@/components/proposals/templates/types";
 
 const proposalBuilderTour = getTour("proposalBuilder");
 
@@ -90,6 +91,7 @@ export default function ProposalWorkspace() {
   const [customNotes, setCustomNotes] = useState("");
   const [assumptions, setAssumptions] = useState("");
   const [showSystemDesign, setShowSystemDesign] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<ProposalTemplateId>("modern");
   const [disclaimers, setDisclaimers] = useState(
     "This proposal is based on estimated consumption data and solar irradiance forecasts. Actual performance may vary based on weather conditions, equipment degradation, and other factors. Financial projections assume current tariff rates and do not account for future rate changes. All figures are estimates only."
   );
@@ -729,6 +731,8 @@ export default function ProposalWorkspace() {
                     proposal={proposalForComponents}
                     project={project}
                     simulation={simulationData}
+                    selectedTemplate={selectedTemplate}
+                    onTemplateChange={setSelectedTemplate}
                   />
                 </div>
               )}
@@ -759,6 +763,7 @@ export default function ProposalWorkspace() {
                           tenants={tenants || undefined}
                           shopTypes={shopTypes || undefined}
                           showSystemDesign={showSystemDesign}
+                          templateId={selectedTemplate}
                         />
                       ) : (
                         <div className="flex flex-col items-center justify-center py-16 text-center">

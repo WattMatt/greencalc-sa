@@ -6,6 +6,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Proposal, SimulationData, ProposalBranding } from "./types";
+import { ProposalTemplateId, PROPOSAL_TEMPLATES } from "./templates/types";
 import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { LoadProfileChart } from "@/components/projects/LoadProfileChart";
 import { ProposalLocationMap } from "./ProposalLocationMap";
@@ -17,12 +18,15 @@ interface ProposalPreviewProps {
   tenants?: any[];
   shopTypes?: any[];
   showSystemDesign?: boolean;
+  templateId?: ProposalTemplateId;
 }
 
-export function ProposalPreview({ proposal, project, simulation, tenants, shopTypes, showSystemDesign }: ProposalPreviewProps) {
+export function ProposalPreview({ proposal, project, simulation, tenants, shopTypes, showSystemDesign, templateId = "modern" }: ProposalPreviewProps) {
+  const template = PROPOSAL_TEMPLATES[templateId];
   const branding = proposal.branding as ProposalBranding;
-  const primaryColor = branding?.primary_color || "#22c55e";
-  const secondaryColor = branding?.secondary_color || "#0f172a";
+  // Use template colors as defaults, allow branding to override
+  const primaryColor = branding?.primary_color || template.colors.accentColor;
+  const secondaryColor = branding?.secondary_color || template.colors.headerBg;
   const [showFullProjection, setShowFullProjection] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
 
