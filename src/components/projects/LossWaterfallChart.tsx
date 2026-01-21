@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import type { LossBreakdownItem } from "@/lib/pvsystLossChain";
 
@@ -8,9 +9,28 @@ interface LossWaterfallChartProps {
   breakdown: LossBreakdownItem[];
   performanceRatio: number;
   className?: string;
+  editable?: boolean;
+  onLossChange?: (stage: string, newValue: number) => void;
 }
 
-export function LossWaterfallChart({ breakdown, performanceRatio, className }: LossWaterfallChartProps) {
+export function LossWaterfallChart({ 
+  breakdown, 
+  performanceRatio, 
+  className,
+  editable = false,
+  onLossChange
+}: LossWaterfallChartProps) {
+  const [editingStage, setEditingStage] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingStage && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingStage]);
+
   // Calculate running total for waterfall visualization
   const waterfallData = useMemo(() => {
     let runningPercent = 100;
@@ -28,10 +48,11 @@ export function LossWaterfallChart({ breakdown, performanceRatio, className }: L
             endPercent: 100,
             runningPercent: 100,
             barWidth: 100,
+            isGain: false,
           };
         }
         
-        const loss = isGain ? -item.lossPercent : item.lossPercent;
+        const loss = isGain ? -Math.abs(item.lossPercent) : Math.abs(item.lossPercent);
         const startPercent = runningPercent;
         runningPercent = runningPercent - loss;
         
@@ -41,9 +62,34 @@ export function LossWaterfallChart({ breakdown, performanceRatio, className }: L
           endPercent: runningPercent,
           runningPercent,
           barWidth: Math.abs(loss),
+          isGain,
         };
       });
   }, [breakdown]);
+
+  const handleEditClick = (stage: string, currentValue: number) => {
+    if (!editable || stage === "GHI Input") return;
+    setEditingStage(stage);
+    setEditValue(Math.abs(currentValue).toFixed(4));
+  };
+
+  const handleEditBlur = () => {
+    if (editingStage && onLossChange) {
+      const newValue = parseFloat(editValue);
+      if (!isNaN(newValue)) {
+        onLossChange(editingStage, newValue);
+      }
+    }
+    setEditingStage(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleEditBlur();
+    } else if (e.key === "Escape") {
+      setEditingStage(null);
+    }
+  };
 
   return (
     <Card className={className}>
@@ -56,6 +102,7 @@ export function LossWaterfallChart({ breakdown, performanceRatio, className }: L
         </div>
         <CardDescription className="text-xs">
           Sequential energy losses from GHI to grid injection
+          {editable && <span className="text-primary ml-1">(click values to edit)</span>}
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-2">
@@ -63,12 +110,13 @@ export function LossWaterfallChart({ breakdown, performanceRatio, className }: L
           {waterfallData.map((item, index) => {
             const isFirst = index === 0;
             const isGain = item.isGain;
-            const isLast = item.stage === "Availability" || item.stage === "E_Grid";
+            const isLast = item.stage === "System Unavailability";
+            const isEditing = editingStage === item.stage;
             
             return (
               <div key={item.stage} className="flex items-center gap-2 text-xs">
                 {/* Stage label */}
-                <div className="w-28 truncate text-muted-foreground text-right">
+                <div className="w-32 truncate text-muted-foreground text-right" title={item.stage}>
                   {item.stage}
                 </div>
                 
@@ -100,8 +148,8 @@ export function LossWaterfallChart({ breakdown, performanceRatio, className }: L
                   )}
                 </div>
                 
-                {/* Loss/Gain value */}
-                <div className={`w-16 text-right flex items-center justify-end gap-1 ${
+                {/* Loss/Gain value - editable */}
+                <div className={`w-20 text-right flex items-center justify-end gap-1 ${
                   isFirst 
                     ? "text-muted-foreground"
                     : isGain 
@@ -110,17 +158,36 @@ export function LossWaterfallChart({ breakdown, performanceRatio, className }: L
                 }`}>
                   {!isFirst && (
                     isGain ? (
-                      <TrendingUp className="h-3 w-3" />
+                      <TrendingUp className="h-3 w-3 flex-shrink-0" />
                     ) : (
-                      <TrendingDown className="h-3 w-3" />
+                      <TrendingDown className="h-3 w-3 flex-shrink-0" />
                     )
                   )}
-                  {isFirst ? (
-                    "100%"
-                  ) : isGain ? (
-                    `+${Math.abs(item.lossPercent).toFixed(1)}%`
+                  {isEditing ? (
+                    <Input
+                      ref={inputRef}
+                      type="text"
+                      inputMode="decimal"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={handleEditBlur}
+                      onKeyDown={handleKeyDown}
+                      className="h-5 w-16 text-xs text-right px-1 py-0"
+                    />
                   ) : (
-                    `-${item.lossPercent.toFixed(1)}%`
+                    <span
+                      className={`${editable && !isFirst ? "cursor-pointer hover:underline" : ""}`}
+                      onClick={() => handleEditClick(item.stage, item.lossPercent)}
+                      title={editable && !isFirst ? "Click to edit (4 decimal places)" : undefined}
+                    >
+                      {isFirst ? (
+                        "100%"
+                      ) : isGain ? (
+                        `+${Math.abs(item.lossPercent).toFixed(1)}%`
+                      ) : (
+                        `-${Math.abs(item.lossPercent).toFixed(1)}%`
+                      )}
+                    </span>
                   )}
                 </div>
                 
@@ -134,7 +201,7 @@ export function LossWaterfallChart({ breakdown, performanceRatio, className }: L
           
           {/* Final E_Grid line */}
           <div className="flex items-center gap-2 text-xs border-t pt-2 mt-2">
-            <div className="w-28 truncate text-right font-medium text-primary">
+            <div className="w-32 truncate text-right font-medium text-primary">
               E_Grid Output
             </div>
             <div className="flex-1 h-5 bg-muted/30 rounded relative overflow-hidden">
@@ -143,7 +210,7 @@ export function LossWaterfallChart({ breakdown, performanceRatio, className }: L
                 style={{ width: `${performanceRatio}%` }}
               />
             </div>
-            <div className="w-16 text-right text-muted-foreground">—</div>
+            <div className="w-20 text-right text-muted-foreground">—</div>
             <div className="w-12 text-right font-bold text-primary">
               {performanceRatio.toFixed(1)}%
             </div>
