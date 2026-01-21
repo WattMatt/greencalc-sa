@@ -826,7 +826,13 @@ export function calculateAnnualPVsystOutput(
   // ========================================
   // Step 7: Apply System Unavailability to get E_Grid
   // ========================================
-  const availabilityLoss = config.lossesAfterInverter.availabilityLoss;
+  // Defensive check: use default 2.071% if lossesAfterInverter is missing
+  if (debug) {
+    console.log('=== Config Check ===');
+    console.log('lossesAfterInverter:', config.lossesAfterInverter);
+    console.log('availabilityLoss value:', config.lossesAfterInverter?.availabilityLoss);
+  }
+  const availabilityLoss = config.lossesAfterInverter?.availabilityLoss ?? 2.071;
   const availabilityFactor = 1 - (availabilityLoss / 100);
   const eGrid = eOutInv * availabilityFactor;
   
