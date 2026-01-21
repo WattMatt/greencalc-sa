@@ -13,10 +13,12 @@ export interface IrradianceLosses {
 }
 
 export interface ArrayLosses {
-  lidLoss: number;            // Light-Induced Degradation first year (e.g., 2.00)
-  annualDegradation: number;  // % per year (e.g., 0.50)
-  mismatchLoss: number;       // Module mismatch (e.g., 3.68)
-  ohmicLoss: number;          // DC wiring losses (e.g., 1.10)
+  irradianceLevelLoss: number;  // PV loss due to irradiance level (e.g., 0.80)
+  moduleQualityLoss: number;    // Module quality loss (e.g., 0.50)
+  lidLoss: number;              // Light-Induced Degradation first year (e.g., 2.00)
+  annualDegradation: number;    // % per year (e.g., 0.50)
+  mismatchLoss: number;         // Module mismatch incl. degradation dispersion (e.g., 3.68)
+  ohmicLoss: number;            // DC wiring losses (e.g., 1.10)
 }
 
 export interface SystemLosses {
@@ -82,10 +84,12 @@ export const DEFAULT_PVSYST_CONFIG: PVsystLossChainConfig = {
     spectralLoss: 0.5,
   },
   array: {
-    lidLoss: 2.00,
-    annualDegradation: 0.50,
-    mismatchLoss: 3.68,
-    ohmicLoss: 1.10,
+    irradianceLevelLoss: 0.80,   // PV loss due to irradiance level
+    moduleQualityLoss: 0.50,     // Module quality loss
+    lidLoss: 2.00,               // LID - Light induced degradation
+    annualDegradation: 0.50,     // For cumulative calculation
+    mismatchLoss: 3.68,          // Including 1.7% for degradation dispersion
+    ohmicLoss: 1.10,             // Ohmic wiring loss
   },
   system: {
     inverterLoss: 1.55,
@@ -200,6 +204,8 @@ export function calculatePVsystLossChain(
   const arrayFactor = 
     (1 - temperatureLoss / 100) *
     (1 - cumulativeDegradation / 100) *
+    (1 - config.array.irradianceLevelLoss / 100) *
+    (1 - config.array.moduleQualityLoss / 100) *
     (1 - config.array.mismatchLoss / 100) *
     (1 - config.array.ohmicLoss / 100);
   const arrayMPP = arrayNominalSTC * arrayFactor;
@@ -230,13 +236,19 @@ export function calculatePVsystLossChain(
   const lossBreakdown: LossBreakdownItem[] = [
     { stage: "GHI Input", lossPercent: 0, energyAfter: startEnergy },
     { stage: "Transposition", lossPercent: -transpositionGain, energyAfter: poaIrradiance * capacityKwp, isGain: true },
-    { stage: "Shading", lossPercent: config.irradiance.shadingLoss, energyAfter: 0 },
     { stage: "IAM", lossPercent: config.irradiance.iamLoss, energyAfter: 0 },
     { stage: "Soiling", lossPercent: config.irradiance.soilingLoss, energyAfter: effectiveIrradiance * capacityKwp },
+    // Array losses in Excel order:
+    { stage: `Module Degradation (Yr ${config.operationYear})`, lossPercent: cumulativeDegradation, energyAfter: 0 },
+    { stage: "Irradiance Level", lossPercent: config.array.irradianceLevelLoss, energyAfter: 0 },
     { stage: "Temperature", lossPercent: temperatureLoss, energyAfter: 0 },
-    { stage: `Degradation (Yr ${config.operationYear})`, lossPercent: cumulativeDegradation, energyAfter: 0 },
+    { stage: "Spectral Correction", lossPercent: config.irradiance.spectralLoss, energyAfter: 0 },
+    { stage: "Shading Electrical", lossPercent: config.irradiance.shadingLoss, energyAfter: 0 },
+    { stage: "Module Quality", lossPercent: config.array.moduleQualityLoss, energyAfter: 0 },
+    { stage: "LID", lossPercent: config.array.lidLoss, energyAfter: 0 },
     { stage: "Mismatch", lossPercent: config.array.mismatchLoss, energyAfter: 0 },
-    { stage: "Ohmic/Wiring", lossPercent: config.array.ohmicLoss, energyAfter: arrayMPP },
+    { stage: "Ohmic Wiring", lossPercent: config.array.ohmicLoss, energyAfter: arrayMPP },
+    // System losses:
     { stage: "Inverter", lossPercent: config.system.inverterLoss, energyAfter: 0 },
     { stage: "AC Wiring", lossPercent: config.system.acWiringLoss, energyAfter: 0 },
     { stage: "Availability", lossPercent: config.system.availabilityLoss, energyAfter: eGrid },
@@ -317,6 +329,8 @@ export function calculateHourlyPVsystOutput(
     const arrayFactor = 
       (1 - tempLoss / 100) *
       (1 - cumulativeDegradation / 100) *
+      (1 - config.array.irradianceLevelLoss / 100) *
+      (1 - config.array.moduleQualityLoss / 100) *
       (1 - config.array.mismatchLoss / 100) *
       (1 - config.array.ohmicLoss / 100);
     const systemFactor = 

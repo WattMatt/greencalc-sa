@@ -265,26 +265,48 @@ export function PVsystLossChainConfig({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                -{(result.temperatureLoss + result.cumulativeDegradation + config.array.mismatchLoss + config.array.ohmicLoss).toFixed(1)}%
+                -{(result.cumulativeDegradation + config.array.irradianceLevelLoss + result.temperatureLoss + config.irradiance.spectralLoss + config.irradiance.shadingLoss + config.array.moduleQualityLoss + config.array.lidLoss + config.array.mismatchLoss + config.array.ohmicLoss).toFixed(1)}%
               </Badge>
               <ChevronDown className={`h-4 w-4 transition-transform ${showArray ? "rotate-180" : ""}`} />
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2 space-y-3 px-2">
-            {/* 1. Temperature Loss (dynamic) - display only */}
+            {/* 1. Module Degradation Loss (for year #X) - DISPLAY ONLY */}
+            <div className="p-2 bg-muted/30 rounded-lg">
+              <div className="flex items-center justify-between text-xs">
+                <span>Module Degradation Loss (for year #{config.operationYear})</span>
+                <Badge variant="secondary">{result.cumulativeDegradation.toFixed(2)}%</Badge>
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1">
+                LID ({config.array.lidLoss}%) + {Math.max(0, config.operationYear - 1)} × {config.array.annualDegradation}%/yr
+              </div>
+            </div>
+            
+            {/* 2. PV loss due to irradiance level */}
+            <LossSlider
+              label="PV loss due to irradiance level"
+              value={config.array.irradianceLevelLoss}
+              onChange={(v) => updateArray("irradianceLevelLoss", v)}
+              max={3}
+              step={0.1}
+              description="Low-light efficiency losses (typically 0.5-1.5%)"
+            />
+            
+            {/* 3. PV loss due to temperature - DISPLAY ONLY */}
             <div className="p-2 bg-muted/30 rounded-lg">
               <div className="flex items-center justify-between text-xs">
                 <span className="flex items-center gap-1">
                   <Thermometer className="h-3 w-3" />
-                  Temperature Loss (dynamic)
+                  PV loss due to temperature
                 </span>
-                <span className="font-medium text-amber-600">-{result.temperatureLoss.toFixed(1)}%</span>
+                <Badge variant={result.temperatureLoss > 8 ? "destructive" : "secondary"}>
+                  {result.temperatureLoss.toFixed(2)}%
+                </Badge>
               </div>
               <div className="text-[10px] text-muted-foreground mt-1">
-                Based on ambient temp ({ambientTemp}°C) and NOCT ({config.noct}°C)
+                Calculated from Tcell × {Math.abs(config.cellTempCoefficient)}%/°C (ambient: {ambientTemp}°C)
               </div>
             </div>
-            {/* 2. Temp Coefficient */}
             <LossSlider
               label="Temp Coefficient"
               value={Math.abs(config.cellTempCoefficient)}
@@ -295,7 +317,6 @@ export function PVsystLossChainConfig({
               suffix="%/°C"
               description="Power temperature coefficient (typically -0.35 to -0.45 for mono-Si)"
             />
-            {/* 3. NOCT */}
             <LossSlider
               label="NOCT"
               value={config.noct}
@@ -306,34 +327,57 @@ export function PVsystLossChainConfig({
               suffix="°C"
               description="Nominal Operating Cell Temperature (typically 44-47°C)"
             />
-            {/* 4. LID - Light Induced Degradation */}
+            
+            {/* 4. Spectral correction */}
             <LossSlider
-              label="LID - Light Induced Degradation"
+              label="Spectral correction"
+              value={config.irradiance.spectralLoss}
+              onChange={(v) => updateIrradiance("spectralLoss", v)}
+              max={2}
+              step={0.1}
+              description="Spectral mismatch between actual and STC spectrum"
+            />
+            
+            {/* 5. Shadings: Electrical Loss detailed module calc. */}
+            <LossSlider
+              label="Shadings: Electrical Loss detailed module calc."
+              value={config.irradiance.shadingLoss}
+              onChange={(v) => updateIrradiance("shadingLoss", v)}
+              max={10}
+              description="Electrical losses from partial shading on module strings"
+            />
+            
+            {/* 6. Module quality loss */}
+            <LossSlider
+              label="Module quality loss"
+              value={config.array.moduleQualityLoss}
+              onChange={(v) => updateArray("moduleQualityLoss", v)}
+              max={3}
+              step={0.1}
+              description="Manufacturer power tolerance and binning (typically 0-1%)"
+            />
+            
+            {/* 7. LID - Light induced degradation */}
+            <LossSlider
+              label="LID - Light induced degradation"
               value={config.array.lidLoss}
               onChange={(v) => updateArray("lidLoss", v)}
               max={5}
-              description="Light-Induced Degradation in first year (typically 1-3% for mono-Si)"
+              description="First-year light-induced degradation (typically 1-3%)"
             />
-            {/* 5. Annual Degradation */}
+            
+            {/* 8. Module array mismatch loss */}
             <LossSlider
-              label="Annual Degradation"
-              value={config.array.annualDegradation}
-              onChange={(v) => updateArray("annualDegradation", v)}
-              max={1.5}
-              step={0.05}
-              description="Yearly performance decline (typically 0.4-0.7%)"
-            />
-            {/* 6. Mismatch */}
-            <LossSlider
-              label="Mismatch"
+              label="Module array mismatch loss"
               value={config.array.mismatchLoss}
               onChange={(v) => updateArray("mismatchLoss", v)}
               max={8}
-              description="Power loss from module parameter variations"
+              description="Including 1.7% for degradation dispersion"
             />
-            {/* 7. Ohmic wiring */}
+            
+            {/* 9. Ohmic wiring loss */}
             <LossSlider
-              label="Ohmic wiring"
+              label="Ohmic wiring loss"
               value={config.array.ohmicLoss}
               onChange={(v) => updateArray("ohmicLoss", v)}
               max={5}
