@@ -101,11 +101,16 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
 
     const totalPages = pages.length;
 
+    // Determine if we need dark or light text based on header background
+    const isLightHeader = template.colors.headerBg === '#ffffff' || template.colors.headerBg === '#fafaf9';
+    const headerTextColor = isLightHeader ? '#1e293b' : '#ffffff';
+    const headerSubtextColor = isLightHeader ? '#64748b' : 'rgba(255,255,255,0.7)';
+
     // Page header component
     const PageHeader = ({ pageNum }: { pageNum: number }) => (
       <div
-        className="p-4 text-white flex items-center justify-between shrink-0"
-        style={{ backgroundColor: secondaryColor }}
+        className="p-4 flex items-center justify-between shrink-0"
+        style={{ backgroundColor: secondaryColor, color: headerTextColor }}
       >
         <div className="flex items-center gap-3">
           {branding?.logo_url && (
@@ -115,19 +120,19 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
             <h1 className="text-lg font-bold">
               {branding?.company_name || "Solar Installation Proposal"}
             </h1>
-            <p className="text-xs text-white/70">
+            <p className="text-xs" style={{ color: headerSubtextColor }}>
               {project?.name}
             </p>
           </div>
         </div>
         <div className="text-right flex items-center gap-3">
           <Badge
-            className="text-white border-white/30 text-xs"
-            style={{ backgroundColor: primaryColor }}
+            className="text-xs"
+            style={{ backgroundColor: primaryColor, color: '#ffffff' }}
           >
             v{proposal.version || 1}
           </Badge>
-          <span className="text-xs text-white/70">
+          <span className="text-xs" style={{ color: headerSubtextColor }}>
             Page {pageNum} of {totalPages}
           </span>
         </div>
@@ -137,8 +142,8 @@ export const ProposalPrintView = forwardRef<HTMLDivElement, ProposalPrintViewPro
     // Page footer component
     const PageFooter = () => (
       <div
-        className="p-3 text-white text-center text-xs mt-auto shrink-0"
-        style={{ backgroundColor: secondaryColor }}
+        className="p-3 text-center text-xs mt-auto shrink-0"
+        style={{ backgroundColor: secondaryColor, color: headerTextColor }}
       >
         <div className="flex items-center justify-center gap-3 flex-wrap">
           {branding?.contact_email && <span>{branding.contact_email}</span>}
