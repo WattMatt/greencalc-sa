@@ -714,6 +714,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             summer: blendedRateBreakdown.summer,
             winter: blendedRateBreakdown.winter,
           },
+          // Save PVsyst loss configuration for persistence
+          lossCalculationMode,
+          pvsystConfig,
         })),
       };
 
