@@ -44,6 +44,7 @@ import { AdvancedResultsDisplay } from "./simulation/AdvancedResultsDisplay";
 import { AdvancedConfigComparison } from "./simulation/AdvancedConfigComparison";
 import { LoadSheddingAnalysisPanel } from "./simulation/LoadSheddingAnalysisPanel";
 import { InverterSizing, InverterConfig, getDefaultInverterConfig } from "./InverterSizing";
+import { getModulePresetById, getDefaultModulePreset, calculateModuleMetrics } from "./SolarModulePresets";
 import { SystemCostsData } from "./SystemCostsManager";
 import { calculateAnnualBlendedRate, getBlendedRateBreakdown } from "@/lib/tariffCalculations";
 import { 
@@ -833,15 +834,32 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       </Collapsible>
 
       {/* PVsyst Loss Chain Configuration - only show when in PVsyst mode */}
-      {lossCalculationMode === "pvsyst" && (
-        <PVsystLossChainConfigPanel
-          config={pvsystConfig}
-          onChange={setPvsystConfig}
-          dailyGHI={selectedLocation.ghi}
-          capacityKwp={solarCapacity}
-          ambientTemp={25}
-        />
-      )}
+      {lossCalculationMode === "pvsyst" && (() => {
+        // Get selected module from inverter config
+        const selectedModule = inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule
+          ? inverterConfig.customModule
+          : getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
+        
+        // Calculate module metrics
+        const currentAcCapacity = inverterConfig.inverterSize * inverterConfig.inverterCount;
+        const metrics = calculateModuleMetrics(currentAcCapacity, inverterConfig.dcAcRatio, selectedModule);
+        
+        return (
+          <PVsystLossChainConfigPanel
+            config={{ ...pvsystConfig, stcEfficiency: metrics.stcEfficiency }}
+            onChange={(newConfig) => setPvsystConfig({ ...newConfig, stcEfficiency: metrics.stcEfficiency })}
+            dailyGHI={selectedLocation.ghi}
+            capacityKwp={solarCapacity}
+            ambientTemp={25}
+            moduleMetrics={{
+              moduleCount: metrics.moduleCount,
+              collectorAreaM2: metrics.collectorAreaM2,
+              stcEfficiency: metrics.stcEfficiency,
+              moduleName: selectedModule.name,
+            }}
+          />
+        );
+      })()}
 
       {/* Advanced Simulation Configuration */}
       <AdvancedSimulationConfigPanel
@@ -1150,7 +1168,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           }
           // Load inverter config if present
           if (config.inverterConfig) {
-            setInverterConfig(config.inverterConfig);
+            setInverterConfig((prev) => ({ ...prev, ...config.inverterConfig }));
           }
           // Load system costs if present
           if (config.systemCosts) {

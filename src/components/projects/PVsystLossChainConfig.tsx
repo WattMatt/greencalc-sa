@@ -35,6 +35,13 @@ interface PVsystLossChainConfigProps {
   capacityKwp: number;
   ambientTemp?: number;    // Average ambient temperature °C
   className?: string;
+  // Module metrics from InverterSizing (optional - if provided, shows read-only)
+  moduleMetrics?: {
+    moduleCount: number;
+    collectorAreaM2: number;
+    stcEfficiency: number;
+    moduleName?: string;
+  };
 }
 
 // Helper for slider with info tooltip
@@ -152,6 +159,7 @@ export function PVsystLossChainConfig({
   capacityKwp,
   ambientTemp = 25,
   className,
+  moduleMetrics,
 }: PVsystLossChainConfigProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showIrradiance, setShowIrradiance] = useState(false);
@@ -263,21 +271,46 @@ export function PVsystLossChainConfig({
           </div>
         </div>
 
-        {/* Module STC Efficiency */}
+        {/* Module STC Efficiency - Read-only if module metrics provided */}
         <div className="space-y-2 px-2">
-          <LossSlider
-            label="Module STC Efficiency"
-            value={(config.stcEfficiency ?? 0.2149) * 100}
-            onChange={(v) => onChange({ ...config, stcEfficiency: v / 100 })}
-            min={15}
-            max={25}
-            step={0.01}
-            suffix="%"
-            description="Module nameplate efficiency at Standard Test Conditions (1000 W/m², 25°C). Typical: 21.49% for 450W panels"
-          />
-          <div className="text-xs text-muted-foreground">
-            Collector Area: {((capacityKwp * 1000) / ((config.stcEfficiency ?? 0.2149) * 1000)).toFixed(1)} m²
-          </div>
+          {moduleMetrics ? (
+            // Read-only display when module is selected from InverterSizing
+            <div className="p-2 rounded-lg bg-muted/30 border border-border/50">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-muted-foreground">Module</span>
+                <span className="font-medium">{moduleMetrics.moduleName || "Selected Module"}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">STC Efficiency</span>
+                <span className="font-medium">{(config.stcEfficiency * 100).toFixed(2)}%</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Module Count</span>
+                <span className="font-medium">{moduleMetrics.moduleCount.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Collector Area</span>
+                <span className="font-medium">{moduleMetrics.collectorAreaM2.toLocaleString(undefined, { maximumFractionDigits: 1 })} m²</span>
+              </div>
+            </div>
+          ) : (
+            // Editable slider when no module is provided
+            <>
+              <LossSlider
+                label="Module STC Efficiency"
+                value={(config.stcEfficiency ?? 0.2149) * 100}
+                onChange={(v) => onChange({ ...config, stcEfficiency: v / 100 })}
+                min={15}
+                max={25}
+                step={0.01}
+                suffix="%"
+                description="Module nameplate efficiency at Standard Test Conditions (1000 W/m², 25°C). Typical: 21.49% for 450W panels"
+              />
+              <div className="text-xs text-muted-foreground">
+                Collector Area: {((capacityKwp * 1000) / ((config.stcEfficiency ?? 0.2149) * 1000)).toFixed(1)} m²
+              </div>
+            </>
+          )}
         </div>
 
         {/* Year Selector */}

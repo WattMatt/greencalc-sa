@@ -6,10 +6,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Zap, Info, Plus, Minus, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Zap, Info, Plus, Minus, AlertTriangle, CheckCircle2, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { 
+  SolarModulePreset, 
+  SOLAR_MODULE_PRESETS, 
+  getDefaultModulePreset,
+  getModulePresetById,
+  calculateModuleMetrics
+} from "./SolarModulePresets";
 
 // Common inverter sizes in kW (AC output)
 export const INVERTER_SIZES = [
@@ -35,6 +41,8 @@ export interface InverterConfig {
   inverterSize: number; // kW AC
   inverterCount: number;
   dcAcRatio: number; // Typical 1.1-1.5
+  selectedModuleId: string; // Selected solar module preset ID
+  customModule?: SolarModulePreset; // Custom module specs when using "custom"
 }
 
 export interface InverterSizingProps {
@@ -45,11 +53,16 @@ export interface InverterSizingProps {
   maxSolarKva?: number | null;
 }
 
+// Export the module metrics type for use elsewhere
+export type { SolarModulePreset };
+
 export function getDefaultInverterConfig(): InverterConfig {
+  const defaultModule = getDefaultModulePreset();
   return {
     inverterSize: 100,
     inverterCount: 1,
     dcAcRatio: 1.25,
+    selectedModuleId: defaultModule.id,
   };
 }
 
@@ -97,6 +110,20 @@ export function InverterSizing({
   const currentAcCapacity = config.inverterSize * config.inverterCount;
   const dcPanelCapacity = Math.round(currentAcCapacity * config.dcAcRatio);
   
+  // Get selected module - use custom module if selected, otherwise get from presets
+  const selectedModule = useMemo(() => {
+    if (config.selectedModuleId === "custom" && config.customModule) {
+      return config.customModule;
+    }
+    return getModulePresetById(config.selectedModuleId) || getDefaultModulePreset();
+  }, [config.selectedModuleId, config.customModule]);
+
+  // Calculate module metrics
+  const moduleMetrics = useMemo(
+    () => calculateModuleMetrics(currentAcCapacity, config.dcAcRatio, selectedModule),
+    [currentAcCapacity, config.dcAcRatio, selectedModule]
+  );
+  
   // Check if current solar capacity (AC) matches a valid inverter configuration
   const isValidConfig = validSizes.some(s => s.acCapacity === currentSolarCapacity);
   const nearestValid = validSizes.reduce((prev, curr) => 
@@ -110,6 +137,22 @@ export function InverterSizing({
 
   // Check if inverter size matches a preset
   const matchesPreset = INVERTER_SIZES.some(inv => inv.kw === config.inverterSize);
+
+  // Handler for module selection
+  const handleModuleChange = (moduleId: string) => {
+    const newConfig = { ...config, selectedModuleId: moduleId };
+    onChange(newConfig);
+  };
+
+  // Handler for custom module changes
+  const handleCustomModuleChange = (field: keyof SolarModulePreset, value: number | string) => {
+    const customPreset = getModulePresetById("custom")!;
+    const newCustomModule: SolarModulePreset = {
+      ...(config.customModule || customPreset),
+      [field]: value,
+    };
+    onChange({ ...config, customModule: newCustomModule });
+  };
 
   const handleInverterSizeChange = (size: number) => {
     const newConfig = { ...config, inverterSize: size };
@@ -286,6 +329,82 @@ export function InverterSizing({
             </div>
           </div>
 
+          {/* Solar Module Selection */}
+          <div className="space-y-2">
+            <Label className="text-xs flex items-center gap-1">
+              <Sun className="h-3 w-3" />
+              Solar Module
+            </Label>
+            <Select
+              value={config.selectedModuleId}
+              onValueChange={handleModuleChange}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Select module" />
+              </SelectTrigger>
+              <SelectContent>
+                {SOLAR_MODULE_PRESETS.map((mod) => (
+                  <SelectItem key={mod.id} value={mod.id} className="text-xs">
+                    <div className="flex items-center justify-between gap-4 w-full">
+                      <span className="font-medium">{mod.name}</span>
+                      <span className="text-muted-foreground">{mod.power_wp}W</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            {/* Module specs summary */}
+            <div className="flex gap-3 text-[10px] text-muted-foreground">
+              <span>Power: {selectedModule.power_wp}W</span>
+              <span>•</span>
+              <span>Area: {(selectedModule.width_m * selectedModule.length_m).toFixed(3)} m²</span>
+              <span>•</span>
+              <span>Eff: {selectedModule.efficiency}%</span>
+            </div>
+
+            {/* Custom module inputs */}
+            {config.selectedModuleId === "custom" && (
+              <div className="grid grid-cols-3 gap-2 pt-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px]">Power (W)</Label>
+                  <Input
+                    type="number"
+                    value={config.customModule?.power_wp || 450}
+                    onChange={(e) => handleCustomModuleChange("power_wp", Number(e.target.value))}
+                    className="h-7 text-xs"
+                    min={100}
+                    max={800}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px]">Width (m)</Label>
+                  <Input
+                    type="number"
+                    value={config.customModule?.width_m || 1.038}
+                    onChange={(e) => handleCustomModuleChange("width_m", Number(e.target.value))}
+                    className="h-7 text-xs"
+                    min={0.5}
+                    max={2}
+                    step={0.001}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px]">Length (m)</Label>
+                  <Input
+                    type="number"
+                    value={config.customModule?.length_m || 2.094}
+                    onChange={(e) => handleCustomModuleChange("length_m", Number(e.target.value))}
+                    className="h-7 text-xs"
+                    min={0.5}
+                    max={3}
+                    step={0.001}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* DC/AC Ratio */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -339,7 +458,15 @@ export function InverterSizing({
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">DC Panel Capacity</span>
-              <span className="font-medium">{dcPanelCapacity} kWp</span>
+              <span className="font-medium">{moduleMetrics.actualDcCapacityKwp.toFixed(2)} kWp</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Module Count</span>
+              <span className="font-medium">{moduleMetrics.moduleCount.toLocaleString()} modules</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Collector Area</span>
+              <span className="font-medium">{moduleMetrics.collectorAreaM2.toLocaleString(undefined, { maximumFractionDigits: 1 })} m²</span>
             </div>
             {maxSolarKva && (
               <div className="flex items-center justify-between text-xs">
