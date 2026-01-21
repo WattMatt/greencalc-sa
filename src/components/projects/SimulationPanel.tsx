@@ -200,6 +200,33 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         });
       }
       
+      // Load PVsyst config if saved - merge with defaults to preserve new fields like lossesAfterInverter
+      if (savedResultsJson?.pvsystConfig) {
+        setPvsystConfig({
+          ...DEFAULT_PVSYST_CONFIG,
+          ...savedResultsJson.pvsystConfig,
+          irradiance: {
+            ...DEFAULT_PVSYST_CONFIG.irradiance,
+            ...savedResultsJson.pvsystConfig?.irradiance,
+          },
+          array: {
+            ...DEFAULT_PVSYST_CONFIG.array,
+            ...savedResultsJson.pvsystConfig?.array,
+          },
+          system: {
+            ...DEFAULT_PVSYST_CONFIG.system,
+            inverter: {
+              ...DEFAULT_PVSYST_CONFIG.system.inverter,
+              ...savedResultsJson.pvsystConfig?.system?.inverter,
+            },
+          },
+          lossesAfterInverter: {
+            ...DEFAULT_PVSYST_CONFIG.lossesAfterInverter,
+            ...savedResultsJson.pvsystConfig?.lossesAfterInverter,
+          },
+        });
+      }
+      
       // System costs are now loaded by ProjectDetail.tsx on initial load
       // to ensure consistency between Costs tab and Simulation tab
       
