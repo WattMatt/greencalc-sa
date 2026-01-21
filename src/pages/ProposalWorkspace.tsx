@@ -247,9 +247,23 @@ export default function ProposalWorkspace() {
         setSelectedType('sandbox');
       }
       setVerificationChecklist(existingProposal.verification_checklist as unknown as VerificationChecklistType);
-      if (existingProposal.branding) {
-        setBranding(existingProposal.branding as unknown as ProposalBranding);
-      }
+      
+      // Merge existing proposal branding with organization branding as fallback
+      // This ensures logo_url and company_name are always populated if available in org branding
+      const proposalBranding = existingProposal.branding as unknown as ProposalBranding;
+      setBranding({
+        company_name: proposalBranding?.company_name && proposalBranding.company_name !== '1' 
+          ? proposalBranding.company_name 
+          : orgBranding.company_name,
+        logo_url: proposalBranding?.logo_url || orgBranding.logo_url,
+        primary_color: proposalBranding?.primary_color || orgBranding.primary_color || "#22c55e",
+        secondary_color: proposalBranding?.secondary_color || orgBranding.secondary_color || "#0f172a",
+        contact_email: proposalBranding?.contact_email || orgBranding.contact_email,
+        contact_phone: proposalBranding?.contact_phone || orgBranding.contact_phone,
+        website: proposalBranding?.website || orgBranding.website,
+        address: proposalBranding?.address || orgBranding.address,
+      });
+      
       setExecutiveSummary(existingProposal.executive_summary || "");
       setCustomNotes(existingProposal.custom_notes || "");
       setAssumptions(existingProposal.assumptions || "");
@@ -258,7 +272,7 @@ export default function ProposalWorkspace() {
         setSimulationData(existingProposal.simulation_snapshot as unknown as SimulationData);
       }
     }
-  }, [existingProposal]);
+  }, [existingProposal, orgBranding]);
 
   // Build simulation data when selection changes
   useEffect(() => {
