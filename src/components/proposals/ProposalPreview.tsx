@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sun, Battery, Zap, TrendingUp, Calendar, MapPin, LayoutDashboard, BarChart3, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from "lucide-react";
-import { useState, useMemo } from "react";
+import { Sun, Battery, Zap, TrendingUp, Calendar, MapPin, LayoutDashboard, BarChart3, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Printer } from "lucide-react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Proposal, SimulationData, ProposalBranding } from "./types";
@@ -121,6 +121,307 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
   const formatCurrency = (value: number) => `R ${value.toLocaleString("en-ZA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   const formatNumber = (value: number) => value.toLocaleString("en-ZA", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
+  // Open print preview in new window
+  const openPrintPreview = useCallback(() => {
+    const printWindow = window.open('', '_blank', 'width=900,height=1200');
+    if (!printWindow) {
+      alert('Please allow popups for this site to use print preview.');
+      return;
+    }
+
+    // Generate all pages HTML
+    const generatePageHTML = (pageId: string, pageNum: number, content: string) => `
+      <div class="page" style="width: 794px; min-height: 1123px; background: white; margin: 0 auto 20px; display: flex; flex-direction: column; border-radius: ${borderRadiusStyle}; box-shadow: 0 4px 12px rgba(0,0,0,0.1); page-break-after: always; overflow: hidden;">
+        <div style="padding: ${template.layout.sectionSpacing === 'spacious' ? '1.25rem' : '1rem'}; background: ${secondaryColor}; color: ${headerTextColor}; display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            ${branding?.logo_url ? `<img src="${branding.logo_url}" alt="Logo" style="height: 40px; object-fit: contain;" />` : ''}
+            <div>
+              <div style="font-size: 18px; font-weight: bold;">${branding?.company_name || 'Solar Installation Proposal'}</div>
+              <div style="font-size: 12px; color: ${headerSubtextColor};">${project?.name || ''}</div>
+            </div>
+          </div>
+          <div style="text-align: right; display: flex; align-items: center; gap: 12px;">
+            <span style="background: ${primaryColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">v${proposal.version || 1}</span>
+            <span style="font-size: 12px; color: ${headerSubtextColor};">Page ${pageNum} of ${totalPages}</span>
+          </div>
+        </div>
+        <div style="flex: 1; padding: ${template.layout.sectionSpacing === 'spacious' ? '1.5rem' : '1rem'};">
+          ${content}
+        </div>
+        <div style="padding: 12px; background: ${secondaryColor}; color: ${headerTextColor}; text-align: center; font-size: 12px;">
+          ${[branding?.contact_email, branding?.contact_phone, branding?.website].filter(Boolean).join(' • ')}
+        </div>
+      </div>
+    `;
+
+    // Cover page content
+    const coverContent = `
+      <div style="background: ${primaryColor}; color: white; padding: ${template.layout.sectionSpacing === 'spacious' ? '2rem' : '1.5rem'}; border-radius: ${borderRadiusStyle}; margin-bottom: 1.5rem;">
+        <h2 style="font-size: 24px; margin: 0 0 8px; font-weight: ${template.typography.headingWeight};">Solar Installation Proposal</h2>
+        <p style="opacity: 0.8; margin: 0 0 8px;">${project?.name || ''}</p>
+        <p style="opacity: 0.7; font-size: 12px; margin: 0;">${new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      </div>
+      ${simulation ? `
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: ${template.layout.sectionSpacing === 'spacious' ? '1.5rem' : '1rem'}; margin-bottom: 1.5rem;">
+        <div style="background: ${template.colors.cardBg}; padding: 1rem; border-radius: ${borderRadiusStyle}; text-align: center; box-shadow: ${shadowStyle};">
+          <div style="font-size: 24px; font-weight: bold; color: ${template.colors.textPrimary};">${simulation.solarCapacity} kWp</div>
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">System Size</div>
+        </div>
+        <div style="background: ${template.colors.cardBg}; padding: 1rem; border-radius: ${borderRadiusStyle}; text-align: center; box-shadow: ${shadowStyle};">
+          <div style="font-size: 24px; font-weight: bold; color: ${template.colors.textPrimary};">${formatCurrency(simulation.annualSavings)}</div>
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">Annual Savings</div>
+        </div>
+        <div style="background: ${template.colors.cardBg}; padding: 1rem; border-radius: ${borderRadiusStyle}; text-align: center; box-shadow: ${shadowStyle};">
+          <div style="font-size: 24px; font-weight: bold; color: ${template.colors.textPrimary};">${simulation.paybackYears.toFixed(1)} yrs</div>
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">Payback Period</div>
+        </div>
+        <div style="background: ${template.colors.cardBg}; padding: 1rem; border-radius: ${borderRadiusStyle}; text-align: center; box-shadow: ${shadowStyle};">
+          <div style="font-size: 24px; font-weight: bold; color: ${template.colors.textPrimary};">${simulation.roiPercentage.toFixed(0)}%</div>
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">25-Year ROI</div>
+        </div>
+      </div>
+      ` : ''}
+      <div>
+        <h3 style="font-size: 18px; color: ${primaryColor}; margin: 0 0 12px; font-weight: ${template.typography.headingWeight};">Executive Summary</h3>
+        <p style="color: ${template.colors.textSecondary}; line-height: 1.6; margin: 0;">
+          ${proposal.executive_summary || `This proposal outlines a ${simulation?.solarCapacity || 0} kWp solar PV system installation for ${project?.name}. The system is projected to generate ${formatNumber(simulation?.annualSolarGeneration || 0)} kWh annually, resulting in estimated annual savings of ${formatCurrency(simulation?.annualSavings || 0)} with a payback period of ${(simulation?.paybackYears || 0).toFixed(1)} years.`}
+        </p>
+      </div>
+    `;
+
+    // Site overview content
+    const siteContent = `
+      <h3 style="font-size: 18px; color: ${primaryColor}; margin: 0 0 16px; font-weight: ${template.typography.headingWeight};">Site Overview</h3>
+      <div style="height: 200px; background: #f0f0f0; border-radius: ${borderRadiusStyle}; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; border: 1px solid ${template.colors.tableBorder};">
+        <span style="color: ${template.colors.textSecondary};">📍 ${project?.location || 'Location Map'}</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: ${template.layout.sectionSpacing === 'spacious' ? '1rem' : '0.75rem'};">
+        <div style="background: ${template.colors.cardBg}; padding: 0.75rem; border-radius: ${borderRadiusStyle};">
+          <div style="font-size: 12px; color: ${template.colors.textSecondary}; margin-bottom: 4px;">Location</div>
+          <div style="font-weight: 500; color: ${template.colors.textPrimary};">${project?.location || 'Not specified'}</div>
+        </div>
+        <div style="background: ${template.colors.cardBg}; padding: 0.75rem; border-radius: ${borderRadiusStyle};">
+          <div style="font-size: 12px; color: ${template.colors.textSecondary}; margin-bottom: 4px;">Total Area</div>
+          <div style="font-weight: 500; color: ${template.colors.textPrimary};">${project?.total_area_sqm ? formatNumber(project.total_area_sqm) + ' m²' : '—'}</div>
+        </div>
+        <div style="background: ${template.colors.cardBg}; padding: 0.75rem; border-radius: ${borderRadiusStyle};">
+          <div style="font-size: 12px; color: ${template.colors.textSecondary}; margin-bottom: 4px;">Connection Size</div>
+          <div style="font-weight: 500; color: ${template.colors.textPrimary};">${project?.connection_size_kva ? project.connection_size_kva + ' kVA' : '—'}</div>
+        </div>
+        <div style="background: ${template.colors.cardBg}; padding: 0.75rem; border-radius: ${borderRadiusStyle};">
+          <div style="font-size: 12px; color: ${template.colors.textSecondary}; margin-bottom: 4px;">Tariff</div>
+          <div style="font-weight: 500; color: ${template.colors.textPrimary};">${simulation?.tariffName || 'Standard'}</div>
+        </div>
+      </div>
+    `;
+
+    // Specs content
+    const specsContent = `
+      <h3 style="font-size: 18px; color: ${primaryColor}; margin: 0 0 16px; font-weight: ${template.typography.headingWeight};">System Specification</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: ${template.layout.sectionSpacing === 'spacious' ? '1rem' : '0.75rem'}; margin-bottom: 1.5rem;">
+        <div style="background: ${template.colors.cardBg}; padding: 1rem; border-radius: ${borderRadiusStyle}; text-align: center; box-shadow: ${shadowStyle};">
+          <div style="font-size: 24px; font-weight: bold; color: ${template.colors.textPrimary};">${simulation?.solarCapacity || 0} kWp</div>
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">Solar Capacity</div>
+        </div>
+        <div style="background: ${template.colors.cardBg}; padding: 1rem; border-radius: ${borderRadiusStyle}; text-align: center; box-shadow: ${shadowStyle};">
+          <div style="font-size: 24px; font-weight: bold; color: ${template.colors.textPrimary};">${simulation?.batteryCapacity || 0} kWh</div>
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">Battery Storage</div>
+        </div>
+        <div style="background: ${template.colors.cardBg}; padding: 1rem; border-radius: ${borderRadiusStyle}; text-align: center; box-shadow: ${shadowStyle};">
+          <div style="font-size: 24px; font-weight: bold; color: ${template.colors.textPrimary};">${formatNumber(simulation?.annualSolarGeneration || 0)}</div>
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">Annual Generation (kWh)</div>
+        </div>
+        <div style="background: ${template.colors.cardBg}; padding: 1rem; border-radius: ${borderRadiusStyle}; text-align: center; box-shadow: ${shadowStyle};">
+          <div style="font-size: 24px; font-weight: bold; color: ${template.colors.textPrimary};">${simulation?.solarCapacity ? ((simulation.annualSolarGeneration || 0) / simulation.solarCapacity).toFixed(0) : 0}</div>
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">Specific Yield (kWh/kWp)</div>
+        </div>
+      </div>
+      <div style="padding: 1rem; border: 1px solid ${primaryColor}40; border-radius: ${borderRadiusStyle}; background: ${primaryColor}05;">
+        <h4 style="margin: 0 0 12px; font-weight: ${template.typography.headingWeight}; color: ${template.colors.textPrimary};">Annual Energy Flow</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+          <div>
+            <div style="color: ${template.colors.textSecondary}; font-size: 14px;">Solar Generation</div>
+            <div style="font-size: 18px; font-weight: bold; color: ${template.colors.textPrimary};">${formatNumber(simulation?.annualSolarGeneration || 0)} kWh</div>
+          </div>
+          <div>
+            <div style="color: ${template.colors.textSecondary}; font-size: 14px;">Grid Import</div>
+            <div style="font-size: 18px; font-weight: bold; color: ${template.colors.textPrimary};">${formatNumber(simulation?.annualGridImport || 0)} kWh</div>
+          </div>
+          <div>
+            <div style="color: ${template.colors.textSecondary}; font-size: 14px;">Grid Export</div>
+            <div style="font-size: 18px; font-weight: bold; color: ${template.colors.textPrimary};">${formatNumber(simulation?.annualGridExport || 0)} kWh</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Financial content
+    const financialContent = `
+      <h3 style="font-size: 18px; color: ${primaryColor}; margin: 0 0 16px; font-weight: ${template.typography.headingWeight};">Financial Analysis</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.5rem;">
+        <div style="padding: 0.75rem; border-radius: ${borderRadiusStyle}; background: ${primaryColor}10;">
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">System Cost</div>
+          <div style="font-size: 20px; font-weight: bold; color: ${template.colors.textPrimary};">${formatCurrency(simulation?.systemCost || 0)}</div>
+        </div>
+        <div style="padding: 0.75rem; border-radius: ${borderRadiusStyle}; background: ${primaryColor}10;">
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">Annual Savings</div>
+          <div style="font-size: 20px; font-weight: bold; color: ${template.colors.textPrimary};">${formatCurrency(simulation?.annualSavings || 0)}</div>
+        </div>
+        <div style="padding: 0.75rem; border-radius: ${borderRadiusStyle}; background: ${primaryColor}10;">
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">Payback Period</div>
+          <div style="font-size: 20px; font-weight: bold; color: ${template.colors.textPrimary};">${paybackYear || (simulation?.paybackYears || 0).toFixed(1)} years</div>
+        </div>
+        <div style="padding: 0.75rem; border-radius: ${borderRadiusStyle}; background: ${primaryColor}10;">
+          <div style="font-size: 12px; color: ${template.colors.textSecondary};">25-Year ROI</div>
+          <div style="font-size: 20px; font-weight: bold; color: ${primaryColor};">${projection[24]?.roi.toFixed(0) || 0}%</div>
+        </div>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+        <thead>
+          <tr style="border-bottom: 2px solid ${template.colors.tableBorder};">
+            <th style="text-align: left; padding: 8px 4px; color: ${template.colors.textPrimary};">Year</th>
+            <th style="text-align: right; padding: 8px 4px; color: ${template.colors.textPrimary};">Generation (kWh)</th>
+            <th style="text-align: right; padding: 8px 4px; color: ${template.colors.textPrimary};">Annual Savings</th>
+            <th style="text-align: right; padding: 8px 4px; color: ${template.colors.textPrimary};">Cumulative</th>
+            <th style="text-align: right; padding: 8px 4px; color: ${template.colors.textPrimary};">ROI</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${projection.slice(0, 15).map((row, idx) => `
+            <tr style="border-bottom: 1px solid ${template.colors.tableBorder}; background: ${row.year === paybackYear ? primaryColor + '15' : (template.layout.tableStyle === 'striped' && idx % 2 === 1 ? template.colors.cardBg : 'transparent')};">
+              <td style="padding: 6px 4px; color: ${template.colors.textPrimary};">${row.year}${row.year === paybackYear ? ' ✓' : ''}</td>
+              <td style="text-align: right; padding: 6px 4px; color: ${template.colors.textSecondary};">${formatNumber(row.generation)}</td>
+              <td style="text-align: right; padding: 6px 4px; color: ${template.colors.textSecondary};">${formatCurrency(row.savings)}</td>
+              <td style="text-align: right; padding: 6px 4px; color: ${template.colors.textSecondary};">${formatCurrency(row.cumulative)}</td>
+              <td style="text-align: right; padding: 6px 4px; color: ${row.roi > 0 ? primaryColor : template.colors.textSecondary};">${row.roi.toFixed(0)}%</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ${projection.length > 15 ? `<p style="text-align: center; font-size: 12px; color: ${template.colors.textSecondary}; margin-top: 8px;">+ ${projection.length - 15} more years (see full report)</p>` : ''}
+    `;
+
+    // Terms content
+    const termsContent = `
+      <h3 style="font-size: 18px; color: ${primaryColor}; margin: 0 0 16px; font-weight: ${template.typography.headingWeight};">Assumptions & Disclaimers</h3>
+      <div style="margin-bottom: 1rem; padding: 0.75rem; border-radius: ${borderRadiusStyle}; ${template.layout.useCards ? `background: ${template.colors.cardBg};` : `border-left: 3px solid ${primaryColor}; padding-left: 1rem;`}">
+        <div style="font-weight: 500; margin-bottom: 4px; color: ${template.colors.textPrimary};">Assumptions</div>
+        <div style="white-space: pre-line; font-size: 14px; color: ${template.colors.textSecondary};">${proposal.assumptions || '• 0.5% annual panel degradation\n• 8% annual tariff escalation\n• Standard weather conditions'}</div>
+      </div>
+      <div style="margin-bottom: 1rem; padding: 0.75rem; border-radius: ${borderRadiusStyle}; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);">
+        <div style="font-weight: 500; margin-bottom: 4px; color: ${template.colors.textPrimary};">Disclaimers</div>
+        <div style="font-size: 14px; color: ${template.colors.textSecondary};">${proposal.disclaimers || 'Actual results may vary based on weather conditions, consumption patterns, and tariff changes.'}</div>
+      </div>
+      <div style="border-top: 1px solid ${template.colors.tableBorder}; padding-top: 2rem; margin-top: 2rem;">
+        <h4 style="font-size: 14px; color: ${template.colors.textSecondary}; margin: 0 0 16px;">Signatures</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+          <div style="text-align: center;">
+            <div style="height: 64px; border-bottom: 2px solid ${template.colors.tableBorder}; margin-bottom: 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px;">
+              ${proposal.prepared_by ? `<span style="font-weight: 500; color: ${template.colors.textPrimary};">${proposal.prepared_by}</span>` : ''}
+            </div>
+            <div style="font-size: 12px; color: ${template.colors.textSecondary};">Prepared By</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="height: 64px; border-bottom: 2px solid ${template.colors.tableBorder}; margin-bottom: 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px;">
+              ${proposal.approved_by ? `<span style="font-weight: 500; color: ${template.colors.textPrimary};">${proposal.approved_by}</span>` : ''}
+            </div>
+            <div style="font-size: 12px; color: ${template.colors.textSecondary};">Approved By</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="height: 64px; border-bottom: 2px solid ${template.colors.tableBorder}; margin-bottom: 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px;">
+              ${proposal.client_signature ? `<span style="font-weight: 500; color: ${primaryColor};">${proposal.client_signature}</span>` : ''}
+            </div>
+            <div style="font-size: 12px; color: ${template.colors.textSecondary};">Client Acceptance</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Build all pages
+    let pageNum = 1;
+    let allPagesHTML = '';
+    
+    allPagesHTML += generatePageHTML('cover', pageNum++, coverContent);
+    allPagesHTML += generatePageHTML('site', pageNum++, siteContent);
+    allPagesHTML += generatePageHTML('specs', pageNum++, specsContent);
+    allPagesHTML += generatePageHTML('financial', pageNum++, financialContent);
+    allPagesHTML += generatePageHTML('terms', pageNum++, termsContent);
+
+    // Write to window
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Proposal - ${project?.name || 'Print Preview'}</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #e5e5e5; 
+            padding: 20px;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print-controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            gap: 8px;
+          }
+          .print-btn {
+            background: ${primaryColor};
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          }
+          .print-btn:hover { opacity: 0.9; }
+          .close-btn {
+            background: #6b7280;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          }
+          .close-btn:hover { background: #4b5563; }
+          @media print {
+            body { background: white; padding: 0; }
+            .print-controls { display: none; }
+            .page { 
+              box-shadow: none !important; 
+              margin: 0 !important;
+              border-radius: 0 !important;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="print-controls">
+          <button class="print-btn" onclick="window.print()">
+            🖨️ Print
+          </button>
+          <button class="close-btn" onclick="window.close()">Close</button>
+        </div>
+        ${allPagesHTML}
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }, [proposal, project, simulation, template, templateStyles, branding, primaryColor, secondaryColor, headerTextColor, headerSubtextColor, borderRadiusStyle, shadowStyle, pages, totalPages, projection, paybackYear, formatCurrency, formatNumber]);
+
   // Page header component
   const PageHeader = () => (
     <div
@@ -234,15 +535,17 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
     <div className="flex flex-col bg-muted/30" id="proposal-preview">
       {/* Pagination Controls */}
       <div className="sticky top-0 z-10 bg-background border-b px-4 py-2 flex items-center justify-between">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-          disabled={currentPage === 0}
-        >
-          <ChevronLeft className="h-4 w-4 mr-1" />
-          Previous
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+            disabled={currentPage === 0}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Previous
+          </Button>
+        </div>
         
         <div className="flex items-center gap-1">
           {pages.map((page, index) => (
@@ -261,15 +564,26 @@ export function ProposalPreview({ proposal, project, simulation, tenants, shopTy
           ))}
         </div>
         
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
-          disabled={currentPage === totalPages - 1}
-        >
-          Next
-          <ChevronRight className="h-4 w-4 ml-1" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openPrintPreview}
+            title="Open full preview in new window"
+          >
+            <Printer className="h-4 w-4 mr-1" />
+            Print Preview
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+            disabled={currentPage === totalPages - 1}
+          >
+            Next
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
       </div>
 
       {/* Page Title */}
