@@ -190,9 +190,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         setPvConfig(savedResultsJson.pvConfig);
       }
       
-      // Load inverter config if saved
+      // Load inverter config if saved - merge with defaults to preserve new fields
       if (savedResultsJson?.inverterConfig) {
-        setInverterConfig(savedResultsJson.inverterConfig);
+        setInverterConfig({
+          ...getDefaultInverterConfig(),
+          ...savedResultsJson.inverterConfig,
+        });
       }
       
       // System costs are now loaded by ProjectDetail.tsx on initial load
@@ -211,6 +214,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       setLoadedSimulationDate(lastSavedSimulation.created_at);
     }
   }, [isFetched, lastSavedSimulation, savedResultsJson, includesBattery, onSystemCostsChange]);
+
+  // Sync solarCapacity slider with inverter-based AC capacity
+  useEffect(() => {
+    const acCapacity = inverterConfig.inverterSize * inverterConfig.inverterCount;
+    if (acCapacity !== solarCapacity) {
+      setSolarCapacity(acCapacity);
+    }
+  }, [inverterConfig.inverterSize, inverterConfig.inverterCount]);
 
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, error: solcastError, fetchForecast } = useSolcastForecast();
@@ -368,6 +379,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       return null;
     }
     
+    // Use AC capacity from inverter config for consistency with module metrics
+    const acCapacityKw = inverterConfig.inverterSize * inverterConfig.inverterCount;
+    
     // Extract hourly GHI (W/m²) and temperature arrays
     const hourlyGhi = activeProfile.map(h => h.ghi);
     const hourlyTemp = activeProfile.map(h => (h as any).temp ?? 25);
@@ -383,12 +397,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     const hourlyResults = calculateHourlyPVsystOutput(
       hourlyGhi,
       hourlyTemp,
-      solarCapacity,
+      acCapacityKw,
       configWithModuleData
     );
     
     return hourlyResults.map(r => r.eGridKwh);
-  }, [lossCalculationMode, solarDataSource, solcastHourlyProfile, pvgisHourlyProfile, solarCapacity, pvsystConfig, moduleMetrics]);
+  }, [lossCalculationMode, solarDataSource, solcastHourlyProfile, pvgisHourlyProfile, pvsystConfig, moduleMetrics, inverterConfig]);
 
   // Active solar profile based on data source and loss calculation mode
   const solarProfile = useMemo(() => {
