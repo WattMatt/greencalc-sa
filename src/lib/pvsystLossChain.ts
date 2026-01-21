@@ -19,7 +19,7 @@ export interface ArrayLosses {
   temperatureLoss: number;      // PV loss due to temperature (e.g., 8.00)
   moduleQualityLoss: number;    // Module quality loss (e.g., 0.50)
   lidLoss: number;              // Light-Induced Degradation first year (e.g., 2.00)
-  annualDegradation: number;    // % per year (e.g., 0.50)
+  moduleDegradationLoss: number; // Module degradation loss % (e.g., 3.80)
   mismatchLoss: number;         // Module mismatch incl. degradation dispersion (e.g., 3.68)
   ohmicLoss: number;            // DC wiring losses (e.g., 1.10)
 }
@@ -105,7 +105,7 @@ export const DEFAULT_PVSYST_CONFIG: PVsystLossChainConfig = {
     temperatureLoss: 4.9160,       // PV loss due to temperature
     moduleQualityLoss: -0.7500,    // Module quality gain (+0.75%)
     lidLoss: 2.0000,               // LID - Light induced degradation
-    annualDegradation: 0.2000,     // For cumulative calculation (3.80% at year 10 = 2% LID + 9*0.2%)
+    moduleDegradationLoss: 3.8000, // Module degradation loss % (fixed percentage)
     mismatchLoss: 3.3960,          // Including 1.4% for degradation dispersion
     ohmicLoss: 1.0610,             // Ohmic wiring loss
   },
@@ -157,19 +157,13 @@ export function calculateTemperatureLoss(
 }
 
 /**
- * Calculate cumulative degradation for a given operation year
+ * Calculate total degradation (LID + Module Degradation Loss)
  */
-export function calculateCumulativeDegradation(
-  operationYear: number,
+export function calculateTotalDegradation(
   lidLoss: number,
-  annualDegradation: number
+  moduleDegradationLoss: number
 ): number {
-  // Year 1: LID only
-  // Year 2+: LID + (year - 1) × annual degradation
-  if (operationYear <= 1) {
-    return lidLoss;
-  }
-  return lidLoss + (operationYear - 1) * annualDegradation;
+  return lidLoss + moduleDegradationLoss;
 }
 
 /**
@@ -226,12 +220,11 @@ export function calculatePVsystLossChain(
   const temperatureLoss = config.array.temperatureLoss;
   
   // ========================================
-  // Step 7: Degradation (cumulative)
+  // Step 7: Total Degradation (LID + Module Degradation Loss)
   // ========================================
-  const cumulativeDegradation = calculateCumulativeDegradation(
-    config.operationYear,
+  const cumulativeDegradation = calculateTotalDegradation(
     config.array.lidLoss,
-    config.array.annualDegradation
+    config.array.moduleDegradationLoss
   );
   
   // ========================================
@@ -342,11 +335,10 @@ export function calculateHourlyPVsystOutput(
   // Calculate collector area once - use provided area OR calculate from capacity/efficiency
   const collectorAreaM2 = config.collectorAreaM2 ?? (capacityKwp * 1000) / (config.stcEfficiency * 1000);
   
-  // Pre-calculate cumulative degradation (same for all hours)
-  const cumulativeDegradation = calculateCumulativeDegradation(
-    config.operationYear,
+  // Pre-calculate total degradation (same for all hours)
+  const cumulativeDegradation = calculateTotalDegradation(
     config.array.lidLoss,
-    config.array.annualDegradation
+    config.array.moduleDegradationLoss
   );
   
   if (debug) {
@@ -669,16 +661,14 @@ export function calculateAnnualPVsystOutput(
   });
   currentValue = afterLID;
   
-  // Step 5b: Apply Annual Degradation (separate loss based on operation year)
-  const annualDegYears = Math.max(0, config.operationYear - 1);
-  const annualDegPercent = annualDegYears * config.array.annualDegradation;
-  const afterAnnualDeg = currentValue * (1 - annualDegPercent / 100);
+  // Step 5b: Apply Module Degradation Loss (single percentage)
+  const afterModuleDeg = currentValue * (1 - config.array.moduleDegradationLoss / 100);
   breakdown.push({ 
-    stage: `Annual Degradation (Year ${config.operationYear}: ${annualDegYears} × ${config.array.annualDegradation.toFixed(4)}%)`, 
-    valueKwh: afterAnnualDeg, 
-    lossPercent: annualDegPercent  // e.g., 1.8000% for Year 10
+    stage: 'Module Degradation Loss', 
+    valueKwh: afterModuleDeg, 
+    lossPercent: config.array.moduleDegradationLoss  // e.g., 3.8000%
   });
-  currentValue = afterAnnualDeg;
+  currentValue = afterModuleDeg;
   
   // Apply irradiance level loss
   const afterIrradianceLevel = currentValue * (1 - config.array.irradianceLevelLoss / 100);
@@ -745,7 +735,7 @@ export function calculateAnnualPVsystOutput(
   
   if (debug) {
     console.log('LID Loss:', config.array.lidLoss.toFixed(4), '%');
-    console.log('Annual Degradation (Year ' + config.operationYear + '):', annualDegPercent.toFixed(4), '%');
+    console.log('Module Degradation Loss:', config.array.moduleDegradationLoss.toFixed(4), '%');
     console.log('EArrMPP:', eArrMPP.toFixed(4), 'kWh');
   }
   
