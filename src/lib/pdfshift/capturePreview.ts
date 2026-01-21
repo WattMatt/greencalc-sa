@@ -94,8 +94,8 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
     if (!simulation || projection.length === 0) return '';
     
     const width = 550;
-    const height = 140;
-    const padding = { top: 20, right: 50, bottom: 30, left: 60 };
+    const height = 130;
+    const padding = { top: 18, right: 50, bottom: 28, left: 55 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
     
@@ -157,12 +157,12 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
   const generateEnergyFlowDonutSVG = (): string => {
     if (!simulation) return '';
     
-    const width = 260;
-    const height = 140;
-    const centerX = 70;
-    const centerY = 70;
-    const outerRadius = 55;
-    const innerRadius = 35;
+    const width = 240;
+    const height = 120;
+    const centerX = 60;
+    const centerY = 60;
+    const outerRadius = 48;
+    const innerRadius = 30;
     
     const selfConsumption = Math.max(0, simulation.annualSolarGeneration - simulation.annualGridExport);
     const total = selfConsumption + simulation.annualGridImport + simulation.annualGridExport;
@@ -209,18 +209,18 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
       `<path d="${arc.path}" fill="${arc.color}" stroke="white" stroke-width="2"/>`
     ).join('');
     
-    // Legend - positioned to the right
+    // Legend - positioned to the right (compact)
     const legend = data.map((d, i) => `
-      <rect x="145" y="${20 + i * 35}" width="10" height="10" rx="2" fill="${d.color}"/>
-      <text x="160" y="${28 + i * 35}" font-size="9" fill="#374151">${d.name}</text>
-      <text x="160" y="${40 + i * 35}" font-size="8" fill="#6b7280">${formatNumber(d.value)} kWh</text>
+      <rect x="130" y="${10 + i * 30}" width="8" height="8" rx="2" fill="${d.color}"/>
+      <text x="142" y="${17 + i * 30}" font-size="8" fill="#374151">${d.name}</text>
+      <text x="142" y="${27 + i * 30}" font-size="7" fill="#6b7280">${formatNumber(d.value)} kWh</text>
     `).join('');
     
     return `
       <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto;">
         ${segments}
-        <text x="${centerX}" y="${centerY - 3}" font-size="16" font-weight="700" fill="${primaryColor}" text-anchor="middle">${solarCoverage}%</text>
-        <text x="${centerX}" y="${centerY + 10}" font-size="8" fill="#6b7280" text-anchor="middle">Solar Coverage</text>
+        <text x="${centerX}" y="${centerY - 2}" font-size="14" font-weight="700" fill="${primaryColor}" text-anchor="middle">${solarCoverage}%</text>
+        <text x="${centerX}" y="${centerY + 9}" font-size="7" fill="#6b7280" text-anchor="middle">Solar Coverage</text>
         ${legend}
       </svg>
     `;
@@ -230,8 +230,8 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
     if (!simulation) return '';
     
     const width = 550;
-    const height = 120;
-    const padding = { top: 20, right: 20, bottom: 35, left: 50 };
+    const height = 110;
+    const padding = { top: 18, right: 20, bottom: 32, left: 45 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
     
@@ -298,13 +298,21 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
   let logoBase64 = '';
   if (branding?.logo_url) {
     try {
-      const response = await fetch(branding.logo_url);
+      // Remove cache-buster query params that may cause CORS issues
+      const cleanLogoUrl = branding.logo_url.split('?')[0];
+      console.log('Fetching logo from:', cleanLogoUrl);
+      const response = await fetch(cleanLogoUrl);
+      if (!response.ok) {
+        throw new Error(`Logo fetch failed: ${response.status}`);
+      }
       const blob = await response.blob();
-      logoBase64 = await new Promise<string>((resolve) => {
+      logoBase64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('FileReader failed'));
         reader.readAsDataURL(blob);
       });
+      console.log('Logo converted to base64 successfully');
     } catch (e) {
       console.warn('Failed to load logo:', e);
     }
@@ -736,51 +744,51 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
       </div>
     </div>
     
-    <div class="content" style="padding: 12px 20px;">
-      <div class="section-title" style="color: ${primaryColor}; font-size: 14px; margin-bottom: 10px;">Financial Outlook</div>
+    <div class="content" style="padding: 10px 18px;">
+      <div class="section-title" style="color: ${primaryColor}; font-size: 13px; margin-bottom: 8px;">Financial Outlook</div>
       
-      <div class="no-break" style="background-color: ${template.colors.cardBg}; padding: 10px 14px; border-radius: ${borderRadius}; box-shadow: ${boxShadow}; margin-bottom: 12px;">
-        <h4 style="font-size: 11px; font-weight: 600; margin-bottom: 6px; color: ${template.colors.textPrimary};">Cumulative Savings vs Investment</h4>
+      <div class="no-break" style="background-color: ${template.colors.cardBg}; padding: 8px 12px; border-radius: ${borderRadius}; box-shadow: ${boxShadow}; margin-bottom: 10px;">
+        <h4 style="font-size: 10px; font-weight: 600; margin-bottom: 4px; color: ${template.colors.textPrimary};">Cumulative Savings vs Investment</h4>
         ${generatePaybackChartSVG()}
-        <p style="font-size: 9px; color: ${template.colors.textSecondary}; margin-top: 4px;">
-          Payback occurs when savings exceed the initial investment (red dashed line).
+        <p style="font-size: 8px; color: ${template.colors.textSecondary}; margin-top: 2px;">
+          Payback occurs when savings exceed initial investment (red line).
         </p>
       </div>
       
-      <div class="no-break" style="background-color: ${template.colors.cardBg}; padding: 10px 14px; border-radius: ${borderRadius}; box-shadow: ${boxShadow}; margin-bottom: 12px;">
-        <h4 style="font-size: 11px; font-weight: 600; margin-bottom: 6px; color: ${template.colors.textPrimary};">Expected Monthly Generation</h4>
+      <div class="no-break" style="background-color: ${template.colors.cardBg}; padding: 8px 12px; border-radius: ${borderRadius}; box-shadow: ${boxShadow}; margin-bottom: 10px;">
+        <h4 style="font-size: 10px; font-weight: 600; margin-bottom: 4px; color: ${template.colors.textPrimary};">Expected Monthly Generation</h4>
         ${generateMonthlyGenerationChartSVG()}
-        <p style="font-size: 9px; color: ${template.colors.textSecondary}; margin-top: 4px;">
+        <p style="font-size: 8px; color: ${template.colors.textSecondary}; margin-top: 2px;">
           Summer months (colored) produce more energy than winter months (gray).
         </p>
       </div>
       
-      <div class="section-title" style="color: ${primaryColor}; font-size: 14px; margin-bottom: 10px;">Energy Distribution</div>
+      <div class="section-title" style="color: ${primaryColor}; font-size: 12px; margin-bottom: 8px; margin-top: 10px;">Energy Distribution</div>
       
-      <div class="no-break" style="display: flex; gap: 12px;">
-        <div style="flex: 1; background-color: ${template.colors.cardBg}; padding: 10px 14px; border-radius: ${borderRadius}; box-shadow: ${boxShadow};">
-          <h4 style="font-size: 11px; font-weight: 600; margin-bottom: 6px; color: ${template.colors.textPrimary};">Annual Energy Flow</h4>
+      <div style="display: flex; gap: 10px;">
+        <div style="flex: 1; background-color: ${template.colors.cardBg}; padding: 8px 12px; border-radius: ${borderRadius}; box-shadow: ${boxShadow};">
+          <h4 style="font-size: 10px; font-weight: 600; margin-bottom: 4px; color: ${template.colors.textPrimary};">Annual Energy Flow</h4>
           ${generateEnergyFlowDonutSVG()}
         </div>
         
-        <div style="flex: 1; background-color: ${template.colors.cardBg}; padding: 10px 14px; border-radius: ${borderRadius}; box-shadow: ${boxShadow};">
-          <h4 style="font-size: 11px; font-weight: 600; margin-bottom: 6px; color: ${template.colors.textPrimary};">Key Metrics</h4>
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <div style="display: flex; justify-content: space-between; padding: 8px; background: ${primaryColor}10; border-radius: 4px;">
-              <span style="font-size: 10px; color: ${template.colors.textSecondary};">Annual Generation</span>
-              <span style="font-size: 10px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(simulation.annualSolarGeneration)} kWh</span>
+        <div style="flex: 1; background-color: ${template.colors.cardBg}; padding: 8px 12px; border-radius: ${borderRadius}; box-shadow: ${boxShadow};">
+          <h4 style="font-size: 10px; font-weight: 600; margin-bottom: 4px; color: ${template.colors.textPrimary};">Key Metrics</h4>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; justify-content: space-between; padding: 6px; background: ${primaryColor}10; border-radius: 4px;">
+              <span style="font-size: 9px; color: ${template.colors.textSecondary};">Annual Generation</span>
+              <span style="font-size: 9px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(simulation.annualSolarGeneration)} kWh</span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 8px; background: ${primaryColor}10; border-radius: 4px;">
-              <span style="font-size: 10px; color: ${template.colors.textSecondary};">Grid Import Avoided</span>
-              <span style="font-size: 10px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(Math.max(0, simulation.annualSolarGeneration - simulation.annualGridExport))} kWh</span>
+            <div style="display: flex; justify-content: space-between; padding: 6px; background: ${primaryColor}10; border-radius: 4px;">
+              <span style="font-size: 9px; color: ${template.colors.textSecondary};">Grid Import Avoided</span>
+              <span style="font-size: 9px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(Math.max(0, simulation.annualSolarGeneration - simulation.annualGridExport))} kWh</span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 8px; background: ${primaryColor}10; border-radius: 4px;">
-              <span style="font-size: 10px; color: ${template.colors.textSecondary};">CO₂ Offset (est.)</span>
-              <span style="font-size: 10px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(Math.round(simulation.annualSolarGeneration * 0.9))} kg/year</span>
+            <div style="display: flex; justify-content: space-between; padding: 6px; background: ${primaryColor}10; border-radius: 4px;">
+              <span style="font-size: 9px; color: ${template.colors.textSecondary};">CO₂ Offset (est.)</span>
+              <span style="font-size: 9px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(Math.round(simulation.annualSolarGeneration * 0.9))} kg/year</span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 8px; background: ${primaryColor}10; border-radius: 4px;">
-              <span style="font-size: 10px; color: ${template.colors.textSecondary};">25-Year Savings</span>
-              <span style="font-size: 10px; font-weight: 600; color: ${template.colors.textPrimary};">${formatCurrency(Math.round(projection[24]?.cumulative || 0))}</span>
+            <div style="display: flex; justify-content: space-between; padding: 6px; background: ${primaryColor}10; border-radius: 4px;">
+              <span style="font-size: 9px; color: ${template.colors.textSecondary};">25-Year Savings</span>
+              <span style="font-size: 9px; font-weight: 600; color: ${template.colors.textPrimary};">${formatCurrency(Math.round(projection[24]?.cumulative || 0))}</span>
             </div>
           </div>
         </div>
