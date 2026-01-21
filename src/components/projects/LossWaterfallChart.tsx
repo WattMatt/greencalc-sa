@@ -32,6 +32,8 @@ export function LossWaterfallChart({
   }, [editingStage]);
 
   // Calculate running total for waterfall visualization
+  // Config stores: positive values = losses, negative values = gains
+  // We subtract the lossPercent directly from running total
   const waterfallData = useMemo(() => {
     let runningPercent = 100;
     
@@ -39,7 +41,6 @@ export function LossWaterfallChart({
       .filter(item => item.lossPercent !== 0 || item.stage === "GHI Input")
       .map((item, index) => {
         const isFirst = index === 0;
-        const isGain = item.isGain || item.lossPercent < 0;
         
         if (isFirst) {
           return {
@@ -52,16 +53,19 @@ export function LossWaterfallChart({
           };
         }
         
-        const loss = isGain ? -Math.abs(item.lossPercent) : Math.abs(item.lossPercent);
+        // Use lossPercent directly: positive = loss (reduces), negative = gain (increases)
         const startPercent = runningPercent;
-        runningPercent = runningPercent - loss;
+        runningPercent = runningPercent - item.lossPercent;
+        
+        // isGain when lossPercent is negative (meaning it's actually a gain)
+        const isGain = item.lossPercent < 0;
         
         return {
           ...item,
           startPercent,
           endPercent: runningPercent,
           runningPercent,
-          barWidth: Math.abs(loss),
+          barWidth: Math.abs(item.lossPercent),
           isGain,
         };
       });
