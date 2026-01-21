@@ -345,22 +345,22 @@ export function PVsystLossChainConfig({
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                -{(config.irradiance.nearShadingLoss + config.irradiance.iamLoss + config.irradiance.soilingLoss).toFixed(1)}%
+                -{((config.irradiance.transpositionLoss ?? 0.13) + config.irradiance.nearShadingLoss + config.irradiance.iamLoss + config.irradiance.soilingLoss).toFixed(1)}%
               </Badge>
               <ChevronDown className={`h-4 w-4 transition-transform ${showIrradiance ? "rotate-180" : ""}`} />
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2 space-y-3 px-2">
-            {/* 1. Global incident in coll. plane (Transposition Factor) */}
+            {/* 1. Global incident in coll. plane (Transposition Loss %) */}
             <LossSlider
               label="Global incident in coll. plane"
-              value={config.transpositionFactor}
-              onChange={(v) => onChange({ ...config, transpositionFactor: v })}
-              min={0.9}
-              max={1.3}
+              value={config.irradiance.transpositionLoss ?? 0.13}
+              onChange={(v) => updateIrradiance("transpositionLoss", v)}
+              min={-30}
+              max={10}
               step={0.01}
-              suffix="x"
-              description="POA irradiance gain from tilted surface (typically 1.05-1.15 for SA)"
+              suffix="%"
+              description="Loss/gain from tilted surface vs horizontal. Negative = gain (typical for tilted panels)"
             />
             {/* 2. Near Shadings: irradiance loss */}
             <LossSlider
