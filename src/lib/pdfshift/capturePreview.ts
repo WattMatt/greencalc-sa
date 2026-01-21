@@ -226,6 +226,74 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
     `;
   };
 
+  const generateMonthlyGenerationChartSVG = (): string => {
+    if (!simulation) return '';
+    
+    const width = 550;
+    const height = 180;
+    const padding = { top: 20, right: 20, bottom: 35, left: 50 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+    
+    // Monthly solar generation factors (typical South African pattern)
+    // Higher in summer (Oct-Mar), lower in winter (Apr-Sep)
+    const monthlyFactors = [
+      1.15, 1.10, 1.00, 0.85, 0.75, 0.70,  // Jan-Jun
+      0.72, 0.82, 0.95, 1.08, 1.18, 1.20   // Jul-Dec
+    ];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    // Calculate monthly values based on annual generation
+    const avgMonthly = simulation.annualSolarGeneration / 12;
+    const monthlyValues = monthlyFactors.map(f => Math.round(avgMonthly * f));
+    const maxValue = Math.max(...monthlyValues) * 1.1;
+    
+    const barWidth = (chartWidth / 12) * 0.7;
+    const barGap = (chartWidth / 12) * 0.3;
+    
+    const xScale = (month: number) => padding.left + (month * (chartWidth / 12)) + (barGap / 2);
+    const yScale = (value: number) => height - padding.bottom - (value / maxValue) * chartHeight;
+    
+    // Grid lines
+    const gridLines = [0, 0.25, 0.5, 0.75, 1].map(pct => 
+      `<line x1="${padding.left}" y1="${padding.top + (1-pct) * chartHeight}" x2="${width - padding.right}" y2="${padding.top + (1-pct) * chartHeight}" stroke="#e5e7eb" stroke-dasharray="3 3"/>`
+    ).join('');
+    
+    // Y-axis labels
+    const yLabels = [0, 0.25, 0.5, 0.75, 1].map(pct => 
+      `<text x="${padding.left - 8}" y="${padding.top + (1-pct) * chartHeight + 4}" font-size="9" fill="#6b7280" text-anchor="end">${Math.round(maxValue * pct / 1000)}k</text>`
+    ).join('');
+    
+    // Bars
+    const bars = monthlyValues.map((value, i) => {
+      const x = xScale(i);
+      const y = yScale(value);
+      const barHeight = height - padding.bottom - y;
+      const isWinter = i >= 4 && i <= 7;
+      const fillColor = isWinter ? '#94a3b8' : primaryColor;
+      
+      return `
+        <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="${fillColor}" rx="2"/>
+        <text x="${x + barWidth/2}" y="${y - 4}" font-size="8" fill="${template.colors.textSecondary}" text-anchor="middle">${Math.round(value/1000)}k</text>
+      `;
+    }).join('');
+    
+    // X-axis labels
+    const xLabels = monthNames.map((name, i) => 
+      `<text x="${xScale(i) + barWidth/2}" y="${height - padding.bottom + 15}" font-size="9" fill="#6b7280" text-anchor="middle">${name}</text>`
+    ).join('');
+    
+    return `
+      <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto;">
+        ${gridLines}
+        ${yLabels}
+        ${bars}
+        ${xLabels}
+        <text x="${padding.left - 35}" y="${height / 2}" font-size="9" fill="#6b7280" text-anchor="middle" transform="rotate(-90 ${padding.left - 35} ${height / 2})">kWh</text>
+      </svg>
+    `;
+  };
+
   // Convert logo to base64 if present
   let logoBase64 = '';
   if (branding?.logo_url) {
@@ -669,6 +737,14 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
         ${generatePaybackChartSVG()}
         <p style="font-size: 10px; color: ${template.colors.textSecondary}; margin-top: 8px;">
           The chart shows cumulative savings over 25 years. Payback occurs when savings exceed the initial investment (red dashed line).
+        </p>
+      </div>
+      
+      <div style="background-color: ${template.colors.cardBg}; padding: ${sectionPadding}; border-radius: ${borderRadius}; box-shadow: ${boxShadow}; margin-bottom: ${sectionGap};">
+        <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: ${template.colors.textPrimary};">Expected Monthly Generation</h4>
+        ${generateMonthlyGenerationChartSVG()}
+        <p style="font-size: 10px; color: ${template.colors.textSecondary}; margin-top: 8px;">
+          Monthly solar generation estimates based on typical seasonal patterns. Summer months (colored) produce more energy than winter months (gray).
         </p>
       </div>
       
