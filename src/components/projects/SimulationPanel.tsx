@@ -8,7 +8,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
@@ -46,6 +46,14 @@ import { LoadSheddingAnalysisPanel } from "./simulation/LoadSheddingAnalysisPane
 import { InverterSizing, InverterConfig, getDefaultInverterConfig } from "./InverterSizing";
 import { SystemCostsData } from "./SystemCostsManager";
 import { calculateAnnualBlendedRate, getBlendedRateBreakdown } from "@/lib/tariffCalculations";
+import { 
+  type LossCalculationMode, 
+  type PVsystLossChainConfig, 
+  DEFAULT_PVSYST_CONFIG,
+  calculateHourlyPVsystOutput,
+  calculatePVsystLossChain 
+} from "@/lib/pvsystLossChain";
+import { PVsystLossChainConfig as PVsystLossChainConfigPanel } from "./PVsystLossChainConfig";
 
 // Solar data source type
 type SolarDataSource = "solcast" | "pvgis_monthly" | "pvgis_tmy";
@@ -149,6 +157,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [solarDataSource, setSolarDataSource] = useState<SolarDataSource>("pvgis_monthly");
+  const [lossCalculationMode, setLossCalculationMode] = useState<LossCalculationMode>("simplified");
+  const [pvsystConfig, setPvsystConfig] = useState<PVsystLossChainConfig>(DEFAULT_PVSYST_CONFIG);
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
   const [inverterConfig, setInverterConfig] = useState<InverterConfig>(getDefaultInverterConfig);
   
@@ -318,32 +328,69 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   }, [tenants, shopTypes]);
 
   // Generate solar profiles - both with real data and generic (for comparison)
-  const solarProfileSolcast = useMemo(() => {
+  // Simplified mode uses the existing PVWatts-style calculation
+  const solarProfileSolcastSimplified = useMemo(() => {
     if (!solcastHourlyProfile) return null;
     return generateSolarProfile(pvConfig, solarCapacity, solcastHourlyProfile);
   }, [pvConfig, solarCapacity, solcastHourlyProfile]);
 
-  const solarProfilePVGIS = useMemo(() => {
+  const solarProfilePVGISSimplified = useMemo(() => {
     if (!pvgisHourlyProfile) return null;
     return generateSolarProfile(pvConfig, solarCapacity, pvgisHourlyProfile);
   }, [pvConfig, solarCapacity, pvgisHourlyProfile]);
 
-  const solarProfileGeneric = useMemo(() => {
+  const solarProfileGenericSimplified = useMemo(() => {
     return generateSolarProfile(pvConfig, solarCapacity, undefined);
   }, [pvConfig, solarCapacity]);
 
-  // Active solar profile based on data source selection
+  // PVsyst mode uses the detailed loss chain calculation
+  const solarProfilePVsyst = useMemo(() => {
+    // Get hourly GHI and temperature data
+    const activeProfile = solarDataSource === "solcast" 
+      ? solcastHourlyProfile 
+      : pvgisHourlyProfile;
+    
+    if (lossCalculationMode !== "pvsyst" || !activeProfile) {
+      return null;
+    }
+    
+    // Extract hourly GHI (W/m²) and temperature arrays
+    const hourlyGhi = activeProfile.map(h => h.ghi);
+    const hourlyTemp = activeProfile.map(h => (h as any).temp ?? 25);
+    
+    // Calculate hourly output using PVsyst loss chain
+    const hourlyResults = calculateHourlyPVsystOutput(
+      hourlyGhi,
+      hourlyTemp,
+      solarCapacity,
+      pvsystConfig
+    );
+    
+    return hourlyResults.map(r => r.eGridKwh);
+  }, [lossCalculationMode, solarDataSource, solcastHourlyProfile, pvgisHourlyProfile, solarCapacity, pvsystConfig]);
+
+  // Active solar profile based on data source and loss calculation mode
   const solarProfile = useMemo(() => {
+    // If PVsyst mode and we have a valid profile, use it
+    if (lossCalculationMode === "pvsyst" && solarProfilePVsyst) {
+      return solarProfilePVsyst;
+    }
+    
+    // Otherwise use simplified mode
     switch (solarDataSource) {
       case "solcast":
-        return solarProfileSolcast ?? solarProfileGeneric;
+        return solarProfileSolcastSimplified ?? solarProfileGenericSimplified;
       case "pvgis_monthly":
       case "pvgis_tmy":
-        return solarProfilePVGIS ?? solarProfileGeneric;
+        return solarProfilePVGISSimplified ?? solarProfileGenericSimplified;
       default:
-        return solarProfileGeneric;
+        return solarProfileGenericSimplified;
     }
-  }, [solarDataSource, solarProfileSolcast, solarProfilePVGIS, solarProfileGeneric]);
+  }, [lossCalculationMode, solarDataSource, solarProfilePVsyst, solarProfileSolcastSimplified, solarProfilePVGISSimplified, solarProfileGenericSimplified]);
+
+  // For comparison charts, use simplified versions
+  const solarProfileSolcast = solarProfileSolcastSimplified;
+  const solarProfileGeneric = solarProfileGenericSimplified;
 
   // ========================================
   // PHASE 1: Energy Simulation (tariff-independent)
@@ -676,8 +723,25 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             </ToggleGroupItem>
           </ToggleGroup>
           
+          {/* Loss Calculation Mode Toggle */}
+          <ToggleGroup
+            type="single"
+            value={lossCalculationMode}
+            onValueChange={(value) => value && setLossCalculationMode(value as LossCalculationMode)}
+            className="border rounded-lg p-0.5"
+          >
+            <ToggleGroupItem value="simplified" size="sm" className="text-xs gap-1 px-3">
+              <Zap className="h-3 w-3" />
+              Simplified
+            </ToggleGroupItem>
+            <ToggleGroupItem value="pvsyst" size="sm" className="text-xs gap-1 px-3">
+              <Activity className="h-3 w-3" />
+              PVsyst
+            </ToggleGroupItem>
+          </ToggleGroup>
+          
           {hasRealData && (
-            <Badge variant="outline" className="text-xs text-primary border-primary">
+            <Badge variant="outline" className="text-xs">
               {solarDataSource === "solcast" ? "Forecast" : solarDataSource === "pvgis_tmy" ? "Typical Year" : "19-Yr Avg"}
             </Badge>
           )}
@@ -759,6 +823,17 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           />
         </CollapsibleContent>
       </Collapsible>
+
+      {/* PVsyst Loss Chain Configuration - only show when in PVsyst mode */}
+      {lossCalculationMode === "pvsyst" && (
+        <PVsystLossChainConfigPanel
+          config={pvsystConfig}
+          onChange={setPvsystConfig}
+          dailyGHI={selectedLocation.ghi}
+          capacityKwp={solarCapacity}
+          ambientTemp={25}
+        />
+      )}
 
       {/* Advanced Simulation Configuration */}
       <AdvancedSimulationConfigPanel
