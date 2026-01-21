@@ -94,7 +94,7 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
     if (!simulation || projection.length === 0) return '';
     
     const width = 550;
-    const height = 200;
+    const height = 140;
     const padding = { top: 20, right: 50, bottom: 30, left: 60 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
@@ -157,12 +157,12 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
   const generateEnergyFlowDonutSVG = (): string => {
     if (!simulation) return '';
     
-    const width = 280;
-    const height = 180;
-    const centerX = 90;
-    const centerY = 90;
-    const outerRadius = 70;
-    const innerRadius = 45;
+    const width = 260;
+    const height = 140;
+    const centerX = 70;
+    const centerY = 70;
+    const outerRadius = 55;
+    const innerRadius = 35;
     
     const selfConsumption = Math.max(0, simulation.annualSolarGeneration - simulation.annualGridExport);
     const total = selfConsumption + simulation.annualGridImport + simulation.annualGridExport;
@@ -209,18 +209,18 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
       `<path d="${arc.path}" fill="${arc.color}" stroke="white" stroke-width="2"/>`
     ).join('');
     
-    // Legend
+    // Legend - positioned to the right
     const legend = data.map((d, i) => `
-      <rect x="175" y="${30 + i * 45}" width="12" height="12" rx="2" fill="${d.color}"/>
-      <text x="192" y="${39 + i * 45}" font-size="10" fill="#374151">${d.name}</text>
-      <text x="192" y="${52 + i * 45}" font-size="9" fill="#6b7280">${formatNumber(d.value)} kWh</text>
+      <rect x="145" y="${20 + i * 35}" width="10" height="10" rx="2" fill="${d.color}"/>
+      <text x="160" y="${28 + i * 35}" font-size="9" fill="#374151">${d.name}</text>
+      <text x="160" y="${40 + i * 35}" font-size="8" fill="#6b7280">${formatNumber(d.value)} kWh</text>
     `).join('');
     
     return `
       <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto;">
         ${segments}
-        <text x="${centerX}" y="${centerY - 5}" font-size="18" font-weight="700" fill="${primaryColor}" text-anchor="middle">${solarCoverage}%</text>
-        <text x="${centerX}" y="${centerY + 12}" font-size="9" fill="#6b7280" text-anchor="middle">Solar Coverage</text>
+        <text x="${centerX}" y="${centerY - 3}" font-size="16" font-weight="700" fill="${primaryColor}" text-anchor="middle">${solarCoverage}%</text>
+        <text x="${centerX}" y="${centerY + 10}" font-size="8" fill="#6b7280" text-anchor="middle">Solar Coverage</text>
         ${legend}
       </svg>
     `;
@@ -230,7 +230,7 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
     if (!simulation) return '';
     
     const width = 550;
-    const height = 180;
+    const height = 120;
     const padding = { top: 20, right: 20, bottom: 35, left: 50 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
@@ -361,17 +361,24 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
     
     .page {
       width: 210mm;
-      min-height: 297mm;
+      height: 297mm;
+      max-height: 297mm;
       background: white;
-      margin: 0 auto 20px;
+      margin: 0 auto;
       display: flex;
       flex-direction: column;
       page-break-after: always;
+      page-break-inside: avoid;
       overflow: hidden;
     }
     
     .page:last-child {
       page-break-after: auto;
+    }
+    
+    .no-break {
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     
     .header {
@@ -729,51 +736,51 @@ export async function generateProposalHTML(options: CaptureOptions): Promise<str
       </div>
     </div>
     
-    <div class="content">
-      <div class="section-title" style="color: ${primaryColor};">Financial Outlook</div>
+    <div class="content" style="padding: 12px 20px;">
+      <div class="section-title" style="color: ${primaryColor}; font-size: 14px; margin-bottom: 10px;">Financial Outlook</div>
       
-      <div style="background-color: ${template.colors.cardBg}; padding: ${sectionPadding}; border-radius: ${borderRadius}; box-shadow: ${boxShadow}; margin-bottom: ${sectionGap};">
-        <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: ${template.colors.textPrimary};">Cumulative Savings vs Investment</h4>
+      <div class="no-break" style="background-color: ${template.colors.cardBg}; padding: 10px 14px; border-radius: ${borderRadius}; box-shadow: ${boxShadow}; margin-bottom: 12px;">
+        <h4 style="font-size: 11px; font-weight: 600; margin-bottom: 6px; color: ${template.colors.textPrimary};">Cumulative Savings vs Investment</h4>
         ${generatePaybackChartSVG()}
-        <p style="font-size: 10px; color: ${template.colors.textSecondary}; margin-top: 8px;">
-          The chart shows cumulative savings over 25 years. Payback occurs when savings exceed the initial investment (red dashed line).
+        <p style="font-size: 9px; color: ${template.colors.textSecondary}; margin-top: 4px;">
+          Payback occurs when savings exceed the initial investment (red dashed line).
         </p>
       </div>
       
-      <div style="background-color: ${template.colors.cardBg}; padding: ${sectionPadding}; border-radius: ${borderRadius}; box-shadow: ${boxShadow}; margin-bottom: ${sectionGap};">
-        <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: ${template.colors.textPrimary};">Expected Monthly Generation</h4>
+      <div class="no-break" style="background-color: ${template.colors.cardBg}; padding: 10px 14px; border-radius: ${borderRadius}; box-shadow: ${boxShadow}; margin-bottom: 12px;">
+        <h4 style="font-size: 11px; font-weight: 600; margin-bottom: 6px; color: ${template.colors.textPrimary};">Expected Monthly Generation</h4>
         ${generateMonthlyGenerationChartSVG()}
-        <p style="font-size: 10px; color: ${template.colors.textSecondary}; margin-top: 8px;">
-          Monthly solar generation estimates based on typical seasonal patterns. Summer months (colored) produce more energy than winter months (gray).
+        <p style="font-size: 9px; color: ${template.colors.textSecondary}; margin-top: 4px;">
+          Summer months (colored) produce more energy than winter months (gray).
         </p>
       </div>
       
-      <div class="section-title" style="color: ${primaryColor};">Energy Distribution</div>
+      <div class="section-title" style="color: ${primaryColor}; font-size: 14px; margin-bottom: 10px;">Energy Distribution</div>
       
-      <div style="display: flex; gap: ${sectionGap};">
-        <div style="flex: 1; background-color: ${template.colors.cardBg}; padding: ${sectionPadding}; border-radius: ${borderRadius}; box-shadow: ${boxShadow};">
-          <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: ${template.colors.textPrimary};">Annual Energy Flow</h4>
+      <div class="no-break" style="display: flex; gap: 12px;">
+        <div style="flex: 1; background-color: ${template.colors.cardBg}; padding: 10px 14px; border-radius: ${borderRadius}; box-shadow: ${boxShadow};">
+          <h4 style="font-size: 11px; font-weight: 600; margin-bottom: 6px; color: ${template.colors.textPrimary};">Annual Energy Flow</h4>
           ${generateEnergyFlowDonutSVG()}
         </div>
         
-        <div style="flex: 1; background-color: ${template.colors.cardBg}; padding: ${sectionPadding}; border-radius: ${borderRadius}; box-shadow: ${boxShadow};">
-          <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 12px; color: ${template.colors.textPrimary};">Key Metrics</h4>
-          <div style="display: flex; flex-direction: column; gap: 12px;">
-            <div style="display: flex; justify-content: space-between; padding: 10px; background: ${primaryColor}10; border-radius: 6px;">
-              <span style="font-size: 11px; color: ${template.colors.textSecondary};">Annual Generation</span>
-              <span style="font-size: 11px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(simulation.annualSolarGeneration)} kWh</span>
+        <div style="flex: 1; background-color: ${template.colors.cardBg}; padding: 10px 14px; border-radius: ${borderRadius}; box-shadow: ${boxShadow};">
+          <h4 style="font-size: 11px; font-weight: 600; margin-bottom: 6px; color: ${template.colors.textPrimary};">Key Metrics</h4>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; padding: 8px; background: ${primaryColor}10; border-radius: 4px;">
+              <span style="font-size: 10px; color: ${template.colors.textSecondary};">Annual Generation</span>
+              <span style="font-size: 10px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(simulation.annualSolarGeneration)} kWh</span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 10px; background: ${primaryColor}10; border-radius: 6px;">
-              <span style="font-size: 11px; color: ${template.colors.textSecondary};">Grid Import Avoided</span>
-              <span style="font-size: 11px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(Math.max(0, simulation.annualSolarGeneration - simulation.annualGridExport))} kWh</span>
+            <div style="display: flex; justify-content: space-between; padding: 8px; background: ${primaryColor}10; border-radius: 4px;">
+              <span style="font-size: 10px; color: ${template.colors.textSecondary};">Grid Import Avoided</span>
+              <span style="font-size: 10px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(Math.max(0, simulation.annualSolarGeneration - simulation.annualGridExport))} kWh</span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 10px; background: ${primaryColor}10; border-radius: 6px;">
-              <span style="font-size: 11px; color: ${template.colors.textSecondary};">CO₂ Offset (est.)</span>
-              <span style="font-size: 11px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(Math.round(simulation.annualSolarGeneration * 0.9))} kg/year</span>
+            <div style="display: flex; justify-content: space-between; padding: 8px; background: ${primaryColor}10; border-radius: 4px;">
+              <span style="font-size: 10px; color: ${template.colors.textSecondary};">CO₂ Offset (est.)</span>
+              <span style="font-size: 10px; font-weight: 600; color: ${template.colors.textPrimary};">${formatNumber(Math.round(simulation.annualSolarGeneration * 0.9))} kg/year</span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 10px; background: ${primaryColor}10; border-radius: 6px;">
-              <span style="font-size: 11px; color: ${template.colors.textSecondary};">25-Year Savings</span>
-              <span style="font-size: 11px; font-weight: 600; color: ${template.colors.textPrimary};">${formatCurrency(Math.round(projection[24]?.cumulative || 0))}</span>
+            <div style="display: flex; justify-content: space-between; padding: 8px; background: ${primaryColor}10; border-radius: 4px;">
+              <span style="font-size: 10px; color: ${template.colors.textSecondary};">25-Year Savings</span>
+              <span style="font-size: 10px; font-weight: 600; color: ${template.colors.textPrimary};">${formatCurrency(Math.round(projection[24]?.cumulative || 0))}</span>
             </div>
           </div>
         </div>
