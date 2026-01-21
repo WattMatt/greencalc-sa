@@ -451,7 +451,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // Calculate basic financial metrics (NPV, IRR, LCOE) using systemCosts parameters
   const basicFinancialMetrics = useMemo(() => {
     // Use financial parameters from systemCosts
-    const projectLifeYears = systemCosts.projectDurationYears ?? 25;
+    const projectLifeYears = systemCosts.projectDurationYears ?? 20;
     const discountRate = (systemCosts.lcoeDiscountRate ?? 9) / 100; // Convert from % to decimal
     const financeRate = (systemCosts.mirrFinanceRate ?? 9) / 100;
     const reinvestmentRate = (systemCosts.mirrReinvestmentRate ?? 10) / 100;

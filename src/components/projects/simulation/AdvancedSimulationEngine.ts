@@ -268,7 +268,7 @@ export function runAdvancedSimulation(
   
   const lifetimeYears = financial.enabled 
     ? financial.projectLifetimeYears 
-    : 25;
+    : 20;
   
   const baseAnnualLoad = baseEnergyResults.totalDailyLoad * 365;
   const baseAnnualSolar = baseEnergyResults.totalDailySolar * 365;

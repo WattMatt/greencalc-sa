@@ -955,7 +955,7 @@ function renderEngineeringSpecs(data: PDFGeneratorConfig["simulationData"], narr
         [{ text: "Battery Storage", fillColor: "#f8fafc" }, { text: `${data.batteryCapacityKwh} kWh`, fillColor: "#f8fafc" }, { text: "Usable capacity", fillColor: "#f8fafc" }],
         [{ text: "Expected PR" }, { text: "80-82%" }, { text: "Performance ratio" }],
         [{ text: "Specific Yield", fillColor: "#f8fafc" }, { text: "~1,600 kWh/kWp/yr", fillColor: "#f8fafc" }, { text: "South Africa average", fillColor: "#f8fafc" }],
-        [{ text: "System Lifetime" }, { text: "25 years" }, { text: "Warranty period" }],
+        [{ text: "System Lifetime" }, { text: "20 years" }, { text: "Warranty period" }],
       ],
     },
     layout: "lightHorizontalLines",

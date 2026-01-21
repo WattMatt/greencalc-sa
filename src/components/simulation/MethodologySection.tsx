@@ -65,7 +65,7 @@ export const financialMethodology: MethodologyItem = {
   title: "Financial Projections Methodology",
   content: (
     <div className="space-y-3 text-sm text-muted-foreground">
-      <p>Financial analysis uses a 25-year projection model with the following assumptions:</p>
+      <p>Financial analysis uses a 20-year projection model with the following assumptions:</p>
       <div className="grid gap-2">
         <div className="bg-muted/50 p-3 rounded-md">
           <p className="font-semibold text-foreground">Annual Savings Calculation:</p>
@@ -78,7 +78,7 @@ export const financialMethodology: MethodologyItem = {
           <ul className="list-disc list-inside mt-1 space-y-1">
             <li><strong>Panel Degradation</strong>: 0.5% per year (industry standard)</li>
             <li><strong>Tariff Escalation</strong>: 8% per year (based on historical SA increases)</li>
-            <li><strong>System Lifespan</strong>: 25 years for panels, 10-15 years for batteries</li>
+            <li><strong>System Lifespan</strong>: 20 years for panels, 10-15 years for batteries</li>
             <li><strong>Discount Rate</strong>: 10% for NPV calculations</li>
           </ul>
         </div>
@@ -86,7 +86,7 @@ export const financialMethodology: MethodologyItem = {
           <p className="font-semibold text-foreground">ROI & Payback:</p>
           <ul className="list-disc list-inside mt-1 space-y-1">
             <li><strong>Simple Payback</strong> = System Cost ÷ Year 1 Savings</li>
-            <li><strong>25-Year ROI</strong> = (Cumulative Savings - System Cost) ÷ System Cost × 100%</li>
+            <li><strong>20-Year ROI</strong> = (Cumulative Savings - System Cost) ÷ System Cost × 100%</li>
             <li><strong>LCOE</strong> = Total Lifetime Cost ÷ Total Lifetime Generation</li>
           </ul>
         </div>

@@ -284,7 +284,7 @@ function renderSegmentContent(
           </div>
           <div class="metric-card accent">
             <div class="metric-value">${Math.round(data.roiPercent)}%</div>
-            <div class="metric-label">25-Year ROI</div>
+            <div class="metric-label">20-Year ROI</div>
           </div>
           <div class="metric-card warning">
             <div class="metric-value">${formatCurrency(data.annualSavings, true)}</div>

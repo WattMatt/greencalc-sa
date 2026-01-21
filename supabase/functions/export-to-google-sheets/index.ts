@@ -269,7 +269,7 @@ const handler = async (req: Request): Promise<Response> => {
         ],
       },
       {
-        range: "Cashflow!A1:D26",
+        range: "Cashflow!A1:D21",
         values: [
           ["Year", "Cumulative Savings (R)", "Cumulative Cost (R)", "Net Position (R)"],
           ...reportData.financials.yearly_cashflows.map(cf => [

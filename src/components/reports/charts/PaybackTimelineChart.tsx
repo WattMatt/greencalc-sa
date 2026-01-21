@@ -130,7 +130,7 @@ export function PaybackTimelineChart({
             <p className="text-xl font-bold text-chart-1">
               R{totalSavings.toLocaleString()}
             </p>
-            <p className="text-xs text-muted-foreground">25-Year Savings</p>
+            <p className="text-xs text-muted-foreground">20-Year Savings</p>
           </div>
           <div>
             <p className="text-xl font-bold text-primary">{roi}%</p>
