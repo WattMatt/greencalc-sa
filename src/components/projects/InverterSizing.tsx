@@ -342,15 +342,22 @@ export function InverterSizing({
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue placeholder="Select module" />
               </SelectTrigger>
-              <SelectContent>
-                {SOLAR_MODULE_PRESETS.map((mod) => (
-                  <SelectItem key={mod.id} value={mod.id} className="text-xs">
-                    <div className="flex items-center justify-between gap-4 w-full">
-                      <span className="font-medium">{mod.name}</span>
-                      <span className="text-muted-foreground">{mod.power_wp}W</span>
-                    </div>
-                  </SelectItem>
-                ))}
+                <SelectContent>
+                  {SOLAR_MODULE_PRESETS.map((mod) => {
+                    // For custom module, show actual configured power instead of static 450W
+                    const displayPower = mod.id === "custom" && config.customModule 
+                      ? config.customModule.power_wp 
+                      : mod.power_wp;
+                    
+                    return (
+                      <SelectItem key={mod.id} value={mod.id} className="text-xs">
+                        <div className="flex items-center justify-between gap-4 w-full">
+                          <span className="font-medium">{mod.name}</span>
+                          <span className="text-muted-foreground">{displayPower}W</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
               </SelectContent>
             </Select>
             

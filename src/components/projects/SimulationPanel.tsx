@@ -324,10 +324,20 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       : getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
     
     const currentAcCapacity = inverterConfig.inverterSize * inverterConfig.inverterCount;
-    return {
+    const metrics = {
       ...calculateModuleMetrics(currentAcCapacity, inverterConfig.dcAcRatio, selectedModule),
       moduleName: selectedModule.name,
     };
+    
+    // Debug logging for module metrics
+    console.log("=== Module Metrics ===");
+    console.log("Selected Module:", selectedModule.name, selectedModule.power_wp + "W");
+    console.log("Module Dimensions:", selectedModule.width_m, "x", selectedModule.length_m, "m");
+    console.log("Module Count:", metrics.moduleCount);
+    console.log("Collector Area (m²):", metrics.collectorAreaM2.toFixed(2));
+    console.log("STC Efficiency:", metrics.stcEfficiency);
+    
+    return metrics;
   }, [inverterConfig]);
 
   // Calculate load profile from tenants (kWh per hour)
@@ -398,7 +408,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       hourlyGhi,
       hourlyTemp,
       acCapacityKw,
-      configWithModuleData
+      configWithModuleData,
+      true  // Enable debug logging
     );
     
     return hourlyResults.map(r => r.eGridKwh);
