@@ -231,8 +231,11 @@ export function calculatePVsystLossChain(
   // Step 8: Array at MPP (EArrMPP - after all array losses)
   // Apply losses sequentially from EArrNom
   // ========================================
+  // Apply LID and Module Degradation as SEPARATE multipliers (not combined)
+  // This matches the breakdown steps for accurate waterfall visualization
   const arrayFactor = 
-    (1 - cumulativeDegradation / 100) *
+    (1 - config.array.lidLoss / 100) *
+    (1 - config.array.moduleDegradationLoss / 100) *
     (1 - config.array.irradianceLevelLoss / 100) *
     (1 - temperatureLoss / 100) *
     (1 - config.irradiance.spectralLoss / 100) *
@@ -285,7 +288,7 @@ export function calculatePVsystLossChain(
     { stage: "Soiling", lossPercent: -config.irradiance.soilingLoss, energyAfter: effectiveIrradiance * capacityKwp },
     // Array losses in Excel order:
     { stage: "LID", lossPercent: -config.array.lidLoss, energyAfter: 0 },
-    { stage: `Module Degradation (Yr ${config.operationYear})`, lossPercent: -cumulativeDegradation, energyAfter: 0 },
+    { stage: `Module Degradation (Yr ${config.operationYear})`, lossPercent: -config.array.moduleDegradationLoss, energyAfter: 0 },
     { stage: "Irradiance Level", lossPercent: -config.array.irradianceLevelLoss, energyAfter: 0 },
     { stage: "Temperature", lossPercent: -temperatureLoss, energyAfter: 0 },
     { stage: "Spectral Correction", lossPercent: -config.irradiance.spectralLoss, energyAfter: 0 },
