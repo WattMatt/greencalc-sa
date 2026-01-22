@@ -632,6 +632,7 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
+  const [blendedRateType, setBlendedRateType] = useState<'allHours' | 'solarHours'>('solarHours');
   const dashboardRef = useRef<DashboardTabContentRef>(null);
   const simulationRef = useRef<SimulationModesRef>(null);
   
@@ -700,10 +701,11 @@ export default function ProjectDetail() {
     enabled: !!id,
   });
   
-  // Initialize costs from last saved simulation (only once per project)
+  // Initialize costs and blended rate type from last saved simulation (only once per project)
   useEffect(() => {
     if (!costsInitializedRef.current && lastSavedSimulation?.results_json) {
-      const savedCosts = (lastSavedSimulation.results_json as any)?.systemCosts;
+      const savedJson = lastSavedSimulation.results_json as any;
+      const savedCosts = savedJson?.systemCosts;
       if (savedCosts) {
         setSystemCosts({
           solarCostPerKwp: savedCosts.solarCostPerKwp ?? DEFAULT_SYSTEM_COSTS.solarCostPerKwp,
@@ -731,8 +733,12 @@ export default function ProjectDetail() {
           mirrFinanceRate: savedCosts.mirrFinanceRate ?? DEFAULT_SYSTEM_COSTS.mirrFinanceRate ?? 9.0,
           mirrReinvestmentRate: savedCosts.mirrReinvestmentRate ?? DEFAULT_SYSTEM_COSTS.mirrReinvestmentRate ?? 10.0,
         });
-        costsInitializedRef.current = true;
       }
+      // Load blended rate type preference
+      if (savedJson?.blendedRateType) {
+        setBlendedRateType(savedJson.blendedRateType);
+      }
+      costsInitializedRef.current = true;
     }
   }, [lastSavedSimulation]);
   
@@ -1169,6 +1175,8 @@ export default function ProjectDetail() {
             projectId={id!}
             currentTariffId={project.tariff_id}
             onSelect={(tariffId) => updateProject.mutate({ tariff_id: tariffId })}
+            selectedBlendedRateType={blendedRateType}
+            onBlendedRateTypeChange={setBlendedRateType}
           />
         </TabsContent>
 
@@ -1182,6 +1190,8 @@ export default function ProjectDetail() {
             systemCosts={systemCosts}
             onSystemCostsChange={setSystemCosts}
             includesBattery={systemIncludesBattery}
+            blendedRateType={blendedRateType}
+            onBlendedRateTypeChange={setBlendedRateType}
           />
         </TabsContent>
 

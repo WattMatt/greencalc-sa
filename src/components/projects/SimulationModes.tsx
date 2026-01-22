@@ -31,6 +31,8 @@ interface ShopType {
   load_profile_weekday: number[];
 }
 
+import { type BlendedRateType } from "./TariffSelector";
+
 interface SimulationModesProps {
   projectId: string;
   project: any;
@@ -39,13 +41,15 @@ interface SimulationModesProps {
   systemCosts: SystemCostsData;
   onSystemCostsChange: (costs: SystemCostsData) => void;
   includesBattery?: boolean;
+  blendedRateType?: BlendedRateType;
+  onBlendedRateTypeChange?: (type: BlendedRateType) => void;
 }
 
 export interface SimulationModesRef {
   saveIfNeeded: () => Promise<void>;
 }
 
-export const SimulationModes = forwardRef<SimulationModesRef, SimulationModesProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false }, ref) => {
+export const SimulationModes = forwardRef<SimulationModesRef, SimulationModesProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, blendedRateType, onBlendedRateTypeChange }, ref) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeMode, setActiveMode] = useState("profile-builder");
@@ -129,6 +133,8 @@ export const SimulationModes = forwardRef<SimulationModesRef, SimulationModesPro
           systemCosts={systemCosts}
           onSystemCostsChange={onSystemCostsChange}
           includesBattery={includesBattery}
+          blendedRateType={blendedRateType}
+          onBlendedRateTypeChange={onBlendedRateTypeChange}
         />
       </TabsContent>
 

@@ -127,16 +127,33 @@ function RateCard({ rate, tariff }: { rate: any; tariff: any }) {
   );
 }
 
-function BlendedRatesCard({ rates, tariff }: { rates: any[]; tariff?: { legacy_charge_per_kwh?: number } }) {
+// Export the blended rate type for use in other components
+export type BlendedRateType = 'allHours' | 'solarHours';
+
+interface BlendedRatesCardProps {
+  rates: any[];
+  tariff?: { legacy_charge_per_kwh?: number };
+  selectedType?: BlendedRateType;
+  onTypeChange?: (type: BlendedRateType) => void;
+}
+
+function BlendedRatesCard({ rates, tariff, selectedType = 'solarHours', onTypeChange }: BlendedRatesCardProps) {
   const blendedRates = useMemo(() => calculateAnnualBlendedRates(rates, tariff), [rates, tariff]);
   
   if (!blendedRates) return null;
+  
+  const isSelectable = !!onTypeChange;
   
   return (
     <div className="mt-4 pt-4 border-t">
       <div className="flex items-center gap-2 mb-4">
         <Calculator className="h-4 w-4 text-primary" />
         <span className="text-sm font-medium">Blended Tariff Rates</span>
+        {isSelectable && (
+          <Badge variant="outline" className="text-[10px] ml-auto">
+            Click to select for simulation
+          </Badge>
+        )}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger>
@@ -158,15 +175,22 @@ function BlendedRatesCard({ rates, tariff }: { rates: any[]; tariff?: { legacy_c
       
       <div className="grid grid-cols-2 gap-4">
         {/* All Hours Column */}
-        <div className="space-y-3">
+        <div 
+          className={`space-y-3 ${isSelectable ? 'cursor-pointer' : ''}`}
+          onClick={() => onTypeChange?.('allHours')}
+        >
           <div className="flex items-center gap-2">
             <Clock className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs font-medium text-muted-foreground">All Hours (24/7/365)</span>
           </div>
           
-          <div className="p-3 rounded-lg bg-muted/50 border">
+          <div className={`p-3 rounded-lg border transition-all ${
+            selectedType === 'allHours' 
+              ? 'bg-primary/10 border-primary ring-2 ring-primary/30' 
+              : 'bg-muted/50 hover:bg-muted/80'
+          }`}>
             <div className="flex items-baseline gap-1">
-              <span className="text-xl font-bold">
+              <span className={`text-xl font-bold ${selectedType === 'allHours' ? 'text-primary' : ''}`}>
                 R{blendedRates.allHours.annual.toFixed(4)}
               </span>
               <span className="text-xs text-muted-foreground">/kWh</span>
@@ -174,6 +198,11 @@ function BlendedRatesCard({ rates, tariff }: { rates: any[]; tariff?: { legacy_c
             <p className="text-[10px] text-muted-foreground mt-1">
               Annual Blended • {ANNUAL_HOURS_24H.annual.total.toLocaleString()}h
             </p>
+            {selectedType === 'allHours' && isSelectable && (
+              <Badge variant="default" className="mt-2 text-[10px]">
+                ✓ Selected for simulation
+              </Badge>
+            )}
           </div>
           
           <div className="grid grid-cols-2 gap-2">
@@ -204,15 +233,22 @@ function BlendedRatesCard({ rates, tariff }: { rates: any[]; tariff?: { legacy_c
         </div>
         
         {/* Solar Sun Hours Column */}
-        <div className="space-y-3">
+        <div 
+          className={`space-y-3 ${isSelectable ? 'cursor-pointer' : ''}`}
+          onClick={() => onTypeChange?.('solarHours')}
+        >
           <div className="flex items-center gap-2">
             <Sun className="h-3.5 w-3.5 text-amber-500" />
             <span className="text-xs font-medium text-amber-600">Solar Sun Hours (6h)</span>
           </div>
           
-          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <div className={`p-3 rounded-lg border transition-all ${
+            selectedType === 'solarHours' 
+              ? 'bg-amber-500/20 border-amber-500 ring-2 ring-amber-500/30' 
+              : 'bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20'
+          }`}>
             <div className="flex items-baseline gap-1">
-              <span className="text-xl font-bold text-amber-600">
+              <span className={`text-xl font-bold ${selectedType === 'solarHours' ? 'text-amber-600' : 'text-amber-600'}`}>
                 R{blendedRates.solarHours.annual.toFixed(4)}
               </span>
               <span className="text-xs text-muted-foreground">/kWh</span>
@@ -220,6 +256,11 @@ function BlendedRatesCard({ rates, tariff }: { rates: any[]; tariff?: { legacy_c
             <p className="text-[10px] text-muted-foreground mt-1">
               Annual Blended • {ANNUAL_HOURS_SOLAR.annual.total.toLocaleString()}h
             </p>
+            {selectedType === 'solarHours' && isSelectable && (
+              <Badge className="mt-2 text-[10px] bg-amber-500 hover:bg-amber-600">
+                ✓ Selected for simulation
+              </Badge>
+            )}
           </div>
           
           <div className="grid grid-cols-2 gap-2">
@@ -268,9 +309,17 @@ interface TariffSelectorProps {
   projectId: string;
   currentTariffId: string | null;
   onSelect: (tariffId: string) => void;
+  selectedBlendedRateType?: BlendedRateType;
+  onBlendedRateTypeChange?: (type: BlendedRateType) => void;
 }
 
-export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffSelectorProps) {
+export function TariffSelector({ 
+  projectId, 
+  currentTariffId, 
+  onSelect, 
+  selectedBlendedRateType = 'solarHours',
+  onBlendedRateTypeChange 
+}: TariffSelectorProps) {
   const [provinceId, setProvinceId] = useState<string>("");
   const [municipalityId, setMunicipalityId] = useState<string>("");
 
@@ -515,7 +564,12 @@ export function TariffSelector({ projectId, currentTariffId, onSelect }: TariffS
 
             {/* Blended Rates Calculation */}
             {selectedTariff.tariff_rates && selectedTariff.tariff_rates.length > 0 && (
-              <BlendedRatesCard rates={selectedTariff.tariff_rates} tariff={selectedTariff} />
+              <BlendedRatesCard 
+                rates={selectedTariff.tariff_rates} 
+                tariff={selectedTariff}
+                selectedType={selectedBlendedRateType}
+                onTypeChange={onBlendedRateTypeChange}
+              />
             )}
           </CardContent>
         </Card>

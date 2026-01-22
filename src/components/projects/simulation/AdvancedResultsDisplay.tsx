@@ -243,10 +243,16 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                             {formatNumber(proj.demandRateIndex ?? 1, 2)}
                           </TableCell>
                           <TableCell className="text-right text-primary">
-                            R{formatNumber(proj.demandRateR ?? 0, 2)}
+                            {(proj.demandSavingKva ?? 0) > 0 
+                              ? `R${formatNumber(proj.demandRateR ?? 0, 2)}`
+                              : <span className="text-muted-foreground">-</span>
+                            }
                           </TableCell>
                           <TableCell className="text-right text-green-600">
-                            {formatCurrency(proj.demandIncomeR ?? 0)}
+                            {(proj.demandSavingKva ?? 0) > 0 
+                              ? formatCurrency(proj.demandIncomeR ?? 0)
+                              : <span className="text-muted-foreground">-</span>
+                            }
                           </TableCell>
                           <TableCell className="text-right font-medium text-green-600 bg-green-500/5">
                             {formatCurrency(proj.totalIncomeR ?? proj.energySavings)}
