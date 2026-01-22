@@ -123,7 +123,9 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
         />
         <MetricCard
           label="Payback"
-          value={paybackYear ? `${paybackYear} years` : ">25 years"}
+          value={results.sensitivityResults?.expected.payback 
+            ? `${results.sensitivityResults.expected.payback.toFixed(2)} years` 
+            : (paybackYear ? `~${paybackYear} years` : ">25 years")}
           icon={<Calendar className="h-4 w-4" />}
           variant={paybackYear && paybackYear < 7 ? "positive" : paybackYear && paybackYear < 12 ? "neutral" : "negative"}
           tooltip="Years to break even"
@@ -182,7 +184,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                 <span>Cumulative Cash Flow</span>
                 {breakEvenMonth && (
                   <Badge variant="outline" className="text-xs">
-                    Break-even: Year {breakEvenMonth.year}, Month {breakEvenMonth.month}
+                    Break-even: {((breakEvenMonth.year - 1) + (breakEvenMonth.month / 12)).toFixed(2)} years
                   </Badge>
                 )}
               </CardTitle>
