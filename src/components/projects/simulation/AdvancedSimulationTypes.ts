@@ -131,10 +131,10 @@ export const DEFAULT_DEGRADATION_CONFIG: DegradationConfig = {
 };
 
 export const DEFAULT_FINANCIAL_CONFIG: AdvancedFinancialConfig = {
-  enabled: false,
+  enabled: true, // Enabled by default for O&M CPI escalation
   tariffEscalationRate: 10.0, // SA tariffs have been rising ~10%/year
-  inflationRate: 5.5,
-  discountRate: 10.0,
+  inflationRate: 6.0, // Sync with default CPI
+  discountRate: 9.0,
   projectLifetimeYears: 20,
   sensitivityEnabled: false,
   sensitivityVariation: 20,

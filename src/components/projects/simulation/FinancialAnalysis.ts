@@ -37,6 +37,17 @@ export interface SystemCosts {
   batteryMaintenancePercentage?: number; // Percentage of battery cost (e.g., 1.5 = 1.5%)
   maintenancePerYear?: number; // R/year - calculated from both percentages
   
+  // Additional Fixed Costs (Rand values)
+  healthAndSafetyCost?: number;        // Health and Safety Consultant
+  waterPointsCost?: number;            // Water Points
+  cctvCost?: number;                   // CCTV
+  mvSwitchGearCost?: number;           // MV Switch Gear
+  
+  // Percentage-based Fees (% of project subtotal)
+  professionalFeesPercent?: number;    // Professional Fees %
+  projectManagementPercent?: number;   // Project Management Fees %
+  contingencyPercent?: number;         // Project Contingency %
+  
   // Financial Return Parameters
   costOfCapital?: number;           // % - General WACC (default: 9)
   cpi?: number;                     // % - Inflation (default: 6)
@@ -151,9 +162,31 @@ export function calculateFinancials(
     : 0;
 
   // === Investment analysis ===
-  const systemCost = 
+  // Calculate additional costs
+  const additionalCosts = 
+    (systemCosts.healthAndSafetyCost ?? 0) +
+    (systemCosts.waterPointsCost ?? 0) +
+    (systemCosts.cctvCost ?? 0) +
+    (systemCosts.mvSwitchGearCost ?? 0);
+
+  const baseCost = 
     (solarCapacity * solarCostPerKwp) + 
     (batteryCapacity * batteryCostPerKwh);
+  
+  const subtotalBeforeFees = baseCost + additionalCosts;
+
+  // Percentage-based fees (applied to subtotal)
+  const professionalFees = subtotalBeforeFees * ((systemCosts.professionalFeesPercent ?? 0) / 100);
+  const projectManagementFees = subtotalBeforeFees * ((systemCosts.projectManagementPercent ?? 0) / 100);
+
+  // Subtotal with fees
+  const subtotalWithFees = subtotalBeforeFees + professionalFees + projectManagementFees;
+
+  // Contingency (applied to subtotal + fees)
+  const contingency = subtotalWithFees * ((systemCosts.contingencyPercent ?? 0) / 100);
+
+  // Total Capital Cost
+  const systemCost = subtotalWithFees + contingency;
   
   const netAnnualSavings = annualSavings - maintenancePerYear;
   const paybackYears = netAnnualSavings > 0 
@@ -231,6 +264,17 @@ export const DEFAULT_SYSTEM_COSTS: SystemCosts = {
   solarMaintenancePercentage: 3.5, // 3.5% of solar cost per year
   batteryMaintenancePercentage: 1.5, // 1.5% of battery cost per year
   maintenancePerYear: 0, // Calculated from both percentages
+  
+  // Additional Fixed Costs (default to 0)
+  healthAndSafetyCost: 0,
+  waterPointsCost: 0,
+  cctvCost: 0,
+  mvSwitchGearCost: 0,
+  
+  // Percentage-based Fees (default to 0)
+  professionalFeesPercent: 0,
+  projectManagementPercent: 0,
+  contingencyPercent: 0,
   
   // Financial Return Parameters
   costOfCapital: 9.0,           // % - General WACC
