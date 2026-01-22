@@ -1,7 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TrendingUp, TrendingDown, DollarSign, Zap, Calendar } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { TrendingUp, TrendingDown, DollarSign, Zap, Calendar, TableIcon } from "lucide-react";
 import { AdvancedFinancialResults, YearlyProjection } from "./AdvancedSimulationTypes";
 import {
   LineChart,
@@ -112,8 +114,9 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
 
       {/* Charts */}
       <Tabs defaultValue="cashflow" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="cashflow">Cash Flow</TabsTrigger>
+          <TabsTrigger value="detailed">Detailed Table</TabsTrigger>
           <TabsTrigger value="generation">Generation</TabsTrigger>
           <TabsTrigger value="degradation">Degradation</TabsTrigger>
         </TabsList>
@@ -153,6 +156,87 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="detailed" className="mt-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <TableIcon className="h-4 w-4" />
+                20-Year Cashflow Breakdown
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[400px]">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background z-10">
+                    <TableRow>
+                      <TableHead className="w-12 text-center">Year</TableHead>
+                      <TableHead className="text-right">Production (kWh)</TableHead>
+                      <TableHead className="text-right">Panel Eff.</TableHead>
+                      <TableHead className="text-right">Tariff (R/kWh)</TableHead>
+                      <TableHead className="text-right">Savings</TableHead>
+                      <TableHead className="text-right">O&M Cost</TableHead>
+                      <TableHead className="text-right">Net Cashflow</TableHead>
+                      <TableHead className="text-right">Cumulative</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {/* Year 0 - Initial Investment */}
+                    <TableRow className="bg-destructive/5">
+                      <TableCell className="text-center font-medium">0</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right font-medium text-destructive">
+                        -{formatCurrency(Math.abs(results.yearlyProjections[0]?.cumulativeCashFlow - results.yearlyProjections[0]?.netCashFlow || 0))}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-destructive">
+                        -{formatCurrency(Math.abs(results.yearlyProjections[0]?.cumulativeCashFlow - results.yearlyProjections[0]?.netCashFlow || 0))}
+                      </TableCell>
+                    </TableRow>
+                    {results.yearlyProjections.map((proj, idx) => {
+                      const isPaybackYear = proj.cumulativeCashFlow >= 0 && (idx === 0 || results.yearlyProjections[idx - 1]?.cumulativeCashFlow < 0);
+                      return (
+                        <TableRow 
+                          key={proj.year} 
+                          className={isPaybackYear ? "bg-green-500/10 font-medium" : ""}
+                        >
+                          <TableCell className="text-center font-medium">
+                            {proj.year}
+                            {isPaybackYear && <Badge variant="outline" className="ml-1 text-[10px] px-1">Payback</Badge>}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatNumber(proj.solarGeneration, 0)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatNumber(proj.panelEfficiency, 1)}%
+                          </TableCell>
+                          <TableCell className="text-right">
+                            R{formatNumber(proj.tariffRate, 2)}
+                          </TableCell>
+                          <TableCell className="text-right text-green-600">
+                            {formatCurrency(proj.energySavings)}
+                          </TableCell>
+                          <TableCell className="text-right text-amber-600">
+                            -{formatCurrency(proj.maintenanceCost)}
+                          </TableCell>
+                          <TableCell className={`text-right font-medium ${proj.netCashFlow >= 0 ? "text-green-600" : "text-destructive"}`}>
+                            {proj.netCashFlow >= 0 ? formatCurrency(proj.netCashFlow) : `-${formatCurrency(Math.abs(proj.netCashFlow))}`}
+                          </TableCell>
+                          <TableCell className={`text-right font-medium ${proj.cumulativeCashFlow >= 0 ? "text-green-600" : "text-destructive"}`}>
+                            {proj.cumulativeCashFlow >= 0 ? formatCurrency(proj.cumulativeCashFlow) : `-${formatCurrency(Math.abs(proj.cumulativeCashFlow))}`}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
