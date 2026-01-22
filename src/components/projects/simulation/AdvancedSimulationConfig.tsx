@@ -350,6 +350,9 @@ function DegradationSection({
   onChange: (config: DegradationConfig) => void;
   projectLifetime?: number;
 }) {
+  const [panelApplyRate, setPanelApplyRate] = useState(config.panelSimpleRate ?? 0.5);
+  const [batteryApplyRate, setBatteryApplyRate] = useState(config.batterySimpleRate ?? 3.0);
+  
   // Ensure arrays are the right length
   const ensureArrayLength = (arr: number[], length: number, defaultValue: number): number[] => {
     const newArr = [...arr];
@@ -373,13 +376,11 @@ function DegradationSection({
   };
   
   const applyPanelRateToAll = () => {
-    const rate = config.panelSimpleRate || 0.5;
-    onChange({ ...config, panelYearlyRates: Array(projectLifetime).fill(rate) });
+    onChange({ ...config, panelYearlyRates: Array(projectLifetime).fill(panelApplyRate) });
   };
   
   const applyBatteryRateToAll = () => {
-    const rate = config.batterySimpleRate || 3.0;
-    onChange({ ...config, batteryYearlyRates: Array(projectLifetime).fill(rate) });
+    onChange({ ...config, batteryYearlyRates: Array(projectLifetime).fill(batteryApplyRate) });
   };
 
   return (
@@ -460,14 +461,26 @@ function DegradationSection({
                       ))}
                     </div>
                   </ScrollArea>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-6 text-[10px] w-full"
-                    onClick={applyPanelRateToAll}
-                  >
-                    Apply {config.panelSimpleRate ?? 0.5}% to all years
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={panelApplyRate}
+                      onChange={(e) => setPanelApplyRate(parseFloat(e.target.value) || 0.5)}
+                      className="w-14 h-6 text-[10px] text-center"
+                      step={0.1}
+                      min={0}
+                      max={10}
+                    />
+                    <span className="text-[10px] text-muted-foreground">%</span>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-6 text-[10px] flex-1"
+                      onClick={applyPanelRateToAll}
+                    >
+                      Apply to all years
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -533,14 +546,26 @@ function DegradationSection({
                       ))}
                     </div>
                   </ScrollArea>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-6 text-[10px] w-full"
-                    onClick={applyBatteryRateToAll}
-                  >
-                    Apply {config.batterySimpleRate ?? 3.0}% to all years
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={batteryApplyRate}
+                      onChange={(e) => setBatteryApplyRate(parseFloat(e.target.value) || 3.0)}
+                      className="w-14 h-6 text-[10px] text-center"
+                      step={0.5}
+                      min={0}
+                      max={15}
+                    />
+                    <span className="text-[10px] text-muted-foreground">%</span>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-6 text-[10px] flex-1"
+                      onClick={applyBatteryRateToAll}
+                    >
+                      Apply to all years
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
