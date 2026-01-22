@@ -254,7 +254,8 @@ export function calculateLCOE(
 }
 
 /**
- * Run advanced multi-year simulation
+ * Run advanced multi-year simulation with Income-based methodology
+ * Aligned with Excel cashflow model: separate Energy Income + Demand Income
  */
 export function runAdvancedSimulation(
   baseEnergyResults: EnergySimulationResults,
@@ -275,10 +276,43 @@ export function runAdvancedSimulation(
   const baseAnnualGridImport = baseEnergyResults.totalGridImport * 365;
   const baseAnnualGridExport = baseEnergyResults.totalGridExport * 365;
   
-  // Calculate initial system cost
-  const initialCost = 
+  // Calculate initial system cost (Total Capital Cost)
+  const additionalCosts = 
+    (systemCosts.healthAndSafetyCost ?? 0) +
+    (systemCosts.waterPointsCost ?? 0) +
+    (systemCosts.cctvCost ?? 0) +
+    (systemCosts.mvSwitchGearCost ?? 0);
+  
+  const baseCost = 
     solarCapacity * systemCosts.solarCostPerKwp +
     batteryCapacity * systemCosts.batteryCostPerKwh;
+  
+  const subtotalBeforeFees = baseCost + additionalCosts;
+  
+  const professionalFees = subtotalBeforeFees * ((systemCosts.professionalFeesPercent ?? 0) / 100);
+  const projectManagementFees = subtotalBeforeFees * ((systemCosts.projectManagementPercent ?? 0) / 100);
+  const subtotalWithFees = subtotalBeforeFees + professionalFees + projectManagementFees;
+  const contingency = subtotalWithFees * ((systemCosts.contingencyPercent ?? 0) / 100);
+  const initialCost = subtotalWithFees + contingency;
+  
+  // ===== Income-based approach: Base values (Year 1, before escalation) =====
+  const baseEnergyRate = tariff.averageRatePerKwh;
+  const baseDemandRate = tariff.demandChargePerKva ?? 0;
+  const baseInsurance = financial.enabled && financial.insuranceEnabled 
+    ? financial.baseInsuranceCostR 
+    : 0;
+  const baseMaintenance = systemCosts.maintenancePerYear ?? 0;
+  
+  // Calculate demand saving (kVA) from peak load reduction
+  const powerFactor = 0.9;
+  const peakLoadKva = baseEnergyResults.peakLoad / powerFactor;
+  const peakWithSolarKva = baseEnergyResults.peakGridImport / powerFactor;
+  const demandSavingKva = Math.max(0, peakLoadKva - peakWithSolarKva);
+  
+  // Escalation rates
+  const tariffEscalation = financial.enabled ? financial.tariffEscalationRate : 10;
+  const inflationRate = financial.enabled ? financial.inflationRate : 6;
+  const insuranceEscalation = financial.enabled ? financial.insuranceEscalationRate : inflationRate;
   
   const yearlyProjections: YearlyProjection[] = [];
   const cashFlows: number[] = [-initialCost]; // Year 0 is investment
@@ -294,7 +328,8 @@ export function runAdvancedSimulation(
     const panelEfficiency = getPanelEfficiency(year, degradation);
     const batteryRemaining = getBatteryCapacityRemaining(year, degradation);
     
-    const yearlyGeneration = baseAnnualSolar * (panelEfficiency / 100);
+    // Energy yield (kWh) with degradation
+    const energyYield = baseAnnualSolar * (panelEfficiency / 100);
     
     // Calculate load with growth
     const yearlyLoad = getYearlyLoad(baseAnnualLoad, year, loadGrowth);
@@ -303,53 +338,53 @@ export function runAdvancedSimulation(
     const loadGrowthFactor = yearlyLoad / baseAnnualLoad;
     const generationFactor = panelEfficiency / 100;
     
-    // Simplified: assume import increases and export decreases with degradation
     let yearlyGridImport = baseAnnualGridImport * loadGrowthFactor / generationFactor;
     let yearlyGridExport = baseAnnualGridExport * generationFactor;
     
     // Apply grid constraints (simplified - just reduce export)
     if (gridConstraints.enabled && gridConstraints.exportLimitEnabled) {
-      const maxAnnualExport = gridConstraints.maxExportKw * 365 * 5; // Rough estimate
+      const maxAnnualExport = gridConstraints.maxExportKw * 365 * 5;
       if (yearlyGridExport > maxAnnualExport) {
         yearlyGridExport = maxAnnualExport;
       }
     }
     
-    // Calculate financials
-    const escalatedTariff = financial.enabled
-      ? getEscalatedTariff(tariff.averageRatePerKwh, year, financial.tariffEscalationRate)
-      : tariff.averageRatePerKwh;
+    // ===== INCOME CALCULATIONS (Excel model approach) =====
     
-    // Grid-only cost (what they would pay without solar)
-    const gridOnlyCost = yearlyLoad * escalatedTariff + tariff.fixedMonthlyCharge * 12;
+    // Escalation indices (compound growth from Year 1)
+    const energyRateIndex = Math.pow(1 + tariffEscalation / 100, year - 1);
+    const demandRateIndex = energyRateIndex; // Same escalation for demand
+    const costIndex = Math.pow(1 + inflationRate / 100, year - 1);
+    const insuranceIndex = Math.pow(1 + insuranceEscalation / 100, year - 1);
     
-    // Solar cost (import + fixed - export revenue)
-    const exportRate = tariff.exportRatePerKwh ?? 0;
-    const wheelingCost = gridConstraints.enabled && gridConstraints.wheelingEnabled
-      ? yearlyGridExport * gridConstraints.wheelingChargePerKwh
-      : 0;
+    // Energy Income = Energy Yield × Base Rate × Escalation Index
+    const energyIncomeR = energyYield * baseEnergyRate * energyRateIndex;
     
-    const solarCost = 
-      yearlyGridImport * escalatedTariff + 
-      tariff.fixedMonthlyCharge * 12 -
-      yearlyGridExport * exportRate +
-      wheelingCost;
+    // Demand Income = kVA Saving × Base Demand Rate × 12 months × Escalation Index
+    const demandIncomeR = demandSavingKva * baseDemandRate * 12 * demandRateIndex;
     
-    const energySavings = gridOnlyCost - solarCost;
+    // Total Income
+    const totalIncomeR = energyIncomeR + demandIncomeR;
     
-    // Maintenance cost (inflation adjusted)
-    const maintenanceCost = financial.enabled
-      ? (systemCosts.maintenancePerYear ?? 0) * Math.pow(1 + financial.inflationRate / 100, year - 1)
-      : (systemCosts.maintenancePerYear ?? 0);
+    // ===== COST CALCULATIONS =====
     
-    // Replacement costs
+    // Insurance Cost = Base Insurance × CPI Index
+    const insuranceCostR = baseInsurance * insuranceIndex;
+    
+    // O&M Cost = Base Maintenance × CPI Index
+    const maintenanceCost = baseMaintenance * costIndex;
+    
+    // Total Operating Costs
+    const totalCostR = insuranceCostR + maintenanceCost;
+    
+    // Replacement costs (inverter replacement)
     let replacementCost = 0;
     if (degradation.enabled && year === degradation.inverterReplacementYear) {
       replacementCost = degradation.inverterReplacementCost;
     }
     
-    // Net cash flow
-    const netCashFlow = energySavings - maintenanceCost - replacementCost;
+    // ===== NET CASHFLOW (Income-based) =====
+    const netCashFlow = totalIncomeR - totalCostR - replacementCost;
     cumulativeCashFlow += netCashFlow;
     
     // Discounted cash flow
@@ -357,28 +392,42 @@ export function runAdvancedSimulation(
       ? netCashFlow / Math.pow(1 + financial.discountRate / 100, year)
       : netCashFlow;
     
+    // Legacy fields (for backwards compatibility)
+    const escalatedTariff = baseEnergyRate * energyRateIndex;
+    const energySavings = totalIncomeR; // Map to legacy field
+    
     yearlyProjections.push({
       year,
-      solarGeneration: yearlyGeneration,
+      solarGeneration: energyYield,
       loadConsumption: yearlyLoad,
       gridImport: yearlyGridImport,
       gridExport: yearlyGridExport,
       panelEfficiency,
       batteryCapacityRemaining: batteryRemaining,
       tariffRate: escalatedTariff,
-      energySavings,
+      energySavings, // Legacy: now equals totalIncome
       maintenanceCost,
       replacementCost,
       netCashFlow,
       cumulativeCashFlow,
       discountedCashFlow,
+      // NEW: Income-based fields
+      energyYield,
+      energyRateIndex,
+      energyIncomeR,
+      demandSavingKva,
+      demandRateIndex,
+      demandIncomeR,
+      totalIncomeR,
+      insuranceCostR,
+      totalCostR,
     });
     
     cashFlows.push(netCashFlow);
-    yearlyGenerations.push(yearlyGeneration);
-    yearlyMaintenanceCosts.push(maintenanceCost);
-    lifetimeSavings += energySavings;
-    lifetimeGeneration += yearlyGeneration;
+    yearlyGenerations.push(energyYield);
+    yearlyMaintenanceCosts.push(maintenanceCost + insuranceCostR);
+    lifetimeSavings += totalIncomeR;
+    lifetimeGeneration += energyYield;
   }
   
   // Calculate summary metrics using systemCosts financial parameters
@@ -404,23 +453,23 @@ export function runAdvancedSimulation(
   if (financial.enabled && financial.sensitivityEnabled) {
     const variation = financial.sensitivityVariation / 100;
     
-    // Best case: higher tariff escalation, lower degradation
+    // Best case: higher income, lower costs
     const bestCashFlows = [-initialCost];
-    // Worst case: lower tariff escalation, higher degradation
+    // Worst case: lower income, higher costs
     const worstCashFlows = [-initialCost];
     
     for (let year = 1; year <= lifetimeYears; year++) {
       const baseProjection = yearlyProjections[year - 1];
       
-      // Best case adjustments
-      const bestSavings = baseProjection.energySavings * (1 + variation);
-      const bestMaintenance = baseProjection.maintenanceCost * (1 - variation * 0.5);
-      bestCashFlows.push(bestSavings - bestMaintenance - baseProjection.replacementCost);
+      // Best case adjustments (more income, less cost)
+      const bestIncome = baseProjection.totalIncomeR * (1 + variation);
+      const bestCost = baseProjection.totalCostR * (1 - variation * 0.5);
+      bestCashFlows.push(bestIncome - bestCost - baseProjection.replacementCost);
       
-      // Worst case adjustments
-      const worstSavings = baseProjection.energySavings * (1 - variation);
-      const worstMaintenance = baseProjection.maintenanceCost * (1 + variation);
-      worstCashFlows.push(worstSavings - worstMaintenance - baseProjection.replacementCost);
+      // Worst case adjustments (less income, more cost)
+      const worstIncome = baseProjection.totalIncomeR * (1 - variation);
+      const worstCost = baseProjection.totalCostR * (1 + variation);
+      worstCashFlows.push(worstIncome - worstCost - baseProjection.replacementCost);
     }
     
     sensitivityResults = {
@@ -433,13 +482,13 @@ export function runAdvancedSimulation(
         npv: calculateNPV(bestCashFlows, financial.discountRate),
         irr: calculateIRR(bestCashFlows),
         payback: calculatePayback(yearlyProjections) * (1 - variation * 0.5),
-        assumptions: `+${financial.sensitivityVariation}% savings, -${financial.sensitivityVariation/2}% maintenance`,
+        assumptions: `+${financial.sensitivityVariation}% income, -${financial.sensitivityVariation/2}% costs`,
       },
       worst: {
         npv: calculateNPV(worstCashFlows, financial.discountRate),
         irr: calculateIRR(worstCashFlows),
         payback: calculatePayback(yearlyProjections) * (1 + variation),
-        assumptions: `-${financial.sensitivityVariation}% savings, +${financial.sensitivityVariation}% maintenance`,
+        assumptions: `-${financial.sensitivityVariation}% income, +${financial.sensitivityVariation}% costs`,
       },
     };
   }

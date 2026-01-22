@@ -165,20 +165,25 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <TableIcon className="h-4 w-4" />
-                20-Year Cashflow Breakdown
+                20-Year Cashflow Breakdown (Income Model)
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="h-[400px]">
+              <ScrollArea className="h-[500px]">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
-                      <TableHead className="w-12 text-center">Year</TableHead>
-                      <TableHead className="text-right">Production (kWh)</TableHead>
-                      <TableHead className="text-right">Panel Eff.</TableHead>
-                      <TableHead className="text-right">Tariff (R/kWh)</TableHead>
-                      <TableHead className="text-right">Savings</TableHead>
-                      <TableHead className="text-right">O&M Cost</TableHead>
+                      <TableHead className="w-12 text-center sticky left-0 bg-background">Year</TableHead>
+                      <TableHead className="text-right">Energy Yield (kWh)</TableHead>
+                      <TableHead className="text-right">Energy Index</TableHead>
+                      <TableHead className="text-right">Energy Income</TableHead>
+                      <TableHead className="text-right">Demand kVA</TableHead>
+                      <TableHead className="text-right">Demand Index</TableHead>
+                      <TableHead className="text-right">Demand Income</TableHead>
+                      <TableHead className="text-right bg-green-500/5">Total Income</TableHead>
+                      <TableHead className="text-right">Insurance</TableHead>
+                      <TableHead className="text-right">O&M</TableHead>
+                      <TableHead className="text-right bg-amber-500/5">Total Cost</TableHead>
                       <TableHead className="text-right">Net Cashflow</TableHead>
                       <TableHead className="text-right">Cumulative</TableHead>
                     </TableRow>
@@ -186,12 +191,17 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                   <TableBody>
                     {/* Year 0 - Initial Investment */}
                     <TableRow className="bg-destructive/5">
-                      <TableCell className="text-center font-medium">0</TableCell>
+                      <TableCell className="text-center font-medium sticky left-0 bg-destructive/5">0</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground bg-green-500/5">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground bg-amber-500/5">-</TableCell>
                       <TableCell className="text-right font-medium text-destructive">
                         -{formatCurrency(Math.abs(results.yearlyProjections[0]?.cumulativeCashFlow - results.yearlyProjections[0]?.netCashFlow || 0))}
                       </TableCell>
@@ -206,24 +216,39 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                           key={proj.year} 
                           className={isPaybackYear ? "bg-green-500/10 font-medium" : ""}
                         >
-                          <TableCell className="text-center font-medium">
+                          <TableCell className={`text-center font-medium sticky left-0 ${isPaybackYear ? "bg-green-500/10" : "bg-background"}`}>
                             {proj.year}
                             {isPaybackYear && <Badge variant="outline" className="ml-1 text-[10px] px-1">Payback</Badge>}
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatNumber(proj.solarGeneration, 0)}
+                            {formatNumber(proj.energyYield ?? proj.solarGeneration, 0)}
                           </TableCell>
-                          <TableCell className="text-right">
-                            {formatNumber(proj.panelEfficiency, 1)}%
-                          </TableCell>
-                          <TableCell className="text-right">
-                            R{formatNumber(proj.tariffRate, 2)}
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatNumber(proj.energyRateIndex ?? 1, 2)}
                           </TableCell>
                           <TableCell className="text-right text-green-600">
-                            {formatCurrency(proj.energySavings)}
+                            {formatCurrency(proj.energyIncomeR ?? proj.energySavings)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatNumber(proj.demandSavingKva ?? 0, 1)}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatNumber(proj.demandRateIndex ?? 1, 2)}
+                          </TableCell>
+                          <TableCell className="text-right text-green-600">
+                            {formatCurrency(proj.demandIncomeR ?? 0)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-green-600 bg-green-500/5">
+                            {formatCurrency(proj.totalIncomeR ?? proj.energySavings)}
+                          </TableCell>
+                          <TableCell className="text-right text-amber-600">
+                            {proj.insuranceCostR > 0 ? `-${formatCurrency(proj.insuranceCostR)}` : "-"}
                           </TableCell>
                           <TableCell className="text-right text-amber-600">
                             -{formatCurrency(proj.maintenanceCost)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-amber-600 bg-amber-500/5">
+                            -{formatCurrency(proj.totalCostR ?? proj.maintenanceCost)}
                           </TableCell>
                           <TableCell className={`text-right font-medium ${proj.netCashFlow >= 0 ? "text-green-600" : "text-destructive"}`}>
                             {proj.netCashFlow >= 0 ? formatCurrency(proj.netCashFlow) : `-${formatCurrency(Math.abs(proj.netCashFlow))}`}
