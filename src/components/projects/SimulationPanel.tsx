@@ -1059,6 +1059,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       <AdvancedSimulationConfigPanel
         config={advancedConfig}
         onChange={setAdvancedConfig}
+        includesBattery={includesBattery}
       />
 
       {/* Scenario Comparison */}
