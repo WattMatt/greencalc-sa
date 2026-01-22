@@ -146,6 +146,10 @@ export function SystemCostsManager({
   // Calculate first 3 years O&M with CPI escalation (for display)
   const threeYearSolarOM = solarMaintenance * (1 + Math.pow(1 + cpi / 100, 1) + Math.pow(1 + cpi / 100, 2));
   const threeYearBatteryOM = batteryMaintenance * (1 + Math.pow(1 + cpi / 100, 1) + Math.pow(1 + cpi / 100, 2));
+  const threeYearOM = threeYearSolarOM + threeYearBatteryOM;
+  
+  // Total Capital Cost Including 3-Year O&M
+  const totalCapitalCostInclOM = totalCapitalCost + threeYearOM;
 
   // Calculate effective O&M percentage (read-only)
   const effectiveOMPercentage = totalCapitalCost > 0 
@@ -1132,6 +1136,15 @@ export function SystemCostsManager({
                 <div>
                   <p className="text-sm text-muted-foreground">Total Annual O&M</p>
                   <p className="text-2xl font-bold">R{totalMaintenancePerYear.toLocaleString(undefined, { maximumFractionDigits: 0 })}/year</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-primary/10 rounded-full">
+                  <TrendingUp className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Capital Cost (Incl. 3-Yr O&M)</p>
+                  <p className="text-2xl font-bold text-primary">R{totalCapitalCostInclOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
                 </div>
               </div>
             </div>
