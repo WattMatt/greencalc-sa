@@ -367,10 +367,12 @@ export interface YearlyProjection {
   // NEW: Income-based approach (Excel model alignment)
   energyYield: number; // kWh (with degradation applied)
   energyRateIndex: number; // Tariff escalation factor (1.0, 1.1, 1.21...)
+  energyRateR: number; // R/kWh (base rate × index) - actual tariff charged
   energyIncomeR: number; // R = energyYield × baseRate × index
   
   demandSavingKva: number; // kVA reduction from solar
   demandRateIndex: number; // Demand escalation factor
+  demandRateR: number; // R/kVA (base demand rate × index) - actual demand charge
   demandIncomeR: number; // R = kVA × R/kVA × 12 × index
   
   totalIncomeR: number; // energyIncome + demandIncome

@@ -176,9 +176,11 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                       <TableHead className="w-12 text-center sticky left-0 bg-background">Year</TableHead>
                       <TableHead className="text-right">Energy Yield (kWh)</TableHead>
                       <TableHead className="text-right">Energy Index</TableHead>
+                      <TableHead className="text-right">Energy Rate (R/kWh)</TableHead>
                       <TableHead className="text-right">Energy Income</TableHead>
                       <TableHead className="text-right">Demand kVA</TableHead>
                       <TableHead className="text-right">Demand Index</TableHead>
+                      <TableHead className="text-right">Demand Rate (R/kVA)</TableHead>
                       <TableHead className="text-right">Demand Income</TableHead>
                       <TableHead className="text-right bg-green-500/5">Total Income</TableHead>
                       <TableHead className="text-right">Insurance</TableHead>
@@ -192,6 +194,8 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                     {/* Year 0 - Initial Investment */}
                     <TableRow className="bg-destructive/5">
                       <TableCell className="text-center font-medium sticky left-0 bg-destructive/5">0</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
@@ -226,6 +230,9 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                           <TableCell className="text-right text-muted-foreground">
                             {formatNumber(proj.energyRateIndex ?? 1, 2)}
                           </TableCell>
+                          <TableCell className="text-right text-primary">
+                            R{formatNumber(proj.energyRateR ?? proj.tariffRate ?? 0, 4)}
+                          </TableCell>
                           <TableCell className="text-right text-green-600">
                             {formatCurrency(proj.energyIncomeR ?? proj.energySavings)}
                           </TableCell>
@@ -234,6 +241,9 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {formatNumber(proj.demandRateIndex ?? 1, 2)}
+                          </TableCell>
+                          <TableCell className="text-right text-primary">
+                            R{formatNumber(proj.demandRateR ?? 0, 2)}
                           </TableCell>
                           <TableCell className="text-right text-green-600">
                             {formatCurrency(proj.demandIncomeR ?? 0)}
