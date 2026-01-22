@@ -23,7 +23,8 @@ export interface SystemCostsData {
   mvSwitchGearCost: number;           // MV Switch Gear
   
   // Insurance Costs (NEW: Income-based model alignment)
-  insuranceCostPerYear: number;       // Annual insurance cost (R)
+  insuranceCostPerYear: number;       // Annual insurance cost (R) - calculated from percentage
+  insuranceRatePercent: number;       // % of (Total Capital + O&M) for annual insurance
   
   // Percentage-based Fees (% of project subtotal)
   professionalFeesPercent: number;    // Professional Fees %
@@ -307,6 +308,7 @@ export function SystemCostsManager({
       mvSwitchGearCost: DEFAULT_SYSTEM_COSTS.mvSwitchGearCost ?? 0,
       // Insurance
       insuranceCostPerYear: DEFAULT_SYSTEM_COSTS.insuranceCostPerYear ?? 0,
+      insuranceRatePercent: DEFAULT_SYSTEM_COSTS.insuranceRatePercent ?? 1.0,
       // Percentage-based Fees
       professionalFeesPercent: DEFAULT_SYSTEM_COSTS.professionalFeesPercent ?? 0,
       projectManagementPercent: DEFAULT_SYSTEM_COSTS.projectManagementPercent ?? 0,
@@ -1113,6 +1115,45 @@ export function SystemCostsManager({
                   <span>0%</span>
                   <span>25%</span>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Insurance Parameters */}
+          <div>
+            <h4 className="text-xs font-medium mb-3 text-muted-foreground uppercase tracking-wide">Insurance Parameters</h4>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <div>
+                  <Label className="text-xs">Insurance Rate</Label>
+                  <p className="text-[10px] text-muted-foreground">% of (Total Capital + O&M)</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={costs.insuranceRatePercent}
+                    onChange={(e) => onChange({ ...costs, insuranceRatePercent: parseFloat(e.target.value) || 0 })}
+                    className="h-6 w-16 text-xs text-right px-2"
+                    min={0}
+                    max={5}
+                    step={0.1}
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
+              </div>
+              <Slider
+                value={[costs.insuranceRatePercent]}
+                onValueChange={([v]) => onChange({ ...costs, insuranceRatePercent: v })}
+                min={0}
+                max={5}
+                step={0.1}
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>0%</span>
+                <span>2.5%</span>
+                <span>5%</span>
               </div>
             </div>
           </div>

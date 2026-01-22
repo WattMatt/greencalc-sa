@@ -300,10 +300,10 @@ export function runAdvancedSimulation(
   const baseDemandRate = tariff.demandChargePerKva ?? 0;
   const baseMaintenance = systemCosts.maintenancePerYear ?? 0;
   
-  // Insurance = 1% of (Total Capital Cost + Annual O&M)
+  // Insurance = X% of (Total Capital Cost + Annual O&M)
   // This base value is then escalated by CPI each year
-  const INSURANCE_RATE_PERCENT = 1.0; // 1% of total capital + O&M
-  const insuranceBase = (initialCost + baseMaintenance) * (INSURANCE_RATE_PERCENT / 100);
+  const insuranceRatePercent = systemCosts.insuranceRatePercent ?? 1.0; // Default 1% if not set
+  const insuranceBase = (initialCost + baseMaintenance) * (insuranceRatePercent / 100);
   const baseInsurance = financial.enabled && financial.insuranceEnabled 
     ? insuranceBase 
     : 0;

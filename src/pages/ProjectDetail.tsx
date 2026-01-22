@@ -667,6 +667,7 @@ export default function ProjectDetail() {
     mvSwitchGearCost: DEFAULT_SYSTEM_COSTS.mvSwitchGearCost ?? 0,
     // Insurance
     insuranceCostPerYear: DEFAULT_SYSTEM_COSTS.insuranceCostPerYear ?? 0,
+    insuranceRatePercent: DEFAULT_SYSTEM_COSTS.insuranceRatePercent ?? 1.0,
     // Percentage-based Fees
     professionalFeesPercent: DEFAULT_SYSTEM_COSTS.professionalFeesPercent ?? 0,
     projectManagementPercent: DEFAULT_SYSTEM_COSTS.projectManagementPercent ?? 0,
@@ -720,6 +721,7 @@ export default function ProjectDetail() {
           mvSwitchGearCost: savedCosts.mvSwitchGearCost ?? DEFAULT_SYSTEM_COSTS.mvSwitchGearCost ?? 0,
           // Insurance
           insuranceCostPerYear: savedCosts.insuranceCostPerYear ?? DEFAULT_SYSTEM_COSTS.insuranceCostPerYear ?? 0,
+          insuranceRatePercent: savedCosts.insuranceRatePercent ?? DEFAULT_SYSTEM_COSTS.insuranceRatePercent ?? 1.0,
           // Percentage-based Fees
           professionalFeesPercent: savedCosts.professionalFeesPercent ?? DEFAULT_SYSTEM_COSTS.professionalFeesPercent ?? 0,
           projectManagementPercent: savedCosts.projectManagementPercent ?? DEFAULT_SYSTEM_COSTS.projectManagementPercent ?? 0,
