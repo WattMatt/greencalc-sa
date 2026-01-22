@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -97,6 +97,16 @@ export function SystemCostsManager({
   const [solarPercentageInput, setSolarPercentageInput] = useState(costs.solarMaintenancePercentage.toString());
   const [batteryPercentageInput, setBatteryPercentageInput] = useState(costs.batteryMaintenancePercentage.toString());
 
+  // State for inline editing of solar cost per kWp
+  const [isEditingSolarCost, setIsEditingSolarCost] = useState(false);
+  const [solarCostEditValue, setSolarCostEditValue] = useState("");
+  const solarCostInputRef = useRef<HTMLInputElement>(null);
+
+  // State for inline editing of battery cost per kWh
+  const [isEditingBatteryCost, setIsEditingBatteryCost] = useState(false);
+  const [batteryCostEditValue, setBatteryCostEditValue] = useState("");
+  const batteryCostInputRef = useRef<HTMLInputElement>(null);
+
   // Sync local inputs with props
   useEffect(() => {
     setSolarPercentageInput(costs.solarMaintenancePercentage.toString());
@@ -106,6 +116,21 @@ export function SystemCostsManager({
     setBatteryPercentageInput(costs.batteryMaintenancePercentage.toString());
   }, [costs.batteryMaintenancePercentage]);
 
+  // Auto-focus for inline cost editing
+  useEffect(() => {
+    if (isEditingSolarCost && solarCostInputRef.current) {
+      solarCostInputRef.current.focus();
+      solarCostInputRef.current.select();
+    }
+  }, [isEditingSolarCost]);
+
+  useEffect(() => {
+    if (isEditingBatteryCost && batteryCostInputRef.current) {
+      batteryCostInputRef.current.focus();
+      batteryCostInputRef.current.select();
+    }
+  }, [isEditingBatteryCost]);
+
   // Auto-sync calculated maintenance to parent whenever inputs change
   useEffect(() => {
     if (Math.abs(costs.maintenancePerYear - totalMaintenancePerYear) > 0.01) {
@@ -113,9 +138,48 @@ export function SystemCostsManager({
     }
   }, [totalMaintenancePerYear, costs, onChange]);
 
-  const handleInputChange = (field: keyof SystemCostsData, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    onChange({ ...costs, [field]: numValue });
+  // Handlers for inline solar cost editing
+  const handleSolarCostClick = () => {
+    setSolarCostEditValue(costs.solarCostPerKwp.toString());
+    setIsEditingSolarCost(true);
+  };
+
+  const handleSolarCostBlur = () => {
+    setIsEditingSolarCost(false);
+    const parsed = parseFloat(solarCostEditValue);
+    if (!isNaN(parsed) && parsed >= 0) {
+      onChange({ ...costs, solarCostPerKwp: parsed });
+    }
+  };
+
+  const handleSolarCostKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSolarCostBlur();
+    } else if (e.key === "Escape") {
+      setIsEditingSolarCost(false);
+    }
+  };
+
+  // Handlers for inline battery cost editing
+  const handleBatteryCostClick = () => {
+    setBatteryCostEditValue(costs.batteryCostPerKwh.toString());
+    setIsEditingBatteryCost(true);
+  };
+
+  const handleBatteryCostBlur = () => {
+    setIsEditingBatteryCost(false);
+    const parsed = parseFloat(batteryCostEditValue);
+    if (!isNaN(parsed) && parsed >= 0) {
+      onChange({ ...costs, batteryCostPerKwh: parsed });
+    }
+  };
+
+  const handleBatteryCostKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleBatteryCostBlur();
+    } else if (e.key === "Escape") {
+      setIsEditingBatteryCost(false);
+    }
   };
 
   const handleSolarPercentageInputBlur = () => {
@@ -275,11 +339,32 @@ export function SystemCostsManager({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <Label className="text-xs">Cost per kWp Installed</Label>
-                <span className="text-xs text-muted-foreground">
-                  R{costs.solarCostPerKwp.toLocaleString()}
-                </span>
+                {isEditingSolarCost ? (
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">R</span>
+                    <Input
+                      ref={solarCostInputRef}
+                      type="number"
+                      value={solarCostEditValue}
+                      onChange={(e) => setSolarCostEditValue(e.target.value)}
+                      onBlur={handleSolarCostBlur}
+                      onKeyDown={handleSolarCostKeyDown}
+                      className="h-6 w-20 text-xs text-right px-2"
+                      min={0}
+                      step={100}
+                    />
+                  </div>
+                ) : (
+                  <span 
+                    className="text-xs text-muted-foreground cursor-pointer hover:underline hover:text-foreground"
+                    onClick={handleSolarCostClick}
+                    title="Click to edit"
+                  >
+                    R{costs.solarCostPerKwp.toLocaleString()}
+                  </span>
+                )}
               </div>
               <Slider
                 value={[costs.solarCostPerKwp]}
@@ -291,21 +376,6 @@ export function SystemCostsManager({
               <div className="flex justify-between text-[10px] text-muted-foreground">
                 <span>R5,000</span>
                 <span>R20,000</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Or enter exact value</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">R</span>
-                <Input
-                  type="number"
-                  value={costs.solarCostPerKwp}
-                  onChange={(e) => handleInputChange("solarCostPerKwp", e.target.value)}
-                  className="h-9"
-                  min={0}
-                  step={100}
-                />
-                <span className="text-muted-foreground text-sm">/kWp</span>
               </div>
             </div>
             <div className="pt-2 border-t">
@@ -328,11 +398,32 @@ export function SystemCostsManager({
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <Label className="text-xs">Cost per kWh Capacity</Label>
-                  <span className="text-xs text-muted-foreground">
-                    R{costs.batteryCostPerKwh.toLocaleString()}
-                  </span>
+                  {isEditingBatteryCost ? (
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground">R</span>
+                      <Input
+                        ref={batteryCostInputRef}
+                        type="number"
+                        value={batteryCostEditValue}
+                        onChange={(e) => setBatteryCostEditValue(e.target.value)}
+                        onBlur={handleBatteryCostBlur}
+                        onKeyDown={handleBatteryCostKeyDown}
+                        className="h-6 w-20 text-xs text-right px-2"
+                        min={0}
+                        step={100}
+                      />
+                    </div>
+                  ) : (
+                    <span 
+                      className="text-xs text-muted-foreground cursor-pointer hover:underline hover:text-foreground"
+                      onClick={handleBatteryCostClick}
+                      title="Click to edit"
+                    >
+                      R{costs.batteryCostPerKwh.toLocaleString()}
+                    </span>
+                  )}
                 </div>
                 <Slider
                   value={[costs.batteryCostPerKwh]}
@@ -344,21 +435,6 @@ export function SystemCostsManager({
                 <div className="flex justify-between text-[10px] text-muted-foreground">
                   <span>R3,000</span>
                   <span>R15,000</span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs">Or enter exact value</Label>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">R</span>
-                  <Input
-                    type="number"
-                    value={costs.batteryCostPerKwh}
-                    onChange={(e) => handleInputChange("batteryCostPerKwh", e.target.value)}
-                    className="h-9"
-                    min={0}
-                    step={100}
-                  />
-                  <span className="text-muted-foreground text-sm">/kWh</span>
                 </div>
               </div>
               <div className="pt-2 border-t">
