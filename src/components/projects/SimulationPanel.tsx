@@ -1349,12 +1349,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardDescription>Annual Production</CardDescription>
             <CardTitle className="text-2xl text-chart-2">
               {annualPVsystResult 
-                ? Math.round(annualPVsystResult.eGrid).toLocaleString()
+                ? Math.round(annualPVsystResult.eGrid * reductionFactor).toLocaleString()
                 : Math.round(energyResults.totalDailySolar * 365).toLocaleString()} kWh
             </CardTitle>
             {annualPVsystResult && (
               <p className="text-xs text-muted-foreground">
-                {Math.round(annualPVsystResult.specificYield).toLocaleString()} kWh/kWp • PR: {annualPVsystResult.performanceRatio.toFixed(1)}%
+                {Math.round(annualPVsystResult.specificYield * reductionFactor).toLocaleString()} kWh/kWp • PR: {annualPVsystResult.performanceRatio.toFixed(1)}%
               </p>
             )}
           </CardHeader>
