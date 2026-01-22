@@ -49,7 +49,8 @@ import { InverterSizeModuleConfig } from "./InverterSizeModuleConfig";
 import { InverterSliderPanel } from "./InverterSliderPanel";
 import { getModulePresetById, getDefaultModulePreset, calculateModuleMetrics } from "./SolarModulePresets";
 import { SystemCostsData } from "./SystemCostsManager";
-import { calculateAnnualBlendedRate, getBlendedRateBreakdown } from "@/lib/tariffCalculations";
+import { calculateAnnualBlendedRates } from "@/lib/tariffCalculations";
+import { type BlendedRateType } from "./TariffSelector";
 import { 
   type LossCalculationMode, 
   type PVsystLossChainConfig, 
@@ -92,6 +93,8 @@ interface SimulationPanelProps {
   systemCosts: SystemCostsData;
   onSystemCostsChange: (costs: SystemCostsData) => void;
   includesBattery?: boolean;
+  blendedRateType?: BlendedRateType;
+  onBlendedRateTypeChange?: (type: BlendedRateType) => void;
 }
 
 export interface SimulationPanelRef {
@@ -134,7 +137,7 @@ function DifferenceIndicator({ baseValue, compareValue, suffix = "", invert = fa
   );
 }
 
-export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false }, ref) => {
+export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, blendedRateType = 'solarHours', onBlendedRateTypeChange }, ref) => {
   const queryClient = useQueryClient();
   
   // Fetch the most recent saved simulation FIRST
@@ -603,17 +606,28 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // ========================================
   // PHASE 2: Financial Analysis (tariff-dependent)
   // ========================================
-  // Calculate blended solar rate (energy-weighted by solar production curve)
-  const blendedRateBreakdown = useMemo(() => getBlendedRateBreakdown(tariffRates), [tariffRates]);
+  // Calculate blended rates using the new accurate methodology with all unbundled charges
+  const annualBlendedRates = useMemo(() => 
+    calculateAnnualBlendedRates(tariffRates, { legacy_charge_per_kwh: tariff?.legacy_charge_per_kwh }),
+    [tariffRates, tariff?.legacy_charge_per_kwh]
+  );
+  
+  // Use the selected blended rate type (from Tariff tab or default to solarHours)
+  const selectedBlendedRate = useMemo(() => {
+    if (!annualBlendedRates) return 2.5; // Fallback default
+    return blendedRateType === 'allHours' 
+      ? annualBlendedRates.allHours.annual 
+      : annualBlendedRates.solarHours.annual;
+  }, [annualBlendedRates, blendedRateType]);
   
   const tariffData: TariffData = useMemo(() => ({
     fixedMonthlyCharge: Number(tariff?.fixed_monthly_charge || 0),
     demandChargePerKva: Number(tariff?.demand_charge_per_kva || 0),
     networkAccessCharge: Number(tariff?.network_access_charge || 0),
-    // Use blended solar rate instead of simple average for accurate financial modeling
-    averageRatePerKwh: blendedRateBreakdown.annual ?? 2.5,
+    // Use the selected blended rate (includes all unbundled charges)
+    averageRatePerKwh: selectedBlendedRate,
     exportRatePerKwh: 0, // No feed-in tariff by default
-  }), [tariff, blendedRateBreakdown]);
+  }), [tariff, selectedBlendedRate]);
 
   const financialResults = useMemo(() =>
     calculateFinancials(energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity),
@@ -760,11 +774,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           inverterConfig,
           systemCosts,
           // Blended solar rate for IRR/financial modeling
-          blendedSolarRate: blendedRateBreakdown.annual,
-          tariffBreakdown: {
-            summer: blendedRateBreakdown.summer,
-            winter: blendedRateBreakdown.winter,
-          },
+          blendedSolarRate: selectedBlendedRate,
+          blendedRateType,
+          blendedRates: annualBlendedRates ? {
+            allHours: annualBlendedRates.allHours.annual,
+            solarHours: annualBlendedRates.solarHours.annual,
+          } : null,
           // Save PVsyst loss configuration for persistence
           lossCalculationMode,
           pvsystConfig,
