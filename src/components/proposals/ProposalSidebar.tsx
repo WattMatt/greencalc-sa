@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -18,7 +17,6 @@ import { BrandingForm } from "./BrandingForm";
 import { TemplateSelector } from "./templates/TemplateSelector";
 import { ContentBlock, ProposalBranding, SimulationData, Proposal } from "./types";
 import { ProposalTemplateId } from "./templates/types";
-import { cn } from "@/lib/utils";
 
 interface ProposalSidebarProps {
   contentBlocks: ContentBlock[];
