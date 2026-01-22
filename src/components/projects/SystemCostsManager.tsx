@@ -80,9 +80,19 @@ const COST_PRESETS = [
   },
 ];
 
+interface SystemCostsManagerProps {
+  costs: SystemCostsData;
+  onChange: (costs: SystemCostsData) => void;
+  onBlur?: () => void;
+  solarCapacity?: number;
+  batteryCapacity?: number;
+  includesBattery?: boolean;
+}
+
 export function SystemCostsManager({ 
   costs, 
   onChange, 
+  onBlur,
   solarCapacity = 100, 
   batteryCapacity = 50,
   includesBattery = true
@@ -535,6 +545,7 @@ export function SystemCostsManager({
                       type="number"
                       value={costs.healthAndSafetyCost ?? 0}
                       onChange={(e) => onChange({ ...costs, healthAndSafetyCost: parseFloat(e.target.value) || 0 })}
+                      onBlur={onBlur}
                       className="h-8 w-28 text-sm text-right px-2"
                       min={0}
                       step={1000}
@@ -551,6 +562,7 @@ export function SystemCostsManager({
                       type="number"
                       value={costs.waterPointsCost ?? 0}
                       onChange={(e) => onChange({ ...costs, waterPointsCost: parseFloat(e.target.value) || 0 })}
+                      onBlur={onBlur}
                       className="h-8 w-28 text-sm text-right px-2"
                       min={0}
                       step={1000}
@@ -567,6 +579,7 @@ export function SystemCostsManager({
                       type="number"
                       value={costs.cctvCost ?? 0}
                       onChange={(e) => onChange({ ...costs, cctvCost: parseFloat(e.target.value) || 0 })}
+                      onBlur={onBlur}
                       className="h-8 w-28 text-sm text-right px-2"
                       min={0}
                       step={1000}
@@ -583,6 +596,7 @@ export function SystemCostsManager({
                       type="number"
                       value={costs.mvSwitchGearCost ?? 0}
                       onChange={(e) => onChange({ ...costs, mvSwitchGearCost: parseFloat(e.target.value) || 0 })}
+                      onBlur={onBlur}
                       className="h-8 w-28 text-sm text-right px-2"
                       min={0}
                       step={10000}
