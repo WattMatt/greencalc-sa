@@ -298,10 +298,15 @@ export function runAdvancedSimulation(
   // ===== Income-based approach: Base values (Year 1, before escalation) =====
   const baseEnergyRate = tariff.averageRatePerKwh;
   const baseDemandRate = tariff.demandChargePerKva ?? 0;
-  const baseInsurance = financial.enabled && financial.insuranceEnabled 
-    ? financial.baseInsuranceCostR 
-    : 0;
   const baseMaintenance = systemCosts.maintenancePerYear ?? 0;
+  
+  // Insurance = 1% of (Total Capital Cost + Annual O&M)
+  // This base value is then escalated by CPI each year
+  const INSURANCE_RATE_PERCENT = 1.0; // 1% of total capital + O&M
+  const insuranceBase = (initialCost + baseMaintenance) * (INSURANCE_RATE_PERCENT / 100);
+  const baseInsurance = financial.enabled && financial.insuranceEnabled 
+    ? insuranceBase 
+    : 0;
   
   // Calculate demand saving (kVA) from peak load reduction
   const powerFactor = 0.9;
