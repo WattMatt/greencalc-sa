@@ -476,6 +476,8 @@ export function TariffSelector({
           municipalityId={municipalityId}
           currentTariffId={currentTariffId}
           onSelect={onSelect}
+          selectedBlendedRateType={selectedBlendedRateType}
+          onBlendedRateTypeChange={onBlendedRateTypeChange}
         />
       )}
 
