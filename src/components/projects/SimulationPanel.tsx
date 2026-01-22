@@ -1243,63 +1243,38 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   <Calculator className="h-4 w-4" />
                   Simulation Tariff Rate
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Select blended rate methodology
-                </CardDescription>
               </CardHeader>
-              <CardContent className="pt-0 space-y-3">
-                <Select 
-                  value={blendedRateType} 
-                  onValueChange={(value: BlendedRateType) => onBlendedRateTypeChange?.(value)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select rate type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="solarHours">
-                      <div className="flex items-center gap-2">
-                        <Sun className="h-4 w-4 text-amber-500" />
-                        <span>Solar Sun Hours (6h)</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="allHours">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
-                        <span>All Hours (24/7/365)</span>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                {/* Display selected rate with visual indicator */}
-                <div className="p-2 rounded-lg bg-muted/50 flex items-center justify-between">
-                  {blendedRateType === 'solarHours' ? (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <Sun className="h-4 w-4 text-amber-500" />
-                        <div className="flex flex-col">
-                          <span className="text-xs font-medium">Solar Sun Hours</span>
-                          <span className="text-[10px] text-muted-foreground">{ANNUAL_HOURS_SOLAR.toLocaleString()} hrs/year</span>
+              <CardContent className="pt-0">
+                <div className="flex items-center gap-3">
+                  <Select 
+                    value={blendedRateType} 
+                    onValueChange={(value: BlendedRateType) => onBlendedRateTypeChange?.(value)}
+                  >
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Select rate type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="solarHours">
+                        <div className="flex items-center gap-2">
+                          <Sun className="h-4 w-4 text-amber-500" />
+                          <span>Solar Sun Hours (6h)</span>
                         </div>
-                      </div>
-                      <span className="text-sm font-bold text-amber-600">
-                        R{annualBlendedRates.solarHours.annual.toFixed(4)}/kWh
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
-                        <div className="flex flex-col">
-                          <span className="text-xs font-medium">All Hours</span>
-                          <span className="text-[10px] text-muted-foreground">{ANNUAL_HOURS_24H.toLocaleString()} hrs/year</span>
+                      </SelectItem>
+                      <SelectItem value="allHours">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          <span>All Hours (24/7/365)</span>
                         </div>
-                      </div>
-                      <span className="text-sm font-bold">
-                        R{annualBlendedRates.allHours.annual.toFixed(4)}/kWh
-                      </span>
-                    </>
-                  )}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  <span className={`text-lg font-bold ml-auto ${blendedRateType === 'solarHours' ? 'text-amber-600' : ''}`}>
+                    R{(blendedRateType === 'solarHours' 
+                      ? annualBlendedRates.solarHours.annual 
+                      : annualBlendedRates.allHours.annual
+                    ).toFixed(4)}/kWh
+                  </span>
                 </div>
               </CardContent>
             </Card>
