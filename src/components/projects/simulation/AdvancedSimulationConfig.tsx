@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles, Save, Trash2, User } from "lucide-react";
+import { useState, useRef } from "react";
+import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles, Save, Trash2, User, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   AdvancedSimulationConfig,
   DEFAULT_ADVANCED_CONFIG,
@@ -247,6 +249,7 @@ export function AdvancedSimulationConfigPanel({
             <DegradationSection
               config={config.degradation}
               onChange={(degradation) => onChange({ ...config, degradation })}
+              projectLifetime={config.financial.projectLifetimeYears || 20}
             />
             
             {/* Financial Sophistication */}
@@ -340,11 +343,56 @@ function SeasonalSection({
 
 function DegradationSection({ 
   config, 
-  onChange 
+  onChange,
+  projectLifetime = 20
 }: { 
   config: DegradationConfig; 
   onChange: (config: DegradationConfig) => void;
+  projectLifetime?: number;
 }) {
+  const panelScrollRef = useRef<HTMLDivElement>(null);
+  const batteryScrollRef = useRef<HTMLDivElement>(null);
+  
+  // Ensure arrays are the right length
+  const ensureArrayLength = (arr: number[], length: number, defaultValue: number): number[] => {
+    const newArr = [...arr];
+    while (newArr.length < length) newArr.push(defaultValue);
+    return newArr.slice(0, length);
+  };
+  
+  const panelRates = ensureArrayLength(config.panelYearlyRates || [], projectLifetime, config.panelSimpleRate || 0.5);
+  const batteryRates = ensureArrayLength(config.batteryYearlyRates || [], projectLifetime, config.batterySimpleRate || 3.0);
+  
+  const handlePanelYearChange = (index: number, value: number) => {
+    const newRates = [...panelRates];
+    newRates[index] = value;
+    onChange({ ...config, panelYearlyRates: newRates });
+  };
+  
+  const handleBatteryYearChange = (index: number, value: number) => {
+    const newRates = [...batteryRates];
+    newRates[index] = value;
+    onChange({ ...config, batteryYearlyRates: newRates });
+  };
+  
+  const applyPanelRateToAll = () => {
+    const rate = config.panelSimpleRate || 0.5;
+    onChange({ ...config, panelYearlyRates: Array(projectLifetime).fill(rate) });
+  };
+  
+  const applyBatteryRateToAll = () => {
+    const rate = config.batterySimpleRate || 3.0;
+    onChange({ ...config, batteryYearlyRates: Array(projectLifetime).fill(rate) });
+  };
+  
+  const scrollLeft = (ref: React.RefObject<HTMLDivElement>) => {
+    if (ref.current) ref.current.scrollBy({ left: -200, behavior: 'smooth' });
+  };
+  
+  const scrollRight = (ref: React.RefObject<HTMLDivElement>) => {
+    if (ref.current) ref.current.scrollBy({ left: 200, behavior: 'smooth' });
+  };
+
   return (
     <div className="space-y-3 p-3 rounded-lg border bg-card">
       <div className="flex items-center justify-between">
@@ -359,37 +407,183 @@ function DegradationSection({
       </div>
       
       {config.enabled && (
-        <div className="space-y-3 pt-2">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Panel Degradation (%/year)</Label>
+        <div className="space-y-4 pt-2">
+          {/* Panel Degradation */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium">Panel Degradation</Label>
+              <RadioGroup
+                value={config.panelDegradationMode || 'simple'}
+                onValueChange={(mode: 'simple' | 'yearly') => onChange({ ...config, panelDegradationMode: mode })}
+                className="flex items-center gap-3"
+              >
+                <div className="flex items-center gap-1">
+                  <RadioGroupItem value="simple" id="panel-simple" className="h-3 w-3" />
+                  <Label htmlFor="panel-simple" className="text-[10px] cursor-pointer">Simple</Label>
+                </div>
+                <div className="flex items-center gap-1">
+                  <RadioGroupItem value="yearly" id="panel-yearly" className="h-3 w-3" />
+                  <Label htmlFor="panel-yearly" className="text-[10px] cursor-pointer">Yearly</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            
+            {(config.panelDegradationMode || 'simple') === 'simple' ? (
               <div className="flex items-center gap-2">
                 <Slider
-                  value={[config.panelDegradationRate * 10]}
-                  onValueChange={([v]) => onChange({ ...config, panelDegradationRate: v / 10 })}
+                  value={[(config.panelSimpleRate ?? 0.5) * 10]}
+                  onValueChange={([v]) => onChange({ ...config, panelSimpleRate: v / 10 })}
                   min={2}
-                  max={10}
+                  max={15}
                   step={1}
                   className="flex-1"
                 />
-                <span className="text-xs w-12 text-right">{config.panelDegradationRate.toFixed(1)}%</span>
+                <Input
+                  type="number"
+                  value={config.panelSimpleRate ?? 0.5}
+                  onChange={(e) => onChange({ ...config, panelSimpleRate: parseFloat(e.target.value) || 0.5 })}
+                  className="w-16 h-7 text-xs text-right"
+                  step={0.1}
+                  min={0}
+                  max={5}
+                />
+                <span className="text-xs text-muted-foreground">%/yr</span>
               </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => scrollLeft(panelScrollRef)}>
+                    <ChevronLeft className="h-3 w-3" />
+                  </Button>
+                  <div ref={panelScrollRef} className="flex-1 overflow-x-auto scrollbar-thin">
+                    <div className="flex gap-1 pb-1 min-w-max">
+                      {panelRates.map((rate, idx) => (
+                        <div key={idx} className="flex flex-col items-center gap-0.5">
+                          <span className="text-[9px] text-muted-foreground">Y{idx + 1}</span>
+                          <Input
+                            type="number"
+                            value={rate}
+                            onChange={(e) => handlePanelYearChange(idx, parseFloat(e.target.value) || 0)}
+                            className="w-12 h-6 text-[10px] text-center p-1"
+                            step={0.1}
+                            min={0}
+                            max={10}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => scrollRight(panelScrollRef)}>
+                    <ChevronRight className="h-3 w-3" />
+                  </Button>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-6 text-[10px] w-full"
+                  onClick={applyPanelRateToAll}
+                >
+                  Apply {config.panelSimpleRate ?? 0.5}% to all years
+                </Button>
+              </div>
+            )}
+          </div>
+          
+          <Separator />
+          
+          {/* Battery Degradation */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium">Battery Degradation</Label>
+              <RadioGroup
+                value={config.batteryDegradationMode || 'simple'}
+                onValueChange={(mode: 'simple' | 'yearly') => onChange({ ...config, batteryDegradationMode: mode })}
+                className="flex items-center gap-3"
+              >
+                <div className="flex items-center gap-1">
+                  <RadioGroupItem value="simple" id="battery-simple" className="h-3 w-3" />
+                  <Label htmlFor="battery-simple" className="text-[10px] cursor-pointer">Simple</Label>
+                </div>
+                <div className="flex items-center gap-1">
+                  <RadioGroupItem value="yearly" id="battery-yearly" className="h-3 w-3" />
+                  <Label htmlFor="battery-yearly" className="text-[10px] cursor-pointer">Yearly</Label>
+                </div>
+              </RadioGroup>
             </div>
             
-            <div className="space-y-1">
-              <Label className="text-xs">Battery Degradation (%/year)</Label>
+            {(config.batteryDegradationMode || 'simple') === 'simple' ? (
               <div className="flex items-center gap-2">
                 <Slider
-                  value={[config.batteryDegradationRate * 10]}
-                  onValueChange={([v]) => onChange({ ...config, batteryDegradationRate: v / 10 })}
+                  value={[(config.batterySimpleRate ?? 3.0) * 10]}
+                  onValueChange={([v]) => onChange({ ...config, batterySimpleRate: v / 10 })}
                   min={10}
-                  max={50}
+                  max={60}
                   step={5}
                   className="flex-1"
                 />
-                <span className="text-xs w-12 text-right">{config.batteryDegradationRate.toFixed(1)}%</span>
+                <Input
+                  type="number"
+                  value={config.batterySimpleRate ?? 3.0}
+                  onChange={(e) => onChange({ ...config, batterySimpleRate: parseFloat(e.target.value) || 3.0 })}
+                  className="w-16 h-7 text-xs text-right"
+                  step={0.5}
+                  min={0}
+                  max={10}
+                />
+                <span className="text-xs text-muted-foreground">%/yr</span>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => scrollLeft(batteryScrollRef)}>
+                    <ChevronLeft className="h-3 w-3" />
+                  </Button>
+                  <div ref={batteryScrollRef} className="flex-1 overflow-x-auto scrollbar-thin">
+                    <div className="flex gap-1 pb-1 min-w-max">
+                      {batteryRates.map((rate, idx) => (
+                        <div key={idx} className="flex flex-col items-center gap-0.5">
+                          <span className="text-[9px] text-muted-foreground">Y{idx + 1}</span>
+                          <Input
+                            type="number"
+                            value={rate}
+                            onChange={(e) => handleBatteryYearChange(idx, parseFloat(e.target.value) || 0)}
+                            className="w-12 h-6 text-[10px] text-center p-1"
+                            step={0.5}
+                            min={0}
+                            max={15}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => scrollRight(batteryScrollRef)}>
+                    <ChevronRight className="h-3 w-3" />
+                  </Button>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-6 text-[10px] w-full"
+                  onClick={applyBatteryRateToAll}
+                >
+                  Apply {config.batterySimpleRate ?? 3.0}% to all years
+                </Button>
+              </div>
+            )}
+          </div>
+          
+          {/* Battery EOL Capacity */}
+          <div className="flex items-center gap-2">
+            <Label className="text-xs flex-1">Battery End-of-Life Capacity</Label>
+            <Input
+              type="number"
+              value={config.batteryEolCapacity}
+              onChange={(e) => onChange({ ...config, batteryEolCapacity: parseInt(e.target.value) || 70 })}
+              className="w-16 h-7 text-xs text-right"
+              min={50}
+              max={90}
+            />
+            <span className="text-xs text-muted-foreground">%</span>
           </div>
           
           <p className="text-[10px] text-muted-foreground">

@@ -23,17 +23,23 @@ export interface SeasonalConfig {
 export interface DegradationConfig {
   enabled: boolean;
   
-  // Panel degradation
-  panelDegradationRate: number; // % per year (default 0.5%)
-  panelFirstYearDegradation: number; // Initial degradation (typically higher, ~2%)
+  // Panel degradation - year-by-year configuration
+  panelDegradationMode: 'simple' | 'yearly';  // Toggle between modes
+  panelSimpleRate: number;                     // Single rate for simple mode (%)
+  panelYearlyRates: number[];                  // Array of rates for yearly mode (one per year)
   
-  // Battery degradation
-  batteryDegradationRate: number; // % capacity loss per year
-  batteryEolCapacity: number; // End-of-life capacity threshold (e.g., 70%)
+  // Battery degradation - year-by-year configuration
+  batteryDegradationMode: 'simple' | 'yearly';
+  batterySimpleRate: number;                   // Single rate for simple mode (%)
+  batteryYearlyRates: number[];                // Array of rates for yearly mode (one per year)
+  batteryEolCapacity: number;                  // End-of-life capacity threshold (e.g., 70%)
   
-  // Inverter replacement
-  inverterReplacementYear: number; // Year for replacement (default 12)
-  inverterReplacementCost: number; // R cost for replacement
+  // Legacy fields for backwards compatibility (deprecated)
+  panelDegradationRate?: number;
+  panelFirstYearDegradation?: number;
+  batteryDegradationRate?: number;
+  inverterReplacementYear?: number;
+  inverterReplacementCost?: number;
 }
 
 // ============= Financial Sophistication =============
@@ -125,14 +131,33 @@ export const DEFAULT_SEASONAL_CONFIG: SeasonalConfig = {
   lowDemandLoadMultiplier: 0.98,
 };
 
+// Helper to generate default yearly rates
+const generateYearlyRates = (rate: number, years: number = 20): number[] => 
+  Array(years).fill(rate);
+
 export const DEFAULT_DEGRADATION_CONFIG: DegradationConfig = {
   enabled: false,
+  
+  // Panel defaults
+  panelDegradationMode: 'simple',
+  panelSimpleRate: 0.5,  // 0.5% per year
+  panelYearlyRates: [
+    2.0,  // Year 1 - higher initial degradation (LID + settling)
+    ...generateYearlyRates(0.5, 19),  // Years 2-20
+  ],
+  
+  // Battery defaults
+  batteryDegradationMode: 'simple',
+  batterySimpleRate: 3.0,  // 3% per year typical for Li-ion
+  batteryYearlyRates: generateYearlyRates(3.0, 20),
+  batteryEolCapacity: 70,
+  
+  // Legacy (deprecated) - kept for backwards compatibility
   panelDegradationRate: 0.5,
   panelFirstYearDegradation: 2.0,
-  batteryDegradationRate: 3.0, // ~3% per year is typical for Li-ion
-  batteryEolCapacity: 70,
+  batteryDegradationRate: 3.0,
   inverterReplacementYear: 12,
-  inverterReplacementCost: 50000, // R50,000 typical for commercial
+  inverterReplacementCost: 50000,
 };
 
 export const DEFAULT_FINANCIAL_CONFIG: AdvancedFinancialConfig = {
@@ -196,13 +221,13 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
         lowDemandLoadMultiplier: 0.95,
       },
       degradation: {
+        ...DEFAULT_DEGRADATION_CONFIG,
         enabled: true,
-        panelDegradationRate: 0.7,
-        panelFirstYearDegradation: 2.5,
-        batteryDegradationRate: 4.0,
+        panelDegradationMode: 'simple',
+        panelSimpleRate: 0.7,
+        batteryDegradationMode: 'simple',
+        batterySimpleRate: 4.0,
         batteryEolCapacity: 70,
-        inverterReplacementYear: 10,
-        inverterReplacementCost: 65000,
       },
       financial: {
         enabled: true,
@@ -240,13 +265,13 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
         lowDemandLoadMultiplier: 0.98,
       },
       degradation: {
+        ...DEFAULT_DEGRADATION_CONFIG,
         enabled: true,
-        panelDegradationRate: 0.4,
-        panelFirstYearDegradation: 1.5,
-        batteryDegradationRate: 2.5,
+        panelDegradationMode: 'simple',
+        panelSimpleRate: 0.4,
+        batteryDegradationMode: 'simple',
+        batterySimpleRate: 2.5,
         batteryEolCapacity: 75,
-        inverterReplacementYear: 15,
-        inverterReplacementCost: 40000,
       },
       financial: {
         enabled: true,
@@ -285,13 +310,13 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
         lowDemandLoadMultiplier: 0.98,
       },
       degradation: {
+        ...DEFAULT_DEGRADATION_CONFIG,
         enabled: true,
-        panelDegradationRate: 0.5,
-        panelFirstYearDegradation: 2.0,
-        batteryDegradationRate: 3.0,
+        panelDegradationMode: 'simple',
+        panelSimpleRate: 0.5,
+        batteryDegradationMode: 'simple',
+        batterySimpleRate: 3.0,
         batteryEolCapacity: 70,
-        inverterReplacementYear: 12,
-        inverterReplacementCost: 50000,
       },
       financial: {
         enabled: true,

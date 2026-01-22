@@ -50,6 +50,7 @@ export function getSeasonalLoadMultiplier(
 
 /**
  * Calculate panel efficiency after degradation for a given year
+ * Uses year-by-year rates if in 'yearly' mode, otherwise applies simple rate
  */
 export function getPanelEfficiency(
   year: number,
@@ -57,16 +58,33 @@ export function getPanelEfficiency(
 ): number {
   if (!config.enabled) return 100;
   
-  if (year === 1) {
-    return 100 - config.panelFirstYearDegradation;
+  let totalDegradation = 0;
+  
+  // Check if using new yearly mode
+  if (config.panelDegradationMode === 'yearly' && config.panelYearlyRates?.length > 0) {
+    // Sum degradation from Year 1 to current year
+    for (let y = 0; y < year && y < config.panelYearlyRates.length; y++) {
+      totalDegradation += config.panelYearlyRates[y];
+    }
+  } else if (config.panelDegradationMode === 'simple' && config.panelSimpleRate !== undefined) {
+    // Simple mode: apply same rate every year
+    totalDegradation = year * config.panelSimpleRate;
+  } else {
+    // Legacy fallback for backwards compatibility
+    if (year === 1) {
+      return 100 - (config.panelFirstYearDegradation ?? 2.0);
+    }
+    const firstYearDeg = config.panelFirstYearDegradation ?? 2.0;
+    const subsequentDeg = (year - 1) * (config.panelDegradationRate ?? 0.5);
+    totalDegradation = firstYearDeg + subsequentDeg;
   }
   
-  const subsequentDegradation = (year - 1) * config.panelDegradationRate;
-  return 100 - config.panelFirstYearDegradation - subsequentDegradation;
+  return Math.max(0, 100 - totalDegradation);
 }
 
 /**
  * Calculate battery capacity remaining after degradation
+ * Uses year-by-year rates if in 'yearly' mode, otherwise applies simple rate
  */
 export function getBatteryCapacityRemaining(
   year: number,
@@ -74,8 +92,23 @@ export function getBatteryCapacityRemaining(
 ): number {
   if (!config.enabled) return 100;
   
-  const degradation = year * config.batteryDegradationRate;
-  const remaining = 100 - degradation;
+  let totalDegradation = 0;
+  
+  // Check if using new yearly mode
+  if (config.batteryDegradationMode === 'yearly' && config.batteryYearlyRates?.length > 0) {
+    // Sum degradation from Year 1 to current year
+    for (let y = 0; y < year && y < config.batteryYearlyRates.length; y++) {
+      totalDegradation += config.batteryYearlyRates[y];
+    }
+  } else if (config.batteryDegradationMode === 'simple' && config.batterySimpleRate !== undefined) {
+    // Simple mode: apply same rate every year
+    totalDegradation = year * config.batterySimpleRate;
+  } else {
+    // Legacy fallback
+    totalDegradation = year * (config.batteryDegradationRate ?? 3.0);
+  }
+  
+  const remaining = 100 - totalDegradation;
   
   // Don't go below EOL capacity
   return Math.max(remaining, config.batteryEolCapacity);
