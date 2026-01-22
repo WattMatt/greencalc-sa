@@ -40,7 +40,8 @@ import {
   FinancialSummarySection,
   CashflowTableSection,
   TermsSection,
-  SignatureSection
+  SignatureSection,
+  PageWrapper
 } from "@/components/proposals/sections";
 
 export default function ProposalWorkspace() {
@@ -467,91 +468,138 @@ export default function ProposalWorkspace() {
     );
   }
 
+  // Page titles for header
+  const PAGE_TITLES: Record<string, string> = {
+    cover: 'Cover',
+    siteOverview: 'Site Overview',
+    loadAnalysis: 'Load Analysis',
+    equipmentSpecs: 'Equipment Specifications',
+    financialSummary: 'Financial Summary',
+    cashflowTable: '20-Year Cashflow',
+    terms: 'Terms & Conditions',
+    signature: 'Authorization',
+  };
+
   // Render section based on block ID
   const renderSection = (blockId: string) => {
     if (!simulationData) return null;
 
-    switch (blockId) {
-      case 'cover':
-        return (
+    const pageIndex = enabledBlocks.findIndex(b => b.id === blockId);
+    const pageNumber = pageIndex + 1;
+    const totalPages = enabledBlocks.length;
+    const pageTitle = PAGE_TITLES[blockId] || blockId;
+
+    // Cover section has its own branded header - don't wrap it
+    if (blockId === 'cover') {
+      return (
+        <div className="flex flex-col min-h-[297mm]">
           <CoverSection
             proposal={proposalForComponents}
             project={project}
             simulation={simulationData}
             template={template}
           />
-        );
-      case 'siteOverview':
-        return (
-          <SiteOverviewSection
-            proposal={proposalForComponents}
-            project={project}
-            simulation={simulationData}
-            template={template}
-            tariffName={projectTariffName || undefined}
-          />
-        );
-      case 'loadAnalysis':
-        // Extract shop_types from tenants join data
-        const shopTypesFromTenants = tenants
-          ?.map(t => t.shop_types)
-          .filter((st): st is NonNullable<typeof st> => st != null) || [];
-        // Deduplicate shop types
-        const uniqueShopTypes = Array.from(
-          new Map(shopTypesFromTenants.map(st => [st.id, st])).values()
-        );
-        return (
-          <LoadAnalysisSection
-            simulation={simulationData}
-            template={template}
-            tenants={tenants || []}
-            shopTypes={uniqueShopTypes}
-            project={project}
-          />
-        );
-      case 'equipmentSpecs':
-        return (
-          <EquipmentSpecsSection
-            simulation={simulationData}
-            template={template}
-          />
-        );
-      case 'financialSummary':
-        return (
-          <FinancialSummarySection
-            simulation={simulationData}
-            template={template}
-          />
-        );
-      case 'cashflowTable':
-        return (
-          <CashflowTableSection
-            simulation={simulationData}
-            template={template}
-            showAllYears={true}
-          />
-        );
-      case 'terms':
-        return (
-          <TermsSection
-            proposal={proposalForComponents}
-            template={template}
-          />
-        );
-      case 'signature':
-        return (
-          <SignatureSection
-            proposal={proposalForComponents}
-            template={template}
-          />
-        );
-      default:
-        return (
-          <div className="p-6 text-center text-muted-foreground">
-            <p className="text-sm">{blockId} section coming soon</p>
+          {/* Cover page footer */}
+          <div className="mt-auto px-6 py-3 border-t bg-muted/30">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                {[branding.contact_email, branding.contact_phone, branding.website].filter(Boolean).join(' • ') || 
+                 `Generated ${new Date().toLocaleDateString("en-ZA")}`}
+              </span>
+              <span>Page {pageNumber} of {totalPages}</span>
+            </div>
           </div>
-        );
+        </div>
+      );
     }
+
+    // Extract shop types for load analysis
+    const shopTypesFromTenants = tenants
+      ?.map(t => t.shop_types)
+      .filter((st): st is NonNullable<typeof st> => st != null) || [];
+    const uniqueShopTypes = Array.from(
+      new Map(shopTypesFromTenants.map(st => [st.id, st])).values()
+    );
+
+    const getSectionContent = () => {
+      switch (blockId) {
+        case 'siteOverview':
+          return (
+            <SiteOverviewSection
+              proposal={proposalForComponents}
+              project={project}
+              simulation={simulationData}
+              template={template}
+              tariffName={projectTariffName || undefined}
+            />
+          );
+        case 'loadAnalysis':
+          return (
+            <LoadAnalysisSection
+              simulation={simulationData}
+              template={template}
+              tenants={tenants || []}
+              shopTypes={uniqueShopTypes}
+              project={project}
+            />
+          );
+        case 'equipmentSpecs':
+          return (
+            <EquipmentSpecsSection
+              simulation={simulationData}
+              template={template}
+            />
+          );
+        case 'financialSummary':
+          return (
+            <FinancialSummarySection
+              simulation={simulationData}
+              template={template}
+            />
+          );
+        case 'cashflowTable':
+          return (
+            <CashflowTableSection
+              simulation={simulationData}
+              template={template}
+              showAllYears={true}
+            />
+          );
+        case 'terms':
+          return (
+            <TermsSection
+              proposal={proposalForComponents}
+              template={template}
+            />
+          );
+        case 'signature':
+          return (
+            <SignatureSection
+              proposal={proposalForComponents}
+              template={template}
+            />
+          );
+        default:
+          return (
+            <div className="text-center text-muted-foreground">
+              <p className="text-sm">{blockId} section coming soon</p>
+            </div>
+          );
+      }
+    };
+
+    return (
+      <PageWrapper
+        pageNumber={pageNumber}
+        totalPages={totalPages}
+        template={template}
+        branding={branding}
+        pageTitle={pageTitle}
+        forPDF={false}
+      >
+        {getSectionContent()}
+      </PageWrapper>
+    );
   };
 
   return (

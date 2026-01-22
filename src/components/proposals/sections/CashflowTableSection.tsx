@@ -51,8 +51,8 @@ export function CashflowTableSection({ simulation, template, forPDF, showAllYear
   const headerClasses = forPDF ? "text-[9px] py-1 px-2 font-semibold" : "text-[10px] py-2 font-semibold";
 
   return (
-    <div className={forPDF ? "break-inside-avoid" : "p-6"}>
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">20-Year Cashflow Projection</h2>
         {paybackYear && (
           <Badge 

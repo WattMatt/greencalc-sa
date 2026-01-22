@@ -7,3 +7,4 @@ export { FinancialSummarySection } from './FinancialSummarySection';
 export { CashflowTableSection } from './CashflowTableSection';
 export { TermsSection } from './TermsSection';
 export { SignatureSection } from './SignatureSection';
+export { PageWrapper } from './PageWrapper';
