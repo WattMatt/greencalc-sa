@@ -357,6 +357,10 @@ export function runAdvancedSimulation(
     const costIndex = Math.pow(1 + inflationRate / 100, year - 1);
     const insuranceIndex = Math.pow(1 + insuranceEscalation / 100, year - 1);
     
+    // Actual rates per unit (for display in table)
+    const energyRateR = baseEnergyRate * energyRateIndex; // R/kWh
+    const demandRateR = baseDemandRate * demandRateIndex; // R/kVA
+    
     // Energy Income = Energy Yield × Base Rate × Escalation Index
     const energyIncomeR = energyYield * baseEnergyRate * energyRateIndex;
     
@@ -414,9 +418,11 @@ export function runAdvancedSimulation(
       // NEW: Income-based fields
       energyYield,
       energyRateIndex,
+      energyRateR,
       energyIncomeR,
       demandSavingKva,
       demandRateIndex,
+      demandRateR,
       demandIncomeR,
       totalIncomeR,
       insuranceCostR,
