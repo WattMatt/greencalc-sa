@@ -105,14 +105,14 @@ export default function ProposalWorkspace() {
     }
   }, [proposalId, orgBranding, loadingOrgBranding, brandingAutoPopulated]);
 
-  // Fetch project
+  // Fetch project with tariff
   const { data: project } = useQuery({
     queryKey: ["project", projectId],
     queryFn: async () => {
       if (!projectId) return null;
       const { data, error } = await supabase
         .from("projects")
-        .select("*")
+        .select("*, tariffs(id, name)")
         .eq("id", projectId)
         .single();
       if (error) throw error;
@@ -120,6 +120,9 @@ export default function ProposalWorkspace() {
     },
     enabled: !!projectId,
   });
+
+  // Extract tariff name from project
+  const projectTariffName = (project as any)?.tariffs?.name || null;
 
   // Fetch simulations
   const { data: simulations = [] } = useQuery({
@@ -268,7 +271,7 @@ export default function ProposalWorkspace() {
           paybackYears: results?.paybackYears || 0,
           roiPercentage: results?.roiPercentage || 0,
           systemCost: results?.systemCost || (sim.solar_capacity_kwp || 0) * 12000,
-          tariffName: results?.tariffName,
+          tariffName: projectTariffName || results?.tariffName,
           location: project?.location || undefined,
           // Advanced metrics if available
           npv: results?.npv,
@@ -291,11 +294,12 @@ export default function ProposalWorkspace() {
           paybackYears: 5,
           roiPercentage: 300,
           systemCost: (sandbox.solar_capacity_kwp || 0) * 12000,
+          tariffName: projectTariffName || undefined,
           location: project?.location || undefined,
         });
       }
     }
-  }, [selectedSimulationId, selectedType, simulations, sandboxes, project]);
+  }, [selectedSimulationId, selectedType, simulations, sandboxes, project, projectTariffName]);
 
   // Auto-select first simulation if none selected
   useEffect(() => {
@@ -483,6 +487,7 @@ export default function ProposalWorkspace() {
             project={project}
             simulation={simulationData}
             template={template}
+            tariffName={projectTariffName || undefined}
           />
         );
       case 'equipmentSpecs':
