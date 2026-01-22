@@ -39,8 +39,62 @@ function formatNumber(value: number, decimals: number = 1): string {
   }).format(value);
 }
 
+// Generate monthly data points from yearly projections for more granular chart
+function generateMonthlyCashflowData(yearlyProjections: YearlyProjection[]): { 
+  monthlyData: Array<{ month: number; year: number; label: string; cumulativeCashFlow: number }>;
+  breakEvenMonth: { year: number; month: number } | null;
+} {
+  const monthlyData: Array<{ month: number; year: number; label: string; cumulativeCashFlow: number }> = [];
+  let breakEvenMonth: { year: number; month: number } | null = null;
+  
+  // Add Year 0 (initial investment) as month 0
+  if (yearlyProjections.length > 0) {
+    const firstYear = yearlyProjections[0];
+    // The first projection is Year 1, but we need Year 0's cumulative (initial investment)
+    // Year 0 cumulative = Year 1 cumulative - Year 1 net cashflow
+    const year0Cumulative = firstYear.cumulativeCashFlow - firstYear.netCashFlow;
+    monthlyData.push({ month: 0, year: 0, label: "Y0", cumulativeCashFlow: year0Cumulative });
+  }
+  
+  for (let i = 0; i < yearlyProjections.length; i++) {
+    const currentYear = yearlyProjections[i];
+    const previousCumulative = i === 0 
+      ? (currentYear.cumulativeCashFlow - currentYear.netCashFlow)
+      : yearlyProjections[i - 1].cumulativeCashFlow;
+    
+    const annualNetCashflow = currentYear.netCashFlow;
+    const monthlyNetCashflow = annualNetCashflow / 12;
+    
+    // Generate 12 monthly data points for this year
+    for (let m = 1; m <= 12; m++) {
+      const monthNumber = (currentYear.year - 1) * 12 + m;
+      const cumulativeCashFlow = previousCumulative + (monthlyNetCashflow * m);
+      
+      // Label format: Y1-M1, Y1-M2, etc. but only show year labels at month 1
+      const label = m === 1 ? `Y${currentYear.year}` : "";
+      
+      monthlyData.push({
+        month: monthNumber,
+        year: currentYear.year,
+        label,
+        cumulativeCashFlow
+      });
+      
+      // Check for breakeven crossing
+      if (breakEvenMonth === null && cumulativeCashFlow >= 0) {
+        breakEvenMonth = { year: currentYear.year, month: m };
+      }
+    }
+  }
+  
+  return { monthlyData, breakEvenMonth };
+}
+
 export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps) {
   const paybackYear = results.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year;
+  
+  // Generate monthly data for the cashflow chart
+  const { monthlyData, breakEvenMonth } = generateMonthlyCashflowData(results.yearlyProjections);
   
   return (
     <div className="space-y-4">
@@ -124,17 +178,32 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
         <TabsContent value="cashflow" className="mt-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Cumulative Cash Flow</CardTitle>
+              <CardTitle className="text-sm font-medium flex items-center justify-between">
+                <span>Cumulative Cash Flow</span>
+                {breakEvenMonth && (
+                  <Badge variant="outline" className="text-xs">
+                    Break-even: Year {breakEvenMonth.year}, Month {breakEvenMonth.month}
+                  </Badge>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={results.yearlyProjections}>
+                  <AreaChart data={monthlyData}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis 
-                      dataKey="year" 
-                      tick={{ fontSize: 10 }}
-                      tickFormatter={(v) => `Y${v}`}
+                      dataKey="month" 
+                      tick={{ fontSize: 9 }}
+                      tickFormatter={(v) => {
+                        // Show year labels at year boundaries (month 1, 13, 25, etc.)
+                        if (v === 0) return "Y0";
+                        const year = Math.ceil(v / 12);
+                        const month = v % 12 || 12;
+                        // Only show year labels at January of each year
+                        return month === 1 ? `Y${year}` : "";
+                      }}
+                      interval={11} // Show tick every 12 months (at year start)
                     />
                     <YAxis 
                       tick={{ fontSize: 10 }}
@@ -142,7 +211,12 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                     />
                     <Tooltip 
                       formatter={(value: number) => formatCurrency(value)}
-                      labelFormatter={(label) => `Year ${label}`}
+                      labelFormatter={(monthNum) => {
+                        if (monthNum === 0) return "Initial Investment";
+                        const year = Math.ceil(monthNum / 12);
+                        const month = monthNum % 12 || 12;
+                        return `Year ${year}, Month ${month}`;
+                      }}
                     />
                     <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
                     <Area
