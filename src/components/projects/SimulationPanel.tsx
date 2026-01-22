@@ -172,6 +172,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [dailyOutputOverride, setDailyOutputOverride] = useState<number | null>(null);
   const [specificYieldOverride, setSpecificYieldOverride] = useState<number | null>(null);
   
+  // Production reduction percentage (conservative safety margin)
+  const [productionReductionPercent, setProductionReductionPercent] = useState(15);
+  
   // Track the loaded simulation name for UI feedback
   const [loadedSimulationName, setLoadedSimulationName] = useState<string | null>(null);
   const [loadedSimulationDate, setLoadedSimulationDate] = useState<string | null>(null);
@@ -243,6 +246,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         setSolarDataSource(savedType);
       } else if (savedType === "generic") {
         setSolarDataSource("pvgis_monthly"); // Default to PVGIS monthly for legacy "generic" saves
+      }
+      
+      // Load production reduction if saved
+      if (savedResultsJson?.productionReductionPercent !== undefined) {
+        setProductionReductionPercent(savedResultsJson.productionReductionPercent);
       }
       
       // Track what we loaded for UI feedback
@@ -398,21 +406,27 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return profile;
   }, [tenants, shopTypes]);
 
+  // Production reduction factor for conservative estimates
+  const reductionFactor = 1 - (productionReductionPercent / 100);
+
   // Generate solar profiles - both with real data and generic (for comparison)
-  // Simplified mode uses the existing PVWatts-style calculation
+  // Simplified mode uses the existing PVWatts-style calculation, with reduction applied
   const solarProfileSolcastSimplified = useMemo(() => {
     if (!solcastHourlyProfile) return null;
-    return generateSolarProfile(pvConfig, solarCapacity, solcastHourlyProfile);
-  }, [pvConfig, solarCapacity, solcastHourlyProfile]);
+    const baseProfile = generateSolarProfile(pvConfig, solarCapacity, solcastHourlyProfile);
+    return baseProfile.map(v => v * reductionFactor);
+  }, [pvConfig, solarCapacity, solcastHourlyProfile, reductionFactor]);
 
   const solarProfilePVGISSimplified = useMemo(() => {
     if (!pvgisHourlyProfile) return null;
-    return generateSolarProfile(pvConfig, solarCapacity, pvgisHourlyProfile);
-  }, [pvConfig, solarCapacity, pvgisHourlyProfile]);
+    const baseProfile = generateSolarProfile(pvConfig, solarCapacity, pvgisHourlyProfile);
+    return baseProfile.map(v => v * reductionFactor);
+  }, [pvConfig, solarCapacity, pvgisHourlyProfile, reductionFactor]);
 
   const solarProfileGenericSimplified = useMemo(() => {
-    return generateSolarProfile(pvConfig, solarCapacity, undefined);
-  }, [pvConfig, solarCapacity]);
+    const baseProfile = generateSolarProfile(pvConfig, solarCapacity, undefined);
+    return baseProfile.map(v => v * reductionFactor);
+  }, [pvConfig, solarCapacity, reductionFactor]);
 
   // Calculate annual GHI from PVGIS monthly data (for annual PVsyst calculation)
   const annualGHI = useMemo(() => {
@@ -503,11 +517,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       return Array(24).fill(0);
     }
     
-    // Distribute daily E_Grid according to hourly GHI shape
-    const hourlyProfile = hourlyGhi.map(ghi => (ghi / totalDailyGhi) * dailyEGrid);
+    // Distribute daily E_Grid according to hourly GHI shape, with reduction applied
+    const hourlyProfile = hourlyGhi.map(ghi => (ghi / totalDailyGhi) * dailyEGrid * reductionFactor);
     
     return hourlyProfile;
-  }, [lossCalculationMode, solarDataSource, solcastHourlyProfile, pvgisHourlyProfile, annualPVsystResult]);
+  }, [lossCalculationMode, solarDataSource, solcastHourlyProfile, pvgisHourlyProfile, annualPVsystResult, reductionFactor]);
 
   // Active solar profile based on data source and loss calculation mode
   const solarProfile = useMemo(() => {
@@ -724,6 +738,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           // Save PVsyst loss configuration for persistence
           lossCalculationMode,
           pvsystConfig,
+          // Save production reduction percentage
+          productionReductionPercent,
         })),
       };
 
@@ -1111,6 +1127,38 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   </Button>
                 </div>
               </div>
+            </div>
+            
+            {/* Production Reduction - conservative safety margin */}
+            <div className="pt-2 border-t">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-muted-foreground text-[10px]">Production reduction</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={productionReductionPercent}
+                    onChange={(e) => setProductionReductionPercent(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                    className="h-6 w-16 text-right text-xs"
+                    min={0}
+                    max={100}
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5"
+                    onClick={() => setProductionReductionPercent(15)}
+                    title="Reset to default (15%)"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+              {productionReductionPercent > 0 && (
+                <p className="text-[9px] text-muted-foreground mt-1">
+                  Output reduced by {productionReductionPercent}% for conservative estimate
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
