@@ -31,8 +31,8 @@ export function LossWaterfallChart({
     }
   }, [editingStage]);
 
-  // Calculate running total for waterfall visualization
-  // Negative values = losses (reduce running %), Positive values = gains (increase running %)
+  // Calculate running total for waterfall visualization using MULTIPLICATIVE compounding
+  // This matches how the energy engine actually applies losses
   const waterfallData = useMemo(() => {
     let runningPercent = 100;
     
@@ -49,12 +49,21 @@ export function LossWaterfallChart({
             runningPercent: 100,
             barWidth: 100,
             isGain: false,
+            displayLossPercent: 0,
           };
         }
         
-        // Add lossPercent: negative reduces, positive increases
         const startPercent = runningPercent;
-        runningPercent = runningPercent + item.lossPercent;
+        
+        // MULTIPLICATIVE compounding - matches energy engine
+        // lossPercent is negative for losses (e.g., -2.0 means 2% loss)
+        // So we multiply by (1 + lossPercent/100) = (1 - 0.02) = 0.98
+        const newRunningPercent = runningPercent * (1 + item.lossPercent / 100);
+        
+        // Calculate actual percentage points lost at this step (for display & bar width)
+        const actualLossPoints = newRunningPercent - startPercent;
+        
+        runningPercent = newRunningPercent;
         
         // isGain when lossPercent is positive
         const isGain = item.lossPercent > 0;
@@ -64,8 +73,9 @@ export function LossWaterfallChart({
           startPercent,
           endPercent: runningPercent,
           runningPercent,
-          barWidth: Math.abs(item.lossPercent),
+          barWidth: Math.abs(actualLossPoints),
           isGain,
+          displayLossPercent: actualLossPoints,
         };
       });
   }, [breakdown]);
@@ -186,9 +196,9 @@ export function LossWaterfallChart({
                       {isFirst ? (
                         "100%"
                       ) : isGain ? (
-                        `+${Math.abs(item.lossPercent).toFixed(1)}%`
+                        `+${Math.abs(item.displayLossPercent ?? item.lossPercent).toFixed(1)}%`
                       ) : (
-                        `-${Math.abs(item.lossPercent).toFixed(1)}%`
+                        `-${Math.abs(item.displayLossPercent ?? item.lossPercent).toFixed(1)}%`
                       )}
                     </span>
                   )}
