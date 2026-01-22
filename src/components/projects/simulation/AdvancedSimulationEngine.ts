@@ -274,23 +274,31 @@ export function calculateMIRR(
 
 /**
  * Calculate LCOE (Levelized Cost of Energy)
+ * Formula: Undiscounted Total Costs / NPV of Energy Yield
+ * Matches Excel: =Σ(Project Cost, O&M, Insurance, Replacements) / NPV(Cost of Capital, Σ Energy Yield)
  */
 export function calculateLCOE(
   totalSystemCost: number,
   yearlyGenerations: number[],
   yearlyMaintenanceCosts: number[],
+  yearlyReplacementCosts: number[],
   discountRate: number
 ): number {
-  let discountedCosts = totalSystemCost;
-  let discountedEnergy = 0;
-  
-  for (let year = 0; year < yearlyGenerations.length; year++) {
-    const discountFactor = Math.pow(1 + discountRate / 100, year + 1);
-    discountedCosts += yearlyMaintenanceCosts[year] / discountFactor;
-    discountedEnergy += yearlyGenerations[year] / discountFactor;
+  // Numerator: Undiscounted sum of ALL costs (Project Cost + O&M + Insurance + Replacements)
+  let totalCosts = totalSystemCost;
+  for (let year = 0; year < yearlyMaintenanceCosts.length; year++) {
+    totalCosts += yearlyMaintenanceCosts[year];           // O&M + Insurance (undiscounted)
+    totalCosts += yearlyReplacementCosts[year] || 0;      // Replacements (undiscounted)
   }
   
-  return discountedEnergy > 0 ? discountedCosts / discountedEnergy : 0;
+  // Denominator: NPV of Energy Yield (discounted by Cost of Capital)
+  let npvEnergy = 0;
+  for (let year = 0; year < yearlyGenerations.length; year++) {
+    const discountFactor = Math.pow(1 + discountRate / 100, year + 1);
+    npvEnergy += yearlyGenerations[year] / discountFactor;
+  }
+  
+  return npvEnergy > 0 ? totalCosts / npvEnergy : 0;
 }
 
 /**
@@ -515,10 +523,14 @@ export function runAdvancedSimulation(
   const mirrReinvestmentRate = systemCosts.mirrReinvestmentRate ?? 10;
   const mirr = calculateMIRR(cashFlows, mirrFinanceRate, mirrReinvestmentRate);
   
+  // Build yearly replacement costs array from projections
+  const yearlyReplacementCosts = yearlyProjections.map(p => p.replacementCost);
+  
   const lcoe = calculateLCOE(
     initialCost,
     yearlyGenerations,
     yearlyMaintenanceCosts,
+    yearlyReplacementCosts,
     discountRate
   );
   
