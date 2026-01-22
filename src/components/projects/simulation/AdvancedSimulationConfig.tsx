@@ -392,31 +392,9 @@ function DegradationSection({
             </div>
           </div>
           
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Inverter Replacement Year</Label>
-              <Input
-                type="number"
-                value={config.inverterReplacementYear}
-                onChange={(e) => onChange({ ...config, inverterReplacementYear: parseInt(e.target.value) || 12 })}
-                min={5}
-                max={25}
-                className="h-8 text-xs"
-              />
-            </div>
-            
-            <div className="space-y-1">
-              <Label className="text-xs">Replacement Cost (R)</Label>
-              <Input
-                type="number"
-                value={config.inverterReplacementCost}
-                onChange={(e) => onChange({ ...config, inverterReplacementCost: parseInt(e.target.value) || 0 })}
-                min={0}
-                step={5000}
-                className="h-8 text-xs"
-              />
-            </div>
-          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Replacement costs are configured in the Costs tab
+          </p>
         </div>
       )}
     </div>
