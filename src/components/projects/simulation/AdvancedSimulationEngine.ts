@@ -276,19 +276,29 @@ export function calculateMIRR(
  * Calculate LCOE (Levelized Cost of Energy)
  * Formula: Undiscounted Total Costs / NPV of Energy Yield
  * Matches Excel: =Σ(Project Cost, O&M, Insurance, Replacements) / NPV(Cost of Capital, Σ Energy Yield)
+ * 
+ * @param useEscalatedCosts - if false, uses flat (base) O&M/Insurance values instead of escalated
+ * @param flatMaintenanceCost - base annual O&M + Insurance (used when useEscalatedCosts = false)
  */
 export function calculateLCOE(
   totalSystemCost: number,
   yearlyGenerations: number[],
   yearlyMaintenanceCosts: number[],
   yearlyReplacementCosts: number[],
-  discountRate: number
+  discountRate: number,
+  useEscalatedCosts: boolean = true,
+  flatMaintenanceCost: number = 0
 ): number {
   // Numerator: Undiscounted sum of ALL costs (Project Cost + O&M + Insurance + Replacements)
   let totalCosts = totalSystemCost;
-  for (let year = 0; year < yearlyMaintenanceCosts.length; year++) {
-    totalCosts += yearlyMaintenanceCosts[year];           // O&M + Insurance (undiscounted)
-    totalCosts += yearlyReplacementCosts[year] || 0;      // Replacements (undiscounted)
+  
+  for (let year = 0; year < yearlyGenerations.length; year++) {
+    // Use escalated costs or flat costs based on toggle
+    const omInsuranceCost = useEscalatedCosts 
+      ? yearlyMaintenanceCosts[year] 
+      : flatMaintenanceCost;
+    totalCosts += omInsuranceCost;
+    totalCosts += yearlyReplacementCosts[year] || 0;  // Replacements (always use actual)
   }
   
   // Denominator: NPV of Energy Yield (discounted by Cost of Capital)
@@ -526,12 +536,18 @@ export function runAdvancedSimulation(
   // Build yearly replacement costs array from projections
   const yearlyReplacementCosts = yearlyProjections.map(p => p.replacementCost);
   
+  // LCOE calculation: use escalated or flat costs based on config
+  const useEscalatedCosts = financial.lcoeCostEscalation ?? false;
+  const flatMaintenanceCost = baseMaintenance + baseInsurance; // Base O&M + Base Insurance
+  
   const lcoe = calculateLCOE(
     initialCost,
     yearlyGenerations,
     yearlyMaintenanceCosts,
     yearlyReplacementCosts,
-    discountRate
+    discountRate,
+    useEscalatedCosts,
+    flatMaintenanceCost
   );
   
   // Calculate sensitivity if enabled
