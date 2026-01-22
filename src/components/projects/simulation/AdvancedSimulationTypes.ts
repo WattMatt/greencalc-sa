@@ -143,8 +143,8 @@ export const DEFAULT_FINANCIAL_CONFIG: AdvancedFinancialConfig = {
   projectLifetimeYears: 20,
   sensitivityEnabled: false,
   sensitivityVariation: 20,
-  // Insurance defaults (disabled by default)
-  insuranceEnabled: false,
+  // Insurance defaults (enabled - 1% of total capital + O&M, escalated by CPI)
+  insuranceEnabled: true,
   baseInsuranceCostR: 0,
   insuranceEscalationRate: 6.0, // Same as CPI
 };
