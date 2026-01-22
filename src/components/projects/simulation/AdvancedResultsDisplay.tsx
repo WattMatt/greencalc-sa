@@ -185,6 +185,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                       <TableHead className="text-right bg-green-500/5">Total Income</TableHead>
                       <TableHead className="text-right">Insurance</TableHead>
                       <TableHead className="text-right">O&M</TableHead>
+                      <TableHead className="text-right">Replacements</TableHead>
                       <TableHead className="text-right bg-amber-500/5">Total Cost</TableHead>
                       <TableHead className="text-right">Net Cashflow</TableHead>
                       <TableHead className="text-right">Cumulative</TableHead>
@@ -203,6 +204,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground bg-green-500/5">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground bg-amber-500/5">-</TableCell>
@@ -263,8 +265,11 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                           <TableCell className="text-right text-amber-600">
                             -{formatCurrency(proj.maintenanceCost)}
                           </TableCell>
+                          <TableCell className="text-right text-amber-600">
+                            {(proj.replacementCost ?? 0) > 0 ? `-${formatCurrency(proj.replacementCost)}` : "-"}
+                          </TableCell>
                           <TableCell className="text-right font-medium text-amber-600 bg-amber-500/5">
-                            -{formatCurrency(proj.totalCostR ?? proj.maintenanceCost)}
+                            -{formatCurrency((proj.totalCostR ?? proj.maintenanceCost) + (proj.replacementCost ?? 0))}
                           </TableCell>
                           <TableCell className={`text-right font-medium ${proj.netCashFlow >= 0 ? "text-green-600" : "text-destructive"}`}>
                             {proj.netCashFlow >= 0 ? formatCurrency(proj.netCashFlow) : `-${formatCurrency(Math.abs(proj.netCashFlow))}`}
