@@ -44,7 +44,8 @@ export interface SystemCosts {
   mvSwitchGearCost?: number;           // MV Switch Gear
   
   // Insurance Costs (NEW: Income-based model alignment)
-  insuranceCostPerYear?: number;       // Annual insurance cost (R)
+  insuranceCostPerYear?: number;       // Annual insurance cost (R) - calculated from percentage
+  insuranceRatePercent?: number;       // % of (Total Capital + O&M) for annual insurance (default: 1.0)
   
   // Percentage-based Fees (% of project subtotal)
   professionalFeesPercent?: number;    // Professional Fees %
@@ -274,8 +275,9 @@ export const DEFAULT_SYSTEM_COSTS: SystemCosts = {
   cctvCost: 0,
   mvSwitchGearCost: 0,
   
-  // Insurance (default to 0)
+  // Insurance (default 1% of Total Capital + O&M)
   insuranceCostPerYear: 0,
+  insuranceRatePercent: 1.0,
   
   // Percentage-based Fees (default to 0)
   professionalFeesPercent: 0,

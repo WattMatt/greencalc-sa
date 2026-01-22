@@ -1556,6 +1556,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               mvSwitchGearCost: savedCosts.mvSwitchGearCost ?? 0,
               // Insurance
               insuranceCostPerYear: savedCosts.insuranceCostPerYear ?? 0,
+              insuranceRatePercent: savedCosts.insuranceRatePercent ?? 1.0,
               // Percentage-based Fees
               professionalFeesPercent: savedCosts.professionalFeesPercent ?? 0,
               projectManagementPercent: savedCosts.projectManagementPercent ?? 0,
