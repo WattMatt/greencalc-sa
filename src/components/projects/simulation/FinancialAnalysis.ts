@@ -52,6 +52,15 @@ export interface SystemCosts {
   projectManagementPercent?: number;   // Project Management Fees %
   contingencyPercent?: number;         // Project Contingency %
   
+  // Replacement Costs (Year 10)
+  replacementYear?: number;                    // Year for replacement (default: 10)
+  equipmentCostPercent?: number;               // % of solar cost that is equipment (default: 45%)
+  moduleSharePercent?: number;                 // % of equipment that is modules (default: 70%)
+  inverterSharePercent?: number;               // % of equipment that is inverters (default: 30%)
+  solarModuleReplacementPercent?: number;      // % of module cost to replace (default: 10%)
+  inverterReplacementPercent?: number;         // % of inverter cost to replace (default: 50%)
+  batteryReplacementPercent?: number;          // % of battery cost to replace (default: 30%)
+  
   // Financial Return Parameters
   costOfCapital?: number;           // % - General WACC (default: 9)
   cpi?: number;                     // % - Inflation (default: 6)
@@ -283,6 +292,15 @@ export const DEFAULT_SYSTEM_COSTS: SystemCosts = {
   professionalFeesPercent: 0,
   projectManagementPercent: 0,
   contingencyPercent: 0,
+  
+  // Replacement Costs (Year 10)
+  replacementYear: 10,
+  equipmentCostPercent: 45,
+  moduleSharePercent: 70,
+  inverterSharePercent: 30,
+  solarModuleReplacementPercent: 10,
+  inverterReplacementPercent: 50,
+  batteryReplacementPercent: 30,
   
   // Financial Return Parameters
   costOfCapital: 9.0,           // % - General WACC

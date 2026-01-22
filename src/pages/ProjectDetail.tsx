@@ -672,6 +672,14 @@ export default function ProjectDetail() {
     professionalFeesPercent: DEFAULT_SYSTEM_COSTS.professionalFeesPercent ?? 0,
     projectManagementPercent: DEFAULT_SYSTEM_COSTS.projectManagementPercent ?? 0,
     contingencyPercent: DEFAULT_SYSTEM_COSTS.contingencyPercent ?? 0,
+    // Replacement Costs (Year 10)
+    replacementYear: DEFAULT_SYSTEM_COSTS.replacementYear ?? 10,
+    equipmentCostPercent: DEFAULT_SYSTEM_COSTS.equipmentCostPercent ?? 45,
+    moduleSharePercent: DEFAULT_SYSTEM_COSTS.moduleSharePercent ?? 70,
+    inverterSharePercent: DEFAULT_SYSTEM_COSTS.inverterSharePercent ?? 30,
+    solarModuleReplacementPercent: DEFAULT_SYSTEM_COSTS.solarModuleReplacementPercent ?? 10,
+    inverterReplacementPercent: DEFAULT_SYSTEM_COSTS.inverterReplacementPercent ?? 50,
+    batteryReplacementPercent: DEFAULT_SYSTEM_COSTS.batteryReplacementPercent ?? 30,
     // Financial Return Parameters
     costOfCapital: DEFAULT_SYSTEM_COSTS.costOfCapital ?? 9.0,
     cpi: DEFAULT_SYSTEM_COSTS.cpi ?? 6.0,
@@ -726,6 +734,14 @@ export default function ProjectDetail() {
           professionalFeesPercent: savedCosts.professionalFeesPercent ?? DEFAULT_SYSTEM_COSTS.professionalFeesPercent ?? 0,
           projectManagementPercent: savedCosts.projectManagementPercent ?? DEFAULT_SYSTEM_COSTS.projectManagementPercent ?? 0,
           contingencyPercent: savedCosts.contingencyPercent ?? DEFAULT_SYSTEM_COSTS.contingencyPercent ?? 0,
+          // Replacement Costs (Year 10)
+          replacementYear: savedCosts.replacementYear ?? DEFAULT_SYSTEM_COSTS.replacementYear ?? 10,
+          equipmentCostPercent: savedCosts.equipmentCostPercent ?? DEFAULT_SYSTEM_COSTS.equipmentCostPercent ?? 45,
+          moduleSharePercent: savedCosts.moduleSharePercent ?? DEFAULT_SYSTEM_COSTS.moduleSharePercent ?? 70,
+          inverterSharePercent: savedCosts.inverterSharePercent ?? DEFAULT_SYSTEM_COSTS.inverterSharePercent ?? 30,
+          solarModuleReplacementPercent: savedCosts.solarModuleReplacementPercent ?? DEFAULT_SYSTEM_COSTS.solarModuleReplacementPercent ?? 10,
+          inverterReplacementPercent: savedCosts.inverterReplacementPercent ?? DEFAULT_SYSTEM_COSTS.inverterReplacementPercent ?? 50,
+          batteryReplacementPercent: savedCosts.batteryReplacementPercent ?? DEFAULT_SYSTEM_COSTS.batteryReplacementPercent ?? 30,
           // Financial Return Parameters
           costOfCapital: savedCosts.costOfCapital ?? DEFAULT_SYSTEM_COSTS.costOfCapital ?? 9.0,
           cpi: savedCosts.cpi ?? DEFAULT_SYSTEM_COSTS.cpi ?? 6.0,
