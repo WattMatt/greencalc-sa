@@ -659,6 +659,15 @@ export default function ProjectDetail() {
     solarMaintenancePercentage: DEFAULT_SYSTEM_COSTS.solarMaintenancePercentage ?? 3.5,
     batteryMaintenancePercentage: DEFAULT_SYSTEM_COSTS.batteryMaintenancePercentage ?? 1.5,
     maintenancePerYear: 0,
+    // Additional Fixed Costs
+    healthAndSafetyCost: DEFAULT_SYSTEM_COSTS.healthAndSafetyCost ?? 0,
+    waterPointsCost: DEFAULT_SYSTEM_COSTS.waterPointsCost ?? 0,
+    cctvCost: DEFAULT_SYSTEM_COSTS.cctvCost ?? 0,
+    mvSwitchGearCost: DEFAULT_SYSTEM_COSTS.mvSwitchGearCost ?? 0,
+    // Percentage-based Fees
+    professionalFeesPercent: DEFAULT_SYSTEM_COSTS.professionalFeesPercent ?? 0,
+    projectManagementPercent: DEFAULT_SYSTEM_COSTS.projectManagementPercent ?? 0,
+    contingencyPercent: DEFAULT_SYSTEM_COSTS.contingencyPercent ?? 0,
     // Financial Return Parameters
     costOfCapital: DEFAULT_SYSTEM_COSTS.costOfCapital ?? 9.0,
     cpi: DEFAULT_SYSTEM_COSTS.cpi ?? 6.0,
@@ -700,6 +709,15 @@ export default function ProjectDetail() {
           solarMaintenancePercentage: savedCosts.solarMaintenancePercentage ?? savedCosts.maintenancePercentage ?? DEFAULT_SYSTEM_COSTS.solarMaintenancePercentage ?? 3.5,
           batteryMaintenancePercentage: savedCosts.batteryMaintenancePercentage ?? DEFAULT_SYSTEM_COSTS.batteryMaintenancePercentage ?? 1.5,
           maintenancePerYear: savedCosts.maintenancePerYear ?? 0,
+          // Additional Fixed Costs
+          healthAndSafetyCost: savedCosts.healthAndSafetyCost ?? DEFAULT_SYSTEM_COSTS.healthAndSafetyCost ?? 0,
+          waterPointsCost: savedCosts.waterPointsCost ?? DEFAULT_SYSTEM_COSTS.waterPointsCost ?? 0,
+          cctvCost: savedCosts.cctvCost ?? DEFAULT_SYSTEM_COSTS.cctvCost ?? 0,
+          mvSwitchGearCost: savedCosts.mvSwitchGearCost ?? DEFAULT_SYSTEM_COSTS.mvSwitchGearCost ?? 0,
+          // Percentage-based Fees
+          professionalFeesPercent: savedCosts.professionalFeesPercent ?? DEFAULT_SYSTEM_COSTS.professionalFeesPercent ?? 0,
+          projectManagementPercent: savedCosts.projectManagementPercent ?? DEFAULT_SYSTEM_COSTS.projectManagementPercent ?? 0,
+          contingencyPercent: savedCosts.contingencyPercent ?? DEFAULT_SYSTEM_COSTS.contingencyPercent ?? 0,
           // Financial Return Parameters
           costOfCapital: savedCosts.costOfCapital ?? DEFAULT_SYSTEM_COSTS.costOfCapital ?? 9.0,
           cpi: savedCosts.cpi ?? DEFAULT_SYSTEM_COSTS.cpi ?? 6.0,

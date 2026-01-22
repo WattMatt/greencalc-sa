@@ -16,6 +16,17 @@ export interface SystemCostsData {
   batteryMaintenancePercentage: number; // Percentage of battery cost (e.g., 1.5 = 1.5%)
   maintenancePerYear: number; // Calculated total Rand value
   
+  // Additional Fixed Costs (Rand values)
+  healthAndSafetyCost: number;        // Health and Safety Consultant
+  waterPointsCost: number;            // Water Points
+  cctvCost: number;                   // CCTV
+  mvSwitchGearCost: number;           // MV Switch Gear
+  
+  // Percentage-based Fees (% of project subtotal)
+  professionalFeesPercent: number;    // Professional Fees %
+  projectManagementPercent: number;   // Project Management Fees %
+  contingencyPercent: number;         // Project Contingency %
+  
   // Financial Return Parameters
   costOfCapital: number;           // % - General WACC
   cpi: number;                     // % - Inflation
@@ -78,19 +89,53 @@ export function SystemCostsManager({
 }: SystemCostsManagerProps) {
   const effectiveBatteryCapacity = includesBattery ? batteryCapacity : 0;
   
-  // Calculate costs
+  // Calculate base costs
   const solarCost = solarCapacity * costs.solarCostPerKwp;
   const batteryCost = effectiveBatteryCapacity * costs.batteryCostPerKwh;
-  const totalSystemCost = solarCost + batteryCost;
+  const baseCost = solarCost + batteryCost;
+
+  // Calculate additional fixed costs
+  const additionalCosts = 
+    (costs.healthAndSafetyCost ?? 0) +
+    (costs.waterPointsCost ?? 0) +
+    (costs.cctvCost ?? 0) +
+    (costs.mvSwitchGearCost ?? 0);
+
+  // Subtotal before fees
+  const subtotalBeforeFees = baseCost + additionalCosts;
+
+  // Percentage-based fees (applied to subtotal)
+  const professionalFees = subtotalBeforeFees * ((costs.professionalFeesPercent ?? 0) / 100);
+  const projectManagementFees = subtotalBeforeFees * ((costs.projectManagementPercent ?? 0) / 100);
+
+  // Subtotal with fees
+  const subtotalWithFees = subtotalBeforeFees + professionalFees + projectManagementFees;
+
+  // Contingency (applied to subtotal + fees)
+  const contingency = subtotalWithFees * ((costs.contingencyPercent ?? 0) / 100);
+
+  // Total Capital Cost (Excl. O&M)
+  const totalCapitalCost = subtotalWithFees + contingency;
+
+  // Legacy totalSystemCost for backwards compatibility with some displays
+  const totalSystemCost = totalCapitalCost;
 
   // Calculate maintenance from separate percentages
   const solarMaintenance = solarCost * (costs.solarMaintenancePercentage / 100);
   const batteryMaintenance = batteryCost * (costs.batteryMaintenancePercentage / 100);
   const totalMaintenancePerYear = solarMaintenance + batteryMaintenance;
 
+  // Calculate 20-year O&M with CPI escalation
+  const cpi = costs.cpi ?? 6.0;
+  const projectYears = costs.projectDurationYears ?? 20;
+  let lifetimeOM = 0;
+  for (let year = 1; year <= projectYears; year++) {
+    lifetimeOM += totalMaintenancePerYear * Math.pow(1 + cpi / 100, year - 1);
+  }
+
   // Calculate effective O&M percentage (read-only)
-  const effectiveOMPercentage = totalSystemCost > 0 
-    ? (totalMaintenancePerYear / totalSystemCost) * 100 
+  const effectiveOMPercentage = totalCapitalCost > 0 
+    ? (totalMaintenancePerYear / totalCapitalCost) * 100 
     : 0;
 
   // Local state for percentage inputs
@@ -234,6 +279,15 @@ export function SystemCostsManager({
       solarMaintenancePercentage: DEFAULT_SYSTEM_COSTS.solarMaintenancePercentage ?? 3.5,
       batteryMaintenancePercentage: DEFAULT_SYSTEM_COSTS.batteryMaintenancePercentage ?? 1.5,
       maintenancePerYear: 0,
+      // Additional Fixed Costs
+      healthAndSafetyCost: DEFAULT_SYSTEM_COSTS.healthAndSafetyCost ?? 0,
+      waterPointsCost: DEFAULT_SYSTEM_COSTS.waterPointsCost ?? 0,
+      cctvCost: DEFAULT_SYSTEM_COSTS.cctvCost ?? 0,
+      mvSwitchGearCost: DEFAULT_SYSTEM_COSTS.mvSwitchGearCost ?? 0,
+      // Percentage-based Fees
+      professionalFeesPercent: DEFAULT_SYSTEM_COSTS.professionalFeesPercent ?? 0,
+      projectManagementPercent: DEFAULT_SYSTEM_COSTS.projectManagementPercent ?? 0,
+      contingencyPercent: DEFAULT_SYSTEM_COSTS.contingencyPercent ?? 0,
       // Financial Return Parameters
       costOfCapital: DEFAULT_SYSTEM_COSTS.costOfCapital ?? 9.0,
       cpi: DEFAULT_SYSTEM_COSTS.cpi ?? 6.0,
@@ -446,6 +500,207 @@ export function SystemCostsManager({
             </CardContent>
           </Card>
         )}
+
+        {/* Additional Project Costs */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-primary" />
+              Additional Project Costs
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Fixed costs for project infrastructure and services
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Health & Safety Consultant */}
+              <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                <Label className="text-sm">Health & Safety Consultant</Label>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">R</span>
+                  <Input
+                    type="number"
+                    value={costs.healthAndSafetyCost ?? 0}
+                    onChange={(e) => onChange({ ...costs, healthAndSafetyCost: parseFloat(e.target.value) || 0 })}
+                    className="h-8 w-28 text-sm text-right px-2"
+                    min={0}
+                    step={1000}
+                  />
+                </div>
+              </div>
+
+              {/* Water Points */}
+              <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                <Label className="text-sm">Water Points</Label>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">R</span>
+                  <Input
+                    type="number"
+                    value={costs.waterPointsCost ?? 0}
+                    onChange={(e) => onChange({ ...costs, waterPointsCost: parseFloat(e.target.value) || 0 })}
+                    className="h-8 w-28 text-sm text-right px-2"
+                    min={0}
+                    step={1000}
+                  />
+                </div>
+              </div>
+
+              {/* CCTV */}
+              <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                <Label className="text-sm">CCTV</Label>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">R</span>
+                  <Input
+                    type="number"
+                    value={costs.cctvCost ?? 0}
+                    onChange={(e) => onChange({ ...costs, cctvCost: parseFloat(e.target.value) || 0 })}
+                    className="h-8 w-28 text-sm text-right px-2"
+                    min={0}
+                    step={1000}
+                  />
+                </div>
+              </div>
+
+              {/* MV Switch Gear */}
+              <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                <Label className="text-sm">MV Switch Gear</Label>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">R</span>
+                  <Input
+                    type="number"
+                    value={costs.mvSwitchGearCost ?? 0}
+                    onChange={(e) => onChange({ ...costs, mvSwitchGearCost: parseFloat(e.target.value) || 0 })}
+                    className="h-8 w-28 text-sm text-right px-2"
+                    min={0}
+                    step={10000}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Costs Subtotal */}
+            <div className="pt-3 border-t">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Additional Costs Subtotal</span>
+                <span className="font-bold">R{additionalCosts.toLocaleString()}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Fees & Contingency */}
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Percent className="h-4 w-4 text-primary" />
+              Fees & Contingency
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Percentage-based fees applied to the project subtotal
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-6 md:grid-cols-3">
+              {/* Professional Fees */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs">Professional Fees</Label>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={costs.professionalFeesPercent ?? 0}
+                      onChange={(e) => onChange({ ...costs, professionalFeesPercent: parseFloat(e.target.value) || 0 })}
+                      className="h-6 w-14 text-xs text-right px-2"
+                      min={0}
+                      max={15}
+                      step={0.5}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[costs.professionalFeesPercent ?? 0]}
+                  onValueChange={([v]) => onChange({ ...costs, professionalFeesPercent: v })}
+                  min={0}
+                  max={15}
+                  step={0.5}
+                />
+                <div className="text-xs text-muted-foreground text-right">
+                  R{professionalFees.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </div>
+              </div>
+
+              {/* Project Management */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs">Project Management</Label>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={costs.projectManagementPercent ?? 0}
+                      onChange={(e) => onChange({ ...costs, projectManagementPercent: parseFloat(e.target.value) || 0 })}
+                      className="h-6 w-14 text-xs text-right px-2"
+                      min={0}
+                      max={15}
+                      step={0.5}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[costs.projectManagementPercent ?? 0]}
+                  onValueChange={([v]) => onChange({ ...costs, projectManagementPercent: v })}
+                  min={0}
+                  max={15}
+                  step={0.5}
+                />
+                <div className="text-xs text-muted-foreground text-right">
+                  R{projectManagementFees.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </div>
+              </div>
+
+              {/* Contingency */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs">Contingency</Label>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={costs.contingencyPercent ?? 0}
+                      onChange={(e) => onChange({ ...costs, contingencyPercent: parseFloat(e.target.value) || 0 })}
+                      className="h-6 w-14 text-xs text-right px-2"
+                      min={0}
+                      max={15}
+                      step={0.5}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[costs.contingencyPercent ?? 0]}
+                  onValueChange={([v]) => onChange({ ...costs, contingencyPercent: v })}
+                  min={0}
+                  max={15}
+                  step={0.5}
+                />
+                <div className="text-xs text-muted-foreground text-right">
+                  R{contingency.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </div>
+              </div>
+            </div>
+
+            {/* Fees Summary */}
+            <div className="pt-3 border-t">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Total Fees & Contingency</span>
+                <span className="font-medium">
+                  R{(professionalFees + projectManagementFees + contingency).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Annual Maintenance - Split Solar & Battery O&M */}
         <Card className={includesBattery ? "md:col-span-2" : ""}>
@@ -845,30 +1100,55 @@ export function SystemCostsManager({
       {/* Total Summary */}
       <Card className="bg-primary/5 border-primary/20">
         <CardContent className="py-6">
-          <div className="flex items-center justify-between">
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Left side: Total Capital Cost */}
             <div className="flex items-center gap-3">
               <div className="p-3 bg-primary/10 rounded-full">
                 <TrendingUp className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total System Cost</p>
-                <p className="text-2xl font-bold">R{totalSystemCost.toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">Total Capital Cost (Excl. O&M)</p>
+                <p className="text-2xl font-bold">R{totalCapitalCost.toLocaleString()}</p>
               </div>
             </div>
-            <div className="text-right space-y-1 text-sm">
-              <div className="flex justify-between gap-8">
+
+            {/* Right side: Cost Breakdown */}
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Solar ({solarCapacity} kWp)</span>
                 <span>R{solarCost.toLocaleString()}</span>
               </div>
               {includesBattery && (
-                <div className="flex justify-between gap-8">
+                <div className="flex justify-between gap-4">
                   <span className="text-muted-foreground">Battery ({batteryCapacity} kWh)</span>
                   <span>R{batteryCost.toLocaleString()}</span>
                 </div>
               )}
-              <div className="flex justify-between gap-8 pt-1 border-t">
-                <span className="text-muted-foreground">Annual O&M ({effectiveOMPercentage.toFixed(2)}%)</span>
+              {additionalCosts > 0 && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Additional Costs</span>
+                  <span>R{additionalCosts.toLocaleString()}</span>
+                </div>
+              )}
+              {(professionalFees + projectManagementFees) > 0 && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Fees</span>
+                  <span>R{(professionalFees + projectManagementFees).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+              )}
+              {contingency > 0 && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Contingency</span>
+                  <span>R{contingency.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+              )}
+              <div className="flex justify-between gap-4 pt-2 border-t">
+                <span className="text-muted-foreground">Annual O&M (Year 1)</span>
                 <span>R{totalMaintenancePerYear.toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">{projectYears}-Year O&M (@ {cpi}% CPI)</span>
+                <span className="font-medium">R{lifetimeOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
               </div>
             </div>
           </div>

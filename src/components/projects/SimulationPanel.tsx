@@ -267,6 +267,19 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     }
   }, [inverterConfig.inverterSize, inverterConfig.inverterCount]);
 
+  // Sync CPI from systemCosts to advancedConfig for O&M escalation
+  useEffect(() => {
+    if (systemCosts.cpi !== advancedConfig.financial.inflationRate) {
+      setAdvancedConfig(prev => ({
+        ...prev,
+        financial: {
+          ...prev.financial,
+          inflationRate: systemCosts.cpi ?? 6.0,
+        }
+      }));
+    }
+  }, [systemCosts.cpi]);
+
   // Solcast forecast hook
   const { data: solcastData, isLoading: solcastLoading, error: solcastError, fetchForecast } = useSolcastForecast();
   
@@ -1422,22 +1435,31 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           }
           // Load system costs if present
           if (config.systemCosts) {
-            // Handle legacy data that may have old maintenancePercentage field
-            const legacyCosts = config.systemCosts as any;
+            // Handle legacy data that may have old maintenancePercentage field or missing new fields
+            const savedCosts = config.systemCosts as any;
             onSystemCostsChange({
-              solarCostPerKwp: config.systemCosts.solarCostPerKwp,
-              batteryCostPerKwh: config.systemCosts.batteryCostPerKwh,
-              solarMaintenancePercentage: config.systemCosts.solarMaintenancePercentage ?? legacyCosts.maintenancePercentage ?? 3.5,
-              batteryMaintenancePercentage: config.systemCosts.batteryMaintenancePercentage ?? 1.5,
-              maintenancePerYear: config.systemCosts.maintenancePerYear ?? 0,
+              solarCostPerKwp: savedCosts.solarCostPerKwp,
+              batteryCostPerKwh: savedCosts.batteryCostPerKwh,
+              solarMaintenancePercentage: savedCosts.solarMaintenancePercentage ?? savedCosts.maintenancePercentage ?? 3.5,
+              batteryMaintenancePercentage: savedCosts.batteryMaintenancePercentage ?? 1.5,
+              maintenancePerYear: savedCosts.maintenancePerYear ?? 0,
+              // Additional Fixed Costs
+              healthAndSafetyCost: savedCosts.healthAndSafetyCost ?? 0,
+              waterPointsCost: savedCosts.waterPointsCost ?? 0,
+              cctvCost: savedCosts.cctvCost ?? 0,
+              mvSwitchGearCost: savedCosts.mvSwitchGearCost ?? 0,
+              // Percentage-based Fees
+              professionalFeesPercent: savedCosts.professionalFeesPercent ?? 0,
+              projectManagementPercent: savedCosts.projectManagementPercent ?? 0,
+              contingencyPercent: savedCosts.contingencyPercent ?? 0,
               // Financial Return Parameters
-              costOfCapital: config.systemCosts.costOfCapital ?? 9.0,
-              cpi: config.systemCosts.cpi ?? 6.0,
-              electricityInflation: config.systemCosts.electricityInflation ?? 10.0,
-              projectDurationYears: config.systemCosts.projectDurationYears ?? 20,
-              lcoeDiscountRate: config.systemCosts.lcoeDiscountRate ?? 9.0,
-              mirrFinanceRate: config.systemCosts.mirrFinanceRate ?? 9.0,
-              mirrReinvestmentRate: config.systemCosts.mirrReinvestmentRate ?? 10.0,
+              costOfCapital: savedCosts.costOfCapital ?? 9.0,
+              cpi: savedCosts.cpi ?? 6.0,
+              electricityInflation: savedCosts.electricityInflation ?? 10.0,
+              projectDurationYears: savedCosts.projectDurationYears ?? 20,
+              lcoeDiscountRate: savedCosts.lcoeDiscountRate ?? 9.0,
+              mirrFinanceRate: savedCosts.mirrFinanceRate ?? 9.0,
+              mirrReinvestmentRate: savedCosts.mirrReinvestmentRate ?? 10.0,
             });
           }
           // Track which simulation was loaded for UI feedback
