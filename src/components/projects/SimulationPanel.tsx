@@ -1102,60 +1102,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           </CardContent>
         </Card>
 
-        {/* Battery Storage - in the same row as 3rd column */}
-        {includesBattery && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Battery className="h-4 w-4" />
-                Battery Storage
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <Label className="text-xs">Capacity</Label>
-                  <span className="text-xs text-muted-foreground">{batteryCapacity} kWh</span>
-                </div>
-                <Slider
-                  value={[batteryCapacity]}
-                  onValueChange={([v]) => setBatteryCapacity(v)}
-                  min={0}
-                  max={200}
-                  step={10}
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <Label className="text-xs">Power</Label>
-                  <span className="text-xs text-muted-foreground">{batteryPower} kW</span>
-                </div>
-                <Slider
-                  value={[batteryPower]}
-                  onValueChange={([v]) => setBatteryPower(v)}
-                  min={5}
-                  max={100}
-                  step={5}
-                />
-              </div>
-              {/* Battery utilization (tariff-independent) */}
-              <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>Daily cycles</span>
-                  <span className="text-foreground">{energyResults.batteryCycles.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Energy throughput</span>
-                  <span className="text-foreground">{energyResults.totalBatteryDischarge.toFixed(0)} kWh</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Financial Return Outputs - only show if tariff is selected */}
-      <div className="grid gap-6 md:grid-cols-2">
+        {/* Financial Return Outputs - 3rd column, always visible */}
         {hasFinancialData ? (
           <Card>
             <CardContent className="p-0">
@@ -1244,6 +1191,59 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           </Card>
         )}
       </div>
+
+      {/* Battery Storage - separate row when enabled */}
+      {includesBattery && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Battery className="h-4 w-4" />
+              Battery Storage
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <Label className="text-xs">Capacity</Label>
+                  <span className="text-xs text-muted-foreground">{batteryCapacity} kWh</span>
+                </div>
+                <Slider
+                  value={[batteryCapacity]}
+                  onValueChange={([v]) => setBatteryCapacity(v)}
+                  min={0}
+                  max={200}
+                  step={10}
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <Label className="text-xs">Power</Label>
+                  <span className="text-xs text-muted-foreground">{batteryPower} kW</span>
+                </div>
+                <Slider
+                  value={[batteryPower]}
+                  onValueChange={([v]) => setBatteryPower(v)}
+                  min={5}
+                  max={100}
+                  step={5}
+                />
+              </div>
+            </div>
+            {/* Battery utilization (tariff-independent) */}
+            <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
+              <div className="flex justify-between">
+                <span>Daily cycles</span>
+                <span className="text-foreground">{energyResults.batteryCycles.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Energy throughput</span>
+                <span className="text-foreground">{energyResults.totalBatteryDischarge.toFixed(0)} kWh</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Energy Results Summary (always visible - tariff-independent) */}
       <div className="grid gap-4 md:grid-cols-5">
