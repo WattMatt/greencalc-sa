@@ -1298,7 +1298,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   <div className="grid grid-cols-2 hover:bg-muted/50">
                     <div className="px-3 py-1.5 text-muted-foreground">ZAR / kWh (Incl. 3-Yr O&M)</div>
                     <div className="px-3 py-1.5 text-right font-medium">
-                      {((financialResults.systemCost + threeYearOM) / (annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365)).toFixed(2)}
+                      {((financialResults.systemCost + threeYearOM) / ((annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365) * reductionFactor)).toFixed(2)}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 hover:bg-muted/50">
