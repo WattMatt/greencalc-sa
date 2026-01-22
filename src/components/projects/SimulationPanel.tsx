@@ -1340,7 +1340,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   <div className="grid grid-cols-2 hover:bg-muted/50">
                     <div className="px-3 py-1.5 text-muted-foreground">Payback Period</div>
                     <div className="px-3 py-1.5 text-right font-medium">
-                      {financialResults.paybackYears.toFixed(2)}
+                      {(advancedResults?.sensitivityResults?.expected.payback ?? financialResults.paybackYears).toFixed(2)} yrs
                     </div>
                   </div>
                   <div className="grid grid-cols-2 hover:bg-muted/50">
