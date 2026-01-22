@@ -381,337 +381,234 @@ export function SystemCostsManager({
         </CardContent>
       </Card>
 
-      {/* Detailed Cost Inputs */}
+      {/* 2x2 Grid Layout */}
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Solar Costs */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Sun className="h-4 w-4 text-amber-500" />
-              Solar PV Costs
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Label className="text-xs">Cost per kWp Installed</Label>
-                {isEditingSolarCost ? (
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-muted-foreground">R</span>
-                    <Input
-                      ref={solarCostInputRef}
-                      type="number"
-                      value={solarCostEditValue}
-                      onChange={(e) => setSolarCostEditValue(e.target.value)}
-                      onBlur={handleSolarCostBlur}
-                      onKeyDown={handleSolarCostKeyDown}
-                      className="h-6 w-20 text-xs text-right px-2"
-                      min={0}
-                      step={100}
-                    />
-                  </div>
-                ) : (
-                  <span 
-                    className="text-xs text-muted-foreground cursor-pointer hover:underline hover:text-foreground"
-                    onClick={handleSolarCostClick}
-                    title="Click to edit"
-                  >
-                    R{costs.solarCostPerKwp.toLocaleString()}
-                  </span>
-                )}
-              </div>
-              <Slider
-                value={[costs.solarCostPerKwp]}
-                onValueChange={([v]) => onChange({ ...costs, solarCostPerKwp: v })}
-                min={5000}
-                max={20000}
-                step={500}
-              />
-              <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>R5,000</span>
-                <span>R20,000</span>
-              </div>
-            </div>
-            <div className="pt-2 border-t">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Solar total ({solarCapacity} kWp)</span>
-                <span className="font-medium">R{solarCost.toLocaleString()}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Battery Costs - Only shown if system includes battery */}
-        {includesBattery && (
+        {/* LEFT COLUMN */}
+        <div className="space-y-6">
+          {/* Equipment Costs Card (Solar + Battery) */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Battery className="h-4 w-4 text-green-500" />
-                Battery Storage Costs
+                <Sun className="h-4 w-4 text-amber-500" />
+                Equipment Costs
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label className="text-xs">Cost per kWh Capacity</Label>
-                  {isEditingBatteryCost ? (
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-muted-foreground">R</span>
-                      <Input
-                        ref={batteryCostInputRef}
-                        type="number"
-                        value={batteryCostEditValue}
-                        onChange={(e) => setBatteryCostEditValue(e.target.value)}
-                        onBlur={handleBatteryCostBlur}
-                        onKeyDown={handleBatteryCostKeyDown}
-                        className="h-6 w-20 text-xs text-right px-2"
-                        min={0}
-                        step={100}
-                      />
-                    </div>
-                  ) : (
-                    <span 
-                      className="text-xs text-muted-foreground cursor-pointer hover:underline hover:text-foreground"
-                      onClick={handleBatteryCostClick}
-                      title="Click to edit"
-                    >
-                      R{costs.batteryCostPerKwh.toLocaleString()}
-                    </span>
-                  )}
+            <CardContent className="space-y-6">
+              {/* Solar PV Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Sun className="h-4 w-4 text-amber-500" />
+                  <span className="text-sm font-medium">Solar PV</span>
                 </div>
-                <Slider
-                  value={[costs.batteryCostPerKwh]}
-                  onValueChange={([v]) => onChange({ ...costs, batteryCostPerKwh: v })}
-                  min={3000}
-                  max={15000}
-                  step={500}
-                />
-                <div className="flex justify-between text-[10px] text-muted-foreground">
-                  <span>R3,000</span>
-                  <span>R15,000</span>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-xs">Cost per kWp Installed</Label>
+                    {isEditingSolarCost ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground">R</span>
+                        <Input
+                          ref={solarCostInputRef}
+                          type="number"
+                          value={solarCostEditValue}
+                          onChange={(e) => setSolarCostEditValue(e.target.value)}
+                          onBlur={handleSolarCostBlur}
+                          onKeyDown={handleSolarCostKeyDown}
+                          className="h-6 w-20 text-xs text-right px-2"
+                          min={0}
+                          step={100}
+                        />
+                      </div>
+                    ) : (
+                      <span 
+                        className="text-xs text-muted-foreground cursor-pointer hover:underline hover:text-foreground"
+                        onClick={handleSolarCostClick}
+                        title="Click to edit"
+                      >
+                        R{costs.solarCostPerKwp.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <Slider
+                    value={[costs.solarCostPerKwp]}
+                    onValueChange={([v]) => onChange({ ...costs, solarCostPerKwp: v })}
+                    min={5000}
+                    max={20000}
+                    step={500}
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>R5,000</span>
+                    <span>R20,000</span>
+                  </div>
+                </div>
+                <div className="pt-2 border-t">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Solar total ({solarCapacity} kWp)</span>
+                    <span className="font-medium">R{solarCost.toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
-              <div className="pt-2 border-t">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Battery total ({batteryCapacity} kWh)</span>
-                  <span className="font-medium">R{batteryCost.toLocaleString()}</span>
+
+              {/* Battery Storage Section (conditional) */}
+              {includesBattery && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Battery className="h-4 w-4 text-green-500" />
+                      <span className="text-sm font-medium">Battery Storage</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label className="text-xs">Cost per kWh Capacity</Label>
+                        {isEditingBatteryCost ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-muted-foreground">R</span>
+                            <Input
+                              ref={batteryCostInputRef}
+                              type="number"
+                              value={batteryCostEditValue}
+                              onChange={(e) => setBatteryCostEditValue(e.target.value)}
+                              onBlur={handleBatteryCostBlur}
+                              onKeyDown={handleBatteryCostKeyDown}
+                              className="h-6 w-20 text-xs text-right px-2"
+                              min={0}
+                              step={100}
+                            />
+                          </div>
+                        ) : (
+                          <span 
+                            className="text-xs text-muted-foreground cursor-pointer hover:underline hover:text-foreground"
+                            onClick={handleBatteryCostClick}
+                            title="Click to edit"
+                          >
+                            R{costs.batteryCostPerKwh.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                      <Slider
+                        value={[costs.batteryCostPerKwh]}
+                        onValueChange={([v]) => onChange({ ...costs, batteryCostPerKwh: v })}
+                        min={3000}
+                        max={15000}
+                        step={500}
+                      />
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>R3,000</span>
+                        <span>R15,000</span>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Battery total ({batteryCapacity} kWh)</span>
+                        <span className="font-medium">R{batteryCost.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Additional Project Costs Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-primary" />
+                Additional Project Costs
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Fixed costs for project infrastructure and services
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3">
+                {/* Health & Safety Consultant */}
+                <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                  <Label className="text-sm">Health & Safety Consultant</Label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">R</span>
+                    <Input
+                      type="number"
+                      value={costs.healthAndSafetyCost ?? 0}
+                      onChange={(e) => onChange({ ...costs, healthAndSafetyCost: parseFloat(e.target.value) || 0 })}
+                      className="h-8 w-28 text-sm text-right px-2"
+                      min={0}
+                      step={1000}
+                    />
+                  </div>
+                </div>
+
+                {/* Water Points */}
+                <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                  <Label className="text-sm">Water Points</Label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">R</span>
+                    <Input
+                      type="number"
+                      value={costs.waterPointsCost ?? 0}
+                      onChange={(e) => onChange({ ...costs, waterPointsCost: parseFloat(e.target.value) || 0 })}
+                      className="h-8 w-28 text-sm text-right px-2"
+                      min={0}
+                      step={1000}
+                    />
+                  </div>
+                </div>
+
+                {/* CCTV */}
+                <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                  <Label className="text-sm">CCTV</Label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">R</span>
+                    <Input
+                      type="number"
+                      value={costs.cctvCost ?? 0}
+                      onChange={(e) => onChange({ ...costs, cctvCost: parseFloat(e.target.value) || 0 })}
+                      className="h-8 w-28 text-sm text-right px-2"
+                      min={0}
+                      step={1000}
+                    />
+                  </div>
+                </div>
+
+                {/* MV Switch Gear */}
+                <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                  <Label className="text-sm">MV Switch Gear</Label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">R</span>
+                    <Input
+                      type="number"
+                      value={costs.mvSwitchGearCost ?? 0}
+                      onChange={(e) => onChange({ ...costs, mvSwitchGearCost: parseFloat(e.target.value) || 0 })}
+                      className="h-8 w-28 text-sm text-right px-2"
+                      min={0}
+                      step={10000}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Costs Subtotal */}
+              <div className="pt-3 border-t">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Additional Costs Subtotal</span>
+                  <span className="font-bold">R{additionalCosts.toLocaleString()}</span>
                 </div>
               </div>
             </CardContent>
           </Card>
-        )}
+        </div>
 
-        {/* Additional Project Costs */}
-        <Card className="md:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-primary" />
-              Additional Project Costs
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Fixed costs for project infrastructure and services
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* Health & Safety Consultant */}
-              <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                <Label className="text-sm">Health & Safety Consultant</Label>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-muted-foreground">R</span>
-                  <Input
-                    type="number"
-                    value={costs.healthAndSafetyCost ?? 0}
-                    onChange={(e) => onChange({ ...costs, healthAndSafetyCost: parseFloat(e.target.value) || 0 })}
-                    className="h-8 w-28 text-sm text-right px-2"
-                    min={0}
-                    step={1000}
-                  />
-                </div>
-              </div>
-
-              {/* Water Points */}
-              <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                <Label className="text-sm">Water Points</Label>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-muted-foreground">R</span>
-                  <Input
-                    type="number"
-                    value={costs.waterPointsCost ?? 0}
-                    onChange={(e) => onChange({ ...costs, waterPointsCost: parseFloat(e.target.value) || 0 })}
-                    className="h-8 w-28 text-sm text-right px-2"
-                    min={0}
-                    step={1000}
-                  />
-                </div>
-              </div>
-
-              {/* CCTV */}
-              <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                <Label className="text-sm">CCTV</Label>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-muted-foreground">R</span>
-                  <Input
-                    type="number"
-                    value={costs.cctvCost ?? 0}
-                    onChange={(e) => onChange({ ...costs, cctvCost: parseFloat(e.target.value) || 0 })}
-                    className="h-8 w-28 text-sm text-right px-2"
-                    min={0}
-                    step={1000}
-                  />
-                </div>
-              </div>
-
-              {/* MV Switch Gear */}
-              <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                <Label className="text-sm">MV Switch Gear</Label>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-muted-foreground">R</span>
-                  <Input
-                    type="number"
-                    value={costs.mvSwitchGearCost ?? 0}
-                    onChange={(e) => onChange({ ...costs, mvSwitchGearCost: parseFloat(e.target.value) || 0 })}
-                    className="h-8 w-28 text-sm text-right px-2"
-                    min={0}
-                    step={10000}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Additional Costs Subtotal */}
-            <div className="pt-3 border-t">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Additional Costs Subtotal</span>
-                <span className="font-bold">R{additionalCosts.toLocaleString()}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Fees & Contingency */}
-        <Card className="md:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Percent className="h-4 w-4 text-primary" />
-              Fees & Contingency
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Percentage-based fees applied to the project subtotal
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-6 md:grid-cols-3">
-              {/* Professional Fees */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label className="text-xs">Professional Fees</Label>
-                  <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
-                      value={costs.professionalFeesPercent ?? 0}
-                      onChange={(e) => onChange({ ...costs, professionalFeesPercent: parseFloat(e.target.value) || 0 })}
-                      className="h-6 w-14 text-xs text-right px-2"
-                      min={0}
-                      max={15}
-                      step={0.5}
-                    />
-                    <span className="text-xs text-muted-foreground">%</span>
-                  </div>
-                </div>
-                <Slider
-                  value={[costs.professionalFeesPercent ?? 0]}
-                  onValueChange={([v]) => onChange({ ...costs, professionalFeesPercent: v })}
-                  min={0}
-                  max={15}
-                  step={0.5}
-                />
-                <div className="text-xs text-muted-foreground text-right">
-                  R{professionalFees.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </div>
-              </div>
-
-              {/* Project Management */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label className="text-xs">Project Management</Label>
-                  <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
-                      value={costs.projectManagementPercent ?? 0}
-                      onChange={(e) => onChange({ ...costs, projectManagementPercent: parseFloat(e.target.value) || 0 })}
-                      className="h-6 w-14 text-xs text-right px-2"
-                      min={0}
-                      max={15}
-                      step={0.5}
-                    />
-                    <span className="text-xs text-muted-foreground">%</span>
-                  </div>
-                </div>
-                <Slider
-                  value={[costs.projectManagementPercent ?? 0]}
-                  onValueChange={([v]) => onChange({ ...costs, projectManagementPercent: v })}
-                  min={0}
-                  max={15}
-                  step={0.5}
-                />
-                <div className="text-xs text-muted-foreground text-right">
-                  R{projectManagementFees.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </div>
-              </div>
-
-              {/* Contingency */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label className="text-xs">Contingency</Label>
-                  <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
-                      value={costs.contingencyPercent ?? 0}
-                      onChange={(e) => onChange({ ...costs, contingencyPercent: parseFloat(e.target.value) || 0 })}
-                      className="h-6 w-14 text-xs text-right px-2"
-                      min={0}
-                      max={15}
-                      step={0.5}
-                    />
-                    <span className="text-xs text-muted-foreground">%</span>
-                  </div>
-                </div>
-                <Slider
-                  value={[costs.contingencyPercent ?? 0]}
-                  onValueChange={([v]) => onChange({ ...costs, contingencyPercent: v })}
-                  min={0}
-                  max={15}
-                  step={0.5}
-                />
-                <div className="text-xs text-muted-foreground text-right">
-                  R{contingency.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </div>
-              </div>
-            </div>
-
-            {/* Fees Summary */}
-            <div className="pt-3 border-t">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Total Fees & Contingency</span>
-                <span className="font-medium">
-                  R{(professionalFees + projectManagementFees + contingency).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Annual Maintenance - Split Solar & Battery O&M */}
-        <Card className={includesBattery ? "md:col-span-2" : ""}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Calculator className="h-4 w-4 text-primary" />
-              Annual Maintenance (O&M)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className={`grid gap-6 ${includesBattery ? "md:grid-cols-2" : ""}`}>
+        {/* RIGHT COLUMN */}
+        <div className="space-y-6">
+          {/* Annual Maintenance (O&M) Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Calculator className="h-4 w-4 text-primary" />
+                Annual Maintenance (O&M)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
               {/* Solar PV O&M */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 mb-2">
@@ -762,76 +659,196 @@ export function SystemCostsManager({
 
               {/* Battery O&M - Only shown if system includes battery */}
               {includesBattery && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Battery className="h-4 w-4 text-green-500" />
-                    <span className="text-sm font-medium">Battery O&M</span>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <Label className="text-xs">Percentage of Battery Cost</Label>
-                      <div className="flex items-center gap-1">
-                        <Input
-                          type="number"
-                          value={batteryPercentageInput}
-                          onChange={(e) => setBatteryPercentageInput(e.target.value)}
-                          onBlur={handleBatteryPercentageInputBlur}
-                          onKeyDown={handleBatteryPercentageKeyDown}
-                          className="h-6 w-14 text-xs text-right px-2"
-                          min={0}
-                          max={10}
-                          step={0.1}
-                        />
-                        <span className="text-xs text-muted-foreground">%</span>
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Battery className="h-4 w-4 text-green-500" />
+                      <span className="text-sm font-medium">Battery O&M</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label className="text-xs">Percentage of Battery Cost</Label>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            value={batteryPercentageInput}
+                            onChange={(e) => setBatteryPercentageInput(e.target.value)}
+                            onBlur={handleBatteryPercentageInputBlur}
+                            onKeyDown={handleBatteryPercentageKeyDown}
+                            className="h-6 w-14 text-xs text-right px-2"
+                            min={0}
+                            max={10}
+                            step={0.1}
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                      <Slider
+                        value={[costs.batteryMaintenancePercentage]}
+                        onValueChange={([v]) => onChange({ ...costs, batteryMaintenancePercentage: v })}
+                        min={0}
+                        max={10}
+                        step={0.1}
+                      />
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>0%</span>
+                        <span>5%</span>
+                        <span>10%</span>
                       </div>
                     </div>
-                    <Slider
-                      value={[costs.batteryMaintenancePercentage]}
-                      onValueChange={([v]) => onChange({ ...costs, batteryMaintenancePercentage: v })}
-                      min={0}
-                      max={10}
-                      step={0.1}
-                    />
-                    <div className="flex justify-between text-[10px] text-muted-foreground">
-                      <span>0%</span>
-                      <span>5%</span>
-                      <span>10%</span>
+                    <div className="pt-2 px-3 py-2 bg-muted/30 rounded-md">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">Annual Cost</span>
+                        <span className="font-medium">R{batteryMaintenance.toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {costs.batteryMaintenancePercentage}% of R{batteryCost.toLocaleString()}
+                      </p>
                     </div>
                   </div>
-                  <div className="pt-2 px-3 py-2 bg-muted/30 rounded-md">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">Annual Cost</span>
-                      <span className="font-medium">R{batteryMaintenance.toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr</span>
+                </>
+              )}
+              
+              {/* Total O&M Summary */}
+              <div className="pt-4 border-t bg-primary/5 -mx-6 px-6 -mb-6 pb-4 rounded-b-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium">Total Annual O&M</span>
+                  <span className="font-bold text-lg">
+                    R{totalMaintenancePerYear.toLocaleString(undefined, { maximumFractionDigits: 0 })}/year
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">Effective O&M Rate</span>
+                  <span className="text-sm font-medium text-primary">
+                    {effectiveOMPercentage.toFixed(2)}% of total project
+                  </span>
+                </div>
+                <div className="flex justify-between items-center mt-2 pt-2 border-t border-primary/10">
+                  <span className="text-xs text-muted-foreground">{projectYears}-Year O&M (@ {cpi}% CPI)</span>
+                  <span className="text-sm font-bold text-primary">
+                    R{lifetimeOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Fees & Contingency Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Percent className="h-4 w-4 text-primary" />
+                Fees & Contingency
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Percentage-based fees applied to the project subtotal
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-4">
+                {/* Professional Fees */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-xs">Professional Fees</Label>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        value={costs.professionalFeesPercent ?? 0}
+                        onChange={(e) => onChange({ ...costs, professionalFeesPercent: parseFloat(e.target.value) || 0 })}
+                        className="h-6 w-14 text-xs text-right px-2"
+                        min={0}
+                        max={15}
+                        step={0.5}
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      {costs.batteryMaintenancePercentage}% of R{batteryCost.toLocaleString()}
-                    </p>
+                  </div>
+                  <Slider
+                    value={[costs.professionalFeesPercent ?? 0]}
+                    onValueChange={([v]) => onChange({ ...costs, professionalFeesPercent: v })}
+                    min={0}
+                    max={15}
+                    step={0.5}
+                  />
+                  <div className="text-xs text-muted-foreground text-right">
+                    R{professionalFees.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                   </div>
                 </div>
-              )}
-            </div>
-            
-            {/* Total O&M Summary */}
-            <div className="pt-4 border-t bg-primary/5 -mx-6 px-6 -mb-6 pb-4 rounded-b-lg">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">Total Annual O&M</span>
-                <span className="font-bold text-lg">
-                  R{totalMaintenancePerYear.toLocaleString(undefined, { maximumFractionDigits: 0 })}/year
-                </span>
+
+                {/* Project Management */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-xs">Project Management</Label>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        value={costs.projectManagementPercent ?? 0}
+                        onChange={(e) => onChange({ ...costs, projectManagementPercent: parseFloat(e.target.value) || 0 })}
+                        className="h-6 w-14 text-xs text-right px-2"
+                        min={0}
+                        max={15}
+                        step={0.5}
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                  <Slider
+                    value={[costs.projectManagementPercent ?? 0]}
+                    onValueChange={([v]) => onChange({ ...costs, projectManagementPercent: v })}
+                    min={0}
+                    max={15}
+                    step={0.5}
+                  />
+                  <div className="text-xs text-muted-foreground text-right">
+                    R{projectManagementFees.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </div>
+                </div>
+
+                {/* Contingency */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-xs">Contingency</Label>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        value={costs.contingencyPercent ?? 0}
+                        onChange={(e) => onChange({ ...costs, contingencyPercent: parseFloat(e.target.value) || 0 })}
+                        className="h-6 w-14 text-xs text-right px-2"
+                        min={0}
+                        max={15}
+                        step={0.5}
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                  <Slider
+                    value={[costs.contingencyPercent ?? 0]}
+                    onValueChange={([v]) => onChange({ ...costs, contingencyPercent: v })}
+                    min={0}
+                    max={15}
+                    step={0.5}
+                  />
+                  <div className="text-xs text-muted-foreground text-right">
+                    R{contingency.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-muted-foreground">Effective O&M Rate</span>
-                <span className="text-sm font-medium text-primary">
-                  {effectiveOMPercentage.toFixed(2)}% of total project
-                </span>
+
+              {/* Fees Summary */}
+              <div className="pt-3 border-t">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Total Fees & Contingency</span>
+                  <span className="font-medium">
+                    R{(professionalFees + projectManagementFees + contingency).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-2">
-                Formula: (Solar × {costs.solarMaintenancePercentage}%){includesBattery ? ` + (Battery × ${costs.batteryMaintenancePercentage}%)` : ""}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
+
 
       {/* Financial Return Inputs */}
       <Card>
