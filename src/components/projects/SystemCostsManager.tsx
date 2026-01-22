@@ -664,13 +664,13 @@ export function SystemCostsManager({
                     <span>10%</span>
                   </div>
                 </div>
-                <div className="pt-2 px-3 py-2 bg-muted/30 rounded-md">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">3-Year Cost (@ {cpi}% CPI)</span>
-                    <span className="font-medium">R{threeYearSolarOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                <div className="pt-3 border-t">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">3-Year O&M Cost</span>
+                    <span className="font-bold">R{threeYearSolarOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    {costs.solarMaintenancePercentage}% of R{solarCost.toLocaleString()} (Year 1: R{solarMaintenance.toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                  <p className="text-xs text-muted-foreground mt-1">
+                    @ {cpi}% CPI escalation (Year 1: R{solarMaintenance.toLocaleString(undefined, { maximumFractionDigits: 0 })})
                   </p>
                 </div>
               </div>
@@ -715,13 +715,13 @@ export function SystemCostsManager({
                         <span>10%</span>
                       </div>
                     </div>
-                    <div className="pt-2 px-3 py-2 bg-muted/30 rounded-md">
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground">3-Year Cost (@ {cpi}% CPI)</span>
-                        <span className="font-medium">R{threeYearBatteryOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    <div className="pt-3 border-t">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">3-Year Battery O&M</span>
+                        <span className="font-bold">R{threeYearBatteryOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        {costs.batteryMaintenancePercentage}% of R{batteryCost.toLocaleString()} (Year 1: R{batteryMaintenance.toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                      <p className="text-xs text-muted-foreground mt-1">
+                        @ {cpi}% CPI escalation (Year 1: R{batteryMaintenance.toLocaleString(undefined, { maximumFractionDigits: 0 })})
                       </p>
                     </div>
                   </div>
