@@ -50,7 +50,10 @@ export function getSeasonalLoadMultiplier(
 
 /**
  * Calculate panel efficiency after degradation for a given year
- * Uses year-by-year rates if in 'yearly' mode, otherwise applies simple rate
+ * Degradation is applied at END of year, meaning:
+ * - Year 1: Full production (100% efficiency, no degradation yet)
+ * - Year 2: Apply Year 1's degradation rate
+ * - Year N: Apply cumulative degradation from Years 1 to N-1
  */
 export function getPanelEfficiency(
   year: number,
@@ -58,25 +61,26 @@ export function getPanelEfficiency(
 ): number {
   if (!config.enabled) return 100;
   
+  // Year 1 has no degradation (degradation happens at end of year)
+  if (year <= 1) return 100;
+  
   let totalDegradation = 0;
   
   // Check if using new yearly mode
   if (config.panelDegradationMode === 'yearly' && config.panelYearlyRates?.length > 0) {
-    // Sum degradation from Year 1 to current year
-    for (let y = 0; y < year && y < config.panelYearlyRates.length; y++) {
+    // Sum degradation from Year 1 to Year (N-1) - applied at end of each year
+    // Year 2 gets Year 1's degradation, Year 3 gets Year 1+2's degradation, etc.
+    for (let y = 0; y < year - 1 && y < config.panelYearlyRates.length; y++) {
       totalDegradation += config.panelYearlyRates[y];
     }
   } else if (config.panelDegradationMode === 'simple' && config.panelSimpleRate !== undefined) {
-    // Simple mode: apply same rate every year
-    totalDegradation = year * config.panelSimpleRate;
+    // Simple mode: apply same rate every year (N-1 years of degradation)
+    totalDegradation = (year - 1) * config.panelSimpleRate;
   } else {
     // Legacy fallback for backwards compatibility
-    if (year === 1) {
-      return 100 - (config.panelFirstYearDegradation ?? 2.0);
-    }
     const firstYearDeg = config.panelFirstYearDegradation ?? 2.0;
-    const subsequentDeg = (year - 1) * (config.panelDegradationRate ?? 0.5);
-    totalDegradation = firstYearDeg + subsequentDeg;
+    const subsequentDeg = (year - 2) * (config.panelDegradationRate ?? 0.5);
+    totalDegradation = firstYearDeg + Math.max(0, subsequentDeg);
   }
   
   return Math.max(0, 100 - totalDegradation);
@@ -84,7 +88,7 @@ export function getPanelEfficiency(
 
 /**
  * Calculate battery capacity remaining after degradation
- * Uses year-by-year rates if in 'yearly' mode, otherwise applies simple rate
+ * Degradation is applied at END of year (same logic as panels)
  */
 export function getBatteryCapacityRemaining(
   year: number,
@@ -92,20 +96,23 @@ export function getBatteryCapacityRemaining(
 ): number {
   if (!config.enabled) return 100;
   
+  // Year 1 has no degradation
+  if (year <= 1) return 100;
+  
   let totalDegradation = 0;
   
   // Check if using new yearly mode
   if (config.batteryDegradationMode === 'yearly' && config.batteryYearlyRates?.length > 0) {
-    // Sum degradation from Year 1 to current year
-    for (let y = 0; y < year && y < config.batteryYearlyRates.length; y++) {
+    // Sum degradation from Year 1 to Year (N-1)
+    for (let y = 0; y < year - 1 && y < config.batteryYearlyRates.length; y++) {
       totalDegradation += config.batteryYearlyRates[y];
     }
   } else if (config.batteryDegradationMode === 'simple' && config.batterySimpleRate !== undefined) {
-    // Simple mode: apply same rate every year
-    totalDegradation = year * config.batterySimpleRate;
+    // Simple mode: apply same rate every year (N-1 years)
+    totalDegradation = (year - 1) * config.batterySimpleRate;
   } else {
     // Legacy fallback
-    totalDegradation = year * (config.batteryDegradationRate ?? 3.0);
+    totalDegradation = (year - 1) * (config.batteryDegradationRate ?? 3.0);
   }
   
   const remaining = 100 - totalDegradation;
