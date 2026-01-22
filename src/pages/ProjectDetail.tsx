@@ -664,6 +664,8 @@ export default function ProjectDetail() {
     waterPointsCost: DEFAULT_SYSTEM_COSTS.waterPointsCost ?? 0,
     cctvCost: DEFAULT_SYSTEM_COSTS.cctvCost ?? 0,
     mvSwitchGearCost: DEFAULT_SYSTEM_COSTS.mvSwitchGearCost ?? 0,
+    // Insurance
+    insuranceCostPerYear: DEFAULT_SYSTEM_COSTS.insuranceCostPerYear ?? 0,
     // Percentage-based Fees
     professionalFeesPercent: DEFAULT_SYSTEM_COSTS.professionalFeesPercent ?? 0,
     projectManagementPercent: DEFAULT_SYSTEM_COSTS.projectManagementPercent ?? 0,
@@ -714,6 +716,8 @@ export default function ProjectDetail() {
           waterPointsCost: savedCosts.waterPointsCost ?? DEFAULT_SYSTEM_COSTS.waterPointsCost ?? 0,
           cctvCost: savedCosts.cctvCost ?? DEFAULT_SYSTEM_COSTS.cctvCost ?? 0,
           mvSwitchGearCost: savedCosts.mvSwitchGearCost ?? DEFAULT_SYSTEM_COSTS.mvSwitchGearCost ?? 0,
+          // Insurance
+          insuranceCostPerYear: savedCosts.insuranceCostPerYear ?? DEFAULT_SYSTEM_COSTS.insuranceCostPerYear ?? 0,
           // Percentage-based Fees
           professionalFeesPercent: savedCosts.professionalFeesPercent ?? DEFAULT_SYSTEM_COSTS.professionalFeesPercent ?? 0,
           projectManagementPercent: savedCosts.projectManagementPercent ?? DEFAULT_SYSTEM_COSTS.projectManagementPercent ?? 0,

@@ -55,6 +55,11 @@ export interface AdvancedFinancialConfig {
   // Sensitivity analysis
   sensitivityEnabled: boolean;
   sensitivityVariation: number; // % variation for best/worst cases (e.g., 20%)
+  
+  // Insurance costs (NEW: Income-based approach)
+  insuranceEnabled: boolean;
+  baseInsuranceCostR: number; // Year 1 insurance (e.g., R12,500)
+  insuranceEscalationRate: number; // % (typically same as CPI, 6%)
 }
 
 // ============= Grid Constraints =============
@@ -138,6 +143,10 @@ export const DEFAULT_FINANCIAL_CONFIG: AdvancedFinancialConfig = {
   projectLifetimeYears: 20,
   sensitivityEnabled: false,
   sensitivityVariation: 20,
+  // Insurance defaults (disabled by default)
+  insuranceEnabled: false,
+  baseInsuranceCostR: 0,
+  insuranceEscalationRate: 6.0, // Same as CPI
 };
 
 export const DEFAULT_GRID_CONSTRAINTS_CONFIG: GridConstraintsConfig = {
@@ -203,6 +212,9 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
         projectLifetimeYears: 20,
         sensitivityEnabled: true,
         sensitivityVariation: 25,
+        insuranceEnabled: false,
+        baseInsuranceCostR: 0,
+        insuranceEscalationRate: 6.5,
       },
       gridConstraints: {
         ...DEFAULT_GRID_CONSTRAINTS_CONFIG,
@@ -244,6 +256,9 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
         projectLifetimeYears: 30,
         sensitivityEnabled: true,
         sensitivityVariation: 15,
+        insuranceEnabled: false,
+        baseInsuranceCostR: 0,
+        insuranceEscalationRate: 4.5,
       },
       gridConstraints: {
         ...DEFAULT_GRID_CONSTRAINTS_CONFIG,
@@ -286,6 +301,9 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
         projectLifetimeYears: 20,
         sensitivityEnabled: true,
         sensitivityVariation: 20,
+        insuranceEnabled: false,
+        baseInsuranceCostR: 0,
+        insuranceEscalationRate: 5.5,
       },
       gridConstraints: {
         enabled: true,
@@ -337,14 +355,28 @@ export interface YearlyProjection {
   panelEfficiency: number; // %
   batteryCapacityRemaining: number; // %
   
-  // Financials
+  // Financials (legacy - kept for backwards compatibility)
   tariffRate: number; // R/kWh (escalated)
-  energySavings: number; // R
+  energySavings: number; // R (legacy, replaced by income approach)
   maintenanceCost: number; // R
   replacementCost: number; // R (if applicable)
   netCashFlow: number; // R
   cumulativeCashFlow: number; // R
   discountedCashFlow: number; // R (for NPV)
+  
+  // NEW: Income-based approach (Excel model alignment)
+  energyYield: number; // kWh (with degradation applied)
+  energyRateIndex: number; // Tariff escalation factor (1.0, 1.1, 1.21...)
+  energyIncomeR: number; // R = energyYield × baseRate × index
+  
+  demandSavingKva: number; // kVA reduction from solar
+  demandRateIndex: number; // Demand escalation factor
+  demandIncomeR: number; // R = kVA × R/kVA × 12 × index
+  
+  totalIncomeR: number; // energyIncome + demandIncome
+  
+  insuranceCostR: number; // Insurance with CPI escalation
+  totalCostR: number; // insurance + maintenance
 }
 
 export interface SensitivityResults {

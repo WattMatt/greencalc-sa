@@ -43,6 +43,9 @@ export interface SystemCosts {
   cctvCost?: number;                   // CCTV
   mvSwitchGearCost?: number;           // MV Switch Gear
   
+  // Insurance Costs (NEW: Income-based model alignment)
+  insuranceCostPerYear?: number;       // Annual insurance cost (R)
+  
   // Percentage-based Fees (% of project subtotal)
   professionalFeesPercent?: number;    // Professional Fees %
   projectManagementPercent?: number;   // Project Management Fees %
@@ -270,6 +273,9 @@ export const DEFAULT_SYSTEM_COSTS: SystemCosts = {
   waterPointsCost: 0,
   cctvCost: 0,
   mvSwitchGearCost: 0,
+  
+  // Insurance (default to 0)
+  insuranceCostPerYear: 0,
   
   // Percentage-based Fees (default to 0)
   professionalFeesPercent: 0,
