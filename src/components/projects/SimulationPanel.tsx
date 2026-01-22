@@ -1009,8 +1009,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       {/* Note: System Costs are now configured exclusively in the Costs tab */}
 
       {/* System Configuration */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Solar PV System - now includes Inverter Size & Module Config */}
+      <div className="grid gap-6 md:grid-cols-3">
+        {/* Solar PV System - includes capacity slider + inverter size & module config */}
         <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1024,12 +1024,39 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Inverter Size & Module Config */}
-            <InverterSizeModuleConfig
-              config={inverterConfig}
-              onChange={setInverterConfig}
-              onSolarCapacityChange={setSolarCapacity}
-            />
+            {/* Solar Capacity Slider */}
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <Label className="text-xs">Capacity</Label>
+                <span className={`text-xs ${solarExceedsLimit ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                  {solarCapacity} kWp
+                </span>
+              </div>
+              <Slider
+                value={[solarCapacity]}
+                onValueChange={([v]) => setSolarCapacity(v)}
+                min={10}
+                max={maxSolarKva ? Math.max(maxSolarKva * 1.5, 500) : 500}
+                step={10}
+                className={solarExceedsLimit ? "[&_[role=slider]]:border-destructive [&_[role=slider]]:bg-destructive" : ""}
+              />
+              {maxSolarKva && (
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>10 kWp</span>
+                  <span className="text-warning">70% limit: {maxSolarKva.toFixed(0)}</span>
+                  <span>{Math.round(maxSolarKva * 1.5)} kWp</span>
+                </div>
+              )}
+            </div>
+
+            {/* Inverter Size & Module Config - below the slider */}
+            <div className="pt-2 border-t">
+              <InverterSizeModuleConfig
+                config={inverterConfig}
+                onChange={setInverterConfig}
+                onSolarCapacityChange={setSolarCapacity}
+              />
+            </div>
             
             {/* Energy output estimate (tariff-independent) */}
             <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
@@ -1053,13 +1080,16 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           </CardContent>
         </Card>
 
-        {/* Inverter Configuration - sliders, metrics, quick select */}
+        {/* Inverter-Based Sizing - sliders, metrics, quick select */}
         <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Zap className="h-4 w-4" />
-              Inverter Configuration
+              Inverter-Based Sizing
             </CardTitle>
+            <CardDescription className="text-xs">
+              Size system based on inverter capacity and grouping
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <InverterSliderPanel
@@ -1071,11 +1101,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             />
           </CardContent>
         </Card>
-      </div>
 
-      {/* Battery Storage - separate row when enabled */}
-      {includesBattery && (
-        <div className="grid gap-6 md:grid-cols-2">
+        {/* Battery Storage - in the same row as 3rd column */}
+        {includesBattery && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1123,8 +1151,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               </div>
             </CardContent>
           </Card>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Financial Return Outputs - only show if tariff is selected */}
       <div className="grid gap-6 md:grid-cols-2">
