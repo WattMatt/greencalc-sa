@@ -466,12 +466,13 @@ function DegradationSection({
                       ))}
                     </div>
                   </ScrollArea>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-[10px] text-muted-foreground whitespace-nowrap">Set rate:</Label>
                     <Input
                       type="number"
                       value={panelApplyRate}
                       onChange={(e) => setPanelApplyRate(parseFloat(e.target.value) || 0.5)}
-                      className="w-14 h-6 text-[10px] text-center"
+                      className="w-20 h-6 text-[10px] text-center"
                       step={0.1}
                       min={0}
                       max={10}
@@ -480,10 +481,10 @@ function DegradationSection({
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      className="h-6 text-[10px] flex-1"
+                      className="h-6 text-[10px]"
                       onClick={applyPanelRateToAll}
                     >
-                      Apply to all years
+                      Apply to all
                     </Button>
                   </div>
                 </div>
@@ -593,10 +594,6 @@ function DegradationSection({
               <span className="text-xs text-muted-foreground">%</span>
             </div>
           )}
-          
-          <p className="text-[10px] text-muted-foreground">
-            Replacement costs are configured in the Costs tab
-          </p>
         </div>
       )}
     </div>

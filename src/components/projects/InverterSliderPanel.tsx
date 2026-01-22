@@ -1,6 +1,7 @@
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Tooltip,
   TooltipContent,
@@ -102,9 +103,20 @@ export function InverterSliderPanel({
               </Tooltip>
             </TooltipProvider>
           </Label>
-          <span className="text-lg font-semibold">
-            {config.dcAcRatio.toFixed(2)}
-          </span>
+          <Input
+            type="number"
+            value={config.dcAcRatio}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              if (!isNaN(val) && val >= 1.0 && val <= 1.5) {
+                onChange({ ...config, dcAcRatio: val });
+              }
+            }}
+            className="w-16 h-7 text-right text-lg font-semibold"
+            step={0.01}
+            min={1.0}
+            max={1.5}
+          />
         </div>
         <Slider
           value={[config.dcAcRatio]}
