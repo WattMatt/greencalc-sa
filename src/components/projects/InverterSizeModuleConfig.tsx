@@ -162,53 +162,69 @@ export function InverterSizeModuleConfig({
 
         {/* Custom module inputs */}
         {config.selectedModuleId === "custom" && config.customModule && (
-          <div className="grid grid-cols-4 gap-2 pt-2">
-            <div>
-              <Label className="text-xs">Power (W)</Label>
-              <Input
-                type="number"
-                value={config.customModule.power_wp}
-                onChange={(e) =>
-                  handleCustomModuleChange("power_wp", e.target.value)
-                }
-                className="h-8"
-              />
+          <div className="space-y-2 pt-2">
+            {/* Row 1: Width, Length, Area */}
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-xs">Width (m)</Label>
+                <Input
+                  type="number"
+                  value={config.customModule.width_m}
+                  onChange={(e) =>
+                    handleCustomModuleChange("width_m", e.target.value)
+                  }
+                  className="h-8"
+                  step="0.001"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Length (m)</Label>
+                <Input
+                  type="number"
+                  value={config.customModule.length_m}
+                  onChange={(e) =>
+                    handleCustomModuleChange("length_m", e.target.value)
+                  }
+                  className="h-8"
+                  step="0.001"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Area (m²)</Label>
+                <Input
+                  type="number"
+                  value={(config.customModule.width_m * config.customModule.length_m).toFixed(3)}
+                  disabled
+                  className="h-8 bg-muted"
+                />
+              </div>
             </div>
-            <div>
-              <Label className="text-xs">Width (m)</Label>
-              <Input
-                type="number"
-                value={config.customModule.width_m}
-                onChange={(e) =>
-                  handleCustomModuleChange("width_m", e.target.value)
-                }
-                className="h-8"
-                step="0.001"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Length (m)</Label>
-              <Input
-                type="number"
-                value={config.customModule.length_m}
-                onChange={(e) =>
-                  handleCustomModuleChange("length_m", e.target.value)
-                }
-                className="h-8"
-                step="0.001"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Efficiency (%)</Label>
-              <Input
-                type="number"
-                value={config.customModule.efficiency}
-                onChange={(e) =>
-                  handleCustomModuleChange("efficiency", e.target.value)
-                }
-                className="h-8"
-                step="0.1"
-              />
+            
+            {/* Row 2: Power, Efficiency */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs">Power (W)</Label>
+                <Input
+                  type="number"
+                  value={config.customModule.power_wp}
+                  onChange={(e) =>
+                    handleCustomModuleChange("power_wp", e.target.value)
+                  }
+                  className="h-8"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Efficiency (%)</Label>
+                <Input
+                  type="number"
+                  value={config.customModule.efficiency}
+                  onChange={(e) =>
+                    handleCustomModuleChange("efficiency", e.target.value)
+                  }
+                  className="h-8"
+                  step="0.1"
+                />
+              </div>
             </div>
           </div>
         )}
