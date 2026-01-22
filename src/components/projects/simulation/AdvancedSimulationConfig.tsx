@@ -29,11 +29,13 @@ import { useSimulationPresets, SimulationPreset } from "@/hooks/useSimulationPre
 interface AdvancedSimulationConfigProps {
   config: AdvancedSimulationConfig;
   onChange: (config: AdvancedSimulationConfig) => void;
+  includesBattery?: boolean;
 }
 
 export function AdvancedSimulationConfigPanel({ 
   config, 
-  onChange 
+  onChange,
+  includesBattery = false
 }: AdvancedSimulationConfigProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -250,6 +252,7 @@ export function AdvancedSimulationConfigPanel({
               config={config.degradation}
               onChange={(degradation) => onChange({ ...config, degradation })}
               projectLifetime={config.financial.projectLifetimeYears || 20}
+              includesBattery={includesBattery}
             />
             
             {/* Financial Sophistication */}
@@ -344,11 +347,13 @@ function SeasonalSection({
 function DegradationSection({ 
   config, 
   onChange,
-  projectLifetime = 20
+  projectLifetime = 20,
+  includesBattery = false
 }: { 
   config: DegradationConfig; 
   onChange: (config: DegradationConfig) => void;
   projectLifetime?: number;
+  includesBattery?: boolean;
 }) {
   const [panelApplyRate, setPanelApplyRate] = useState(config.panelSimpleRate ?? 0.5);
   const [batteryApplyRate, setBatteryApplyRate] = useState(config.batterySimpleRate ?? 3.0);
@@ -398,9 +403,9 @@ function DegradationSection({
       
       {config.enabled && (
         <div className="space-y-4 pt-2">
-          {/* Side-by-side layout: Panel (left) and Battery (right) */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Panel Degradation - LEFT */}
+          {/* Side-by-side layout: Panel (left) and Battery (right) - or full width if no battery */}
+          <div className={includesBattery ? "grid grid-cols-2 gap-4" : ""}>
+            {/* Panel Degradation - LEFT (or full width) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-medium">Panel Degradation</Label>
@@ -485,105 +490,109 @@ function DegradationSection({
               )}
             </div>
 
-            {/* Battery Degradation - RIGHT */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">Battery Degradation</Label>
-                <RadioGroup
-                  value={config.batteryDegradationMode || 'simple'}
-                  onValueChange={(mode: 'simple' | 'yearly') => onChange({ ...config, batteryDegradationMode: mode })}
-                  className="flex items-center gap-2"
-                >
-                  <div className="flex items-center gap-1">
-                    <RadioGroupItem value="simple" id="battery-simple" className="h-3 w-3" />
-                    <Label htmlFor="battery-simple" className="text-[10px] cursor-pointer">Simple</Label>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <RadioGroupItem value="yearly" id="battery-yearly" className="h-3 w-3" />
-                    <Label htmlFor="battery-yearly" className="text-[10px] cursor-pointer">Yearly</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-              
-              {(config.batteryDegradationMode || 'simple') === 'simple' ? (
-                <div className="flex items-center gap-2">
-                  <Slider
-                    value={[(config.batterySimpleRate ?? 3.0) * 10]}
-                    onValueChange={([v]) => onChange({ ...config, batterySimpleRate: v / 10 })}
-                    min={10}
-                    max={60}
-                    step={5}
-                    className="flex-1"
-                  />
-                  <Input
-                    type="number"
-                    value={config.batterySimpleRate ?? 3.0}
-                    onChange={(e) => onChange({ ...config, batterySimpleRate: parseFloat(e.target.value) || 3.0 })}
-                    className="w-14 h-7 text-xs text-right"
-                    step={0.5}
-                    min={0}
-                    max={10}
-                  />
-                  <span className="text-[10px] text-muted-foreground">%/yr</span>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <ScrollArea className="h-48 rounded border bg-muted/20 p-2">
-                    <div className="grid grid-cols-4 gap-1">
-                      {batteryRates.map((rate, idx) => (
-                        <div key={idx} className="flex items-center gap-1">
-                          <span className="text-[9px] text-muted-foreground w-5">Y{idx + 1}</span>
-                          <Input
-                            type="number"
-                            value={rate}
-                            onChange={(e) => handleBatteryYearChange(idx, parseFloat(e.target.value) || 0)}
-                            className="h-6 text-[10px] text-center p-1"
-                            step={0.5}
-                            min={0}
-                            max={15}
-                          />
-                        </div>
-                      ))}
+            {/* Battery Degradation - RIGHT (only if battery is included) */}
+            {includesBattery && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">Battery Degradation</Label>
+                  <RadioGroup
+                    value={config.batteryDegradationMode || 'simple'}
+                    onValueChange={(mode: 'simple' | 'yearly') => onChange({ ...config, batteryDegradationMode: mode })}
+                    className="flex items-center gap-2"
+                  >
+                    <div className="flex items-center gap-1">
+                      <RadioGroupItem value="simple" id="battery-simple" className="h-3 w-3" />
+                      <Label htmlFor="battery-simple" className="text-[10px] cursor-pointer">Simple</Label>
                     </div>
-                  </ScrollArea>
-                  <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1">
+                      <RadioGroupItem value="yearly" id="battery-yearly" className="h-3 w-3" />
+                      <Label htmlFor="battery-yearly" className="text-[10px] cursor-pointer">Yearly</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+                
+                {(config.batteryDegradationMode || 'simple') === 'simple' ? (
+                  <div className="flex items-center gap-2">
+                    <Slider
+                      value={[(config.batterySimpleRate ?? 3.0) * 10]}
+                      onValueChange={([v]) => onChange({ ...config, batterySimpleRate: v / 10 })}
+                      min={10}
+                      max={60}
+                      step={5}
+                      className="flex-1"
+                    />
                     <Input
                       type="number"
-                      value={batteryApplyRate}
-                      onChange={(e) => setBatteryApplyRate(parseFloat(e.target.value) || 3.0)}
-                      className="w-14 h-6 text-[10px] text-center"
+                      value={config.batterySimpleRate ?? 3.0}
+                      onChange={(e) => onChange({ ...config, batterySimpleRate: parseFloat(e.target.value) || 3.0 })}
+                      className="w-14 h-7 text-xs text-right"
                       step={0.5}
                       min={0}
-                      max={15}
+                      max={10}
                     />
-                    <span className="text-[10px] text-muted-foreground">%</span>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="h-6 text-[10px] flex-1"
-                      onClick={applyBatteryRateToAll}
-                    >
-                      Apply to all years
-                    </Button>
+                    <span className="text-[10px] text-muted-foreground">%/yr</span>
                   </div>
-                </div>
-              )}
-            </div>
+                ) : (
+                  <div className="space-y-2">
+                    <ScrollArea className="h-48 rounded border bg-muted/20 p-2">
+                      <div className="grid grid-cols-4 gap-1">
+                        {batteryRates.map((rate, idx) => (
+                          <div key={idx} className="flex items-center gap-1">
+                            <span className="text-[9px] text-muted-foreground w-5">Y{idx + 1}</span>
+                            <Input
+                              type="number"
+                              value={rate}
+                              onChange={(e) => handleBatteryYearChange(idx, parseFloat(e.target.value) || 0)}
+                              className="h-6 text-[10px] text-center p-1"
+                              step={0.5}
+                              min={0}
+                              max={15}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        value={batteryApplyRate}
+                        onChange={(e) => setBatteryApplyRate(parseFloat(e.target.value) || 3.0)}
+                        className="w-14 h-6 text-[10px] text-center"
+                        step={0.5}
+                        min={0}
+                        max={15}
+                      />
+                      <span className="text-[10px] text-muted-foreground">%</span>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-6 text-[10px] flex-1"
+                        onClick={applyBatteryRateToAll}
+                      >
+                        Apply to all years
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           
-          {/* Battery EOL Capacity */}
-          <div className="flex items-center gap-2">
-            <Label className="text-xs flex-1">Battery End-of-Life Capacity</Label>
-            <Input
-              type="number"
-              value={config.batteryEolCapacity}
-              onChange={(e) => onChange({ ...config, batteryEolCapacity: parseInt(e.target.value) || 70 })}
-              className="w-16 h-7 text-xs text-right"
-              min={50}
-              max={90}
-            />
-            <span className="text-xs text-muted-foreground">%</span>
-          </div>
+          {/* Battery EOL Capacity - only show if battery is included */}
+          {includesBattery && (
+            <div className="flex items-center gap-2">
+              <Label className="text-xs flex-1">Battery End-of-Life Capacity</Label>
+              <Input
+                type="number"
+                value={config.batteryEolCapacity}
+                onChange={(e) => onChange({ ...config, batteryEolCapacity: parseInt(e.target.value) || 70 })}
+                className="w-16 h-7 text-xs text-right"
+                min={50}
+                max={90}
+              />
+              <span className="text-xs text-muted-foreground">%</span>
+            </div>
+          )}
           
           <p className="text-[10px] text-muted-foreground">
             Replacement costs are configured in the Costs tab
