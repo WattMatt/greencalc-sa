@@ -1561,6 +1561,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               professionalFeesPercent: savedCosts.professionalFeesPercent ?? 0,
               projectManagementPercent: savedCosts.projectManagementPercent ?? 0,
               contingencyPercent: savedCosts.contingencyPercent ?? 0,
+              // Replacement Costs (Year 10)
+              replacementYear: savedCosts.replacementYear ?? 10,
+              equipmentCostPercent: savedCosts.equipmentCostPercent ?? 45,
+              moduleSharePercent: savedCosts.moduleSharePercent ?? 70,
+              inverterSharePercent: savedCosts.inverterSharePercent ?? 30,
+              solarModuleReplacementPercent: savedCosts.solarModuleReplacementPercent ?? 10,
+              inverterReplacementPercent: savedCosts.inverterReplacementPercent ?? 50,
+              batteryReplacementPercent: savedCosts.batteryReplacementPercent ?? 30,
               // Financial Return Parameters
               costOfCapital: savedCosts.costOfCapital ?? 9.0,
               cpi: savedCosts.cpi ?? 6.0,

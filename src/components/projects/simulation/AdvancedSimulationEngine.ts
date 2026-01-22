@@ -386,10 +386,34 @@ export function runAdvancedSimulation(
     // Total Operating Costs
     const totalCostR = insuranceCostR + maintenanceCost;
     
-    // Replacement costs (inverter replacement)
+    // Replacement costs - percentage-based calculation
     let replacementCost = 0;
-    if (degradation.enabled && year === degradation.inverterReplacementYear) {
-      replacementCost = degradation.inverterReplacementCost;
+    const replacementYear = systemCosts.replacementYear ?? degradation.inverterReplacementYear ?? 10;
+    
+    if (degradation.enabled && year === replacementYear) {
+      // Calculate based on percentages (matching Excel model)
+      const solarInstalled = systemCosts.solarCostPerKwp * solarCapacity;
+      const batteryInstalled = systemCosts.batteryCostPerKwh * batteryCapacity;
+      
+      const equipmentCostPercent = systemCosts.equipmentCostPercent ?? 45;
+      const moduleSharePercent = systemCosts.moduleSharePercent ?? 70;
+      const inverterSharePercent = systemCosts.inverterSharePercent ?? 30;
+      
+      const equipmentCost = solarInstalled * (equipmentCostPercent / 100);
+      const moduleCost = equipmentCost * (moduleSharePercent / 100);
+      const inverterCost = equipmentCost * (inverterSharePercent / 100);
+      
+      const moduleReplacementPercent = systemCosts.solarModuleReplacementPercent ?? 10;
+      const inverterReplacementPercent = systemCosts.inverterReplacementPercent ?? 50;
+      const batteryReplacementPercent = systemCosts.batteryReplacementPercent ?? 30;
+      
+      const moduleReplacement = moduleCost * (moduleReplacementPercent / 100);
+      const inverterReplacement = inverterCost * (inverterReplacementPercent / 100);
+      const batteryReplacement = batteryInstalled * (batteryReplacementPercent / 100);
+      
+      // Escalate by CPI to replacement year
+      const cpiEscalation = Math.pow(1 + inflationRate / 100, year - 1);
+      replacementCost = (moduleReplacement + inverterReplacement + batteryReplacement) * cpiEscalation;
     }
     
     // ===== NET CASHFLOW (Income-based) =====

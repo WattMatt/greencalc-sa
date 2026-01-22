@@ -31,6 +31,15 @@ export interface SystemCostsData {
   projectManagementPercent: number;   // Project Management Fees %
   contingencyPercent: number;         // Project Contingency %
   
+  // Replacement Costs (Year 10)
+  replacementYear: number;                    // Year for replacement (default: 10)
+  equipmentCostPercent: number;               // % of solar cost that is equipment (default: 45%)
+  moduleSharePercent: number;                 // % of equipment that is modules (default: 70%)
+  inverterSharePercent: number;               // % of equipment that is inverters (default: 30%)
+  solarModuleReplacementPercent: number;      // % of module cost to replace (default: 10%)
+  inverterReplacementPercent: number;         // % of inverter cost to replace (default: 50%)
+  batteryReplacementPercent: number;          // % of battery cost to replace (default: 30%)
+  
   // Financial Return Parameters
   costOfCapital: number;           // % - General WACC
   cpi: number;                     // % - Inflation
@@ -159,6 +168,29 @@ export function SystemCostsManager({
   const effectiveOMPercentage = totalCapitalCost > 0 
     ? (totalMaintenancePerYear / totalCapitalCost) * 100 
     : 0;
+
+  // Calculate Replacement Costs (Year 10 by default)
+  const replacementYear = costs.replacementYear ?? 10;
+  const equipmentCostPercent = costs.equipmentCostPercent ?? 45;
+  const moduleSharePercent = costs.moduleSharePercent ?? 70;
+  const inverterSharePercent = costs.inverterSharePercent ?? 30;
+  
+  const equipmentCost = solarCost * (equipmentCostPercent / 100);
+  const moduleCost = equipmentCost * (moduleSharePercent / 100);
+  const inverterCost = equipmentCost * (inverterSharePercent / 100);
+  
+  const moduleReplacementPercent = costs.solarModuleReplacementPercent ?? 10;
+  const inverterReplacementPercent = costs.inverterReplacementPercent ?? 50;
+  const batteryReplacementPercent = costs.batteryReplacementPercent ?? 30;
+  
+  const moduleReplacementCost = moduleCost * (moduleReplacementPercent / 100);
+  const inverterReplacementCost = inverterCost * (inverterReplacementPercent / 100);
+  const batteryReplacementCost = batteryCost * (batteryReplacementPercent / 100);
+  
+  const totalReplacementCost = moduleReplacementCost + inverterReplacementCost + batteryReplacementCost;
+  
+  // Escalate to replacement year at CPI
+  const escalatedReplacementCost = totalReplacementCost * Math.pow(1 + cpi / 100, replacementYear - 1);
 
   // Local state for percentage inputs
   const [solarPercentageInput, setSolarPercentageInput] = useState(costs.solarMaintenancePercentage.toString());
@@ -313,6 +345,14 @@ export function SystemCostsManager({
       professionalFeesPercent: DEFAULT_SYSTEM_COSTS.professionalFeesPercent ?? 0,
       projectManagementPercent: DEFAULT_SYSTEM_COSTS.projectManagementPercent ?? 0,
       contingencyPercent: DEFAULT_SYSTEM_COSTS.contingencyPercent ?? 0,
+      // Replacement Costs (Year 10)
+      replacementYear: DEFAULT_SYSTEM_COSTS.replacementYear ?? 10,
+      equipmentCostPercent: DEFAULT_SYSTEM_COSTS.equipmentCostPercent ?? 45,
+      moduleSharePercent: DEFAULT_SYSTEM_COSTS.moduleSharePercent ?? 70,
+      inverterSharePercent: DEFAULT_SYSTEM_COSTS.inverterSharePercent ?? 30,
+      solarModuleReplacementPercent: DEFAULT_SYSTEM_COSTS.solarModuleReplacementPercent ?? 10,
+      inverterReplacementPercent: DEFAULT_SYSTEM_COSTS.inverterReplacementPercent ?? 50,
+      batteryReplacementPercent: DEFAULT_SYSTEM_COSTS.batteryReplacementPercent ?? 30,
       // Financial Return Parameters
       costOfCapital: DEFAULT_SYSTEM_COSTS.costOfCapital ?? 9.0,
       cpi: DEFAULT_SYSTEM_COSTS.cpi ?? 6.0,
@@ -856,6 +896,261 @@ export function SystemCostsManager({
         </div>
       </div>
 
+      {/* Replacement Costs (Year 10) */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <RotateCcw className="h-4 w-4 text-primary" />
+            Replacement Costs (Year {replacementYear})
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Percentage of equipment costs for replacement at Year {replacementYear}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Replacement Year Selector */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Label className="text-xs">Replacement Year</Label>
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  value={costs.replacementYear}
+                  onChange={(e) => onChange({ ...costs, replacementYear: parseInt(e.target.value) || 10 })}
+                  className="h-6 w-16 text-xs text-right px-2"
+                  min={5}
+                  max={20}
+                  step={1}
+                />
+                <span className="text-xs text-muted-foreground">yrs</span>
+              </div>
+            </div>
+            <Slider
+              value={[costs.replacementYear]}
+              onValueChange={([v]) => onChange({ ...costs, replacementYear: v })}
+              min={5}
+              max={20}
+              step={1}
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>5 yrs</span>
+              <span>10 yrs</span>
+              <span>15 yrs</span>
+              <span>20 yrs</span>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Equipment Cost Split */}
+          <div>
+            <h4 className="text-xs font-medium mb-3 text-muted-foreground uppercase tracking-wide">Equipment Cost Split</h4>
+            <div className="grid gap-4 md:grid-cols-3">
+              {/* Equipment % of Solar PV */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs">Equipment %</Label>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={costs.equipmentCostPercent}
+                      onChange={(e) => onChange({ ...costs, equipmentCostPercent: parseFloat(e.target.value) || 0 })}
+                      className="h-6 w-14 text-xs text-right px-2"
+                      min={0}
+                      max={100}
+                      step={5}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[costs.equipmentCostPercent]}
+                  onValueChange={([v]) => onChange({ ...costs, equipmentCostPercent: v })}
+                  min={0}
+                  max={100}
+                  step={5}
+                />
+                <p className="text-[10px] text-muted-foreground">of Solar PV cost</p>
+              </div>
+
+              {/* Module Share */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs">Module Share</Label>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={costs.moduleSharePercent}
+                      onChange={(e) => onChange({ ...costs, moduleSharePercent: parseFloat(e.target.value) || 0 })}
+                      className="h-6 w-14 text-xs text-right px-2"
+                      min={0}
+                      max={100}
+                      step={5}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[costs.moduleSharePercent]}
+                  onValueChange={([v]) => onChange({ ...costs, moduleSharePercent: v })}
+                  min={0}
+                  max={100}
+                  step={5}
+                />
+                <p className="text-[10px] text-muted-foreground">of Equipment</p>
+              </div>
+
+              {/* Inverter Share */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs">Inverter Share</Label>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={costs.inverterSharePercent}
+                      onChange={(e) => onChange({ ...costs, inverterSharePercent: parseFloat(e.target.value) || 0 })}
+                      className="h-6 w-14 text-xs text-right px-2"
+                      min={0}
+                      max={100}
+                      step={5}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[costs.inverterSharePercent]}
+                  onValueChange={([v]) => onChange({ ...costs, inverterSharePercent: v })}
+                  min={0}
+                  max={100}
+                  step={5}
+                />
+                <p className="text-[10px] text-muted-foreground">of Equipment</p>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Replacement Percentages */}
+          <div>
+            <h4 className="text-xs font-medium mb-3 text-muted-foreground uppercase tracking-wide">Replacement Percentages</h4>
+            <div className="space-y-4">
+              {/* Solar Module Replacement */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Sun className="h-3 w-3 text-amber-500" />
+                    <Label className="text-xs">Solar Module Cost</Label>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={costs.solarModuleReplacementPercent}
+                      onChange={(e) => onChange({ ...costs, solarModuleReplacementPercent: parseFloat(e.target.value) || 0 })}
+                      className="h-6 w-14 text-xs text-right px-2"
+                      min={0}
+                      max={100}
+                      step={5}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[costs.solarModuleReplacementPercent]}
+                  onValueChange={([v]) => onChange({ ...costs, solarModuleReplacementPercent: v })}
+                  min={0}
+                  max={100}
+                  step={5}
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>Module base: R{moduleCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className="font-medium">R{moduleReplacementCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+              </div>
+
+              {/* Inverter Replacement */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Calculator className="h-3 w-3 text-primary" />
+                    <Label className="text-xs">Inverter Cost</Label>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      value={costs.inverterReplacementPercent}
+                      onChange={(e) => onChange({ ...costs, inverterReplacementPercent: parseFloat(e.target.value) || 0 })}
+                      className="h-6 w-14 text-xs text-right px-2"
+                      min={0}
+                      max={100}
+                      step={5}
+                    />
+                    <span className="text-xs text-muted-foreground">%</span>
+                  </div>
+                </div>
+                <Slider
+                  value={[costs.inverterReplacementPercent]}
+                  onValueChange={([v]) => onChange({ ...costs, inverterReplacementPercent: v })}
+                  min={0}
+                  max={100}
+                  step={5}
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>Inverter base: R{inverterCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className="font-medium">R{inverterReplacementCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+              </div>
+
+              {/* Battery Replacement - only show if system includes battery */}
+              {includesBattery && (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <Battery className="h-3 w-3 text-green-500" />
+                      <Label className="text-xs">Battery Cost</Label>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        value={costs.batteryReplacementPercent}
+                        onChange={(e) => onChange({ ...costs, batteryReplacementPercent: parseFloat(e.target.value) || 0 })}
+                        className="h-6 w-14 text-xs text-right px-2"
+                        min={0}
+                        max={100}
+                        step={5}
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                  <Slider
+                    value={[costs.batteryReplacementPercent]}
+                    onValueChange={([v]) => onChange({ ...costs, batteryReplacementPercent: v })}
+                    min={0}
+                    max={100}
+                    step={5}
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>Battery base: R{batteryCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    <span className="font-medium">R{batteryReplacementCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Replacement Cost Summary */}
+          <div className="pt-3 border-t space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Total Replacement (Today's R)</span>
+              <span className="font-medium">R{totalReplacementCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium">Escalated @ {cpi}% CPI (Year {replacementYear})</span>
+              <span className="font-bold text-primary">R{escalatedReplacementCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Financial Return Inputs */}
       <Card>
