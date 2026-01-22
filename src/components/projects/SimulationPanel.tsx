@@ -4,11 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
@@ -166,6 +167,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [pvsystConfig, setPvsystConfig] = useState<PVsystLossChainConfig>(DEFAULT_PVSYST_CONFIG);
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedSimulationConfig>(DEFAULT_ADVANCED_CONFIG);
   const [inverterConfig, setInverterConfig] = useState<InverterConfig>(getDefaultInverterConfig);
+  
+  // Override states for editable energy output metrics
+  const [dailyOutputOverride, setDailyOutputOverride] = useState<number | null>(null);
+  const [specificYieldOverride, setSpecificYieldOverride] = useState<number | null>(null);
   
   // Track the loaded simulation name for UI feedback
   const [loadedSimulationName, setLoadedSimulationName] = useState<string | null>(null);
@@ -1058,23 +1063,53 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               />
             </div>
             
-            {/* Energy output estimate (tariff-independent) */}
-            <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
-              <div className="flex justify-between">
-                <span>Expected daily output</span>
-                <span className="text-foreground">
-                  {annualPVsystResult 
-                    ? Math.round(annualPVsystResult.eGrid / 365).toLocaleString()
-                    : energyResults.totalDailySolar.toFixed(0)} kWh
-                </span>
+            {/* Energy output estimate (tariff-independent) - editable with reset */}
+            <div className="pt-2 border-t space-y-2 text-[10px]">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-muted-foreground text-[10px]">Expected daily output</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={dailyOutputOverride ?? (annualPVsystResult 
+                      ? Math.round(annualPVsystResult.eGrid / 365)
+                      : Math.round(energyResults.totalDailySolar))}
+                    onChange={(e) => setDailyOutputOverride(parseInt(e.target.value) || 0)}
+                    className="h-6 w-20 text-right text-xs"
+                  />
+                  <span className="text-xs text-muted-foreground">kWh</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5"
+                    onClick={() => setDailyOutputOverride(null)}
+                    title="Reset to calculated value"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span>Specific yield</span>
-                <span className="text-foreground">
-                  {annualPVsystResult 
-                    ? Math.round(annualPVsystResult.specificYield).toLocaleString()
-                    : ((energyResults.totalDailySolar * 365) / solarCapacity).toFixed(0)} kWh/kWp/yr
-                </span>
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-muted-foreground text-[10px]">Specific yield</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={specificYieldOverride ?? (annualPVsystResult 
+                      ? Math.round(annualPVsystResult.specificYield)
+                      : Math.round((energyResults.totalDailySolar * 365) / solarCapacity))}
+                    onChange={(e) => setSpecificYieldOverride(parseInt(e.target.value) || 0)}
+                    className="h-6 w-20 text-right text-xs"
+                  />
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">kWh/kWp/yr</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5"
+                    onClick={() => setSpecificYieldOverride(null)}
+                    title="Reset to calculated value"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
