@@ -133,6 +133,10 @@ export function SystemCostsManager({
     lifetimeOM += totalMaintenancePerYear * Math.pow(1 + cpi / 100, year - 1);
   }
 
+  // Calculate first 3 years O&M with CPI escalation (for display)
+  const threeYearSolarOM = solarMaintenance * (1 + Math.pow(1 + cpi / 100, 1) + Math.pow(1 + cpi / 100, 2));
+  const threeYearBatteryOM = batteryMaintenance * (1 + Math.pow(1 + cpi / 100, 1) + Math.pow(1 + cpi / 100, 2));
+
   // Calculate effective O&M percentage (read-only)
   const effectiveOMPercentage = totalCapitalCost > 0 
     ? (totalMaintenancePerYear / totalCapitalCost) * 100 
@@ -648,11 +652,11 @@ export function SystemCostsManager({
                 </div>
                 <div className="pt-2 px-3 py-2 bg-muted/30 rounded-md">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">Annual Cost</span>
-                    <span className="font-medium">R{solarMaintenance.toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr</span>
+                    <span className="text-muted-foreground">3-Year Cost (@ {cpi}% CPI)</span>
+                    <span className="font-medium">R{threeYearSolarOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1">
-                    {costs.solarMaintenancePercentage}% of R{solarCost.toLocaleString()}
+                    {costs.solarMaintenancePercentage}% of R{solarCost.toLocaleString()} (Year 1: R{solarMaintenance.toLocaleString(undefined, { maximumFractionDigits: 0 })})
                   </p>
                 </div>
               </div>
@@ -699,11 +703,11 @@ export function SystemCostsManager({
                     </div>
                     <div className="pt-2 px-3 py-2 bg-muted/30 rounded-md">
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground">Annual Cost</span>
-                        <span className="font-medium">R{batteryMaintenance.toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr</span>
+                        <span className="text-muted-foreground">3-Year Cost (@ {cpi}% CPI)</span>
+                        <span className="font-medium">R{threeYearBatteryOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-1">
-                        {costs.batteryMaintenancePercentage}% of R{batteryCost.toLocaleString()}
+                        {costs.batteryMaintenancePercentage}% of R{batteryCost.toLocaleString()} (Year 1: R{batteryMaintenance.toLocaleString(undefined, { maximumFractionDigits: 0 })})
                       </p>
                     </div>
                   </div>
