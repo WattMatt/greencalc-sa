@@ -397,6 +397,23 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return metrics;
   }, [inverterConfig]);
 
+  // Calculate 3-Year O&M with CPI escalation for financial metrics
+  const threeYearOM = useMemo(() => {
+    const cpi = systemCosts.cpi ?? 6.0;
+    const solarCost = solarCapacity * (systemCosts.solarCostPerKwp ?? 8500);
+    const batteryCost = batteryCapacity * (systemCosts.batteryCostPerKwh ?? 3500);
+    const solarMaintenance = solarCost * ((systemCosts.solarMaintenancePercentage ?? 3.5) / 100);
+    const batteryMaintenance = includesBattery 
+      ? batteryCost * ((systemCosts.batteryMaintenancePercentage ?? 1.5) / 100) 
+      : 0;
+    
+    // Year 1 + Year 2 (with CPI) + Year 3 (with 2 years CPI compounded)
+    const cpiMultiplier = 1 + Math.pow(1 + cpi / 100, 1) + Math.pow(1 + cpi / 100, 2);
+    const threeYearTotal = (solarMaintenance + batteryMaintenance) * cpiMultiplier;
+    
+    return threeYearTotal;
+  }, [systemCosts, solarCapacity, batteryCapacity, includesBattery]);
+
   // Calculate load profile from tenants (kWh per hour)
   const loadProfile = useMemo(() => {
     const profile = Array(24).fill(0);
@@ -1215,9 +1232,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               {/* Table Rows */}
               <div className="divide-y divide-border text-sm">
                 <div className="grid grid-cols-2 hover:bg-muted/50">
-                  <div className="px-3 py-1.5 text-muted-foreground">ZAR / kWh (1st Year)</div>
+                  <div className="px-3 py-1.5 text-muted-foreground">ZAR / kWh (Incl. 3-Yr O&M)</div>
                   <div className="px-3 py-1.5 text-right font-medium">
-                    {(financialResults.systemCost / (annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365)).toFixed(2)}
+                    {((financialResults.systemCost + threeYearOM) / (annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365)).toFixed(2)}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 hover:bg-muted/50">
