@@ -13,8 +13,8 @@ export function SignatureSection({ proposal, template, forPDF }: SignatureSectio
   const primaryColor = template.colors.accentColor;
 
   return (
-    <div className={forPDF ? "" : "p-6"}>
-      <h2 className="text-lg font-semibold mb-6 flex items-center gap-2">
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold flex items-center gap-2">
         <PenLine className="h-5 w-5" style={{ color: primaryColor }} />
         Authorization
       </h2>

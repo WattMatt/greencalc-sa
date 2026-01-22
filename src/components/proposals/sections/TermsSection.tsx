@@ -21,8 +21,8 @@ export function TermsSection({ proposal, template, forPDF }: TermsSectionProps) 
   const defaultDisclaimers = `This proposal is based on estimated consumption data and solar irradiance forecasts. Actual performance may vary based on weather conditions, equipment degradation, and other factors. Financial projections assume current tariff rates and standard escalation assumptions. All figures are estimates only and do not constitute a guarantee of performance or returns.`;
 
   return (
-    <div className={forPDF ? "" : "p-6"}>
-      <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold flex items-center gap-2">
         <FileText className="h-5 w-5" style={{ color: primaryColor }} />
         Terms & Conditions
       </h2>

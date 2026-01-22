@@ -78,8 +78,8 @@ export function SiteOverviewSection({ project, simulation, template, tariffName,
   const hasCoordinates = project?.latitude && project?.longitude;
 
   return (
-    <div className={forPDF ? "" : "p-6"}>
-      <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold flex items-center gap-2">
         <MapPin className="h-5 w-5" style={{ color: primaryColor }} />
         Site Overview
       </h2>
