@@ -357,9 +357,6 @@ export function PVsystLossChainConfig({
               ))}
             </SelectContent>
           </Select>
-          <span className="text-xs text-muted-foreground">
-            Degradation: -{result.cumulativeDegradation.toFixed(1)}%
-          </span>
         </div>
 
         {/* Irradiance Losses */}

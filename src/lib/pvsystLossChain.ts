@@ -77,7 +77,6 @@ export interface LossChainResult {
   specificYield: number;       // kWh/kWp/year
   totalLossPercent: number;    // Combined losses
   temperatureLoss: number;     // Dynamic temp loss %
-  cumulativeDegradation: number; // Total degradation at this year
 }
 
 export interface HourlyLossResult {
@@ -157,16 +156,6 @@ export function calculateTemperatureLoss(
 }
 
 /**
- * Calculate total degradation (LID + Module Degradation Loss)
- */
-export function calculateTotalDegradation(
-  lidLoss: number,
-  moduleDegradationLoss: number
-): number {
-  return lidLoss + moduleDegradationLoss;
-}
-
-/**
  * Main PVsyst loss chain calculation
  * Calculates energy output following the PVsyst methodology
  */
@@ -220,15 +209,7 @@ export function calculatePVsystLossChain(
   const temperatureLoss = config.array.temperatureLoss;
   
   // ========================================
-  // Step 7: Total Degradation (LID + Module Degradation Loss)
-  // ========================================
-  const cumulativeDegradation = calculateTotalDegradation(
-    config.array.lidLoss,
-    config.array.moduleDegradationLoss
-  );
-  
-  // ========================================
-  // Step 8: Array at MPP (EArrMPP - after all array losses)
+  // Step 7: Array at MPP (EArrMPP - after all array losses)
   // Apply losses sequentially from EArrNom
   // ========================================
   // Apply LID and Module Degradation as SEPARATE multipliers (not combined)
@@ -321,7 +302,6 @@ export function calculatePVsystLossChain(
     specificYield: (eGrid * 365) / capacityKwp,
     totalLossPercent: 100 - performanceRatio,
     temperatureLoss,
-    cumulativeDegradation,
   };
 }
 
@@ -341,19 +321,12 @@ export function calculateHourlyPVsystOutput(
   // Calculate collector area once - use provided area OR calculate from capacity/efficiency
   const collectorAreaM2 = config.collectorAreaM2 ?? (capacityKwp * 1000) / (config.stcEfficiency * 1000);
   
-  // Pre-calculate total degradation (same for all hours)
-  const cumulativeDegradation = calculateTotalDegradation(
-    config.array.lidLoss,
-    config.array.moduleDegradationLoss
-  );
-  
   if (debug) {
     console.log("=== PVsyst Calculation Debug ===");
     console.log("Capacity (kWp):", capacityKwp);
     console.log("Collector Area (m²):", collectorAreaM2.toFixed(2));
     console.log("STC Efficiency:", config.stcEfficiency);
     console.log("Config collectorAreaM2 override:", config.collectorAreaM2);
-    console.log("Cumulative Degradation (%):", cumulativeDegradation.toFixed(2));
   }
   
   let firstSunlightLogged = false;
@@ -395,9 +368,10 @@ export function calculateHourlyPVsystOutput(
     // Step 4: Array Nominal at STC (EArrNom)
     const arrayNominalSTC = totalEnergyOnCollectors * config.stcEfficiency;
     
-    // Step 5: Apply array losses sequentially
+    // Step 5: Apply array losses sequentially with LID and Degradation as separate multipliers
     const arrayFactor =
-      (1 - cumulativeDegradation / 100) *
+      (1 - config.array.lidLoss / 100) *
+      (1 - config.array.moduleDegradationLoss / 100) *
       (1 - config.array.irradianceLevelLoss / 100) *
       (1 - tempLoss / 100) *
       (1 - config.irradiance.spectralLoss / 100) *
@@ -469,18 +443,21 @@ export function generate20YearProjection(
   config: PVsystLossChainConfig
 ): Array<{
   year: number;
-  cumulativeDegradation: number;
+  combinedDegradation: number;
   performanceRatio: number;
   annualEGridKwh: number;
   specificYield: number;
 }> {
   const projection: Array<{
     year: number;
-    cumulativeDegradation: number;
+    combinedDegradation: number;
     performanceRatio: number;
     annualEGridKwh: number;
     specificYield: number;
   }> = [];
+  
+  // Calculate multiplicative combined degradation for display
+  const combinedDegradation = (1 - (1 - config.array.lidLoss / 100) * (1 - config.array.moduleDegradationLoss / 100)) * 100;
   
   for (let year = 1; year <= 25; year++) {
     const yearConfig = { ...config, operationYear: year };
@@ -488,7 +465,7 @@ export function generate20YearProjection(
     
     projection.push({
       year,
-      cumulativeDegradation: result.cumulativeDegradation,
+      combinedDegradation,
       performanceRatio: result.performanceRatio,
       annualEGridKwh: result.eGrid * 365,
       specificYield: result.specificYield,

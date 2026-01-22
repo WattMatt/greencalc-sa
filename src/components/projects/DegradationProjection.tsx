@@ -30,7 +30,7 @@ export function DegradationProjection({
 
   const year1Output = projection[0]?.annualEGridKwh ?? 0;
   const year20Output = projection[19]?.annualEGridKwh ?? 0;
-  const totalDegradation = projection[19]?.cumulativeDegradation ?? 0;
+  const totalDegradation = projection[19]?.combinedDegradation ?? 0;
   const lifetimeProduction = projection.slice(0, 20).reduce((sum, yr) => sum + yr.annualEGridKwh, 0);
 
   // Format large numbers
@@ -163,7 +163,7 @@ export function DegradationProjection({
                       {yr.year}
                     </TableCell>
                     <TableCell className="text-xs text-right py-1.5 text-amber-600">
-                      -{yr.cumulativeDegradation.toFixed(1)}%
+                      -{yr.combinedDegradation.toFixed(1)}%
                     </TableCell>
                     <TableCell className="text-xs text-right py-1.5">
                       {yr.performanceRatio.toFixed(1)}%
