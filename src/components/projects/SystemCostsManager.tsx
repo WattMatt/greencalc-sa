@@ -709,28 +709,6 @@ export function SystemCostsManager({
                   </div>
                 </>
               )}
-              
-              {/* Total O&M Summary */}
-              <div className="pt-4 border-t bg-primary/5 -mx-6 px-6 -mb-6 pb-4 rounded-b-lg">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium">Total Annual O&M</span>
-                  <span className="font-bold text-lg">
-                    R{totalMaintenancePerYear.toLocaleString(undefined, { maximumFractionDigits: 0 })}/year
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground">Effective O&M Rate</span>
-                  <span className="text-sm font-medium text-primary">
-                    {effectiveOMPercentage.toFixed(2)}% of total project
-                  </span>
-                </div>
-                <div className="flex justify-between items-center mt-2 pt-2 border-t border-primary/10">
-                  <span className="text-xs text-muted-foreground">{projectYears}-Year O&M (@ {cpi}% CPI)</span>
-                  <span className="text-sm font-bold text-primary">
-                    R{lifetimeOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-              </div>
             </CardContent>
           </Card>
 
@@ -1118,14 +1096,25 @@ export function SystemCostsManager({
       <Card className="bg-primary/5 border-primary/20">
         <CardContent className="py-6">
           <div className="grid gap-6 md:grid-cols-2">
-            {/* Left side: Total Capital Cost */}
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-primary/10 rounded-full">
-                <TrendingUp className="h-6 w-6 text-primary" />
+            {/* Left side: Total Capital Cost + Total Annual O&M */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-primary/10 rounded-full">
+                  <TrendingUp className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Capital Cost (Excl. O&M)</p>
+                  <p className="text-2xl font-bold">R{totalCapitalCost.toLocaleString()}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Capital Cost (Excl. O&M)</p>
-                <p className="text-2xl font-bold">R{totalCapitalCost.toLocaleString()}</p>
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-primary/10 rounded-full">
+                  <Calculator className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Annual O&M</p>
+                  <p className="text-2xl font-bold">R{totalMaintenancePerYear.toLocaleString(undefined, { maximumFractionDigits: 0 })}/year</p>
+                </div>
               </div>
             </div>
 
@@ -1160,12 +1149,12 @@ export function SystemCostsManager({
                 </div>
               )}
               <div className="flex justify-between gap-4 pt-2 border-t">
-                <span className="text-muted-foreground">Annual O&M (Year 1)</span>
-                <span>R{totalMaintenancePerYear.toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr</span>
+                <span className="text-muted-foreground">Effective O&M Rate</span>
+                <span className="font-medium text-primary">{effectiveOMPercentage.toFixed(2)}% of project</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">{projectYears}-Year O&M (@ {cpi}% CPI)</span>
-                <span className="font-medium">R{lifetimeOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                <span className="font-bold text-primary">R{lifetimeOM.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
               </div>
             </div>
           </div>
