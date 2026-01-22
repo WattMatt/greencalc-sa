@@ -114,59 +114,6 @@ export function LoadAnalysisSection({
           </p>
         </div>
       )}
-
-      {/* Tenant Breakdown Table */}
-      {tenantCount > 0 && (
-        <div className="border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left px-3 py-2 font-medium">Tenant</th>
-                <th className="text-right px-3 py-2 font-medium">Area (m²)</th>
-                <th className="text-right px-3 py-2 font-medium">Category</th>
-                <th className="text-right px-3 py-2 font-medium">Monthly kWh</th>
-                <th className="text-right px-3 py-2 font-medium">% of Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tenants.slice(0, forPDF ? 10 : 15).map((tenant, idx) => {
-                const shopType = shopTypes.find(st => st.id === tenant.shop_type_id);
-                const calculated = tenant.area_sqm * (shopType?.kwh_per_sqm_month || 50);
-                const monthlyKwh = tenant.monthly_kwh_override || calculated;
-                const percentage = totalMonthlyKwh > 0 ? (monthlyKwh / totalMonthlyKwh) * 100 : 0;
-                
-                return (
-                  <tr key={tenant.id} className={cn(idx % 2 === 0 ? "bg-background" : "bg-muted/20")}>
-                    <td className="px-3 py-2 font-medium">{tenant.name}</td>
-                    <td className="px-3 py-2 text-right">{tenant.area_sqm.toLocaleString()}</td>
-                    <td className="px-3 py-2 text-right text-muted-foreground">
-                      {shopType?.name || "Generic"}
-                    </td>
-                    <td className="px-3 py-2 text-right">{Math.round(monthlyKwh).toLocaleString()}</td>
-                    <td className="px-3 py-2 text-right">{percentage.toFixed(1)}%</td>
-                  </tr>
-                );
-              })}
-              {tenants.length > (forPDF ? 10 : 15) && (
-                <tr className="bg-muted/30">
-                  <td colSpan={5} className="px-3 py-2 text-center text-muted-foreground text-xs">
-                    + {tenants.length - (forPDF ? 10 : 15)} more tenants
-                  </td>
-                </tr>
-              )}
-            </tbody>
-            <tfoot className="bg-muted/50 font-medium">
-              <tr>
-                <td className="px-3 py-2">Total</td>
-                <td className="px-3 py-2 text-right">{totalArea.toLocaleString()}</td>
-                <td className="px-3 py-2 text-right">—</td>
-                <td className="px-3 py-2 text-right">{Math.round(totalMonthlyKwh).toLocaleString()}</td>
-                <td className="px-3 py-2 text-right">100%</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
