@@ -1304,13 +1304,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   <div className="grid grid-cols-2 hover:bg-muted/50">
                     <div className="px-3 py-1.5 text-muted-foreground">ZAR / Wp (DC)</div>
                     <div className="px-3 py-1.5 text-right font-medium">
-                      {(financialResults.systemCost / (solarCapacity * 1000)).toFixed(2)}
+                      {((financialResults.systemCost + threeYearOM) / (solarCapacity * inverterConfig.dcAcRatio * 1000)).toFixed(2)}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 hover:bg-muted/50">
                     <div className="px-3 py-1.5 text-muted-foreground">ZAR / Wp (AC)</div>
                     <div className="px-3 py-1.5 text-right font-medium">
-                      {(financialResults.systemCost / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
+                      {((financialResults.systemCost + threeYearOM) / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 hover:bg-muted/50">
