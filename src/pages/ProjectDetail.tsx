@@ -1153,6 +1153,7 @@ export default function ProjectDetail() {
           <SystemCostsManager
             costs={systemCosts}
             onChange={setSystemCosts}
+            onBlur={() => simulationRef.current?.saveIfNeeded()}
             solarCapacity={latestSimulation?.solar_capacity_kwp ?? 100}
             batteryCapacity={latestSimulation?.battery_capacity_kwh ?? 50}
             includesBattery={systemIncludesBattery}
