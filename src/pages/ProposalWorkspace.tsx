@@ -35,6 +35,7 @@ import { ProposalTemplateId, PROPOSAL_TEMPLATES } from "@/components/proposals/t
 import {
   CoverSection,
   SiteOverviewSection,
+  LoadAnalysisSection,
   EquipmentSpecsSection,
   FinancialSummarySection,
   CashflowTableSection,
@@ -488,6 +489,24 @@ export default function ProposalWorkspace() {
             simulation={simulationData}
             template={template}
             tariffName={projectTariffName || undefined}
+          />
+        );
+      case 'loadAnalysis':
+        // Extract shop_types from tenants join data
+        const shopTypesFromTenants = tenants
+          ?.map(t => t.shop_types)
+          .filter((st): st is NonNullable<typeof st> => st != null) || [];
+        // Deduplicate shop types
+        const uniqueShopTypes = Array.from(
+          new Map(shopTypesFromTenants.map(st => [st.id, st])).values()
+        );
+        return (
+          <LoadAnalysisSection
+            simulation={simulationData}
+            template={template}
+            tenants={tenants || []}
+            shopTypes={uniqueShopTypes}
+            project={project}
           />
         );
       case 'equipmentSpecs':
