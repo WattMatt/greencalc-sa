@@ -9,7 +9,9 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw, Calculator, Clock } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ANNUAL_HOURS_24H, ANNUAL_HOURS_SOLAR } from "@/lib/tariffCalculations";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
@@ -1230,94 +1232,166 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           </CardContent>
         </Card>
 
-        {/* Financial Return Outputs - 3rd column, always visible */}
-        {hasFinancialData ? (
-          <Card>
-            <CardContent className="p-0">
-              {/* Table Header */}
-              <div className="grid grid-cols-2 border-b border-primary bg-primary/10">
-                <div className="px-3 py-1.5 text-xs font-bold text-primary uppercase tracking-wide">
+        {/* Third column: Tariff Selector + Financial Returns (stacked) */}
+        <div className="flex flex-col gap-4">
+          {/* Simulation Tariff Rate Selector - compact pane */}
+          {hasFinancialData && annualBlendedRates && (
+            <Card className="border-primary/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Calculator className="h-4 w-4" />
+                  Simulation Tariff Rate
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Select blended rate methodology
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-3">
+                <Select 
+                  value={blendedRateType} 
+                  onValueChange={(value: BlendedRateType) => onBlendedRateTypeChange?.(value)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select rate type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="solarHours">
+                      <div className="flex items-center gap-2">
+                        <Sun className="h-4 w-4 text-amber-500" />
+                        <span>Solar Sun Hours (6h)</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="allHours">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        <span>All Hours (24/7/365)</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                {/* Display selected rate with visual indicator */}
+                <div className="p-2 rounded-lg bg-muted/50 flex items-center justify-between">
+                  {blendedRateType === 'solarHours' ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Sun className="h-4 w-4 text-amber-500" />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium">Solar Sun Hours</span>
+                          <span className="text-[10px] text-muted-foreground">{ANNUAL_HOURS_SOLAR.toLocaleString()} hrs/year</span>
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold text-amber-600">
+                        R{annualBlendedRates.solarHours.annual.toFixed(4)}/kWh
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium">All Hours</span>
+                          <span className="text-[10px] text-muted-foreground">{ANNUAL_HOURS_24H.toLocaleString()} hrs/year</span>
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold">
+                        R{annualBlendedRates.allHours.annual.toFixed(4)}/kWh
+                      </span>
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Financial Return Outputs - now below the tariff selector */}
+          {hasFinancialData ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" />
                   Financial Return Outputs
-                </div>
-                <div className="px-3 py-1.5 text-xs font-bold text-primary text-right uppercase tracking-wide">
-                  {project?.location || 'Site'}
-                </div>
-              </div>
-              
-              {/* Table Rows */}
-              <div className="divide-y divide-border text-sm">
-                <div className="grid grid-cols-2 hover:bg-muted/50">
-                  <div className="px-3 py-1.5 text-muted-foreground">ZAR / kWh (Incl. 3-Yr O&M)</div>
-                  <div className="px-3 py-1.5 text-right font-medium">
-                    {((financialResults.systemCost + threeYearOM) / (annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365)).toFixed(2)}
+                  <span className="text-xs font-normal text-muted-foreground ml-auto">
+                    {project?.location || 'Site'}
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {/* Table Rows */}
+                <div className="divide-y divide-border text-sm">
+                  <div className="grid grid-cols-2 hover:bg-muted/50">
+                    <div className="px-3 py-1.5 text-muted-foreground">ZAR / kWh (Incl. 3-Yr O&M)</div>
+                    <div className="px-3 py-1.5 text-right font-medium">
+                      {((financialResults.systemCost + threeYearOM) / (annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365)).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 hover:bg-muted/50">
+                    <div className="px-3 py-1.5 text-muted-foreground">ZAR / Wp (DC)</div>
+                    <div className="px-3 py-1.5 text-right font-medium">
+                      {(financialResults.systemCost / (solarCapacity * 1000)).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 hover:bg-muted/50">
+                    <div className="px-3 py-1.5 text-muted-foreground">ZAR / Wp (AC)</div>
+                    <div className="px-3 py-1.5 text-right font-medium">
+                      {(financialResults.systemCost / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 hover:bg-muted/50">
+                    <div className="px-3 py-1.5 text-muted-foreground">LCOE (ZAR/kWh)</div>
+                    <div className="px-3 py-1.5 text-right font-medium">
+                      {(advancedResults?.lcoe ?? basicFinancialMetrics.lcoe).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 hover:bg-muted/50">
+                    <div className="px-3 py-1.5 text-muted-foreground">Initial Yield</div>
+                    <div className="px-3 py-1.5 text-right font-medium">
+                      {((financialResults.annualSavings / financialResults.systemCost) * 100).toFixed(2)}%
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 hover:bg-muted/50">
+                    <div className="px-3 py-1.5 text-muted-foreground">IRR</div>
+                    <div className="px-3 py-1.5 text-right font-medium">
+                      {(advancedResults?.irr ?? basicFinancialMetrics.irr).toFixed(2)}%
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 hover:bg-muted/50">
+                    <div className="px-3 py-1.5 text-muted-foreground">MIRR</div>
+                    <div className="px-3 py-1.5 text-right font-medium">
+                      {(advancedResults?.mirr ?? basicFinancialMetrics.mirr).toFixed(2)}%
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 hover:bg-muted/50">
+                    <div className="px-3 py-1.5 text-muted-foreground">Payback Period</div>
+                    <div className="px-3 py-1.5 text-right font-medium">
+                      {financialResults.paybackYears.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 hover:bg-muted/50">
+                    <div className="px-3 py-1.5 text-muted-foreground">NPV</div>
+                    <div className={`px-3 py-1.5 text-right font-medium ${(advancedResults?.npv ?? basicFinancialMetrics.npv) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {Math.round(advancedResults?.npv ?? basicFinancialMetrics.npv).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 hover:bg-muted/50">
-                  <div className="px-3 py-1.5 text-muted-foreground">ZAR / Wp (DC)</div>
-                  <div className="px-3 py-1.5 text-right font-medium">
-                    {(financialResults.systemCost / (solarCapacity * 1000)).toFixed(2)}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 hover:bg-muted/50">
-                  <div className="px-3 py-1.5 text-muted-foreground">ZAR / Wp (AC)</div>
-                  <div className="px-3 py-1.5 text-right font-medium">
-                    {(financialResults.systemCost / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 hover:bg-muted/50">
-                  <div className="px-3 py-1.5 text-muted-foreground">LCOE (ZAR/kWh)</div>
-                  <div className="px-3 py-1.5 text-right font-medium">
-                    {(advancedResults?.lcoe ?? basicFinancialMetrics.lcoe).toFixed(2)}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 hover:bg-muted/50">
-                  <div className="px-3 py-1.5 text-muted-foreground">Initial Yield</div>
-                  <div className="px-3 py-1.5 text-right font-medium">
-                    {((financialResults.annualSavings / financialResults.systemCost) * 100).toFixed(2)}%
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 hover:bg-muted/50">
-                  <div className="px-3 py-1.5 text-muted-foreground">IRR</div>
-                  <div className="px-3 py-1.5 text-right font-medium">
-                    {(advancedResults?.irr ?? basicFinancialMetrics.irr).toFixed(2)}%
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 hover:bg-muted/50">
-                  <div className="px-3 py-1.5 text-muted-foreground">MIRR</div>
-                  <div className="px-3 py-1.5 text-right font-medium">
-                    {(advancedResults?.mirr ?? basicFinancialMetrics.mirr).toFixed(2)}%
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 hover:bg-muted/50">
-                  <div className="px-3 py-1.5 text-muted-foreground">Payback Period</div>
-                  <div className="px-3 py-1.5 text-right font-medium">
-                    {financialResults.paybackYears.toFixed(2)}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 hover:bg-muted/50">
-                  <div className="px-3 py-1.5 text-muted-foreground">NPV</div>
-                  <div className={`px-3 py-1.5 text-right font-medium ${(advancedResults?.npv ?? basicFinancialMetrics.npv) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {Math.round(advancedResults?.npv ?? basicFinancialMetrics.npv).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-dashed">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                <TrendingUp className="h-4 w-4" />
-                Financial Analysis
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">
-                Select a tariff to enable cost analysis and ROI calculations.
-              </p>
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-dashed">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                  <TrendingUp className="h-4 w-4" />
+                  Financial Analysis
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">
+                  Select a tariff to enable cost analysis and ROI calculations.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
 
       {/* Battery Storage - separate row when enabled */}
