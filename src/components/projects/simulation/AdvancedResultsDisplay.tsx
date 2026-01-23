@@ -93,10 +93,31 @@ function generateMonthlyCashflowData(yearlyProjections: YearlyProjection[]): {
 }
 
 export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps) {
-  const paybackYear = results.yearlyProjections.find(p => p.cumulativeCashFlow >= 0)?.year;
-  
   // Generate monthly data for the cashflow chart
-  const { monthlyData, breakEvenMonth } = generateMonthlyCashflowData(results.yearlyProjections);
+  const { monthlyData } = generateMonthlyCashflowData(results.yearlyProjections);
+  
+  // Calculate interpolated payback from yearly projections (same logic as AdvancedSimulationEngine)
+  // This serves as a fallback when sensitivityResults is not available
+  const paybackPeriod = useMemo(() => {
+    // Use sensitivityResults if available (preferred source)
+    if (results.sensitivityResults?.expected.payback) {
+      return results.sensitivityResults.expected.payback;
+    }
+    
+    // Fallback: calculate interpolated payback from yearlyProjections
+    const projections = results.yearlyProjections;
+    const breakeven = projections.find(p => p.cumulativeCashFlow >= 0);
+    if (!breakeven) return null; // No payback within projection period
+    
+    // Interpolate for more accurate payback
+    const prevYear = projections[breakeven.year - 2];
+    if (!prevYear) return breakeven.year;
+    
+    const remaining = Math.abs(prevYear.cumulativeCashFlow);
+    const fraction = remaining / breakeven.netCashFlow;
+    
+    return breakeven.year - 1 + fraction;
+  }, [results.yearlyProjections, results.sensitivityResults]);
   
   // Calculate column totals for the cashflow table
   const totals = useMemo(() => {
@@ -141,13 +162,13 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
         />
         <MetricCard
           label="Payback"
-          value={results.sensitivityResults?.expected.payback 
-            ? formatPaybackPeriod(results.sensitivityResults.expected.payback)
+          value={paybackPeriod 
+            ? formatPaybackPeriod(paybackPeriod)
             : ">25 years"}
           icon={<Calendar className="h-4 w-4" />}
-          variant={results.sensitivityResults?.expected.payback && results.sensitivityResults.expected.payback < 7 
+          variant={paybackPeriod && paybackPeriod < 7 
             ? "positive" 
-            : results.sensitivityResults?.expected.payback && results.sensitivityResults.expected.payback < 12 
+            : paybackPeriod && paybackPeriod < 12 
               ? "neutral" 
               : "negative"}
           tooltip="Years to break even"
@@ -204,9 +225,9 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center justify-between">
                 <span>Cumulative Cash Flow</span>
-              {results.sensitivityResults?.expected.payback && results.sensitivityResults.expected.payback < 25 && (
+              {paybackPeriod && paybackPeriod < 25 && (
                 <Badge variant="outline" className="text-xs">
-                  Break-even: {formatPaybackPeriod(results.sensitivityResults.expected.payback)}
+                  Break-even: {formatPaybackPeriod(paybackPeriod)}
                 </Badge>
               )}
               </CardTitle>
