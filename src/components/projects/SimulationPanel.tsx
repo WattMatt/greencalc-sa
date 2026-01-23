@@ -782,6 +782,31 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     );
   }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig]);
 
+  // Compute unified payback period from advancedResults (same logic as AdvancedResultsDisplay)
+  // This ensures consistency between the MetricCard, Break-even badge, and Financial Return Outputs table
+  const unifiedPaybackPeriod = useMemo(() => {
+    if (!advancedResults) return null;
+    
+    // Use sensitivityResults if available (preferred source)
+    if (advancedResults.sensitivityResults?.expected.payback) {
+      return advancedResults.sensitivityResults.expected.payback;
+    }
+    
+    // Fallback: calculate interpolated payback from yearlyProjections
+    const projections = advancedResults.yearlyProjections;
+    const breakeven = projections.find(p => p.cumulativeCashFlow >= 0);
+    if (!breakeven) return null; // No payback within projection period
+    
+    // Interpolate for more accurate payback
+    const prevYear = projections[breakeven.year - 2];
+    if (!prevYear) return breakeven.year;
+    
+    const remaining = Math.abs(prevYear.cumulativeCashFlow);
+    const fraction = remaining / breakeven.netCashFlow;
+    
+    return breakeven.year - 1 + fraction;
+  }, [advancedResults]);
+
   // Auto-save mutation - upserts simulation on tab change
   const autoSaveMutation = useMutation({
     mutationFn: async () => {
@@ -1519,7 +1544,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   />
                   <FinancialMetricRow
                     label="Payback Period"
-                    value={formatPaybackPeriod(advancedResults?.sensitivityResults?.expected.payback ?? financialResults.paybackYears)}
+                    value={formatPaybackPeriod(unifiedPaybackPeriod ?? financialResults.paybackYears)}
                     breakdown={{
                       formula: "Year when cumulative cashflow ≥ 0",
                       inputs: [
