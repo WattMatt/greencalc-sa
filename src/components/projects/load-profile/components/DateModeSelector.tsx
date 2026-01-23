@@ -1,6 +1,7 @@
 import { Separator } from "@/components/ui/separator";
 import { WeekdaySelector } from "./WeekdaySelector";
 import { MonthSelector } from "./MonthSelector";
+import { SeasonPresets } from "./SeasonPresets";
 import { DayPresets } from "./DayPresets";
 
 interface DateModeSelectorProps {
@@ -24,6 +25,10 @@ export function DateModeSelector({
       {selectedMonthsFilter && onMonthsFilterChange && (
         <>
           <MonthSelector 
+            selectedMonths={selectedMonthsFilter} 
+            onMonthsChange={onMonthsFilterChange} 
+          />
+          <SeasonPresets 
             selectedMonths={selectedMonthsFilter} 
             onMonthsChange={onMonthsFilterChange} 
           />
