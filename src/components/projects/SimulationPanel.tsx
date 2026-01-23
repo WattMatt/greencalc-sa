@@ -779,7 +779,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       batteryCapacity,
       advancedConfig
     );
-  }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, solarCapacity, batteryCapacity, advancedConfig]);
+  }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig]);
 
   // Auto-save mutation - upserts simulation on tab change
   const autoSaveMutation = useMutation({
