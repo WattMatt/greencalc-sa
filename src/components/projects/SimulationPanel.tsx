@@ -258,6 +258,39 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         setProductionReductionPercent(savedResultsJson.productionReductionPercent);
       }
       
+      // Load loss calculation mode if saved
+      if (savedResultsJson?.lossCalculationMode) {
+        setLossCalculationMode(savedResultsJson.lossCalculationMode);
+      }
+      
+      // Load advanced config if saved - deep merge with defaults to preserve new fields
+      if (savedResultsJson?.advancedConfig) {
+        setAdvancedConfig({
+          ...DEFAULT_ADVANCED_CONFIG,
+          ...savedResultsJson.advancedConfig,
+          seasonal: {
+            ...DEFAULT_ADVANCED_CONFIG.seasonal,
+            ...savedResultsJson.advancedConfig?.seasonal,
+          },
+          degradation: {
+            ...DEFAULT_ADVANCED_CONFIG.degradation,
+            ...savedResultsJson.advancedConfig?.degradation,
+          },
+          financial: {
+            ...DEFAULT_ADVANCED_CONFIG.financial,
+            ...savedResultsJson.advancedConfig?.financial,
+          },
+          gridConstraints: {
+            ...DEFAULT_ADVANCED_CONFIG.gridConstraints,
+            ...savedResultsJson.advancedConfig?.gridConstraints,
+          },
+          loadGrowth: {
+            ...DEFAULT_ADVANCED_CONFIG.loadGrowth,
+            ...savedResultsJson.advancedConfig?.loadGrowth,
+          },
+        });
+      }
+      
       // Track what we loaded for UI feedback
       setLoadedSimulationName(lastSavedSimulation.name);
       setLoadedSimulationDate(lastSavedSimulation.created_at);
@@ -787,6 +820,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           pvsystConfig,
           // Save production reduction percentage
           productionReductionPercent,
+          // Save advanced simulation config (degradation, financial, seasonal, etc.)
+          advancedConfig,
         })),
       };
 
