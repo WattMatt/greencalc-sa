@@ -281,7 +281,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                       <TableHead className="text-right">Replacements</TableHead>
                       <TableHead className="text-right bg-amber-500/5">Total Cost</TableHead>
                       <TableHead className="text-right">Net Cashflow</TableHead>
-                      <TableHead className="text-right text-muted-foreground">PV of R1</TableHead>
+                      <TableHead className="text-right text-muted-foreground">PV Reduction Factor</TableHead>
                       <TableHead className="text-right">Present Value</TableHead>
                       <TableHead className="text-right">Cumulative</TableHead>
                     </TableRow>
