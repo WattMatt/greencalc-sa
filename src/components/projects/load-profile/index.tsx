@@ -2,8 +2,6 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tenant, ShopType, DAYS_OF_WEEK, DayOfWeek, DisplayUnit, Annotation } from "./types";
 import { useLoadProfileData } from "./hooks/useLoadProfileData";
-import { useSpecificDateData } from "./hooks/useSpecificDateData";
-import { useMonthlyData } from "./hooks/useMonthlyData";
 import { useExportHandlers } from "./hooks/useExportHandlers";
 import { useSolcastPVProfile } from "./hooks/useSolcastPVProfile";
 import { LoadChart } from "./charts/LoadChart";
@@ -17,7 +15,6 @@ import { OverPanelingAnalysis } from "./components/OverPanelingAnalysis";
 import { AnnotationsPanel } from "./components/AnnotationsPanel";
 import { TOULegend } from "./components/TOULegend";
 import { TopContributors } from "./components/TopContributors";
-import { DateMode } from "./components/DateModeSelector";
 import { MethodologySection, solarMethodology, batteryMethodology, financialMethodology, touMethodology } from "@/components/simulation/MethodologySection";
 import { useDeratingSettings } from "@/hooks/useDeratingSettings";
 import { useDiversitySettings } from "@/hooks/useDiversitySettings";
@@ -119,9 +116,6 @@ export function LoadProfileChart({
   const [systemLosses, setSystemLosses] = useState(() => globalDeratingSettings.systemLosses);
   // Use diversity settings for load profile diversity factor
   const [diversityFactor, setDiversityFactor] = useState(() => globalDiversitySettings.diversityFactor);
-  const [dateMode, setDateMode] = useState<DateMode>("average");
-  const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   // Month multi-select for average mode filtering (default: all months)
   const [selectedMonthsFilter, setSelectedMonthsFilter] = useState<Set<number>>(
     () => new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
@@ -174,42 +168,13 @@ export function LoadProfileChart({
     longitude: longitude || null,
   });
 
-  // Specific date data hook
+  // Averaged data hook (always used now - no more month/specific modes)
   const {
-    chartData: specificDateChartData,
-    availableDateRange,
-    hasRawData: specificDateHasRawData,
-  } = useSpecificDateData({
-    tenants,
-    shopTypes,
-    selectedDate: specificDate || null,
-    displayUnit,
-    powerFactor,
-  });
-
-  // Monthly data hook
-  const {
-    chartData: monthlyChartData,
-    availableMonths,
-    monthlyStats,
-    hasRawData: monthlyHasRawData,
-  } = useMonthlyData({
-    tenants,
-    shopTypes,
-    selectedMonth,
-    displayUnit,
-    powerFactor,
-  });
-
-  const hasRawData = specificDateHasRawData || monthlyHasRawData;
-
-  // Averaged data hook
-  const {
-    chartData: averagedChartData,
-    totalDaily: avgTotalDaily,
-    peakHour: avgPeakHour,
-    avgHourly: avgAvgHourly,
-    loadFactor: avgLoadFactor,
+    chartData,
+    totalDaily,
+    peakHour,
+    avgHourly,
+    loadFactor,
     pvStats,
     overPanelingStats,
     tenantsWithScada,
@@ -223,44 +188,17 @@ export function LoadProfileChart({
     selectedDays,
     displayUnit,
     powerFactor,
-    showPVProfile: dateMode === "average" && showPVProfile,
+    showPVProfile,
     maxPvAcKva,
     dcCapacityKwp,
     dcAcRatio: effectiveDcAcRatio,
-    showBattery: dateMode === "average" && showBattery,
+    showBattery,
     batteryCapacity,
     batteryPower,
     solcastProfile: useSolcast ? solcastProfile : undefined,
     systemLosses,
     diversityFactor,
   });
-
-  // Use appropriate data based on mode
-  const chartData = dateMode === "month" && monthlyChartData 
-    ? monthlyChartData 
-    : dateMode === "specific" && specificDateChartData 
-      ? specificDateChartData 
-      : averagedChartData;
-  
-  const totalDaily = dateMode === "month" && monthlyChartData
-    ? monthlyChartData.reduce((sum, d) => sum + d.total, 0)
-    : dateMode === "specific" && specificDateChartData 
-      ? specificDateChartData.reduce((sum, d) => sum + d.total, 0)
-      : avgTotalDaily;
-  
-  const peakHour = dateMode === "month" && monthlyChartData
-    ? monthlyChartData.reduce((max, d, i) => (d.total > max.val ? { val: d.total, hour: i } : max), { val: 0, hour: 0 })
-    : dateMode === "specific" && specificDateChartData
-      ? specificDateChartData.reduce((max, d, i) => (d.total > max.val ? { val: d.total, hour: i } : max), { val: 0, hour: 0 })
-      : avgPeakHour;
-  
-  const avgHourly = totalDaily / 24;
-  const loadFactor = peakHour.val > 0 ? (avgHourly / peakHour.val) * 100 : 0;
-  
-  // For specific date mode, determine if it's a weekend
-  const effectiveIsWeekend = dateMode === "specific" && specificDate
-    ? (specificDate.getDay() === 0 || specificDate.getDay() === 6)
-    : isWeekend;
 
   const { exportToCSV, exportToPDF, exportToPNG, exportToSVG } = useExportHandlers({
     chartData,
@@ -295,7 +233,7 @@ export function LoadProfileChart({
         <CardHeader className="pb-3">
           <ChartHeader
             selectedDay={selectedDay}
-            isWeekend={effectiveIsWeekend}
+            isWeekend={isWeekend}
             displayUnit={displayUnit}
             setDisplayUnit={setDisplayUnit}
             navigateDay={navigateDay}
@@ -316,24 +254,10 @@ export function LoadProfileChart({
             exportToPDF={exportToPDF}
             exportToPNG={exportToPNG}
             exportToSVG={exportToSVG}
-            // Date mode props
-            dateMode={dateMode}
-            onDateModeChange={setDateMode}
-            specificDate={specificDate}
-            onSpecificDateChange={setSpecificDate}
-            availableDates={availableDateRange.availableDates}
-            dateRangeStart={availableDateRange.startDate}
-            dateRangeEnd={availableDateRange.endDate}
-            hasRawData={hasRawData}
-            // Monthly mode props
-            selectedMonth={selectedMonth}
-            onMonthChange={setSelectedMonth}
-            availableMonths={availableMonths}
-            monthlyStats={monthlyStats}
             // Weekday multi-select props
             selectedDays={selectedDays}
             onDaysChange={setSelectedDays}
-            // Month multi-select props for average mode filtering
+            // Month multi-select props for filtering
             selectedMonthsFilter={selectedMonthsFilter}
             onMonthsFilterChange={setSelectedMonthsFilter}
           />
@@ -377,29 +301,15 @@ export function LoadProfileChart({
             setUseSolcast={toggleSolcast}
           />
 
-          {/* No data message for month mode */}
-          {dateMode === "month" && !monthlyChartData && selectedMonth && (
-            <div className="flex items-center justify-center py-8 text-muted-foreground">
-              <p className="text-sm">No SCADA data available for {selectedMonth}</p>
-            </div>
-          )}
-
-          {/* No data message for specific date */}
-          {dateMode === "specific" && !specificDateChartData && specificDate && (
-            <div className="flex items-center justify-center py-8 text-muted-foreground">
-              <p className="text-sm">No SCADA data available for {specificDate.toLocaleDateString()}</p>
-            </div>
-          )}
-
           {/* Load Profile Chart */}
-          <LoadChart chartData={chartData} showTOU={showTOU} isWeekend={effectiveIsWeekend} unit={unit} />
+          <LoadChart chartData={chartData} showTOU={showTOU} isWeekend={isWeekend} unit={unit} />
 
           {/* PV Generation Chart */}
           {showPVProfile && maxPvAcKva && chartData && (
             <SolarChart
               chartData={chartData}
               showTOU={showTOU}
-              isWeekend={effectiveIsWeekend}
+              isWeekend={isWeekend}
               dcAcRatio={effectiveDcAcRatio}
               show1to1Comparison={show1to1Comparison}
               unit={unit}
@@ -412,14 +322,14 @@ export function LoadProfileChart({
             <GridFlowChart
               chartData={chartData}
               showTOU={showTOU}
-              isWeekend={effectiveIsWeekend}
+              isWeekend={isWeekend}
               unit={unit}
             />
           )}
 
 
           {/* Over-Paneling Summary */}
-          {showPVProfile && maxPvAcKva && overPanelingStats && effectiveDcAcRatio > 1 && dateMode === "average" && (
+          {showPVProfile && maxPvAcKva && overPanelingStats && effectiveDcAcRatio > 1 && (
             <OverPanelingAnalysis stats={overPanelingStats} dcAcRatio={effectiveDcAcRatio} />
           )}
 
@@ -442,7 +352,7 @@ export function LoadProfileChart({
         avgHourly={avgHourly} 
         loadFactor={loadFactor} 
         unit={unit} 
-        pvStats={dateMode === "average" ? pvStats : null}
+        pvStats={pvStats}
         weekdayDailyKwh={weekdayDailyKwh}
         weekendDailyKwh={weekendDailyKwh}
       />
