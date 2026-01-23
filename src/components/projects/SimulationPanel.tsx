@@ -7,10 +7,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
 import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw, Calculator, Clock, Info, Save } from "lucide-react";
+import { LoadChart } from "./load-profile/charts/LoadChart";
+import { SolarChart } from "./load-profile/charts/SolarChart";
+import { GridFlowChart } from "./load-profile/charts/GridFlowChart";
+import { BatteryChart } from "./load-profile/charts/BatteryChart";
+import { TOULegend } from "./load-profile/components/TOULegend";
+import { ChartDataPoint } from "./load-profile/types";
 import { FinancialMetricRow } from "./simulation/FinancialMetricRow";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ANNUAL_HOURS_24H, ANNUAL_HOURS_SOLAR } from "@/lib/tariffCalculations";
@@ -193,6 +200,16 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitialLoadComplete = useRef(false);
   const AUTOSAVE_DEBOUNCE_MS = 1500;
+
+  // TOU toggle state for charts (with localStorage persistence)
+  const [showTOU, setShowTOU] = useState(() => {
+    const saved = localStorage.getItem('simulation_showTOU');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('simulation_showTOU', String(showTOU));
+  }, [showTOU]);
 
   // Auto-load the last saved simulation when data arrives (only once per projectId)
   useEffect(() => {
@@ -756,6 +773,35 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   // Annual scaling
   const annualEnergy = useMemo(() => scaleToAnnual(energyResults), [energyResults]);
+
+  // Transform energyResults.hourlyData to ChartDataPoint format for LoadProfile charts
+  const simulationChartData = useMemo<ChartDataPoint[]>(() => {
+    if (!energyResults?.hourlyData) return [];
+    
+    const dcAcRatio = inverterConfig.dcAcRatio;
+    
+    return energyResults.hourlyData.map((point): ChartDataPoint => {
+      // Calculate DC output based on DC/AC ratio
+      const pvAcOutput = point.solar;
+      const pvDcOutput = pvAcOutput * dcAcRatio;
+      const clipping = Math.max(0, pvDcOutput - solarCapacity); // Clipping when DC exceeds inverter capacity
+      const pv1to1Baseline = Math.min(pvAcOutput, solarCapacity); // What a 1:1 ratio would produce
+      
+      return {
+        hour: point.hour,
+        total: point.load,
+        pvGeneration: pvAcOutput,
+        pvDcOutput: pvDcOutput,
+        pvClipping: clipping,
+        pv1to1Baseline: pv1to1Baseline,
+        gridImport: point.gridImport,
+        gridExport: point.gridExport,
+        batteryCharge: point.batteryCharge,
+        batteryDischarge: point.batteryDischarge,
+        batterySoC: point.batterySOC * batteryCapacity / 100, // Convert % to kWh
+      };
+    });
+  }, [energyResults?.hourlyData, inverterConfig.dcAcRatio, solarCapacity, batteryCapacity]);
 
   // Check if financial analysis is available (moved up for use in advanced simulation)
   const hasFinancialData = !!project.tariff_id;
@@ -1789,9 +1835,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       {/* Charts */}
       <Tabs defaultValue="energy">
         <TabsList>
-          <TabsTrigger value="energy">Energy Flow</TabsTrigger>
-          <TabsTrigger value="battery">Battery State</TabsTrigger>
-          {hasFinancialData && <TabsTrigger value="cost">Cost Comparison</TabsTrigger>}
+          <TabsTrigger value="energy">Energy Charts</TabsTrigger>
           <TabsTrigger value="loadshed" className="gap-1">
             <Zap className="h-3 w-3" />
             Load Shedding
@@ -1806,132 +1850,71 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
         <TabsContent value="energy" className="mt-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Hourly Energy Flow</CardTitle>
-                  <CardDescription>Load, solar generation, and grid import by hour (kWh)</CardDescription>
+                  <CardTitle>Energy Simulation Charts</CardTitle>
+                  <CardDescription>Hourly load, solar generation, and grid flow analysis</CardDescription>
                 </div>
-                <ReportToggle
-                  id="energy-flow-chart"
-                  segmentType="energy_flow"
-                  label="Energy Flow Chart"
+                <div className="flex items-center gap-3">
+                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
+                    TOU
+                  </Label>
+                  <ReportToggle
+                    id="energy-flow-chart"
+                    segmentType="energy_flow"
+                    label="Energy Flow Chart"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Load Profile Chart */}
+              <LoadChart 
+                chartData={simulationChartData} 
+                showTOU={showTOU} 
+                isWeekend={false} 
+                unit="kW" 
+              />
+
+              {/* Solar Chart */}
+              {solarCapacity > 0 && (
+                <SolarChart
+                  chartData={simulationChartData}
+                  showTOU={showTOU}
+                  isWeekend={false}
+                  dcAcRatio={inverterConfig.dcAcRatio}
+                  show1to1Comparison={inverterConfig.dcAcRatio > 1}
+                  unit="kW"
+                  maxPvAcKva={solarCapacity}
                 />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[350px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={energyResults.hourlyData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="hour" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}`} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Bar dataKey="load" name="Load" fill="hsl(var(--chart-1))" />
-                    <Bar dataKey="solar" name="Solar" fill="hsl(142 76% 36%)" />
-                    <Bar dataKey="gridImport" name="Grid Import" fill="hsl(var(--destructive))" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              )}
+
+              {/* Grid Flow Chart */}
+              {solarCapacity > 0 && (
+                <GridFlowChart
+                  chartData={simulationChartData}
+                  showTOU={showTOU}
+                  isWeekend={false}
+                  unit="kW"
+                />
+              )}
+
+              {/* Battery Chart */}
+              {includesBattery && batteryCapacity > 0 && (
+                <BatteryChart
+                  chartData={simulationChartData}
+                  batteryCapacity={batteryCapacity}
+                  batteryPower={batteryPower}
+                />
+              )}
+
+              {/* TOU Legend */}
+              {showTOU && <TOULegend />}
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="battery" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Battery State of Charge</CardTitle>
-              <CardDescription>Battery charge level throughout the day</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[350px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={energyResults.hourlyData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis dataKey="hour" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                      formatter={(v: number) => [`${v.toFixed(1)}%`, "SOC"]}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="batterySOC"
-                      name="State of Charge"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {hasFinancialData && (
-          <TabsContent value="cost" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Cost Comparison</CardTitle>
-                <CardDescription>Grid-only vs Solar+Battery system costs</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="p-4 rounded-lg bg-muted/50">
-                    <h4 className="font-medium mb-3">Grid Only</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>Daily Cost</span>
-                        <span>R{financialResults.gridOnlyDailyCost.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Monthly Cost</span>
-                        <span>R{financialResults.gridOnlyMonthlyCost.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between font-medium">
-                        <span>Annual Cost</span>
-                        <span>R{Math.round(financialResults.gridOnlyAnnualCost).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-                    <h4 className="font-medium mb-3 text-green-700">With Solar + Battery</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>Daily Cost</span>
-                        <span>R{financialResults.solarDailyCost.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Monthly Cost</span>
-                        <span>R{financialResults.solarMonthlyCost.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between font-medium">
-                        <span>Annual Cost</span>
-                        <span>R{Math.round(financialResults.solarAnnualCost).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between font-medium text-green-600 pt-2 border-t border-green-500/20">
-                        <span>Annual Savings</span>
-                        <span>R{Math.round(financialResults.annualSavings).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
 
         {/* Load Shedding Scenarios Tab */}
         <TabsContent value="loadshed" className="mt-4">
