@@ -1,6 +1,7 @@
 import { TrendingUp, DollarSign, Percent, Clock, BarChart3, Zap } from "lucide-react";
 import { SimulationData, formatCurrency, formatNumber, formatPercent } from "../types";
 import { ProposalTemplate } from "../templates/types";
+import { formatPaybackPeriod } from "@/lib/utils";
 
 interface FinancialSummarySectionProps {
   simulation: SimulationData;
@@ -36,7 +37,7 @@ export function FinancialSummarySection({ simulation, template, forPDF }: Financ
     { 
       icon: Clock, 
       label: "Payback Period", 
-      value: `${simulation.paybackYears.toFixed(1)} years`,
+      value: formatPaybackPeriod(simulation.paybackYears),
       description: "Time to recover initial investment",
       highlight: simulation.paybackYears < 6
     },

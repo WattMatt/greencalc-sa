@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { formatPaybackPeriod } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -651,7 +652,7 @@ export default function Calculator() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-primary">
-                      {results.paybackYears > 0 ? `${results.paybackYears.toFixed(1)} years` : "-"}
+                      {formatPaybackPeriod(results.paybackYears)}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Payback period • New bill: R {results.newBill.toFixed(2)}/month
