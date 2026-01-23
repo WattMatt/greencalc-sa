@@ -122,6 +122,10 @@ export function LoadProfileChart({
   const [dateMode, setDateMode] = useState<DateMode>("average");
   const [specificDate, setSpecificDate] = useState<Date | undefined>(undefined);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  // Month multi-select for average mode filtering (default: all months)
+  const [selectedMonthsFilter, setSelectedMonthsFilter] = useState<Set<number>>(
+    () => new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+  );
   const chartRef = useRef<HTMLDivElement>(null);
 
   // Maximum possible PV based on connection (for reference)
@@ -329,6 +333,9 @@ export function LoadProfileChart({
             // Weekday multi-select props
             selectedDays={selectedDays}
             onDaysChange={setSelectedDays}
+            // Month multi-select props for average mode filtering
+            selectedMonthsFilter={selectedMonthsFilter}
+            onMonthsFilterChange={setSelectedMonthsFilter}
           />
         </CardHeader>
 

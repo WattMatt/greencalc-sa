@@ -8,7 +8,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { WeekdaySelector } from "./WeekdaySelector";
+import { MonthSelector } from "./MonthSelector";
+import { DayPresets } from "./DayPresets";
 
 export type DateMode = "average" | "specific" | "month";
 
@@ -35,6 +38,9 @@ interface DateModeSelectorProps {
   // Weekday multi-select props for average mode
   selectedDays?: Set<number>;
   onDaysChange?: (days: Set<number>) => void;
+  // Month multi-select props for average mode
+  selectedMonthsFilter?: Set<number>;
+  onMonthsFilterChange?: (months: Set<number>) => void;
 }
 
 export function DateModeSelector({
@@ -51,6 +57,8 @@ export function DateModeSelector({
   availableMonths = [],
   selectedDays,
   onDaysChange,
+  selectedMonthsFilter,
+  onMonthsFilterChange,
 }: DateModeSelectorProps) {
   const [calendarOpen, setCalendarOpen] = useState(false);
 
@@ -101,9 +109,23 @@ export function DateModeSelector({
         </ToggleGroupItem>
       </ToggleGroup>
 
+      {/* Month multi-select for average mode (filter by months) */}
+      {mode === "average" && selectedMonthsFilter && onMonthsFilterChange && (
+        <>
+          <MonthSelector 
+            selectedMonths={selectedMonthsFilter} 
+            onMonthsChange={onMonthsFilterChange} 
+          />
+          <Separator orientation="vertical" className="h-5" />
+        </>
+      )}
+
       {/* Weekday multi-select for average mode */}
       {mode === "average" && selectedDays && onDaysChange && (
-        <WeekdaySelector selectedDays={selectedDays} onDaysChange={onDaysChange} />
+        <>
+          <WeekdaySelector selectedDays={selectedDays} onDaysChange={onDaysChange} />
+          <DayPresets selectedDays={selectedDays} onDaysChange={onDaysChange} />
+        </>
       )}
 
       {/* Month selector */}

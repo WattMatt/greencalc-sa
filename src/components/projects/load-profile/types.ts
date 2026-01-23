@@ -64,6 +64,11 @@ export type DayOfWeek = typeof DAYS_OF_WEEK[number];
 export const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"] as const;
 export type DayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
+// Month labels for compact month selector
+export const MONTH_LABELS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"] as const;
+export const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+export type MonthIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+
 export const DAY_MULTIPLIERS: Record<DayOfWeek, number> = {
   Monday: 0.92,
   Tuesday: 0.96,
