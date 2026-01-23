@@ -20,6 +20,7 @@ import {
   SeasonalConfig,
   GridConstraintsConfig,
   LoadGrowthConfig,
+  ColumnTotals,
 } from "./AdvancedSimulationTypes";
 
 /**
@@ -589,6 +590,18 @@ export function runAdvancedSimulation(
     };
   }
   
+  // Calculate column totals for transparency (matches cashflow table)
+  const columnTotals: ColumnTotals = {
+    totalEnergyYield: lifetimeGeneration,
+    npvEnergyYield,
+    totalIncome: lifetimeSavings,
+    totalInsurance: yearlyProjections.reduce((s, p) => s + (p.insuranceCostR || 0), 0),
+    totalOM: yearlyProjections.reduce((s, p) => s + p.maintenanceCost, 0),
+    totalReplacements: yearlyProjections.reduce((s, p) => s + (p.replacementCost || 0), 0),
+    totalCosts: yearlyProjections.reduce((s, p) => s + (p.totalCostR || 0), 0),
+    totalNetCashflow: yearlyProjections.reduce((s, p) => s + p.netCashFlow, 0),
+  };
+
   return {
     npv,
     irr,
@@ -597,6 +610,7 @@ export function runAdvancedSimulation(
     yearlyProjections,
     lifetimeSavings,
     lifetimeGeneration,
+    columnTotals,
     sensitivityResults,
   };
 }

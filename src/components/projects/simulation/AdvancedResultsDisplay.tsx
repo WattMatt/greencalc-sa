@@ -1,10 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TrendingUp, TrendingDown, DollarSign, Zap, Calendar, TableIcon } from "lucide-react";
 import { AdvancedFinancialResults, YearlyProjection } from "./AdvancedSimulationTypes";
+import { useMemo } from "react";
 import {
   LineChart,
   Line,
@@ -95,6 +96,21 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
   
   // Generate monthly data for the cashflow chart
   const { monthlyData, breakEvenMonth } = generateMonthlyCashflowData(results.yearlyProjections);
+  
+  // Calculate column totals for the cashflow table
+  const totals = useMemo(() => {
+    const projections = results.yearlyProjections;
+    return {
+      energyYield: projections.reduce((sum, p) => sum + (p.energyYield ?? p.solarGeneration ?? 0), 0),
+      discountedEnergyYield: projections.reduce((sum, p) => sum + (p.discountedEnergyYield ?? 0), 0),
+      totalIncome: projections.reduce((sum, p) => sum + (p.totalIncomeR ?? p.energySavings ?? 0), 0),
+      insurance: projections.reduce((sum, p) => sum + (p.insuranceCostR ?? 0), 0),
+      oAndM: projections.reduce((sum, p) => sum + (p.maintenanceCost ?? 0), 0),
+      replacements: projections.reduce((sum, p) => sum + (p.replacementCost ?? 0), 0),
+      totalCost: projections.reduce((sum, p) => sum + (p.totalCostR ?? p.maintenanceCost ?? 0) + (p.replacementCost ?? 0), 0),
+      netCashflow: projections.reduce((sum, p) => sum + (p.netCashFlow ?? 0), 0),
+    };
+  }, [results.yearlyProjections]);
   
   return (
     <div className="space-y-4">
@@ -356,6 +372,25 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                         </TableRow>
                       );
                     })}
+                    {/* Totals Row */}
+                    <TableRow className="bg-muted/50 font-bold border-t-2">
+                      <TableCell className="text-center sticky left-0 bg-muted/50 font-bold">TOTAL</TableCell>
+                      <TableCell className="text-right font-bold">{formatNumber(totals.energyYield, 0)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right font-bold text-green-600 bg-green-500/10">{formatCurrency(totals.totalIncome)}</TableCell>
+                      <TableCell className="text-right font-bold text-amber-600">-{formatCurrency(totals.insurance)}</TableCell>
+                      <TableCell className="text-right font-bold text-amber-600">-{formatCurrency(totals.oAndM)}</TableCell>
+                      <TableCell className="text-right font-bold text-amber-600">-{formatCurrency(totals.replacements)}</TableCell>
+                      <TableCell className="text-right font-bold text-amber-600 bg-amber-500/10">-{formatCurrency(totals.totalCost)}</TableCell>
+                      <TableCell className="text-right font-bold text-green-600">{formatCurrency(totals.netCashflow)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </ScrollArea>
