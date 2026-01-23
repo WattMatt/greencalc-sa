@@ -33,6 +33,9 @@ interface LoadProfileChartProps {
   simulatedBatteryCapacityKwh?: number | null;
   simulatedBatteryPowerKw?: number | null;
   simulatedDcAcRatio?: number | null;
+  // System type flags to control initial toggle states
+  systemIncludesSolar?: boolean;
+  systemIncludesBattery?: boolean;
 }
 
 export function LoadProfileChart({ 
@@ -45,6 +48,8 @@ export function LoadProfileChart({
   simulatedBatteryCapacityKwh,
   simulatedBatteryPowerKw,
   simulatedDcAcRatio,
+  systemIncludesSolar = true,
+  systemIncludesBattery = false,
 }: LoadProfileChartProps) {
   // Get global settings as defaults - Diversity for load profiles, Derating for PV simulations
   const { settings: globalDeratingSettings } = useDeratingSettings();
@@ -54,8 +59,10 @@ export function LoadProfileChart({
   const [powerFactor, setPowerFactor] = useState(() => globalDeratingSettings.powerFactor);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Wednesday");
   const [showTOU, setShowTOU] = useState(true);
-  const [showPVProfile, setShowPVProfile] = useState(false);
-  const [showBattery, setShowBattery] = useState(false);
+  // Initialize PV toggle based on whether the project system includes solar
+  const [showPVProfile, setShowPVProfile] = useState(() => systemIncludesSolar);
+  // Initialize battery toggle based on whether the project system includes battery
+  const [showBattery, setShowBattery] = useState(() => systemIncludesBattery);
   // Use simulated battery values if available, otherwise defaults
   const [batteryCapacity, setBatteryCapacity] = useState(() => simulatedBatteryCapacityKwh || 500);
   const [batteryPower, setBatteryPower] = useState(() => simulatedBatteryPowerKw || 250);
