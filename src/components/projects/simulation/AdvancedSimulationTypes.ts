@@ -350,6 +350,18 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
   },
 };
 
+// ============= Column Totals for Transparency =============
+export interface ColumnTotals {
+  totalEnergyYield: number;        // Sum of Energy Yield column
+  npvEnergyYield: number;          // Sum of Discounted Energy Yield column (for LCOE)
+  totalIncome: number;             // Sum of Total Income column
+  totalInsurance: number;          // Sum of Insurance column
+  totalOM: number;                 // Sum of O&M column
+  totalReplacements: number;       // Sum of Replacements column
+  totalCosts: number;              // Sum of Total Cost column (excluding replacements)
+  totalNetCashflow: number;        // Sum of Net Cashflow column
+}
+
 // ============= Advanced Financial Results =============
 export interface AdvancedFinancialResults {
   // Standard metrics
@@ -364,6 +376,9 @@ export interface AdvancedFinancialResults {
   // Cumulative savings over project lifetime
   lifetimeSavings: number;
   lifetimeGeneration: number;
+  
+  // Column totals for transparency (matches cashflow table)
+  columnTotals: ColumnTotals;
   
   // Sensitivity analysis
   sensitivityResults?: SensitivityResults;

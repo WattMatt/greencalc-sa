@@ -1377,9 +1377,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       formula: "Undiscounted Total Costs ÷ NPV of Energy Yield",
                       inputs: [
                         { label: "Initial Capital", value: `R ${financialResults.systemCost.toLocaleString()}` },
-                        { label: "20-Yr O&M + Insurance", value: advancedResults ? `R ${Math.round(advancedResults.yearlyProjections.reduce((s, p) => s + p.maintenanceCost + (p.insuranceCostR || 0), 0)).toLocaleString()}` : 'N/A' },
-                        { label: "Replacements", value: advancedResults ? `R ${Math.round(advancedResults.yearlyProjections.reduce((s, p) => s + p.replacementCost, 0)).toLocaleString()}` : 'N/A' },
-                        { label: "NPV Energy Yield", value: advancedResults ? `${Math.round(advancedResults.yearlyProjections.reduce((s, p) => s + (p.discountedEnergyYield || 0), 0)).toLocaleString()} kWh` : 'N/A' },
+                        { label: "20-Yr O&M (CPI escalated)", value: advancedResults?.columnTotals ? `R ${Math.round(advancedResults.columnTotals.totalOM).toLocaleString()}` : 'N/A' },
+                        { label: "20-Yr Insurance (CPI escalated)", value: advancedResults?.columnTotals ? `R ${Math.round(advancedResults.columnTotals.totalInsurance).toLocaleString()}` : 'N/A' },
+                        { label: "Replacements (Yr 10)", value: advancedResults?.columnTotals ? `R ${Math.round(advancedResults.columnTotals.totalReplacements).toLocaleString()}` : 'N/A' },
+                        { label: "NPV of Energy Yield", value: advancedResults?.columnTotals ? `${Math.round(advancedResults.columnTotals.npvEnergyYield).toLocaleString()} kWh` : 'N/A' },
                         { label: "LCOE Discount Rate", value: `${systemCosts.lcoeDiscountRate ?? 10}%` },
                       ],
                     }}
