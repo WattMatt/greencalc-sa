@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { formatPaybackPeriod } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -1518,7 +1519,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   />
                   <FinancialMetricRow
                     label="Payback Period"
-                    value={`${(advancedResults?.sensitivityResults?.expected.payback ?? financialResults.paybackYears).toFixed(2)} yrs`}
+                    value={formatPaybackPeriod(advancedResults?.sensitivityResults?.expected.payback ?? financialResults.paybackYears)}
                     breakdown={{
                       formula: "Year when cumulative cashflow ≥ 0",
                       inputs: [
@@ -2019,7 +2020,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Payback</span>
-                        <span>{financialResultsGeneric.paybackYears.toFixed(1)} yrs</span>
+                        <span>{formatPaybackPeriod(financialResultsGeneric.paybackYears)}</span>
                       </div>
                     </div>
                   )}
@@ -2085,7 +2086,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Payback</span>
                         <span>
-                          {financialResultsSolcast.paybackYears.toFixed(1)} yrs
+                          {formatPaybackPeriod(financialResultsSolcast.paybackYears)}
                           <DifferenceIndicator
                             baseValue={financialResultsGeneric.paybackYears}
                             compareValue={financialResultsSolcast.paybackYears}

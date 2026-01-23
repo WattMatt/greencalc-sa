@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { TrendingUp, TrendingDown, DollarSign, Zap, Calendar, TableIcon } from "lucide-react";
 import { AdvancedFinancialResults, YearlyProjection } from "./AdvancedSimulationTypes";
 import { useMemo } from "react";
+import { formatPaybackPeriod } from "@/lib/utils";
 import {
   LineChart,
   Line,
@@ -141,8 +142,8 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
         <MetricCard
           label="Payback"
           value={results.sensitivityResults?.expected.payback 
-            ? `${results.sensitivityResults.expected.payback.toFixed(2)} years` 
-            : (paybackYear ? `~${paybackYear} years` : ">25 years")}
+            ? formatPaybackPeriod(results.sensitivityResults.expected.payback)
+            : (paybackYear ? formatPaybackPeriod(paybackYear) : ">25 years")}
           icon={<Calendar className="h-4 w-4" />}
           variant={paybackYear && paybackYear < 7 ? "positive" : paybackYear && paybackYear < 12 ? "neutral" : "negative"}
           tooltip="Years to break even"
@@ -201,7 +202,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                 <span>Cumulative Cash Flow</span>
                 {breakEvenMonth && (
                   <Badge variant="outline" className="text-xs">
-                    Break-even: {((breakEvenMonth.year - 1) + (breakEvenMonth.month / 12)).toFixed(2)} years
+                    Break-even: {formatPaybackPeriod((breakEvenMonth.year - 1) + (breakEvenMonth.month / 12))}
                   </Badge>
                 )}
               </CardTitle>
@@ -620,7 +621,7 @@ function SensitivityCard({
         </div>
         <div className="flex justify-between">
           <span className="text-muted-foreground">Payback:</span>
-          <span className="font-medium">{formatNumber(payback)} yrs</span>
+          <span className="font-medium">{formatPaybackPeriod(payback)}</span>
         </div>
       </div>
       {assumptions && (

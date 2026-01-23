@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Sun, Battery, TrendingUp, Calendar, Banknote, AlertTriangle, Info } from "lucide-react";
+import { formatPaybackPeriod } from "@/lib/utils";
 
 export interface QuickEstimateOutput {
   // Energy
@@ -139,9 +140,9 @@ export function QuickEstimateResults({ results }: QuickEstimateResultsProps) {
             <div>
               <div className="flex items-center justify-center gap-1">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                <p className="text-xl font-bold">{results.paybackYears.toFixed(1)}</p>
+                <p className="text-xl font-bold">{formatPaybackPeriod(results.paybackYears)}</p>
               </div>
-              <p className="text-xs text-muted-foreground">Payback (years)</p>
+              <p className="text-xs text-muted-foreground">Payback</p>
             </div>
             <div>
               <div className="flex items-center justify-center gap-1">
