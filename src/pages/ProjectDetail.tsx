@@ -1174,6 +1174,8 @@ export default function ProjectDetail() {
             simulatedBatteryCapacityKwh={latestSimulation?.battery_capacity_kwh}
             simulatedBatteryPowerKw={latestSimulation?.battery_power_kw}
             simulatedDcAcRatio={(latestSimulation?.results_json as any)?.pvConfig?.dcAcRatio}
+            systemIncludesSolar={projectSystemType !== "Grid Only"}
+            systemIncludesBattery={systemIncludesBattery}
           />
         </TabsContent>
 
