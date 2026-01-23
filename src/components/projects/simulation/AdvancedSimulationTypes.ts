@@ -420,6 +420,10 @@ export interface YearlyProjection {
   
   insuranceCostR: number; // Insurance with CPI escalation
   totalCostR: number; // insurance + maintenance
+  
+  // Present Value calculations (for NPV transparency)
+  pvReductionFactor: number; // (1 + discountRate)^-year - starts at 1/(1+r) for year 1
+  presentValue: number; // netCashFlow × pvReductionFactor
 }
 
 export interface SensitivityResults {

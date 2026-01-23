@@ -476,6 +476,11 @@ export function runAdvancedSimulation(
     const lcoeRate = systemCosts.lcoeDiscountRate ?? (financial.enabled ? financial.discountRate : 10);
     const discountedEnergyYield = energyYield / Math.pow(1 + lcoeRate / 100, year);
     
+    // PV Reduction Factor using discount rate: 1 / (1 + r)^year
+    const pvDiscountRate = financial.enabled ? financial.discountRate : 10;
+    const pvReductionFactor = 1 / Math.pow(1 + pvDiscountRate / 100, year);
+    const presentValue = netCashFlow * pvReductionFactor;
+    
     // Legacy fields (for backwards compatibility)
     const escalatedTariff = baseEnergyRate * energyRateIndex;
     const energySavings = totalIncomeR; // Map to legacy field
@@ -508,6 +513,8 @@ export function runAdvancedSimulation(
       totalIncomeR,
       insuranceCostR,
       totalCostR,
+      pvReductionFactor,
+      presentValue,
     });
     
     cashFlows.push(netCashFlow);

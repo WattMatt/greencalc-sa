@@ -109,6 +109,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
       replacements: projections.reduce((sum, p) => sum + (p.replacementCost ?? 0), 0),
       totalCost: projections.reduce((sum, p) => sum + (p.totalCostR ?? p.maintenanceCost ?? 0) + (p.replacementCost ?? 0), 0),
       netCashflow: projections.reduce((sum, p) => sum + (p.netCashFlow ?? 0), 0),
+      presentValue: projections.reduce((sum, p) => sum + (p.presentValue ?? 0), 0),
     };
   }, [results.yearlyProjections]);
   
@@ -280,6 +281,8 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                       <TableHead className="text-right">Replacements</TableHead>
                       <TableHead className="text-right bg-amber-500/5">Total Cost</TableHead>
                       <TableHead className="text-right">Net Cashflow</TableHead>
+                      <TableHead className="text-right text-muted-foreground">PV of R1</TableHead>
+                      <TableHead className="text-right">Present Value</TableHead>
                       <TableHead className="text-right">Cumulative</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -300,6 +303,10 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground bg-amber-500/5">-</TableCell>
+                      <TableCell className="text-right font-medium text-destructive">
+                        -{formatCurrency(Math.abs(results.yearlyProjections[0]?.cumulativeCashFlow - results.yearlyProjections[0]?.netCashFlow || 0))}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">1.0000</TableCell>
                       <TableCell className="text-right font-medium text-destructive">
                         -{formatCurrency(Math.abs(results.yearlyProjections[0]?.cumulativeCashFlow - results.yearlyProjections[0]?.netCashFlow || 0))}
                       </TableCell>
@@ -366,6 +373,12 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                           <TableCell className={`text-right font-medium ${proj.netCashFlow >= 0 ? "text-green-600" : "text-destructive"}`}>
                             {proj.netCashFlow >= 0 ? formatCurrency(proj.netCashFlow) : `-${formatCurrency(Math.abs(proj.netCashFlow))}`}
                           </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatNumber(proj.pvReductionFactor ?? 0, 4)}
+                          </TableCell>
+                          <TableCell className={`text-right font-medium ${(proj.presentValue ?? 0) >= 0 ? "text-green-600" : "text-destructive"}`}>
+                            {(proj.presentValue ?? 0) >= 0 ? formatCurrency(proj.presentValue ?? 0) : `-${formatCurrency(Math.abs(proj.presentValue ?? 0))}`}
+                          </TableCell>
                           <TableCell className={`text-right font-medium ${proj.cumulativeCashFlow >= 0 ? "text-green-600" : "text-destructive"}`}>
                             {proj.cumulativeCashFlow >= 0 ? formatCurrency(proj.cumulativeCashFlow) : `-${formatCurrency(Math.abs(proj.cumulativeCashFlow))}`}
                           </TableCell>
@@ -389,6 +402,8 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                       <TableCell className="text-right font-bold text-amber-600">-{formatCurrency(totals.replacements)}</TableCell>
                       <TableCell className="text-right font-bold text-amber-600 bg-amber-500/10">-{formatCurrency(totals.totalCost)}</TableCell>
                       <TableCell className="text-right font-bold text-green-600">{formatCurrency(totals.netCashflow)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right font-bold text-green-600">{formatCurrency(totals.presentValue)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                     </TableRow>
                   </TableBody>
