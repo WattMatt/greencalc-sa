@@ -348,9 +348,10 @@ export function runAdvancedSimulation(
   const baseMaintenance = systemCosts.maintenancePerYear ?? 0;
   
   // Insurance = X% of Total Capital Cost only (excluding O&M)
+  // Insurance Rate produces a monthly amount - multiply by 12 for annual
   // This base value is then escalated by CPI each year
   const insuranceRatePercent = systemCosts.insuranceRatePercent ?? 1.0; // Default 1% if not set
-  const insuranceBase = initialCost * (insuranceRatePercent / 100);
+  const insuranceBase = initialCost * (insuranceRatePercent / 100) * 12;
   const baseInsurance = financial.enabled && financial.insuranceEnabled 
     ? insuranceBase 
     : 0;

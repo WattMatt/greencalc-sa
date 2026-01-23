@@ -1469,7 +1469,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     const year1Projection = advancedResults?.yearlyProjections?.[0];
                     const totalIncomeY1 = year1Projection?.totalIncomeR ?? financialResults.annualSavings;
                     const omCostY1 = year1Projection?.maintenanceCost ?? (systemCosts.maintenancePerYear ?? 0);
-                    const insuranceY1 = year1Projection?.insuranceCostR ?? (financialResults.systemCost * (systemCosts.insuranceRatePercent ?? 1) / 100);
+                    // Insurance Rate is monthly - multiply by 12 for annual fallback
+                    const insuranceY1 = year1Projection?.insuranceCostR ?? (financialResults.systemCost * (systemCosts.insuranceRatePercent ?? 1) / 100 * 12);
                     const netCashflowY1 = totalIncomeY1 - omCostY1 - insuranceY1;
                     const initialYield = (netCashflowY1 / financialResults.systemCost) * 100;
                     
