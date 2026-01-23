@@ -58,11 +58,33 @@ export function LoadProfileChart({
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kw");
   const [powerFactor, setPowerFactor] = useState(() => globalDeratingSettings.powerFactor);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Wednesday");
-  const [showTOU, setShowTOU] = useState(true);
-  // Initialize PV toggle based on whether the project system includes solar
-  const [showPVProfile, setShowPVProfile] = useState(() => systemIncludesSolar);
-  // Initialize battery toggle based on whether the project system includes battery
-  const [showBattery, setShowBattery] = useState(() => systemIncludesBattery);
+  
+  // Toggle states with localStorage persistence
+  const [showTOU, setShowTOU] = useState(() => {
+    const saved = localStorage.getItem('loadProfile_showTOU');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [showPVProfile, setShowPVProfile] = useState(() => {
+    const saved = localStorage.getItem('loadProfile_showPV');
+    return saved !== null ? saved === 'true' : systemIncludesSolar;
+  });
+  const [showBattery, setShowBattery] = useState(() => {
+    const saved = localStorage.getItem('loadProfile_showBattery');
+    return saved !== null ? saved === 'true' : systemIncludesBattery;
+  });
+  
+  // Persist toggle states to localStorage
+  useEffect(() => {
+    localStorage.setItem('loadProfile_showTOU', String(showTOU));
+  }, [showTOU]);
+  
+  useEffect(() => {
+    localStorage.setItem('loadProfile_showPV', String(showPVProfile));
+  }, [showPVProfile]);
+  
+  useEffect(() => {
+    localStorage.setItem('loadProfile_showBattery', String(showBattery));
+  }, [showBattery]);
   // Use simulated battery values if available, otherwise defaults
   const [batteryCapacity, setBatteryCapacity] = useState(() => simulatedBatteryCapacityKwh || 500);
   const [batteryPower, setBatteryPower] = useState(() => simulatedBatteryPowerKw || 250);
