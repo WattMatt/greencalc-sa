@@ -391,6 +391,7 @@ export interface YearlyProjection {
   
   // NEW: Income-based approach (Excel model alignment)
   energyYield: number; // kWh (with degradation applied)
+  discountedEnergyYield: number; // kWh discounted by LCOE rate (for LCOE denominator)
   energyRateIndex: number; // Tariff escalation factor (1.0, 1.1, 1.21...)
   energyRateR: number; // R/kWh (base rate × index) - actual tariff charged
   energyIncomeR: number; // R = energyYield × baseRate × index

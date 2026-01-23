@@ -276,33 +276,27 @@ export function calculateMIRR(
  * Calculate LCOE (Levelized Cost of Energy)
  * Formula: Undiscounted Total Costs / NPV of Energy Yield
  * 
- * Uses ACTUAL values from cashflow projections - no recalculation.
+ * Uses ACTUAL values directly from cashflow projections - no recalculation.
+ * npvEnergyYield is the sum of discountedEnergyYield from yearly projections.
  * yearlyMaintenanceCosts already contains CPI-escalated O&M + Insurance from projections.
  */
 export function calculateLCOE(
   totalSystemCost: number,
-  yearlyGenerations: number[],
-  yearlyMaintenanceCosts: number[],  // Already CPI-escalated from cashflow projections
-  yearlyReplacementCosts: number[],
-  discountRate: number
+  npvEnergyYield: number,              // Pre-calculated sum of discounted yields from projections
+  yearlyMaintenanceCosts: number[],    // Already CPI-escalated from cashflow projections
+  yearlyReplacementCosts: number[]
 ): number {
   // Numerator: Undiscounted sum of ALL costs from cashflow breakdown
   // Initial Capital + Sum(O&M + Insurance) + Sum(Replacements)
   let totalCosts = totalSystemCost;
   
-  for (let year = 0; year < yearlyGenerations.length; year++) {
+  for (let year = 0; year < yearlyMaintenanceCosts.length; year++) {
     totalCosts += yearlyMaintenanceCosts[year];  // Use actual escalated values from projections
     totalCosts += yearlyReplacementCosts[year] || 0;
   }
   
-  // Denominator: NPV of Energy Yield (discounted by Cost of Capital)
-  let npvEnergy = 0;
-  for (let year = 0; year < yearlyGenerations.length; year++) {
-    const discountFactor = Math.pow(1 + discountRate / 100, year + 1);
-    npvEnergy += yearlyGenerations[year] / discountFactor;
-  }
-  
-  return npvEnergy > 0 ? totalCosts / npvEnergy : 0;
+  // Denominator: NPV of Energy Yield (pre-calculated from discountedEnergyYield column)
+  return npvEnergyYield > 0 ? totalCosts / npvEnergyYield : 0;
 }
 
 /**
@@ -477,6 +471,10 @@ export function runAdvancedSimulation(
       ? netCashFlow / Math.pow(1 + financial.discountRate / 100, year)
       : netCashFlow;
     
+    // Discounted energy yield for LCOE denominator (uses LCOE discount rate)
+    const lcoeRate = systemCosts.lcoeDiscountRate ?? (financial.enabled ? financial.discountRate : 10);
+    const discountedEnergyYield = energyYield / Math.pow(1 + lcoeRate / 100, year);
+    
     // Legacy fields (for backwards compatibility)
     const escalatedTariff = baseEnergyRate * energyRateIndex;
     const energySavings = totalIncomeR; // Map to legacy field
@@ -498,6 +496,7 @@ export function runAdvancedSimulation(
       discountedCashFlow,
       // NEW: Income-based fields
       energyYield,
+      discountedEnergyYield, // For LCOE denominator
       energyRateIndex,
       energyRateR,
       energyIncomeR,
@@ -530,13 +529,18 @@ export function runAdvancedSimulation(
   // Build yearly replacement costs array from projections
   const yearlyReplacementCosts = yearlyProjections.map(p => p.replacementCost);
   
-  // LCOE calculation: uses ACTUAL costs from cashflow projections (no recalculation)
+  // NPV of Energy Yield - sum from projections (already discounted by LCOE rate)
+  const npvEnergyYield = yearlyProjections.reduce(
+    (sum, p) => sum + p.discountedEnergyYield, 
+    0
+  );
+  
+  // LCOE calculation: uses ACTUAL values directly from cashflow projections
   const lcoe = calculateLCOE(
     initialCost,
-    yearlyGenerations,
+    npvEnergyYield,          // Pre-calculated NPV from discountedEnergyYield column
     yearlyMaintenanceCosts,  // Already contains CPI-escalated O&M + Insurance
-    yearlyReplacementCosts,
-    discountRate
+    yearlyReplacementCosts
   );
   
   // Calculate sensitivity if enabled
