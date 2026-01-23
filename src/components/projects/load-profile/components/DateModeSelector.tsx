@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { WeekdaySelector } from "./WeekdaySelector";
 
 export type DateMode = "average" | "specific" | "month";
 
@@ -31,6 +32,9 @@ interface DateModeSelectorProps {
   selectedMonth?: string | null;
   onMonthChange?: (month: string | null) => void;
   availableMonths?: AvailableMonth[];
+  // Weekday multi-select props for average mode
+  selectedDays?: Set<number>;
+  onDaysChange?: (days: Set<number>) => void;
 }
 
 export function DateModeSelector({
@@ -45,6 +49,8 @@ export function DateModeSelector({
   selectedMonth,
   onMonthChange,
   availableMonths = [],
+  selectedDays,
+  onDaysChange,
 }: DateModeSelectorProps) {
   const [calendarOpen, setCalendarOpen] = useState(false);
 
@@ -94,6 +100,11 @@ export function DateModeSelector({
           Day
         </ToggleGroupItem>
       </ToggleGroup>
+
+      {/* Weekday multi-select for average mode */}
+      {mode === "average" && selectedDays && onDaysChange && (
+        <WeekdaySelector selectedDays={selectedDays} onDaysChange={onDaysChange} />
+      )}
 
       {/* Month selector */}
       {mode === "month" && hasRawData && availableMonths.length > 0 && (

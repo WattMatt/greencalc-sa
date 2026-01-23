@@ -432,7 +432,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   } = useLoadProfileData({
     tenants,
     shopTypes,
-    selectedDay,
+    selectedDays: new Set([DAYS_OF_WEEK.indexOf(selectedDay) === -1 ? 3 : (DAYS_OF_WEEK.indexOf(selectedDay) + 1) % 7]),
     displayUnit: "kw",
     powerFactor: 0.9,
     showPVProfile: solarCapacity > 0,
