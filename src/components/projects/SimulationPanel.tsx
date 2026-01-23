@@ -1833,9 +1833,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       )}
 
       {/* Charts */}
-      <Tabs defaultValue="energy">
+      <Tabs defaultValue="load">
         <TabsList>
-          <TabsTrigger value="energy">Energy Charts</TabsTrigger>
+          <TabsTrigger value="load">Load Profile</TabsTrigger>
+          <TabsTrigger value="pv">PV Profile</TabsTrigger>
+          {includesBattery && batteryCapacity > 0 && (
+            <TabsTrigger value="battery">Battery Profile</TabsTrigger>
+          )}
           <TabsTrigger value="loadshed" className="gap-1">
             <Zap className="h-3 w-3" />
             Load Shedding
@@ -1848,50 +1852,30 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           )}
         </TabsList>
 
-        <TabsContent value="energy" className="mt-4">
+        {/* Load Profile Tab */}
+        <TabsContent value="load" className="mt-4">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Energy Simulation Charts</CardTitle>
-                  <CardDescription>Hourly load, solar generation, and grid flow analysis</CardDescription>
+                  <CardTitle>Load Profile</CardTitle>
+                  <CardDescription>Hourly site consumption and grid flow analysis</CardDescription>
                 </div>
                 <div className="flex items-center gap-3">
                   <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
                     <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
                     TOU
                   </Label>
-                  <ReportToggle
-                    id="energy-flow-chart"
-                    segmentType="energy_flow"
-                    label="Energy Flow Chart"
-                  />
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Load Profile Chart */}
               <LoadChart 
                 chartData={simulationChartData} 
                 showTOU={showTOU} 
                 isWeekend={false} 
                 unit="kW" 
               />
-
-              {/* Solar Chart */}
-              {solarCapacity > 0 && (
-                <SolarChart
-                  chartData={simulationChartData}
-                  showTOU={showTOU}
-                  isWeekend={false}
-                  dcAcRatio={inverterConfig.dcAcRatio}
-                  show1to1Comparison={inverterConfig.dcAcRatio > 1}
-                  unit="kW"
-                  maxPvAcKva={solarCapacity}
-                />
-              )}
-
-              {/* Grid Flow Chart */}
               {solarCapacity > 0 && (
                 <GridFlowChart
                   chartData={simulationChartData}
@@ -1900,21 +1884,63 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   unit="kW"
                 />
               )}
+              {showTOU && <TOULegend />}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-              {/* Battery Chart */}
-              {includesBattery && batteryCapacity > 0 && (
+        {/* PV Profile Tab */}
+        <TabsContent value="pv" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>PV Generation</CardTitle>
+                  <CardDescription>Solar output with DC/AC ratio and clipping analysis</CardDescription>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
+                    TOU
+                  </Label>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <SolarChart
+                chartData={simulationChartData}
+                showTOU={showTOU}
+                isWeekend={false}
+                dcAcRatio={inverterConfig.dcAcRatio}
+                show1to1Comparison={inverterConfig.dcAcRatio > 1}
+                unit="kW"
+                maxPvAcKva={solarCapacity}
+              />
+              {showTOU && <TOULegend />}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Battery Profile Tab */}
+        {includesBattery && batteryCapacity > 0 && (
+          <TabsContent value="battery" className="mt-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <div>
+                  <CardTitle>Battery Storage</CardTitle>
+                  <CardDescription>Charge/discharge cycles and state of charge</CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <BatteryChart
                   chartData={simulationChartData}
                   batteryCapacity={batteryCapacity}
                   batteryPower={batteryPower}
                 />
-              )}
-
-              {/* TOU Legend */}
-              {showTOU && <TOULegend />}
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {/* Load Shedding Scenarios Tab */}
         <TabsContent value="loadshed" className="mt-4">
