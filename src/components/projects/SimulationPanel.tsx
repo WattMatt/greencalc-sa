@@ -1464,17 +1464,32 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       ],
                     }}
                   />
-                  <FinancialMetricRow
-                    label="Initial Yield"
-                    value={`${((financialResults.annualSavings / financialResults.systemCost) * 100).toFixed(2)}%`}
-                    breakdown={{
-                      formula: "(Annual Savings ÷ System Cost) × 100",
-                      inputs: [
-                        { label: "Annual Savings", value: `R ${Math.round(financialResults.annualSavings).toLocaleString()}` },
-                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
-                      ],
-                    }}
-                  />
+                  {(() => {
+                    // Calculate Initial Yield using net cashflow: (Income Y1 - O&M Y1 - Insurance Y1) / Total Cost
+                    const year1Projection = advancedResults?.yearlyProjections?.[0];
+                    const totalIncomeY1 = year1Projection?.totalIncomeR ?? financialResults.annualSavings;
+                    const omCostY1 = year1Projection?.maintenanceCost ?? (systemCosts.maintenancePerYear ?? 0);
+                    const insuranceY1 = year1Projection?.insuranceCostR ?? (financialResults.systemCost * (systemCosts.insuranceRatePercent ?? 1) / 100);
+                    const netCashflowY1 = totalIncomeY1 - omCostY1 - insuranceY1;
+                    const initialYield = (netCashflowY1 / financialResults.systemCost) * 100;
+                    
+                    return (
+                      <FinancialMetricRow
+                        label="Initial Yield"
+                        value={`${initialYield.toFixed(2)}%`}
+                        breakdown={{
+                          formula: "((Total Income Y1 - O&M Y1 - Insurance Y1) ÷ Total Project Cost) × 100",
+                          inputs: [
+                            { label: "Total Income Y1", value: `R ${Math.round(totalIncomeY1).toLocaleString()}` },
+                            { label: "O&M Cost Y1", value: `R ${Math.round(omCostY1).toLocaleString()}` },
+                            { label: "Insurance Y1", value: `R ${Math.round(insuranceY1).toLocaleString()}` },
+                            { label: "Net Cashflow Y1", value: `R ${Math.round(netCashflowY1).toLocaleString()}` },
+                            { label: "Total Project Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                          ],
+                        }}
+                      />
+                    );
+                  })()}
                   <FinancialMetricRow
                     label="IRR"
                     value={`${(advancedResults?.irr ?? basicFinancialMetrics.irr).toFixed(2)}%`}
