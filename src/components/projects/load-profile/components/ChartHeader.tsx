@@ -56,6 +56,9 @@ interface ChartHeaderProps {
   // Weekday multi-select props
   selectedDays?: Set<number>;
   onDaysChange?: (days: Set<number>) => void;
+  // Month multi-select props for average mode filtering
+  selectedMonthsFilter?: Set<number>;
+  onMonthsFilterChange?: (months: Set<number>) => void;
 }
 
 export function ChartHeader({
@@ -95,6 +98,8 @@ export function ChartHeader({
   monthlyStats,
   selectedDays,
   onDaysChange,
+  selectedMonthsFilter,
+  onMonthsFilterChange,
 }: ChartHeaderProps) {
   return (
     <div className="flex flex-col gap-3">
@@ -114,6 +119,8 @@ export function ChartHeader({
           availableMonths={availableMonths}
           selectedDays={selectedDays}
           onDaysChange={onDaysChange}
+          selectedMonthsFilter={selectedMonthsFilter}
+          onMonthsFilterChange={onMonthsFilterChange}
         />
         
         {/* Unit Toggle */}
