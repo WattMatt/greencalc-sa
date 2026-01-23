@@ -1198,7 +1198,12 @@ export default function ProjectDetail() {
           />
         </TabsContent>
 
-        <TabsContent value="simulation" className="mt-6">
+        {/* Force-mount simulation when on costs tab to preserve ref for auto-save */}
+        <TabsContent 
+          value="simulation" 
+          className={`mt-6 ${activeTab === "costs" ? "hidden" : ""}`}
+          forceMount={activeTab === "costs" || activeTab === "simulation" ? true : undefined}
+        >
           <SimulationModes
             ref={simulationRef}
             projectId={id!}
