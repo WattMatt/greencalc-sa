@@ -9,7 +9,8 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw, Calculator, Clock } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw, Calculator, Clock, Info } from "lucide-react";
+import { FinancialMetricRow } from "./simulation/FinancialMetricRow";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ANNUAL_HOURS_24H, ANNUAL_HOURS_SOLAR } from "@/lib/tariffCalculations";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -1330,60 +1331,121 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               <CardContent className="p-0">
                 {/* Table Rows */}
                 <div className="divide-y divide-border text-sm">
-                  <div className="grid grid-cols-2 hover:bg-muted/50">
-                    <div className="px-3 py-1.5 text-muted-foreground">ZAR / kWh (Incl. 3-Yr O&M)</div>
-                    <div className="px-3 py-1.5 text-right font-medium">
-                      {((financialResults.systemCost + threeYearOM) / ((annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365) * reductionFactor)).toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 hover:bg-muted/50">
-                    <div className="px-3 py-1.5 text-muted-foreground">ZAR / Wp (DC)</div>
-                    <div className="px-3 py-1.5 text-right font-medium">
-                      {((financialResults.systemCost + threeYearOM) / (solarCapacity * inverterConfig.dcAcRatio * 1000)).toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 hover:bg-muted/50">
-                    <div className="px-3 py-1.5 text-muted-foreground">ZAR / Wp (AC)</div>
-                    <div className="px-3 py-1.5 text-right font-medium">
-                      {((financialResults.systemCost + threeYearOM) / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 hover:bg-muted/50">
-                    <div className="px-3 py-1.5 text-muted-foreground">LCOE (ZAR/kWh)</div>
-                    <div className="px-3 py-1.5 text-right font-medium">
-                      {(advancedResults?.lcoe ?? basicFinancialMetrics.lcoe).toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 hover:bg-muted/50">
-                    <div className="px-3 py-1.5 text-muted-foreground">Initial Yield</div>
-                    <div className="px-3 py-1.5 text-right font-medium">
-                      {((financialResults.annualSavings / financialResults.systemCost) * 100).toFixed(2)}%
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 hover:bg-muted/50">
-                    <div className="px-3 py-1.5 text-muted-foreground">IRR</div>
-                    <div className="px-3 py-1.5 text-right font-medium">
-                      {(advancedResults?.irr ?? basicFinancialMetrics.irr).toFixed(2)}%
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 hover:bg-muted/50">
-                    <div className="px-3 py-1.5 text-muted-foreground">MIRR</div>
-                    <div className="px-3 py-1.5 text-right font-medium">
-                      {(advancedResults?.mirr ?? basicFinancialMetrics.mirr).toFixed(2)}%
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 hover:bg-muted/50">
-                    <div className="px-3 py-1.5 text-muted-foreground">Payback Period</div>
-                    <div className="px-3 py-1.5 text-right font-medium">
-                      {(advancedResults?.sensitivityResults?.expected.payback ?? financialResults.paybackYears).toFixed(2)} yrs
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 hover:bg-muted/50">
-                    <div className="px-3 py-1.5 text-muted-foreground">NPV</div>
-                    <div className={`px-3 py-1.5 text-right font-medium ${(advancedResults?.npv ?? basicFinancialMetrics.npv) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {Math.round(advancedResults?.npv ?? basicFinancialMetrics.npv).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
+                  <FinancialMetricRow
+                    label="ZAR / kWh (Incl. 3-Yr O&M)"
+                    value={((financialResults.systemCost + threeYearOM) / ((annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365) * reductionFactor)).toFixed(2)}
+                    breakdown={{
+                      formula: "(System Cost + 3-Yr O&M) ÷ (Annual Production × Reduction)",
+                      inputs: [
+                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                        { label: "3-Yr O&M Total", value: `R ${Math.round(threeYearOM).toLocaleString()}` },
+                        { label: "Annual Production", value: `${Math.round(annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365).toLocaleString()} kWh` },
+                        { label: "Reduction Factor", value: `${(reductionFactor * 100).toFixed(0)}%` },
+                      ],
+                    }}
+                  />
+                  <FinancialMetricRow
+                    label="ZAR / Wp (DC)"
+                    value={((financialResults.systemCost + threeYearOM) / (solarCapacity * inverterConfig.dcAcRatio * 1000)).toFixed(2)}
+                    breakdown={{
+                      formula: "(System Cost + 3-Yr O&M) ÷ (DC Capacity in Wp)",
+                      inputs: [
+                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                        { label: "3-Yr O&M Total", value: `R ${Math.round(threeYearOM).toLocaleString()}` },
+                        { label: "AC Capacity", value: `${solarCapacity} kW` },
+                        { label: "DC/AC Ratio", value: inverterConfig.dcAcRatio.toFixed(2) },
+                        { label: "DC Capacity", value: `${(solarCapacity * inverterConfig.dcAcRatio).toFixed(1)} kWp` },
+                      ],
+                    }}
+                  />
+                  <FinancialMetricRow
+                    label="ZAR / Wp (AC)"
+                    value={((financialResults.systemCost + threeYearOM) / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
+                    breakdown={{
+                      formula: "(System Cost + 3-Yr O&M) ÷ (AC Capacity in Wp)",
+                      inputs: [
+                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                        { label: "3-Yr O&M Total", value: `R ${Math.round(threeYearOM).toLocaleString()}` },
+                        { label: "AC Capacity", value: `${inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity} kW` },
+                      ],
+                    }}
+                  />
+                  <FinancialMetricRow
+                    label="LCOE (ZAR/kWh)"
+                    value={(advancedResults?.lcoe ?? basicFinancialMetrics.lcoe).toFixed(2)}
+                    breakdown={{
+                      formula: "Undiscounted Total Costs ÷ NPV of Energy Yield",
+                      inputs: [
+                        { label: "Initial Capital", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                        { label: "20-Yr O&M + Insurance", value: advancedResults ? `R ${Math.round(advancedResults.yearlyProjections.reduce((s, p) => s + p.maintenanceCost + (p.insuranceCostR || 0), 0)).toLocaleString()}` : 'N/A' },
+                        { label: "Replacements", value: advancedResults ? `R ${Math.round(advancedResults.yearlyProjections.reduce((s, p) => s + p.replacementCost, 0)).toLocaleString()}` : 'N/A' },
+                        { label: "NPV Energy Yield", value: advancedResults ? `${Math.round(advancedResults.yearlyProjections.reduce((s, p) => s + (p.discountedEnergyYield || 0), 0)).toLocaleString()} kWh` : 'N/A' },
+                        { label: "LCOE Discount Rate", value: `${systemCosts.lcoeDiscountRate ?? 10}%` },
+                      ],
+                    }}
+                  />
+                  <FinancialMetricRow
+                    label="Initial Yield"
+                    value={`${((financialResults.annualSavings / financialResults.systemCost) * 100).toFixed(2)}%`}
+                    breakdown={{
+                      formula: "(Annual Savings ÷ System Cost) × 100",
+                      inputs: [
+                        { label: "Annual Savings", value: `R ${Math.round(financialResults.annualSavings).toLocaleString()}` },
+                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                      ],
+                    }}
+                  />
+                  <FinancialMetricRow
+                    label="IRR"
+                    value={`${(advancedResults?.irr ?? basicFinancialMetrics.irr).toFixed(2)}%`}
+                    breakdown={{
+                      formula: "Rate where NPV of cashflows = 0",
+                      inputs: [
+                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                        { label: "Annual Savings (Yr 1)", value: `R ${Math.round(financialResults.annualSavings).toLocaleString()}` },
+                        { label: "Project Lifetime", value: `${advancedConfig.financial.projectLifetimeYears ?? 20} years` },
+                        { label: "Tariff Escalation", value: `${advancedConfig.financial.tariffEscalationRate ?? 10}%` },
+                      ],
+                    }}
+                  />
+                  <FinancialMetricRow
+                    label="MIRR"
+                    value={`${(advancedResults?.mirr ?? basicFinancialMetrics.mirr).toFixed(2)}%`}
+                    breakdown={{
+                      formula: "[(FV Positives / PV Negatives)^(1/n)] - 1",
+                      inputs: [
+                        { label: "Finance Rate", value: `${systemCosts.mirrFinanceRate ?? 10}%` },
+                        { label: "Reinvestment Rate", value: `${systemCosts.mirrReinvestmentRate ?? 12}%` },
+                        { label: "Project Lifetime", value: `${advancedConfig.financial.projectLifetimeYears ?? 20} years` },
+                      ],
+                    }}
+                  />
+                  <FinancialMetricRow
+                    label="Payback Period"
+                    value={`${(advancedResults?.sensitivityResults?.expected.payback ?? financialResults.paybackYears).toFixed(2)} yrs`}
+                    breakdown={{
+                      formula: "Year when cumulative cashflow ≥ 0",
+                      inputs: [
+                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                        { label: "Year 1 Savings", value: `R ${Math.round(financialResults.annualSavings).toLocaleString()}` },
+                        { label: "Tariff Escalation", value: `${advancedConfig.financial.tariffEscalationRate ?? 10}%` },
+                      ],
+                    }}
+                  />
+                  <FinancialMetricRow
+                    label="NPV"
+                    value={Math.round(advancedResults?.npv ?? basicFinancialMetrics.npv).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    valueClassName={(advancedResults?.npv ?? basicFinancialMetrics.npv) >= 0 ? 'text-green-600' : 'text-red-600'}
+                    breakdown={{
+                      formula: "Σ (Cashflow_t ÷ (1 + r)^t)",
+                      inputs: [
+                        { label: "System Cost (Year 0)", value: `-R ${financialResults.systemCost.toLocaleString()}` },
+                        { label: "Annual Savings (Yr 1)", value: `R ${Math.round(financialResults.annualSavings).toLocaleString()}` },
+                        { label: "Discount Rate", value: `${advancedConfig.financial.discountRate ?? 10}%` },
+                        { label: "Project Lifetime", value: `${advancedConfig.financial.projectLifetimeYears ?? 20} years` },
+                      ],
+                    }}
+                  />
                 </div>
               </CardContent>
             </Card>
