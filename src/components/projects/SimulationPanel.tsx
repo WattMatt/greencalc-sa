@@ -11,13 +11,13 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw, Calculator, Clock, Info, Save } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw, Calculator, Clock, Info, Save, ChevronLeft, ChevronRight } from "lucide-react";
 import { LoadChart } from "./load-profile/charts/LoadChart";
 import { SolarChart } from "./load-profile/charts/SolarChart";
 import { GridFlowChart } from "./load-profile/charts/GridFlowChart";
 import { BatteryChart } from "./load-profile/charts/BatteryChart";
 import { TOULegend } from "./load-profile/components/TOULegend";
-import { ChartDataPoint } from "./load-profile/types";
+import { ChartDataPoint, DayOfWeek, DAYS_OF_WEEK } from "./load-profile/types";
 import { FinancialMetricRow } from "./simulation/FinancialMetricRow";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ANNUAL_HOURS_24H, ANNUAL_HOURS_SOLAR } from "@/lib/tariffCalculations";
@@ -72,35 +72,20 @@ import {
   calculateAnnualPVsystOutput
 } from "@/lib/pvsystLossChain";
 import { PVsystLossChainConfig as PVsystLossChainConfigPanel } from "./PVsystLossChainConfig";
+import { useLoadProfileData } from "./load-profile/hooks/useLoadProfileData";
+import { useSolcastPVProfile } from "./load-profile/hooks/useSolcastPVProfile";
+import { Tenant as FullTenant, ShopType as FullShopType } from "./load-profile/types";
 
 // Solar data source type
 type SolarDataSource = "solcast" | "pvgis_monthly" | "pvgis_tmy";
 
-interface Tenant {
-  id: string;
-  name: string;
-  area_sqm: number;
-  shop_type_id: string | null;
-  monthly_kwh_override: number | null;
-  shop_types?: {
-    name: string;
-    kwh_per_sqm_month: number;
-    load_profile_weekday: number[];
-  } | null;
-}
-
-interface ShopType {
-  id: string;
-  name: string;
-  kwh_per_sqm_month: number;
-  load_profile_weekday: number[];
-}
+// Use full Tenant and ShopType from load-profile types for compatibility with useLoadProfileData
 
 interface SimulationPanelProps {
   projectId: string;
   project: any;
-  tenants: Tenant[];
-  shopTypes: ShopType[];
+  tenants: FullTenant[];
+  shopTypes: FullShopType[];
   systemCosts: SystemCostsData;
   onSystemCostsChange: (costs: SystemCostsData) => void;
   includesBattery?: boolean;
@@ -207,9 +192,22 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return saved !== null ? saved === 'true' : true;
   });
 
+  // Day-of-week selection for load profile visualization (matches Load Profile tab)
+  const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Wednesday");
+
   useEffect(() => {
     localStorage.setItem('simulation_showTOU', String(showTOU));
   }, [showTOU]);
+
+  // Day navigation helper
+  const navigateDay = useCallback((direction: "prev" | "next") => {
+    const idx = DAYS_OF_WEEK.indexOf(selectedDay);
+    if (direction === "prev") {
+      setSelectedDay(DAYS_OF_WEEK[(idx - 1 + 7) % 7]);
+    } else {
+      setSelectedDay(DAYS_OF_WEEK[(idx + 1) % 7]);
+    }
+  }, [selectedDay]);
 
   // Auto-load the last saved simulation when data arrives (only once per projectId)
   useEffect(() => {
@@ -411,7 +409,41 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     }));
   }, [solarDataSource, pvgisTmyData, pvgisMonthlyData]);
 
-  // Fetch tariff data (for financial analysis only)
+  // Solcast PV Profile hook for consistent chart rendering (matches Load Profile tab)
+  const {
+    pvProfile: solcastPvProfileData,
+    useSolcast: useSolcastForCharts,
+    toggleSolcast: toggleSolcastForCharts,
+  } = useSolcastPVProfile({
+    latitude: effectiveLat,
+    longitude: effectiveLng,
+    enabled: solarDataSource === "solcast",
+  });
+
+  // Use the same useLoadProfileData hook as Load Profile tab for consistent chart visualization
+  const {
+    chartData: loadProfileChartData,
+    totalDaily: loadProfileTotalDaily,
+    peakHour: loadProfilePeakHour,
+    loadFactor: loadProfileLoadFactor,
+    isWeekend: loadProfileIsWeekend,
+    tenantsWithScada,
+    tenantsEstimated,
+  } = useLoadProfileData({
+    tenants,
+    shopTypes,
+    selectedDay,
+    displayUnit: "kw",
+    powerFactor: 0.9,
+    showPVProfile: solarCapacity > 0,
+    maxPvAcKva: solarCapacity,
+    dcCapacityKwp: solarCapacity * inverterConfig.dcAcRatio,
+    dcAcRatio: inverterConfig.dcAcRatio,
+    showBattery: includesBattery && batteryCapacity > 0,
+    batteryCapacity,
+    batteryPower,
+    solcastProfile: solarDataSource === "solcast" ? solcastPvProfileData : undefined,
+  });
   const { data: tariffRates } = useQuery({
     queryKey: ["tariff-rates", project.tariff_id],
     queryFn: async () => {
@@ -774,34 +806,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // Annual scaling
   const annualEnergy = useMemo(() => scaleToAnnual(energyResults), [energyResults]);
 
-  // Transform energyResults.hourlyData to ChartDataPoint format for LoadProfile charts
-  const simulationChartData = useMemo<ChartDataPoint[]>(() => {
-    if (!energyResults?.hourlyData) return [];
-    
-    const dcAcRatio = inverterConfig.dcAcRatio;
-    
-    return energyResults.hourlyData.map((point): ChartDataPoint => {
-      // Calculate DC output based on DC/AC ratio
-      const pvAcOutput = point.solar;
-      const pvDcOutput = pvAcOutput * dcAcRatio;
-      const clipping = Math.max(0, pvDcOutput - solarCapacity); // Clipping when DC exceeds inverter capacity
-      const pv1to1Baseline = Math.min(pvAcOutput, solarCapacity); // What a 1:1 ratio would produce
-      
-      return {
-        hour: point.hour,
-        total: point.load,
-        pvGeneration: pvAcOutput,
-        pvDcOutput: pvDcOutput,
-        pvClipping: clipping,
-        pv1to1Baseline: pv1to1Baseline,
-        gridImport: point.gridImport,
-        gridExport: point.gridExport,
-        batteryCharge: point.batteryCharge,
-        batteryDischarge: point.batteryDischarge,
-        batterySoC: point.batterySOC * batteryCapacity / 100, // Convert % to kWh
-      };
-    });
-  }, [energyResults?.hourlyData, inverterConfig.dcAcRatio, solarCapacity, batteryCapacity]);
+  // Use chart data from useLoadProfileData hook for consistent visualization with Load Profile tab
+  // This replaces the simplified simulationChartData based on energyResults
+  const simulationChartData = loadProfileChartData;
 
   // Check if financial analysis is available (moved up for use in advanced simulation)
   const hasFinancialData = !!project.tariff_id;
@@ -1857,9 +1864,17 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Load Profile</CardTitle>
-                  <CardDescription>Hourly site consumption and grid flow analysis</CardDescription>
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div>
+                    <CardTitle className="text-base">{selectedDay}</CardTitle>
+                    <CardDescription className="text-xs">Hourly site consumption</CardDescription>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
                 </div>
                 <div className="flex items-center gap-3">
                   <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
@@ -1873,14 +1888,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               <LoadChart 
                 chartData={simulationChartData} 
                 showTOU={showTOU} 
-                isWeekend={false} 
+                isWeekend={loadProfileIsWeekend} 
                 unit="kW" 
               />
               {solarCapacity > 0 && (
                 <GridFlowChart
                   chartData={simulationChartData}
                   showTOU={showTOU}
-                  isWeekend={false}
+                  isWeekend={loadProfileIsWeekend}
                   unit="kW"
                 />
               )}
