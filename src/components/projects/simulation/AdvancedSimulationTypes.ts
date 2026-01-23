@@ -66,9 +66,6 @@ export interface AdvancedFinancialConfig {
   insuranceEnabled: boolean;
   baseInsuranceCostR: number; // Year 1 insurance (e.g., R12,500)
   insuranceEscalationRate: number; // % (typically same as CPI, 6%)
-  
-  // LCOE cost methodology
-  lcoeCostEscalation: boolean; // true = use escalated O&M/Insurance, false = use flat/base values
 }
 
 // ============= Grid Constraints =============
@@ -175,8 +172,6 @@ export const DEFAULT_FINANCIAL_CONFIG: AdvancedFinancialConfig = {
   insuranceEnabled: true,
   baseInsuranceCostR: 0,
   insuranceEscalationRate: 6.0, // Same as CPI
-  // LCOE methodology (false = flat costs for Excel compatibility)
-  lcoeCostEscalation: false,
 };
 
 export const DEFAULT_GRID_CONSTRAINTS_CONFIG: GridConstraintsConfig = {
@@ -245,7 +240,6 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
         insuranceEnabled: false,
         baseInsuranceCostR: 0,
         insuranceEscalationRate: 6.5,
-        lcoeCostEscalation: false,
       },
       gridConstraints: {
         ...DEFAULT_GRID_CONSTRAINTS_CONFIG,
@@ -290,7 +284,6 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
         insuranceEnabled: false,
         baseInsuranceCostR: 0,
         insuranceEscalationRate: 4.5,
-        lcoeCostEscalation: false,
       },
       gridConstraints: {
         ...DEFAULT_GRID_CONSTRAINTS_CONFIG,
@@ -336,7 +329,6 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
         insuranceEnabled: false,
         baseInsuranceCostR: 0,
         insuranceEscalationRate: 5.5,
-        lcoeCostEscalation: false,
       },
       gridConstraints: {
         enabled: true,

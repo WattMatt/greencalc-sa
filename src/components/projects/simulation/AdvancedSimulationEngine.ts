@@ -275,30 +275,24 @@ export function calculateMIRR(
 /**
  * Calculate LCOE (Levelized Cost of Energy)
  * Formula: Undiscounted Total Costs / NPV of Energy Yield
- * Matches Excel: =Σ(Project Cost, O&M, Insurance, Replacements) / NPV(Cost of Capital, Σ Energy Yield)
  * 
- * @param useEscalatedCosts - if false, uses flat (base) O&M/Insurance values instead of escalated
- * @param flatMaintenanceCost - base annual O&M + Insurance (used when useEscalatedCosts = false)
+ * Uses ACTUAL values from cashflow projections - no recalculation.
+ * yearlyMaintenanceCosts already contains CPI-escalated O&M + Insurance from projections.
  */
 export function calculateLCOE(
   totalSystemCost: number,
   yearlyGenerations: number[],
-  yearlyMaintenanceCosts: number[],
+  yearlyMaintenanceCosts: number[],  // Already CPI-escalated from cashflow projections
   yearlyReplacementCosts: number[],
-  discountRate: number,
-  useEscalatedCosts: boolean = true,
-  flatMaintenanceCost: number = 0
+  discountRate: number
 ): number {
-  // Numerator: Undiscounted sum of ALL costs (Project Cost + O&M + Insurance + Replacements)
+  // Numerator: Undiscounted sum of ALL costs from cashflow breakdown
+  // Initial Capital + Sum(O&M + Insurance) + Sum(Replacements)
   let totalCosts = totalSystemCost;
   
   for (let year = 0; year < yearlyGenerations.length; year++) {
-    // Use escalated costs or flat costs based on toggle
-    const omInsuranceCost = useEscalatedCosts 
-      ? yearlyMaintenanceCosts[year] 
-      : flatMaintenanceCost;
-    totalCosts += omInsuranceCost;
-    totalCosts += yearlyReplacementCosts[year] || 0;  // Replacements (always use actual)
+    totalCosts += yearlyMaintenanceCosts[year];  // Use actual escalated values from projections
+    totalCosts += yearlyReplacementCosts[year] || 0;
   }
   
   // Denominator: NPV of Energy Yield (discounted by Cost of Capital)
@@ -536,18 +530,13 @@ export function runAdvancedSimulation(
   // Build yearly replacement costs array from projections
   const yearlyReplacementCosts = yearlyProjections.map(p => p.replacementCost);
   
-  // LCOE calculation: use escalated or flat costs based on config
-  const useEscalatedCosts = financial.lcoeCostEscalation ?? false;
-  const flatMaintenanceCost = baseMaintenance + baseInsurance; // Base O&M + Base Insurance
-  
+  // LCOE calculation: uses ACTUAL costs from cashflow projections (no recalculation)
   const lcoe = calculateLCOE(
     initialCost,
     yearlyGenerations,
-    yearlyMaintenanceCosts,
+    yearlyMaintenanceCosts,  // Already contains CPI-escalated O&M + Insurance
     yearlyReplacementCosts,
-    discountRate,
-    useEscalatedCosts,
-    flatMaintenanceCost
+    discountRate
   );
   
   // Calculate sensitivity if enabled
