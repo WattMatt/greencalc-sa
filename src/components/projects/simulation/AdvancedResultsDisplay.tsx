@@ -143,9 +143,13 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
           label="Payback"
           value={results.sensitivityResults?.expected.payback 
             ? formatPaybackPeriod(results.sensitivityResults.expected.payback)
-            : (paybackYear ? formatPaybackPeriod(paybackYear) : ">25 years")}
+            : ">25 years"}
           icon={<Calendar className="h-4 w-4" />}
-          variant={paybackYear && paybackYear < 7 ? "positive" : paybackYear && paybackYear < 12 ? "neutral" : "negative"}
+          variant={results.sensitivityResults?.expected.payback && results.sensitivityResults.expected.payback < 7 
+            ? "positive" 
+            : results.sensitivityResults?.expected.payback && results.sensitivityResults.expected.payback < 12 
+              ? "neutral" 
+              : "negative"}
           tooltip="Years to break even"
         />
       </div>
@@ -200,11 +204,11 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium flex items-center justify-between">
                 <span>Cumulative Cash Flow</span>
-                {breakEvenMonth && (
-                  <Badge variant="outline" className="text-xs">
-                    Break-even: {formatPaybackPeriod((breakEvenMonth.year - 1) + (breakEvenMonth.month / 12))}
-                  </Badge>
-                )}
+              {results.sensitivityResults?.expected.payback && results.sensitivityResults.expected.payback < 25 && (
+                <Badge variant="outline" className="text-xs">
+                  Break-even: {formatPaybackPeriod(results.sensitivityResults.expected.payback)}
+                </Badge>
+              )}
               </CardTitle>
             </CardHeader>
             <CardContent>
