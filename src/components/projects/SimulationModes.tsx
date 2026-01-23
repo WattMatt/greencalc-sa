@@ -10,26 +10,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { SystemCostsData } from "./SystemCostsManager";
-
-interface Tenant {
-  id: string;
-  name: string;
-  area_sqm: number;
-  shop_type_id: string | null;
-  monthly_kwh_override: number | null;
-  shop_types?: {
-    name: string;
-    kwh_per_sqm_month: number;
-    load_profile_weekday: number[];
-  } | null;
-}
-
-interface ShopType {
-  id: string;
-  name: string;
-  kwh_per_sqm_month: number;
-  load_profile_weekday: number[];
-}
+import { Tenant, ShopType } from "./load-profile/types";
 
 import { type BlendedRateType } from "./TariffSelector";
 
