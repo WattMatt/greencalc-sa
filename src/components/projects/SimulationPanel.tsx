@@ -911,6 +911,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // Expose autoSave method to parent
   useImperativeHandle(ref, () => ({
     autoSave: async () => {
+      // Cancel any pending debounced save first
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+        autoSaveTimeoutRef.current = null;
+      }
       // Only auto-save if we have tenants (valid simulation)
       if (tenants.length > 0) {
         await autoSaveMutation.mutateAsync();
