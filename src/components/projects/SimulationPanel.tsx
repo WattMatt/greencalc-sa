@@ -9,13 +9,13 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw, Calculator, Clock, Info } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw, Calculator, Clock, Info, Save } from "lucide-react";
 import { FinancialMetricRow } from "./simulation/FinancialMetricRow";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ANNUAL_HOURS_24H, ANNUAL_HOURS_SOLAR } from "@/lib/tariffCalculations";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { useSolcastForecast } from "@/hooks/useSolcastForecast";
 import { usePVGISProfile, PVGISTMYResponse, PVGISMonthlyResponse } from "@/hooks/usePVGISProfile";
 import { ReportToggle } from "@/components/reports/ReportToggle";
@@ -185,11 +185,19 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [loadedSimulationName, setLoadedSimulationName] = useState<string | null>(null);
   const [loadedSimulationDate, setLoadedSimulationDate] = useState<string | null>(null);
   const hasInitializedFromSaved = useRef(false);
+  
+  // Auto-save tracking
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasInitialLoadComplete = useRef(false);
+  const AUTOSAVE_DEBOUNCE_MS = 1500;
 
   // Auto-load the last saved simulation when data arrives (only once per projectId)
   useEffect(() => {
     // Reset initialization flag when projectId changes
     hasInitializedFromSaved.current = false;
+    hasInitialLoadComplete.current = false;
   }, [projectId]);
 
   useEffect(() => {
@@ -842,11 +850,63 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       }
     },
     onSuccess: () => {
+      setLastSavedAt(new Date());
       queryClient.invalidateQueries({ queryKey: ["project-simulations", projectId] });
       queryClient.invalidateQueries({ queryKey: ["last-simulation", projectId] });
       queryClient.invalidateQueries({ queryKey: ["project-latest-simulation", projectId] });
     },
   });
+
+  // Debounced auto-save on any configuration change
+  useEffect(() => {
+    // Skip if not yet initialized from saved data
+    if (!hasInitializedFromSaved.current || !isFetched) return;
+    
+    // Skip on first render after initialization
+    if (!hasInitialLoadComplete.current) {
+      hasInitialLoadComplete.current = true;
+      return;
+    }
+    
+    // Clear any pending save
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    
+    // Only auto-save if we have valid tenants
+    if (tenants.length === 0) return;
+    
+    // Schedule debounced save
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      setIsAutoSaving(true);
+      try {
+        await autoSaveMutation.mutateAsync();
+      } finally {
+        setIsAutoSaving(false);
+      }
+    }, AUTOSAVE_DEBOUNCE_MS);
+    
+    // Cleanup on unmount
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [
+    // Watch all configuration values
+    solarCapacity,
+    batteryCapacity,
+    batteryPower,
+    JSON.stringify(pvConfig),
+    JSON.stringify(inverterConfig),
+    JSON.stringify(pvsystConfig),
+    JSON.stringify(advancedConfig),
+    lossCalculationMode,
+    productionReductionPercent,
+    solarDataSource,
+    JSON.stringify(systemCosts),
+    blendedRateType,
+  ]);
 
   // Expose autoSave method to parent
   useImperativeHandle(ref, () => ({
@@ -857,6 +917,20 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       }
     }
   }), [autoSaveMutation, tenants.length]);
+
+  // Get the active data source's peak sun hours for display (must be before early return)
+  const activeDataSourceLabel = useMemo(() => {
+    if (solarDataSource === "solcast" && solcastData?.summary?.average_daily_ghi_kwh_m2) {
+      return `Solcast: ${solcastData.summary.average_daily_ghi_kwh_m2.toFixed(1)} kWh/m²/day`;
+    }
+    if (solarDataSource === "pvgis_monthly" && pvgisMonthlyData?.summary?.peakSunHours) {
+      return `PVGIS 19-Yr: ${pvgisMonthlyData.summary.peakSunHours.toFixed(1)} kWh/m²/day`;
+    }
+    if (solarDataSource === "pvgis_tmy" && pvgisTmyData?.summary?.peakSunHours) {
+      return `PVGIS TMY: ${pvgisTmyData.summary.peakSunHours.toFixed(1)} kWh/m²/day`;
+    }
+    return `${selectedLocation?.ghi || 5.0} kWh/m²/day`;
+  }, [solarDataSource, solcastData, pvgisMonthlyData, pvgisTmyData, selectedLocation?.ghi]);
 
   // Empty states
   if (tenants.length === 0) {
@@ -886,35 +960,35 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   
   const hasRealData = solarDataSource === "solcast" ? !!solcastHourlyProfile
     : !!pvgisHourlyProfile;
-  
-  // Get the active data source's peak sun hours for display
-  const activeDataSourceLabel = useMemo(() => {
-    if (solarDataSource === "solcast" && solcastData?.summary?.average_daily_ghi_kwh_m2) {
-      return `Solcast: ${solcastData.summary.average_daily_ghi_kwh_m2.toFixed(1)} kWh/m²/day`;
-    }
-    if (solarDataSource === "pvgis_monthly" && pvgisMonthlyData?.summary?.peakSunHours) {
-      return `PVGIS 19-Yr: ${pvgisMonthlyData.summary.peakSunHours.toFixed(1)} kWh/m²/day`;
-    }
-    if (solarDataSource === "pvgis_tmy" && pvgisTmyData?.summary?.peakSunHours) {
-      return `PVGIS TMY: ${pvgisTmyData.summary.peakSunHours.toFixed(1)} kWh/m²/day`;
-    }
-    return `${selectedLocation.ghi} kWh/m²/day`;
-  }, [solarDataSource, solcastData, pvgisMonthlyData, pvgisTmyData, selectedLocation.ghi]);
 
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Energy Simulation</h2>
-          <p className="text-sm text-muted-foreground">
-            Model solar and battery energy flows • {selectedLocation.name}
-            {hasRealData ? (
-              <span className="text-primary"> ({activeDataSourceLabel})</span>
-            ) : (
-              <span> ({selectedLocation.ghi} kWh/m²/day)</span>
-            )}
-          </p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">Energy Simulation</h2>
+            <p className="text-sm text-muted-foreground">
+              Model solar and battery energy flows • {selectedLocation.name}
+              {hasRealData ? (
+                <span className="text-primary"> ({activeDataSourceLabel})</span>
+              ) : (
+                <span> ({selectedLocation.ghi} kWh/m²/day)</span>
+              )}
+            </p>
+          </div>
+          {/* Auto-save indicator */}
+          {isAutoSaving ? (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Saving...</span>
+            </div>
+          ) : lastSavedAt ? (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md">
+              <Save className="h-3 w-3" />
+              <span>Saved {formatDistanceToNow(lastSavedAt, { addSuffix: true })}</span>
+            </div>
+          ) : null}
         </div>
         {/* Solar Data Source Toggle */}
         <div className="flex items-center gap-2">
