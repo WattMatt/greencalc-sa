@@ -685,18 +685,6 @@ function FinancialSection({
             </div>
           </div>
           
-          <div className="flex items-center justify-between pt-2 border-t">
-            <div>
-              <Label className="text-xs">LCOE Cost Escalation</Label>
-              <p className="text-[10px] text-muted-foreground">
-                {config.lcoeCostEscalation ? 'Using CPI-escalated O&M' : 'Using flat/base O&M'}
-              </p>
-            </div>
-            <Switch
-              checked={config.lcoeCostEscalation ?? false}
-              onCheckedChange={(lcoeCostEscalation) => onChange({ ...config, lcoeCostEscalation })}
-            />
-          </div>
           
           {config.sensitivityEnabled && (
             <div className="space-y-1">
