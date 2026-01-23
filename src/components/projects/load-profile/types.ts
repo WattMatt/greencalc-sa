@@ -60,6 +60,10 @@ export type DisplayUnit = "kw" | "kva";
 export const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 export type DayOfWeek = typeof DAYS_OF_WEEK[number];
 
+// Short day labels for compact weekday selector (Sunday=0 through Saturday=6)
+export const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"] as const;
+export type DayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
 export const DAY_MULTIPLIERS: Record<DayOfWeek, number> = {
   Monday: 0.92,
   Tuesday: 0.96,

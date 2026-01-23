@@ -57,7 +57,10 @@ export function LoadProfileChart({
   
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kw");
   const [powerFactor, setPowerFactor] = useState(() => globalDeratingSettings.powerFactor);
-  const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Wednesday");
+  // Multi-day selection for average mode (default: Wednesday only)
+  const [selectedDays, setSelectedDays] = useState<Set<number>>(() => new Set([3])); // 3 = Wednesday (0=Sun)
+  // Keep legacy selectedDay for compatibility with other components
+  const selectedDay: DayOfWeek = DAYS_OF_WEEK[(Array.from(selectedDays)[0] + 6) % 7] || "Wednesday";
   
   // Toggle states with localStorage persistence
   const [showTOU, setShowTOU] = useState(() => {
@@ -135,8 +138,24 @@ export function LoadProfileChart({
     return maxPvAcKva ? maxPvAcKva * effectiveDcAcRatio : null;
   }, [maxPvAcKva, effectiveDcAcRatio]);
 
+  // Determine if current selection includes only weekend days
+  const isWeekendSelection = useMemo(() => {
+    const days = Array.from(selectedDays);
+    return days.every(d => d === 0 || d === 6);
+  }, [selectedDays]);
+
+  // Legacy day index for compatibility
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
   const unit = displayUnit === "kw" ? "kW" : "kVA";
+
+  // Navigate day for legacy compatibility (not used in multi-select mode)
+  const navigateDay = (direction: "prev" | "next") => {
+    const currentDays = Array.from(selectedDays);
+    if (currentDays.length === 1) {
+      const newIndex = direction === "prev" ? (currentDays[0] - 1 + 7) % 7 : (currentDays[0] + 1) % 7;
+      setSelectedDays(new Set([newIndex]));
+    }
+  };
 
   // Solcast PV profile hook
   const {
@@ -180,11 +199,6 @@ export function LoadProfileChart({
 
   const hasRawData = specificDateHasRawData || monthlyHasRawData;
 
-  const navigateDay = (direction: "prev" | "next") => {
-    const newIndex = direction === "prev" ? (dayIndex - 1 + 7) % 7 : (dayIndex + 1) % 7;
-    setSelectedDay(DAYS_OF_WEEK[newIndex]);
-  };
-
   // Averaged data hook
   const {
     chartData: averagedChartData,
@@ -202,7 +216,7 @@ export function LoadProfileChart({
   } = useLoadProfileData({
     tenants,
     shopTypes,
-    selectedDay,
+    selectedDays,
     displayUnit,
     powerFactor,
     showPVProfile: dateMode === "average" && showPVProfile,
@@ -312,6 +326,9 @@ export function LoadProfileChart({
             onMonthChange={setSelectedMonth}
             availableMonths={availableMonths}
             monthlyStats={monthlyStats}
+            // Weekday multi-select props
+            selectedDays={selectedDays}
+            onDaysChange={setSelectedDays}
           />
         </CardHeader>
 

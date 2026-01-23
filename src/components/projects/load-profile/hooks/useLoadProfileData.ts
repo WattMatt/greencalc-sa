@@ -4,6 +4,7 @@ import {
   TenantMeter,
   ShopType,
   DayOfWeek,
+  DAYS_OF_WEEK,
   DAY_MULTIPLIERS,
   DEFAULT_PROFILE_PERCENT,
   getTOUPeriod,
@@ -119,7 +120,7 @@ function getAveragedProfileKw(
 interface UseLoadProfileDataProps {
   tenants: Tenant[];
   shopTypes: ShopType[];
-  selectedDay: DayOfWeek;
+  selectedDays: Set<number>; // 0=Sunday through 6=Saturday - multi-day selection
   displayUnit: DisplayUnit;
   powerFactor: number;
   showPVProfile: boolean;
@@ -140,7 +141,7 @@ const TEMP_COEFFICIENT = 0.004; // 0.4% per degree
 export function useLoadProfileData({
   tenants,
   shopTypes,
-  selectedDay,
+  selectedDays,
   displayUnit,
   powerFactor,
   showPVProfile,
@@ -154,7 +155,9 @@ export function useLoadProfileData({
   systemLosses = 0.14,
   diversityFactor = 1.0,
 }: UseLoadProfileDataProps) {
-  const isWeekend = selectedDay === "Saturday" || selectedDay === "Sunday";
+  // Convert selectedDays (0=Sunday) to determine if current selection is weekend-only
+  const daysArray = Array.from(selectedDays);
+  const isWeekend = daysArray.every(d => d === 0 || d === 6);
 
   // Get the PV profile to use (Solcast or static)
   const pvNormalizedProfile = useMemo(() => {
@@ -245,79 +248,92 @@ export function useLoadProfileData({
     return { weekdayDailyKwh: weekdayTotal, weekendDailyKwh: weekendTotal };
   }, [tenants, shopTypes]);
 
-  // Calculate base kW data based on selected day
+  // Calculate base kW data by averaging across all selected days
   // IMPORTANT: Chart displays kW (power), not kWh - values are direct power readings per hour
   const baseChartData = useMemo(() => {
-    const isWeekendDay = selectedDay === "Saturday" || selectedDay === "Sunday";
-    const dayMultiplier = DAY_MULTIPLIERS[selectedDay];
     const hourlyData: { hour: string; total: number; [key: string]: number | string }[] = [];
 
+    // For each hour, calculate the average across all selected days
     for (let h = 0; h < 24; h++) {
       const hourLabel = `${h.toString().padStart(2, "0")}:00`;
       const hourData: { hour: string; total: number; [key: string]: number | string } = { hour: hourLabel, total: 0 };
 
-      tenants.forEach((tenant) => {
-        const tenantArea = Number(tenant.area_sqm) || 0;
-        if (tenantArea <= 0) return;
-        
-        const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
-        
-        // Check for multi-meter averaged profile first
-        const profileKey = isWeekendDay ? 'load_profile_weekend' : 'load_profile_weekday';
-        const profileData = getAveragedProfileKw(tenant.tenant_meters, profileKey);
-        
-        // Fallback to weekday if weekend not available
-        const fallbackProfile = isWeekendDay && !profileData.avgKwPerSqm 
-          ? getAveragedProfileKw(tenant.tenant_meters, 'load_profile_weekday')
-          : profileData;
-        
-        if (fallbackProfile.avgKwPerSqm) {
-          // Scale kW/m² by tenant area to get tenant's kW for this hour
-          const hourlyKw = tenantArea * fallbackProfile.avgKwPerSqm[h] * dayMultiplier;
-          
-          hourData[key] = ((hourData[key] as number) || 0) + hourlyKw;
-          hourData.total += hourlyKw;
-          return;
-        }
-        
-        // Fall back to single SCADA profile - values are kW per interval
-        const scadaWeekdayRaw = tenant.scada_imports?.load_profile_weekday;
-        const scadaWeekendRaw = tenant.scada_imports?.load_profile_weekend;
-        const scadaProfileRaw = isWeekendDay ? scadaWeekendRaw || scadaWeekdayRaw : scadaWeekdayRaw;
-        const detectedInterval = tenant.scada_imports?.detected_interval_minutes;
+      // Accumulate values across all selected days, then average
+      const dayValues: Map<string, number[]> = new Map();
+      let totalValues: number[] = [];
 
-        if (scadaProfileRaw && [24, 48, 96].includes(scadaProfileRaw.length)) {
-          const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
-          // Correct for interval (handles summed vs averaged issue), then scale
-          const scadaProfile = correctProfileForInterval(scadaProfileRaw, detectedInterval);
-          // Scale kW by area ratio: tenant_kW = source_kW × (tenant_area / source_area)
-          const areaScale = scadaArea > 0 ? tenantArea / scadaArea : 1;
-          const hourlyKw = scadaProfile[h] * areaScale * dayMultiplier;
-          
-          hourData[key] = ((hourData[key] as number) || 0) + hourlyKw;
-          hourData.total += hourlyKw;
-          return;
-        }
+      daysArray.forEach((dayIndex) => {
+        // Convert day index (0=Sun) to DayOfWeek
+        const dayOfWeek = DAYS_OF_WEEK[(dayIndex + 6) % 7]; // Shift: 0=Sun→6, 1=Mon→0, etc.
+        const isWeekendDay = dayIndex === 0 || dayIndex === 6;
+        const dayMultiplier = DAY_MULTIPLIERS[dayOfWeek];
 
-        // Shop type estimate - convert kWh to kW using profile shape
-        const shopType = tenant.shop_type_id ? shopTypes.find((st) => st.id === tenant.shop_type_id) : null;
-        const monthlyKwh = tenant.monthly_kwh_override || (shopType?.kwh_per_sqm_month || 50) * tenantArea;
-        const dailyKwh = monthlyKwh / 30;
-        const shopTypeProfile = isWeekendDay ? shopType?.load_profile_weekend || shopType?.load_profile_weekday : shopType?.load_profile_weekday;
-        const profile = shopTypeProfile?.length === 24 ? shopTypeProfile.map(Number) : DEFAULT_PROFILE_PERCENT;
-        // Profile is percentages, so hourlyKw = dailyKwh × (profile[h] / 100)
-        // This gives kW since we're spreading daily energy over hours
-        const hourlyKw = dailyKwh * (profile[h] / 100) * dayMultiplier;
-        
-        hourData[key] = ((hourData[key] as number) || 0) + hourlyKw;
-        hourData.total += hourlyKw;
+        tenants.forEach((tenant) => {
+          const tenantArea = Number(tenant.area_sqm) || 0;
+          if (tenantArea <= 0) return;
+
+          const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
+
+          // Check for multi-meter averaged profile first
+          const profileKey = isWeekendDay ? 'load_profile_weekend' : 'load_profile_weekday';
+          const profileData = getAveragedProfileKw(tenant.tenant_meters, profileKey);
+
+          // Fallback to weekday if weekend not available
+          const fallbackProfile = isWeekendDay && !profileData.avgKwPerSqm
+            ? getAveragedProfileKw(tenant.tenant_meters, 'load_profile_weekday')
+            : profileData;
+
+          let hourlyKw = 0;
+
+          if (fallbackProfile.avgKwPerSqm) {
+            // Scale kW/m² by tenant area to get tenant's kW for this hour
+            hourlyKw = tenantArea * fallbackProfile.avgKwPerSqm[h] * dayMultiplier;
+          } else {
+            // Fall back to single SCADA profile - values are kW per interval
+            const scadaWeekdayRaw = tenant.scada_imports?.load_profile_weekday;
+            const scadaWeekendRaw = tenant.scada_imports?.load_profile_weekend;
+            const scadaProfileRaw = isWeekendDay ? scadaWeekendRaw || scadaWeekdayRaw : scadaWeekdayRaw;
+            const detectedInterval = tenant.scada_imports?.detected_interval_minutes;
+
+            if (scadaProfileRaw && [24, 48, 96].includes(scadaProfileRaw.length)) {
+              const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
+              // Correct for interval (handles summed vs averaged issue), then scale
+              const scadaProfile = correctProfileForInterval(scadaProfileRaw, detectedInterval);
+              // Scale kW by area ratio: tenant_kW = source_kW × (tenant_area / source_area)
+              const areaScale = scadaArea > 0 ? tenantArea / scadaArea : 1;
+              hourlyKw = scadaProfile[h] * areaScale * dayMultiplier;
+            } else {
+              // Shop type estimate - convert kWh to kW using profile shape
+              const shopType = tenant.shop_type_id ? shopTypes.find((st) => st.id === tenant.shop_type_id) : null;
+              const monthlyKwh = tenant.monthly_kwh_override || (shopType?.kwh_per_sqm_month || 50) * tenantArea;
+              const dailyKwh = monthlyKwh / 30;
+              const shopTypeProfile = isWeekendDay ? shopType?.load_profile_weekend || shopType?.load_profile_weekday : shopType?.load_profile_weekday;
+              const profile = shopTypeProfile?.length === 24 ? shopTypeProfile.map(Number) : DEFAULT_PROFILE_PERCENT;
+              // Profile is percentages, so hourlyKw = dailyKwh × (profile[h] / 100)
+              hourlyKw = dailyKwh * (profile[h] / 100) * dayMultiplier;
+            }
+          }
+
+          // Accumulate for averaging
+          if (!dayValues.has(key)) dayValues.set(key, []);
+          dayValues.get(key)!.push(hourlyKw);
+          totalValues.push(hourlyKw);
+        });
       });
+
+      // Average across all selected days
+      const numDays = daysArray.length;
+      dayValues.forEach((values, key) => {
+        const avgValue = values.reduce((sum, v) => sum + v, 0) / numDays;
+        hourData[key] = avgValue;
+      });
+      hourData.total = totalValues.reduce((sum, v) => sum + v, 0) / numDays;
 
       hourlyData.push(hourData);
     }
 
     return hourlyData;
-  }, [tenants, shopTypes, selectedDay]);
+  }, [tenants, shopTypes, daysArray]);
 
   // Apply diversity factor and convert to kVA if needed
   // baseChartData contains kW values - apply diversity and optional kW→kVA conversion

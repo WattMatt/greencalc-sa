@@ -53,6 +53,9 @@ interface ChartHeaderProps {
   onMonthChange?: (month: string | null) => void;
   availableMonths?: AvailableMonth[];
   monthlyStats?: { totalKwh: number; peakKw: number; daysWithData: number } | null;
+  // Weekday multi-select props
+  selectedDays?: Set<number>;
+  onDaysChange?: (days: Set<number>) => void;
 }
 
 export function ChartHeader({
@@ -90,6 +93,8 @@ export function ChartHeader({
   onMonthChange,
   availableMonths = [],
   monthlyStats,
+  selectedDays,
+  onDaysChange,
 }: ChartHeaderProps) {
   return (
     <div className="flex flex-col gap-3">
@@ -107,6 +112,8 @@ export function ChartHeader({
           selectedMonth={selectedMonth}
           onMonthChange={onMonthChange}
           availableMonths={availableMonths}
+          selectedDays={selectedDays}
+          onDaysChange={onDaysChange}
         />
         
         {/* Unit Toggle */}
@@ -123,21 +130,20 @@ export function ChartHeader({
       {/* Second row: Navigation & Controls */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          {/* Day Navigation - only show in average mode */}
-          {dateMode === "average" && (
-            <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateDay("prev")}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="w-28 text-center">
-                <span className="font-medium">{selectedDay}</span>
+          {/* Day display - only show in average mode (multi-select handles navigation) */}
+          {dateMode === "average" && selectedDays && (
+            <div className="flex items-center gap-2">
+              <div className="text-center">
+                <span className="font-medium text-sm">
+                  {selectedDays.size === 7 ? "All Days" : 
+                   selectedDays.size === 5 && !selectedDays.has(0) && !selectedDays.has(6) ? "Weekdays" :
+                   selectedDays.size === 2 && selectedDays.has(0) && selectedDays.has(6) ? "Weekends" :
+                   Array.from(selectedDays).map(d => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]).join(", ")}
+                </span>
                 <Badge variant={isWeekend ? "secondary" : "outline"} className="ml-2 text-[10px]">
-                  {isWeekend ? "WE" : "WD"}
+                  {selectedDays.size}d avg
                 </Badge>
               </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateDay("next")}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
             </div>
           )}
 
