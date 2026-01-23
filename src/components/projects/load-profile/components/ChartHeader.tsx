@@ -264,26 +264,22 @@ export function ChartHeader({
             <p className="text-xs text-muted-foreground">Peak at {peakHour.hour.toString().padStart(2, "0")}:00</p>
           </div>
 
-          {/* Quick Toggles */}
+          {/* Quick Toggles - All always visible */}
           <div className="flex items-center gap-3 border-l pl-4">
             <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
               <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
               TOU
             </Label>
-            {maxPvAcKva && (
-              <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                <Switch checked={showPVProfile} onCheckedChange={setShowPVProfile} className="scale-75" />
-                <Sun className="h-3 w-3 text-amber-500" />
-                PV
-              </Label>
-            )}
-            {showPVProfile && maxPvAcKva && (
-              <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                <Switch checked={showBattery} onCheckedChange={setShowBattery} className="scale-75" />
-                <Battery className="h-3 w-3 text-green-500" />
-                Battery
-              </Label>
-            )}
+            <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+              <Switch checked={showPVProfile} onCheckedChange={setShowPVProfile} className="scale-75" />
+              <Sun className="h-3 w-3 text-amber-500" />
+              PV
+            </Label>
+            <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+              <Switch checked={showBattery} onCheckedChange={setShowBattery} className="scale-75" />
+              <Battery className="h-3 w-3 text-green-500" />
+              Battery
+            </Label>
             <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
               <Switch checked={showAnnotations} onCheckedChange={setShowAnnotations} className="scale-75" />
               <MessageSquare className="h-3 w-3 text-blue-500" />
