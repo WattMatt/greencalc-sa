@@ -140,6 +140,9 @@ export function CalculationsSettingsCard() {
             <p className="text-sm text-muted-foreground">
               Centralized first-principles constants for all solar and financial calculations
             </p>
+            <p className="text-xs text-muted-foreground/70 mt-0.5">
+              Changes here flow to: Project Simulations → Financial Analysis → Results
+            </p>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={resetAll}>

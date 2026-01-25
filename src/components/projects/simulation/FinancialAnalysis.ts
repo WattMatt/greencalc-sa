@@ -269,47 +269,55 @@ export function compareTariffs(
 
 /**
  * Default system costs for South Africa (2025/2026)
- * Updated to reflect current market pricing
+ * Now sourced from centralized calculation variables in Settings
  */
+import { buildSystemCostsFromVariables } from "@/hooks/useCalculationDefaults";
+
+// Dynamic getter that reads from centralized Settings
+export function getDefaultSystemCosts(): SystemCosts {
+  return buildSystemCostsFromVariables();
+}
+
+// Legacy export for backwards compatibility (reads from Settings at call time)
 export const DEFAULT_SYSTEM_COSTS: SystemCosts = {
-  solarCostPerKwp: 11000, // R11,000 per kWp installed (includes installation)
-  batteryCostPerKwh: 7500, // R7,500 per kWh (LFP battery costs declining)
-  solarMaintenancePercentage: 3.5, // 3.5% of solar cost per year
-  batteryMaintenancePercentage: 1.5, // 1.5% of battery cost per year
-  maintenancePerYear: 0, // Calculated from both percentages
+  get solarCostPerKwp() { return getDefaultSystemCosts().solarCostPerKwp; },
+  get batteryCostPerKwh() { return getDefaultSystemCosts().batteryCostPerKwh; },
+  solarMaintenancePercentage: 3.5, // Keep as project-level override
+  batteryMaintenancePercentage: 1.5, // Keep as project-level override
+  maintenancePerYear: 0,
   
-  // Additional Fixed Costs (default to 0)
+  // Additional Fixed Costs (project-level)
   healthAndSafetyCost: 0,
   waterPointsCost: 0,
   cctvCost: 0,
   mvSwitchGearCost: 0,
   
-  // Insurance (default 1% of Total Capital + O&M)
+  // Insurance - reads from Settings
   insuranceCostPerYear: 0,
-  insuranceRatePercent: 1.0,
+  get insuranceRatePercent() { return getDefaultSystemCosts().insuranceRatePercent; },
   
-  // Percentage-based Fees (default to 0)
-  professionalFeesPercent: 0,
-  projectManagementPercent: 0,
-  contingencyPercent: 0,
+  // Percentage-based Fees - reads from Settings
+  get professionalFeesPercent() { return getDefaultSystemCosts().professionalFeesPercent; },
+  get projectManagementPercent() { return getDefaultSystemCosts().projectManagementPercent; },
+  get contingencyPercent() { return getDefaultSystemCosts().contingencyPercent; },
   
-  // Replacement Costs (Year 10)
-  replacementYear: 10,
-  equipmentCostPercent: 45,
-  moduleSharePercent: 70,
-  inverterSharePercent: 30,
-  solarModuleReplacementPercent: 10,
-  inverterReplacementPercent: 50,
-  batteryReplacementPercent: 30,
+  // Replacement Costs - reads from Settings
+  get replacementYear() { return getDefaultSystemCosts().replacementYear; },
+  get equipmentCostPercent() { return getDefaultSystemCosts().equipmentCostPercent; },
+  get moduleSharePercent() { return getDefaultSystemCosts().moduleSharePercent; },
+  get inverterSharePercent() { return getDefaultSystemCosts().inverterSharePercent; },
+  get solarModuleReplacementPercent() { return getDefaultSystemCosts().solarModuleReplacementPercent; },
+  get inverterReplacementPercent() { return getDefaultSystemCosts().inverterReplacementPercent; },
+  get batteryReplacementPercent() { return getDefaultSystemCosts().batteryReplacementPercent; },
   
-  // Financial Return Parameters
-  costOfCapital: 9.0,           // % - General WACC
-  cpi: 6.0,                     // % - Inflation
-  electricityInflation: 10.0,   // % - Tariff escalation
-  projectDurationYears: 20,     // years
-  lcoeDiscountRate: 9.0,        // % - NPV discount rate
-  mirrFinanceRate: 9.0,         // % - Interest paid on money used in cash flows
-  mirrReinvestmentRate: 10.0,   // % - Interest received on reinvestment
+  // Financial Return Parameters - reads from Settings
+  get costOfCapital() { return getDefaultSystemCosts().costOfCapital; },
+  get cpi() { return getDefaultSystemCosts().cpi; },
+  get electricityInflation() { return getDefaultSystemCosts().electricityInflation; },
+  get projectDurationYears() { return getDefaultSystemCosts().projectDurationYears; },
+  get lcoeDiscountRate() { return getDefaultSystemCosts().lcoeDiscountRate; },
+  get mirrFinanceRate() { return getDefaultSystemCosts().mirrFinanceRate; },
+  get mirrReinvestmentRate() { return getDefaultSystemCosts().mirrReinvestmentRate; },
 };
 
 /**

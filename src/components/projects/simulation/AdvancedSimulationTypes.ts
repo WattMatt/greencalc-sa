@@ -135,43 +135,75 @@ export const DEFAULT_SEASONAL_CONFIG: SeasonalConfig = {
 const generateYearlyRates = (rate: number, years: number = 20): number[] => 
   Array(years).fill(rate);
 
+// Import centralized variables for defaults
+import { 
+  getDegradationVariables, 
+  getFinancialVariables,
+  getCostBreakdownVariables,
+} from "@/hooks/useCalculationDefaults";
+
+// Dynamic getters that read from centralized Settings
+function getDegradationDefaults() {
+  const vars = getDegradationVariables();
+  return {
+    panelSimpleRate: vars.annualPanelDegradation,
+    firstYearDegradation: vars.firstYearDegradation,
+    batterySimpleRate: vars.annualBatteryDegradation,
+    batteryEolCapacity: vars.batteryEolCapacity,
+    projectLifetimeYears: vars.projectLifetimeYears,
+  };
+}
+
+function getFinancialDefaults() {
+  const vars = getFinancialVariables();
+  return {
+    tariffEscalationRate: vars.tariffEscalation,
+    inflationRate: vars.cpiInflation,
+    discountRate: vars.discountRate,
+    insuranceEscalationRate: vars.cpiInflation,
+  };
+}
+
 export const DEFAULT_DEGRADATION_CONFIG: DegradationConfig = {
   enabled: false,
   
-  // Panel defaults
+  // Panel defaults - read from centralized Settings
   panelDegradationMode: 'simple',
-  panelSimpleRate: 0.5,  // 0.5% per year
-  panelYearlyRates: [
-    2.0,  // Year 1 - higher initial degradation (LID + settling)
-    ...generateYearlyRates(0.5, 19),  // Years 2-20
-  ],
+  get panelSimpleRate() { return getDegradationDefaults().panelSimpleRate; },
+  get panelYearlyRates() {
+    const defaults = getDegradationDefaults();
+    return [
+      defaults.firstYearDegradation,  // Year 1 - higher initial degradation (LID + settling)
+      ...generateYearlyRates(defaults.panelSimpleRate, 19),  // Years 2-20
+    ];
+  },
   
-  // Battery defaults
+  // Battery defaults - read from centralized Settings
   batteryDegradationMode: 'simple',
-  batterySimpleRate: 3.0,  // 3% per year typical for Li-ion
-  batteryYearlyRates: generateYearlyRates(3.0, 20),
-  batteryEolCapacity: 70,
+  get batterySimpleRate() { return getDegradationDefaults().batterySimpleRate; },
+  get batteryYearlyRates() { return generateYearlyRates(getDegradationDefaults().batterySimpleRate, 20); },
+  get batteryEolCapacity() { return getDegradationDefaults().batteryEolCapacity; },
   
   // Legacy (deprecated) - kept for backwards compatibility
-  panelDegradationRate: 0.5,
-  panelFirstYearDegradation: 2.0,
-  batteryDegradationRate: 3.0,
-  inverterReplacementYear: 12,
+  get panelDegradationRate() { return getDegradationDefaults().panelSimpleRate; },
+  get panelFirstYearDegradation() { return getDegradationDefaults().firstYearDegradation; },
+  get batteryDegradationRate() { return getDegradationDefaults().batterySimpleRate; },
+  get inverterReplacementYear() { return getCostBreakdownVariables().replacementYear; },
   inverterReplacementCost: 50000,
 };
 
 export const DEFAULT_FINANCIAL_CONFIG: AdvancedFinancialConfig = {
   enabled: true, // Enabled by default for O&M CPI escalation
-  tariffEscalationRate: 10.0, // SA tariffs have been rising ~10%/year
-  inflationRate: 6.0, // Sync with default CPI
-  discountRate: 9.0,
-  projectLifetimeYears: 20,
+  get tariffEscalationRate() { return getFinancialDefaults().tariffEscalationRate; },
+  get inflationRate() { return getFinancialDefaults().inflationRate; },
+  get discountRate() { return getFinancialDefaults().discountRate; },
+  get projectLifetimeYears() { return getDegradationDefaults().projectLifetimeYears; },
   sensitivityEnabled: false,
   sensitivityVariation: 20,
   // Insurance defaults (enabled - 1% of total capital + O&M, escalated by CPI)
   insuranceEnabled: true,
   baseInsuranceCostR: 0,
-  insuranceEscalationRate: 6.0, // Same as CPI
+  get insuranceEscalationRate() { return getFinancialDefaults().insuranceEscalationRate; },
 };
 
 export const DEFAULT_GRID_CONSTRAINTS_CONFIG: GridConstraintsConfig = {
