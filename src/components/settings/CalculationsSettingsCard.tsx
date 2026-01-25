@@ -136,24 +136,24 @@ export function CalculationsSettingsCard() {
         <div className="flex items-center gap-3">
           <Calculator className="h-6 w-6 text-primary" />
           <div>
-            <h2 className="text-lg font-semibold">Calculation Defaults</h2>
+            <h2 className="text-lg font-semibold">Calculation Variables</h2>
             <p className="text-sm text-muted-foreground">
-              Configure first-principles variables for all solar and financial calculations
+              Centralized first-principles constants for all solar and financial calculations
             </p>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={resetAll}>
           <RotateCcw className="h-4 w-4 mr-2" />
-          Reset All
+          Reset to Industry Standards
         </Button>
       </div>
 
       {/* Sections */}
       <div className="space-y-3">
-        {/* Solar System Defaults */}
+        {/* Solar System Variables */}
         <Section
-          title="Solar System Defaults"
-          description="Installation costs and system parameters"
+          title="Solar System Variables"
+          description="Base installation costs and system parameters"
           icon={<Sun className="h-4 w-4" />}
           onReset={() => resetSection("solarSystem")}
           defaultOpen={true}
@@ -215,10 +215,10 @@ export function CalculationsSettingsCard() {
           </div>
         </Section>
 
-        {/* PVsyst Loss Chain */}
+        {/* PVsyst Loss Chain Variables */}
         <Section
           title="PVsyst Loss Chain"
-          description="Detailed loss factors for accurate yield modeling"
+          description="Sequential loss factors for yield modeling (21-step chain)"
           icon={<Zap className="h-4 w-4" />}
           onReset={() => resetSection("pvsystLoss")}
         >
@@ -371,10 +371,10 @@ export function CalculationsSettingsCard() {
           </div>
         </Section>
 
-        {/* Degradation & Lifetime */}
+        {/* Degradation & Lifetime Variables */}
         <Section
           title="Degradation & Lifetime"
-          description="Equipment aging and project duration"
+          description="Equipment aging rates and project duration constants"
           icon={<TrendingDown className="h-4 w-4" />}
           onReset={() => resetSection("degradation")}
         >
@@ -434,10 +434,10 @@ export function CalculationsSettingsCard() {
           </div>
         </Section>
 
-        {/* Financial Assumptions */}
+        {/* Financial Variables */}
         <Section
-          title="Financial Assumptions"
-          description="Rates for NPV, IRR, and escalation modeling"
+          title="Financial Variables"
+          description="Discount rates, escalation, and return calculation constants"
           icon={<DollarSign className="h-4 w-4" />}
           onReset={() => resetSection("financial")}
         >
@@ -522,10 +522,10 @@ export function CalculationsSettingsCard() {
           </div>
         </Section>
 
-        {/* Cost Breakdown */}
+        {/* Cost Structure Variables */}
         <Section
-          title="Cost Breakdown & Replacements"
-          description="Equipment splits and replacement assumptions"
+          title="Cost Structure & Replacements"
+          description="Equipment cost splits and replacement schedule constants"
           icon={<Wrench className="h-4 w-4" />}
           onReset={() => resetSection("costBreakdown")}
         >
@@ -648,10 +648,10 @@ export function CalculationsSettingsCard() {
           </div>
         </Section>
 
-        {/* Carbon & Environmental */}
+        {/* Carbon & Environmental Variables */}
         <Section
           title="Carbon & Environmental"
-          description="Emission factors and environmental calculations"
+          description="Emission factors and environmental impact constants"
           icon={<Leaf className="h-4 w-4" />}
           onReset={() => resetSection("carbon")}
         >
