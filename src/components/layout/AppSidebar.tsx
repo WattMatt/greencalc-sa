@@ -80,16 +80,17 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className={`flex ${isCollapsed ? "flex-col items-center gap-3" : "items-center justify-between"}`}>
+          {/* Logo section */}
+          <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"}`}>
             {orgBranding.logo_url ? (
               <img 
                 src={orgBranding.logo_url} 
                 alt="Company logo" 
-                className="h-10 w-10 rounded-lg object-contain"
+                className="h-10 w-10 rounded-lg object-contain shrink-0"
               />
             ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary shrink-0">
                 <Zap className="h-6 w-6 text-primary-foreground" />
               </div>
             )}
@@ -104,8 +105,35 @@ export function AppSidebar() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-1">
-            {!isCollapsed && <SyncStatus />}
+          
+          {/* Controls - expanded state */}
+          {!isCollapsed && (
+            <div className="flex items-center gap-1">
+              <SyncStatus />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={toggleTheme}
+                    className="h-8 w-8 shrink-0"
+                  >
+                    {theme === "dark" ? (
+                      <Sun className="h-4 w-4" />
+                    ) : (
+                      <Moon className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          )}
+          
+          {/* Theme toggle only - collapsed state */}
+          {isCollapsed && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -125,7 +153,7 @@ export function AppSidebar() {
                 <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
               </TooltipContent>
             </Tooltip>
-          </div>
+          )}
         </div>
       </SidebarHeader>
 

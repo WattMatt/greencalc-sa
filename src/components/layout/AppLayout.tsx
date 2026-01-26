@@ -13,7 +13,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         <AppSidebar />
         <SidebarInset className="flex-1">
           <header className="flex h-14 items-center gap-4 border-b border-border px-6 bg-card">
-            <SidebarTrigger className="-ml-2" />
+            <SidebarTrigger className="shrink-0" />
             <div className="flex-1" />
           </header>
           <main className="flex-1 p-6 bg-background">
