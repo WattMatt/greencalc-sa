@@ -85,23 +85,25 @@ const TabWithStatus = ({
   status: TabStatus;
   tooltip: string;
 }) => (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <TabsTrigger value={value} className="relative">
-        {children}
-        <TabStatusBadge status={status} />
-      </TabsTrigger>
-    </TooltipTrigger>
-    <TooltipContent side="bottom" className="max-w-xs">
-      <div className="flex items-center gap-2">
-        {status === "complete" && <CheckCircle2 className="h-3 w-3 text-green-500" />}
-        {status === "partial" && <AlertCircle className="h-3 w-3 text-amber-500" />}
-        {status === "blocked" && <Lock className="h-3 w-3 text-destructive" />}
-        {status === "pending" && <Circle className="h-3 w-3 text-muted-foreground" />}
-        <span>{tooltip}</span>
-      </div>
-    </TooltipContent>
-  </Tooltip>
+  <TabsTrigger value={value} className="relative group">
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center">
+          {children}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs">
+        <div className="flex items-center gap-2">
+          {status === "complete" && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+          {status === "partial" && <AlertCircle className="h-3 w-3 text-amber-500" />}
+          {status === "blocked" && <Lock className="h-3 w-3 text-destructive" />}
+          {status === "pending" && <Circle className="h-3 w-3 text-muted-foreground" />}
+          <span>{tooltip}</span>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+    <TabStatusBadge status={status} />
+  </TabsTrigger>
 );
 
 // Expose save function for tab change
