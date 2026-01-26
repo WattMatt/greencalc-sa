@@ -21,6 +21,7 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -129,30 +130,34 @@ export function AppSidebar() {
                   <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
                 </TooltipContent>
               </Tooltip>
+              <SidebarTrigger className="h-8 w-8 shrink-0" />
             </div>
           )}
           
-          {/* Theme toggle only - collapsed state */}
+          {/* Controls - collapsed state */}
           {isCollapsed && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleTheme}
-                  className="h-8 w-8 shrink-0"
-                >
-                  {theme === "dark" ? (
-                    <Sun className="h-4 w-4" />
-                  ) : (
-                    <Moon className="h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
-              </TooltipContent>
-            </Tooltip>
+            <div className="flex flex-col items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={toggleTheme}
+                    className="h-8 w-8 shrink-0"
+                  >
+                    {theme === "dark" ? (
+                      <Sun className="h-4 w-4" />
+                    ) : (
+                      <Moon className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
+                </TooltipContent>
+              </Tooltip>
+              <SidebarTrigger className="h-8 w-8 shrink-0" />
+            </div>
           )}
         </div>
       </SidebarHeader>
