@@ -1196,6 +1196,8 @@ export default function ProjectDetail() {
           <TariffSelector
             projectId={id!}
             currentTariffId={project.tariff_id}
+            latitude={project.latitude}
+            longitude={project.longitude}
             onSelect={(tariffId) => updateProject.mutate({ tariff_id: tariffId })}
             selectedBlendedRateType={blendedRateType}
             onBlendedRateTypeChange={setBlendedRateType}

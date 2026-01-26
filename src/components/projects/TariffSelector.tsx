@@ -311,6 +311,8 @@ interface TariffSelectorProps {
   onSelect: (tariffId: string) => void;
   selectedBlendedRateType?: BlendedRateType;
   onBlendedRateTypeChange?: (type: BlendedRateType) => void;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export function TariffSelector({ 
@@ -318,10 +320,14 @@ export function TariffSelector({
   currentTariffId, 
   onSelect, 
   selectedBlendedRateType = 'solarHours',
-  onBlendedRateTypeChange 
+  onBlendedRateTypeChange,
+  latitude,
+  longitude
 }: TariffSelectorProps) {
   const [provinceId, setProvinceId] = useState<string>("");
   const [municipalityId, setMunicipalityId] = useState<string>("");
+  const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
   const { data: provinces } = useQuery({
     queryKey: ["provinces"],
@@ -359,6 +365,89 @@ export function TariffSelector({
       }
     }
   }, [isEskomSelected, municipalities, municipalityId]);
+
+  // Auto-select province and municipality based on project coordinates (reverse geocoding)
+  useEffect(() => {
+    // Only run if we have coordinates, no province selected yet, provinces are loaded, and haven't auto-selected before
+    if (!latitude || !longitude || provinceId || !provinces || hasAutoSelected || currentTariffId) {
+      return;
+    }
+
+    const reverseGeocode = async () => {
+      setIsReverseGeocoding(true);
+      try {
+        const response = await supabase.functions.invoke('geocode-location', {
+          body: { latitude, longitude, reverse: true }
+        });
+
+        if (response.error) {
+          console.error('Reverse geocoding error:', response.error);
+          return;
+        }
+
+        const { province, municipality } = response.data;
+        console.log('Reverse geocode result:', { province, municipality });
+
+        if (province) {
+          // Find matching province (case-insensitive)
+          const matchedProvince = provinces.find(p => 
+            p.name.toLowerCase() === province.toLowerCase() ||
+            p.name.toLowerCase().includes(province.toLowerCase()) ||
+            province.toLowerCase().includes(p.name.toLowerCase())
+          );
+
+          if (matchedProvince) {
+            console.log('Matched province:', matchedProvince.name);
+            setProvinceId(matchedProvince.id);
+            setHasAutoSelected(true);
+
+            // Municipality will be auto-selected once municipalities load
+            // Store the target municipality name for later matching
+            if (municipality) {
+              // We'll match municipality in the municipalities query effect
+              sessionStorage.setItem(`tariff-selector-municipality-${projectId}`, municipality);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Reverse geocoding failed:', error);
+      } finally {
+        setIsReverseGeocoding(false);
+      }
+    };
+
+    reverseGeocode();
+  }, [latitude, longitude, provinceId, provinces, hasAutoSelected, currentTariffId, projectId]);
+
+  // Auto-select municipality after province is selected (from reverse geocoding)
+  useEffect(() => {
+    if (!municipalities || municipalities.length === 0 || !hasAutoSelected || municipalityId) {
+      return;
+    }
+
+    const targetMunicipality = sessionStorage.getItem(`tariff-selector-municipality-${projectId}`);
+    if (!targetMunicipality) return;
+
+    // Find matching municipality (case-insensitive, partial match)
+    const matchedMunicipality = municipalities.find(m => {
+      const mName = m.name.toLowerCase();
+      const target = targetMunicipality.toLowerCase();
+      return mName === target ||
+        mName.includes(target) ||
+        target.includes(mName) ||
+        // Handle cases like "Mogalakwena" matching "Mogalakwena Local Municipality"
+        mName.split(' ').some(word => word === target) ||
+        target.split(' ').some(word => word === mName.split(' ')[0]);
+    });
+
+    if (matchedMunicipality) {
+      console.log('Matched municipality:', matchedMunicipality.name);
+      setMunicipalityId(matchedMunicipality.id);
+    }
+
+    // Clean up
+    sessionStorage.removeItem(`tariff-selector-municipality-${projectId}`);
+  }, [municipalities, hasAutoSelected, municipalityId, projectId]);
 
   const { data: tariffs } = useQuery({
     queryKey: ["tariffs", municipalityId],
