@@ -9,10 +9,6 @@ interface MonthSelectorProps {
 export function MonthSelector({ selectedMonths, onMonthsChange }: MonthSelectorProps) {
   const handleToggle = (values: string[]) => {
     const newMonths = new Set(values.map(v => parseInt(v, 10)));
-    // Ensure at least one month is always selected
-    if (newMonths.size === 0) {
-      return;
-    }
     onMonthsChange(newMonths);
   };
 

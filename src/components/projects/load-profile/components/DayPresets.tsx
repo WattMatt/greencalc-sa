@@ -20,6 +20,7 @@ function setsEqual(a: Set<number>, b: Set<number>): boolean {
 export function DayPresets({ selectedDays, onDaysChange }: DayPresetsProps) {
   // Determine which preset matches current selection
   const getCurrentPreset = (): string | undefined => {
+    if (selectedDays.size === 0) return "none";
     if (setsEqual(selectedDays, WEEKDAYS)) return "weekday";
     if (setsEqual(selectedDays, WEEKEND)) return "weekend";
     if (setsEqual(selectedDays, ALL_DAYS)) return "all";
@@ -30,6 +31,9 @@ export function DayPresets({ selectedDays, onDaysChange }: DayPresetsProps) {
     if (!value) return; // Don't allow deselection
     
     switch (value) {
+      case "none":
+        onDaysChange(new Set());
+        break;
       case "weekday":
         onDaysChange(new Set(WEEKDAYS));
         break;
@@ -50,9 +54,16 @@ export function DayPresets({ selectedDays, onDaysChange }: DayPresetsProps) {
       className="gap-0"
     >
       <ToggleGroupItem
+        value="none"
+        aria-label="Deselect all days"
+        className="h-7 px-2 text-xs font-medium data-[state=on]:bg-primary data-[state=on]:text-primary-foreground rounded-none rounded-l-md border-r border-border/50"
+      >
+        None
+      </ToggleGroupItem>
+      <ToggleGroupItem
         value="weekday"
         aria-label="Select weekdays"
-        className="h-7 px-2 text-xs font-medium data-[state=on]:bg-primary data-[state=on]:text-primary-foreground rounded-none rounded-l-md border-r border-border/50"
+        className="h-7 px-2 text-xs font-medium data-[state=on]:bg-primary data-[state=on]:text-primary-foreground rounded-none border-r border-border/50"
       >
         Wkday
       </ToggleGroupItem>

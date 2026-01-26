@@ -21,6 +21,7 @@ function setsEqual(a: Set<number>, b: Set<number>): boolean {
 export function SeasonPresets({ selectedMonths, onMonthsChange }: SeasonPresetsProps) {
   // Determine current preset based on selection
   const getCurrentPreset = (): string | undefined => {
+    if (selectedMonths.size === 0) return "none";
     if (setsEqual(selectedMonths, SUMMER_MONTHS)) return "summer";
     if (setsEqual(selectedMonths, WINTER_MONTHS)) return "winter";
     if (setsEqual(selectedMonths, ALL_MONTHS)) return "all";
@@ -31,6 +32,9 @@ export function SeasonPresets({ selectedMonths, onMonthsChange }: SeasonPresetsP
     if (!value) return;
     
     switch (value) {
+      case "none":
+        onMonthsChange(new Set());
+        break;
       case "summer":
         onMonthsChange(new Set(SUMMER_MONTHS));
         break;
@@ -51,9 +55,17 @@ export function SeasonPresets({ selectedMonths, onMonthsChange }: SeasonPresetsP
       className="gap-0"
     >
       <ToggleGroupItem 
-        value="summer" 
+        value="none" 
         size="sm" 
         className="text-xs px-2 h-7 rounded-r-none border-r-0"
+        aria-label="Deselect all months"
+      >
+        None
+      </ToggleGroupItem>
+      <ToggleGroupItem 
+        value="summer" 
+        size="sm" 
+        className="text-xs px-2 h-7 rounded-none border-r-0"
         aria-label="Select summer months (Sep-May)"
       >
         Summer
