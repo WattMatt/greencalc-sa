@@ -81,7 +81,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="p-4">
-        <div className={`flex ${isCollapsed ? "flex-col items-center gap-3" : "items-center justify-between"}`}>
+        <div className="flex items-center justify-between">
           {/* Logo section */}
           <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"}`}>
             {orgBranding.logo_url ? (
@@ -107,58 +107,30 @@ export function AppSidebar() {
             )}
           </div>
           
-          {/* Controls - expanded state */}
-          {!isCollapsed && (
-            <div className="flex items-center gap-1">
-              <SyncStatus />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={toggleTheme}
-                    className="h-8 w-8 shrink-0"
-                  >
-                    {theme === "dark" ? (
-                      <Sun className="h-4 w-4" />
-                    ) : (
-                      <Moon className="h-4 w-4" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
-                </TooltipContent>
-              </Tooltip>
-              <SidebarTrigger className="h-8 w-8 shrink-0" />
-            </div>
-          )}
-          
-          {/* Controls - collapsed state */}
-          {isCollapsed && (
-            <div className="flex flex-col items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={toggleTheme}
-                    className="h-8 w-8 shrink-0"
-                  >
-                    {theme === "dark" ? (
-                      <Sun className="h-4 w-4" />
-                    ) : (
-                      <Moon className="h-4 w-4" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
-                </TooltipContent>
-              </Tooltip>
-              <SidebarTrigger className="h-8 w-8 shrink-0" />
-            </div>
-          )}
+          {/* Controls - always on the right */}
+          <div className="flex items-center gap-1">
+            {!isCollapsed && <SyncStatus />}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleTheme}
+                  className="h-8 w-8 shrink-0"
+                >
+                  {theme === "dark" ? (
+                    <Sun className="h-4 w-4" />
+                  ) : (
+                    <Moon className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
+              </TooltipContent>
+            </Tooltip>
+            <SidebarTrigger className="h-8 w-8 shrink-0" />
+          </div>
         </div>
       </SidebarHeader>
 
