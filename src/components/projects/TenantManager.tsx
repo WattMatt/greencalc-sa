@@ -164,6 +164,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newTenant, setNewTenant] = useState({ name: "", area_sqm: "", scada_import_id: "" });
+  const [profilePopoverOpen, setProfilePopoverOpen] = useState(false);
   
   // CSV Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -447,21 +448,56 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                 </div>
                 <div className="space-y-2">
                   <Label>Load Profile (optional)</Label>
-                  <Select
-                    value={newTenant.scada_import_id}
-                    onValueChange={(v) => setNewTenant({ ...newTenant, scada_import_id: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select profile..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {scadaImports?.map((meter) => (
-                        <SelectItem key={meter.id} value={meter.id}>
-                          {formatProfileOption(meter)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={profilePopoverOpen} onOpenChange={setProfilePopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={profilePopoverOpen}
+                        className="w-full justify-between"
+                      >
+                        <span className="truncate">
+                          {newTenant.scada_import_id
+                            ? formatProfileOption(
+                                scadaImports?.find((m) => m.id === newTenant.scada_import_id)!
+                              )
+                            : "Select profile..."}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[320px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search profiles..." className="h-9" />
+                        <CommandList>
+                          <CommandEmpty>No profile found.</CommandEmpty>
+                          <CommandGroup>
+                            {scadaImports?.map((meter) => (
+                              <CommandItem
+                                key={meter.id}
+                                value={`${meter.shop_name || ""} ${meter.site_name || ""} ${meter.area_sqm || ""}`}
+                                onSelect={() => {
+                                  setNewTenant({ ...newTenant, scada_import_id: meter.id });
+                                  setProfilePopoverOpen(false);
+                                }}
+                                className="text-sm"
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    newTenant.scada_import_id === meter.id
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  )}
+                                />
+                                {formatProfileOption(meter)}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <Button
                   className="w-full"
