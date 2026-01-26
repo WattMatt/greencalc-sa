@@ -159,12 +159,76 @@ function getAreaDifference(meterArea: number | null, tenantArea: number): number
   return Math.abs(meterArea - tenantArea);
 }
 
+// Types for profile suggestions
+type MatchType = 'exact' | 'similar' | 'none';
+
+interface ProfileSuggestion {
+  profile: ScadaImport;
+  matchType: MatchType;
+  score: number;
+}
+
+// Match tenant name to profiles and calculate confidence scores
+function getProfileSuggestions(tenantName: string, profiles: ScadaImport[]): ProfileSuggestion[] {
+  const normalizedTenant = tenantName.toLowerCase().trim();
+  if (!normalizedTenant) {
+    return profiles.map(profile => ({ profile, matchType: 'none' as const, score: 0 }));
+  }
+  
+  return profiles.map(profile => {
+    const shopName = profile.shop_name?.toLowerCase() || '';
+    const meterLabel = profile.meter_label?.toLowerCase() || '';
+    
+    // Exact match
+    if (shopName === normalizedTenant || meterLabel === normalizedTenant) {
+      return { profile, matchType: 'exact' as const, score: 100 };
+    }
+    
+    // Contains match (either direction)
+    if ((shopName && (shopName.includes(normalizedTenant) || normalizedTenant.includes(shopName))) ||
+        (meterLabel && (meterLabel.includes(normalizedTenant) || normalizedTenant.includes(meterLabel)))) {
+      const matchedLen = shopName.length || meterLabel.length || 1;
+      const longerLen = Math.max(matchedLen, normalizedTenant.length);
+      const shorterLen = Math.min(matchedLen, normalizedTenant.length);
+      return { profile, matchType: 'similar' as const, score: 60 + (shorterLen / longerLen) * 30 };
+    }
+    
+    // No name match
+    return { profile, matchType: 'none' as const, score: 0 };
+  });
+}
+
+// Get sorted profiles with suggestions based on name or area
+function getSortedProfilesWithSuggestions(
+  tenantName: string, 
+  tenantArea: number, 
+  profiles: ScadaImport[], 
+  sortByArea: boolean
+): ProfileSuggestion[] {
+  if (sortByArea) {
+    // Pure area-based sorting
+    return [...profiles]
+      .map(p => ({ profile: p, matchType: 'none' as const, score: 0 }))
+      .sort((a, b) => getAreaDifference(a.profile.area_sqm, tenantArea) - getAreaDifference(b.profile.area_sqm, tenantArea));
+  }
+  
+  // Name-based with area as tiebreaker
+  const suggestions = getProfileSuggestions(tenantName, profiles);
+  return suggestions.sort((a, b) => {
+    // Primary: match score (highest first)
+    if (a.score !== b.score) return b.score - a.score;
+    // Secondary: area similarity
+    return getAreaDifference(a.profile.area_sqm, tenantArea) - getAreaDifference(b.profile.area_sqm, tenantArea);
+  });
+}
+
 export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newTenant, setNewTenant] = useState({ name: "", area_sqm: "", scada_import_id: "" });
   const [profilePopoverOpen, setProfilePopoverOpen] = useState(false);
+  const [addDialogSortByArea, setAddDialogSortByArea] = useState(false);
   
   // CSV Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -173,6 +237,9 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   
   // Multi-meter selector state
   const [multiMeterTenant, setMultiMeterTenant] = useState<{ id: string; name: string; area: number } | null>(null);
+  
+  // Sort mode toggle per tenant for inline dropdowns
+  const [sortByAreaMap, setSortByAreaMap] = useState<Record<string, boolean>>({});
   
   // Profile preview state
   const [previewContext, setPreviewContext] = useState<{ meter: ScadaImport; tenant: Tenant } | null>(null);
@@ -384,13 +451,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     return sum + kwh;
   }, 0);
 
-  // Sort SCADA imports by similarity to tenant area for better UX
-  const getSortedProfiles = (tenantArea: number) => {
-    if (!scadaImports) return [];
-    return [...scadaImports].sort((a, b) => 
-      getAreaDifference(a.area_sqm, tenantArea) - getAreaDifference(b.area_sqm, tenantArea)
-    );
-  };
+
 
   return (
     <div className="space-y-6">
@@ -466,13 +527,39 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[320px] p-0" align="start">
+                    <PopoverContent className="w-[340px] p-0" align="start">
+                      <div className="flex items-center justify-between px-3 py-2 border-b">
+                        <span className="text-xs text-muted-foreground">Sort by:</span>
+                        <div className="flex gap-1">
+                          <Button 
+                            variant={addDialogSortByArea ? "ghost" : "secondary"} 
+                            size="sm" 
+                            className="h-6 text-xs px-2"
+                            onClick={() => setAddDialogSortByArea(false)}
+                          >
+                            Name
+                          </Button>
+                          <Button 
+                            variant={addDialogSortByArea ? "secondary" : "ghost"} 
+                            size="sm" 
+                            className="h-6 text-xs px-2"
+                            onClick={() => setAddDialogSortByArea(true)}
+                          >
+                            Area
+                          </Button>
+                        </div>
+                      </div>
                       <Command>
                         <CommandInput placeholder="Search profiles..." className="h-9" />
                         <CommandList>
                           <CommandEmpty>No profile found.</CommandEmpty>
                           <CommandGroup>
-                            {scadaImports?.map((meter) => (
+                            {getSortedProfilesWithSuggestions(
+                              newTenant.name,
+                              parseFloat(newTenant.area_sqm) || 0,
+                              scadaImports || [],
+                              addDialogSortByArea
+                            ).map(({ profile: meter, matchType }) => (
                               <CommandItem
                                 key={meter.id}
                                 value={`${meter.shop_name || ""} ${meter.site_name || ""} ${meter.area_sqm || ""}`}
@@ -484,13 +571,21 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                               >
                                 <Check
                                   className={cn(
-                                    "mr-2 h-4 w-4",
+                                    "mr-2 h-4 w-4 shrink-0",
                                     newTenant.scada_import_id === meter.id
                                       ? "opacity-100"
                                       : "opacity-0"
                                   )}
                                 />
-                                {formatProfileOption(meter)}
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <span className="truncate">{formatProfileOption(meter)}</span>
+                                  {matchType === 'exact' && (
+                                    <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] shrink-0">Suggested</Badge>
+                                  )}
+                                  {matchType === 'similar' && (
+                                    <Badge variant="secondary" className="text-[10px] shrink-0">Similar</Badge>
+                                  )}
+                                </div>
                               </CommandItem>
                             ))}
                           </CommandGroup>
@@ -585,7 +680,13 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                 }
 
                 const assignedProfile = scadaImports?.find(m => m.id === tenant.scada_import_id);
-                const sortedProfiles = getSortedProfiles(tenantArea);
+                const sortByArea = sortByAreaMap[tenant.id] ?? false;
+                const sortedSuggestions = getSortedProfilesWithSuggestions(
+                  tenant.name,
+                  tenantArea,
+                  scadaImports || [],
+                  sortByArea
+                );
 
                 return (
                   <TableRow key={tenant.id}>
@@ -610,13 +711,34 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-[320px] p-0" align="start">
+                          <PopoverContent className="w-[340px] p-0" align="start">
+                            <div className="flex items-center justify-between px-3 py-2 border-b">
+                              <span className="text-xs text-muted-foreground">Sort by:</span>
+                              <div className="flex gap-1">
+                                <Button 
+                                  variant={sortByArea ? "ghost" : "secondary"} 
+                                  size="sm" 
+                                  className="h-6 text-xs px-2"
+                                  onClick={() => setSortByAreaMap(prev => ({ ...prev, [tenant.id]: false }))}
+                                >
+                                  Name
+                                </Button>
+                                <Button 
+                                  variant={sortByArea ? "secondary" : "ghost"} 
+                                  size="sm" 
+                                  className="h-6 text-xs px-2"
+                                  onClick={() => setSortByAreaMap(prev => ({ ...prev, [tenant.id]: true }))}
+                                >
+                                  Area
+                                </Button>
+                              </div>
+                            </div>
                             <Command>
                               <CommandInput placeholder="Search profiles..." className="h-9" />
                               <CommandList>
                                 <CommandEmpty>No profile found.</CommandEmpty>
                                 <CommandGroup>
-                                  {sortedProfiles.map((meter) => (
+                                  {sortedSuggestions.map(({ profile: meter, matchType }) => (
                                     <CommandItem
                                       key={meter.id}
                                       value={`${meter.shop_name || ""} ${meter.site_name || ""} ${meter.area_sqm || ""}`}
@@ -630,13 +752,21 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                                     >
                                       <Check
                                         className={cn(
-                                          "mr-2 h-4 w-4",
+                                          "mr-2 h-4 w-4 shrink-0",
                                           tenant.scada_import_id === meter.id
                                             ? "opacity-100"
                                             : "opacity-0"
                                         )}
                                       />
-                                      {formatProfileOption(meter)}
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <span className="truncate">{formatProfileOption(meter)}</span>
+                                        {matchType === 'exact' && (
+                                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] shrink-0">Suggested</Badge>
+                                        )}
+                                        {matchType === 'similar' && (
+                                          <Badge variant="secondary" className="text-[10px] shrink-0">Similar</Badge>
+                                        )}
+                                      </div>
                                     </CommandItem>
                                   ))}
                                 </CommandGroup>
