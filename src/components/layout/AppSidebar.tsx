@@ -81,8 +81,8 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="p-4">
-        <div className="flex items-center justify-between">
-          {/* Logo section */}
+        <div className="flex flex-col gap-3">
+          {/* Logo and company name section */}
           <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"}`}>
             {orgBranding.logo_url ? (
               <img 
@@ -107,8 +107,8 @@ export function AppSidebar() {
             )}
           </div>
           
-          {/* Controls - always on the right */}
-          <div className="flex items-center gap-1">
+          {/* Controls - below the logo/label */}
+          <div className={`flex items-center gap-1 ${isCollapsed ? "justify-center flex-col" : ""}`}>
             {!isCollapsed && <SyncStatus />}
             <Tooltip>
               <TooltipTrigger asChild>
