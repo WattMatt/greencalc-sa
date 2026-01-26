@@ -1,122 +1,90 @@
 
-## Plan: Fix Icon Positioning and Tab Highlighting
+# Add Searchable Load Profile Dropdown in Add Tenant Modal
 
-### Overview
-This plan addresses two visual issues:
-1. Three icons at the top left overlapping when the sidebar is collapsed
-2. The selected tab (e.g., "Load Profile") not appearing highlighted/distinguished from unselected tabs
+## Overview
+Replace the basic dropdown in the "Add Tenant" modal with a searchable dropdown (Combobox) that matches the existing implementation in the tenant table. This allows users to quickly filter and find load profiles by typing.
 
----
+## Current Behavior
+The "Add Tenant" modal uses a simple `Select` component that shows all profiles in a scrollable list without search capability.
 
-### Issue 1: Icon Positioning in Collapsed Sidebar
+## Proposed Solution
+Replace the `Select` component with a `Popover` + `Command` pattern (shadcn/ui Combobox) that includes:
+- A search input field with "Search profiles..." placeholder
+- Filterable list of profiles showing "SHOP NAME (XXX m²)" format
+- Check mark indicator for the currently selected profile
+- "No profile found." empty state when search has no matches
 
-**Current Problem:**  
-In `AppSidebar.tsx`, the `SidebarHeader` contains multiple elements (logo, company name, SyncStatus, theme toggle) that compete for space when the sidebar is collapsed. The current layout (lines 82-129) doesn't properly handle the collapsed state for all these elements.
+## Changes Required
 
-**Solution:**  
-Improve the header layout to properly space icons when collapsed:
-- Ensure the logo, SyncStatus, and theme toggle icons stack vertically or are properly separated when collapsed
-- Hide the SyncStatus when collapsed (it's already conditionally hidden but may still take space)
-- Add proper flex-direction and gap to prevent overlap
-- Ensure the `SidebarTrigger` in `AppLayout.tsx` has proper positioning relative to the sidebar icons
+### File: `src/components/projects/TenantManager.tsx`
 
-**File Changes:**
-1. **`src/components/layout/AppSidebar.tsx`** (lines 82-130):
-   - Restructure the header layout to use `flex-col` when collapsed
-   - Properly center the logo when collapsed
-   - Ensure theme toggle doesn't overlap with the logo
-
-2. **`src/components/layout/AppLayout.tsx`** (lines 15-17):
-   - Add proper margin/spacing to the `SidebarTrigger` to prevent overlap with sidebar content
-
----
-
-### Issue 2: Tab Highlighting Not Visible
-
-**Current Problem:**  
-The `TabsTrigger` component uses `data-[state=active]:bg-background` for the active state. Looking at the CSS variables:
-- `--background`: 210 20% 98% (very light, ~98% lightness)
-- `--muted`: 215 15% 92% (~92% lightness)
-
-The 6% difference in lightness is insufficient for clear visual distinction between the active tab and the tab list background.
-
-**Solution:**  
-Enhance the active tab styling in `tabs.tsx` to make the selected state more prominent:
-- Change active background to pure white (`bg-white dark:bg-card`) or a higher contrast color
-- Increase shadow on active tab (`shadow-md` instead of `shadow-sm`)
-- Add a subtle border or ring to the active tab
-- Optionally use `primary` color accent for the active tab
-
-**File Changes:**
-1. **`src/components/ui/tabs.tsx`** (lines 23-35):
-   - Update `TabsTrigger` styling for better active state visibility
-   - Change from `data-[state=active]:bg-background data-[state=active]:shadow-sm` to something more distinctive like:
-     - `data-[state=active]:bg-white data-[state=active]:shadow-md` for light mode
-     - Add `dark:data-[state=active]:bg-card` for dark mode
-     - Consider adding `data-[state=active]:border data-[state=active]:border-border` for extra definition
-
----
-
-### Technical Implementation Details
-
-**AppSidebar.tsx Header Changes:**
+**1. Add state for popover open/close:**
+Add a new state variable to control the popover visibility:
 ```tsx
-// Restructure SidebarHeader for better collapsed behavior
-<SidebarHeader className="p-4">
-  <div className={cn(
-    "flex items-center",
-    isCollapsed ? "flex-col gap-2" : "justify-between"
-  )}>
-    {/* Logo section */}
-    <div className={cn("flex items-center", isCollapsed ? "justify-center" : "gap-3")}>
-      {/* Logo */}
-    </div>
-    
-    {/* Controls - only show when not collapsed */}
-    {!isCollapsed && (
-      <div className="flex items-center gap-1">
-        <SyncStatus />
-        {/* Theme toggle */}
-      </div>
-    )}
-  </div>
-  
-  {/* When collapsed, show only the theme toggle below logo */}
-  {isCollapsed && (
-    <div className="flex justify-center mt-2">
-      {/* Theme toggle only */}
-    </div>
-  )}
-</SidebarHeader>
+const [profilePopoverOpen, setProfilePopoverOpen] = useState(false);
 ```
 
-**TabsTrigger Styling Enhancement:**
+**2. Replace the Select component with Popover + Command:**
+Replace lines 449-464 (the Load Profile Select) with:
+
 ```tsx
-// Updated TabsTrigger with better active state visibility
-className={cn(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all",
-  // Active state with higher contrast
-  "data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-border/50",
-  // Dark mode active state
-  "dark:data-[state=active]:bg-card",
-  // Other states
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-  className,
-)}
+<div className="space-y-2">
+  <Label>Load Profile (optional)</Label>
+  <Popover open={profilePopoverOpen} onOpenChange={setProfilePopoverOpen}>
+    <PopoverTrigger asChild>
+      <Button
+        variant="outline"
+        role="combobox"
+        aria-expanded={profilePopoverOpen}
+        className="w-full justify-between"
+      >
+        <span className="truncate">
+          {newTenant.scada_import_id
+            ? formatProfileOption(
+                scadaImports?.find((m) => m.id === newTenant.scada_import_id)!
+              )
+            : "Select profile..."}
+        </span>
+        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+      </Button>
+    </PopoverTrigger>
+    <PopoverContent className="w-[320px] p-0" align="start">
+      <Command>
+        <CommandInput placeholder="Search profiles..." className="h-9" />
+        <CommandList>
+          <CommandEmpty>No profile found.</CommandEmpty>
+          <CommandGroup>
+            {scadaImports?.map((meter) => (
+              <CommandItem
+                key={meter.id}
+                value={`${meter.shop_name || ""} ${meter.site_name || ""} ${meter.area_sqm || ""}`}
+                onSelect={() => {
+                  setNewTenant({ ...newTenant, scada_import_id: meter.id });
+                  setProfilePopoverOpen(false);
+                }}
+                className="text-sm"
+              >
+                <Check
+                  className={cn(
+                    "mr-2 h-4 w-4",
+                    newTenant.scada_import_id === meter.id
+                      ? "opacity-100"
+                      : "opacity-0"
+                  )}
+                />
+                {formatProfileOption(meter)}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </PopoverContent>
+  </Popover>
+</div>
 ```
 
----
-
-### Summary of Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/components/layout/AppSidebar.tsx` | Restructure header for better collapsed state layout |
-| `src/components/layout/AppLayout.tsx` | Add spacing to SidebarTrigger |
-| `src/components/ui/tabs.tsx` | Enhance active tab styling with better contrast |
-
----
-
-### Expected Results
-1. Icons in the collapsed sidebar will be properly stacked/spaced without overlapping
-2. The active tab will have a clearly visible white background with shadow, making it easy to identify which tab is selected
+## Technical Notes
+- All required components are already imported in the file (Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, Popover, PopoverContent, PopoverTrigger, Check, ChevronsUpDown, cn)
+- The `formatProfileOption` helper function already exists and formats profiles as "SHOP NAME (XXX m²)"
+- The pattern matches exactly what's used in the tenant table (lines 560-610)
+- The `value` prop on `CommandItem` enables fuzzy search matching on shop_name, site_name, and area
