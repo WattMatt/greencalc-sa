@@ -8,8 +8,6 @@ interface WeekdaySelectorProps {
 
 export function WeekdaySelector({ selectedDays, onDaysChange }: WeekdaySelectorProps) {
   const handleValueChange = (values: string[]) => {
-    // Ensure at least one day is selected
-    if (values.length === 0) return;
     onDaysChange(new Set(values.map(v => parseInt(v, 10))));
   };
 
