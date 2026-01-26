@@ -549,7 +549,10 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                           </Button>
                         </div>
                       </div>
-                      <Command>
+                      <Command filter={(value, search) => {
+                        // Case-insensitive substring match (letter order sensitive)
+                        return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+                      }}>
                         <CommandInput placeholder="Search profiles..." className="h-9" />
                         <CommandList>
                           <CommandEmpty>No profile found.</CommandEmpty>
@@ -733,7 +736,10 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                                 </Button>
                               </div>
                             </div>
-                            <Command>
+                            <Command filter={(value, search) => {
+                              // Case-insensitive substring match (letter order sensitive)
+                              return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+                            }}>
                               <CommandInput placeholder="Search profiles..." className="h-9" />
                               <CommandList>
                                 <CommandEmpty>No profile found.</CommandEmpty>
