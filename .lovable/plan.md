@@ -1,158 +1,101 @@
 
-# Smart Profile Suggestions for Tenant Load Profile Assignment
+# Pre-select Province and Municipality Based on Project Location Pin
 
 ## Overview
-Enhance the Load Profile dropdown in the tenant table to show intelligent suggestions based on tenant name matching first, with the option to toggle to area-based sorting instead.
+When you drop a pin on the map in the Overview tab, the Tariff tab should automatically pre-select the Province and Municipality based on the pin's coordinates. This saves manual selection and ensures geographical accuracy.
 
-## Current Behavior
-- The dropdown shows all profiles sorted by area similarity to the tenant
-- No name-based matching or suggestions are provided
-- Users must manually search through all profiles to find relevant ones
+## How It Will Work
 
-## Proposed Solution
+1. **When you drop a pin on the map** - The coordinates (latitude/longitude) are saved to the project
+2. **When you open the Tariff tab** - The system performs a reverse geocode lookup to determine which province and municipality the pin falls in
+3. **Auto-selection** - The Province and Municipality dropdowns are automatically populated
+4. **Manual override** - You can still change the selection if needed
 
-### User Experience
-When opening the Load Profile dropdown for a tenant:
-1. **Default: Name-Based Suggestions** - Profiles are sorted with best name matches at the top
-   - Exact name matches shown first with a "Suggested" badge
-   - Fuzzy/partial matches shown next with a "Similar" badge
-   - Remaining profiles sorted by area similarity
-2. **Toggle Option** - A button/toggle at the top of the dropdown to "Sort by Area" instead
-   - When enabled, all profiles are sorted purely by area similarity (closest match first)
-3. **Visual Indicators** - Suggested profiles are highlighted with colored badges showing match confidence
+## Technical Implementation
 
-### Implementation Details
+### 1. Extend the Geocoding Edge Function
+Add reverse geocoding capability to the existing `geocode-location` function:
 
-#### File: `src/components/projects/TenantManager.tsx`
-
-**1. Create a profile matching helper function:**
-```tsx
-// Match tenant name to profiles and calculate confidence scores
-function getProfileSuggestions(tenantName: string, profiles: ScadaImport[]) {
-  const normalizedTenant = tenantName.toLowerCase().trim();
-  
-  return profiles.map(profile => {
-    const shopName = profile.shop_name?.toLowerCase() || '';
-    const meterLabel = profile.meter_label?.toLowerCase() || '';
-    
-    // Exact match
-    if (shopName === normalizedTenant || meterLabel === normalizedTenant) {
-      return { profile, matchType: 'exact' as const, score: 100 };
-    }
-    
-    // Contains match (either direction)
-    if (shopName.includes(normalizedTenant) || normalizedTenant.includes(shopName) ||
-        meterLabel.includes(normalizedTenant) || normalizedTenant.includes(meterLabel)) {
-      const longerLen = Math.max(shopName.length || 0, normalizedTenant.length);
-      const shorterLen = Math.min(shopName.length || 0, normalizedTenant.length);
-      return { profile, matchType: 'similar' as const, score: 60 + (shorterLen / longerLen) * 30 };
-    }
-    
-    // No name match
-    return { profile, matchType: 'none' as const, score: 0 };
-  });
-}
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  geocode-location Edge Function                              │
+│                                                              │
+│  Current: Location text → Coordinates                        │
+│  New: Also supports Coordinates → Province/Municipality      │
+│                                                              │
+│  Request: { latitude, longitude, reverse: true }             │
+│  Response: { province: "Limpopo", municipality: "MOGALAKWENA" }│
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**2. Create a sorted profiles function with mode:**
-```tsx
-function getSortedProfilesWithSuggestions(
-  tenantName: string, 
-  tenantArea: number, 
-  profiles: ScadaImport[], 
-  sortByArea: boolean
-) {
-  if (sortByArea) {
-    // Pure area-based sorting
-    return profiles
-      .map(p => ({ profile: p, matchType: 'none' as const, score: 0 }))
-      .sort((a, b) => getAreaDifference(a.profile.area_sqm, tenantArea) - getAreaDifference(b.profile.area_sqm, tenantArea));
-  }
-  
-  // Name-based with area as tiebreaker
-  const suggestions = getProfileSuggestions(tenantName, profiles);
-  return suggestions.sort((a, b) => {
-    // Primary: match score (highest first)
-    if (a.score !== b.score) return b.score - a.score;
-    // Secondary: area similarity
-    return getAreaDifference(a.profile.area_sqm, tenantArea) - getAreaDifference(b.profile.area_sqm, tenantArea);
-  });
-}
-```
+The Mapbox Geocoding API returns a `context` object with administrative regions. For South Africa, this includes:
+- `region` → Province (e.g., "Limpopo", "Gauteng")
+- `place` → Municipality/City (e.g., "Polokwane", "Johannesburg")
 
-**3. Add state for sort mode toggle per tenant:**
-```tsx
-const [sortByAreaMap, setSortByAreaMap] = useState<Record<string, boolean>>({});
-```
+### 2. Update TariffSelector Component
+Add new props and auto-selection logic:
 
-**4. Update the dropdown UI:**
-- Add a toggle button at the top of the Command component: "By Name" | "By Area"
-- Show badges on CommandItems: "Suggested" (green) for exact matches, "Similar" (amber) for fuzzy matches
-- Display match type alongside the profile label
+| New Prop | Type | Purpose |
+|----------|------|---------|
+| `latitude` | `number \| null` | Project latitude from pin |
+| `longitude` | `number \| null` | Project longitude from pin |
+
+The component will:
+1. Detect when coordinates are available but province isn't selected yet
+2. Call the reverse geocode function
+3. Match the returned province name against the `provinces` table
+4. Match the returned municipality name against the `municipalities` table
+5. Auto-select both dropdowns
+
+### 3. Update ProjectDetail Page
+Pass the project coordinates to TariffSelector:
 
 ```tsx
-<PopoverContent className="w-[340px] p-0" align="start">
-  <div className="flex items-center justify-between px-3 py-2 border-b">
-    <span className="text-xs text-muted-foreground">Sort by:</span>
-    <div className="flex gap-1">
-      <Button 
-        variant={sortByArea ? "ghost" : "secondary"} 
-        size="sm" 
-        className="h-6 text-xs"
-        onClick={() => setSortByAreaMap(prev => ({ ...prev, [tenant.id]: false }))}
-      >
-        Name
-      </Button>
-      <Button 
-        variant={sortByArea ? "secondary" : "ghost"} 
-        size="sm" 
-        className="h-6 text-xs"
-        onClick={() => setSortByAreaMap(prev => ({ ...prev, [tenant.id]: true }))}
-      >
-        Area
-      </Button>
-    </div>
-  </div>
-  <Command>
-    <CommandInput placeholder="Search profiles..." />
-    <CommandList>
-      <CommandEmpty>No profile found.</CommandEmpty>
-      <CommandGroup>
-        {sortedSuggestions.map(({ profile, matchType }) => (
-          <CommandItem key={profile.id} ...>
-            <Check className={...} />
-            <div className="flex items-center gap-2 flex-1">
-              {formatProfileOption(profile)}
-              {matchType === 'exact' && (
-                <Badge className="bg-green-100 text-green-700 text-[10px]">Suggested</Badge>
-              )}
-              {matchType === 'similar' && (
-                <Badge variant="secondary" className="text-[10px]">Similar</Badge>
-              )}
-            </div>
-          </CommandItem>
-        ))}
-      </CommandGroup>
-    </CommandList>
-  </Command>
-</PopoverContent>
+<TariffSelector
+  projectId={id!}
+  currentTariffId={project.tariff_id}
+  latitude={project.latitude}      // NEW
+  longitude={project.longitude}    // NEW
+  onSelect={(tariffId) => updateProject.mutate({ tariff_id: tariffId })}
+/>
 ```
 
-## Technical Summary
+### 4. Name Matching Strategy
+Municipality names in the database may differ slightly from Mapbox results. The matching will use:
+- Case-insensitive comparison
+- Partial matching (e.g., "MOGALAKWENA" matches "Mogalakwena Local Municipality")
+- Fallback to showing unmatched results for manual selection
 
-| Change | Description |
-|--------|-------------|
-| New helper function | `getProfileSuggestions()` - matches tenant name against profile shop_name/meter_label |
-| New helper function | `getSortedProfilesWithSuggestions()` - sorts profiles by name match or area |
-| New state | `sortByAreaMap` - tracks sort preference per tenant |
-| UI enhancement | Toggle buttons for "Name" vs "Area" sorting in dropdown header |
-| UI enhancement | "Suggested" (green) and "Similar" (amber) badges on matching profiles |
+## User Experience Flow
+
+```text
+1. Overview Tab: Drop pin on map
+         ↓
+2. Pin saved with coordinates (-23.9, 29.5)
+         ↓
+3. Navigate to Tariff Tab
+         ↓
+4. System performs reverse geocode lookup
+         ↓
+5. Mapbox returns: region="Limpopo", place="Mokopane"
+         ↓
+6. System matches "Limpopo" → Province dropdown pre-selected
+   System matches "Mokopane" → Municipality dropdown pre-selected
+         ↓
+7. You select your specific tariff from the filtered list
+```
 
 ## Files to Modify
-- `src/components/projects/TenantManager.tsx` - Add matching logic and updated dropdown UI
 
-## Benefits
-- Users immediately see the most relevant profile suggestions based on tenant name
-- Clear visual distinction between exact matches, similar matches, and other options
-- Easy toggle to switch to area-based sorting when name matching isn't useful
-- Maintains existing searchability within the dropdown
+| File | Changes |
+|------|---------|
+| `supabase/functions/geocode-location/index.ts` | Add reverse geocoding capability |
+| `src/components/projects/TariffSelector.tsx` | Add coordinate props and auto-selection logic |
+| `src/pages/ProjectDetail.tsx` | Pass latitude/longitude to TariffSelector |
+
+## Edge Cases Handled
+
+- **No pin dropped**: Dropdowns remain empty for manual selection
+- **Location outside South Africa**: Show message, allow manual selection
+- **No matching municipality in database**: Province selected, municipality left for manual selection
+- **Already has a tariff selected**: Don't override existing selections
