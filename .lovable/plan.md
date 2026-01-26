@@ -1,90 +1,158 @@
 
-# Add Searchable Load Profile Dropdown in Add Tenant Modal
+# Smart Profile Suggestions for Tenant Load Profile Assignment
 
 ## Overview
-Replace the basic dropdown in the "Add Tenant" modal with a searchable dropdown (Combobox) that matches the existing implementation in the tenant table. This allows users to quickly filter and find load profiles by typing.
+Enhance the Load Profile dropdown in the tenant table to show intelligent suggestions based on tenant name matching first, with the option to toggle to area-based sorting instead.
 
 ## Current Behavior
-The "Add Tenant" modal uses a simple `Select` component that shows all profiles in a scrollable list without search capability.
+- The dropdown shows all profiles sorted by area similarity to the tenant
+- No name-based matching or suggestions are provided
+- Users must manually search through all profiles to find relevant ones
 
 ## Proposed Solution
-Replace the `Select` component with a `Popover` + `Command` pattern (shadcn/ui Combobox) that includes:
-- A search input field with "Search profiles..." placeholder
-- Filterable list of profiles showing "SHOP NAME (XXX m²)" format
-- Check mark indicator for the currently selected profile
-- "No profile found." empty state when search has no matches
 
-## Changes Required
+### User Experience
+When opening the Load Profile dropdown for a tenant:
+1. **Default: Name-Based Suggestions** - Profiles are sorted with best name matches at the top
+   - Exact name matches shown first with a "Suggested" badge
+   - Fuzzy/partial matches shown next with a "Similar" badge
+   - Remaining profiles sorted by area similarity
+2. **Toggle Option** - A button/toggle at the top of the dropdown to "Sort by Area" instead
+   - When enabled, all profiles are sorted purely by area similarity (closest match first)
+3. **Visual Indicators** - Suggested profiles are highlighted with colored badges showing match confidence
 
-### File: `src/components/projects/TenantManager.tsx`
+### Implementation Details
 
-**1. Add state for popover open/close:**
-Add a new state variable to control the popover visibility:
+#### File: `src/components/projects/TenantManager.tsx`
+
+**1. Create a profile matching helper function:**
 ```tsx
-const [profilePopoverOpen, setProfilePopoverOpen] = useState(false);
+// Match tenant name to profiles and calculate confidence scores
+function getProfileSuggestions(tenantName: string, profiles: ScadaImport[]) {
+  const normalizedTenant = tenantName.toLowerCase().trim();
+  
+  return profiles.map(profile => {
+    const shopName = profile.shop_name?.toLowerCase() || '';
+    const meterLabel = profile.meter_label?.toLowerCase() || '';
+    
+    // Exact match
+    if (shopName === normalizedTenant || meterLabel === normalizedTenant) {
+      return { profile, matchType: 'exact' as const, score: 100 };
+    }
+    
+    // Contains match (either direction)
+    if (shopName.includes(normalizedTenant) || normalizedTenant.includes(shopName) ||
+        meterLabel.includes(normalizedTenant) || normalizedTenant.includes(meterLabel)) {
+      const longerLen = Math.max(shopName.length || 0, normalizedTenant.length);
+      const shorterLen = Math.min(shopName.length || 0, normalizedTenant.length);
+      return { profile, matchType: 'similar' as const, score: 60 + (shorterLen / longerLen) * 30 };
+    }
+    
+    // No name match
+    return { profile, matchType: 'none' as const, score: 0 };
+  });
+}
 ```
 
-**2. Replace the Select component with Popover + Command:**
-Replace lines 449-464 (the Load Profile Select) with:
+**2. Create a sorted profiles function with mode:**
+```tsx
+function getSortedProfilesWithSuggestions(
+  tenantName: string, 
+  tenantArea: number, 
+  profiles: ScadaImport[], 
+  sortByArea: boolean
+) {
+  if (sortByArea) {
+    // Pure area-based sorting
+    return profiles
+      .map(p => ({ profile: p, matchType: 'none' as const, score: 0 }))
+      .sort((a, b) => getAreaDifference(a.profile.area_sqm, tenantArea) - getAreaDifference(b.profile.area_sqm, tenantArea));
+  }
+  
+  // Name-based with area as tiebreaker
+  const suggestions = getProfileSuggestions(tenantName, profiles);
+  return suggestions.sort((a, b) => {
+    // Primary: match score (highest first)
+    if (a.score !== b.score) return b.score - a.score;
+    // Secondary: area similarity
+    return getAreaDifference(a.profile.area_sqm, tenantArea) - getAreaDifference(b.profile.area_sqm, tenantArea);
+  });
+}
+```
+
+**3. Add state for sort mode toggle per tenant:**
+```tsx
+const [sortByAreaMap, setSortByAreaMap] = useState<Record<string, boolean>>({});
+```
+
+**4. Update the dropdown UI:**
+- Add a toggle button at the top of the Command component: "By Name" | "By Area"
+- Show badges on CommandItems: "Suggested" (green) for exact matches, "Similar" (amber) for fuzzy matches
+- Display match type alongside the profile label
 
 ```tsx
-<div className="space-y-2">
-  <Label>Load Profile (optional)</Label>
-  <Popover open={profilePopoverOpen} onOpenChange={setProfilePopoverOpen}>
-    <PopoverTrigger asChild>
-      <Button
-        variant="outline"
-        role="combobox"
-        aria-expanded={profilePopoverOpen}
-        className="w-full justify-between"
+<PopoverContent className="w-[340px] p-0" align="start">
+  <div className="flex items-center justify-between px-3 py-2 border-b">
+    <span className="text-xs text-muted-foreground">Sort by:</span>
+    <div className="flex gap-1">
+      <Button 
+        variant={sortByArea ? "ghost" : "secondary"} 
+        size="sm" 
+        className="h-6 text-xs"
+        onClick={() => setSortByAreaMap(prev => ({ ...prev, [tenant.id]: false }))}
       >
-        <span className="truncate">
-          {newTenant.scada_import_id
-            ? formatProfileOption(
-                scadaImports?.find((m) => m.id === newTenant.scada_import_id)!
-              )
-            : "Select profile..."}
-        </span>
-        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        Name
       </Button>
-    </PopoverTrigger>
-    <PopoverContent className="w-[320px] p-0" align="start">
-      <Command>
-        <CommandInput placeholder="Search profiles..." className="h-9" />
-        <CommandList>
-          <CommandEmpty>No profile found.</CommandEmpty>
-          <CommandGroup>
-            {scadaImports?.map((meter) => (
-              <CommandItem
-                key={meter.id}
-                value={`${meter.shop_name || ""} ${meter.site_name || ""} ${meter.area_sqm || ""}`}
-                onSelect={() => {
-                  setNewTenant({ ...newTenant, scada_import_id: meter.id });
-                  setProfilePopoverOpen(false);
-                }}
-                className="text-sm"
-              >
-                <Check
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    newTenant.scada_import_id === meter.id
-                      ? "opacity-100"
-                      : "opacity-0"
-                  )}
-                />
-                {formatProfileOption(meter)}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </Command>
-    </PopoverContent>
-  </Popover>
-</div>
+      <Button 
+        variant={sortByArea ? "secondary" : "ghost"} 
+        size="sm" 
+        className="h-6 text-xs"
+        onClick={() => setSortByAreaMap(prev => ({ ...prev, [tenant.id]: true }))}
+      >
+        Area
+      </Button>
+    </div>
+  </div>
+  <Command>
+    <CommandInput placeholder="Search profiles..." />
+    <CommandList>
+      <CommandEmpty>No profile found.</CommandEmpty>
+      <CommandGroup>
+        {sortedSuggestions.map(({ profile, matchType }) => (
+          <CommandItem key={profile.id} ...>
+            <Check className={...} />
+            <div className="flex items-center gap-2 flex-1">
+              {formatProfileOption(profile)}
+              {matchType === 'exact' && (
+                <Badge className="bg-green-100 text-green-700 text-[10px]">Suggested</Badge>
+              )}
+              {matchType === 'similar' && (
+                <Badge variant="secondary" className="text-[10px]">Similar</Badge>
+              )}
+            </div>
+          </CommandItem>
+        ))}
+      </CommandGroup>
+    </CommandList>
+  </Command>
+</PopoverContent>
 ```
 
-## Technical Notes
-- All required components are already imported in the file (Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, Popover, PopoverContent, PopoverTrigger, Check, ChevronsUpDown, cn)
-- The `formatProfileOption` helper function already exists and formats profiles as "SHOP NAME (XXX m²)"
-- The pattern matches exactly what's used in the tenant table (lines 560-610)
-- The `value` prop on `CommandItem` enables fuzzy search matching on shop_name, site_name, and area
+## Technical Summary
+
+| Change | Description |
+|--------|-------------|
+| New helper function | `getProfileSuggestions()` - matches tenant name against profile shop_name/meter_label |
+| New helper function | `getSortedProfilesWithSuggestions()` - sorts profiles by name match or area |
+| New state | `sortByAreaMap` - tracks sort preference per tenant |
+| UI enhancement | Toggle buttons for "Name" vs "Area" sorting in dropdown header |
+| UI enhancement | "Suggested" (green) and "Similar" (amber) badges on matching profiles |
+
+## Files to Modify
+- `src/components/projects/TenantManager.tsx` - Add matching logic and updated dropdown UI
+
+## Benefits
+- Users immediately see the most relevant profile suggestions based on tenant name
+- Clear visual distinction between exact matches, similar matches, and other options
+- Easy toggle to switch to area-based sorting when name matching isn't useful
+- Maintains existing searchability within the dropdown
