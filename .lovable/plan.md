@@ -1,199 +1,184 @@
 
-
-# Plan: Unified Image Format for Layout Backgrounds
+# Plan: Auto-populate PV Panel Configuration from Simulation
 
 ## Overview
 
-Convert both PDF uploads and Google Maps captures to a unified **base64 image format**. This means:
-- When a user uploads a PDF, we render the first page to a canvas and convert it to a base64 PNG image
-- When a user captures a Google Maps view, it's already captured as a base64 PNG image
-- The Canvas component only needs to handle image backgrounds (simpler code)
+Replace the manual PV Panel Configuration dialog in the PV Layout tool with an auto-populated configuration that reads the solar module settings from the Simulation tab. The user has already configured panel dimensions and wattage in the Simulation page, so the PV Layout should use those values automatically.
 
-## Architecture
+## Current State
+
+**PV Layout Tool:**
+- Has a "Panel Config" button that opens `PVConfigModal`
+- Allows manual entry of Width (m), Length (m), and Wattage (Wp)
+- Uses `DEFAULT_PV_PANEL_CONFIG` as fallback (1.134m × 2.278m, 550W)
+
+**Simulation Tab:**
+- Stores `inverterConfig` in `project_simulations.results_json`
+- Contains `selectedModuleId` (preset ID or "custom")
+- Contains `customModule` object with `width_m`, `length_m`, `power_wp`, etc.
+
+## Solution
+
+Fetch the latest simulation's `inverterConfig` on mount and use it to populate the `pvPanelConfig` state automatically. The dialog changes from a manual entry form to an **informational display** showing the current configuration sourced from the Simulation tab.
+
+## Data Flow
 
 ```text
-User Action
-     |
-     +-- Upload PDF ---------> Render page 1 to canvas --> Export as base64 PNG
-     |                                                           |
-     +-- Capture Google Maps --> html2canvas capture ----------->+
-                                                                 |
-                                                                 v
-                                                    backgroundImage (base64 string)
-                                                                 |
-                                                                 v
-                                                          Canvas.tsx
-                                                    (renders image background)
+project_simulations table
+         |
+         v
+   results_json.inverterConfig
+         |
+         +-- selectedModuleId (preset or "custom")
+         +-- customModule (if custom)
+         |
+         v
+   [Resolve module from presets or custom]
+         |
+         v
+   PVPanelConfig {
+     width: module.width_m,
+     length: module.length_m,
+     wattage: module.power_wp
+   }
+         |
+         v
+   FloorPlanMarkup (pvPanelConfig state)
+         |
+         v
+   Canvas (panel rendering)
 ```
 
 ## File Changes
 
-### 1. Create `src/components/floor-plan/components/LoadLayoutModal.tsx` (NEW)
+### 1. Modify `src/components/floor-plan/FloorPlanMarkup.tsx`
 
-A dialog with two tabs/options:
-- **Upload PDF Tab**: File picker, renders PDF page 1 to image, returns base64
-- **Google Maps Tab**: Mapbox satellite view centered on project coordinates, capture button
+Add logic to fetch the latest simulation's module configuration:
 
-Key features:
-- Uses `pdfjs-dist` to render PDF to canvas, then exports as PNG
-- Uses `html2canvas` to capture the Mapbox map div
-- Both return a base64 image string to the parent component
+- On mount, fetch from `project_simulations` table
+- Extract `inverterConfig` from `results_json`
+- Resolve the module (either from presets or custom module)
+- Convert to `PVPanelConfig` format and set state
+- If no simulation exists, use `DEFAULT_PV_PANEL_CONFIG`
 
-### 2. Modify `src/components/floor-plan/components/Canvas.tsx`
+**Changes:**
+- Add fetch for `project_simulations.results_json`
+- Import `getModulePresetById` and `getDefaultModulePreset` from `SolarModulePresets.ts`
+- Populate `pvPanelConfig` from simulation data on initial load
+- Remove the ability to manually override (or make it read-only display)
 
-**Before**: Accepts `pdfDoc: PDFDocumentProxy | null`
+### 2. Modify `src/components/floor-plan/components/PVConfigModal.tsx`
 
-**After**: Accepts `backgroundImage: string | null` (base64 image data URL)
+Transform from an editable form to an **informational display**:
 
-Changes:
-- Remove `pdfjs-dist` import and PDF rendering logic
-- Add simple image loading and rendering to canvas
-- Keep all drawing, pan/zoom, and interaction logic the same
+- Show the current panel configuration (Width, Length, Wattage, Area, Power Density)
+- Display the module name/source (e.g., "Custom Module" or "JA Solar 545W")
+- Add a note directing users to the Simulation tab if they need to change values
+- Change the action button from "Save Configuration" to "Close" or "OK"
 
-### 3. Modify `src/components/floor-plan/FloorPlanMarkup.tsx`
-
-Changes:
-- Remove `pdfDoc` state, replace with `backgroundImage` state
-- Add `isLoadLayoutModalOpen` state
-- Fetch project coordinates from Supabase for the map
-- Handle `onImageLoad` callback from LoadLayoutModal
-- Update save/load logic to store `layout_type` ('pdf' or 'image') if needed for metadata
-
-### 4. Modify `src/components/floor-plan/components/Toolbar.tsx`
-
-Changes:
-- Rename "Load PDF" button to "Load Layout"
-- Remove inline file input
-- Add `onOpenLoadLayout` prop (replaces `onLoadPdf`)
-- Update `pdfLoaded` prop to `layoutLoaded`
-
-### 5. Update Database Persistence
-
-The `pv_layouts.pdf_data` column will store the base64 image string (works for both converted PDF images and map captures). No schema change needed - just the content type changes.
-
-## Technical Implementation Details
-
-### PDF to Image Conversion (in LoadLayoutModal)
-
-```typescript
-const convertPdfToImage = async (file: File): Promise<string> => {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await getDocument(arrayBuffer).promise;
-  const page = await pdf.getPage(1);
-  
-  const scale = 2; // High resolution
-  const viewport = page.getViewport({ scale });
-  
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  
-  const ctx = canvas.getContext('2d')!;
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  
-  return canvas.toDataURL('image/png');
-};
-```
-
-### Google Maps Capture (in LoadLayoutModal)
-
-```typescript
-const handleCaptureMap = async () => {
-  const mapDiv = mapContainerRef.current;
-  if (!mapDiv) return;
-  
-  const canvas = await html2canvas(mapDiv, {
-    useCORS: true,
-    allowTaint: false,
-    scale: 2,
-  });
-  
-  onImageLoad(canvas.toDataURL('image/png'));
-};
-```
-
-### Simplified Canvas Image Rendering
-
-```typescript
-// In Canvas.tsx
-useEffect(() => {
-  if (!backgroundImage || !pdfCanvasRef.current) return;
-  
-  const img = new Image();
-  img.onload = () => {
-    const canvas = pdfCanvasRef.current!;
-    const ctx = canvas.getContext('2d')!;
-    canvas.width = img.width;
-    canvas.height = img.height;
-    setCanvasSize({ width: img.width, height: img.height });
-    ctx.drawImage(img, 0, 0);
-  };
-  img.src = backgroundImage;
-}, [backgroundImage]);
-```
-
-## UI/UX Design
-
-### LoadLayoutModal Dialog
-
+**UI Design:**
 ```text
 +-----------------------------------------------------------+
-|  Load Layout                                          [X] |
+|  PV Panel Configuration                              [X]  |
 +-----------------------------------------------------------+
 |                                                           |
-|  +------------------------+  +------------------------+   |
-|  |  [PDF Icon]            |  |  [Satellite Icon]      |   |
-|  |                        |  |                        |   |
-|  |  Upload PDF            |  |  Google Maps           |   |
-|  |                        |  |  Satellite             |   |
-|  |  Browse for a local    |  |  Capture from the      |   |
-|  |  floor plan file       |  |  project location      |   |
-|  +------------------------+  +------------------------+   |
+|  Module: Custom Module                                    |
+|  Source: Simulation Tab Configuration                     |
 |                                                           |
-|  -------------------------------------------------------- |
+|  +-------------------------+  +-------------------------+ |
+|  |  Width                  |  |  Length                 | |
+|  |  1.134 m                |  |  2.278 m                | |
+|  +-------------------------+  +-------------------------+ |
 |                                                           |
-|  When "Google Maps Satellite" is selected:                |
+|  +-------------------------+                              |
+|  |  Wattage                |                              |
+|  |  615 Wp                 |                              |
+|  +-------------------------+                              |
 |                                                           |
-|  +-----------------------------------------------------+  |
-|  |                                                     |  |
-|  |         [Mapbox Satellite View]                     |  |
-|  |         Pan and zoom to desired view                |  |
-|  |                                                     |  |
-|  +-----------------------------------------------------+  |
+|  +-------------------------------------------------------+|
+|  |  Panel Area: 2.583 m²                                 ||
+|  |  Power Density: 238.1 W/m²                            ||
+|  +-------------------------------------------------------+|
 |                                                           |
-|  Location: -25.7479, 28.2293                             |
+|  [Info icon] To change panel specs, go to the Simulation  |
+|  tab and update the Solar Module configuration.          |
 |                                                           |
-|  [ Cancel ]                          [ Capture View ]    |
+|                                        [ OK ]             |
 |                                                           |
 +-----------------------------------------------------------+
 ```
 
-### Canvas Empty State Update
+### 3. Update `src/components/floor-plan/components/Toolbar.tsx`
 
-Change placeholder text from:
-- "Load a PDF floor plan to begin"
+- Update the "Panel Config" button to show "View Panel Config" or keep as is
+- The button now opens an informational modal instead of an edit modal
+- Could add a badge/indicator showing the currently loaded module name
 
-To:
-- "Load a layout to begin"
+## Technical Details
+
+### Fetching Simulation Config (in FloorPlanMarkup.tsx)
+
+```typescript
+// In the existing useEffect that loads layout
+const { data: simData } = await supabase
+  .from('project_simulations')
+  .select('results_json')
+  .eq('project_id', projectId)
+  .order('updated_at', { ascending: false })
+  .limit(1)
+  .maybeSingle();
+
+if (simData?.results_json) {
+  const resultsJson = simData.results_json as any;
+  const inverterConfig = resultsJson.inverterConfig;
+  
+  if (inverterConfig) {
+    let module: SolarModulePreset;
+    
+    if (inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule) {
+      module = inverterConfig.customModule;
+    } else {
+      module = getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
+    }
+    
+    setPvPanelConfig({
+      width: module.width_m,
+      length: module.length_m,
+      wattage: module.power_wp,
+    });
+  }
+}
+```
+
+### Updated PVConfigModal Props
+
+```typescript
+interface PVConfigModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  currentConfig: PVPanelConfig | null;
+  moduleName?: string;  // New: display module name
+}
+```
+
+## Edge Cases
+
+1. **No simulation exists**: Fall back to `DEFAULT_PV_PANEL_CONFIG`
+2. **Invalid module ID**: Use `getDefaultModulePreset()` as fallback
+3. **Layout already has saved `pv_config`**: Prefer simulation config (fresh source of truth)
+4. **User navigates between tabs**: Reload config when tab becomes active (optional enhancement)
+
+## Benefits
+
+1. **Single source of truth**: Panel specs are defined once in Simulation, used everywhere
+2. **Reduced user friction**: No need to re-enter the same data in multiple places
+3. **Consistency**: PV Layout panels match exactly what was configured in simulation
+4. **Clear data flow**: Users understand that Simulation is the master configuration
 
 ## Implementation Steps
 
-1. Create `LoadLayoutModal.tsx` with PDF-to-image conversion and Mapbox integration
-2. Update `Toolbar.tsx` to use "Load Layout" button and new prop
-3. Update `Canvas.tsx` to accept `backgroundImage` instead of `pdfDoc`
-4. Update `FloorPlanMarkup.tsx` to:
-   - Manage modal state
-   - Fetch project coordinates
-   - Handle image loading from both sources
-   - Update persistence to save/load image data
-5. Test PDF upload converts correctly to image
-6. Test Google Maps capture works and centers on project location
-
-## Dependencies
-
-All dependencies are already installed:
-- `pdfjs-dist` - For PDF rendering
-- `html2canvas` - For map capture
-- `mapbox-gl` - For satellite view
-- `MAPBOX_PUBLIC_TOKEN` - Already configured in secrets
-
+1. Update `FloorPlanMarkup.tsx` to fetch simulation config on mount
+2. Refactor `PVConfigModal.tsx` to be informational (read-only)
+3. Update Toolbar button text/behavior if needed
+4. Test with both preset modules and custom modules
+5. Test fallback when no simulation exists
