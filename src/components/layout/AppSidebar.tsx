@@ -79,20 +79,20 @@ export function AppSidebar() {
   const initials = displayName.charAt(0).toUpperCase();
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-      <SidebarHeader className="p-4">
+      <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+        <SidebarHeader className={`py-4 ${isCollapsed ? "px-2" : "px-4"}`}>
         <div className="flex flex-col gap-2">
           {/* Logo and company name section */}
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"}`}>
             {orgBranding.logo_url ? (
               <img 
                 src={orgBranding.logo_url} 
                 alt="Company logo" 
-                className={`rounded-lg object-contain shrink-0 ${isCollapsed ? "h-8 w-8" : "h-10 w-10"}`}
+                className={`rounded-lg object-contain shrink-0 ${isCollapsed ? "h-9 w-9" : "h-10 w-10"}`}
               />
             ) : (
-              <div className={`flex items-center justify-center rounded-lg bg-primary shrink-0 ${isCollapsed ? "h-8 w-8" : "h-10 w-10"}`}>
-                <Zap className={isCollapsed ? "h-4 w-4 text-primary-foreground" : "h-6 w-6 text-primary-foreground"} />
+              <div className={`flex items-center justify-center rounded-lg bg-primary shrink-0 ${isCollapsed ? "h-9 w-9" : "h-10 w-10"}`}>
+                <Zap className={isCollapsed ? "h-5 w-5 text-primary-foreground" : "h-6 w-6 text-primary-foreground"} />
               </div>
             )}
             {!isCollapsed && (
@@ -108,7 +108,7 @@ export function AppSidebar() {
           </div>
           
           {/* Controls - below the logo/label */}
-          <div className="flex items-center gap-0.5">
+          <div className={`flex items-center ${isCollapsed ? "justify-center gap-1" : "gap-0.5"}`}>
             {!isCollapsed && <SyncStatus />}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -116,12 +116,12 @@ export function AppSidebar() {
                   variant="ghost"
                   size="icon"
                   onClick={toggleTheme}
-                  className={`shrink-0 ${isCollapsed ? "h-1.5 w-1.5 p-0.5" : "h-8 w-8"}`}
+                  className={`shrink-0 ${isCollapsed ? "h-6 w-6" : "h-8 w-8"}`}
                 >
                   {theme === "dark" ? (
-                    <Sun className={isCollapsed ? "h-1 w-1" : "h-4 w-4"} />
+                    <Sun className={isCollapsed ? "h-4 w-4" : "h-4 w-4"} />
                   ) : (
-                    <Moon className={isCollapsed ? "h-1 w-1" : "h-4 w-4"} />
+                    <Moon className={isCollapsed ? "h-4 w-4" : "h-4 w-4"} />
                   )}
                 </Button>
               </TooltipTrigger>
@@ -129,7 +129,7 @@ export function AppSidebar() {
                 <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
               </TooltipContent>
             </Tooltip>
-            <SidebarTrigger className={`shrink-0 ${isCollapsed ? "h-1.5 w-1.5 p-0.5 [&>svg]:h-1 [&>svg]:w-1" : "h-8 w-8"}`} />
+            <SidebarTrigger className={`shrink-0 ${isCollapsed ? "h-6 w-6 [&>svg]:h-4 [&>svg]:w-4" : "h-8 w-8"}`} />
           </div>
         </div>
       </SidebarHeader>
