@@ -217,8 +217,8 @@ export function TariffEditDialog({ tariff, rates, open, onOpenChange, onSaved }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             Edit Tariff
             {validityStatus && (
@@ -232,7 +232,7 @@ export function TariffEditDialog({ tariff, rates, open, onOpenChange, onSaved }:
           </DialogDescription>
         </DialogHeader>
         
-        <ScrollArea className="flex-1 pr-4">
+        <ScrollArea className="flex-1 min-h-0 max-h-[calc(90vh-180px)] pr-4">
           <div className="space-y-6 pb-4">
             {/* Tariff Header */}
             <div className="space-y-4">
