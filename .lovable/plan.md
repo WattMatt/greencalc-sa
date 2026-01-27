@@ -1,101 +1,77 @@
 
-# Pre-select Province and Municipality Based on Project Location Pin
+# Fix: Display Flat-Rate Tariffs Correctly
 
-## Overview
-When you drop a pin on the map in the Overview tab, the Tariff tab should automatically pre-select the Province and Municipality based on the pin's coordinates. This saves manual selection and ensures geographical accuracy.
+## Problem Summary
+The "Three Phase Commercial (Conventional)" tariff from POLOKWANE has a valid energy rate of **R3.2622/kWh** stored in the database, but it shows as R0.0000 because:
 
-## How It Will Work
+1. The rate is stored as a **flat rate** with `season: 'All Year'` and `time_of_use: 'Any'`
+2. The display code only shows rates that match "High/Winter" or "Low/Summer" seasons
+3. The blended rate calculation only looks for "Peak", "Standard", and "Off-Peak" time-of-use values
 
-1. **When you drop a pin on the map** - The coordinates (latitude/longitude) are saved to the project
-2. **When you open the Tariff tab** - The system performs a reverse geocode lookup to determine which province and municipality the pin falls in
-3. **Auto-selection** - The Province and Municipality dropdowns are automatically populated
-4. **Manual override** - You can still change the selection if needed
+## Solution Overview
+Update the TariffSelector component and tariff calculation logic to properly handle fixed/flat-rate tariffs alongside TOU tariffs.
 
-## Technical Implementation
+## Implementation Steps
 
-### 1. Extend the Geocoding Edge Function
-Add reverse geocoding capability to the existing `geocode-location` function:
+### Step 1: Update Energy Rates Display in TariffSelector
+**File:** `src/components/projects/TariffSelector.tsx`
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  geocode-location Edge Function                              │
-│                                                              │
-│  Current: Location text → Coordinates                        │
-│  New: Also supports Coordinates → Province/Municipality      │
-│                                                              │
-│  Request: { latitude, longitude, reverse: true }             │
-│  Response: { province: "Limpopo", municipality: "MOGALAKWENA" }│
-└─────────────────────────────────────────────────────────────┘
+Add logic to detect and display flat-rate tariffs differently:
+- Check if rates contain only "All Year" / "Any" entries (indicating a flat-rate tariff)
+- If flat-rate: Display a single rate card showing the flat rate
+- If TOU: Keep existing High/Low season display
+
+### Step 2: Update Blended Rate Calculation
+**File:** `src/lib/tariffCalculations.ts`
+
+Modify `getCombinedRate()` and `calculateAnnualBlendedRates()` to handle flat rates:
+- If no TOU-specific rates are found, fall back to checking for "Any" time_of_use and "All Year" season
+- Use that flat rate for all blended calculations (since it applies equally to all hours)
+
+### Step 3: Update BlendedRatesCard Display
+**File:** `src/components/projects/TariffSelector.tsx`
+
+When displaying blended rates for a flat-rate tariff:
+- Show the flat rate consistently across all columns (All Hours, Solar Hours, High/Low seasons)
+- Consider adding a visual indicator that this is a "Flat Rate" tariff with no TOU variation
+
+---
+
+## Technical Details
+
+### Detection Logic for Flat-Rate Tariffs
+```typescript
+const isFlat = rates.every(r => 
+  (r.season === 'All Year' || !r.season) && 
+  (r.time_of_use === 'Any' || !r.time_of_use)
+);
 ```
 
-The Mapbox Geocoding API returns a `context` object with administrative regions. For South Africa, this includes:
-- `region` → Province (e.g., "Limpopo", "Gauteng")
-- `place` → Municipality/City (e.g., "Polokwane", "Johannesburg")
-
-### 2. Update TariffSelector Component
-Add new props and auto-selection logic:
-
-| New Prop | Type | Purpose |
-|----------|------|---------|
-| `latitude` | `number \| null` | Project latitude from pin |
-| `longitude` | `number \| null` | Project longitude from pin |
-
-The component will:
-1. Detect when coordinates are available but province isn't selected yet
-2. Call the reverse geocode function
-3. Match the returned province name against the `provinces` table
-4. Match the returned municipality name against the `municipalities` table
-5. Auto-select both dropdowns
-
-### 3. Update ProjectDetail Page
-Pass the project coordinates to TariffSelector:
-
-```tsx
-<TariffSelector
-  projectId={id!}
-  currentTariffId={project.tariff_id}
-  latitude={project.latitude}      // NEW
-  longitude={project.longitude}    // NEW
-  onSelect={(tariffId) => updateProject.mutate({ tariff_id: tariffId })}
-/>
+### Fallback in getCombinedRate()
+```typescript
+// If no TOU-specific rate found, check for flat rate
+if (!rate) {
+  rate = rates.find(r => 
+    (r.time_of_use === 'Any' || !r.time_of_use) &&
+    (r.season === 'All Year' || !r.season)
+  );
+}
 ```
 
-### 4. Name Matching Strategy
-Municipality names in the database may differ slightly from Mapbox results. The matching will use:
-- Case-insensitive comparison
-- Partial matching (e.g., "MOGALAKWENA" matches "Mogalakwena Local Municipality")
-- Fallback to showing unmatched results for manual selection
+### Display Logic for Flat Rates
+Instead of showing empty High/Low season grids, show:
+- A single "Flat Rate" section
+- The rate value (R3.2622/kWh in this case)
+- A note explaining "This tariff has a fixed rate regardless of season or time of day"
 
-## User Experience Flow
-
-```text
-1. Overview Tab: Drop pin on map
-         ↓
-2. Pin saved with coordinates (-23.9, 29.5)
-         ↓
-3. Navigate to Tariff Tab
-         ↓
-4. System performs reverse geocode lookup
-         ↓
-5. Mapbox returns: region="Limpopo", place="Mokopane"
-         ↓
-6. System matches "Limpopo" → Province dropdown pre-selected
-   System matches "Mokopane" → Municipality dropdown pre-selected
-         ↓
-7. You select your specific tariff from the filtered list
-```
+---
 
 ## Files to Modify
+1. `src/components/projects/TariffSelector.tsx` - Display logic for energy rates and blended rates card
+2. `src/lib/tariffCalculations.ts` - Calculation logic fallback for flat rates
 
-| File | Changes |
-|------|---------|
-| `supabase/functions/geocode-location/index.ts` | Add reverse geocoding capability |
-| `src/components/projects/TariffSelector.tsx` | Add coordinate props and auto-selection logic |
-| `src/pages/ProjectDetail.tsx` | Pass latitude/longitude to TariffSelector |
-
-## Edge Cases Handled
-
-- **No pin dropped**: Dropdowns remain empty for manual selection
-- **Location outside South Africa**: Show message, allow manual selection
-- **No matching municipality in database**: Province selected, municipality left for manual selection
-- **Already has a tariff selected**: Don't override existing selections
+## Expected Result
+After implementation:
+- The Three Phase Commercial tariff will display R3.2622/kWh correctly
+- Blended rates will show R3.2622/kWh across all scenarios (since there's no TOU variation)
+- Users will clearly see this is a flat-rate tariff without seasonal or TOU variation
