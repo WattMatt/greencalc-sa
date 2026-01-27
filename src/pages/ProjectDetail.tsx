@@ -1066,37 +1066,6 @@ export default function ProjectDetail() {
           </p>
         </div>
 
-        {/* Connection Size Card */}
-        <Card className="ml-auto">
-          <CardContent className="py-3 px-4">
-            <div className="flex items-center gap-3">
-              <Plug className="h-4 w-4 text-muted-foreground" />
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">Connection Size</Label>
-                <Input
-                  type="number"
-                  placeholder="kVA"
-                  className="w-24 h-8"
-                  value={connectionSizeInput || connectionSize || ""}
-                  onChange={(e) => setConnectionSizeInput(e.target.value)}
-                  onBlur={() => {
-                    const value = parseFloat(connectionSizeInput);
-                    if (!isNaN(value) && value > 0) {
-                      updateProject.mutate({ connection_size_kva: value });
-                    }
-                    setConnectionSizeInput("");
-                  }}
-                />
-                <span className="text-xs text-muted-foreground">kVA</span>
-              </div>
-              {maxSolarKva && (
-                <div className="text-xs text-muted-foreground border-l pl-3 ml-2">
-                  Max PV: <span className="font-medium text-foreground">{maxSolarKva.toFixed(0)} kVA</span>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
 
