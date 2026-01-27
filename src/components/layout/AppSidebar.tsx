@@ -145,7 +145,9 @@ export function AppSidebar() {
                   <NavLink
                     to="/"
                     end
-                    className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent ${isCollapsed ? "justify-center" : ""}`}
+                    className={`flex items-center rounded-md transition-colors hover:bg-sidebar-accent ${
+                      isCollapsed ? "justify-center py-2" : "gap-3 px-3 py-2"
+                    }`}
                     activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                   >
                     <LayoutDashboard className="h-5 w-5 shrink-0" />
@@ -166,7 +168,9 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
                       to={item.url}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent ${isCollapsed ? "justify-center" : ""}`}
+                      className={`flex items-center rounded-md transition-colors hover:bg-sidebar-accent ${
+                        isCollapsed ? "justify-center py-2" : "gap-3 px-3 py-2"
+                      }`}
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
                       <item.icon className="h-5 w-5 shrink-0" />
@@ -188,7 +192,9 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
                       to={item.url}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent ${isCollapsed ? "justify-center" : ""}`}
+                      className={`flex items-center rounded-md transition-colors hover:bg-sidebar-accent ${
+                        isCollapsed ? "justify-center py-2" : "gap-3 px-3 py-2"
+                      }`}
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
                       <item.icon className="h-5 w-5 shrink-0" />
@@ -210,7 +216,9 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
                       to={item.url}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent ${isCollapsed ? "justify-center" : ""}`}
+                      className={`flex items-center rounded-md transition-colors hover:bg-sidebar-accent ${
+                        isCollapsed ? "justify-center py-2" : "gap-3 px-3 py-2"
+                      }`}
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
                       <item.icon className="h-5 w-5 shrink-0" />
@@ -228,7 +236,9 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <NavLink
                 to="/profile"
-                className={`px-3 py-2 mb-2 flex items-center gap-3 rounded-md transition-colors hover:bg-sidebar-accent ${isCollapsed ? "justify-center" : ""}`}
+                className={`mb-2 flex items-center rounded-md transition-colors hover:bg-sidebar-accent ${
+                  isCollapsed ? "justify-center py-2" : "gap-3 px-3 py-2"
+                }`}
                 activeClassName="bg-sidebar-accent"
               >
                 <Avatar className="h-8 w-8 shrink-0">
@@ -256,7 +266,9 @@ export function AppSidebar() {
                     <Button
                       variant="ghost"
                       onClick={handleSignOut}
-                      className={`w-full gap-3 px-3 py-2 h-auto font-normal text-muted-foreground hover:text-foreground ${isCollapsed ? "justify-center" : "justify-start"}`}
+                      className={`w-full h-auto font-normal text-muted-foreground hover:text-foreground ${
+                        isCollapsed ? "justify-center py-2" : "justify-start gap-3 px-3 py-2"
+                      }`}
                     >
                       <LogOut className="h-5 w-5 shrink-0" />
                       {!isCollapsed && <span>Sign Out</span>}
