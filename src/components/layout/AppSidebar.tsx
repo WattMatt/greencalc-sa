@@ -116,12 +116,12 @@ export function AppSidebar() {
                   variant="ghost"
                   size="icon"
                   onClick={toggleTheme}
-                  className="h-8 w-8 shrink-0"
+                  className={`shrink-0 ${isCollapsed ? "h-6 w-6" : "h-8 w-8"}`}
                 >
                   {theme === "dark" ? (
-                    <Sun className="h-4 w-4" />
+                    <Sun className={isCollapsed ? "h-3 w-3" : "h-4 w-4"} />
                   ) : (
-                    <Moon className="h-4 w-4" />
+                    <Moon className={isCollapsed ? "h-3 w-3" : "h-4 w-4"} />
                   )}
                 </Button>
               </TooltipTrigger>
@@ -129,7 +129,7 @@ export function AppSidebar() {
                 <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
               </TooltipContent>
             </Tooltip>
-            <SidebarTrigger className="h-8 w-8 shrink-0" />
+            <SidebarTrigger className={`shrink-0 ${isCollapsed ? "h-6 w-6" : "h-8 w-8"}`} />
           </div>
         </div>
       </SidebarHeader>
