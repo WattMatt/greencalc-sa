@@ -12,6 +12,8 @@ import {
   calculateAnnualBlendedRates,
   ANNUAL_HOURS_24H,
   ANNUAL_HOURS_SOLAR,
+  isFlatRateTariff,
+  getFlatRate,
   type BlendedRatesBreakdown,
 } from "@/lib/tariffCalculations";
 
@@ -41,7 +43,7 @@ const calculateCombinedRate = (rate: any, tariff: any) => {
 };
 
 // Rate card component with TOU-based styling and breakdown tooltip
-function RateCard({ rate, tariff }: { rate: any; tariff: any }) {
+function RateCard({ rate, tariff, isFlat = false }: { rate: any; tariff: any; isFlat?: boolean }) {
   const combinedRate = calculateCombinedRate(rate, tariff);
   
   const base = Number(rate.rate_per_kwh) || 0;
@@ -51,13 +53,18 @@ function RateCard({ rate, tariff }: { rate: any; tariff: any }) {
   const elecRural = Number(rate.electrification_rural_per_kwh) || 0;
   const affordability = Number(rate.affordability_subsidy_per_kwh) || 0;
   
-  const bgColor = rate.time_of_use === 'Peak' 
+  // Flat rate uses neutral styling
+  const bgColor = isFlat
+    ? 'bg-primary/10 border-primary/20'
+    : rate.time_of_use === 'Peak' 
     ? 'bg-red-500/10 border-red-500/20' 
     : rate.time_of_use === 'Standard' 
     ? 'bg-yellow-500/10 border-yellow-500/20' 
     : 'bg-green-500/10 border-green-500/20';
   
-  const textColor = rate.time_of_use === 'Peak'
+  const textColor = isFlat
+    ? 'text-primary'
+    : rate.time_of_use === 'Peak'
     ? 'text-red-700 dark:text-red-400'
     : rate.time_of_use === 'Standard'
     ? 'text-yellow-700 dark:text-yellow-400'
@@ -121,7 +128,7 @@ function RateCard({ rate, tariff }: { rate: any; tariff: any }) {
         R{combinedRate.toFixed(4)}/kWh
       </div>
       <div className="text-xs text-muted-foreground">
-        {rate.time_of_use}
+        {isFlat ? 'Flat Rate' : rate.time_of_use}
       </div>
     </div>
   );
@@ -138,9 +145,11 @@ interface BlendedRatesCardProps {
 }
 
 function BlendedRatesCard({ rates, tariff, selectedType = 'solarHours', onTypeChange }: BlendedRatesCardProps) {
+  const isFlat = isFlatRateTariff(rates);
+  const flatRate = isFlat ? getFlatRate(rates, tariff) : 0;
   const blendedRates = useMemo(() => calculateAnnualBlendedRates(rates, tariff), [rates, tariff]);
   
-  if (!blendedRates) return null;
+  if (!blendedRates && !isFlat) return null;
   
   const isSelectable = !!onTypeChange;
   
@@ -148,159 +157,198 @@ function BlendedRatesCard({ rates, tariff, selectedType = 'solarHours', onTypeCh
     <div className="mt-4 pt-4 border-t">
       <div className="flex items-center gap-2 mb-4">
         <Calculator className="h-4 w-4 text-primary" />
-        <span className="text-sm font-medium">Blended Tariff Rates</span>
-        {isSelectable && (
+        <span className="text-sm font-medium">
+          {isFlat ? 'Fixed Tariff Rate' : 'Blended Tariff Rates'}
+        </span>
+        {isFlat && (
+          <Badge variant="outline" className="text-[10px]">No TOU Variation</Badge>
+        )}
+        {!isFlat && isSelectable && (
           <Badge variant="outline" className="text-[10px] ml-auto">
             Click to select for simulation
           </Badge>
         )}
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>
-              <Info className="h-3 w-3 text-muted-foreground" />
-            </TooltipTrigger>
-            <TooltipContent className="max-w-sm p-3">
-              <p className="text-xs font-medium mb-2">Two blended rate methodologies:</p>
-              <ul className="text-xs space-y-1">
-                <li><strong>All Hours:</strong> 24/7/365 weighted average (8,760h/year)</li>
-                <li><strong>Solar Sun Hours:</strong> 6-hour core generation window (2,190h/year) with <strong>zero Peak TOU exposure</strong></li>
-              </ul>
-              <p className="text-xs mt-2 text-muted-foreground">
-                Rates weighted by exact annual hour counts from Eskom tariff schedule.
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        {!isFlat && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <Info className="h-3 w-3 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm p-3">
+                <p className="text-xs font-medium mb-2">Two blended rate methodologies:</p>
+                <ul className="text-xs space-y-1">
+                  <li><strong>All Hours:</strong> 24/7/365 weighted average (8,760h/year)</li>
+                  <li><strong>Solar Sun Hours:</strong> 6-hour core generation window (2,190h/year) with <strong>zero Peak TOU exposure</strong></li>
+                </ul>
+                <p className="text-xs mt-2 text-muted-foreground">
+                  Rates weighted by exact annual hour counts from Eskom tariff schedule.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
       
-      <div className="grid grid-cols-2 gap-4">
-        {/* All Hours Column */}
-        <div 
-          className={`space-y-3 ${isSelectable ? 'cursor-pointer' : ''}`}
-          onClick={() => onTypeChange?.('allHours')}
-        >
-          <div className="flex items-center gap-2">
-            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground">All Hours (24/7/365)</span>
-          </div>
-          
-          <div className={`p-3 rounded-lg border transition-all ${
-            selectedType === 'allHours' 
-              ? 'bg-primary/10 border-primary ring-2 ring-primary/30' 
-              : 'bg-muted/50 hover:bg-muted/80'
-          }`}>
+      {isFlat ? (
+        /* Flat Rate Display - Single unified rate */
+        <div className="space-y-4">
+          <div className="p-4 rounded-lg border bg-primary/10 border-primary/20">
             <div className="flex items-baseline gap-1">
-              <span className={`text-xl font-bold ${selectedType === 'allHours' ? 'text-primary' : ''}`}>
-                R{blendedRates.allHours.annual.toFixed(4)}
+              <span className="text-2xl font-bold text-primary">
+                R{flatRate.toFixed(4)}
               </span>
-              <span className="text-xs text-muted-foreground">/kWh</span>
+              <span className="text-sm text-muted-foreground">/kWh</span>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Annual Blended • {ANNUAL_HOURS_24H.annual.total.toLocaleString()}h
+            <p className="text-xs text-muted-foreground mt-2">
+              Fixed rate applies to all hours, seasons, and time periods
             </p>
-            {selectedType === 'allHours' && isSelectable && (
-              <Badge variant="default" className="mt-2 text-[10px]">
-                ✓ Selected for simulation
+            {isSelectable && (
+              <Badge variant="default" className="mt-3 text-[10px]">
+                ✓ Used for simulation
               </Badge>
             )}
           </div>
           
-          <div className="grid grid-cols-2 gap-2">
-            <div className="p-2 rounded bg-muted/30 text-center">
-              <div className="text-sm font-semibold">R{blendedRates.allHours.high.toFixed(4)}</div>
-              <div className="text-[10px] text-muted-foreground">High (Winter)</div>
-            </div>
-            <div className="p-2 rounded bg-muted/30 text-center">
-              <div className="text-sm font-semibold">R{blendedRates.allHours.low.toFixed(4)}</div>
-              <div className="text-[10px] text-muted-foreground">Low (Summer)</div>
-            </div>
-          </div>
-          
-          <div className="text-[10px] text-muted-foreground space-y-0.5">
-            <div className="flex justify-between">
-              <span>Peak: {ANNUAL_HOURS_24H.annual.peak.toLocaleString()}h</span>
-              <span>({((ANNUAL_HOURS_24H.annual.peak / ANNUAL_HOURS_24H.annual.total) * 100).toFixed(1)}%)</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Standard: {ANNUAL_HOURS_24H.annual.standard.toLocaleString()}h</span>
-              <span>({((ANNUAL_HOURS_24H.annual.standard / ANNUAL_HOURS_24H.annual.total) * 100).toFixed(1)}%)</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Off-Peak: {ANNUAL_HOURS_24H.annual.offPeak.toLocaleString()}h</span>
-              <span>({((ANNUAL_HOURS_24H.annual.offPeak / ANNUAL_HOURS_24H.annual.total) * 100).toFixed(1)}%)</span>
-            </div>
-          </div>
-        </div>
-        
-        {/* Solar Sun Hours Column */}
-        <div 
-          className={`space-y-3 ${isSelectable ? 'cursor-pointer' : ''}`}
-          onClick={() => onTypeChange?.('solarHours')}
-        >
-          <div className="flex items-center gap-2">
-            <Sun className="h-3.5 w-3.5 text-amber-500" />
-            <span className="text-xs font-medium text-amber-600">Solar Sun Hours (6h)</span>
-          </div>
-          
-          <div className={`p-3 rounded-lg border transition-all ${
-            selectedType === 'solarHours' 
-              ? 'bg-amber-500/20 border-amber-500 ring-2 ring-amber-500/30' 
-              : 'bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20'
-          }`}>
-            <div className="flex items-baseline gap-1">
-              <span className={`text-xl font-bold ${selectedType === 'solarHours' ? 'text-amber-600' : 'text-amber-600'}`}>
-                R{blendedRates.solarHours.annual.toFixed(4)}
-              </span>
-              <span className="text-xs text-muted-foreground">/kWh</span>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Annual Blended • {ANNUAL_HOURS_SOLAR.annual.total.toLocaleString()}h
+          <div className="p-3 rounded bg-muted/50 text-xs text-muted-foreground">
+            <p>
+              This is a <strong>fixed/conventional tariff</strong> with no time-of-use or seasonal variation. 
+              The same rate applies 24/7/365, making cost calculations straightforward.
             </p>
-            {selectedType === 'solarHours' && isSelectable && (
-              <Badge className="mt-2 text-[10px] bg-amber-500 hover:bg-amber-600">
-                ✓ Selected for simulation
-              </Badge>
-            )}
-          </div>
-          
-          <div className="grid grid-cols-2 gap-2">
-            <div className="p-2 rounded bg-amber-500/10 text-center">
-              <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">R{blendedRates.solarHours.high.toFixed(4)}</div>
-              <div className="text-[10px] text-muted-foreground">High (Winter)</div>
-            </div>
-            <div className="p-2 rounded bg-amber-500/10 text-center">
-              <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">R{blendedRates.solarHours.low.toFixed(4)}</div>
-              <div className="text-[10px] text-muted-foreground">Low (Summer)</div>
-            </div>
-          </div>
-          
-          <div className="text-[10px] text-muted-foreground space-y-0.5">
-            <div className="flex justify-between">
-              <span>Peak: {ANNUAL_HOURS_SOLAR.annual.peak}h</span>
-              <span className="text-green-600 font-medium">(0% exposure)</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Standard: {ANNUAL_HOURS_SOLAR.annual.standard.toLocaleString()}h</span>
-              <span>({((ANNUAL_HOURS_SOLAR.annual.standard / ANNUAL_HOURS_SOLAR.annual.total) * 100).toFixed(1)}%)</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Off-Peak: {ANNUAL_HOURS_SOLAR.annual.offPeak}h</span>
-              <span>({((ANNUAL_HOURS_SOLAR.annual.offPeak / ANNUAL_HOURS_SOLAR.annual.total) * 100).toFixed(1)}%)</span>
-            </div>
           </div>
         </div>
-      </div>
-      
-      <div className="mt-4 p-3 rounded bg-muted/50 text-xs text-muted-foreground">
-        <p className="font-medium text-foreground flex items-center gap-1 mb-1">
-          <Calculator className="h-3 w-3" /> Calculation Methodology
-        </p>
-        <p>
-          Rates weighted by exact annual hour counts from Eskom 2025/26 tariff schedule. 
-          Solar Sun Hours uses the 6-hour core generation window with <strong>zero Peak TOU exposure</strong> — 
-          92.9% Standard, 7.1% Off-Peak.
-        </p>
-      </div>
+      ) : (
+        /* TOU Rate Display - Two columns */
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            {/* All Hours Column */}
+            <div 
+              className={`space-y-3 ${isSelectable ? 'cursor-pointer' : ''}`}
+              onClick={() => onTypeChange?.('allHours')}
+            >
+              <div className="flex items-center gap-2">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">All Hours (24/7/365)</span>
+              </div>
+              
+              <div className={`p-3 rounded-lg border transition-all ${
+                selectedType === 'allHours' 
+                  ? 'bg-primary/10 border-primary ring-2 ring-primary/30' 
+                  : 'bg-muted/50 hover:bg-muted/80'
+              }`}>
+                <div className="flex items-baseline gap-1">
+                  <span className={`text-xl font-bold ${selectedType === 'allHours' ? 'text-primary' : ''}`}>
+                    R{blendedRates?.allHours.annual.toFixed(4) ?? '0.0000'}
+                  </span>
+                  <span className="text-xs text-muted-foreground">/kWh</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Annual Blended • {ANNUAL_HOURS_24H.annual.total.toLocaleString()}h
+                </p>
+                {selectedType === 'allHours' && isSelectable && (
+                  <Badge variant="default" className="mt-2 text-[10px]">
+                    ✓ Selected for simulation
+                  </Badge>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2 rounded bg-muted/30 text-center">
+                  <div className="text-sm font-semibold">R{blendedRates?.allHours.high.toFixed(4) ?? '0.0000'}</div>
+                  <div className="text-[10px] text-muted-foreground">High (Winter)</div>
+                </div>
+                <div className="p-2 rounded bg-muted/30 text-center">
+                  <div className="text-sm font-semibold">R{blendedRates?.allHours.low.toFixed(4) ?? '0.0000'}</div>
+                  <div className="text-[10px] text-muted-foreground">Low (Summer)</div>
+                </div>
+              </div>
+              
+              <div className="text-[10px] text-muted-foreground space-y-0.5">
+                <div className="flex justify-between">
+                  <span>Peak: {ANNUAL_HOURS_24H.annual.peak.toLocaleString()}h</span>
+                  <span>({((ANNUAL_HOURS_24H.annual.peak / ANNUAL_HOURS_24H.annual.total) * 100).toFixed(1)}%)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Standard: {ANNUAL_HOURS_24H.annual.standard.toLocaleString()}h</span>
+                  <span>({((ANNUAL_HOURS_24H.annual.standard / ANNUAL_HOURS_24H.annual.total) * 100).toFixed(1)}%)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Off-Peak: {ANNUAL_HOURS_24H.annual.offPeak.toLocaleString()}h</span>
+                  <span>({((ANNUAL_HOURS_24H.annual.offPeak / ANNUAL_HOURS_24H.annual.total) * 100).toFixed(1)}%)</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Solar Sun Hours Column */}
+            <div 
+              className={`space-y-3 ${isSelectable ? 'cursor-pointer' : ''}`}
+              onClick={() => onTypeChange?.('solarHours')}
+            >
+              <div className="flex items-center gap-2">
+                <Sun className="h-3.5 w-3.5 text-amber-500" />
+                <span className="text-xs font-medium text-amber-600">Solar Sun Hours (6h)</span>
+              </div>
+              
+              <div className={`p-3 rounded-lg border transition-all ${
+                selectedType === 'solarHours' 
+                  ? 'bg-amber-500/20 border-amber-500 ring-2 ring-amber-500/30' 
+                  : 'bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20'
+              }`}>
+                <div className="flex items-baseline gap-1">
+                  <span className={`text-xl font-bold ${selectedType === 'solarHours' ? 'text-amber-600' : 'text-amber-600'}`}>
+                    R{blendedRates?.solarHours.annual.toFixed(4) ?? '0.0000'}
+                  </span>
+                  <span className="text-xs text-muted-foreground">/kWh</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Annual Blended • {ANNUAL_HOURS_SOLAR.annual.total.toLocaleString()}h
+                </p>
+                {selectedType === 'solarHours' && isSelectable && (
+                  <Badge className="mt-2 text-[10px] bg-amber-500 hover:bg-amber-600">
+                    ✓ Selected for simulation
+                  </Badge>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2 rounded bg-amber-500/10 text-center">
+                  <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">R{blendedRates?.solarHours.high.toFixed(4) ?? '0.0000'}</div>
+                  <div className="text-[10px] text-muted-foreground">High (Winter)</div>
+                </div>
+                <div className="p-2 rounded bg-amber-500/10 text-center">
+                  <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">R{blendedRates?.solarHours.low.toFixed(4) ?? '0.0000'}</div>
+                  <div className="text-[10px] text-muted-foreground">Low (Summer)</div>
+                </div>
+              </div>
+              
+              <div className="text-[10px] text-muted-foreground space-y-0.5">
+                <div className="flex justify-between">
+                  <span>Peak: {ANNUAL_HOURS_SOLAR.annual.peak}h</span>
+                  <span className="text-green-600 font-medium">(0% exposure)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Standard: {ANNUAL_HOURS_SOLAR.annual.standard.toLocaleString()}h</span>
+                  <span>({((ANNUAL_HOURS_SOLAR.annual.standard / ANNUAL_HOURS_SOLAR.annual.total) * 100).toFixed(1)}%)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Off-Peak: {ANNUAL_HOURS_SOLAR.annual.offPeak}h</span>
+                  <span>({((ANNUAL_HOURS_SOLAR.annual.offPeak / ANNUAL_HOURS_SOLAR.annual.total) * 100).toFixed(1)}%)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-4 p-3 rounded bg-muted/50 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground flex items-center gap-1 mb-1">
+              <Calculator className="h-3 w-3" /> Calculation Methodology
+            </p>
+            <p>
+              Rates weighted by exact annual hour counts from Eskom 2025/26 tariff schedule. 
+              Solar Sun Hours uses the 6-hour core generation window with <strong>zero Peak TOU exposure</strong> — 
+              92.9% Standard, 7.1% Off-Peak.
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -627,29 +675,49 @@ export function TariffSelector({
               <div className="mt-4 pt-4 border-t">
                 <span className="text-sm text-muted-foreground">Energy Rates (incl. unbundled charges)</span>
                 
-                {/* High Season Row */}
-                <div className="mt-3">
-                  <span className="text-xs text-muted-foreground mb-1 block">High Season (Winter)</span>
-                  <div className="grid gap-2 md:grid-cols-3">
-                    {organizeEnergyRates(selectedTariff.tariff_rates)
-                      .filter((r: any) => r.season?.includes('High') || r.season?.includes('Winter'))
-                      .map((rate: any) => (
-                        <RateCard key={rate.id} rate={rate} tariff={selectedTariff} />
-                      ))}
+                {isFlatRateTariff(selectedTariff.tariff_rates) ? (
+                  /* Flat Rate Display */
+                  <div className="mt-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="outline" className="text-xs">Fixed Rate</Badge>
+                      <span className="text-xs text-muted-foreground">No seasonal or time-of-use variation</span>
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-1 max-w-xs">
+                      <RateCard 
+                        rate={selectedTariff.tariff_rates[0]} 
+                        tariff={selectedTariff} 
+                        isFlat={true}
+                      />
+                    </div>
                   </div>
-                </div>
-                
-                {/* Low Season Row */}
-                <div className="mt-3">
-                  <span className="text-xs text-muted-foreground mb-1 block">Low Season (Summer)</span>
-                  <div className="grid gap-2 md:grid-cols-3">
-                    {organizeEnergyRates(selectedTariff.tariff_rates)
-                      .filter((r: any) => r.season?.includes('Low') || r.season?.includes('Summer'))
-                      .map((rate: any) => (
-                        <RateCard key={rate.id} rate={rate} tariff={selectedTariff} />
-                      ))}
-                  </div>
-                </div>
+                ) : (
+                  /* TOU Rate Display */
+                  <>
+                    {/* High Season Row */}
+                    <div className="mt-3">
+                      <span className="text-xs text-muted-foreground mb-1 block">High Season (Winter)</span>
+                      <div className="grid gap-2 md:grid-cols-3">
+                        {organizeEnergyRates(selectedTariff.tariff_rates)
+                          .filter((r: any) => r.season?.includes('High') || r.season?.includes('Winter'))
+                          .map((rate: any) => (
+                            <RateCard key={rate.id} rate={rate} tariff={selectedTariff} />
+                          ))}
+                      </div>
+                    </div>
+                    
+                    {/* Low Season Row */}
+                    <div className="mt-3">
+                      <span className="text-xs text-muted-foreground mb-1 block">Low Season (Summer)</span>
+                      <div className="grid gap-2 md:grid-cols-3">
+                        {organizeEnergyRates(selectedTariff.tariff_rates)
+                          .filter((r: any) => r.season?.includes('Low') || r.season?.includes('Summer'))
+                          .map((rate: any) => (
+                            <RateCard key={rate.id} rate={rate} tariff={selectedTariff} />
+                          ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 

@@ -80,6 +80,42 @@ export interface BlendedRatesBreakdown {
 // ============================================================================
 
 /**
+ * Check if tariff rates are flat-rate (no TOU/seasonal variation)
+ */
+export function isFlatRateTariff(rates: TariffRate[] | null | undefined): boolean {
+  if (!rates || rates.length === 0) return false;
+  
+  return rates.every(r => 
+    (r.season === 'All Year' || !r.season) && 
+    (r.time_of_use === 'Any' || !r.time_of_use)
+  );
+}
+
+/**
+ * Get flat rate from tariff rates (for fixed/conventional tariffs)
+ */
+export function getFlatRate(
+  rates: TariffRate[], 
+  tariff?: { legacy_charge_per_kwh?: number }
+): number {
+  const rate = rates.find(r => 
+    (r.time_of_use === 'Any' || !r.time_of_use) &&
+    (r.season === 'All Year' || !r.season)
+  );
+  
+  if (!rate) return 0;
+  
+  const base = Number(rate.rate_per_kwh) || 0;
+  const legacy = Number(tariff?.legacy_charge_per_kwh) || 0;
+  const network = Number(rate.network_charge_per_kwh) || 0;
+  const ancillary = Number(rate.ancillary_charge_per_kwh) || 0;
+  const elecRural = Number(rate.electrification_rural_per_kwh) || 0;
+  const affordability = Number(rate.affordability_subsidy_per_kwh) || 0;
+  
+  return base + legacy + network + ancillary + elecRural + affordability;
+}
+
+/**
  * Get combined rate including all unbundled charges for a specific TOU period and season
  */
 export function getCombinedRate(
@@ -90,10 +126,18 @@ export function getCombinedRate(
 ): number {
   const seasonFilter = season === 'high' ? 'High/Winter' : 'Low/Summer';
   
-  const rate = rates.find(r => 
+  let rate = rates.find(r => 
     r.time_of_use === timeOfUse && 
     (r.season === seasonFilter || r.season?.includes(season === 'high' ? 'High' : 'Low'))
   );
+  
+  // Fallback to flat rate if no TOU-specific rate found
+  if (!rate) {
+    rate = rates.find(r => 
+      (r.time_of_use === 'Any' || !r.time_of_use) &&
+      (r.season === 'All Year' || !r.season)
+    );
+  }
   
   if (!rate) return 0;
   
