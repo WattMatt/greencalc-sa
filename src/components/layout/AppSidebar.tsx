@@ -82,54 +82,55 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="p-4">
         <div className="flex flex-col gap-2">
-          {/* Logo and company name section */}
+          {/* Row 1: Logo + Company Name + Dark Mode (right) */}
           <div className="flex items-center gap-3">
             {orgBranding.logo_url ? (
               <img 
                 src={orgBranding.logo_url} 
                 alt="Company logo" 
-                className={`rounded-lg object-contain shrink-0 ${isCollapsed ? "h-6 w-6" : "h-10 w-10"}`}
+                className={`rounded-lg object-contain shrink-0 ${isCollapsed ? "h-8 w-8" : "h-10 w-10"}`}
               />
             ) : (
               <div className={`flex items-center justify-center rounded-lg bg-primary shrink-0 ${isCollapsed ? "h-8 w-8" : "h-10 w-10"}`}>
-                <Zap className={isCollapsed ? "h-2 w-2 text-primary-foreground" : "h-6 w-6 text-primary-foreground"} />
+                <Zap className={isCollapsed ? "h-4 w-4 text-primary-foreground" : "h-6 w-6 text-primary-foreground"} />
               </div>
             )}
             {!isCollapsed && (
-              <div className="flex flex-col">
-                <span className="font-semibold text-sidebar-foreground">
-                  {orgBranding.company_name ? orgBranding.company_name.split(' ').slice(0, 2).join(' ') : "Green Energy"}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {orgBranding.company_name ? orgBranding.company_name.split(' ').slice(2, 4).join(' ') || "Platform" : "Financial Platform"}
-                </span>
-              </div>
+              <>
+                <div className="flex flex-col flex-1">
+                  <span className="font-semibold text-sidebar-foreground">
+                    {orgBranding.company_name ? orgBranding.company_name.split(' ').slice(0, 2).join(' ') : "Green Energy"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {orgBranding.company_name ? orgBranding.company_name.split(' ').slice(2, 4).join(' ') || "Platform" : "Financial Platform"}
+                  </span>
+                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={toggleTheme}
+                      className="shrink-0 h-8 w-8"
+                    >
+                      {theme === "dark" ? (
+                        <Sun className="h-4 w-4" />
+                      ) : (
+                        <Moon className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
+                  </TooltipContent>
+                </Tooltip>
+              </>
             )}
           </div>
           
-          {/* Controls - below the logo/label */}
-          <div className="flex items-center gap-0.5">
-            {!isCollapsed && <SyncStatus />}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={toggleTheme}
-                  className={`shrink-0 ${isCollapsed ? "h-4 w-4" : "h-8 w-8"}`}
-                >
-                  {theme === "dark" ? (
-                    <Sun className={isCollapsed ? "h-3 w-3" : "h-4 w-4"} />
-                  ) : (
-                    <Moon className={isCollapsed ? "h-3 w-3" : "h-4 w-4"} />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <p>Toggle {theme === "dark" ? "light" : "dark"} mode</p>
-              </TooltipContent>
-            </Tooltip>
-            <SidebarTrigger className={`shrink-0 ${isCollapsed ? "h-4 w-4 [&>svg]:h-3 [&>svg]:w-3" : "h-8 w-8"}`} />
+          {/* Row 2: Collapse trigger - always visible */}
+          <div className={`flex ${isCollapsed ? "justify-center" : "justify-end"}`}>
+            <SidebarTrigger className="h-8 w-8" />
           </div>
         </div>
       </SidebarHeader>
