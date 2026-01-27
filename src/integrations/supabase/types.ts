@@ -1276,6 +1276,8 @@ export type Database = {
           customer_category: string | null
           demand_charge_per_kva: number | null
           demand_charge_per_kva_incl_vat: number | null
+          effective_from: string | null
+          effective_to: string | null
           fixed_monthly_charge: number | null
           fixed_monthly_charge_incl_vat: number | null
           generation_capacity_charge: number | null
@@ -1315,6 +1317,8 @@ export type Database = {
           customer_category?: string | null
           demand_charge_per_kva?: number | null
           demand_charge_per_kva_incl_vat?: number | null
+          effective_from?: string | null
+          effective_to?: string | null
           fixed_monthly_charge?: number | null
           fixed_monthly_charge_incl_vat?: number | null
           generation_capacity_charge?: number | null
@@ -1354,6 +1358,8 @@ export type Database = {
           customer_category?: string | null
           demand_charge_per_kva?: number | null
           demand_charge_per_kva_incl_vat?: number | null
+          effective_from?: string | null
+          effective_to?: string | null
           fixed_monthly_charge?: number | null
           fixed_monthly_charge_incl_vat?: number | null
           generation_capacity_charge?: number | null
