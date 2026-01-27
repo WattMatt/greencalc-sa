@@ -53,7 +53,7 @@ interface ToolbarProps {
   scaleInfo: ScaleInfo;
   pvPanelConfig: PVPanelConfig | null;
   pvArrays: PVArrayItem[];
-  onLoadPdf: (file: File) => void;
+  onOpenLoadLayout: () => void;
   onOpenPVConfig: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -64,7 +64,7 @@ interface ToolbarProps {
   hasUnsavedChanges: boolean;
   placementRotation: number;
   setPlacementRotation: (rotation: number) => void;
-  pdfLoaded: boolean;
+  layoutLoaded: boolean;
 }
 
 export function Toolbar({
@@ -73,7 +73,7 @@ export function Toolbar({
   scaleInfo,
   pvPanelConfig,
   pvArrays,
-  onLoadPdf,
+  onOpenLoadLayout,
   onOpenPVConfig,
   onUndo,
   onRedo,
@@ -84,7 +84,7 @@ export function Toolbar({
   hasUnsavedChanges,
   placementRotation,
   setPlacementRotation,
-  pdfLoaded,
+  layoutLoaded,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -92,13 +92,6 @@ export function Toolbar({
   const { panelCount, capacityKwp } = pvConfigured 
     ? calculateTotalPVCapacity(pvArrays, pvPanelConfig!)
     : { panelCount: 0, capacityKwp: 0 };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      onLoadPdf(file);
-    }
-  };
 
   const rotateNext = () => {
     setPlacementRotation((placementRotation + 45) % 360);
@@ -118,20 +111,15 @@ export function Toolbar({
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {/* File Actions */}
         <div className="space-y-1">
-          <label className="block">
-            <input
-              type="file"
-              accept="application/pdf"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            <Button variant="outline" size="sm" className="w-full justify-start" asChild>
-              <span>
-                <Upload className="h-4 w-4 mr-2" />
-                <span className="text-xs">Load PDF</span>
-              </span>
-            </Button>
-          </label>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full justify-start"
+            onClick={onOpenLoadLayout}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            <span className="text-xs">Load Layout</span>
+          </Button>
         </div>
 
         <Separator className="my-2" />
@@ -156,7 +144,7 @@ export function Toolbar({
             label="Set Scale"
             isActive={activeTool === Tool.SCALE}
             onClick={() => setActiveTool(Tool.SCALE)}
-            disabled={!pdfLoaded}
+            disabled={!layoutLoaded}
             badge={scaleSet ? '✓' : undefined}
           />
         </div>
