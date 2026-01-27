@@ -83,7 +83,7 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <div className="flex flex-col gap-2">
           {/* Row 1: Logo + Company Name + Dark Mode (right) */}
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-3 ${isCollapsed ? "justify-center" : ""}`}>
             {orgBranding.logo_url ? (
               <img 
                 src={orgBranding.logo_url} 
@@ -129,7 +129,7 @@ export function AppSidebar() {
           </div>
           
           {/* Row 2: Collapse trigger - always visible */}
-          <div className={`flex ${isCollapsed ? "justify-center" : "justify-end"}`}>
+          <div className="flex justify-center">
             <SidebarTrigger className="h-8 w-8" />
           </div>
         </div>
@@ -145,7 +145,7 @@ export function AppSidebar() {
                   <NavLink
                     to="/"
                     end
-                    className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent"
+                    className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent ${isCollapsed ? "justify-center" : ""}`}
                     activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                   >
                     <LayoutDashboard className="h-5 w-5 shrink-0" />
@@ -166,7 +166,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
                       to={item.url}
-                      className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent"
+                      className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent ${isCollapsed ? "justify-center" : ""}`}
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
                       <item.icon className="h-5 w-5 shrink-0" />
@@ -188,7 +188,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
                       to={item.url}
-                      className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent"
+                      className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent ${isCollapsed ? "justify-center" : ""}`}
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
                       <item.icon className="h-5 w-5 shrink-0" />
@@ -210,7 +210,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
                       to={item.url}
-                      className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent"
+                      className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors hover:bg-sidebar-accent ${isCollapsed ? "justify-center" : ""}`}
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                     >
                       <item.icon className="h-5 w-5 shrink-0" />
@@ -228,7 +228,7 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <NavLink
                 to="/profile"
-                className="px-3 py-2 mb-2 flex items-center gap-3 rounded-md transition-colors hover:bg-sidebar-accent"
+                className={`px-3 py-2 mb-2 flex items-center gap-3 rounded-md transition-colors hover:bg-sidebar-accent ${isCollapsed ? "justify-center" : ""}`}
                 activeClassName="bg-sidebar-accent"
               >
                 <Avatar className="h-8 w-8 shrink-0">
@@ -256,7 +256,7 @@ export function AppSidebar() {
                     <Button
                       variant="ghost"
                       onClick={handleSignOut}
-                      className="w-full justify-start gap-3 px-3 py-2 h-auto font-normal text-muted-foreground hover:text-foreground"
+                      className={`w-full gap-3 px-3 py-2 h-auto font-normal text-muted-foreground hover:text-foreground ${isCollapsed ? "justify-center" : "justify-start"}`}
                     >
                       <LogOut className="h-5 w-5 shrink-0" />
                       {!isCollapsed && <span>Sign Out</span>}
