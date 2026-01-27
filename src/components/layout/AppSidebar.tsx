@@ -83,7 +83,7 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <div className="flex flex-col gap-3">
           {/* Logo and company name section */}
-          <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"}`}>
+          <div className="flex items-center gap-3">
             {orgBranding.logo_url ? (
               <img 
                 src={orgBranding.logo_url} 
@@ -108,7 +108,7 @@ export function AppSidebar() {
           </div>
           
           {/* Controls - below the logo/label */}
-          <div className={`flex items-center gap-1 ${isCollapsed ? "justify-center flex-col" : ""}`}>
+          <div className="flex items-center gap-1">
             {!isCollapsed && <SyncStatus />}
             <Tooltip>
               <TooltipTrigger asChild>
