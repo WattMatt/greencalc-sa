@@ -90,9 +90,15 @@ export function LoadLayoutModal({
           center: [lng, lat],
           zoom: 18,
           preserveDrawingBuffer: true, // Required for html2canvas
+          dragRotate: true, // Enable rotation with right-click + drag
+          touchZoomRotate: true, // Enable rotation on touch devices
         });
 
-        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        map.addControl(new mapboxgl.NavigationControl({
+          showCompass: true,
+          showZoom: true,
+          visualizePitch: true,
+        }), 'top-right');
         
         // Add marker for project location
         new mapboxgl.Marker({ color: '#ef4444' })
