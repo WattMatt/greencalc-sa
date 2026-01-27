@@ -129,8 +129,8 @@ export function AppSidebar() {
           </div>
           
           {/* Row 2: Collapse trigger - always visible */}
-          <div className="flex justify-center">
-            <SidebarTrigger className="h-8 w-8" />
+          <div className={`flex ${isCollapsed ? "justify-center" : "justify-end"}`}>
+            <SidebarTrigger className={isCollapsed ? "h-6 w-6" : "h-8 w-8"} />
           </div>
         </div>
       </SidebarHeader>
