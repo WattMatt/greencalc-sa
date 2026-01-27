@@ -1,187 +1,111 @@
 
+# Fix: Synchronize Simulation Engine with Chart Load Profile Data
 
-# Add Comprehensive Tariff Edit Functionality with Validity Dates
+## Problem Analysis
 
-## Overview
-Enhance the tariff preview/edit functionality to allow full editing of tariff data (including energy rates) and add date validity tracking for tariffs.
+The simulation engine and the charts use **different load profile data sources**:
 
----
+| Component | Data Source | Issue |
+|-----------|-------------|-------|
+| **Charts** (`useLoadProfileData.ts`) | SCADA meter data, interval corrections, area scaling, day multipliers | Accurate - shows real demand patterns |
+| **Simulation** (`SimulationPanel.tsx`) | Shop type estimates only | Simplified - ignores SCADA data entirely |
 
-## Part 1: Database Migration - Add Validity Date Columns
+This desync causes:
+- Charts show realistic 680 kW peak with solar reducing grid import to ~280 kW at midday
+- Simulation calculates with estimated data, resulting in `peakLoad = peakGridImport` (both 680.4 kW)
+- **Demand savings show as 0 kVA** because the simulation doesn't "see" the solar offsetting load during peak hours
 
-### New Columns on `tariffs` Table
-Add two new date columns to track when tariffs are valid:
+## Root Cause (Code Reference)
 
-```sql
-ALTER TABLE tariffs 
-ADD COLUMN effective_from DATE DEFAULT '2025-07-01',
-ADD COLUMN effective_to DATE DEFAULT '2026-06-30';
-```
-
-**Rationale**: South African tariffs typically run from 1 July to 30 June each financial year. These columns allow:
-- Filtering tariffs by validity period
-- Displaying which tariffs are current vs. expired
-- Warning users when using outdated tariffs
-
----
-
-## Part 2: Enhanced Edit Mode in Preview Dialog
-
-### Current State
-The existing edit mode in `TariffList.tsx` only allows editing 4 fields:
-- Basic Charge
-- Demand Charge
-- Phase Type
-- Amperage Limit
-
-### Enhanced Edit Mode Features
-
-**A. Tariff Header Fields (New)**
-- Tariff Name
-- Customer Category
-- Tariff Type (Fixed/TOU/IBT dropdown)
-- Effective From / Effective To dates
-
-**B. Fixed Charges Section (Expanded)**
-Current fields plus:
-- Network Access Charge
-- Service Charge per Day
-- Administration Charge per Day
-- Reactive Energy Charge
-- Generation Capacity Charge
-
-**C. Energy Rates Section (New)**
-Enable inline editing of individual rate rows:
-- Rate per kWh (editable input)
-- Season selector (All Year/High-Winter/Low-Summer)
-- Time of Use selector (Peak/Standard/Off-Peak/Any)
-- Block Start/End for IBT tariffs
-- Add/Remove rate rows
-
----
-
-## Part 3: UI Implementation
-
-### File: `src/components/tariffs/TariffList.tsx`
-
-**Changes to Tariff Interface**:
+**SimulationPanel.tsx lines 515-534** - The simplified load profile calculation:
 ```typescript
-interface Tariff {
-  // ... existing fields
-  effective_from: string | null;
-  effective_to: string | null;
-}
+const loadProfile = useMemo(() => {
+  const profile = Array(24).fill(0);
+  tenants.forEach((tenant) => {
+    // ONLY uses shop type estimates - ignores SCADA data!
+    const shopType = tenant.shop_type_id ? ... : null;
+    const monthlyKwh = tenant.monthly_kwh_override || ...;
+    const tenantProfile = shopType?.load_profile_weekday || DEFAULT_PROFILE;
+    // ...
+  });
+  return profile;
+}, [tenants, shopTypes]);
 ```
 
-**Enhanced Edit Form Layout**:
+Meanwhile, **useLoadProfileData.ts lines 252-336** correctly handles:
+- SCADA meter profiles (`tenant.scada_imports`, `tenant.tenant_meters`)
+- Sub-hourly interval correction (30-min/15-min to hourly averaging)
+- Area-based scaling for SCADA intensities
+- Day-of-week multipliers
+- Diversity factor
 
-```text
-+---------------------------------------------------+
-| Tariff Name: [Three Phase Commercial       ] [v] |
-| Category: [Industrial v]  Type: [Fixed v]        |
-+---------------------------------------------------+
-| Validity Period                                   |
-| From: [2025-07-01]    To: [2026-06-30]           |
-+---------------------------------------------------+
-| Fixed Charges                                     |
-| Basic Charge     | [R 2636.31  ]  /month         |
-| Demand Charge    | [R 393.40   ]  /kVA           |
-| Phase Type       | [Three Phase v]                |
-| Amperage         | [>100A       ]                 |
-| Network Access   | [R 0.00     ]  /month         |
-+---------------------------------------------------+
-| Energy Rates                                      |
-| Season     | Time of Use | Rate (c/kWh) | Actions |
-|------------|-------------|--------------|---------|
-| All Year   | Any         | [142.00    ] | [x]     |
-| ----------------------------------------[+ Add]  |
-+---------------------------------------------------+
-| [Cancel]                              [Save All] |
-+---------------------------------------------------+
-```
+## Solution
 
-**Edit Rate Row Component**:
-- Inline inputs for each rate field
-- Delete button to remove a rate
-- Add Row button to insert new rate entries
-
-**Save Operation**:
-1. Update `tariffs` table with header fields
-2. For each modified rate, update `tariff_rates` table
-3. Insert any new rates
-4. Delete any removed rates
-5. Invalidate queries and show success toast
+Refactor the simulation to use the same load profile calculation as the charts by extracting the hourly kW profile from `useLoadProfileData` hook output.
 
 ---
 
-## Part 4: Display Validity Badges
+## Implementation Steps
 
-### Show Tariff Status
-In both the list view and preview:
-- **Current**: Green badge if today is within `effective_from` - `effective_to`
-- **Upcoming**: Blue badge if `effective_from` is in the future
-- **Expired**: Red badge if `effective_to` is in the past
+### Step 1: Extract Load Profile from Chart Hook
 
-Example badge display:
+The `useLoadProfileData` hook already returns `chartData` with `.total` values representing the hourly kW load. Use this instead of the simplified calculation.
+
+**File:** `src/components/projects/SimulationPanel.tsx`
+
+Replace the simplified `loadProfile` calculation with:
+```typescript
+// Use the same load profile as charts (from useLoadProfileData hook)
+const loadProfile = useMemo(() => {
+  // loadProfileChartData already calculated with SCADA, scaling, multipliers
+  return loadProfileChartData.map(d => d.total);
+}, [loadProfileChartData]);
 ```
-Bulk Supply >100A 3Phase - High Voltage
-Industrial | Fixed | Valid: Jul 2025 - Jun 2026 [Current]
+
+### Step 2: Verify Energy Simulation Uses Correct Data
+
+The existing `energyResults` calculation at line 686 should now receive the accurate load profile:
+```typescript
+const energyResults = useMemo(() =>
+  runEnergySimulation(loadProfile, solarProfile, energyConfig),
+  [loadProfile, solarProfile, energyConfig]
+);
 ```
+
+With the synchronized load profile, `energyResults.peakLoad` and `energyResults.peakGridImport` will correctly reflect:
+- **peakLoad**: Maximum hourly load (e.g., 680 kW at 11:00)
+- **peakGridImport**: Maximum grid import after solar offset (e.g., 650 kW at 06:00)
+
+### Step 3: Demand Savings Will Calculate Correctly
+
+In `AdvancedSimulationEngine.ts`, the existing logic will now work:
+```typescript
+const demandSavingKva = Math.max(0, peakLoadKva - peakWithSolarKva);
+// With correct data: (680 - 650) / 0.9 = 33 kVA saved!
+```
+
+### Step 4: Remove Redundant Load Profile Calculation
+
+Delete the obsolete simplified `loadProfile` calculation (lines 515-534) from `SimulationPanel.tsx` since it's now derived from `loadProfileChartData`.
 
 ---
 
 ## Technical Details
 
-### Database Update Mutation
-```typescript
-const updateTariff = useMutation({
-  mutationFn: async (data: {
-    tariff: Partial<Tariff>;
-    rates: TariffRate[];
-    deletedRateIds: string[];
-  }) => {
-    // 1. Update tariff record
-    await supabase.from("tariffs")
-      .update({
-        name: data.tariff.name,
-        fixed_monthly_charge: data.tariff.fixed_monthly_charge,
-        demand_charge_per_kva: data.tariff.demand_charge_per_kva,
-        phase_type: data.tariff.phase_type,
-        amperage_limit: data.tariff.amperage_limit,
-        effective_from: data.tariff.effective_from,
-        effective_to: data.tariff.effective_to,
-        // ... other fields
-      })
-      .eq("id", data.tariff.id);
-    
-    // 2. Update existing rates
-    for (const rate of data.rates.filter(r => !r.isNew)) {
-      await supabase.from("tariff_rates")
-        .update({ rate_per_kwh: rate.rate_per_kwh, ... })
-        .eq("id", rate.id);
-    }
-    
-    // 3. Insert new rates
-    const newRates = data.rates.filter(r => r.isNew);
-    if (newRates.length) {
-      await supabase.from("tariff_rates")
-        .insert(newRates.map(r => ({
-          tariff_id: data.tariff.id,
-          rate_per_kwh: r.rate_per_kwh,
-          season: r.season,
-          time_of_use: r.time_of_use,
-          ...
-        })));
-    }
-    
-    // 4. Delete removed rates
-    if (data.deletedRateIds.length) {
-      await supabase.from("tariff_rates")
-        .delete()
-        .in("id", data.deletedRateIds);
-    }
-  }
-});
+### Before (Current State)
+```text
+Charts:           Simulation:
+SCADA Data  ─────→ Charts Display    Shop Type ─────→ Energy Sim
+                   (accurate)        Estimates        (inaccurate)
+                                     (ignores SCADA)
+```
+
+### After (Fixed State)
+```text
+SCADA Data ─────→ useLoadProfileData ─────→ Charts Display
+                         │                  (accurate)
+                         └────────────────→ Energy Simulation
+                                            (now accurate!)
 ```
 
 ---
@@ -190,17 +114,14 @@ const updateTariff = useMutation({
 
 | File | Changes |
 |------|---------|
-| `src/components/tariffs/TariffList.tsx` | Expand edit form, add date fields, add rate editing, add validity badges |
-| Database Migration | Add `effective_from` and `effective_to` columns to `tariffs` table |
+| `src/components/projects/SimulationPanel.tsx` | Replace simplified loadProfile with chartData-derived profile (lines 515-534) |
 
 ---
 
-## Implementation Order
+## Expected Results
 
-1. **Database Migration**: Add validity date columns
-2. **Update Tariff Interface**: Add new date fields to TypeScript types
-3. **Expand Edit Form**: Add all editable fields including dates
-4. **Add Rate Editing**: Enable inline editing of energy rates
-5. **Add Validity Badges**: Show current/expired/upcoming status
-6. **Test & Validate**: Ensure saves work correctly and data persists
-
+After implementation:
+1. Demand kVA savings will show real reductions (e.g., 33 kVA instead of 0)
+2. `newPeakDemand` will differ from `peakDemand` in saved simulations
+3. Financial returns will include demand income from peak reduction
+4. Charts and simulation will be fully synchronized
