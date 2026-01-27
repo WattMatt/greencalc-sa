@@ -37,6 +37,7 @@ export function LoadLayoutModal({
   const [activeTab, setActiveTab] = useState<string>('pdf');
   const [isLoading, setIsLoading] = useState(false);
   const [mapboxToken, setMapboxToken] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -51,6 +52,7 @@ export function LoadLayoutModal({
         }
       } catch (error) {
         console.error('Failed to fetch Mapbox token:', error);
+        toast.error('Failed to load map token');
       }
     };
     if (isOpen) {
@@ -58,45 +60,70 @@ export function LoadLayoutModal({
     }
   }, [isOpen]);
 
-  // Initialize map when tab switches to satellite
+  // Initialize map when tab switches to satellite and container is ready
   useEffect(() => {
-    if (activeTab !== 'satellite' || !mapboxToken || !mapContainerRef.current) return;
-    if (mapRef.current) return; // Already initialized
+    // Only proceed if on satellite tab, have token, and modal is open
+    if (activeTab !== 'satellite' || !mapboxToken || !isOpen) {
+      return;
+    }
 
-    const lat = projectCoordinates.latitude ?? -26.2041;
-    const lng = projectCoordinates.longitude ?? 28.0473;
+    // Small delay to ensure the container is rendered
+    const initTimeout = setTimeout(() => {
+      if (!mapContainerRef.current) {
+        console.error('Map container not found');
+        return;
+      }
+      
+      // Don't reinitialize if map already exists
+      if (mapRef.current) {
+        return;
+      }
 
-    mapboxgl.accessToken = mapboxToken;
-    const map = new mapboxgl.Map({
-      container: mapContainerRef.current,
-      style: 'mapbox://styles/mapbox/satellite-v9',
-      center: [lng, lat],
-      zoom: 18,
-      preserveDrawingBuffer: true, // Required for html2canvas
-    });
+      const lat = projectCoordinates.latitude ?? -26.2041;
+      const lng = projectCoordinates.longitude ?? 28.0473;
 
-    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    
-    // Add marker for project location
-    new mapboxgl.Marker({ color: '#ef4444' })
-      .setLngLat([lng, lat])
-      .addTo(map);
+      try {
+        mapboxgl.accessToken = mapboxToken;
+        const map = new mapboxgl.Map({
+          container: mapContainerRef.current,
+          style: 'mapbox://styles/mapbox/satellite-v9',
+          center: [lng, lat],
+          zoom: 18,
+          preserveDrawingBuffer: true, // Required for html2canvas
+        });
 
-    mapRef.current = map;
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        
+        // Add marker for project location
+        new mapboxgl.Marker({ color: '#ef4444' })
+          .setLngLat([lng, lat])
+          .addTo(map);
+
+        map.on('load', () => {
+          setMapReady(true);
+        });
+
+        mapRef.current = map;
+      } catch (error) {
+        console.error('Failed to initialize map:', error);
+        toast.error('Failed to load satellite map');
+      }
+    }, 100);
 
     return () => {
+      clearTimeout(initTimeout);
+    };
+  }, [activeTab, mapboxToken, isOpen, projectCoordinates.latitude, projectCoordinates.longitude]);
+
+  // Cleanup map on close
+  useEffect(() => {
+    if (!isOpen) {
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
-    };
-  }, [activeTab, mapboxToken, projectCoordinates]);
-
-  // Cleanup map on close
-  useEffect(() => {
-    if (!isOpen && mapRef.current) {
-      mapRef.current.remove();
-      mapRef.current = null;
+      setMapReady(false);
+      setActiveTab('pdf'); // Reset to PDF tab
     }
   }, [isOpen]);
 
@@ -248,16 +275,22 @@ export function LoadLayoutModal({
                   </div>
                 ) : (
                   <>
+                    {!mapboxToken && (
+                      <div className="w-full h-[350px] rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </div>
+                    )}
                     <div 
                       ref={mapContainerRef}
-                      className="w-full h-[350px] rounded-lg overflow-hidden"
+                      className="w-full h-[350px] rounded-lg overflow-hidden bg-muted"
+                      style={{ display: mapboxToken ? 'block' : 'none' }}
                     />
                     <div className="flex items-center justify-between mt-4">
                       <p className="text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3 inline mr-1" />
                         {projectCoordinates.latitude?.toFixed(4)}, {projectCoordinates.longitude?.toFixed(4)}
                       </p>
-                      <Button onClick={handleCaptureMap} disabled={isLoading || !mapboxToken}>
+                      <Button onClick={handleCaptureMap} disabled={isLoading || !mapReady}>
                         {isLoading ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
