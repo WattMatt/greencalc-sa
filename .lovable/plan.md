@@ -1,119 +1,73 @@
 
-# Sidebar Header Icon Layout Adjustment
+# Fix Sidebar Icon Center Alignment
 
-## Current State
-The sidebar header has this layout:
-```
-┌────────────────────────────┐
-│ [Logo] Green Energy        │
-│        Financial Platform  │
-├────────────────────────────┤
-│ [Sync] [🌙] [◀]           │  ← Both icons on same row below logo
-└────────────────────────────┘
-```
+## Problem
 
-When collapsed, both icons shrink and remain visible (but hard to use).
+Looking at the screenshot, the navigation icons are not centered in the collapsed sidebar. The issue is caused by the `px-3` (12px horizontal padding) on the NavLink elements - this padding pushes the icon off-center even when `justify-center` is applied.
 
-## Requested Layout
-
-**Expanded State:**
-```
-┌────────────────────────────┐
-│ [Logo] Green Energy   [🌙] │  ← Dark mode icon RIGHT of logo/text
-│        Financial Platform  │
-├────────────────────────────┤
-│                       [◀]  │  ← Collapse icon below, right-aligned
-└────────────────────────────┘
-```
-
-**Collapsed State:**
-```
-┌──────┐
-│[Logo]│
-├──────┤
-│ [▶]  │  ← Only collapse icon visible (centered)
-└──────┘
-```
-
----
-
-## Technical Changes
-
-### File: `src/components/layout/AppSidebar.tsx`
-
-**1. Move dark mode icon to logo row (right side)**
-- Add the theme toggle button to the logo row with `ml-auto` to push it right
-- Only show when `!isCollapsed`
-
-**2. Move collapse icon to separate row below**
-- Keep `SidebarTrigger` on its own row
-- Right-align it with `justify-end` when expanded
-- Center it when collapsed
-- Always visible in both states
-
-**3. Remove SyncStatus from controls row**
-- Move `SyncStatus` to the logo row (between text and dark mode icon) or remove if not needed when collapsed
-
----
-
-## Code Structure
+## Current Code Issue
 
 ```tsx
-<SidebarHeader className="p-4">
-  <div className="flex flex-col gap-2">
-    {/* Row 1: Logo + Company Name + Dark Mode (right) */}
-    <div className="flex items-center gap-3">
-      {/* Logo */}
-      {orgBranding.logo_url ? (
-        <img ... />
-      ) : (
-        <div ...><Zap /></div>
-      )}
-      
-      {/* Company name - only when expanded */}
-      {!isCollapsed && (
-        <div className="flex flex-col flex-1">
-          <span>Green Energy</span>
-          <span>Financial Platform</span>
-        </div>
-      )}
-      
-      {/* Dark mode toggle - only when expanded, right-aligned */}
-      {!isCollapsed && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={toggleTheme}>
-              {theme === "dark" ? <Sun /> : <Moon />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            Toggle theme
-          </TooltipContent>
-        </Tooltip>
-      )}
-    </div>
-    
-    {/* Row 2: Collapse trigger - always visible */}
-    <div className={`flex ${isCollapsed ? "justify-center" : "justify-end"}`}>
-      <SidebarTrigger className="h-8 w-8" />
-    </div>
-  </div>
-</SidebarHeader>
+// Lines 148, 169, 191, 213, 231, 259
+className={`flex items-center gap-3 px-3 py-2 rounded-md ... ${isCollapsed ? "justify-center" : ""}`}
 ```
 
----
+When collapsed:
+- `px-3` adds 12px padding on both left AND right
+- But the icon only exists on one side (no text)
+- Result: icon appears shifted left
 
-## Visual Summary
+## Solution
 
-| State | Dark Mode Icon | Collapse Icon |
-|-------|---------------|---------------|
-| Expanded | Visible (right of text) | Visible (below, right-aligned) |
-| Collapsed | Hidden | Visible (centered) |
+Remove the horizontal padding (`px-3`) when the sidebar is collapsed:
+- Expanded: `px-3 py-2` (keep padding for good touch targets)
+- Collapsed: `py-2 px-0` (remove horizontal padding so icons center properly)
 
----
+Also fix the `gap-3` which adds unwanted space even when text is hidden.
 
-## Files to Modify
+## Code Changes
 
-| File | Changes |
-|------|---------|
-| `src/components/layout/AppSidebar.tsx` | Restructure header layout: move dark mode to logo row, collapse icon to separate row below |
+**File: `src/components/layout/AppSidebar.tsx`**
+
+For ALL NavLink elements and the Sign Out button, change from:
+```tsx
+className={`flex items-center gap-3 px-3 py-2 ... ${isCollapsed ? "justify-center" : ""}`}
+```
+
+To:
+```tsx
+className={`flex items-center rounded-md transition-colors hover:bg-sidebar-accent ${
+  isCollapsed 
+    ? "justify-center py-2 px-0" 
+    : "gap-3 px-3 py-2"
+}`}
+```
+
+### Affected Elements (6 total)
+
+| Line | Element | Change |
+|------|---------|--------|
+| 148 | Dashboard NavLink | Remove `px-3 gap-3` when collapsed |
+| 169 | Reference Data NavLinks | Remove `px-3 gap-3` when collapsed |
+| 191 | Modeling NavLinks | Remove `px-3 gap-3` when collapsed |
+| 213 | System NavLinks | Remove `px-3 gap-3` when collapsed |
+| 231 | Profile NavLink | Remove `px-3 gap-3` when collapsed |
+| 259 | Sign Out Button | Remove `px-3 gap-3` when collapsed |
+
+## Expected Result
+
+After fix:
+```
+┌──────┐
+│ [⚡] │  ← Logo centered
+├──────┤
+│ [▶]  │  ← Trigger centered
+├──────┤
+│ [🏠] │  ← Dashboard icon CENTERED
+│ [📊] │  ← Projects icon CENTERED
+│ [⚙️] │  ← Settings icon CENTERED
+│      │
+│ [👤] │  ← Avatar CENTERED
+│ [→]  │  ← Sign out CENTERED
+└──────┘
+```
