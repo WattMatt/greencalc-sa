@@ -511,27 +511,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     return threeYearTotal;
   }, [systemCosts, solarCapacity, batteryCapacity, includesBattery]);
 
-  // Calculate load profile from tenants (kWh per hour)
+  // Use the same load profile as charts - synchronized with SCADA data, scaling, and multipliers
+  // This ensures simulation results match the accurate demand patterns shown in Load Profile charts
   const loadProfile = useMemo(() => {
-    const profile = Array(24).fill(0);
-    tenants.forEach((tenant) => {
-      const shopType = tenant.shop_type_id
-        ? shopTypes.find((st) => st.id === tenant.shop_type_id)
-        : null;
-      const monthlyKwh =
-        tenant.monthly_kwh_override ||
-        (shopType?.kwh_per_sqm_month || 50) * Number(tenant.area_sqm);
-      const dailyKwh = monthlyKwh / 30;
-      const tenantProfile = shopType?.load_profile_weekday?.length === 24
-        ? shopType.load_profile_weekday.map(Number)
-        : DEFAULT_PROFILE;
-
-      for (let h = 0; h < 24; h++) {
-        profile[h] += dailyKwh * (tenantProfile[h] / 100);
-      }
-    });
-    return profile;
-  }, [tenants, shopTypes]);
+    // loadProfileChartData already contains accurately calculated kW per hour
+    // with SCADA meter data, interval corrections, area scaling, and diversity factors
+    return loadProfileChartData.map(d => d.total);
+  }, [loadProfileChartData]);
 
   // Production reduction factor for conservative estimates
   const reductionFactor = 1 - (productionReductionPercent / 100);
