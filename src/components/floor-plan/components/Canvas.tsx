@@ -64,13 +64,16 @@ export function Canvas({
     img.src = backgroundImage;
   }, [backgroundImage]);
 
-  // Render drawings
+  // Render drawings - uses context transforms, not CSS
   useEffect(() => {
     const canvas = drawingCanvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
     
-    canvas.width = canvasSize.width;
-    canvas.height = canvasSize.height;
+    // Set canvas to container size for proper mouse hit detection
+    const rect = container.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -251,15 +254,20 @@ export function Canvas({
           <p>Load a layout to begin</p>
         </div>
       ) : (
-        <div 
-          style={{ 
-            transform: `translate(${viewState.offset.x}px, ${viewState.offset.y}px) scale(${viewState.zoom})`,
-            transformOrigin: '0 0',
-          }}
-        >
-          <canvas ref={pdfCanvasRef} className="absolute" />
-          <canvas ref={drawingCanvasRef} className="absolute pointer-events-none" />
-        </div>
+        <>
+          <div 
+            style={{ 
+              transform: `translate(${viewState.offset.x}px, ${viewState.offset.y}px) scale(${viewState.zoom})`,
+              transformOrigin: '0 0',
+            }}
+          >
+            <canvas ref={pdfCanvasRef} />
+          </div>
+          <canvas 
+            ref={drawingCanvasRef} 
+            className="absolute inset-0 pointer-events-none" 
+          />
+        </>
       )}
     </div>
   );
