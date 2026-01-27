@@ -12,6 +12,7 @@ import { LoadLayoutModal } from './components/LoadLayoutModal';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
+import { getModulePresetById, getDefaultModulePreset, SolarModulePreset } from '../projects/SolarModulePresets';
 
 interface FloorPlanMarkupProps {
   projectId: string;
@@ -66,6 +67,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
   const [scaleInfo, setScaleInfo] = useState<ScaleInfo>({ pixelDistance: null, realDistance: null, ratio: null });
   const [scaleLine, setScaleLine] = useState<{ start: Point; end: Point } | null>(null);
   const [pvPanelConfig, setPvPanelConfig] = useState<PVPanelConfig | null>(null);
+  const [moduleName, setModuleName] = useState<string>('');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [placementRotation, setPlacementRotation] = useState(0);
 
@@ -119,11 +121,6 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
             });
           }
 
-          // Restore PV config
-          if (data.pv_config) {
-            setPvPanelConfig(data.pv_config as unknown as PVPanelConfig);
-          }
-
           // Restore design state
           const loadedState: DesignState = {
             roofMasks: (data.roof_masks as unknown as RoofMask[]) || [],
@@ -140,6 +137,56 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
           }
           
           setHasUnsavedChanges(false);
+        }
+
+        // Fetch PV panel config from simulation (source of truth)
+        const { data: simData } = await supabase
+          .from('project_simulations')
+          .select('results_json')
+          .eq('project_id', projectId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (simData?.results_json) {
+          const resultsJson = simData.results_json as any;
+          const inverterConfig = resultsJson.inverterConfig;
+          
+          if (inverterConfig) {
+            let module: SolarModulePreset;
+            
+            if (inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule) {
+              module = inverterConfig.customModule;
+              setModuleName(inverterConfig.customModule.name || 'Custom Module');
+            } else {
+              module = getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
+              setModuleName(module.name);
+            }
+            
+            setPvPanelConfig({
+              width: module.width_m,
+              length: module.length_m,
+              wattage: module.power_wp,
+            });
+          } else {
+            // No inverter config, use default
+            const defaultModule = getDefaultModulePreset();
+            setPvPanelConfig({
+              width: defaultModule.width_m,
+              length: defaultModule.length_m,
+              wattage: defaultModule.power_wp,
+            });
+            setModuleName(defaultModule.name);
+          }
+        } else {
+          // No simulation, use default
+          const defaultModule = getDefaultModulePreset();
+          setPvPanelConfig({
+            width: defaultModule.width_m,
+            length: defaultModule.length_m,
+            wattage: defaultModule.power_wp,
+          });
+          setModuleName(defaultModule.name);
         }
       } catch (error) {
         console.error('Error loading layout:', error);
@@ -368,7 +415,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
             isOpen={isPVConfigModalOpen}
             onClose={() => setIsPVConfigModalOpen(false)}
             currentConfig={pvPanelConfig}
-            onConfirm={(config) => { setPvPanelConfig(config); setIsPVConfigModalOpen(false); toast.success('Panel config saved'); }}
+            moduleName={moduleName}
           />
 
           <RoofMaskModal

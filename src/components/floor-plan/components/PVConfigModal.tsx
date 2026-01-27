@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,37 +7,27 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PVPanelConfig } from '../types';
 import { DEFAULT_PV_PANEL_CONFIG } from '../constants';
+import { Info } from 'lucide-react';
 
 interface PVConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentConfig: PVPanelConfig | null;
-  onConfirm: (config: PVPanelConfig) => void;
+  moduleName?: string;
 }
 
-export function PVConfigModal({ isOpen, onClose, currentConfig, onConfirm }: PVConfigModalProps) {
-  const [width, setWidth] = useState<string>(
-    (currentConfig?.width || DEFAULT_PV_PANEL_CONFIG.width).toString()
-  );
-  const [length, setLength] = useState<string>(
-    (currentConfig?.length || DEFAULT_PV_PANEL_CONFIG.length).toString()
-  );
-  const [wattage, setWattage] = useState<string>(
-    (currentConfig?.wattage || DEFAULT_PV_PANEL_CONFIG.wattage).toString()
-  );
-
-  const handleConfirm = () => {
-    const config: PVPanelConfig = {
-      width: parseFloat(width) || DEFAULT_PV_PANEL_CONFIG.width,
-      length: parseFloat(length) || DEFAULT_PV_PANEL_CONFIG.length,
-      wattage: parseFloat(wattage) || DEFAULT_PV_PANEL_CONFIG.wattage,
-    };
-    onConfirm(config);
+export function PVConfigModal({ isOpen, onClose, currentConfig, moduleName }: PVConfigModalProps) {
+  const config = currentConfig || {
+    width: DEFAULT_PV_PANEL_CONFIG.width,
+    length: DEFAULT_PV_PANEL_CONFIG.length,
+    wattage: DEFAULT_PV_PANEL_CONFIG.wattage,
   };
+
+  const area = config.width * config.length;
+  const powerDensity = config.wattage / area;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -46,57 +35,59 @@ export function PVConfigModal({ isOpen, onClose, currentConfig, onConfirm }: PVC
         <DialogHeader>
           <DialogTitle>PV Panel Configuration</DialogTitle>
           <DialogDescription>
-            Set the dimensions and wattage of your solar panels.
+            Panel specifications from Simulation tab configuration.
           </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4 py-4">
+          {/* Module Info */}
+          <div className="space-y-1">
+            <Label className="text-muted-foreground text-xs">Module</Label>
+            <p className="font-medium">{moduleName || 'Default Module'}</p>
+            <p className="text-xs text-muted-foreground">Source: Simulation Tab</p>
+          </div>
+
+          {/* Dimensions Grid */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="width">Width (m)</Label>
-              <Input
-                id="width"
-                type="number"
-                step="0.001"
-                min="0.1"
-                value={width}
-                onChange={(e) => setWidth(e.target.value)}
-              />
+            <div className="space-y-1 bg-muted/50 p-3 rounded-md">
+              <Label className="text-muted-foreground text-xs">Width</Label>
+              <p className="text-lg font-semibold">{config.width.toFixed(3)} m</p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="length">Length (m)</Label>
-              <Input
-                id="length"
-                type="number"
-                step="0.001"
-                min="0.1"
-                value={length}
-                onChange={(e) => setLength(e.target.value)}
-              />
+            <div className="space-y-1 bg-muted/50 p-3 rounded-md">
+              <Label className="text-muted-foreground text-xs">Length</Label>
+              <p className="text-lg font-semibold">{config.length.toFixed(3)} m</p>
             </div>
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="wattage">Wattage (Wp)</Label>
-            <Input
-              id="wattage"
-              type="number"
-              step="1"
-              min="1"
-              value={wattage}
-              onChange={(e) => setWattage(e.target.value)}
-            />
+          {/* Wattage */}
+          <div className="space-y-1 bg-muted/50 p-3 rounded-md">
+            <Label className="text-muted-foreground text-xs">Wattage</Label>
+            <p className="text-lg font-semibold">{config.wattage} Wp</p>
           </div>
 
-          <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
-            <p>Panel Area: {(parseFloat(width) * parseFloat(length)).toFixed(3)} m²</p>
-            <p>Power Density: {(parseFloat(wattage) / (parseFloat(width) * parseFloat(length))).toFixed(1)} W/m²</p>
+          {/* Calculated Values */}
+          <div className="bg-muted p-3 rounded-md space-y-1">
+            <p className="text-sm">
+              <span className="text-muted-foreground">Panel Area:</span>{' '}
+              <span className="font-medium">{area.toFixed(3)} m²</span>
+            </p>
+            <p className="text-sm">
+              <span className="text-muted-foreground">Power Density:</span>{' '}
+              <span className="font-medium">{powerDensity.toFixed(1)} W/m²</span>
+            </p>
+          </div>
+
+          {/* Info Note */}
+          <div className="flex items-start gap-2 text-sm text-muted-foreground bg-primary/5 p-3 rounded-md">
+            <Info className="h-4 w-4 mt-0.5 shrink-0" />
+            <p>
+              To change panel specifications, go to the <strong>Simulation</strong> tab and update the Solar Module configuration.
+            </p>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleConfirm}>Save Configuration</Button>
+          <Button onClick={onClose}>OK</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
