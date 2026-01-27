@@ -1,12 +1,11 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType } from '../types';
 import { renderAllMarkups } from '../utils/drawing';
 import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon } from '../utils/geometry';
 import { PVArrayConfig } from './PVArrayModal';
 
 interface CanvasProps {
-  pdfDoc: PDFDocumentProxy | null;
+  backgroundImage: string | null;
   activeTool: Tool;
   viewState: ViewState;
   setViewState: (vs: ViewState) => void;
@@ -32,7 +31,7 @@ interface CanvasProps {
 }
 
 export function Canvas({
-  pdfDoc, activeTool, viewState, setViewState,
+  backgroundImage, activeTool, viewState, setViewState,
   scaleInfo, scaleLine, setScaleLine, onScaleComplete,
   pvPanelConfig, roofMasks, setRoofMasks, pvArrays, setPvArrays,
   equipment, setEquipment, lines, setLines,
@@ -49,25 +48,21 @@ export function Canvas({
   const [previewPoint, setPreviewPoint] = useState<Point | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
-  // Render PDF
+  // Render background image
   useEffect(() => {
-    if (!pdfDoc || !pdfCanvasRef.current) return;
+    if (!backgroundImage || !pdfCanvasRef.current) return;
     
-    const renderPdf = async () => {
-      const page = await pdfDoc.getPage(1);
-      const viewport = page.getViewport({ scale: 1.5 });
+    const img = new Image();
+    img.onload = () => {
       const canvas = pdfCanvasRef.current!;
       const ctx = canvas.getContext('2d')!;
-      
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      setCanvasSize({ width: viewport.width, height: viewport.height });
-      
-      await page.render({ canvasContext: ctx, viewport }).promise;
+      canvas.width = img.width;
+      canvas.height = img.height;
+      setCanvasSize({ width: img.width, height: img.height });
+      ctx.drawImage(img, 0, 0);
     };
-    
-    renderPdf();
-  }, [pdfDoc]);
+    img.src = backgroundImage;
+  }, [backgroundImage]);
 
   // Render drawings
   useEffect(() => {
@@ -251,9 +246,9 @@ export function Canvas({
       onDoubleClick={handleDoubleClick}
       onWheel={handleWheel}
     >
-      {!pdfDoc ? (
+      {!backgroundImage ? (
         <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-          <p>Load a PDF floor plan to begin</p>
+          <p>Load a layout to begin</p>
         </div>
       ) : (
         <div 

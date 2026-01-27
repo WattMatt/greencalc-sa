@@ -1,6 +1,4 @@
 import { useState, useCallback, useEffect } from 'react';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
@@ -10,29 +8,28 @@ import { ScaleModal } from './components/ScaleModal';
 import { PVConfigModal } from './components/PVConfigModal';
 import { RoofMaskModal } from './components/RoofMaskModal';
 import { PVArrayModal, PVArrayConfig } from './components/PVArrayModal';
+import { LoadLayoutModal } from './components/LoadLayoutModal';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
-import { Save, CloudDownload, Loader2 } from 'lucide-react';
-
-// Set PDF.js worker
-if (typeof window !== 'undefined') {
-  GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
-}
+import { Loader2 } from 'lucide-react';
 
 interface FloorPlanMarkupProps {
   projectId: string;
 }
 
 export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkupProps & { readOnly?: boolean }) {
-  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
-  const [pdfBase64, setPdfBase64] = useState<string | null>(null);
+  const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<Tool>(Tool.PAN);
   const [viewState, setViewState] = useState<ViewState>({ zoom: 1, offset: { x: 0, y: 0 } });
   const [layoutId, setLayoutId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isLoadLayoutModalOpen, setIsLoadLayoutModalOpen] = useState(false);
+  const [projectCoordinates, setProjectCoordinates] = useState<{ latitude: number | null; longitude: number | null }>({
+    latitude: null,
+    longitude: null,
+  });
   
   // History for undo/redo
   const [history, setHistory] = useState<DesignState[]>([initialDesignState]);
@@ -81,11 +78,25 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
   const [pendingRoofMask, setPendingRoofMask] = useState<{ points: Point[]; area: number } | null>(null);
   const [pendingPvArrayConfig, setPendingPvArrayConfig] = useState<PVArrayConfig | null>(null);
 
-  // Load saved layout on mount
+  // Load saved layout and project coordinates on mount
   useEffect(() => {
-    const loadLayout = async () => {
+    const loadLayoutAndCoordinates = async () => {
       setIsLoading(true);
       try {
+        // Fetch project coordinates
+        const { data: projectData, error: projectError } = await supabase
+          .from('projects')
+          .select('latitude, longitude')
+          .eq('id', projectId)
+          .single();
+        
+        if (!projectError && projectData) {
+          setProjectCoordinates({
+            latitude: projectData.latitude,
+            longitude: projectData.longitude,
+          });
+        }
+        // Fetch layout data
         const { data, error } = await supabase
           .from('pv_layouts')
           .select('*')
@@ -123,16 +134,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
           setHistory([loadedState]);
           setHistoryIndex(0);
 
-          // Restore PDF
+          // Restore background image (now stored as base64 image directly)
           if (data.pdf_data) {
-            setPdfBase64(data.pdf_data);
-            const binaryString = atob(data.pdf_data);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            const doc = await getDocument(bytes.buffer).promise;
-            setPdfDoc(doc);
+            setBackgroundImage(data.pdf_data);
           }
           
           setHasUnsavedChanges(false);
@@ -144,7 +148,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
       }
     };
 
-    loadLayout();
+    loadLayoutAndCoordinates();
   }, [projectId]);
 
   // Save layout to database
@@ -161,7 +165,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
         pv_arrays: pvArrays,
         equipment: equipment,
         cables: lines,
-        pdf_data: pdfBase64,
+        pdf_data: backgroundImage,
       };
 
       let result;
@@ -221,27 +225,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [historyIndex, history.length, handleSave, readOnly]);
 
-  const handleLoadPdf = async (file: File) => {
+  const handleImageLoad = (imageBase64: string) => {
     if (readOnly) return;
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      
-      // Convert to base64 for storage
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const base64 = btoa(binary);
-      setPdfBase64(base64);
-      
-      const doc = await getDocument(arrayBuffer).promise;
-      setPdfDoc(doc);
-      setHasUnsavedChanges(true);
-      toast.success('PDF loaded successfully');
-    } catch (error) {
-      toast.error('Failed to load PDF');
-    }
+    setBackgroundImage(imageBase64);
+    setHasUnsavedChanges(true);
   };
 
   if (isLoading) {
@@ -309,7 +296,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
           scaleInfo={scaleInfo}
           pvPanelConfig={pvPanelConfig}
           pvArrays={pvArrays}
-          onLoadPdf={handleLoadPdf}
+          onOpenLoadLayout={() => setIsLoadLayoutModalOpen(true)}
           onOpenPVConfig={() => setIsPVConfigModalOpen(true)}
           onUndo={handleUndo}
           onRedo={handleRedo}
@@ -320,12 +307,12 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
           hasUnsavedChanges={hasUnsavedChanges}
           placementRotation={placementRotation}
           setPlacementRotation={setPlacementRotation}
-          pdfLoaded={!!pdfDoc}
+          layoutLoaded={!!backgroundImage}
         />
       )}
       
       <Canvas
-        pdfDoc={pdfDoc}
+        backgroundImage={backgroundImage}
         activeTool={readOnly ? Tool.PAN : activeTool}
         viewState={viewState}
         setViewState={setViewState}
@@ -363,6 +350,13 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
 
       {!readOnly && (
         <>
+          <LoadLayoutModal
+            isOpen={isLoadLayoutModalOpen}
+            onClose={() => setIsLoadLayoutModalOpen(false)}
+            onImageLoad={handleImageLoad}
+            projectCoordinates={projectCoordinates}
+          />
+          
           <ScaleModal
             isOpen={isScaleModalOpen}
             onClose={() => { setIsScaleModalOpen(false); setScaleLine(null); }}
