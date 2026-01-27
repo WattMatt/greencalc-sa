@@ -161,7 +161,7 @@ export function Toolbar({
             onClick={onOpenPVConfig}
           >
             <Settings className="h-4 w-4 mr-2" />
-            <span className="text-xs">Panel Config</span>
+            <span className="text-xs">View Panel Config</span>
             {pvConfigured && (
               <span className="ml-auto text-xs text-muted-foreground">
                 {pvPanelConfig!.wattage}W
