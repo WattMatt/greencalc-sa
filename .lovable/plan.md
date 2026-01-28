@@ -1,274 +1,139 @@
 
 
-# Plan: Layout Manager for PV Layouts
+# Plan: Clean Satellite Capture (Remove Marker and Controls)
 
-## Overview
+## Problem
 
-Add a Layout Manager interface that allows users to create, view, switch between, rename, duplicate, and delete multiple PV layouts per project. This transforms the current single-layout system into a multi-layout file management system.
+When capturing the satellite view for the PV Layout, the screenshot includes:
+1. **Red location marker pin** in the center
+2. **Navigation controls** (zoom buttons, compass) on the right side
 
-## Current State
+These UI elements clutter the final image which should be a clean satellite view for drawing PV arrays.
 
-- `pv_layouts` table supports multiple layouts per project (has `name` column)
-- Current code only loads the most recent layout (`LIMIT 1`)
-- All saves use hardcoded name "Default Layout"
-- No UI to manage multiple layouts
+## Solution
 
-## Proposed Solution
+Hide the marker and navigation controls just before capturing, then restore them after capture. This gives users the interactive controls while positioning the view, but produces a clean image for the layout.
 
-Add a **Layout Manager Panel** accessible from the Toolbar that provides file-browser-like functionality for layouts.
+## Implementation
 
-## Architecture
+### Modify `src/components/floor-plan/components/LoadLayoutModal.tsx`
 
-```text
-Toolbar
-   |
-   +-- [Layouts] button --> Opens LayoutManagerModal
-                                     |
-                                     v
-                           +-------------------+
-                           | Layout Manager    |
-                           +-------------------+
-                           | - List of layouts |
-                           | - Create new      |
-                           | - Load/Switch     |
-                           | - Rename          |
-                           | - Duplicate       |
-                           | - Delete          |
-                           +-------------------+
-```
+**Change 1: Store marker reference**
 
-## UI Design
-
-### Layout Manager Modal
-
-```text
-+-----------------------------------------------------------+
-|  Layouts                                             [X]  |
-+-----------------------------------------------------------+
-|                                                           |
-|  [+ New Layout]                            [Search...]    |
-|                                                           |
-|  +-------------------------------------------------------+|
-|  | Name               | Modified         | Actions       ||
-|  +-------------------------------------------------------+|
-|  | * Default Layout   | Today 10:30 AM   | [Edit][...v] ||
-|  | Rooftop Option A   | Yesterday        | [Load][...v] ||
-|  | Carport Design     | Jan 25, 2026     | [Load][...v] ||
-|  +-------------------------------------------------------+|
-|                                                           |
-|  * indicates currently loaded layout                      |
-|                                                           |
-+-----------------------------------------------------------+
-```
-
-### Actions Dropdown Menu
-
-- **Load** - Switch to this layout
-- **Rename** - Change layout name
-- **Duplicate** - Create a copy
-- **Delete** - Remove layout (with confirmation)
-
-### New Layout Dialog
-
-```text
-+-------------------------------------------+
-|  Create New Layout                   [X]  |
-+-------------------------------------------+
-|                                           |
-|  Name: [________________________]         |
-|                                           |
-|  Start from:                              |
-|  ( ) Blank layout                         |
-|  (*) Copy current layout                  |
-|                                           |
-|  [Cancel]                    [Create]     |
-|                                           |
-+-------------------------------------------+
-```
-
-## File Changes
-
-### 1. Create `src/components/floor-plan/components/LayoutManagerModal.tsx` (NEW)
-
-Main layout management interface with:
-- List of all layouts for the current project
-- Create, rename, duplicate, delete functionality
-- Load/switch between layouts
-- Visual indicator for currently active layout
-- Timestamps showing when each layout was last modified
-
-### 2. Modify `src/components/floor-plan/components/Toolbar.tsx`
-
-Add:
-- "Layouts" button that opens the LayoutManagerModal
-- Display current layout name in the header
-- Unsaved changes indicator per layout
-
-### 3. Modify `src/components/floor-plan/FloorPlanMarkup.tsx`
-
-Changes:
-- Add `currentLayoutName` state
-- Add `isLayoutManagerOpen` state
-- Modify load logic to accept a specific layout ID
-- Add functions: `loadLayout(id)`, `createLayout(name, copyFrom?)`, `renameLayout(id, name)`, `duplicateLayout(id)`, `deleteLayout(id)`
-- Update save to use the current layout's actual name (not hardcoded "Default Layout")
-
-### 4. Minor: Update types if needed
-
-Add any new types for layout metadata display.
-
-## Technical Implementation
-
-### Fetching All Layouts
+Currently the marker is created but not stored. We need to keep a reference to hide/show it:
 
 ```typescript
-const { data: layouts } = await supabase
-  .from('pv_layouts')
-  .select('id, name, created_at, updated_at')
-  .eq('project_id', projectId)
-  .order('updated_at', { ascending: false });
+const markerRef = useRef<mapboxgl.Marker | null>(null);
+
+// In map initialization:
+const marker = new mapboxgl.Marker({ color: '#ef4444' })
+  .setLngLat([lng, lat])
+  .addTo(map);
+markerRef.current = marker;
 ```
 
-### Creating a New Layout
+**Change 2: Update handleCaptureMap to hide UI elements before capture**
 
 ```typescript
-const createLayout = async (name: string, copyFromId?: string) => {
-  let layoutData = {
-    project_id: projectId,
-    name,
-    scale_pixels_per_meter: null,
-    pv_config: DEFAULT_PV_PANEL_CONFIG,
-    roof_masks: [],
-    pv_arrays: [],
-    equipment: [],
-    cables: [],
-    pdf_data: null,
-  };
+const handleCaptureMap = useCallback(async () => {
+  if (!mapContainerRef.current || !mapRef.current) {
+    toast.error('Map not ready');
+    return;
+  }
 
-  if (copyFromId) {
-    // Fetch the source layout and copy its data
-    const { data: source } = await supabase
-      .from('pv_layouts')
-      .select('*')
-      .eq('id', copyFromId)
-      .single();
-    
-    if (source) {
-      layoutData = {
-        ...layoutData,
-        scale_pixels_per_meter: source.scale_pixels_per_meter,
-        pv_config: source.pv_config,
-        roof_masks: source.roof_masks,
-        pv_arrays: source.pv_arrays,
-        equipment: source.equipment,
-        cables: source.cables,
-        pdf_data: source.pdf_data,
-      };
+  setIsLoading(true);
+  try {
+    // Hide marker before capture
+    if (markerRef.current) {
+      markerRef.current.getElement().style.display = 'none';
     }
-  }
-
-  const { data, error } = await supabase
-    .from('pv_layouts')
-    .insert(layoutData)
-    .select()
-    .single();
-
-  if (!error && data) {
-    await loadLayout(data.id);
-  }
-};
-```
-
-### Loading a Specific Layout
-
-```typescript
-const loadLayout = async (layoutIdToLoad: string) => {
-  const { data, error } = await supabase
-    .from('pv_layouts')
-    .select('*')
-    .eq('id', layoutIdToLoad)
-    .single();
-
-  if (!error && data) {
-    setLayoutId(data.id);
-    setCurrentLayoutName(data.name);
-    // ... restore all other state from data
-  }
-};
-```
-
-### Renaming a Layout
-
-```typescript
-const renameLayout = async (id: string, newName: string) => {
-  await supabase
-    .from('pv_layouts')
-    .update({ name: newName })
-    .eq('id', id);
-  
-  if (id === layoutId) {
-    setCurrentLayoutName(newName);
-  }
-};
-```
-
-### Deleting a Layout
-
-```typescript
-const deleteLayout = async (id: string) => {
-  await supabase
-    .from('pv_layouts')
-    .delete()
-    .eq('id', id);
-  
-  // If deleted the current layout, load another or create blank
-  if (id === layoutId) {
-    const { data: remaining } = await supabase
-      .from('pv_layouts')
-      .select('id')
-      .eq('project_id', projectId)
-      .limit(1)
-      .maybeSingle();
     
-    if (remaining) {
-      await loadLayout(remaining.id);
-    } else {
-      // Reset to blank state
-      resetToBlankLayout();
+    // Hide navigation controls before capture
+    const controls = mapContainerRef.current.querySelector('.mapboxgl-ctrl-top-right');
+    if (controls) {
+      (controls as HTMLElement).style.display = 'none';
     }
+    
+    // Wait for changes to render
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const canvas = await html2canvas(mapContainerRef.current, {
+      useCORS: true,
+      allowTaint: false,
+      scale: 2,
+      logging: false,
+    });
+
+    // Restore marker after capture
+    if (markerRef.current) {
+      markerRef.current.getElement().style.display = '';
+    }
+    
+    // Restore navigation controls after capture
+    if (controls) {
+      (controls as HTMLElement).style.display = '';
+    }
+
+    const imageBase64 = canvas.toDataURL('image/png');
+    onImageLoad(imageBase64);
+    onClose();
+    toast.success('Satellite view captured successfully');
+  } catch (error) {
+    // Restore visibility even on error
+    if (markerRef.current) {
+      markerRef.current.getElement().style.display = '';
+    }
+    const controls = mapContainerRef.current?.querySelector('.mapboxgl-ctrl-top-right');
+    if (controls) {
+      (controls as HTMLElement).style.display = '';
+    }
+    
+    console.error('Failed to capture map:', error);
+    toast.error('Failed to capture satellite view');
+  } finally {
+    setIsLoading(false);
   }
-};
+}, [onImageLoad, onClose]);
 ```
 
-## Toolbar Update
+**Change 3: Clean up marker reference on modal close**
 
-```text
-+--------------------------------------------------+
-| PV Layout Tool                                   |
-| Main Layout ▼         12 panels | 6.6 kWp        |
-+--------------------------------------------------+
-| [Layouts] [Load Layout]                          |
-+--------------------------------------------------+
+```typescript
+// In cleanup effect:
+useEffect(() => {
+  if (!isOpen) {
+    if (markerRef.current) {
+      markerRef.current.remove();
+      markerRef.current = null;
+    }
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+    }
+    setMapReady(false);
+    setActiveTab('pdf');
+  }
+}, [isOpen]);
 ```
 
-The header area will show:
-- Current layout name (clickable dropdown or button to open manager)
-- Quick stats remain visible
+## Summary of Changes
 
-## Implementation Steps
+| Element | Before Capture | After Capture |
+|---------|---------------|---------------|
+| Red marker pin | Hidden | Restored |
+| Navigation controls | Hidden | Restored |
 
-1. Create `LayoutManagerModal.tsx` with full CRUD UI
-2. Add state and handler functions to `FloorPlanMarkup.tsx`
-3. Update `Toolbar.tsx` with Layouts button and current name display
-4. Update save logic to use actual layout name
-5. Add confirmation dialogs for destructive actions (delete, switch with unsaved changes)
-6. Test all operations: create, load, rename, duplicate, delete
+## User Experience
 
-## Edge Cases
+1. User opens satellite view - sees map with marker and controls for navigation
+2. User pans, zooms, and rotates to desired view using the controls
+3. User clicks "Capture View"
+4. System hides marker and controls momentarily
+5. Screenshot is taken (clean satellite image)
+6. Controls are restored (in case of error/retry)
+7. Clean image is loaded into the PV Layout canvas
 
-1. **Unsaved changes when switching**: Prompt to save or discard
-2. **Delete current layout**: Load another or reset to blank
-3. **Only one layout exists**: Prevent deletion (or allow with warning)
-4. **Duplicate names**: Allow (use timestamps to distinguish) or enforce uniqueness
-5. **Empty project**: Start with one "Default Layout" auto-created
+## Files Modified
+
+- `src/components/floor-plan/components/LoadLayoutModal.tsx`
 
