@@ -187,17 +187,41 @@ export function LoadLayoutModal({
     }
 
     setIsLoading(true);
+    
+    // Collect all elements to hide
+    const elementsToHide: HTMLElement[] = [];
+    
     try {
       // Hide marker before capture
       if (markerRef.current) {
         markerRef.current.getElement().style.display = 'none';
       }
       
-      // Hide navigation controls before capture
-      const controls = mapContainerRef.current.querySelector('.mapboxgl-ctrl-top-right');
-      if (controls) {
-        (controls as HTMLElement).style.display = 'none';
-      }
+      // Hide all Mapbox control containers (top-right, bottom-right, bottom-left, top-left)
+      const controlContainers = mapContainerRef.current.querySelectorAll(
+        '.mapboxgl-ctrl-top-right, .mapboxgl-ctrl-bottom-right, .mapboxgl-ctrl-bottom-left, .mapboxgl-ctrl-top-left'
+      );
+      controlContainers.forEach((el) => {
+        const htmlEl = el as HTMLElement;
+        elementsToHide.push(htmlEl);
+        htmlEl.style.display = 'none';
+      });
+      
+      // Hide Mapbox logo specifically
+      const logos = mapContainerRef.current.querySelectorAll('.mapboxgl-ctrl-logo');
+      logos.forEach((el) => {
+        const htmlEl = el as HTMLElement;
+        elementsToHide.push(htmlEl);
+        htmlEl.style.display = 'none';
+      });
+      
+      // Hide Mapbox attribution
+      const attributions = mapContainerRef.current.querySelectorAll('.mapboxgl-ctrl-attrib');
+      attributions.forEach((el) => {
+        const htmlEl = el as HTMLElement;
+        elementsToHide.push(htmlEl);
+        htmlEl.style.display = 'none';
+      });
       
       // Wait for changes to render
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -209,15 +233,13 @@ export function LoadLayoutModal({
         logging: false,
       });
 
-      // Restore marker after capture
+      // Restore all hidden elements
       if (markerRef.current) {
         markerRef.current.getElement().style.display = '';
       }
-      
-      // Restore navigation controls after capture
-      if (controls) {
-        (controls as HTMLElement).style.display = '';
-      }
+      elementsToHide.forEach((el) => {
+        el.style.display = '';
+      });
 
       const imageBase64 = canvas.toDataURL('image/png');
       onImageLoad(imageBase64);
@@ -228,10 +250,9 @@ export function LoadLayoutModal({
       if (markerRef.current) {
         markerRef.current.getElement().style.display = '';
       }
-      const controls = mapContainerRef.current?.querySelector('.mapboxgl-ctrl-top-right');
-      if (controls) {
-        (controls as HTMLElement).style.display = '';
-      }
+      elementsToHide.forEach((el) => {
+        el.style.display = '';
+      });
       
       console.error('Failed to capture map:', error);
       toast.error('Failed to capture satellite view');
