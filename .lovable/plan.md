@@ -1,36 +1,52 @@
-# Plan: Landing View for PV Layout with File Browser Interface
 
-## Status: ✅ IMPLEMENTED
+
+# Plan: Comment Out Project Overview Panel
 
 ## Overview
 
-Transformed the PV Layout experience from immediately showing the canvas editor to showing a **layout browser landing page first**. Users now see a file manager interface where they can browse, create, and select layouts. Only when they click on a specific layout or create a new one will they enter the canvas editing mode.
+Remove the right-side "Project Overview" panel from the Layout Browser view, but keep the code commented out with a clear note for future expansion.
 
-## Implementation Complete
+## Change
 
-### Files Created/Modified:
-1. **`src/components/floor-plan/components/LayoutBrowser.tsx`** (NEW)
-   - Three-panel layout: left sidebar, center folder list, right overview
-   - Left sidebar with FILE ACTIONS and ADVANCED collapsible sections
-   - Center panel with layout cards in "Uncategorized" folder
-   - Design cards with rename/duplicate/delete actions
-   - Right panel with project overview placeholder
+### File: `src/components/floor-plan/components/LayoutBrowser.tsx`
 
-2. **`src/components/floor-plan/FloorPlanMarkup.tsx`** (MODIFIED)
-   - Added `viewMode` state: `'browser' | 'editor'`
-   - Default to `'browser'` mode
-   - NO auto-load of layouts on mount (stays in browser)
-   - Handlers for selecting layout, creating new design, loading PDF from browser
+**Lines 289-303** - Comment out the entire Right Panel section:
 
-3. **`src/components/floor-plan/components/Toolbar.tsx`** (MODIFIED)
-   - Added `onBackToBrowser` prop
-   - Added "Back to Designs" button at top of toolbar
+```tsx
+{/* 
+  ============================================
+  FUTURE EXPANSION: Project Overview Panel
+  ============================================
+  This panel is reserved for future functionality such as:
+  - Project summary stats (name, location, total kWp)
+  - Selected layout thumbnail preview on hover
+  - Quick project info (coordinates, tariff, tenant area)
+  
+  Uncomment and implement when ready.
+  ============================================
+  
+  <div className="w-72 bg-card border-l flex flex-col items-center justify-center p-6 text-center">
+    <div className="grid grid-cols-2 gap-1 mb-4">
+      <div className="w-8 h-8 border rounded flex items-center justify-center">
+        <Grid3X3 className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <div className="w-8 h-8 border rounded" />
+      <div className="w-8 h-8 border rounded" />
+      <div className="w-8 h-8 border rounded" />
+    </div>
+    <h3 className="font-semibold">Project Overview</h3>
+    <p className="text-sm text-muted-foreground mt-2">
+      Load a PDF and select design purpose to view project details
+    </p>
+  </div>
+*/}
+```
 
-## User Flow
+Also remove the unused `Grid3X3` import from line 28 since it won't be needed (or keep it commented if preferred).
 
-1. User navigates to PV Layout tab → Sees file browser with all layouts
-2. User can:
-   - Click a layout card → Loads that layout and switches to editor
-   - Click "+ New Design" → Creates blank layout and switches to editor
-   - Click "Load PDF File" → Opens modal and switches to editor
-3. In editor mode, user clicks "Back to Designs" to return to browser
+## Result
+
+- The center panel will expand to fill the available space
+- The commented code provides clear guidance for future developers
+- No functionality is lost - just hidden for now
+
