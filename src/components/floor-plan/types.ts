@@ -96,3 +96,47 @@ export const initialDesignState: DesignState = {
   roofMasks: [],
   pvArrays: [],
 };
+
+// Plant Setup Configuration Types
+export interface SolarModuleConfig {
+  id: string;
+  name: string;
+  width: number;      // meters
+  length: number;     // meters
+  wattage: number;    // Wp
+  isDefault?: boolean;
+}
+
+export interface InverterLayoutConfig {
+  id: string;
+  name: string;
+  acCapacity: number; // kW
+  count: number;
+  isDefault?: boolean;
+}
+
+export interface WalkwayConfig {
+  id: string;
+  name: string;
+  width: number;      // meters (default 0.6m)
+}
+
+export interface CableTrayConfig {
+  id: string;
+  name: string;
+  width: number;      // meters (default 0.3m)
+}
+
+export interface PlantSetupConfig {
+  solarModules: SolarModuleConfig[];
+  inverters: InverterLayoutConfig[];
+  walkways: WalkwayConfig[];
+  cableTrays: CableTrayConfig[];
+}
+
+export const defaultPlantSetupConfig: PlantSetupConfig = {
+  solarModules: [],
+  inverters: [],
+  walkways: [{ id: 'default-walkway', name: 'Standard', width: 0.6 }],
+  cableTrays: [{ id: 'default-tray', name: 'Standard', width: 0.3 }],
+};

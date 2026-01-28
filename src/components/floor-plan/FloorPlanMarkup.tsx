@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask } from './types';
+import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
@@ -11,6 +11,7 @@ import { PVArrayModal, PVArrayConfig } from './components/PVArrayModal';
 import { LoadLayoutModal } from './components/LoadLayoutModal';
 import { LayoutManagerModal } from './components/LayoutManagerModal';
 import { LayoutBrowser } from './components/LayoutBrowser';
+import { PlantSetupModal } from './components/PlantSetupModal';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
@@ -85,9 +86,13 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
   const [isPVConfigModalOpen, setIsPVConfigModalOpen] = useState(false);
   const [isRoofMaskModalOpen, setIsRoofMaskModalOpen] = useState(false);
   const [isPVArrayModalOpen, setIsPVArrayModalOpen] = useState(false);
+  const [isPlantSetupModalOpen, setIsPlantSetupModalOpen] = useState(false);
   const [pendingScalePixels, setPendingScalePixels] = useState(0);
   const [pendingRoofMask, setPendingRoofMask] = useState<{ points: Point[]; area: number } | null>(null);
   const [pendingPvArrayConfig, setPendingPvArrayConfig] = useState<PVArrayConfig | null>(null);
+  
+  // Plant Setup Config
+  const [plantSetupConfig, setPlantSetupConfig] = useState<PlantSetupConfig>(defaultPlantSetupConfig);
 
   // Reset to blank layout state
   const resetToBlankLayout = useCallback(() => {
@@ -304,6 +309,26 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
               length: module.length_m,
               wattage: module.power_wp,
             });
+            
+            // Sync plant setup from simulation
+            setPlantSetupConfig(prev => ({
+              ...prev,
+              solarModules: [{
+                id: 'sim-module',
+                name: module.name,
+                width: module.width_m,
+                length: module.length_m,
+                wattage: module.power_wp,
+                isDefault: true,
+              }],
+              inverters: inverterConfig.inverterSize ? [{
+                id: 'sim-inverter',
+                name: `${inverterConfig.inverterSize}kW Inverter`,
+                acCapacity: inverterConfig.inverterSize,
+                count: inverterConfig.inverterCount || 1,
+                isDefault: true,
+              }] : prev.inverters,
+            }));
           } else {
             // No inverter config, use default
             const defaultModule = getDefaultModulePreset();
@@ -525,8 +550,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
           scaleInfo={scaleInfo}
           pvPanelConfig={pvPanelConfig}
           pvArrays={pvArrays}
+          plantSetupConfig={plantSetupConfig}
           onOpenLoadLayout={() => setIsLoadLayoutModalOpen(true)}
-          onOpenPVConfig={() => setIsPVConfigModalOpen(true)}
+          onOpenPlantSetup={() => setIsPlantSetupModalOpen(true)}
           onOpenLayoutManager={() => setIsLayoutManagerOpen(true)}
           onUndo={handleUndo}
           onRedo={handleRedo}
@@ -634,6 +660,68 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
               onConfirm={handlePVArrayConfirm}
             />
           )}
+          
+          <PlantSetupModal
+            isOpen={isPlantSetupModalOpen}
+            onClose={() => setIsPlantSetupModalOpen(false)}
+            config={plantSetupConfig}
+            onApply={(config) => {
+              setPlantSetupConfig(config);
+              setHasUnsavedChanges(true);
+              // Update pvPanelConfig from default module if available
+              const defaultModule = config.solarModules.find(m => m.isDefault);
+              if (defaultModule) {
+                setPvPanelConfig({
+                  width: defaultModule.width,
+                  length: defaultModule.length,
+                  wattage: defaultModule.wattage,
+                });
+                setModuleName(defaultModule.name);
+              }
+            }}
+            onSyncFromSimulation={async () => {
+              const { data: simData } = await supabase
+                .from('project_simulations')
+                .select('results_json')
+                .eq('project_id', projectId)
+                .order('updated_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              
+              if (simData?.results_json) {
+                const resultsJson = simData.results_json as any;
+                const inverterConfig = resultsJson.inverterConfig;
+                
+                if (inverterConfig) {
+                  let module: SolarModulePreset;
+                  if (inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule) {
+                    module = inverterConfig.customModule;
+                  } else {
+                    module = getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
+                  }
+                  
+                  setPlantSetupConfig(prev => ({
+                    ...prev,
+                    solarModules: [{
+                      id: 'sim-module',
+                      name: module.name,
+                      width: module.width_m,
+                      length: module.length_m,
+                      wattage: module.power_wp,
+                      isDefault: true,
+                    }],
+                    inverters: inverterConfig.inverterSize ? [{
+                      id: 'sim-inverter',
+                      name: `${inverterConfig.inverterSize}kW Inverter`,
+                      acCapacity: inverterConfig.inverterSize,
+                      count: inverterConfig.inverterCount || 1,
+                      isDefault: true,
+                    }] : prev.inverters,
+                  }));
+                }
+              }
+            }}
+          />
         </>
       )}
     </div>

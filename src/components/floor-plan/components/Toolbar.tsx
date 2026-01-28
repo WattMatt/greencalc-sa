@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
   Upload, Settings, Undo2, Redo2, Save, Loader2, FolderOpen, ArrowLeft,
-  ChevronLeft, ChevronRight, ChevronDown
+  ChevronLeft, ChevronRight, ChevronDown, Factory
 } from 'lucide-react';
-import { Tool, ScaleInfo, PVPanelConfig } from '../types';
+import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig } from '../types';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { calculateTotalPVCapacity } from '../utils/geometry';
 import { PVArrayItem } from '../types';
@@ -81,8 +82,9 @@ interface ToolbarProps {
   scaleInfo: ScaleInfo;
   pvPanelConfig: PVPanelConfig | null;
   pvArrays: PVArrayItem[];
+  plantSetupConfig: PlantSetupConfig;
   onOpenLoadLayout: () => void;
-  onOpenPVConfig: () => void;
+  onOpenPlantSetup: () => void;
   onOpenLayoutManager: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -106,8 +108,9 @@ export function Toolbar({
   scaleInfo,
   pvPanelConfig,
   pvArrays,
+  plantSetupConfig,
   onOpenLoadLayout,
-  onOpenPVConfig,
+  onOpenPlantSetup,
   onOpenLayoutManager,
   onUndo,
   onRedo,
@@ -134,7 +137,7 @@ export function Toolbar({
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     file: true,
     general: true,
-    pvSetup: false,
+    plantSetup: false,
     roofArrays: false,
     cabling: false,
     equipment: false,
@@ -275,26 +278,34 @@ export function Toolbar({
 
         <Separator className="my-2" />
 
-        {/* PV Setup */}
+        {/* Plant Setup */}
         <CollapsibleSection 
-          title="PV Setup"
-          isOpen={openSections.pvSetup}
-          onToggle={() => toggleSection('pvSetup')}
+          title="Plant Setup"
+          isOpen={openSections.plantSetup}
+          onToggle={() => toggleSection('plantSetup')}
         >
           <Button
             variant="outline"
             size="sm"
             className="w-full justify-start"
-            onClick={onOpenPVConfig}
+            onClick={onOpenPlantSetup}
           >
-            <Settings className="h-4 w-4 mr-2" />
-            <span className="text-xs">View Panel Config</span>
-            {pvConfigured && (
-              <span className="ml-auto text-xs text-muted-foreground">
-                {pvPanelConfig!.wattage}W
-              </span>
-            )}
+            <Factory className="h-4 w-4 mr-2" />
+            <span className="text-xs">Configure Plant</span>
           </Button>
+          {/* Summary badges */}
+          <div className="flex flex-wrap gap-1 px-1 mt-1">
+            {plantSetupConfig.solarModules.length > 0 && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                {plantSetupConfig.solarModules.length} Module{plantSetupConfig.solarModules.length !== 1 ? 's' : ''}
+              </Badge>
+            )}
+            {plantSetupConfig.inverters.length > 0 && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                {plantSetupConfig.inverters.length} Inverter{plantSetupConfig.inverters.length !== 1 ? 's' : ''}
+              </Badge>
+            )}
+          </div>
         </CollapsibleSection>
 
         <Separator className="my-2" />
