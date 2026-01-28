@@ -1,6 +1,6 @@
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
-  Download, Upload, Settings, Undo2, Redo2, Save, Loader2
+  Download, Upload, Settings, Undo2, Redo2, Save, Loader2, FolderOpen
 } from 'lucide-react';
 import { Tool, ScaleInfo, PVPanelConfig } from '../types';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,7 @@ interface ToolbarProps {
   pvArrays: PVArrayItem[];
   onOpenLoadLayout: () => void;
   onOpenPVConfig: () => void;
+  onOpenLayoutManager: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onSave: () => void;
@@ -65,6 +66,7 @@ interface ToolbarProps {
   placementRotation: number;
   setPlacementRotation: (rotation: number) => void;
   layoutLoaded: boolean;
+  currentLayoutName: string;
 }
 
 export function Toolbar({
@@ -75,6 +77,7 @@ export function Toolbar({
   pvArrays,
   onOpenLoadLayout,
   onOpenPVConfig,
+  onOpenLayoutManager,
   onUndo,
   onRedo,
   onSave,
@@ -85,6 +88,7 @@ export function Toolbar({
   placementRotation,
   setPlacementRotation,
   layoutLoaded,
+  currentLayoutName,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -101,8 +105,12 @@ export function Toolbar({
     <div className="w-52 bg-card border-r flex flex-col h-full">
       <div className="p-3 border-b">
         <h2 className="font-semibold text-sm">PV Layout Tool</h2>
+        <p className="text-xs text-muted-foreground mt-1 truncate" title={currentLayoutName}>
+          {currentLayoutName}
+          {hasUnsavedChanges && <span className="text-primary ml-1">•</span>}
+        </p>
         {pvConfigured && panelCount > 0 && (
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground">
             {panelCount} panels • {capacityKwp.toFixed(1)} kWp
           </p>
         )}
@@ -115,10 +123,19 @@ export function Toolbar({
             variant="outline" 
             size="sm" 
             className="w-full justify-start"
+            onClick={onOpenLayoutManager}
+          >
+            <FolderOpen className="h-4 w-4 mr-2" />
+            <span className="text-xs">Layouts</span>
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="w-full justify-start"
             onClick={onOpenLoadLayout}
           >
             <Upload className="h-4 w-4 mr-2" />
-            <span className="text-xs">Load Layout</span>
+            <span className="text-xs">Load Image</span>
           </Button>
         </div>
 

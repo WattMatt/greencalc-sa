@@ -9,6 +9,7 @@ import { PVConfigModal } from './components/PVConfigModal';
 import { RoofMaskModal } from './components/RoofMaskModal';
 import { PVArrayModal, PVArrayConfig } from './components/PVArrayModal';
 import { LoadLayoutModal } from './components/LoadLayoutModal';
+import { LayoutManagerModal } from './components/LayoutManagerModal';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
@@ -23,10 +24,12 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
   const [activeTool, setActiveTool] = useState<Tool>(Tool.PAN);
   const [viewState, setViewState] = useState<ViewState>({ zoom: 1, offset: { x: 0, y: 0 } });
   const [layoutId, setLayoutId] = useState<string | null>(null);
+  const [currentLayoutName, setCurrentLayoutName] = useState<string>('Default Layout');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isLoadLayoutModalOpen, setIsLoadLayoutModalOpen] = useState(false);
+  const [isLayoutManagerOpen, setIsLayoutManagerOpen] = useState(false);
   const [projectCoordinates, setProjectCoordinates] = useState<{ latitude: number | null; longitude: number | null }>({
     latitude: null,
     longitude: null,
@@ -80,6 +83,174 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
   const [pendingRoofMask, setPendingRoofMask] = useState<{ points: Point[]; area: number } | null>(null);
   const [pendingPvArrayConfig, setPendingPvArrayConfig] = useState<PVArrayConfig | null>(null);
 
+  // Reset to blank layout state
+  const resetToBlankLayout = useCallback(() => {
+    setLayoutId(null);
+    setCurrentLayoutName('New Layout');
+    setBackgroundImage(null);
+    setScaleInfo({ pixelDistance: null, realDistance: null, ratio: null });
+    setHistory([initialDesignState]);
+    setHistoryIndex(0);
+    setHasUnsavedChanges(false);
+  }, []);
+
+  // Load a specific layout by ID
+  const loadLayout = useCallback(async (layoutIdToLoad: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('pv_layouts')
+        .select('*')
+        .eq('id', layoutIdToLoad)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setLayoutId(data.id);
+        setCurrentLayoutName(data.name);
+        
+        // Restore scale
+        if (data.scale_pixels_per_meter) {
+          setScaleInfo({
+            pixelDistance: null,
+            realDistance: null,
+            ratio: 1 / Number(data.scale_pixels_per_meter)
+          });
+        } else {
+          setScaleInfo({ pixelDistance: null, realDistance: null, ratio: null });
+        }
+
+        // Restore design state
+        const loadedState: DesignState = {
+          roofMasks: (data.roof_masks as unknown as RoofMask[]) || [],
+          pvArrays: (data.pv_arrays as unknown as any[]) || [],
+          equipment: (data.equipment as unknown as any[]) || [],
+          lines: (data.cables as unknown as any[]) || [],
+        };
+        setHistory([loadedState]);
+        setHistoryIndex(0);
+
+        // Restore background image
+        if (data.pdf_data) {
+          setBackgroundImage(data.pdf_data);
+        } else {
+          setBackgroundImage(null);
+        }
+        
+        setHasUnsavedChanges(false);
+      }
+    } catch (error) {
+      console.error('Error loading layout:', error);
+      throw error;
+    }
+  }, []);
+
+  // Create a new layout
+  const createLayout = useCallback(async (name: string, copyFromId?: string) => {
+    try {
+      let layoutData: any = {
+        project_id: projectId,
+        name,
+        scale_pixels_per_meter: null,
+        pv_config: DEFAULT_PV_PANEL_CONFIG,
+        roof_masks: [],
+        pv_arrays: [],
+        equipment: [],
+        cables: [],
+        pdf_data: null,
+      };
+
+      if (copyFromId) {
+        const { data: source, error: sourceError } = await supabase
+          .from('pv_layouts')
+          .select('*')
+          .eq('id', copyFromId)
+          .single();
+        
+        if (sourceError) throw sourceError;
+        
+        if (source) {
+          layoutData = {
+            ...layoutData,
+            scale_pixels_per_meter: source.scale_pixels_per_meter,
+            pv_config: source.pv_config,
+            roof_masks: source.roof_masks,
+            pv_arrays: source.pv_arrays,
+            equipment: source.equipment,
+            cables: source.cables,
+            pdf_data: source.pdf_data,
+          };
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('pv_layouts')
+        .insert(layoutData)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        await loadLayout(data.id);
+      }
+    } catch (error) {
+      console.error('Error creating layout:', error);
+      throw error;
+    }
+  }, [projectId, loadLayout]);
+
+  // Rename a layout
+  const renameLayout = useCallback(async (id: string, newName: string) => {
+    try {
+      const { error } = await supabase
+        .from('pv_layouts')
+        .update({ name: newName })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      if (id === layoutId) {
+        setCurrentLayoutName(newName);
+      }
+    } catch (error) {
+      console.error('Error renaming layout:', error);
+      throw error;
+    }
+  }, [layoutId]);
+
+  // Delete a layout
+  const deleteLayout = useCallback(async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('pv_layouts')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // If deleted the current layout, load another or reset
+      if (id === layoutId) {
+        const { data: remaining } = await supabase
+          .from('pv_layouts')
+          .select('id')
+          .eq('project_id', projectId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (remaining) {
+          await loadLayout(remaining.id);
+        } else {
+          resetToBlankLayout();
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting layout:', error);
+      throw error;
+    }
+  }, [layoutId, projectId, loadLayout, resetToBlankLayout]);
+
   // Load saved layout and project coordinates on mount
   useEffect(() => {
     const loadLayoutAndCoordinates = async () => {
@@ -111,6 +282,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
 
         if (data) {
           setLayoutId(data.id);
+          setCurrentLayoutName(data.name);
           
           // Restore scale
           if (data.scale_pixels_per_meter) {
@@ -205,7 +377,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
     try {
       const layoutData: any = {
         project_id: projectId,
-        name: 'Default Layout',
+        name: currentLayoutName,
         scale_pixels_per_meter: scaleInfo.ratio ? 1 / scaleInfo.ratio : null,
         pv_config: pvPanelConfig || DEFAULT_PV_PANEL_CONFIG,
         roof_masks: roofMasks,
@@ -234,6 +406,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
       if (result.error) throw result.error;
       
       setLayoutId(result.data.id);
+      setCurrentLayoutName(result.data.name);
       setHasUnsavedChanges(false);
       toast.success('Layout saved successfully');
     } catch (error: any) {
@@ -345,6 +518,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
           pvArrays={pvArrays}
           onOpenLoadLayout={() => setIsLoadLayoutModalOpen(true)}
           onOpenPVConfig={() => setIsPVConfigModalOpen(true)}
+          onOpenLayoutManager={() => setIsLayoutManagerOpen(true)}
           onUndo={handleUndo}
           onRedo={handleRedo}
           onSave={handleSave}
@@ -355,6 +529,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
           placementRotation={placementRotation}
           setPlacementRotation={setPlacementRotation}
           layoutLoaded={!!backgroundImage}
+          currentLayoutName={currentLayoutName}
         />
       )}
       
@@ -402,6 +577,18 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
             onClose={() => setIsLoadLayoutModalOpen(false)}
             onImageLoad={handleImageLoad}
             projectCoordinates={projectCoordinates}
+          />
+          
+          <LayoutManagerModal
+            isOpen={isLayoutManagerOpen}
+            onClose={() => setIsLayoutManagerOpen(false)}
+            projectId={projectId}
+            currentLayoutId={layoutId}
+            hasUnsavedChanges={hasUnsavedChanges}
+            onLoadLayout={loadLayout}
+            onCreateLayout={createLayout}
+            onRenameLayout={renameLayout}
+            onDeleteLayout={deleteLayout}
           />
           
           <ScaleModal
