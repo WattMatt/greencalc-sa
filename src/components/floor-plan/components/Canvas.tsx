@@ -54,9 +54,14 @@ export function Canvas({
     const container = containerRef.current;
     if (!container) return;
     
+    // Set initial size immediately
+    const rect = container.getBoundingClientRect();
+    setContainerSize({ width: rect.width, height: rect.height });
+    
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
+        console.log('[Canvas ResizeObserver] Container resized:', { width, height });
         setContainerSize({ width, height });
       }
     });
@@ -87,7 +92,8 @@ export function Canvas({
     const container = containerRef.current;
     if (!canvas || !container) return;
     
-  // Use containerSize state directly for proper reactivity when panels collapse/expand
+    console.log('[Canvas Draw Effect] Setting canvas size:', containerSize);
+    // Use containerSize state directly for proper reactivity when panels collapse/expand
     canvas.width = containerSize.width;
     canvas.height = containerSize.height;
     
