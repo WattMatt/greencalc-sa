@@ -87,10 +87,9 @@ export function Canvas({
     const container = containerRef.current;
     if (!canvas || !container) return;
     
-    // Set canvas to container size for proper mouse hit detection
-    const rect = container.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+  // Use containerSize state directly for proper reactivity when panels collapse/expand
+    canvas.width = containerSize.width;
+    canvas.height = containerSize.height;
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
