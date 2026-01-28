@@ -1,109 +1,234 @@
 
 
-# Plan: Shift-Key 45-Degree Angle Snapping for Line Drawing
+# Plan: Rename "PV Setup" to "Plant Setup" with Extended Configuration
 
 ## Overview
 
-When drawing lines on the PV Layout canvas (DC cables, AC cables, scale line, or roof mask outlines), holding the Shift key will snap the line segment to the nearest 45-degree angle (0, 45, 90, 135, 180, 225, 270, or 315 degrees).
+Transform the current "PV Setup" section into a comprehensive "Plant Setup" section that allows configuration of multiple types of plant equipment. Each equipment type will support multiple configurations (e.g., different module types across different roof sections, multiple inverter models).
 
-## How It Works
+## Plant Setup Components
 
-When the user holds Shift while moving the mouse:
-1. Calculate the angle from the last point to the current mouse position
-2. Snap to the nearest 45-degree increment
-3. Project the mouse position onto that snapped angle line
+The new Plant Setup section will include:
 
-## Implementation Details
+1. **Solar Modules** - Panel specifications (loaded from Simulation, editable here)
+2. **Inverters** - Inverter specifications (loaded from Simulation, editable here)
+3. **Walkways** - Walkway/maintenance path dimensions
+4. **Cable Trays** - Cable tray width and specifications
 
-### Step 1: Add Snapping Utility Function
-**File:** `src/components/floor-plan/utils/geometry.ts`
+Each component supports **multiple entries** to accommodate different equipment across the plant.
 
-Add a new function that takes two points (anchor and target) and returns a snapped point:
+---
+
+## Technical Implementation
+
+### Step 1: Extend Types
+**File:** `src/components/floor-plan/types.ts`
+
+Add new types for plant equipment:
 
 ```typescript
-/**
- * Snap a point to the nearest 45-degree angle from an anchor point
- */
-export const snapTo45Degrees = (anchor: Point, target: Point): Point => {
-  const dx = target.x - anchor.x;
-  const dy = target.y - anchor.y;
-  const distance = Math.hypot(dx, dy);
+export interface SolarModuleConfig {
+  id: string;
+  name: string;
+  width: number;      // meters
+  length: number;     // meters
+  wattage: number;    // Wp
+  isDefault?: boolean;
+}
+
+export interface InverterLayoutConfig {
+  id: string;
+  name: string;
+  acCapacity: number; // kW
+  count: number;
+  isDefault?: boolean;
+}
+
+export interface WalkwayConfig {
+  id: string;
+  name: string;
+  width: number;      // meters (default 0.6m)
+}
+
+export interface CableTrayConfig {
+  id: string;
+  name: string;
+  width: number;      // meters (default 0.3m)
+}
+
+export interface PlantSetupConfig {
+  solarModules: SolarModuleConfig[];
+  inverters: InverterLayoutConfig[];
+  walkways: WalkwayConfig[];
+  cableTrays: CableTrayConfig[];
+}
+```
+
+### Step 2: Create Plant Setup Modal
+**File:** `src/components/floor-plan/components/PlantSetupModal.tsx` (NEW)
+
+A comprehensive modal with tabs for each equipment type:
+
+```text
++----------------------------------------------+
+|   Plant Setup                            [X] |
++----------------------------------------------+
+| [Solar Modules] [Inverters] [Walkways] [Cable]|
++----------------------------------------------+
+| Solar Modules                                 |
+| +-----------------------------------------+  |
+| | JA Solar 545W (Default)      [Edit][Del]|  |
+| | 1.134m x 2.278m | 545 Wp                |  |
+| +-----------------------------------------+  |
+| [+ Add Module]                               |
++----------------------------------------------+
+|              [Apply]  [Cancel]               |
++----------------------------------------------+
+```
+
+Features:
+- **Tabs**: Solar Modules, Inverters, Walkways, Cable Trays
+- **List View**: Shows configured items with edit/delete actions
+- **Add New**: Button to add additional configurations
+- **Default Marker**: First item marked as default for array placement
+- **Sync from Simulation**: Button to reload values from Simulation tab
+
+### Step 3: Update Toolbar
+**File:** `src/components/floor-plan/components/Toolbar.tsx`
+
+Changes:
+- Rename section from "PV Setup" to "Plant Setup"
+- Replace single "View Panel Config" button with "Configure Plant"
+- Show summary badges for each configured type
+
+```tsx
+<CollapsibleSection 
+  title="Plant Setup"
+  isOpen={openSections.plantSetup}
+  onToggle={() => toggleSection('plantSetup')}
+>
+  <Button onClick={onOpenPlantSetup}>
+    <Settings className="h-4 w-4 mr-2" />
+    <span className="text-xs">Configure Plant</span>
+  </Button>
+  {/* Summary badges */}
+  <div className="flex flex-wrap gap-1 px-1 mt-1">
+    <Badge variant="outline" className="text-[10px]">
+      {plantSetup.solarModules.length} Modules
+    </Badge>
+    <Badge variant="outline" className="text-[10px]">
+      {plantSetup.inverters.length} Inverters
+    </Badge>
+  </div>
+</CollapsibleSection>
+```
+
+### Step 4: Update FloorPlanMarkup State
+**File:** `src/components/floor-plan/FloorPlanMarkup.tsx`
+
+Add state for plant setup:
+
+```typescript
+const [plantSetupConfig, setPlantSetupConfig] = useState<PlantSetupConfig>({
+  solarModules: [],
+  inverters: [],
+  walkways: [{ id: 'default', name: 'Standard', width: 0.6 }],
+  cableTrays: [{ id: 'default', name: 'Standard', width: 0.3 }],
+});
+```
+
+Load from simulation on mount:
+
+```typescript
+// In the existing useEffect that loads project data
+if (simData?.results_json?.inverterConfig) {
+  const inverterConfig = simData.results_json.inverterConfig;
   
-  if (distance === 0) return target;
+  // Sync solar module
+  const module = getModulePresetById(inverterConfig.selectedModuleId) 
+    || inverterConfig.customModule 
+    || getDefaultModulePreset();
   
-  // Get angle in radians, then convert to degrees
-  const angleRad = Math.atan2(dy, dx);
-  const angleDeg = angleRad * (180 / Math.PI);
-  
-  // Snap to nearest 45-degree increment
-  const snappedDeg = Math.round(angleDeg / 45) * 45;
-  const snappedRad = snappedDeg * (Math.PI / 180);
-  
-  // Return point at same distance but snapped angle
-  return {
-    x: anchor.x + distance * Math.cos(snappedRad),
-    y: anchor.y + distance * Math.sin(snappedRad),
-  };
+  setPlantSetupConfig(prev => ({
+    ...prev,
+    solarModules: [{
+      id: 'sim-module',
+      name: module.name,
+      width: module.width_m,
+      length: module.length_m,
+      wattage: module.power_wp,
+      isDefault: true,
+    }],
+    inverters: [{
+      id: 'sim-inverter',
+      name: `${inverterConfig.inverterSize}kW Inverter`,
+      acCapacity: inverterConfig.inverterSize,
+      count: inverterConfig.inverterCount,
+      isDefault: true,
+    }],
+  }));
+}
+```
+
+### Step 5: Persist in Layout Data
+**File:** `src/components/floor-plan/FloorPlanMarkup.tsx`
+
+Update save/load to include plant setup:
+
+```typescript
+// In handleSave
+const layoutData = {
+  // ...existing fields
+  plant_setup: plantSetupConfig,
 };
+
+// In loadLayout
+if (data.plant_setup) {
+  setPlantSetupConfig(data.plant_setup as PlantSetupConfig);
+}
 ```
 
-### Step 2: Track Shift Key State in Canvas
-**File:** `src/components/floor-plan/components/Canvas.tsx`
+---
 
-Add state and keyboard event listeners to track when Shift is held:
+## Files to Create/Modify
 
-```typescript
-const [isShiftHeld, setIsShiftHeld] = useState(false);
+| File | Action | Changes |
+|------|--------|---------|
+| `src/components/floor-plan/types.ts` | Modify | Add PlantSetupConfig and related interfaces |
+| `src/components/floor-plan/components/PlantSetupModal.tsx` | Create | New modal with tabbed interface for plant configuration |
+| `src/components/floor-plan/components/Toolbar.tsx` | Modify | Rename section, update button, add summary badges |
+| `src/components/floor-plan/FloorPlanMarkup.tsx` | Modify | Add state, load from simulation, pass props |
+| `src/components/floor-plan/constants.ts` | Modify | Add default walkway/cable tray dimensions |
 
-useEffect(() => {
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Shift') setIsShiftHeld(true);
-  };
-  const handleKeyUp = (e: KeyboardEvent) => {
-    if (e.key === 'Shift') setIsShiftHeld(false);
-  };
-  
-  window.addEventListener('keydown', handleKeyDown);
-  window.addEventListener('keyup', handleKeyUp);
-  
-  return () => {
-    window.removeEventListener('keydown', handleKeyDown);
-    window.removeEventListener('keyup', handleKeyUp);
-  };
-}, []);
-```
-
-### Step 3: Apply Snapping in Mouse Handlers
-**File:** `src/components/floor-plan/components/Canvas.tsx`
-
-Modify `handleMouseMove` and `handleMouseDown` to apply snapping when Shift is held:
-
-**In `handleMouseMove`:**
-- For line drawing preview: snap `previewPoint` relative to the last point in `currentDrawing`
-- For scale line: snap `scaleLine.end` relative to `scaleLine.start`
-
-**In `handleMouseDown`:**
-- When adding a new point to `currentDrawing`, snap it if Shift is held
-
-### Affected Tools
-
-The snapping will apply to:
-- `Tool.LINE_DC` - DC cable drawing
-- `Tool.LINE_AC` - AC cable drawing  
-- `Tool.ROOF_MASK` - Roof mask polygon drawing
-- `Tool.SCALE` - Scale reference line
-
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/components/floor-plan/utils/geometry.ts` | Add `snapTo45Degrees` utility function |
-| `src/components/floor-plan/components/Canvas.tsx` | Add Shift key tracking and apply snapping logic to mouse handlers |
+---
 
 ## User Experience
 
-- **No Shift held**: Lines draw freely following the cursor
-- **Shift held**: Lines snap to 0, 45, 90, 135, 180, 225, 270, or 315 degree angles
-- Visual feedback is immediate through the preview line
-- Works consistently across all line-drawing tools
+1. **Initial State**: Plant Setup auto-loads Solar Module and Inverter settings from the Simulation tab
+2. **Editing**: Users can override values locally for the layout tool without affecting the Simulation
+3. **Multiple Configs**: Users can add additional modules/inverters for complex sites with mixed equipment
+4. **Walkways/Cable Trays**: Pre-configured with industry-standard defaults (0.6m walkway, 0.3m cable tray)
+5. **Visual Feedback**: Toolbar shows count badges for each configured equipment type
+
+---
+
+## Data Flow
+
+```text
+Simulation Tab (Source of Truth)
+         |
+         v
+    On Layout Load
+         |
+         v
+  Plant Setup Config (Local State)
+    - Editable in modal
+    - Persisted per layout
+         |
+         v
+  Canvas Drawing Tools
+    - Use active module for PV arrays
+    - Use walkway width for walkway tool (future)
+    - Use cable tray width for tray tool (future)
+```
 
