@@ -1,184 +1,274 @@
 
-# Plan: Auto-populate PV Panel Configuration from Simulation
+
+# Plan: Layout Manager for PV Layouts
 
 ## Overview
 
-Replace the manual PV Panel Configuration dialog in the PV Layout tool with an auto-populated configuration that reads the solar module settings from the Simulation tab. The user has already configured panel dimensions and wattage in the Simulation page, so the PV Layout should use those values automatically.
+Add a Layout Manager interface that allows users to create, view, switch between, rename, duplicate, and delete multiple PV layouts per project. This transforms the current single-layout system into a multi-layout file management system.
 
 ## Current State
 
-**PV Layout Tool:**
-- Has a "Panel Config" button that opens `PVConfigModal`
-- Allows manual entry of Width (m), Length (m), and Wattage (Wp)
-- Uses `DEFAULT_PV_PANEL_CONFIG` as fallback (1.134m × 2.278m, 550W)
+- `pv_layouts` table supports multiple layouts per project (has `name` column)
+- Current code only loads the most recent layout (`LIMIT 1`)
+- All saves use hardcoded name "Default Layout"
+- No UI to manage multiple layouts
 
-**Simulation Tab:**
-- Stores `inverterConfig` in `project_simulations.results_json`
-- Contains `selectedModuleId` (preset ID or "custom")
-- Contains `customModule` object with `width_m`, `length_m`, `power_wp`, etc.
+## Proposed Solution
 
-## Solution
+Add a **Layout Manager Panel** accessible from the Toolbar that provides file-browser-like functionality for layouts.
 
-Fetch the latest simulation's `inverterConfig` on mount and use it to populate the `pvPanelConfig` state automatically. The dialog changes from a manual entry form to an **informational display** showing the current configuration sourced from the Simulation tab.
-
-## Data Flow
+## Architecture
 
 ```text
-project_simulations table
-         |
-         v
-   results_json.inverterConfig
-         |
-         +-- selectedModuleId (preset or "custom")
-         +-- customModule (if custom)
-         |
-         v
-   [Resolve module from presets or custom]
-         |
-         v
-   PVPanelConfig {
-     width: module.width_m,
-     length: module.length_m,
-     wattage: module.power_wp
-   }
-         |
-         v
-   FloorPlanMarkup (pvPanelConfig state)
-         |
-         v
-   Canvas (panel rendering)
+Toolbar
+   |
+   +-- [Layouts] button --> Opens LayoutManagerModal
+                                     |
+                                     v
+                           +-------------------+
+                           | Layout Manager    |
+                           +-------------------+
+                           | - List of layouts |
+                           | - Create new      |
+                           | - Load/Switch     |
+                           | - Rename          |
+                           | - Duplicate       |
+                           | - Delete          |
+                           +-------------------+
+```
+
+## UI Design
+
+### Layout Manager Modal
+
+```text
++-----------------------------------------------------------+
+|  Layouts                                             [X]  |
++-----------------------------------------------------------+
+|                                                           |
+|  [+ New Layout]                            [Search...]    |
+|                                                           |
+|  +-------------------------------------------------------+|
+|  | Name               | Modified         | Actions       ||
+|  +-------------------------------------------------------+|
+|  | * Default Layout   | Today 10:30 AM   | [Edit][...v] ||
+|  | Rooftop Option A   | Yesterday        | [Load][...v] ||
+|  | Carport Design     | Jan 25, 2026     | [Load][...v] ||
+|  +-------------------------------------------------------+|
+|                                                           |
+|  * indicates currently loaded layout                      |
+|                                                           |
++-----------------------------------------------------------+
+```
+
+### Actions Dropdown Menu
+
+- **Load** - Switch to this layout
+- **Rename** - Change layout name
+- **Duplicate** - Create a copy
+- **Delete** - Remove layout (with confirmation)
+
+### New Layout Dialog
+
+```text
++-------------------------------------------+
+|  Create New Layout                   [X]  |
++-------------------------------------------+
+|                                           |
+|  Name: [________________________]         |
+|                                           |
+|  Start from:                              |
+|  ( ) Blank layout                         |
+|  (*) Copy current layout                  |
+|                                           |
+|  [Cancel]                    [Create]     |
+|                                           |
++-------------------------------------------+
 ```
 
 ## File Changes
 
-### 1. Modify `src/components/floor-plan/FloorPlanMarkup.tsx`
+### 1. Create `src/components/floor-plan/components/LayoutManagerModal.tsx` (NEW)
 
-Add logic to fetch the latest simulation's module configuration:
+Main layout management interface with:
+- List of all layouts for the current project
+- Create, rename, duplicate, delete functionality
+- Load/switch between layouts
+- Visual indicator for currently active layout
+- Timestamps showing when each layout was last modified
 
-- On mount, fetch from `project_simulations` table
-- Extract `inverterConfig` from `results_json`
-- Resolve the module (either from presets or custom module)
-- Convert to `PVPanelConfig` format and set state
-- If no simulation exists, use `DEFAULT_PV_PANEL_CONFIG`
+### 2. Modify `src/components/floor-plan/components/Toolbar.tsx`
 
-**Changes:**
-- Add fetch for `project_simulations.results_json`
-- Import `getModulePresetById` and `getDefaultModulePreset` from `SolarModulePresets.ts`
-- Populate `pvPanelConfig` from simulation data on initial load
-- Remove the ability to manually override (or make it read-only display)
+Add:
+- "Layouts" button that opens the LayoutManagerModal
+- Display current layout name in the header
+- Unsaved changes indicator per layout
 
-### 2. Modify `src/components/floor-plan/components/PVConfigModal.tsx`
+### 3. Modify `src/components/floor-plan/FloorPlanMarkup.tsx`
 
-Transform from an editable form to an **informational display**:
+Changes:
+- Add `currentLayoutName` state
+- Add `isLayoutManagerOpen` state
+- Modify load logic to accept a specific layout ID
+- Add functions: `loadLayout(id)`, `createLayout(name, copyFrom?)`, `renameLayout(id, name)`, `duplicateLayout(id)`, `deleteLayout(id)`
+- Update save to use the current layout's actual name (not hardcoded "Default Layout")
 
-- Show the current panel configuration (Width, Length, Wattage, Area, Power Density)
-- Display the module name/source (e.g., "Custom Module" or "JA Solar 545W")
-- Add a note directing users to the Simulation tab if they need to change values
-- Change the action button from "Save Configuration" to "Close" or "OK"
+### 4. Minor: Update types if needed
 
-**UI Design:**
-```text
-+-----------------------------------------------------------+
-|  PV Panel Configuration                              [X]  |
-+-----------------------------------------------------------+
-|                                                           |
-|  Module: Custom Module                                    |
-|  Source: Simulation Tab Configuration                     |
-|                                                           |
-|  +-------------------------+  +-------------------------+ |
-|  |  Width                  |  |  Length                 | |
-|  |  1.134 m                |  |  2.278 m                | |
-|  +-------------------------+  +-------------------------+ |
-|                                                           |
-|  +-------------------------+                              |
-|  |  Wattage                |                              |
-|  |  615 Wp                 |                              |
-|  +-------------------------+                              |
-|                                                           |
-|  +-------------------------------------------------------+|
-|  |  Panel Area: 2.583 m²                                 ||
-|  |  Power Density: 238.1 W/m²                            ||
-|  +-------------------------------------------------------+|
-|                                                           |
-|  [Info icon] To change panel specs, go to the Simulation  |
-|  tab and update the Solar Module configuration.          |
-|                                                           |
-|                                        [ OK ]             |
-|                                                           |
-+-----------------------------------------------------------+
-```
+Add any new types for layout metadata display.
 
-### 3. Update `src/components/floor-plan/components/Toolbar.tsx`
+## Technical Implementation
 
-- Update the "Panel Config" button to show "View Panel Config" or keep as is
-- The button now opens an informational modal instead of an edit modal
-- Could add a badge/indicator showing the currently loaded module name
-
-## Technical Details
-
-### Fetching Simulation Config (in FloorPlanMarkup.tsx)
+### Fetching All Layouts
 
 ```typescript
-// In the existing useEffect that loads layout
-const { data: simData } = await supabase
-  .from('project_simulations')
-  .select('results_json')
+const { data: layouts } = await supabase
+  .from('pv_layouts')
+  .select('id, name, created_at, updated_at')
   .eq('project_id', projectId)
-  .order('updated_at', { ascending: false })
-  .limit(1)
-  .maybeSingle();
-
-if (simData?.results_json) {
-  const resultsJson = simData.results_json as any;
-  const inverterConfig = resultsJson.inverterConfig;
-  
-  if (inverterConfig) {
-    let module: SolarModulePreset;
-    
-    if (inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule) {
-      module = inverterConfig.customModule;
-    } else {
-      module = getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
-    }
-    
-    setPvPanelConfig({
-      width: module.width_m,
-      length: module.length_m,
-      wattage: module.power_wp,
-    });
-  }
-}
+  .order('updated_at', { ascending: false });
 ```
 
-### Updated PVConfigModal Props
+### Creating a New Layout
 
 ```typescript
-interface PVConfigModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  currentConfig: PVPanelConfig | null;
-  moduleName?: string;  // New: display module name
-}
+const createLayout = async (name: string, copyFromId?: string) => {
+  let layoutData = {
+    project_id: projectId,
+    name,
+    scale_pixels_per_meter: null,
+    pv_config: DEFAULT_PV_PANEL_CONFIG,
+    roof_masks: [],
+    pv_arrays: [],
+    equipment: [],
+    cables: [],
+    pdf_data: null,
+  };
+
+  if (copyFromId) {
+    // Fetch the source layout and copy its data
+    const { data: source } = await supabase
+      .from('pv_layouts')
+      .select('*')
+      .eq('id', copyFromId)
+      .single();
+    
+    if (source) {
+      layoutData = {
+        ...layoutData,
+        scale_pixels_per_meter: source.scale_pixels_per_meter,
+        pv_config: source.pv_config,
+        roof_masks: source.roof_masks,
+        pv_arrays: source.pv_arrays,
+        equipment: source.equipment,
+        cables: source.cables,
+        pdf_data: source.pdf_data,
+      };
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('pv_layouts')
+    .insert(layoutData)
+    .select()
+    .single();
+
+  if (!error && data) {
+    await loadLayout(data.id);
+  }
+};
 ```
 
-## Edge Cases
+### Loading a Specific Layout
 
-1. **No simulation exists**: Fall back to `DEFAULT_PV_PANEL_CONFIG`
-2. **Invalid module ID**: Use `getDefaultModulePreset()` as fallback
-3. **Layout already has saved `pv_config`**: Prefer simulation config (fresh source of truth)
-4. **User navigates between tabs**: Reload config when tab becomes active (optional enhancement)
+```typescript
+const loadLayout = async (layoutIdToLoad: string) => {
+  const { data, error } = await supabase
+    .from('pv_layouts')
+    .select('*')
+    .eq('id', layoutIdToLoad)
+    .single();
 
-## Benefits
+  if (!error && data) {
+    setLayoutId(data.id);
+    setCurrentLayoutName(data.name);
+    // ... restore all other state from data
+  }
+};
+```
 
-1. **Single source of truth**: Panel specs are defined once in Simulation, used everywhere
-2. **Reduced user friction**: No need to re-enter the same data in multiple places
-3. **Consistency**: PV Layout panels match exactly what was configured in simulation
-4. **Clear data flow**: Users understand that Simulation is the master configuration
+### Renaming a Layout
+
+```typescript
+const renameLayout = async (id: string, newName: string) => {
+  await supabase
+    .from('pv_layouts')
+    .update({ name: newName })
+    .eq('id', id);
+  
+  if (id === layoutId) {
+    setCurrentLayoutName(newName);
+  }
+};
+```
+
+### Deleting a Layout
+
+```typescript
+const deleteLayout = async (id: string) => {
+  await supabase
+    .from('pv_layouts')
+    .delete()
+    .eq('id', id);
+  
+  // If deleted the current layout, load another or create blank
+  if (id === layoutId) {
+    const { data: remaining } = await supabase
+      .from('pv_layouts')
+      .select('id')
+      .eq('project_id', projectId)
+      .limit(1)
+      .maybeSingle();
+    
+    if (remaining) {
+      await loadLayout(remaining.id);
+    } else {
+      // Reset to blank state
+      resetToBlankLayout();
+    }
+  }
+};
+```
+
+## Toolbar Update
+
+```text
++--------------------------------------------------+
+| PV Layout Tool                                   |
+| Main Layout ▼         12 panels | 6.6 kWp        |
++--------------------------------------------------+
+| [Layouts] [Load Layout]                          |
++--------------------------------------------------+
+```
+
+The header area will show:
+- Current layout name (clickable dropdown or button to open manager)
+- Quick stats remain visible
 
 ## Implementation Steps
 
-1. Update `FloorPlanMarkup.tsx` to fetch simulation config on mount
-2. Refactor `PVConfigModal.tsx` to be informational (read-only)
-3. Update Toolbar button text/behavior if needed
-4. Test with both preset modules and custom modules
-5. Test fallback when no simulation exists
+1. Create `LayoutManagerModal.tsx` with full CRUD UI
+2. Add state and handler functions to `FloorPlanMarkup.tsx`
+3. Update `Toolbar.tsx` with Layouts button and current name display
+4. Update save logic to use actual layout name
+5. Add confirmation dialogs for destructive actions (delete, switch with unsaved changes)
+6. Test all operations: create, load, rename, duplicate, delete
+
+## Edge Cases
+
+1. **Unsaved changes when switching**: Prompt to save or discard
+2. **Delete current layout**: Load another or reset to blank
+3. **Only one layout exists**: Prevent deletion (or allow with warning)
+4. **Duplicate names**: Allow (use timestamps to distinguish) or enforce uniqueness
+5. **Empty project**: Start with one "Default Layout" auto-created
+
