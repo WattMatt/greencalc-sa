@@ -10,23 +10,27 @@ import { RoofMaskModal } from './components/RoofMaskModal';
 import { PVArrayModal, PVArrayConfig } from './components/PVArrayModal';
 import { LoadLayoutModal } from './components/LoadLayoutModal';
 import { LayoutManagerModal } from './components/LayoutManagerModal';
+import { LayoutBrowser } from './components/LayoutBrowser';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { getModulePresetById, getDefaultModulePreset, SolarModulePreset } from '../projects/SolarModulePresets';
+
+type ViewMode = 'browser' | 'editor';
 
 interface FloorPlanMarkupProps {
   projectId: string;
 }
 
 export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkupProps & { readOnly?: boolean }) {
+  const [viewMode, setViewMode] = useState<ViewMode>('browser');
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<Tool>(Tool.PAN);
   const [viewState, setViewState] = useState<ViewState>({ zoom: 1, offset: { x: 0, y: 0 } });
   const [layoutId, setLayoutId] = useState<string | null>(null);
   const [currentLayoutName, setCurrentLayoutName] = useState<string>('Default Layout');
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isLoadLayoutModalOpen, setIsLoadLayoutModalOpen] = useState(false);
   const [isLayoutManagerOpen, setIsLayoutManagerOpen] = useState(false);
@@ -251,10 +255,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
     }
   }, [layoutId, projectId, loadLayout, resetToBlankLayout]);
 
-  // Load saved layout and project coordinates on mount
+  // Load project coordinates on mount (but NOT layouts - stay in browser mode)
   useEffect(() => {
-    const loadLayoutAndCoordinates = async () => {
-      setIsLoading(true);
+    const loadProjectData = async () => {
       try {
         // Fetch project coordinates
         const { data: projectData, error: projectError } = await supabase
@@ -268,47 +271,6 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
             latitude: projectData.latitude,
             longitude: projectData.longitude,
           });
-        }
-        // Fetch layout data
-        const { data, error } = await supabase
-          .from('pv_layouts')
-          .select('*')
-          .eq('project_id', projectId)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (error) throw error;
-
-        if (data) {
-          setLayoutId(data.id);
-          setCurrentLayoutName(data.name);
-          
-          // Restore scale
-          if (data.scale_pixels_per_meter) {
-            setScaleInfo({
-              pixelDistance: null,
-              realDistance: null,
-              ratio: 1 / Number(data.scale_pixels_per_meter)
-            });
-          }
-
-          // Restore design state
-          const loadedState: DesignState = {
-            roofMasks: (data.roof_masks as unknown as RoofMask[]) || [],
-            pvArrays: (data.pv_arrays as unknown as any[]) || [],
-            equipment: (data.equipment as unknown as any[]) || [],
-            lines: (data.cables as unknown as any[]) || [],
-          };
-          setHistory([loadedState]);
-          setHistoryIndex(0);
-
-          // Restore background image (now stored as base64 image directly)
-          if (data.pdf_data) {
-            setBackgroundImage(data.pdf_data);
-          }
-          
-          setHasUnsavedChanges(false);
         }
 
         // Fetch PV panel config from simulation (source of truth)
@@ -361,14 +323,44 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
           setModuleName(defaultModule.name);
         }
       } catch (error) {
-        console.error('Error loading layout:', error);
-      } finally {
-        setIsLoading(false);
+        console.error('Error loading project data:', error);
       }
     };
 
-    loadLayoutAndCoordinates();
+    loadProjectData();
   }, [projectId]);
+
+  // Handler for selecting a layout from the browser
+  const handleSelectLayout = useCallback(async (selectedLayoutId: string) => {
+    setIsLoading(true);
+    try {
+      await loadLayout(selectedLayoutId);
+      setViewMode('editor');
+    } catch (error) {
+      toast.error('Failed to load layout');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadLayout]);
+
+  // Handler for creating a new design
+  const handleNewDesign = useCallback(() => {
+    resetToBlankLayout();
+    setViewMode('editor');
+  }, [resetToBlankLayout]);
+
+  // Handler for loading a PDF from the browser (opens modal then switches to editor)
+  const handleLoadPDFFromBrowser = useCallback(() => {
+    resetToBlankLayout();
+    setViewMode('editor');
+    // Small delay to ensure state is updated before opening modal
+    setTimeout(() => setIsLoadLayoutModalOpen(true), 100);
+  }, [resetToBlankLayout]);
+
+  // Handler for duplicating a layout
+  const handleDuplicateLayout = useCallback(async (id: string, name: string) => {
+    await createLayout(name, id);
+  }, [createLayout]);
 
   // Save layout to database
   const handleSave = async () => {
@@ -501,6 +493,21 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
     toast.info('Click on a roof mask to place the array');
   };
 
+  // Show browser view first (unless in readOnly mode)
+  if (viewMode === 'browser' && !readOnly) {
+    return (
+      <LayoutBrowser
+        projectId={projectId}
+        onSelectLayout={handleSelectLayout}
+        onNewDesign={handleNewDesign}
+        onLoadPDF={handleLoadPDFFromBrowser}
+        onRenameLayout={renameLayout}
+        onDeleteLayout={deleteLayout}
+        onDuplicateLayout={handleDuplicateLayout}
+      />
+    );
+  }
+
   return (
     <div className="flex h-[calc(100vh-200px)] min-h-[600px] rounded-lg overflow-hidden border">
       {!readOnly && (
@@ -530,6 +537,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
           setPlacementRotation={setPlacementRotation}
           layoutLoaded={!!backgroundImage}
           currentLayoutName={currentLayoutName}
+          onBackToBrowser={() => setViewMode('browser')}
         />
       )}
       

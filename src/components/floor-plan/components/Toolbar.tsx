@@ -1,6 +1,6 @@
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
-  Download, Upload, Settings, Undo2, Redo2, Save, Loader2, FolderOpen
+  Download, Upload, Settings, Undo2, Redo2, Save, Loader2, FolderOpen, ArrowLeft
 } from 'lucide-react';
 import { Tool, ScaleInfo, PVPanelConfig } from '../types';
 import { Button } from '@/components/ui/button';
@@ -67,6 +67,7 @@ interface ToolbarProps {
   setPlacementRotation: (rotation: number) => void;
   layoutLoaded: boolean;
   currentLayoutName: string;
+  onBackToBrowser?: () => void;
 }
 
 export function Toolbar({
@@ -89,6 +90,7 @@ export function Toolbar({
   setPlacementRotation,
   layoutLoaded,
   currentLayoutName,
+  onBackToBrowser,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -104,6 +106,17 @@ export function Toolbar({
   return (
     <div className="w-52 bg-card border-r flex flex-col h-full">
       <div className="p-3 border-b">
+        {onBackToBrowser && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start mb-2 -ml-1"
+            onClick={onBackToBrowser}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            <span className="text-xs">Back to Designs</span>
+          </Button>
+        )}
         <h2 className="font-semibold text-sm">PV Layout Tool</h2>
         <p className="text-xs text-muted-foreground mt-1 truncate" title={currentLayoutName}>
           {currentLayoutName}
