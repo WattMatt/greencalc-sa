@@ -40,6 +40,7 @@ export function LoadLayoutModal({
   const [mapReady, setMapReady] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markerRef = useRef<mapboxgl.Marker | null>(null);
 
   // Fetch Mapbox token
   useEffect(() => {
@@ -101,9 +102,10 @@ export function LoadLayoutModal({
         }), 'top-right');
         
         // Add marker for project location
-        new mapboxgl.Marker({ color: '#ef4444' })
+        const marker = new mapboxgl.Marker({ color: '#ef4444' })
           .setLngLat([lng, lat])
           .addTo(map);
+        markerRef.current = marker;
 
         map.on('load', () => {
           setMapReady(true);
@@ -124,6 +126,10 @@ export function LoadLayoutModal({
   // Cleanup map on close
   useEffect(() => {
     if (!isOpen) {
+      if (markerRef.current) {
+        markerRef.current.remove();
+        markerRef.current = null;
+      }
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -182,8 +188,19 @@ export function LoadLayoutModal({
 
     setIsLoading(true);
     try {
-      // Wait for map to be fully rendered
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Hide marker before capture
+      if (markerRef.current) {
+        markerRef.current.getElement().style.display = 'none';
+      }
+      
+      // Hide navigation controls before capture
+      const controls = mapContainerRef.current.querySelector('.mapboxgl-ctrl-top-right');
+      if (controls) {
+        (controls as HTMLElement).style.display = 'none';
+      }
+      
+      // Wait for changes to render
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       const canvas = await html2canvas(mapContainerRef.current, {
         useCORS: true,
@@ -192,11 +209,30 @@ export function LoadLayoutModal({
         logging: false,
       });
 
+      // Restore marker after capture
+      if (markerRef.current) {
+        markerRef.current.getElement().style.display = '';
+      }
+      
+      // Restore navigation controls after capture
+      if (controls) {
+        (controls as HTMLElement).style.display = '';
+      }
+
       const imageBase64 = canvas.toDataURL('image/png');
       onImageLoad(imageBase64);
       onClose();
       toast.success('Satellite view captured successfully');
     } catch (error) {
+      // Restore visibility even on error
+      if (markerRef.current) {
+        markerRef.current.getElement().style.display = '';
+      }
+      const controls = mapContainerRef.current?.querySelector('.mapboxgl-ctrl-top-right');
+      if (controls) {
+        (controls as HTMLElement).style.display = '';
+      }
+      
       console.error('Failed to capture map:', error);
       toast.error('Failed to capture satellite view');
     } finally {
