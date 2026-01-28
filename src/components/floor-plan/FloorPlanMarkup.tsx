@@ -25,6 +25,8 @@ interface FloorPlanMarkupProps {
 export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkupProps & { readOnly?: boolean }) {
   const [viewMode, setViewMode] = useState<ViewMode>('browser');
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false);
+  const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false);
   const [activeTool, setActiveTool] = useState<Tool>(Tool.PAN);
   const [viewState, setViewState] = useState<ViewState>({ zoom: 1, offset: { x: 0, y: 0 } });
   const [layoutId, setLayoutId] = useState<string | null>(null);
@@ -538,6 +540,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
           layoutLoaded={!!backgroundImage}
           currentLayoutName={currentLayoutName}
           onBackToBrowser={() => setViewMode('browser')}
+          isCollapsed={isToolbarCollapsed}
+          onToggleCollapse={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
         />
       )}
       
@@ -576,6 +580,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
         scaleInfo={scaleInfo}
         selectedItemId={selectedItemId}
         onSelectItem={setSelectedItemId}
+        isCollapsed={isSummaryCollapsed}
+        onToggleCollapse={() => setIsSummaryCollapsed(!isSummaryCollapsed)}
       />
 
       {!readOnly && (

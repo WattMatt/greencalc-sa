@@ -1,6 +1,7 @@
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
-  Download, Upload, Settings, Undo2, Redo2, Save, Loader2, FolderOpen, ArrowLeft
+  Download, Upload, Settings, Undo2, Redo2, Save, Loader2, FolderOpen, ArrowLeft,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Tool, ScaleInfo, PVPanelConfig } from '../types';
 import { Button } from '@/components/ui/button';
@@ -68,6 +69,8 @@ interface ToolbarProps {
   layoutLoaded: boolean;
   currentLayoutName: string;
   onBackToBrowser?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function Toolbar({
@@ -91,6 +94,8 @@ export function Toolbar({
   layoutLoaded,
   currentLayoutName,
   onBackToBrowser,
+  isCollapsed,
+  onToggleCollapse,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -103,30 +108,67 @@ export function Toolbar({
     setPlacementRotation((placementRotation + 45) % 360);
   };
 
+  // Collapsed state - thin strip with expand button
+  if (isCollapsed) {
+    return (
+      <div className="w-10 bg-card border-r flex flex-col items-center py-3 gap-2">
+        <Button variant="ghost" size="icon" onClick={onToggleCollapse} title="Expand toolbar">
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+        <Separator className="my-1 w-6" />
+        <Button variant="ghost" size="icon" onClick={onUndo} disabled={!canUndo} title="Undo">
+          <Undo2 className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" onClick={onRedo} disabled={!canRedo} title="Redo">
+          <Redo2 className="h-4 w-4" />
+        </Button>
+        <div className="flex-1" />
+        <Button
+          variant={hasUnsavedChanges ? 'default' : 'ghost'}
+          size="icon"
+          onClick={onSave}
+          disabled={isSaving}
+          title="Save"
+        >
+          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="w-52 bg-card border-r flex flex-col h-full">
       <div className="p-3 border-b">
-        {onBackToBrowser && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start mb-2 -ml-1"
-            onClick={onBackToBrowser}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            <span className="text-xs">Back to Designs</span>
-          </Button>
-        )}
-        <h2 className="font-semibold text-sm">PV Layout Tool</h2>
-        <p className="text-xs text-muted-foreground mt-1 truncate" title={currentLayoutName}>
-          {currentLayoutName}
-          {hasUnsavedChanges && <span className="text-primary ml-1">•</span>}
-        </p>
-        {pvConfigured && panelCount > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {panelCount} panels • {capacityKwp.toFixed(1)} kWp
-          </p>
-        )}
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            {onBackToBrowser && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start mb-2 -ml-1"
+                onClick={onBackToBrowser}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                <span className="text-xs">Back to Designs</span>
+              </Button>
+            )}
+            <h2 className="font-semibold text-sm">PV Layout Tool</h2>
+            <p className="text-xs text-muted-foreground mt-1 truncate" title={currentLayoutName}>
+              {currentLayoutName}
+              {hasUnsavedChanges && <span className="text-primary ml-1">•</span>}
+            </p>
+            {pvConfigured && panelCount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {panelCount} panels • {capacityKwp.toFixed(1)} kWp
+              </p>
+            )}
+          </div>
+          {onToggleCollapse && (
+            <Button variant="ghost" size="icon" className="h-6 w-6 -mr-1" onClick={onToggleCollapse} title="Collapse toolbar">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
