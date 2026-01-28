@@ -1,113 +1,109 @@
 
 
-# Plan: Complete Folder Management Features for PV Layout Browser
+# Plan: Shift-Key 45-Degree Angle Snapping for Line Drawing
 
-## Current State Analysis
+## Overview
 
-The LayoutBrowser currently has:
-- Folder creation (New Folder button opens a dialog)
-- Folder rename/delete (only visible when "Manage Folders" mode is active)
-- Multi-select mode with batch move functionality
+When drawing lines on the PV Layout canvas (DC cables, AC cables, scale line, or roof mask outlines), holding the Shift key will snap the line segment to the nearest 45-degree angle (0, 45, 90, 135, 180, 225, 270, or 315 degrees).
 
-## Missing Features to Implement
+## How It Works
 
-Based on the "Full implementation" scope you approved earlier, the following features are missing:
-
-### 1. Move Single Layout to Folder (via Dropdown Menu)
-Currently, the 3-dot menu on each layout card only shows: Rename, Duplicate, Delete.
-
-**Add:** "Move to Folder" option that opens a folder selection submenu or dialog.
-
-### 2. Drag-and-Drop Between Folders
-Allow users to drag layout cards and drop them into folder accordion headers to move them.
-
-### 3. Improved "Manage Folders" UX
-Make it clearer when manage folders mode is active - potentially highlight folders or show a toolbar.
-
----
+When the user holds Shift while moving the mouse:
+1. Calculate the angle from the last point to the current mouse position
+2. Snap to the nearest 45-degree increment
+3. Project the mouse position onto that snapped angle line
 
 ## Implementation Details
 
-### Step 1: Add "Move to Folder" in Layout Dropdown Menu
-**File:** `src/components/floor-plan/components/LayoutBrowser.tsx`
+### Step 1: Add Snapping Utility Function
+**File:** `src/components/floor-plan/utils/geometry.ts`
 
-Update the `DesignCard` component's dropdown menu to include a "Move to..." option with a submenu listing all available folders.
+Add a new function that takes two points (anchor and target) and returns a snapped point:
 
-```text
-DropdownMenu
-  Rename
-  Duplicate
-  Move to... (submenu)
-    - Uncategorized
-    - Folder A
-    - Folder B
-  ---
-  Delete
-```
-
-### Step 2: Add Drag-and-Drop Support
-**File:** `src/components/floor-plan/components/LayoutBrowser.tsx`
-
-- Add `draggable="true"` to `DesignCard`
-- Add `onDragStart` handler to set the layout ID being dragged
-- Add `onDragOver` and `onDrop` handlers to folder `AccordionItem` headers
-- Implement visual feedback (highlight) when dragging over a valid drop target
-- On drop, update the layout's `folder_id` in Supabase
-
-### Step 3: Improve Manage Folders Mode Visibility
-When "Manage Folders" mode is active:
-- Add a colored banner or highlight to indicate the mode
-- Show the edit/delete icons more prominently on folder rows
-
----
-
-## Technical Implementation
-
-### DesignCard Props Addition
 ```typescript
-interface DesignCardProps {
-  // existing props...
-  onMoveToFolder: (folderId: string | null) => void;
-  folders: LayoutFolder[];
-  onDragStart: (layoutId: string) => void;
-}
-```
-
-### Drag State in Parent Component
-```typescript
-const [draggedLayoutId, setDraggedLayoutId] = useState<string | null>(null);
-```
-
-### Drop Handler on Folder
-```typescript
-const handleDropOnFolder = async (folderId: string | null) => {
-  if (!draggedLayoutId) return;
-  await supabase
-    .from('pv_layouts')
-    .update({ folder_id: folderId })
-    .eq('id', draggedLayoutId);
-  await fetchData();
-  setDraggedLayoutId(null);
-  toast.success('Layout moved');
+/**
+ * Snap a point to the nearest 45-degree angle from an anchor point
+ */
+export const snapTo45Degrees = (anchor: Point, target: Point): Point => {
+  const dx = target.x - anchor.x;
+  const dy = target.y - anchor.y;
+  const distance = Math.hypot(dx, dy);
+  
+  if (distance === 0) return target;
+  
+  // Get angle in radians, then convert to degrees
+  const angleRad = Math.atan2(dy, dx);
+  const angleDeg = angleRad * (180 / Math.PI);
+  
+  // Snap to nearest 45-degree increment
+  const snappedDeg = Math.round(angleDeg / 45) * 45;
+  const snappedRad = snappedDeg * (Math.PI / 180);
+  
+  // Return point at same distance but snapped angle
+  return {
+    x: anchor.x + distance * Math.cos(snappedRad),
+    y: anchor.y + distance * Math.sin(snappedRad),
+  };
 };
 ```
 
----
+### Step 2: Track Shift Key State in Canvas
+**File:** `src/components/floor-plan/components/Canvas.tsx`
+
+Add state and keyboard event listeners to track when Shift is held:
+
+```typescript
+const [isShiftHeld, setIsShiftHeld] = useState(false);
+
+useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Shift') setIsShiftHeld(true);
+  };
+  const handleKeyUp = (e: KeyboardEvent) => {
+    if (e.key === 'Shift') setIsShiftHeld(false);
+  };
+  
+  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('keyup', handleKeyUp);
+  
+  return () => {
+    window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('keyup', handleKeyUp);
+  };
+}, []);
+```
+
+### Step 3: Apply Snapping in Mouse Handlers
+**File:** `src/components/floor-plan/components/Canvas.tsx`
+
+Modify `handleMouseMove` and `handleMouseDown` to apply snapping when Shift is held:
+
+**In `handleMouseMove`:**
+- For line drawing preview: snap `previewPoint` relative to the last point in `currentDrawing`
+- For scale line: snap `scaleLine.end` relative to `scaleLine.start`
+
+**In `handleMouseDown`:**
+- When adding a new point to `currentDrawing`, snap it if Shift is held
+
+### Affected Tools
+
+The snapping will apply to:
+- `Tool.LINE_DC` - DC cable drawing
+- `Tool.LINE_AC` - AC cable drawing  
+- `Tool.ROOF_MASK` - Roof mask polygon drawing
+- `Tool.SCALE` - Scale reference line
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/floor-plan/components/LayoutBrowser.tsx` | Add move-to-folder submenu in dropdown, implement drag-and-drop handlers, improve manage folders mode UI |
+| `src/components/floor-plan/utils/geometry.ts` | Add `snapTo45Degrees` utility function |
+| `src/components/floor-plan/components/Canvas.tsx` | Add Shift key tracking and apply snapping logic to mouse handlers |
 
----
+## User Experience
 
-## Summary
-
-This plan adds:
-1. Single-layout move via dropdown submenu
-2. Drag-and-drop layouts between folders
-3. Enhanced visual feedback for folder management mode
-
-All changes are contained within `LayoutBrowser.tsx` and require no database changes (folder structure already exists).
+- **No Shift held**: Lines draw freely following the cursor
+- **Shift held**: Lines snap to 0, 45, 90, 135, 180, 225, 270, or 315 degree angles
+- Visual feedback is immediate through the preview line
+- Works consistently across all line-drawing tools
 
