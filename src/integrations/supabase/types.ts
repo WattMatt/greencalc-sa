@@ -661,11 +661,50 @@ export type Database = {
         }
         Relationships: []
       }
+      pv_layout_folders: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          name: string
+          project_id: string
+          sort_order: number | null
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          project_id: string
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          project_id?: string
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pv_layout_folders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pv_layouts: {
         Row: {
           cables: Json | null
           created_at: string
           equipment: Json | null
+          folder_id: string | null
           id: string
           name: string
           pdf_data: string | null
@@ -680,6 +719,7 @@ export type Database = {
           cables?: Json | null
           created_at?: string
           equipment?: Json | null
+          folder_id?: string | null
           id?: string
           name?: string
           pdf_data?: string | null
@@ -694,6 +734,7 @@ export type Database = {
           cables?: Json | null
           created_at?: string
           equipment?: Json | null
+          folder_id?: string | null
           id?: string
           name?: string
           pdf_data?: string | null
@@ -705,6 +746,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "pv_layouts_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "pv_layout_folders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pv_layouts_project_id_fkey"
             columns: ["project_id"]
