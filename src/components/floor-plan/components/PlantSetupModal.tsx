@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Plus, Pencil, Trash2, RefreshCw, Sun, Zap, Route, Cable, Star } from 'lucide-react';
@@ -514,64 +513,50 @@ export function PlantSetupModal({
     </div>
   );
 
+  const getTitle = () => {
+    switch (activeTab) {
+      case 'modules': return 'Solar Modules';
+      case 'inverters': return 'Inverters';
+      case 'walkways': return 'Walkways';
+      case 'cableTrays': return 'Cable Trays';
+      default: return 'Plant Setup';
+    }
+  };
+
+  const getIcon = () => {
+    switch (activeTab) {
+      case 'modules': return <Sun className="h-5 w-5 text-amber-500" />;
+      case 'inverters': return <Zap className="h-5 w-5 text-blue-500" />;
+      case 'walkways': return <Route className="h-5 w-5 text-green-500" />;
+      case 'cableTrays': return <Cable className="h-5 w-5 text-orange-500" />;
+      default: return null;
+    }
+  };
+
+  const showSyncButton = activeTab === 'modules' || activeTab === 'inverters';
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            <span>Plant Setup</span>
-            <Button variant="outline" size="sm" onClick={handleSync} className="mr-6">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Sync from Simulation
-            </Button>
+          <DialogTitle className="flex items-center gap-2">
+            {getIcon()}
+            <span>{getTitle()}</span>
+            {showSyncButton && (
+              <Button variant="outline" size="sm" onClick={handleSync} className="ml-auto mr-6">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Sync from Simulation
+              </Button>
+            )}
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="modules" className="text-xs">
-              <Sun className="h-3 w-3 mr-1" />
-              Modules
-              {localConfig.solarModules.length > 0 && (
-                <Badge variant="secondary" className="ml-1 h-4 text-[10px] px-1">
-                  {localConfig.solarModules.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="inverters" className="text-xs">
-              <Zap className="h-3 w-3 mr-1" />
-              Inverters
-              {localConfig.inverters.length > 0 && (
-                <Badge variant="secondary" className="ml-1 h-4 text-[10px] px-1">
-                  {localConfig.inverters.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="walkways" className="text-xs">
-              <Route className="h-3 w-3 mr-1" />
-              Walkways
-            </TabsTrigger>
-            <TabsTrigger value="cableTrays" className="text-xs">
-              <Cable className="h-3 w-3 mr-1" />
-              Trays
-            </TabsTrigger>
-          </TabsList>
-
-          <div className="mt-4 max-h-80 overflow-y-auto">
-            <TabsContent value="modules" className="mt-0">
-              {renderModulesTab()}
-            </TabsContent>
-            <TabsContent value="inverters" className="mt-0">
-              {renderInvertersTab()}
-            </TabsContent>
-            <TabsContent value="walkways" className="mt-0">
-              {renderWalkwaysTab()}
-            </TabsContent>
-            <TabsContent value="cableTrays" className="mt-0">
-              {renderCableTraysTab()}
-            </TabsContent>
-          </div>
-        </Tabs>
+        <div className="max-h-80 overflow-y-auto">
+          {activeTab === 'modules' && renderModulesTab()}
+          {activeTab === 'inverters' && renderInvertersTab()}
+          {activeTab === 'walkways' && renderWalkwaysTab()}
+          {activeTab === 'cableTrays' && renderCableTraysTab()}
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
