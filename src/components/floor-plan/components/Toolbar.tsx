@@ -1,12 +1,14 @@
+import { useState } from 'react';
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
-  Download, Upload, Settings, Undo2, Redo2, Save, Loader2, FolderOpen, ArrowLeft,
-  ChevronLeft, ChevronRight
+  Upload, Settings, Undo2, Redo2, Save, Loader2, FolderOpen, ArrowLeft,
+  ChevronLeft, ChevronRight, ChevronDown
 } from 'lucide-react';
 import { Tool, ScaleInfo, PVPanelConfig } from '../types';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { calculateTotalPVCapacity } from '../utils/geometry';
 import { PVArrayItem } from '../types';
@@ -46,6 +48,31 @@ const ToolButton = ({ icon: Icon, label, isActive, onClick, disabled, badge }: T
       <TooltipContent side="right">{label}</TooltipContent>
     </Tooltip>
   </TooltipProvider>
+);
+
+interface CollapsibleSectionProps {
+  title: string;
+  children: React.ReactNode;
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
+const CollapsibleSection = ({ title, children, isOpen, onToggle }: CollapsibleSectionProps) => (
+  <Collapsible open={isOpen} onOpenChange={onToggle}>
+    <CollapsibleTrigger asChild>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full justify-between px-2 py-1"
+      >
+        <span className="text-xs font-medium text-muted-foreground">{title}</span>
+        <ChevronDown className={cn("h-3 w-3 transition-transform", isOpen && "rotate-180")} />
+      </Button>
+    </CollapsibleTrigger>
+    <CollapsibleContent className="space-y-1 pt-1">
+      {children}
+    </CollapsibleContent>
+  </Collapsible>
 );
 
 interface ToolbarProps {
@@ -104,6 +131,19 @@ export function Toolbar({
     ? calculateTotalPVCapacity(pvArrays, pvPanelConfig!)
     : { panelCount: 0, capacityKwp: 0 };
 
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    file: true,
+    general: true,
+    pvSetup: false,
+    roofArrays: false,
+    cabling: false,
+    equipment: false,
+  });
+
+  const toggleSection = (section: string) => {
+    setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
   const rotateNext = () => {
     setPlacementRotation((placementRotation + 45) % 360);
   };
@@ -141,17 +181,6 @@ export function Toolbar({
       <div className="p-3 border-b">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            {onBackToBrowser && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start mb-2 -ml-1"
-                onClick={onBackToBrowser}
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                <span className="text-xs">Back to Designs</span>
-              </Button>
-            )}
             <h2 className="font-semibold text-sm">PV Layout Tool</h2>
             <p className="text-xs text-muted-foreground mt-1 truncate" title={currentLayoutName}>
               {currentLayoutName}
@@ -172,8 +201,23 @@ export function Toolbar({
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {/* File Actions */}
-        <div className="space-y-1">
+        {/* File Section */}
+        <CollapsibleSection 
+          title="File"
+          isOpen={openSections.file}
+          onToggle={() => toggleSection('file')}
+        >
+          {onBackToBrowser && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start"
+              onClick={onBackToBrowser}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              <span className="text-xs">Back to Designs</span>
+            </Button>
+          )}
           <Button 
             variant="outline" 
             size="sm" 
@@ -192,13 +236,16 @@ export function Toolbar({
             <Upload className="h-4 w-4 mr-2" />
             <span className="text-xs">Load Image</span>
           </Button>
-        </div>
+        </CollapsibleSection>
 
         <Separator className="my-2" />
 
         {/* General Tools */}
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground px-2 py-1">General</p>
+        <CollapsibleSection 
+          title="General"
+          isOpen={openSections.general}
+          onToggle={() => toggleSection('general')}
+        >
           <ToolButton
             icon={MousePointer}
             label="Select"
@@ -219,13 +266,16 @@ export function Toolbar({
             disabled={!layoutLoaded}
             badge={scaleSet ? '✓' : undefined}
           />
-        </div>
+        </CollapsibleSection>
 
         <Separator className="my-2" />
 
-        {/* PV Configuration */}
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground px-2 py-1">PV Setup</p>
+        {/* PV Setup */}
+        <CollapsibleSection 
+          title="PV Setup"
+          isOpen={openSections.pvSetup}
+          onToggle={() => toggleSection('pvSetup')}
+        >
           <Button
             variant="outline"
             size="sm"
@@ -240,13 +290,16 @@ export function Toolbar({
               </span>
             )}
           </Button>
-        </div>
+        </CollapsibleSection>
 
         <Separator className="my-2" />
 
-        {/* PV Tools */}
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground px-2 py-1">Roof & Arrays</p>
+        {/* Roof & Arrays */}
+        <CollapsibleSection 
+          title="Roof & Arrays"
+          isOpen={openSections.roofArrays}
+          onToggle={() => toggleSection('roofArrays')}
+        >
           <ToolButton
             icon={Layers}
             label="Draw Roof Mask"
@@ -261,13 +314,16 @@ export function Toolbar({
             onClick={() => setActiveTool(Tool.PV_ARRAY)}
             disabled={!scaleSet || !pvConfigured}
           />
-        </div>
+        </CollapsibleSection>
 
         <Separator className="my-2" />
 
-        {/* Lines */}
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground px-2 py-1">Cabling</p>
+        {/* Cabling */}
+        <CollapsibleSection 
+          title="Cabling"
+          isOpen={openSections.cabling}
+          onToggle={() => toggleSection('cabling')}
+        >
           <ToolButton
             icon={() => <div className="w-4 h-0.5 bg-orange-500 rounded" />}
             label="DC Cable"
@@ -282,13 +338,16 @@ export function Toolbar({
             onClick={() => setActiveTool(Tool.LINE_AC)}
             disabled={!scaleSet}
           />
-        </div>
+        </CollapsibleSection>
 
         <Separator className="my-2" />
 
         {/* Equipment */}
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground px-2 py-1">Equipment</p>
+        <CollapsibleSection 
+          title="Equipment"
+          isOpen={openSections.equipment}
+          onToggle={() => toggleSection('equipment')}
+        >
           <ToolButton
             icon={() => <span className="text-xs font-mono">~=</span>}
             label="Inverter"
@@ -317,7 +376,7 @@ export function Toolbar({
             onClick={() => setActiveTool(Tool.PLACE_MAIN_BOARD)}
             disabled={!scaleSet}
           />
-        </div>
+        </CollapsibleSection>
 
         {/* Rotation control for equipment placement */}
         {[Tool.PLACE_INVERTER, Tool.PLACE_DC_COMBINER, Tool.PLACE_AC_DISCONNECT, Tool.PLACE_MAIN_BOARD].includes(activeTool) && (
