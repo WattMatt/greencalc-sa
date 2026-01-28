@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Grid3X3 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Layout {
@@ -286,21 +286,33 @@ export function LayoutBrowser({
         )}
       </div>
 
-      {/* Right Panel - Project Overview */}
-      <div className="w-72 bg-card border-l flex flex-col items-center justify-center p-6 text-center">
-        <div className="grid grid-cols-2 gap-1 mb-4">
-          <div className="w-8 h-8 border rounded flex items-center justify-center">
-            <Grid3X3 className="h-4 w-4 text-muted-foreground" />
+      {/* 
+        ============================================
+        FUTURE EXPANSION: Project Overview Panel
+        ============================================
+        This panel is reserved for future functionality such as:
+        - Project summary stats (name, location, total kWp)
+        - Selected layout thumbnail preview on hover
+        - Quick project info (coordinates, tariff, tenant area)
+        
+        Uncomment and implement when ready.
+        ============================================
+        
+        <div className="w-72 bg-card border-l flex flex-col items-center justify-center p-6 text-center">
+          <div className="grid grid-cols-2 gap-1 mb-4">
+            <div className="w-8 h-8 border rounded flex items-center justify-center">
+              <Grid3X3 className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="w-8 h-8 border rounded" />
+            <div className="w-8 h-8 border rounded" />
+            <div className="w-8 h-8 border rounded" />
           </div>
-          <div className="w-8 h-8 border rounded" />
-          <div className="w-8 h-8 border rounded" />
-          <div className="w-8 h-8 border rounded" />
+          <h3 className="font-semibold">Project Overview</h3>
+          <p className="text-sm text-muted-foreground mt-2">
+            Load a PDF and select design purpose to view project details
+          </p>
         </div>
-        <h3 className="font-semibold">Project Overview</h3>
-        <p className="text-sm text-muted-foreground mt-2">
-          Load a PDF and select design purpose to view project details
-        </p>
-      </div>
+      */}
 
       {/* Rename Dialog */}
       <AlertDialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
