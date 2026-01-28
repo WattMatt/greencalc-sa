@@ -1,77 +1,113 @@
 
 
-# Plan: Fix Canvas Not Updating When Right Panel Collapses
+# Plan: Complete Folder Management Features for PV Layout Browser
 
-## Problem Analysis
+## Current State Analysis
 
-The canvas correctly updates when the left Toolbar collapses but **not** when the right SummaryPanel collapses. 
+The LayoutBrowser currently has:
+- Folder creation (New Folder button opens a dialog)
+- Folder rename/delete (only visible when "Manage Folders" mode is active)
+- Multi-select mode with batch move functionality
 
-Looking at the current implementation in `Canvas.tsx`:
-1. A `ResizeObserver` watches the container and updates `containerSize` state (lines 53-66)
-2. The drawing `useEffect` has `containerSize` in its dependencies (line 121)
-3. However, inside the effect, the canvas dimensions are set using `container.getBoundingClientRect()` (line 91)
+## Missing Features to Implement
 
-The issue is a subtle timing problem: when `containerSize` triggers the effect, the `getBoundingClientRect()` call may return the same values if the browser hasn't finished the layout reflow, or there could be a synchronization issue between the state update and the actual DOM measurement.
+Based on the "Full implementation" scope you approved earlier, the following features are missing:
 
-## Root Cause
+### 1. Move Single Layout to Folder (via Dropdown Menu)
+Currently, the 3-dot menu on each layout card only shows: Rename, Duplicate, Delete.
 
-The `containerSize` state exists and updates correctly, but it's not actually being **used** to set the canvas dimensions. The effect uses `getBoundingClientRect()` instead of the `containerSize` state values. This means the state change triggers the effect, but the actual canvas sizing still depends on a separate DOM measurement which may not reflect the latest layout.
+**Add:** "Move to Folder" option that opens a folder selection submenu or dialog.
 
-## Solution
+### 2. Drag-and-Drop Between Folders
+Allow users to drag layout cards and drop them into folder accordion headers to move them.
 
-Use the `containerSize` state values directly to set the canvas dimensions instead of calling `getBoundingClientRect()` inside the effect. This ensures the canvas dimensions are synchronized with the state that triggered the re-render.
+### 3. Improved "Manage Folders" UX
+Make it clearer when manage folders mode is active - potentially highlight folders or show a toolbar.
 
-## File Change
+---
 
-### `src/components/floor-plan/components/Canvas.tsx`
+## Implementation Details
 
-**Current code (lines 85-93):**
-```typescript
-useEffect(() => {
-  const canvas = drawingCanvasRef.current;
-  const container = containerRef.current;
-  if (!canvas || !container) return;
-  
-  // Set canvas to container size for proper mouse hit detection
-  const rect = container.getBoundingClientRect();
-  canvas.width = rect.width;
-  canvas.height = rect.height;
+### Step 1: Add "Move to Folder" in Layout Dropdown Menu
+**File:** `src/components/floor-plan/components/LayoutBrowser.tsx`
+
+Update the `DesignCard` component's dropdown menu to include a "Move to..." option with a submenu listing all available folders.
+
+```text
+DropdownMenu
+  Rename
+  Duplicate
+  Move to... (submenu)
+    - Uncategorized
+    - Folder A
+    - Folder B
+  ---
+  Delete
 ```
 
-**Updated code:**
+### Step 2: Add Drag-and-Drop Support
+**File:** `src/components/floor-plan/components/LayoutBrowser.tsx`
+
+- Add `draggable="true"` to `DesignCard`
+- Add `onDragStart` handler to set the layout ID being dragged
+- Add `onDragOver` and `onDrop` handlers to folder `AccordionItem` headers
+- Implement visual feedback (highlight) when dragging over a valid drop target
+- On drop, update the layout's `folder_id` in Supabase
+
+### Step 3: Improve Manage Folders Mode Visibility
+When "Manage Folders" mode is active:
+- Add a colored banner or highlight to indicate the mode
+- Show the edit/delete icons more prominently on folder rows
+
+---
+
+## Technical Implementation
+
+### DesignCard Props Addition
 ```typescript
-useEffect(() => {
-  const canvas = drawingCanvasRef.current;
-  const container = containerRef.current;
-  if (!canvas || !container) return;
-  
-  // Use containerSize state directly for proper reactivity when panels collapse/expand
-  canvas.width = containerSize.width;
-  canvas.height = containerSize.height;
+interface DesignCardProps {
+  // existing props...
+  onMoveToFolder: (folderId: string | null) => void;
+  folders: LayoutFolder[];
+  onDragStart: (layoutId: string) => void;
+}
 ```
 
-This change ensures that:
-1. When the ResizeObserver fires (for either left or right panel toggle), `containerSize` is updated
-2. The drawing useEffect re-runs because `containerSize` is a dependency
-3. The canvas dimensions are set using the **same values** that triggered the re-render, guaranteeing synchronization
+### Drag State in Parent Component
+```typescript
+const [draggedLayoutId, setDraggedLayoutId] = useState<string | null>(null);
+```
 
-## Why This Fixes the Issue
+### Drop Handler on Folder
+```typescript
+const handleDropOnFolder = async (folderId: string | null) => {
+  if (!draggedLayoutId) return;
+  await supabase
+    .from('pv_layouts')
+    .update({ folder_id: folderId })
+    .eq('id', draggedLayoutId);
+  await fetchData();
+  setDraggedLayoutId(null);
+  toast.success('Layout moved');
+};
+```
 
-Currently the logic is:
-1. Panel collapses → container resizes
-2. ResizeObserver fires → `setContainerSize({ width, height })`
-3. React re-renders → useEffect runs
-4. useEffect calls `getBoundingClientRect()` → might get stale/same values
+---
 
-With the fix:
-1. Panel collapses → container resizes  
-2. ResizeObserver fires → `setContainerSize({ width, height })`
-3. React re-renders → useEffect runs
-4. useEffect uses `containerSize.width/height` → guaranteed to use the new values
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/components/floor-plan/components/LayoutBrowser.tsx` | Add move-to-folder submenu in dropdown, implement drag-and-drop handlers, improve manage folders mode UI |
+
+---
 
 ## Summary
 
-| File | Change |
-|------|--------|
-| `Canvas.tsx` | Use `containerSize` state values instead of `getBoundingClientRect()` for canvas dimensions |
+This plan adds:
+1. Single-layout move via dropdown submenu
+2. Drag-and-drop layouts between folders
+3. Enhanced visual feedback for folder management mode
+
+All changes are contained within `LayoutBrowser.tsx` and require no database changes (folder structure already exists).
 
