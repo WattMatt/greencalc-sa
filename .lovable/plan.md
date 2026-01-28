@@ -1,269 +1,77 @@
 
 
-# Plan: Canvas Resize Fix + Collapsible Toolbar Sections
+# Plan: Fix Canvas Not Updating When Right Panel Collapses
 
-## Overview
+## Problem Analysis
 
-This plan addresses four requests:
-1. **Fix canvas not updating when right Summary panel collapses/expands**
-2. **Move "Back to Designs" button above Layouts/Load Image and group them in a collapsible dropdown**
-3. **Group General tools (Select, Pan, Set Scale) in a collapsible section**
-4. **Make PV Setup, Roof & Arrays, Cabling, and Equipment all collapsible sections**
+The canvas correctly updates when the left Toolbar collapses but **not** when the right SummaryPanel collapses. 
 
----
+Looking at the current implementation in `Canvas.tsx`:
+1. A `ResizeObserver` watches the container and updates `containerSize` state (lines 53-66)
+2. The drawing `useEffect` has `containerSize` in its dependencies (line 121)
+3. However, inside the effect, the canvas dimensions are set using `container.getBoundingClientRect()` (line 91)
 
-## Part 1: Canvas Resize Fix
+The issue is a subtle timing problem: when `containerSize` triggers the effect, the `getBoundingClientRect()` call may return the same values if the browser hasn't finished the layout reflow, or there could be a synchronization issue between the state update and the actual DOM measurement.
 
-### Problem
-When the right-side Summary panel collapses or expands, the canvas container size changes but the canvas doesn't re-render. This is because the Canvas component's `useEffect` that sets up the drawing canvas size only triggers based on content changes, not container size changes.
+## Root Cause
 
-### Solution
-Add a `ResizeObserver` to the Canvas component to detect when the container dimensions change and trigger a re-render.
+The `containerSize` state exists and updates correctly, but it's not actually being **used** to set the canvas dimensions. The effect uses `getBoundingClientRect()` instead of the `containerSize` state values. This means the state change triggers the effect, but the actual canvas sizing still depends on a separate DOM measurement which may not reflect the latest layout.
 
-### File: `src/components/floor-plan/components/Canvas.tsx`
+## Solution
 
-Add a state to track container dimensions and a `ResizeObserver` to detect changes:
+Use the `containerSize` state values directly to set the canvas dimensions instead of calling `getBoundingClientRect()` inside the effect. This ensures the canvas dimensions are synchronized with the state that triggered the re-render.
 
+## File Change
+
+### `src/components/floor-plan/components/Canvas.tsx`
+
+**Current code (lines 85-93):**
 ```typescript
-// Add state to track container dimensions
-const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
-
-// Add ResizeObserver effect
 useEffect(() => {
+  const canvas = drawingCanvasRef.current;
   const container = containerRef.current;
-  if (!container) return;
+  if (!canvas || !container) return;
   
-  const resizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      const { width, height } = entry.contentRect;
-      setContainerSize({ width, height });
-    }
-  });
-  
-  resizeObserver.observe(container);
-  return () => resizeObserver.disconnect();
-}, []);
+  // Set canvas to container size for proper mouse hit detection
+  const rect = container.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
 ```
 
-Update the drawing canvas `useEffect` to include `containerSize` as a dependency:
-
+**Updated code:**
 ```typescript
 useEffect(() => {
-  // ... existing drawing code
-}, [viewState, equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, 
-    selectedItemId, scaleLine, currentDrawing, previewPoint, containerSize, activeTool]);
+  const canvas = drawingCanvasRef.current;
+  const container = containerRef.current;
+  if (!canvas || !container) return;
+  
+  // Use containerSize state directly for proper reactivity when panels collapse/expand
+  canvas.width = containerSize.width;
+  canvas.height = containerSize.height;
 ```
 
----
+This change ensures that:
+1. When the ResizeObserver fires (for either left or right panel toggle), `containerSize` is updated
+2. The drawing useEffect re-runs because `containerSize` is a dependency
+3. The canvas dimensions are set using the **same values** that triggered the re-render, guaranteeing synchronization
 
-## Part 2: Toolbar Reorganization with Collapsible Sections
+## Why This Fixes the Issue
 
-### Current Structure
-```
-- Back to Designs (button in header)
-- PV Layout Tool (title)
-- Layouts (button)
-- Load Image (button)
-- General (label + buttons)
-- PV Setup (label + button)
-- Roof & Arrays (label + buttons)
-- Cabling (label + buttons)
-- Equipment (label + buttons)
-```
+Currently the logic is:
+1. Panel collapses → container resizes
+2. ResizeObserver fires → `setContainerSize({ width, height })`
+3. React re-renders → useEffect runs
+4. useEffect calls `getBoundingClientRect()` → might get stale/same values
 
-### New Structure
-```
-- PV Layout Tool (title)
-- Layout Name
-- [File] (collapsible dropdown - open by default)
-    - Back to Designs
-    - Layouts  
-    - Load Image
-- [General] (collapsible - open by default)
-    - Select
-    - Pan
-    - Set Scale
-- [PV Setup] (collapsible)
-    - View Panel Config
-- [Roof & Arrays] (collapsible)
-    - Draw Roof Mask
-    - Place PV Array
-- [Cabling] (collapsible)
-    - DC Cable
-    - AC Cable
-- [Equipment] (collapsible)
-    - Inverter
-    - DC Combiner
-    - AC Disconnect
-    - Main Board
-```
+With the fix:
+1. Panel collapses → container resizes  
+2. ResizeObserver fires → `setContainerSize({ width, height })`
+3. React re-renders → useEffect runs
+4. useEffect uses `containerSize.width/height` → guaranteed to use the new values
 
-### File: `src/components/floor-plan/components/Toolbar.tsx`
-
-**Imports to add:**
-```typescript
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown } from 'lucide-react';
-```
-
-**Add state for collapsed sections:**
-```typescript
-const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-  file: true,
-  general: true,
-  pvSetup: false,
-  roofArrays: false,
-  cabling: false,
-  equipment: false,
-});
-
-const toggleSection = (section: string) => {
-  setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
-};
-```
-
-**Create a reusable CollapsibleSection component:**
-```typescript
-interface CollapsibleSectionProps {
-  title: string;
-  sectionKey: string;
-  children: React.ReactNode;
-  isOpen: boolean;
-  onToggle: () => void;
-}
-
-const CollapsibleSection = ({ title, sectionKey, children, isOpen, onToggle }: CollapsibleSectionProps) => (
-  <Collapsible open={isOpen} onOpenChange={onToggle}>
-    <CollapsibleTrigger asChild>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="w-full justify-between px-2 py-1"
-      >
-        <span className="text-xs font-medium text-muted-foreground">{title}</span>
-        <ChevronDown className={cn("h-3 w-3 transition-transform", isOpen && "rotate-180")} />
-      </Button>
-    </CollapsibleTrigger>
-    <CollapsibleContent className="space-y-1 pt-1">
-      {children}
-    </CollapsibleContent>
-  </Collapsible>
-);
-```
-
-**Refactor toolbar sections:**
-
-Replace the current flat structure with collapsible sections:
-
-```tsx
-<div className="flex-1 overflow-y-auto p-2 space-y-1">
-  {/* File Section (Back to Designs, Layouts, Load Image) */}
-  <CollapsibleSection 
-    title="File" 
-    sectionKey="file"
-    isOpen={openSections.file}
-    onToggle={() => toggleSection('file')}
-  >
-    {onBackToBrowser && (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="w-full justify-start"
-        onClick={onBackToBrowser}
-      >
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        <span className="text-xs">Back to Designs</span>
-      </Button>
-    )}
-    <Button variant="outline" size="sm" className="w-full justify-start" onClick={onOpenLayoutManager}>
-      <FolderOpen className="h-4 w-4 mr-2" />
-      <span className="text-xs">Layouts</span>
-    </Button>
-    <Button variant="outline" size="sm" className="w-full justify-start" onClick={onOpenLoadLayout}>
-      <Upload className="h-4 w-4 mr-2" />
-      <span className="text-xs">Load Image</span>
-    </Button>
-  </CollapsibleSection>
-
-  <Separator className="my-2" />
-
-  {/* General Tools */}
-  <CollapsibleSection 
-    title="General" 
-    sectionKey="general"
-    isOpen={openSections.general}
-    onToggle={() => toggleSection('general')}
-  >
-    <ToolButton icon={MousePointer} label="Select" ... />
-    <ToolButton icon={Hand} label="Pan" ... />
-    <ToolButton icon={Ruler} label="Set Scale" ... />
-  </CollapsibleSection>
-
-  <Separator className="my-2" />
-
-  {/* PV Setup */}
-  <CollapsibleSection 
-    title="PV Setup" 
-    sectionKey="pvSetup"
-    isOpen={openSections.pvSetup}
-    onToggle={() => toggleSection('pvSetup')}
-  >
-    <Button variant="outline" size="sm" ... onClick={onOpenPVConfig}>
-      View Panel Config
-    </Button>
-  </CollapsibleSection>
-
-  {/* ... same pattern for Roof & Arrays, Cabling, Equipment */}
-</div>
-```
-
-**Move "Back to Designs" out of header:**
-Remove the "Back to Designs" button from the header section (lines 144-154) since it's now inside the File collapsible section.
-
----
-
-## Summary of Changes
+## Summary
 
 | File | Change |
 |------|--------|
-| `Canvas.tsx` | Add ResizeObserver to detect container size changes and trigger canvas re-render |
-| `Toolbar.tsx` | Add collapsible sections for File, General, PV Setup, Roof & Arrays, Cabling, Equipment |
-| `Toolbar.tsx` | Move "Back to Designs" into File section as first item |
-| `Toolbar.tsx` | Import Collapsible components and ChevronDown icon |
-
----
-
-## Visual Result
-
-**Expanded toolbar with collapsed sections:**
-```
-+------------------------+
-| PV Layout Tool         |
-| New Layout •           |
-| 12 panels • 6.5 kWp    |
-+------------------------+
-| [v] File               |
-|   Back to Designs      |
-|   Layouts              |
-|   Load Image           |
-+------------------------+
-| [v] General            |
-|   Select               |
-|   Pan                  |
-|   Set Scale [✓]        |
-+------------------------+
-| [>] PV Setup           |
-+------------------------+
-| [>] Roof & Arrays      |
-+------------------------+
-| [>] Cabling            |
-+------------------------+
-| [>] Equipment          |
-+------------------------+
-| [Save Layout]          |
-| [Undo] [Redo]          |
-+------------------------+
-```
-
-This allows users to collapse unused sections to reduce vertical scrolling while keeping essential tools readily accessible.
+| `Canvas.tsx` | Use `containerSize` state values instead of `getBoundingClientRect()` for canvas dimensions |
 
