@@ -87,6 +87,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
   const [isRoofMaskModalOpen, setIsRoofMaskModalOpen] = useState(false);
   const [isPVArrayModalOpen, setIsPVArrayModalOpen] = useState(false);
   const [isPlantSetupModalOpen, setIsPlantSetupModalOpen] = useState(false);
+  const [plantSetupActiveTab, setPlantSetupActiveTab] = useState('modules');
   const [pendingScalePixels, setPendingScalePixels] = useState(0);
   const [pendingRoofMask, setPendingRoofMask] = useState<{ points: Point[]; area: number } | null>(null);
   const [pendingPvArrayConfig, setPendingPvArrayConfig] = useState<PVArrayConfig | null>(null);
@@ -552,7 +553,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
           pvArrays={pvArrays}
           plantSetupConfig={plantSetupConfig}
           onOpenLoadLayout={() => setIsLoadLayoutModalOpen(true)}
-          onOpenPlantSetup={() => setIsPlantSetupModalOpen(true)}
+          onOpenPlantSetup={(tab) => {
+            if (tab) setPlantSetupActiveTab(tab);
+            setIsPlantSetupModalOpen(true);
+          }}
           onOpenLayoutManager={() => setIsLayoutManagerOpen(true)}
           onUndo={handleUndo}
           onRedo={handleRedo}
@@ -665,6 +669,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
             isOpen={isPlantSetupModalOpen}
             onClose={() => setIsPlantSetupModalOpen(false)}
             config={plantSetupConfig}
+            initialTab={plantSetupActiveTab}
             onApply={(config) => {
               setPlantSetupConfig(config);
               setHasUnsavedChanges(true);
