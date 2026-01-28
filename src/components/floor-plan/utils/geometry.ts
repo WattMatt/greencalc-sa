@@ -141,3 +141,29 @@ export const getPolygonCenter = (points: Point[]): Point => {
 export const isPointNear = (p1: Point, p2: Point, threshold: number): boolean => {
   return distance(p1, p2) <= threshold;
 };
+
+/**
+ * Snap a point to the nearest 45-degree angle from an anchor point.
+ * Used when Shift key is held during line drawing.
+ */
+export const snapTo45Degrees = (anchor: Point, target: Point): Point => {
+  const dx = target.x - anchor.x;
+  const dy = target.y - anchor.y;
+  const dist = Math.hypot(dx, dy);
+  
+  if (dist === 0) return target;
+  
+  // Get angle in radians, then convert to degrees
+  const angleRad = Math.atan2(dy, dx);
+  const angleDeg = angleRad * (180 / Math.PI);
+  
+  // Snap to nearest 45-degree increment
+  const snappedDeg = Math.round(angleDeg / 45) * 45;
+  const snappedRad = snappedDeg * (Math.PI / 180);
+  
+  // Return point at same distance but snapped angle
+  return {
+    x: anchor.x + dist * Math.cos(snappedRad),
+    y: anchor.y + dist * Math.sin(snappedRad),
+  };
+};
