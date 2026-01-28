@@ -208,9 +208,9 @@ export function Toolbar({
           onToggle={() => toggleSection('file')}
         >
           {onBackToBrowser && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <Button 
+              variant="outline" 
+              size="sm" 
               className="w-full justify-start"
               onClick={onBackToBrowser}
             >
@@ -218,15 +218,6 @@ export function Toolbar({
               <span className="text-xs">Back to Designs</span>
             </Button>
           )}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="w-full justify-start"
-            onClick={onOpenLayoutManager}
-          >
-            <FolderOpen className="h-4 w-4 mr-2" />
-            <span className="text-xs">Layouts</span>
-          </Button>
           <Button 
             variant="outline" 
             size="sm" 
