@@ -1,234 +1,111 @@
 
+# Plan: Ensure Plant Setup Syncs with Live Simulation Data
 
-# Plan: Rename "PV Setup" to "Plant Setup" with Extended Configuration
+## Problem Analysis
 
-## Overview
+The user identified two related issues:
 
-Transform the current "PV Setup" section into a comprehensive "Plant Setup" section that allows configuration of multiple types of plant equipment. Each equipment type will support multiple configurations (e.g., different module types across different roof sections, multiple inverter models).
+1. **Simulation auto-save appears broken** - The Simulation tab shows "0 saved simulations" despite displaying "Auto-saves on tab change", and the user reports simulations do not persist when switching tabs
+2. **Plant Setup sync shows stale data** - The "Sync from Simulation" button fetches from database records that may not exist or may be outdated
 
-## Plant Setup Components
+## Root Cause Investigation
 
-The new Plant Setup section will include:
+Based on the codebase review:
 
-1. **Solar Modules** - Panel specifications (loaded from Simulation, editable here)
-2. **Inverters** - Inverter specifications (loaded from Simulation, editable here)
-3. **Walkways** - Walkway/maintenance path dimensions
-4. **Cable Trays** - Cable tray width and specifications
+1. **Auto-save mechanism exists** - SimulationPanel has debounced auto-save (1500ms delay) that triggers on configuration changes
+2. **Tab change triggers save** - `handleTabChange` in ProjectDetail calls `simulationRef.current.saveIfNeeded()` when leaving the Simulation or Costs tabs
+3. **Possible issue** - The network logs show DELETE operations on `project_simulations`, which could explain why "0 saved simulations" appears. Simulations may be getting cleaned up or the user deleted them.
+4. **Plant Setup fetches from DB** - The `onSyncFromSimulation` callback queries the database, but if no simulation record exists, it returns nothing
 
-Each component supports **multiple entries** to accommodate different equipment across the plant.
+## Proposed Solution
 
----
+### 1. Make Plant Setup sync from the LIVE simulation state (not database)
 
-## Technical Implementation
+Instead of querying the database when "Sync from Simulation" is clicked, pass the current simulation configuration directly from the parent component. This ensures:
+- The values are always up-to-date with what the user sees in the Simulation tab
+- No database round-trip is needed
+- Works even before the first auto-save occurs
 
-### Step 1: Extend Types
-**File:** `src/components/floor-plan/types.ts`
+**Implementation:**
+- Pass `latestSimulation` or `inverterConfig` prop from ProjectDetail through FloorPlanMarkup
+- Update FloorPlanMarkup to receive optional simulation config as a prop
+- Modify PlantSetupModal's `onSyncFromSimulation` to use the passed prop instead of fetching
 
-Add new types for plant equipment:
+### 2. Add visual feedback when simulation has no saved record
+
+When the Plant Setup modal opens, if there's no saved simulation:
+- Show a helpful message explaining that simulation data will sync after the user configures and saves a simulation
+- Disable the "Sync from Simulation" button if no simulation data is available
+
+### 3. Ensure simulation auto-save triggers reliably
+
+Verify that leaving the Simulation tab (to PV Layout, for example) triggers the auto-save by:
+- Checking the handleTabChange function includes "pv-layout" in its save trigger conditions
+- Adding immediate save (not just debounced) when navigating away from simulation
+
+## Technical Changes
+
+### File: `src/pages/ProjectDetail.tsx`
+
+Pass the latest simulation to FloorPlanMarkup:
 
 ```typescript
-export interface SolarModuleConfig {
-  id: string;
-  name: string;
-  width: number;      // meters
-  length: number;     // meters
-  wattage: number;    // Wp
-  isDefault?: boolean;
-}
+<TabsContent value="pv-layout" className="mt-6">
+  <FloorPlanMarkup 
+    projectId={id!} 
+    latestSimulation={latestSimulation}
+  />
+</TabsContent>
+```
 
-export interface InverterLayoutConfig {
-  id: string;
-  name: string;
-  acCapacity: number; // kW
-  count: number;
-  isDefault?: boolean;
-}
+### File: `src/components/floor-plan/FloorPlanMarkup.tsx`
 
-export interface WalkwayConfig {
-  id: string;
-  name: string;
-  width: number;      // meters (default 0.6m)
-}
-
-export interface CableTrayConfig {
-  id: string;
-  name: string;
-  width: number;      // meters (default 0.3m)
-}
-
-export interface PlantSetupConfig {
-  solarModules: SolarModuleConfig[];
-  inverters: InverterLayoutConfig[];
-  walkways: WalkwayConfig[];
-  cableTrays: CableTrayConfig[];
+1. Add prop for simulation data:
+```typescript
+interface FloorPlanMarkupProps {
+  projectId: string;
+  latestSimulation?: {
+    results_json?: any;
+  };
 }
 ```
 
-### Step 2: Create Plant Setup Modal
-**File:** `src/components/floor-plan/components/PlantSetupModal.tsx` (NEW)
+2. Update PlantSetupModal to use passed simulation data directly instead of fetching
 
-A comprehensive modal with tabs for each equipment type:
+### File: `src/components/floor-plan/components/PlantSetupModal.tsx`
+
+Remove the async database fetch from `onSyncFromSimulation` - the parent will pass the simulation data directly.
+
+## Data Flow (After Fix)
 
 ```text
-+----------------------------------------------+
-|   Plant Setup                            [X] |
-+----------------------------------------------+
-| [Solar Modules] [Inverters] [Walkways] [Cable]|
-+----------------------------------------------+
-| Solar Modules                                 |
-| +-----------------------------------------+  |
-| | JA Solar 545W (Default)      [Edit][Del]|  |
-| | 1.134m x 2.278m | 545 Wp                |  |
-| +-----------------------------------------+  |
-| [+ Add Module]                               |
-+----------------------------------------------+
-|              [Apply]  [Cancel]               |
-+----------------------------------------------+
+ProjectDetail (manages latestSimulation query)
+    |
+    +--> SimulationModes (edits config, auto-saves)
+    |         |
+    |         +--> project_simulations table
+    |
+    +--> FloorPlanMarkup (receives latestSimulation prop)
+              |
+              +--> PlantSetupModal
+                     |
+                     onSyncFromSimulation uses prop data
+                     (no database fetch needed)
 ```
 
-Features:
-- **Tabs**: Solar Modules, Inverters, Walkways, Cable Trays
-- **List View**: Shows configured items with edit/delete actions
-- **Add New**: Button to add additional configurations
-- **Default Marker**: First item marked as default for array placement
-- **Sync from Simulation**: Button to reload values from Simulation tab
+## Alternative Approach: Keep Database Fetch but Improve UX
 
-### Step 3: Update Toolbar
-**File:** `src/components/floor-plan/components/Toolbar.tsx`
+If real-time database sync is preferred:
 
-Changes:
-- Rename section from "PV Setup" to "Plant Setup"
-- Replace single "View Panel Config" button with "Configure Plant"
-- Show summary badges for each configured type
+1. Add a "Save Simulation" button in the Simulation tab for explicit saves
+2. Show loading state in Plant Setup modal while fetching
+3. Display "No simulation saved yet" message when database returns empty
+4. Add a toast notification when Sync completes with what was loaded
 
-```tsx
-<CollapsibleSection 
-  title="Plant Setup"
-  isOpen={openSections.plantSetup}
-  onToggle={() => toggleSection('plantSetup')}
->
-  <Button onClick={onOpenPlantSetup}>
-    <Settings className="h-4 w-4 mr-2" />
-    <span className="text-xs">Configure Plant</span>
-  </Button>
-  {/* Summary badges */}
-  <div className="flex flex-wrap gap-1 px-1 mt-1">
-    <Badge variant="outline" className="text-[10px]">
-      {plantSetup.solarModules.length} Modules
-    </Badge>
-    <Badge variant="outline" className="text-[10px]">
-      {plantSetup.inverters.length} Inverters
-    </Badge>
-  </div>
-</CollapsibleSection>
-```
+## Summary
 
-### Step 4: Update FloorPlanMarkup State
-**File:** `src/components/floor-plan/FloorPlanMarkup.tsx`
-
-Add state for plant setup:
-
-```typescript
-const [plantSetupConfig, setPlantSetupConfig] = useState<PlantSetupConfig>({
-  solarModules: [],
-  inverters: [],
-  walkways: [{ id: 'default', name: 'Standard', width: 0.6 }],
-  cableTrays: [{ id: 'default', name: 'Standard', width: 0.3 }],
-});
-```
-
-Load from simulation on mount:
-
-```typescript
-// In the existing useEffect that loads project data
-if (simData?.results_json?.inverterConfig) {
-  const inverterConfig = simData.results_json.inverterConfig;
-  
-  // Sync solar module
-  const module = getModulePresetById(inverterConfig.selectedModuleId) 
-    || inverterConfig.customModule 
-    || getDefaultModulePreset();
-  
-  setPlantSetupConfig(prev => ({
-    ...prev,
-    solarModules: [{
-      id: 'sim-module',
-      name: module.name,
-      width: module.width_m,
-      length: module.length_m,
-      wattage: module.power_wp,
-      isDefault: true,
-    }],
-    inverters: [{
-      id: 'sim-inverter',
-      name: `${inverterConfig.inverterSize}kW Inverter`,
-      acCapacity: inverterConfig.inverterSize,
-      count: inverterConfig.inverterCount,
-      isDefault: true,
-    }],
-  }));
-}
-```
-
-### Step 5: Persist in Layout Data
-**File:** `src/components/floor-plan/FloorPlanMarkup.tsx`
-
-Update save/load to include plant setup:
-
-```typescript
-// In handleSave
-const layoutData = {
-  // ...existing fields
-  plant_setup: plantSetupConfig,
-};
-
-// In loadLayout
-if (data.plant_setup) {
-  setPlantSetupConfig(data.plant_setup as PlantSetupConfig);
-}
-```
-
----
-
-## Files to Create/Modify
-
-| File | Action | Changes |
-|------|--------|---------|
-| `src/components/floor-plan/types.ts` | Modify | Add PlantSetupConfig and related interfaces |
-| `src/components/floor-plan/components/PlantSetupModal.tsx` | Create | New modal with tabbed interface for plant configuration |
-| `src/components/floor-plan/components/Toolbar.tsx` | Modify | Rename section, update button, add summary badges |
-| `src/components/floor-plan/FloorPlanMarkup.tsx` | Modify | Add state, load from simulation, pass props |
-| `src/components/floor-plan/constants.ts` | Modify | Add default walkway/cable tray dimensions |
-
----
-
-## User Experience
-
-1. **Initial State**: Plant Setup auto-loads Solar Module and Inverter settings from the Simulation tab
-2. **Editing**: Users can override values locally for the layout tool without affecting the Simulation
-3. **Multiple Configs**: Users can add additional modules/inverters for complex sites with mixed equipment
-4. **Walkways/Cable Trays**: Pre-configured with industry-standard defaults (0.6m walkway, 0.3m cable tray)
-5. **Visual Feedback**: Toolbar shows count badges for each configured equipment type
-
----
-
-## Data Flow
-
-```text
-Simulation Tab (Source of Truth)
-         |
-         v
-    On Layout Load
-         |
-         v
-  Plant Setup Config (Local State)
-    - Editable in modal
-    - Persisted per layout
-         |
-         v
-  Canvas Drawing Tools
-    - Use active module for PV arrays
-    - Use walkway width for walkway tool (future)
-    - Use cable tray width for tray tool (future)
-```
-
+| Issue | Root Cause | Fix |
+|-------|------------|-----|
+| Stale data in Plant Setup | Fetches from DB which may be empty/outdated | Pass live simulation state as prop |
+| "0 saved simulations" | User may have deleted simulations OR auto-save not triggered | Ensure handleTabChange saves before navigating to PV Layout |
+| No explicit save button | Design relies on auto-save which may not be visible | Consider adding manual save button for clarity |
