@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType } from '../types';
 import { renderAllMarkups } from '../utils/drawing';
-import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon } from '../utils/geometry';
+import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees } from '../utils/geometry';
 import { PVArrayConfig } from './PVArrayModal';
 
 interface CanvasProps {
@@ -49,6 +49,25 @@ export function Canvas({
   const [previewPoint, setPreviewPoint] = useState<Point | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
+  const [isShiftHeld, setIsShiftHeld] = useState(false);
+
+  // Track Shift key state for 45-degree angle snapping
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftHeld(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftHeld(false);
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   // ResizeObserver to detect container size changes (e.g., when Summary panel collapses)
   useEffect(() => {
@@ -181,7 +200,11 @@ export function Canvas({
         setScaleLine({ start: worldPos, end: worldPos });
       }
     } else if (activeTool === Tool.ROOF_MASK || activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC) {
-      setCurrentDrawing([...currentDrawing, worldPos]);
+      // Apply 45-degree snapping if Shift is held and we have a previous point
+      const snappedPos = (isShiftHeld && currentDrawing.length > 0)
+        ? snapTo45Degrees(currentDrawing[currentDrawing.length - 1], worldPos)
+        : worldPos;
+      setCurrentDrawing([...currentDrawing, snappedPos]);
     } else if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig && pvPanelConfig) {
       // Check if clicking on a roof mask
       const onMask = roofMasks.find(m => isPointInPolygon(worldPos, m.points));
@@ -232,11 +255,16 @@ export function Canvas({
     }
 
     if (activeTool === Tool.SCALE && scaleLine) {
-      setScaleLine({ ...scaleLine, end: worldPos });
+      // Apply 45-degree snapping to scale line if Shift is held
+      const snappedEnd = isShiftHeld ? snapTo45Degrees(scaleLine.start, worldPos) : worldPos;
+      setScaleLine({ ...scaleLine, end: snappedEnd });
     }
 
     if (currentDrawing.length > 0) {
-      setPreviewPoint(worldPos);
+      // Apply 45-degree snapping to preview line if Shift is held
+      const anchor = currentDrawing[currentDrawing.length - 1];
+      const snappedPreview = isShiftHeld ? snapTo45Degrees(anchor, worldPos) : worldPos;
+      setPreviewPoint(snappedPreview);
     }
   };
 
