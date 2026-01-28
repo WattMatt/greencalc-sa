@@ -84,7 +84,7 @@ interface ToolbarProps {
   pvArrays: PVArrayItem[];
   plantSetupConfig: PlantSetupConfig;
   onOpenLoadLayout: () => void;
-  onOpenPlantSetup: () => void;
+  onOpenPlantSetup: (tab?: string) => void;
   onOpenLayoutManager: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -284,27 +284,51 @@ export function Toolbar({
           isOpen={openSections.plantSetup}
           onToggle={() => toggleSection('plantSetup')}
         >
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full justify-start"
-            onClick={onOpenPlantSetup}
-          >
-            <Factory className="h-4 w-4 mr-2" />
-            <span className="text-xs">Configure Plant</span>
-          </Button>
-          {/* Summary badges */}
-          <div className="flex flex-wrap gap-1 px-1 mt-1">
-            {plantSetupConfig.solarModules.length > 0 && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                {plantSetupConfig.solarModules.length} Module{plantSetupConfig.solarModules.length !== 1 ? 's' : ''}
+          <div className="space-y-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-between h-8"
+              onClick={() => onOpenPlantSetup('modules')}
+            >
+              <span className="text-xs">Solar Module</span>
+              <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                {plantSetupConfig.solarModules.length}
               </Badge>
-            )}
-            {plantSetupConfig.inverters.length > 0 && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                {plantSetupConfig.inverters.length} Inverter{plantSetupConfig.inverters.length !== 1 ? 's' : ''}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-between h-8"
+              onClick={() => onOpenPlantSetup('inverters')}
+            >
+              <span className="text-xs">Inverter</span>
+              <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                {plantSetupConfig.inverters.length}
               </Badge>
-            )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-between h-8"
+              onClick={() => onOpenPlantSetup('walkways')}
+            >
+              <span className="text-xs">Walkway</span>
+              <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                {plantSetupConfig.walkways.length}
+              </Badge>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-between h-8"
+              onClick={() => onOpenPlantSetup('cableTrays')}
+            >
+              <span className="text-xs">Cable Tray</span>
+              <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                {plantSetupConfig.cableTrays.length}
+              </Badge>
+            </Button>
           </div>
         </CollapsibleSection>
 

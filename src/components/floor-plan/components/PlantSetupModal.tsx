@@ -20,6 +20,7 @@ interface PlantSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
   config: PlantSetupConfig;
+  initialTab?: string;
   onApply: (config: PlantSetupConfig) => void;
   onSyncFromSimulation: () => void;
 }
@@ -34,19 +35,21 @@ export function PlantSetupModal({
   isOpen, 
   onClose, 
   config, 
+  initialTab = 'modules',
   onApply, 
   onSyncFromSimulation 
 }: PlantSetupModalProps) {
   const [localConfig, setLocalConfig] = useState<PlantSetupConfig>(config);
-  const [activeTab, setActiveTab] = useState('modules');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [editing, setEditing] = useState<EditingItem | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setLocalConfig(config);
+      setActiveTab(initialTab);
       setEditing(null);
     }
-  }, [isOpen, config]);
+  }, [isOpen, config, initialTab]);
 
   const handleApply = () => {
     onApply(localConfig);
