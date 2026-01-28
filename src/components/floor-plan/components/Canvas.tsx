@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType } from '../types';
 import { renderAllMarkups } from '../utils/drawing';
 import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon } from '../utils/geometry';
@@ -41,6 +41,7 @@ export function Canvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const prevContainerSizeRef = useRef<{ width: number; height: number } | null>(null);
   
   const [isPanning, setIsPanning] = useState(false);
   const [lastMousePos, setLastMousePos] = useState<Point>({ x: 0, y: 0 });
@@ -57,11 +58,11 @@ export function Canvas({
     // Set initial size immediately
     const rect = container.getBoundingClientRect();
     setContainerSize({ width: rect.width, height: rect.height });
+    prevContainerSizeRef.current = { width: rect.width, height: rect.height };
     
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
-        console.log('[Canvas ResizeObserver] Container resized:', { width, height });
         setContainerSize({ width, height });
       }
     });
@@ -69,6 +70,36 @@ export function Canvas({
     resizeObserver.observe(container);
     return () => resizeObserver.disconnect();
   }, []);
+
+  // When the container resizes (e.g. right summary pane collapses), preserve the *viewport center*
+  // so the background appears to shift consistently instead of staying anchored to the left.
+  useEffect(() => {
+    if (!backgroundImage) return;
+
+    const prev = prevContainerSizeRef.current;
+    if (!prev) {
+      prevContainerSizeRef.current = containerSize;
+      return;
+    }
+
+    if (prev.width === containerSize.width && prev.height === containerSize.height) return;
+
+    // World coordinate at the center of the old viewport
+    const prevCenterScreen = { x: prev.width / 2, y: prev.height / 2 };
+    const worldCenter = {
+      x: (prevCenterScreen.x - viewState.offset.x) / viewState.zoom,
+      y: (prevCenterScreen.y - viewState.offset.y) / viewState.zoom,
+    };
+
+    // New offset that keeps the same world center in the center of the new viewport
+    const nextOffset = {
+      x: containerSize.width / 2 - worldCenter.x * viewState.zoom,
+      y: containerSize.height / 2 - worldCenter.y * viewState.zoom,
+    };
+
+    prevContainerSizeRef.current = containerSize;
+    setViewState({ ...viewState, offset: nextOffset });
+  }, [containerSize.width, containerSize.height, backgroundImage, viewState, setViewState]);
 
   // Render background image
   useEffect(() => {
@@ -92,7 +123,6 @@ export function Canvas({
     const container = containerRef.current;
     if (!canvas || !container) return;
     
-    console.log('[Canvas Draw Effect] Setting canvas size:', containerSize);
     // Use containerSize state directly for proper reactivity when panels collapse/expand
     canvas.width = containerSize.width;
     canvas.height = containerSize.height;
