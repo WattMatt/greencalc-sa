@@ -19,11 +19,25 @@ import { getModulePresetById, getDefaultModulePreset, SolarModulePreset } from '
 
 type ViewMode = 'browser' | 'editor';
 
+// Type for simulation data passed from parent
+type SimulationData = {
+  id: string;
+  name: string;
+  solar_capacity_kwp: number | null;
+  battery_capacity_kwh: number | null;
+  battery_power_kw: number | null;
+  annual_solar_savings: number | null;
+  roi_percentage: number | null;
+  results_json: any;
+} | null;
+
 interface FloorPlanMarkupProps {
   projectId: string;
+  readOnly?: boolean;
+  latestSimulation?: SimulationData;
 }
 
-export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkupProps & { readOnly?: boolean }) {
+export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation }: FloorPlanMarkupProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('browser');
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false);
@@ -280,76 +294,6 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
             longitude: projectData.longitude,
           });
         }
-
-        // Fetch PV panel config from simulation (source of truth)
-        const { data: simData } = await supabase
-          .from('project_simulations')
-          .select('results_json')
-          .eq('project_id', projectId)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (simData?.results_json) {
-          const resultsJson = simData.results_json as any;
-          const inverterConfig = resultsJson.inverterConfig;
-          
-          if (inverterConfig) {
-            let module: SolarModulePreset;
-            
-            if (inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule) {
-              module = inverterConfig.customModule;
-              setModuleName(inverterConfig.customModule.name || 'Custom Module');
-            } else {
-              module = getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
-              setModuleName(module.name);
-            }
-            
-            setPvPanelConfig({
-              width: module.width_m,
-              length: module.length_m,
-              wattage: module.power_wp,
-            });
-            
-            // Sync plant setup from simulation
-            setPlantSetupConfig(prev => ({
-              ...prev,
-              solarModules: [{
-                id: 'sim-module',
-                name: module.name,
-                width: module.width_m,
-                length: module.length_m,
-                wattage: module.power_wp,
-                isDefault: true,
-              }],
-              inverters: inverterConfig.inverterSize ? [{
-                id: 'sim-inverter',
-                name: `${inverterConfig.inverterSize}kW Inverter`,
-                acCapacity: inverterConfig.inverterSize,
-                count: inverterConfig.inverterCount || 1,
-                isDefault: true,
-              }] : prev.inverters,
-            }));
-          } else {
-            // No inverter config, use default
-            const defaultModule = getDefaultModulePreset();
-            setPvPanelConfig({
-              width: defaultModule.width_m,
-              length: defaultModule.length_m,
-              wattage: defaultModule.power_wp,
-            });
-            setModuleName(defaultModule.name);
-          }
-        } else {
-          // No simulation, use default
-          const defaultModule = getDefaultModulePreset();
-          setPvPanelConfig({
-            width: defaultModule.width_m,
-            length: defaultModule.length_m,
-            wattage: defaultModule.power_wp,
-          });
-          setModuleName(defaultModule.name);
-        }
       } catch (error) {
         console.error('Error loading project data:', error);
       }
@@ -357,6 +301,70 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
 
     loadProjectData();
   }, [projectId]);
+
+  // Sync PV panel config from latestSimulation prop
+  useEffect(() => {
+    if (latestSimulation?.results_json) {
+      const resultsJson = latestSimulation.results_json as any;
+      const inverterConfig = resultsJson.inverterConfig;
+      
+      if (inverterConfig) {
+        let module: SolarModulePreset;
+        
+        if (inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule) {
+          module = inverterConfig.customModule;
+          setModuleName(inverterConfig.customModule.name || 'Custom Module');
+        } else {
+          module = getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
+          setModuleName(module.name);
+        }
+        
+        setPvPanelConfig({
+          width: module.width_m,
+          length: module.length_m,
+          wattage: module.power_wp,
+        });
+        
+        // Sync plant setup from simulation
+        setPlantSetupConfig(prev => ({
+          ...prev,
+          solarModules: [{
+            id: 'sim-module',
+            name: module.name,
+            width: module.width_m,
+            length: module.length_m,
+            wattage: module.power_wp,
+            isDefault: true,
+          }],
+          inverters: inverterConfig.inverterSize ? [{
+            id: 'sim-inverter',
+            name: `${inverterConfig.inverterSize}kW Inverter`,
+            acCapacity: inverterConfig.inverterSize,
+            count: inverterConfig.inverterCount || 1,
+            isDefault: true,
+          }] : prev.inverters,
+        }));
+      } else {
+        // No inverter config, use default
+        const defaultModule = getDefaultModulePreset();
+        setPvPanelConfig({
+          width: defaultModule.width_m,
+          length: defaultModule.length_m,
+          wattage: defaultModule.power_wp,
+        });
+        setModuleName(defaultModule.name);
+      }
+    } else {
+      // No simulation, use default
+      const defaultModule = getDefaultModulePreset();
+      setPvPanelConfig({
+        width: defaultModule.width_m,
+        length: defaultModule.length_m,
+        wattage: defaultModule.power_wp,
+      });
+      setModuleName(defaultModule.name);
+    }
+  }, [latestSimulation]);
 
   // Handler for selecting a layout from the browser
   const handleSelectLayout = useCallback(async (selectedLayoutId: string) => {
@@ -684,46 +692,45 @@ export function FloorPlanMarkup({ projectId, readOnly = false }: FloorPlanMarkup
                 setModuleName(defaultModule.name);
               }
             }}
-            onSyncFromSimulation={async () => {
-              const { data: simData } = await supabase
-                .from('project_simulations')
-                .select('results_json')
-                .eq('project_id', projectId)
-                .order('updated_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
+            onSyncFromSimulation={() => {
+              // Use latestSimulation prop passed from parent (no database fetch needed)
+              if (!latestSimulation?.results_json) {
+                toast.error('No simulation data available. Please configure and save a simulation first.');
+                return;
+              }
               
-              if (simData?.results_json) {
-                const resultsJson = simData.results_json as any;
-                const inverterConfig = resultsJson.inverterConfig;
-                
-                if (inverterConfig) {
-                  let module: SolarModulePreset;
-                  if (inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule) {
-                    module = inverterConfig.customModule;
-                  } else {
-                    module = getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
-                  }
-                  
-                  setPlantSetupConfig(prev => ({
-                    ...prev,
-                    solarModules: [{
-                      id: 'sim-module',
-                      name: module.name,
-                      width: module.width_m,
-                      length: module.length_m,
-                      wattage: module.power_wp,
-                      isDefault: true,
-                    }],
-                    inverters: inverterConfig.inverterSize ? [{
-                      id: 'sim-inverter',
-                      name: `${inverterConfig.inverterSize}kW Inverter`,
-                      acCapacity: inverterConfig.inverterSize,
-                      count: inverterConfig.inverterCount || 1,
-                      isDefault: true,
-                    }] : prev.inverters,
-                  }));
+              const resultsJson = latestSimulation.results_json as any;
+              const inverterConfig = resultsJson.inverterConfig;
+              
+              if (inverterConfig) {
+                let module: SolarModulePreset;
+                if (inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule) {
+                  module = inverterConfig.customModule;
+                } else {
+                  module = getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
                 }
+                
+                setPlantSetupConfig(prev => ({
+                  ...prev,
+                  solarModules: [{
+                    id: 'sim-module',
+                    name: module.name,
+                    width: module.width_m,
+                    length: module.length_m,
+                    wattage: module.power_wp,
+                    isDefault: true,
+                  }],
+                  inverters: inverterConfig.inverterSize ? [{
+                    id: 'sim-inverter',
+                    name: `${inverterConfig.inverterSize}kW Inverter`,
+                    acCapacity: inverterConfig.inverterSize,
+                    count: inverterConfig.inverterCount || 1,
+                    isDefault: true,
+                  }] : prev.inverters,
+                }));
+                toast.success('Synced from Simulation');
+              } else {
+                toast.error('No inverter configuration found in simulation');
               }
             }}
           />

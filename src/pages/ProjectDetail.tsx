@@ -644,12 +644,14 @@ export default function ProjectDetail() {
     if (activeTab === "overview" && dashboardRef.current) {
       await dashboardRef.current.saveIfNeeded();
     }
-    // Auto-save simulation when leaving simulation tab
-    if (activeTab === "simulation" && simulationRef.current) {
-      await simulationRef.current.saveIfNeeded();
-    }
-    // Auto-save costs when leaving costs tab (persists via simulation)
-    if (activeTab === "costs" && simulationRef.current) {
+    // Auto-save simulation when leaving simulation or costs tabs
+    // Also save when going TO pv-layout to ensure latest data is available
+    const shouldSaveSimulation = 
+      activeTab === "simulation" || 
+      activeTab === "costs" ||
+      newTab === "pv-layout";
+    
+    if (shouldSaveSimulation && simulationRef.current) {
       await simulationRef.current.saveIfNeeded();
     }
     setActiveTab(newTab);
@@ -1194,7 +1196,7 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="pv-layout" className="mt-6">
-          <FloorPlanMarkup projectId={id!} />
+          <FloorPlanMarkup projectId={id!} latestSimulation={latestSimulation} />
         </TabsContent>
 
         <TabsContent value="solar-forecast" className="mt-6">
