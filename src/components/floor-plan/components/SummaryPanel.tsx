@@ -1,5 +1,6 @@
-import { Sun, Layers, Cable, Zap, Hash } from 'lucide-react';
+import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo } from '../types';
 import { calculateTotalPVCapacity, calculatePolygonArea, calculateLineLength } from '../utils/geometry';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,6 +14,8 @@ interface SummaryPanelProps {
   scaleInfo: ScaleInfo;
   selectedItemId: string | null;
   onSelectItem: (id: string | null) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function SummaryPanel({
@@ -24,6 +27,8 @@ export function SummaryPanel({
   scaleInfo,
   selectedItemId,
   onSelectItem,
+  isCollapsed,
+  onToggleCollapse,
 }: SummaryPanelProps) {
   const { panelCount, capacityKwp } = pvPanelConfig
     ? calculateTotalPVCapacity(pvArrays, pvPanelConfig)
@@ -43,10 +48,34 @@ export function SummaryPanel({
 
   const inverterCount = equipment.filter(e => e.type === 'Inverter').length;
 
+  // Collapsed state - thin strip with expand button
+  if (isCollapsed) {
+    return (
+      <div className="w-10 bg-card border-l flex flex-col items-center py-3 gap-2">
+        <Button variant="ghost" size="icon" onClick={onToggleCollapse} title="Expand summary">
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        {panelCount > 0 && (
+          <>
+            <div className="text-xs font-semibold text-center" title={`${capacityKwp.toFixed(1)} kWp`}>
+              {capacityKwp.toFixed(0)}
+            </div>
+            <div className="text-[10px] text-muted-foreground">kWp</div>
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="w-64 bg-card border-l flex flex-col h-full">
-      <div className="p-3 border-b">
+      <div className="p-3 border-b flex items-center justify-between">
         <h2 className="font-semibold text-sm">Project Summary</h2>
+        {onToggleCollapse && (
+          <Button variant="ghost" size="icon" className="h-6 w-6 -mr-1" onClick={onToggleCollapse} title="Collapse summary">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       <ScrollArea className="flex-1">
