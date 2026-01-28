@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { 
   Folder, Calendar, ChevronDown, FileUp, FileText, 
   Download, MoreVertical, Plus, FolderOpen, Settings2,
-  Check, X, FolderPlus, Pencil, Trash2, Move
+  Check, X, FolderPlus, Pencil, Trash2, Move, GripVertical
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -14,6 +14,10 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
@@ -117,6 +121,10 @@ export function LayoutBrowser({
   // Layout delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteLayoutId, setDeleteLayoutId] = useState<string | null>(null);
+  
+  // Drag and drop state
+  const [draggedLayoutId, setDraggedLayoutId] = useState<string | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -240,6 +248,51 @@ export function LayoutBrowser({
       console.error('Error moving layouts:', error);
       toast.error('Failed to move layouts');
     }
+  };
+
+  // Move single layout to folder
+  const handleMoveLayoutToFolder = async (layoutId: string, folderId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('pv_layouts')
+        .update({ folder_id: folderId })
+        .eq('id', layoutId);
+      
+      if (error) throw error;
+      await fetchData();
+      toast.success('Layout moved');
+    } catch (error) {
+      console.error('Error moving layout:', error);
+      toast.error('Failed to move layout');
+    }
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (layoutId: string) => {
+    setDraggedLayoutId(layoutId);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedLayoutId(null);
+    setDragOverFolderId(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, folderId: string | null) => {
+    e.preventDefault();
+    setDragOverFolderId(folderId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverFolderId(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, folderId: string | null) => {
+    e.preventDefault();
+    setDragOverFolderId(null);
+    if (!draggedLayoutId) return;
+    
+    await handleMoveLayoutToFolder(draggedLayoutId, folderId);
+    setDraggedLayoutId(null);
   };
 
   // Layout operations
@@ -452,6 +505,22 @@ export function LayoutBrowser({
           </div>
         </div>
 
+        {/* Manage Folders Mode Banner */}
+        {isManageFoldersMode && (
+          <div className="mb-4 p-3 bg-secondary/50 border border-secondary rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4 text-secondary-foreground" />
+              <span className="text-sm font-medium text-secondary-foreground">
+                Folder Management Mode — Click the edit or delete icons on folders to manage them
+              </span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setIsManageFoldersMode(false)}>
+              <X className="h-4 w-4 mr-1" />
+              Done
+            </Button>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -460,7 +529,16 @@ export function LayoutBrowser({
           <Accordion type="multiple" defaultValue={['uncategorized', ...folders.map(f => f.id)]}>
             {/* Custom folders */}
             {folderLayouts.map(({ folder, layouts: folderLayoutList }) => (
-              <AccordionItem key={folder.id} value={folder.id} className="border rounded-lg mb-2">
+              <AccordionItem 
+                key={folder.id} 
+                value={folder.id} 
+                className={`border rounded-lg mb-2 transition-colors ${
+                  dragOverFolderId === folder.id ? 'border-primary bg-primary/5' : ''
+                } ${isManageFoldersMode ? 'border-secondary' : ''}`}
+                onDragOver={(e) => handleDragOver(e, folder.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, folder.id)}
+              >
                 <AccordionTrigger className="px-4 hover:no-underline">
                   <div className="flex items-center gap-2 flex-1">
                     <Folder className="h-4 w-4" style={{ color: folder.color }} />
@@ -505,12 +583,17 @@ export function LayoutBrowser({
                         <DesignCard
                           key={layout.id}
                           layout={layout}
+                          folders={folders}
                           isMultiSelectMode={isMultiSelectMode}
                           isSelected={selectedLayoutIds.has(layout.id)}
+                          isDragging={draggedLayoutId === layout.id}
                           onClick={() => isMultiSelectMode ? toggleLayoutSelection(layout.id) : onSelectLayout(layout.id)}
                           onRename={() => handleRenameClick(layout)}
                           onDuplicate={() => handleDuplicate(layout)}
                           onDelete={() => handleDeleteClick(layout.id)}
+                          onMoveToFolder={(folderId) => handleMoveLayoutToFolder(layout.id, folderId)}
+                          onDragStart={() => handleDragStart(layout.id)}
+                          onDragEnd={handleDragEnd}
                         />
                       ))}
                     </div>
@@ -520,7 +603,15 @@ export function LayoutBrowser({
             ))}
 
             {/* Uncategorized folder */}
-            <AccordionItem value="uncategorized" className="border rounded-lg">
+            <AccordionItem 
+              value="uncategorized" 
+              className={`border rounded-lg transition-colors ${
+                dragOverFolderId === 'uncategorized' ? 'border-primary bg-primary/5' : ''
+              }`}
+              onDragOver={(e) => handleDragOver(e, 'uncategorized')}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, null)}
+            >
               <AccordionTrigger className="px-4 hover:no-underline">
                 <div className="flex items-center gap-2">
                   <Folder className="h-4 w-4 text-primary" />
@@ -542,12 +633,17 @@ export function LayoutBrowser({
                       <DesignCard
                         key={layout.id}
                         layout={layout}
+                        folders={folders}
                         isMultiSelectMode={isMultiSelectMode}
                         isSelected={selectedLayoutIds.has(layout.id)}
+                        isDragging={draggedLayoutId === layout.id}
                         onClick={() => isMultiSelectMode ? toggleLayoutSelection(layout.id) : onSelectLayout(layout.id)}
                         onRename={() => handleRenameClick(layout)}
                         onDuplicate={() => handleDuplicate(layout)}
                         onDelete={() => handleDeleteClick(layout.id)}
+                        onMoveToFolder={(folderId) => handleMoveLayoutToFolder(layout.id, folderId)}
+                        onDragStart={() => handleDragStart(layout.id)}
+                        onDragEnd={handleDragEnd}
                       />
                     ))}
                   </div>
@@ -704,30 +800,56 @@ export function LayoutBrowser({
 
 interface DesignCardProps {
   layout: Layout;
+  folders: LayoutFolder[];
   isMultiSelectMode: boolean;
   isSelected: boolean;
+  isDragging: boolean;
   onClick: () => void;
   onRename: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onMoveToFolder: (folderId: string | null) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
 }
 
-function DesignCard({ layout, isMultiSelectMode, isSelected, onClick, onRename, onDuplicate, onDelete }: DesignCardProps) {
+function DesignCard({ 
+  layout, 
+  folders,
+  isMultiSelectMode, 
+  isSelected, 
+  isDragging,
+  onClick, 
+  onRename, 
+  onDuplicate, 
+  onDelete,
+  onMoveToFolder,
+  onDragStart,
+  onDragEnd
+}: DesignCardProps) {
   return (
     <div
       className={`border rounded-lg p-4 hover:border-primary transition-colors cursor-pointer bg-background group ${
         isSelected ? 'border-primary bg-primary/5' : ''
-      }`}
+      } ${isDragging ? 'opacity-50 border-dashed' : ''}`}
       onClick={onClick}
+      draggable={!isMultiSelectMode}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        onDragStart();
+      }}
+      onDragEnd={onDragEnd}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          {isMultiSelectMode && (
+          {isMultiSelectMode ? (
             <Checkbox 
               checked={isSelected} 
               onCheckedChange={() => onClick()}
               onClick={(e) => e.stopPropagation()}
             />
+          ) : (
+            <GripVertical className="h-4 w-4 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 cursor-grab" />
           )}
           <Folder className="h-4 w-4 text-primary shrink-0" />
           <span className="font-medium truncate">{layout.name}</span>
@@ -742,16 +864,45 @@ function DesignCard({ layout, isMultiSelectMode, isSelected, onClick, onRename, 
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="bg-popover">
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRename(); }}>
+                <Pencil className="h-4 w-4 mr-2" />
                 Rename
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDuplicate(); }}>
                 Duplicate
               </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger onClick={(e) => e.stopPropagation()}>
+                  <Move className="h-4 w-4 mr-2" />
+                  Move to...
+                </DropdownMenuSubTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent className="bg-popover">
+                    <DropdownMenuItem 
+                      onClick={(e) => { e.stopPropagation(); onMoveToFolder(null); }}
+                      disabled={!layout.folder_id}
+                    >
+                      <Folder className="h-4 w-4 mr-2 text-primary" />
+                      Uncategorized
+                    </DropdownMenuItem>
+                    {folders.map(folder => (
+                      <DropdownMenuItem 
+                        key={folder.id}
+                        onClick={(e) => { e.stopPropagation(); onMoveToFolder(folder.id); }}
+                        disabled={layout.folder_id === folder.id}
+                      >
+                        <Folder className="h-4 w-4 mr-2" style={{ color: folder.color }} />
+                        {folder.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
               <DropdownMenuSeparator />
               <DropdownMenuItem 
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
                 className="text-destructive focus:text-destructive"
               >
+                <Trash2 className="h-4 w-4 mr-2" />
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
