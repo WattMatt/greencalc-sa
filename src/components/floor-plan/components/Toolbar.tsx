@@ -215,7 +215,7 @@ export function Toolbar({
               onClick={onBackToBrowser}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
-              <span className="text-xs">Back to Designs</span>
+              <span className="text-xs">Back</span>
             </Button>
           )}
           <Button 
@@ -225,7 +225,21 @@ export function Toolbar({
             onClick={onOpenLoadLayout}
           >
             <Upload className="h-4 w-4 mr-2" />
-            <span className="text-xs">Load Image</span>
+            <span className="text-xs">Load</span>
+          </Button>
+          <Button
+            variant={hasUnsavedChanges ? 'default' : 'outline'}
+            size="sm"
+            className="w-full justify-start"
+            onClick={onSave}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            <span className="text-xs">{isSaving ? 'Saving...' : 'Save'}</span>
           </Button>
         </CollapsibleSection>
 
@@ -392,21 +406,7 @@ export function Toolbar({
       </div>
 
       {/* Bottom actions */}
-      <div className="p-2 border-t space-y-2">
-        <Button
-          variant={hasUnsavedChanges ? 'default' : 'outline'}
-          size="sm"
-          className="w-full"
-          onClick={onSave}
-          disabled={isSaving}
-        >
-          {isSaving ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4 mr-2" />
-          )}
-          <span className="text-xs">{isSaving ? 'Saving...' : 'Save Layout'}</span>
-        </Button>
+      <div className="p-2 border-t">
         <div className="flex gap-1">
           <Button
             variant="ghost"
