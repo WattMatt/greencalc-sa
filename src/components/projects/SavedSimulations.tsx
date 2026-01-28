@@ -288,9 +288,64 @@ export function SavedSimulations({
           )}
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          {savedSimulations?.length || 0} saved simulations • Auto-saves on tab change
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-muted-foreground">
+            {savedSimulations?.length || 0} saved simulations • Auto-saves on tab change
+          </p>
+          <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 gap-1.5">
+                <Save className="h-3.5 w-3.5" />
+                Save
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Save Simulation</DialogTitle>
+                <DialogDescription>
+                  Save your current configuration for comparison or proposal generation.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Simulation Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="e.g., 500kWp Optimized"
+                    value={simulationName}
+                    onChange={(e) => setSimulationName(e.target.value)}
+                  />
+                </div>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p>Solar: {currentConfig.solarCapacity} kWp</p>
+                  {includesBattery && <p>Battery: {currentConfig.batteryCapacity} kWh</p>}
+                  <p>Annual Savings: R{Math.round(currentResults.annualSavings).toLocaleString()}</p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => simulationName && saveMutation.mutate(simulationName)}
+                  disabled={!simulationName || saveMutation.isPending}
+                >
+                  {saveMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      Save
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Comparison View */}
