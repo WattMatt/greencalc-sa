@@ -258,21 +258,23 @@ export const snapPVArrayToSpacing = (
     const absDx = Math.abs(dx);
     const absDy = Math.abs(dy);
     
-    // Check if edges would be closer than minSpacing
+    // Edge-to-edge gaps (negative means overlap on that axis)
     const edgeDistX = absDx - (effArrHalfW + effGhostHalfW);
     const edgeDistY = absDy - (effArrHalfH + effGhostHalfH);
-    
-    // If both edge distances are positive and greater than spacing, no snap needed
-    if (edgeDistX >= minSpacingPx && edgeDistY >= minSpacingPx) {
-      continue; // Far enough away, allow free placement
+
+    // Compute the true minimum edge-to-edge distance between the (axis-aligned) bounding boxes.
+    // If boxes overlap on an axis, the gap for that axis is 0.
+    // This avoids snapping when you're far away on one axis but merely aligned on the other.
+    const gapX = Math.max(0, edgeDistX);
+    const gapY = Math.max(0, edgeDistY);
+    const minEdgeDistance = Math.hypot(gapX, gapY);
+
+    // If the true min distance is already >= configured spacing, allow free placement.
+    if (minEdgeDistance >= minSpacingPx) {
+      continue;
     }
-    
-    // Check if we're actually close enough to this array to consider snapping
-    // Only snap if at least one axis would violate the spacing
-    const wouldViolateX = edgeDistX < minSpacingPx;
-    const wouldViolateY = edgeDistY < minSpacingPx;
-    
-    if ((wouldViolateX || wouldViolateY) && dist < closestDist) {
+
+    if (dist < closestDist) {
       closestDist = dist;
       closestArray = arr;
 
@@ -282,13 +284,13 @@ export const snapPVArrayToSpacing = (
         const signX = dx >= 0 ? 1 : -1;
         snapPosition = {
           x: arr.position.x + signX * minDistX,
-          y: arr.position.y,
+          y: mousePos.y,
         };
       } else {
         // Approaching vertically - snap above/below
         const signY = dy >= 0 ? 1 : -1;
         snapPosition = {
-          x: arr.position.x,
+          x: mousePos.x,
           y: arr.position.y + signY * minDistY,
         };
       }
