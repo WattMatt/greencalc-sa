@@ -108,6 +108,12 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   
   // Plant Setup Config
   const [plantSetupConfig, setPlantSetupConfig] = useState<PlantSetupConfig>(defaultPlantSetupConfig);
+  
+  // Selected items for placement (which type of module/inverter/etc. to use)
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  const [selectedInverterId, setSelectedInverterId] = useState<string | null>(null);
+  const [selectedWalkwayId, setSelectedWalkwayId] = useState<string | null>(null);
+  const [selectedCableTrayId, setSelectedCableTrayId] = useState<string | null>(null);
 
   // Reset to blank layout state
   const resetToBlankLayout = useCallback(() => {
@@ -580,6 +586,14 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           onBackToBrowser={() => setViewMode('browser')}
           isCollapsed={isToolbarCollapsed}
           onToggleCollapse={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
+          selectedModuleId={selectedModuleId}
+          setSelectedModuleId={setSelectedModuleId}
+          selectedInverterId={selectedInverterId}
+          setSelectedInverterId={setSelectedInverterId}
+          selectedWalkwayId={selectedWalkwayId}
+          setSelectedWalkwayId={setSelectedWalkwayId}
+          selectedCableTrayId={selectedCableTrayId}
+          setSelectedCableTrayId={setSelectedCableTrayId}
         />
       )}
       
