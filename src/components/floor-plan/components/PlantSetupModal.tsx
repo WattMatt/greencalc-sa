@@ -157,14 +157,14 @@ export function PlantSetupModal({
 
   // Walkway editing
   const [walkwayForm, setWalkwayForm] = useState<WalkwayConfig>({ 
-    id: '', name: '', width: 0.6 
+    id: '', name: '', width: 0.6, length: 10 
   });
 
   const startEditWalkway = (walkway: WalkwayConfig | null) => {
     if (walkway) {
-      setWalkwayForm(walkway);
+      setWalkwayForm({ ...walkway, length: walkway.length ?? 10 });
     } else {
-      setWalkwayForm({ id: `walk-${Date.now()}`, name: '', width: 0.6 });
+      setWalkwayForm({ id: `walk-${Date.now()}`, name: '', width: 0.6, length: 10 });
     }
     setEditing({ type: 'walkway', item: walkway, isNew: !walkway });
   };
@@ -190,14 +190,14 @@ export function PlantSetupModal({
 
   // Cable Tray editing
   const [cableTrayForm, setCableTrayForm] = useState<CableTrayConfig>({ 
-    id: '', name: '', width: 0.3 
+    id: '', name: '', width: 0.3, length: 10 
   });
 
   const startEditCableTray = (tray: CableTrayConfig | null) => {
     if (tray) {
-      setCableTrayForm(tray);
+      setCableTrayForm({ ...tray, length: tray.length ?? 10 });
     } else {
-      setCableTrayForm({ id: `tray-${Date.now()}`, name: '', width: 0.3 });
+      setCableTrayForm({ id: `tray-${Date.now()}`, name: '', width: 0.3, length: 10 });
     }
     setEditing({ type: 'cableTray', item: tray, isNew: !tray });
   };
@@ -417,6 +417,16 @@ export function PlantSetupModal({
                 className="h-8 text-sm"
               />
             </div>
+            <div>
+              <Label className="text-xs">Length (m)</Label>
+              <Input 
+                type="number" 
+                step="0.1"
+                value={walkwayForm.length} 
+                onChange={e => setWalkwayForm(prev => ({ ...prev, length: parseFloat(e.target.value) || 0 }))}
+                className="h-8 text-sm"
+              />
+            </div>
           </div>
           <div className="flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
@@ -431,7 +441,7 @@ export function PlantSetupModal({
                 <Route className="h-4 w-4 text-green-500" />
                 <div>
                   <span className="text-sm font-medium">{walkway.name}</span>
-                  <p className="text-xs text-muted-foreground">{walkway.width}m wide</p>
+                  <p className="text-xs text-muted-foreground">{walkway.width}m × {walkway.length ?? '-'}m</p>
                 </div>
               </div>
               <div className="flex gap-1">
@@ -477,6 +487,16 @@ export function PlantSetupModal({
                 className="h-8 text-sm"
               />
             </div>
+            <div>
+              <Label className="text-xs">Length (m)</Label>
+              <Input 
+                type="number" 
+                step="0.1"
+                value={cableTrayForm.length} 
+                onChange={e => setCableTrayForm(prev => ({ ...prev, length: parseFloat(e.target.value) || 0 }))}
+                className="h-8 text-sm"
+              />
+            </div>
           </div>
           <div className="flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
@@ -491,7 +511,7 @@ export function PlantSetupModal({
                 <Cable className="h-4 w-4 text-orange-500" />
                 <div>
                   <span className="text-sm font-medium">{tray.name}</span>
-                  <p className="text-xs text-muted-foreground">{tray.width}m wide</p>
+                  <p className="text-xs text-muted-foreground">{tray.width}m × {tray.length ?? '-'}m</p>
                 </div>
               </div>
               <div className="flex gap-1">
