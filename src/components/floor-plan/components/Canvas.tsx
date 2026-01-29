@@ -301,7 +301,10 @@ export function Canvas({
     // Draw ghost preview for PV array placement
     if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig && pvPanelConfig && mouseWorldPos) {
       const onMask = roofMasks.find(m => isPointInPolygon(mouseWorldPos, m.points));
-      const rotation = onMask ? calculateArrayRotationForRoof(mouseWorldPos, roofMasks, 0) : 0;
+      
+      // Use placementRotation for manual control, otherwise auto-calculate from roof
+      const autoRotation = onMask ? calculateArrayRotationForRoof(mouseWorldPos, roofMasks, 0) : 0;
+      const rotation = (autoRotation + placementRotation) % 360;
       
       const ghostArray: PVArrayItem = {
         id: 'ghost-preview',
@@ -317,7 +320,7 @@ export function Canvas({
     }
     
     ctx.restore();
-  }, [viewState, equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, selectedItemId, scaleLine, currentDrawing, previewPoint, canvasSize, containerSize, activeTool, pendingRoofMaskPoints, directionLine, mouseWorldPos, pendingPvArrayConfig]);
+  }, [viewState, equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, selectedItemId, scaleLine, currentDrawing, previewPoint, canvasSize, containerSize, activeTool, pendingRoofMaskPoints, directionLine, mouseWorldPos, pendingPvArrayConfig, placementRotation]);
 
   const getMousePos = (e: React.MouseEvent): Point => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -404,7 +407,8 @@ export function Canvas({
       // Check if clicking on a roof mask
       const onMask = roofMasks.find(m => isPointInPolygon(worldPos, m.points));
       if (onMask) {
-        const rotation = calculateArrayRotationForRoof(worldPos, roofMasks, 0);
+        const autoRotation = calculateArrayRotationForRoof(worldPos, roofMasks, 0);
+        const rotation = (autoRotation + placementRotation) % 360;
         const newArray: PVArrayItem = {
           id: `array-${Date.now()}`,
           position: worldPos,
