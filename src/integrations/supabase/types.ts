@@ -708,6 +708,7 @@ export type Database = {
           id: string
           name: string
           pdf_data: string | null
+          plant_setup: Json | null
           project_id: string
           pv_arrays: Json | null
           pv_config: Json | null
@@ -723,6 +724,7 @@ export type Database = {
           id?: string
           name?: string
           pdf_data?: string | null
+          plant_setup?: Json | null
           project_id: string
           pv_arrays?: Json | null
           pv_config?: Json | null
@@ -738,6 +740,7 @@ export type Database = {
           id?: string
           name?: string
           pdf_data?: string | null
+          plant_setup?: Json | null
           project_id?: string
           pv_arrays?: Json | null
           pv_config?: Json | null
