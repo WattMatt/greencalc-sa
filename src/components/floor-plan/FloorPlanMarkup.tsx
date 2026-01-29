@@ -187,6 +187,11 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           setBackgroundImage(null);
         }
         
+        // Restore plant setup config (walkways, cable trays, etc.)
+        if (data.plant_setup) {
+          setPlantSetupConfig(data.plant_setup as unknown as PlantSetupConfig);
+        }
+        
         setHasUnsavedChanges(false);
       }
     } catch (error) {
@@ -443,6 +448,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         equipment: equipment,
         cables: lines,
         pdf_data: backgroundImage,
+        plant_setup: plantSetupConfig,
       };
 
       let result;
@@ -480,7 +486,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       if (!silent) setIsSaving(false);
       isAutoSavingRef.current = false;
     }
-  }, [readOnly, projectId, currentLayoutName, scaleInfo.ratio, pvPanelConfig, roofMasks, pvArrays, equipment, lines, backgroundImage, layoutId]);
+  }, [readOnly, projectId, currentLayoutName, scaleInfo.ratio, pvPanelConfig, roofMasks, pvArrays, equipment, lines, backgroundImage, layoutId, plantSetupConfig]);
 
   // Manual save handler
   const handleSave = async () => {
@@ -506,7 +512,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [hasUnsavedChanges, roofMasks, pvArrays, equipment, lines, backgroundImage, scaleInfo, readOnly, saveLayout]);
+  }, [hasUnsavedChanges, roofMasks, pvArrays, equipment, lines, backgroundImage, scaleInfo, plantSetupConfig, readOnly, saveLayout]);
 
   // Cleanup on unmount
   useEffect(() => {
