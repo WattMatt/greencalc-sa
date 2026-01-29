@@ -144,7 +144,15 @@ export function Toolbar({
   });
 
   const toggleSection = (section: string) => {
-    setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
+    setOpenSections(prev => {
+      const isCurrentlyOpen = prev[section];
+      // Close all sections, then open only the clicked one (if it was closed)
+      const allClosed = Object.keys(prev).reduce((acc, key) => {
+        acc[key] = false;
+        return acc;
+      }, {} as Record<string, boolean>);
+      return { ...allClosed, [section]: !isCurrentlyOpen };
+    });
   };
 
   const rotateNext = () => {
