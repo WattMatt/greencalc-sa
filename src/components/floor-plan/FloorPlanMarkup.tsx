@@ -959,6 +959,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         onDeleteItem={readOnly ? undefined : handleDeleteItem}
         isCollapsed={isSummaryCollapsed}
         onToggleCollapse={() => setIsSummaryCollapsed(!isSummaryCollapsed)}
+        plantSetupConfig={plantSetupConfig}
+        latestSimulation={latestSimulation}
       />
 
       {!readOnly && (
