@@ -1,46 +1,143 @@
 
 
-# Fix: Walkways and Cable Trays Showing Default Data
+# Fix: Separate Plant Setup Configuration from Placed Items
 
-## Problem
-The Summary Panel displays walkway and cable tray quantities even when the user hasn't defined or placed any. This happens because:
+## Problem Understanding
 
-1. **Default Configuration**: The `defaultPlantSetupConfig` in `types.ts` includes pre-populated default walkways and cable trays
-2. **Data Source Confusion**: The Summary Panel reads from `plantSetupConfig.walkways` and `plantSetupConfig.cableTrays`, which are **configuration entries** (equipment specs for the BOM), not actually **placed items on the canvas**
+The current system conflates two different concepts for Walkways and Cable Trays:
 
-## Root Cause
+1. **Plant Setup Configuration** (left toolbar) = Templates/definitions of equipment types available to place (e.g., "Standard Walkway - 0.6m wide")
+2. **Project Summary** (right panel) = Should show placed instances on the canvas
+
+Currently, both areas read from and modify the same `plantSetupConfig.walkways` and `plantSetupConfig.cableTrays` arrays. When you delete from the Project Summary, it removes the template from Plant Setup.
+
+### How Other Items Work Correctly
+- **PV Arrays**: Defined by `pvPanelConfig` (template) → Placed as `pvArrays[]` (instances)
+- **Equipment/Inverters**: Placed as `equipment[]` array in `DesignState`
+- **Roof Masks**: Placed as `roofMasks[]` array in `DesignState`
+- **Cabling**: Placed as `lines[]` array in `DesignState`
+
+### Current Walkway/Cable Tray Issue
+- Walkways: Only exist in `plantSetupConfig.walkways[]` (template AND instance combined)
+- Cable Trays: Only exist in `plantSetupConfig.cableTrays[]` (template AND instance combined)
+
+## Solution: Add Placed Item Arrays to DesignState
+
+We need to separate templates from placed instances by adding new arrays to track what's actually been placed on the project.
+
+### 1. Update Types (`src/components/floor-plan/types.ts`)
+
+Add new interfaces for placed walkway and cable tray instances:
+
 ```typescript
-// src/components/floor-plan/types.ts (lines 142-147)
-export const defaultPlantSetupConfig: PlantSetupConfig = {
-  solarModules: [],
-  inverters: [],
-  walkways: [{ id: 'default-walkway', name: 'Standard', width: 0.6, length: 10 }],  // ← Default data!
-  cableTrays: [{ id: 'default-tray', name: 'Standard', width: 0.3, length: 10 }],   // ← Default data!
+// Placed instance of a walkway on the canvas
+export interface PlacedWalkway {
+  id: string;
+  configId: string;  // Reference to WalkwayConfig template
+  name: string;
+  width: number;     // meters
+  length: number;    // meters (specific to this placement)
+  position?: Point;  // Optional canvas position
+}
+
+// Placed instance of a cable tray on the canvas
+export interface PlacedCableTray {
+  id: string;
+  configId: string;  // Reference to CableTrayConfig template
+  name: string;
+  width: number;     // meters
+  length: number;    // meters (specific to this placement)
+  position?: Point;  // Optional canvas position
+}
+
+// Update DesignState to include placed walkways and cable trays
+export interface DesignState {
+  equipment: EquipmentItem[];
+  lines: SupplyLine[];
+  roofMasks: RoofMask[];
+  pvArrays: PVArrayItem[];
+  placedWalkways: PlacedWalkway[];    // NEW
+  placedCableTrays: PlacedCableTray[]; // NEW
+}
+```
+
+### 2. Update Initial State (`src/components/floor-plan/types.ts`)
+
+```typescript
+export const initialDesignState: DesignState = {
+  equipment: [],
+  lines: [],
+  roofMasks: [],
+  pvArrays: [],
+  placedWalkways: [],    // NEW
+  placedCableTrays: [],  // NEW
 };
 ```
 
-## Solution
-Remove the default walkway and cable tray entries so the Plant Setup starts empty - users must explicitly add items.
+### 3. Update FloorPlanMarkup.tsx
 
-### File: `src/components/floor-plan/types.ts`
+- Add state setters for placed walkways and cable trays
+- Update `handleDeletePlantSetupItem` to delete from `placedWalkways`/`placedCableTrays` instead of `plantSetupConfig`
+- Update save/load logic to persist these new arrays
 
-Change the `defaultPlantSetupConfig` to have empty arrays for walkways and cable trays:
+### 4. Update SummaryPanel.tsx
 
-```typescript
-export const defaultPlantSetupConfig: PlantSetupConfig = {
-  solarModules: [],
-  inverters: [],
-  walkways: [],     // Start empty
-  cableTrays: [],   // Start empty
-};
+Change the Walkways and Cable Trays sections to read from `placedWalkways` and `placedCableTrays` props instead of `plantSetupConfig.walkways/cableTrays`.
+
+**Summary Card Metrics:**
+- Walkways card: Sum of `placedWalkways[].length`
+- Cable Trays card: Sum of `placedCableTrays[].length`
+
+**Dropdown Lists:**
+- Walkways dropdown: List items from `placedWalkways[]`
+- Cable Trays dropdown: List items from `placedCableTrays[]`
+
+### 5. Add "Place" Functionality (Future Enhancement)
+
+To add walkways/cable trays to the project, users will need:
+- Select a template from Plant Setup
+- Either click to place OR manually add an instance with specific length
+
+For immediate fix, we'll add an "Add to Project" flow that creates a placed instance from a template.
+
+## Data Flow After Fix
+
+```text
+Plant Setup Modal                    Project Summary
+┌─────────────────────┐              ┌─────────────────────┐
+│ Templates (Config)  │              │ Placed Instances    │
+├─────────────────────┤              ├─────────────────────┤
+│ walkwayConfig[]     │─── Copy ───> │ placedWalkways[]    │
+│ cableTrayConfig[]   │              │ placedCableTrays[]  │
+└─────────────────────┘              └─────────────────────┘
+     (Left toolbar)                       (Right panel)
 ```
 
-## Result
-After this change:
-- The Summary Panel will show **0 m** for Walkways and Cable Trays by default
-- The detail dropdowns will show "No walkways defined" and "No cable trays defined"
-- Users can add entries via the Plant Setup modal as needed
+## Files to Modify
 
-## Technical Note
-This change only affects the **initial state**. Existing layouts that have been saved with walkways/cable trays will continue to load their saved data correctly since the persistence layer restores `plantSetupConfig` from the database.
+1. **`src/components/floor-plan/types.ts`**
+   - Add `PlacedWalkway` and `PlacedCableTray` interfaces
+   - Update `DesignState` interface
+   - Update `initialDesignState`
+
+2. **`src/components/floor-plan/FloorPlanMarkup.tsx`**
+   - Add setters for new placed arrays
+   - Update delete handler to target placed items
+   - Update persistence (save/load) to include new arrays
+   - Add handler to add placed instance from template
+
+3. **`src/components/floor-plan/components/SummaryPanel.tsx`**
+   - Add new props: `placedWalkways`, `placedCableTrays`
+   - Update metrics calculation to use placed arrays
+   - Update dropdown lists to show placed items
+   - Update delete callback to target placed items
+
+4. **`src/components/floor-plan/components/Toolbar.tsx`** (if needed)
+   - Add "Add to Project" action in Plant Setup section
+
+## Migration Consideration
+
+For existing layouts that have walkways/cableTrays in `plantSetupConfig`, the load function should:
+- Keep them in config (as templates)
+- Optionally migrate them to `placedWalkways`/`placedCableTrays` if they represent actual placements
 
