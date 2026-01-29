@@ -12,6 +12,7 @@ import { LoadLayoutModal } from './components/LoadLayoutModal';
 import { LayoutManagerModal } from './components/LayoutManagerModal';
 import { LayoutBrowser } from './components/LayoutBrowser';
 import { PlantSetupModal } from './components/PlantSetupModal';
+import { SimulationSelector } from './components/SimulationSelector';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
@@ -19,8 +20,8 @@ import { getModulePresetById, getDefaultModulePreset, SolarModulePreset } from '
 
 type ViewMode = 'browser' | 'editor';
 
-// Type for simulation data passed from parent
-type SimulationData = {
+// Type for simulation data
+export type SimulationData = {
   id: string;
   name: string;
   solar_capacity_kwp: number | null;
@@ -52,6 +53,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [isLoading, setIsLoading] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  
+  // Assigned simulation for this layout
+  const [assignedSimulationId, setAssignedSimulationId] = useState<string | null>(null);
+  const [assignedSimulation, setAssignedSimulation] = useState<SimulationData>(null);
   
   // Refs for auto-save
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -146,6 +151,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     setHistory([initialDesignState]);
     setHistoryIndex(0);
     setHasUnsavedChanges(false);
+    setAssignedSimulationId(null);
+    setAssignedSimulation(null);
   }, []);
 
   // Load a specific layout by ID
@@ -162,6 +169,27 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       if (data) {
         setLayoutId(data.id);
         setCurrentLayoutName(data.name);
+        
+        // Load assigned simulation if present
+        const simId = (data as any).simulation_id as string | null;
+        setAssignedSimulationId(simId);
+        
+        if (simId) {
+          // Fetch the assigned simulation
+          const { data: simData, error: simError } = await supabase
+            .from('project_simulations')
+            .select('id, name, solar_capacity_kwp, battery_capacity_kwh, battery_power_kw, annual_solar_savings, roi_percentage, results_json')
+            .eq('id', simId)
+            .single();
+          
+          if (!simError && simData) {
+            setAssignedSimulation(simData);
+          } else {
+            setAssignedSimulation(null);
+          }
+        } else {
+          setAssignedSimulation(null);
+        }
         
         // Restore scale
         if (data.scale_pixels_per_meter) {
@@ -468,6 +496,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         cables: lines,
         pdf_data: backgroundImage,
         plant_setup: plantSetupConfig,
+        simulation_id: assignedSimulationId,
       };
 
       let result;
@@ -505,7 +534,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       if (!silent) setIsSaving(false);
       isAutoSavingRef.current = false;
     }
-  }, [readOnly, projectId, currentLayoutName, scaleInfo.ratio, pvPanelConfig, roofMasks, pvArrays, equipment, lines, backgroundImage, layoutId, plantSetupConfig, placedWalkways, placedCableTrays]);
+  }, [readOnly, projectId, currentLayoutName, scaleInfo.ratio, pvPanelConfig, roofMasks, pvArrays, equipment, lines, backgroundImage, layoutId, plantSetupConfig, placedWalkways, placedCableTrays, assignedSimulationId]);
 
   // Manual save handler
   const handleSave = async () => {
@@ -531,7 +560,28 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [hasUnsavedChanges, roofMasks, pvArrays, equipment, lines, backgroundImage, scaleInfo, plantSetupConfig, placedWalkways, placedCableTrays, readOnly, saveLayout]);
+  }, [hasUnsavedChanges, roofMasks, pvArrays, equipment, lines, backgroundImage, scaleInfo, plantSetupConfig, placedWalkways, placedCableTrays, readOnly, saveLayout, assignedSimulationId]);
+
+  // Handle simulation assignment change
+  const handleSimulationChange = useCallback((simulationId: string | null, simulation: any) => {
+    setAssignedSimulationId(simulationId);
+    // Map to full SimulationData type (some fields may be null)
+    if (simulation) {
+      setAssignedSimulation({
+        id: simulation.id,
+        name: simulation.name,
+        solar_capacity_kwp: simulation.solar_capacity_kwp,
+        battery_capacity_kwh: null,
+        battery_power_kw: null,
+        annual_solar_savings: null,
+        roi_percentage: null,
+        results_json: simulation.results_json,
+      });
+    } else {
+      setAssignedSimulation(null);
+    }
+    setHasUnsavedChanges(true);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -993,7 +1043,16 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         plantSetupConfig={plantSetupConfig}
         placedWalkways={placedWalkways}
         placedCableTrays={placedCableTrays}
-        latestSimulation={latestSimulation}
+        assignedSimulation={assignedSimulation}
+        simulationSelector={
+          <SimulationSelector
+            projectId={projectId}
+            layoutId={layoutId}
+            currentSimulationId={assignedSimulationId}
+            onSimulationChange={handleSimulationChange}
+            readOnly={readOnly}
+          />
+        }
       />
 
       {!readOnly && (

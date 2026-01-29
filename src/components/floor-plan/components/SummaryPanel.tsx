@@ -37,7 +37,8 @@ interface SummaryPanelProps {
   plantSetupConfig?: PlantSetupConfig;
   placedWalkways?: PlacedWalkway[];
   placedCableTrays?: PlacedCableTray[];
-  latestSimulation?: SimulationData | null;
+  assignedSimulation?: SimulationData | null;
+  simulationSelector?: React.ReactNode;
 }
 
 // Reusable collapsible section component
@@ -95,7 +96,8 @@ export function SummaryPanel({
   plantSetupConfig,
   placedWalkways = [],
   placedCableTrays = [],
-  latestSimulation,
+  assignedSimulation,
+  simulationSelector,
 }: SummaryPanelProps) {
   const { panelCount, capacityKwp } = pvPanelConfig
     ? calculateTotalPVCapacity(pvArrays, pvPanelConfig)
@@ -118,8 +120,8 @@ export function SummaryPanel({
   const totalCableTrayLength = placedCableTrays.reduce((sum, c) => sum + c.length, 0);
   
   // Simulation comparison values
-  const simModuleCount = latestSimulation?.results_json?.moduleCount ?? null;
-  const simInverterCount = latestSimulation?.results_json?.inverterCount ?? null;
+  const simModuleCount = assignedSimulation?.results_json?.moduleCount ?? null;
+  const simInverterCount = assignedSimulation?.results_json?.inverterCount ?? null;
   
   // Layout inverter count (placed on canvas)
   const layoutInverterCount = equipment.filter(e => e.type === 'Inverter').length;
@@ -150,12 +152,19 @@ export function SummaryPanel({
   return (
     <TooltipProvider>
       <div className="w-64 bg-card border-l flex flex-col h-full">
-        <div className="p-3 border-b flex items-center justify-between">
-          <h2 className="font-semibold text-sm">Project Summary</h2>
-          {onToggleCollapse && (
-            <Button variant="ghost" size="icon" className="h-6 w-6 -mr-1" onClick={onToggleCollapse} title="Collapse summary">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+        <div className="p-3 border-b space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-sm">Project Summary</h2>
+            {onToggleCollapse && (
+              <Button variant="ghost" size="icon" className="h-6 w-6 -mr-1" onClick={onToggleCollapse} title="Collapse summary">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          {simulationSelector && (
+            <div className="pt-1">
+              {simulationSelector}
+            </div>
           )}
         </div>
 
