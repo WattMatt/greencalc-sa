@@ -1,86 +1,79 @@
 
-# Add Simulation Requirements to Summary Panel and Reorder Sections
+## Goal
+Make placed inverters behave like other selectable items (PV arrays, roof masks):
+- Click an inverter on the canvas to select it (highlight + enables keyboard delete).
+- Delete an inverter from the Project Summary dropdown reliably.
 
-## Summary
-This plan addresses two requests:
-1. Display the simulation's required module count and inverter count in the Modules and Inverters cards
-2. Move the "Roof Areas" dropdown from the top to between the 2x2 summary grid and the "Modules" dropdown
+## What’s happening now (root cause)
+The canvas selection logic (`Canvas.tsx`) only hit-tests PV arrays and roof masks. It never checks “equipment” items (inverters, combiner, etc.), so clicking an inverter can’t select it.
 
-## Current Behavior
-- The Summary Panel cards show `panelCount` (from placed PV arrays on canvas) and `layoutInverterCount` (placed equipment)
-- The cards can show `/X` comparison when `simModuleCount` and `simInverterCount` exist in `latestSimulation.results_json`
-- However, **these values are not currently saved** to `results_json` in the simulation auto-save
-- The "Roof Areas" collapsible is currently at the very top, before the 2x2 card grid
+Deletion from the Project Summary should theoretically work (it calls `onDeleteItem(inv.id)`), but in practice it can fail if:
+- the inverter list filter doesn’t match the stored `type` values in all cases (string vs enum), or
+- the click event gets swallowed/treated like a selection click (needs `preventDefault` + `stopPropagation` consistently).
 
-## Changes Required
+## Proposed changes
 
-### 1. Save Module and Inverter Counts to Simulation Results
-**File:** `src/components/projects/SimulationPanel.tsx`
+### 1) Add equipment hit-testing + selection on the canvas
+**File:** `src/components/floor-plan/components/Canvas.tsx`
 
-Add two new fields to the `results_json` object in the auto-save mutation:
-- `moduleCount`: From `moduleMetrics.moduleCount` (calculated based on DC capacity and module specs)
-- `inverterCount`: From `inverterConfig.inverterCount`
+**Implementation approach:**
+- In the `handleMouseDown` block for `Tool.SELECT`:
+  1. Keep existing priority: PV Arrays (topmost) first.
+  2. Then Roof Masks.
+  3. Then add a new step: detect if the click hits an equipment icon (inverter etc.) and select it.
+  4. Otherwise clear selection.
 
-This will enable the Summary Panel to read these values and display them as the simulation requirement.
+**How to hit-test equipment (simple + consistent with drawing):**
+- Reuse the same size logic used in `drawEquipmentIcon`:
+  - If `scaleInfo.ratio` exists: `sizePx = EQUIPMENT_REAL_WORLD_SIZES[type] / scaleInfo.ratio`
+  - Else fallback to `fixedSize = 12 / zoom` style sizing (or a small constant adjusted by zoom).
+- Use a conservative axis-aligned bounding box around the item’s center:
+  - `abs(worldPos.x - item.position.x) <= sizePx/2 + padding`
+  - `abs(worldPos.y - item.position.y) <= sizePx/2 + padding`
+- Iterate equipment in reverse order so the most recently placed (visually “top”) wins, similar to PV arrays.
 
-### 2. Reorder Summary Panel Sections
+**Notes / edge cases:**
+- Ignore rotation in the hit test initially (simple bounding box). This is good enough for selection and matches user expectations.
+- Later enhancement (optional) could do rotated-rect hit testing, but not needed to solve the issue.
+
+**Expected outcome:**
+- Clicking an inverter selects it.
+- `selectedItemId` becomes the inverter’s id.
+- Highlighting already works because `renderAllMarkups()` passes `selectedItemId` into `drawEquipmentIcon`.
+
+---
+
+### 2) Make inverter deletion from the Summary Panel robust
 **File:** `src/components/floor-plan/components/SummaryPanel.tsx`
 
-Move the "Roof Areas" `CollapsibleSection` from its current position (before the 2x2 grid) to after the grid and before the "Modules" dropdown section.
+**Implementation approach:**
+- Ensure filtering uses the enum value (or otherwise matches actual stored values):
+  - Replace `e.type === 'Inverter'` with `e.type === EquipmentType.INVERTER` by importing `EquipmentType` from `../types`.
+- Harden delete click handling:
+  - In the trash button `onClick`, call `e.preventDefault()` + `e.stopPropagation()` before invoking `onDeleteItem(inv.id)`.
+  - This prevents the click from being interpreted as a selection click or triggering any parent handlers.
 
-**New order will be:**
-1. 2x2 Summary Grid (Modules, Inverters, Walkways, Cable Trays)
-2. Roof Areas (collapsible)
-3. Modules detail dropdown
-4. Inverters detail dropdown
-5. Walkways detail dropdown
-6. Cable Trays detail dropdown
-7. Cabling detail dropdown
+**Expected outcome:**
+- Clicking the trash icon reliably deletes that inverter instance (calls `handleDeleteItem`, which filters `equipment` by id).
+- Works regardless of whether `type` is represented as a string literal or enum in persisted data.
 
-## Visual Result
+---
 
-```text
-+---------------------------+
-| Project Summary         > |
-+---------------------------+
-| [Modules]    [Inverters]  |  <- Cards now show "52 /55" format
-|   52/55          0/3      |     (layout count / simulation requirement)
-| [Walkways]  [Cable Trays] |
-|    0 m           0 m      |
-+---------------------------+
-| Roof Areas      9659 m² v |  <- MOVED HERE (was at top)
-+---------------------------+
-| # Modules           52  v |  <- Collapsible dropdown
-| z Inverters          0  v |
-| F Walkways         0 m  v |
-| B Cable Trays      0 m  v |
-+---------------------------+
-| Cabling            0 m  v |
-+---------------------------+
-```
+### 3) Verification checklist (manual tests)
+1. Place an inverter using the Equipment tool.
+2. Switch to Select tool.
+3. Click the inverter on the canvas:
+   - It should highlight (selected state).
+4. Press Delete/Backspace:
+   - The inverter should be removed.
+5. Open Project Summary → Inverters:
+   - Confirm the inverter appears in the list.
+6. Click the trash icon for that inverter:
+   - It should be removed immediately.
 
-## Technical Changes
-
-### File 1: `src/components/projects/SimulationPanel.tsx`
-- Line ~898: Add `moduleCount` and `inverterCount` to `results_json` object
-
-```typescript
-results_json: JSON.parse(JSON.stringify({
-  // ... existing fields
-  advancedConfig,
-  // NEW: Save module and inverter counts for layout comparison
-  moduleCount: moduleMetrics.moduleCount,
-  inverterCount: inverterConfig.inverterCount,
-})),
-```
-
-### File 2: `src/components/floor-plan/components/SummaryPanel.tsx`
-- Remove the "Roof Areas" `CollapsibleSection` from lines 165-226 (before the grid)
-- Insert it after the grid (after line 327) and before the "Modules" dropdown (line 330)
-
-## Testing
-After implementation:
-1. Go to Simulation tab and configure/save a simulation
-2. Navigate to PV Layout tab
-3. Verify the Modules and Inverters cards show the simulation requirement (e.g., "0/55" meaning 0 placed, 55 required)
-4. Verify Roof Areas dropdown appears between the cards and the Modules dropdown
+## Optional follow-up (nice-to-have, not required for the fix)
+- Add equipment dragging in Select mode (similar to PV arrays) once selection works:
+  - drag start when clicking selected equipment,
+  - update equipment position on mouse move,
+  - release on mouse up.
+This would improve usability but is not necessary to resolve the current “cannot select” blocker.
