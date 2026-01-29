@@ -142,6 +142,6 @@ export interface PlantSetupConfig {
 export const defaultPlantSetupConfig: PlantSetupConfig = {
   solarModules: [],
   inverters: [],
-  walkways: [{ id: 'default-walkway', name: 'Standard', width: 0.6, length: 10 }],
-  cableTrays: [{ id: 'default-tray', name: 'Standard', width: 0.3, length: 10 }],
+  walkways: [],
+  cableTrays: [],
 };
