@@ -385,6 +385,32 @@ export function Canvas({
         return;
       }
 
+      // Fallback: select equipment (inverters, etc.) using bounding box hit-test
+      const hitEquipment = [...equipment].reverse().find(item => {
+        // Calculate size in pixels based on real-world size and scale
+        const EQUIPMENT_REAL_WORLD_SIZES: Record<EquipmentType, number> = {
+          [EquipmentType.INVERTER]: 0.7,
+          [EquipmentType.DC_COMBINER]: 0.4,
+          [EquipmentType.AC_DISCONNECT]: 0.3,
+          [EquipmentType.MAIN_BOARD]: 1.2,
+          [EquipmentType.SUB_BOARD]: 0.8,
+        };
+        
+        const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
+        // Convert real size to world units (pixels at zoom=1)
+        const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
+        const padding = 5 / viewState.zoom; // Small padding for easier selection
+        const halfSize = sizePx / 2 + padding;
+        
+        return Math.abs(worldPos.x - item.position.x) <= halfSize &&
+               Math.abs(worldPos.y - item.position.y) <= halfSize;
+      });
+
+      if (hitEquipment) {
+        setSelectedItemId(hitEquipment.id);
+        return;
+      }
+
       // Clicked empty space
       setSelectedItemId(null);
       return;

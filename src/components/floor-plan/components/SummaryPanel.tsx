@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig, PlacedWalkway, PlacedCableTray } from '../types';
+import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig, PlacedWalkway, PlacedCableTray, EquipmentType } from '../types';
 import { calculateTotalPVCapacity, calculatePolygonArea, calculateLineLength } from '../utils/geometry';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
@@ -123,8 +123,8 @@ export function SummaryPanel({
   const simModuleCount = assignedSimulation?.results_json?.moduleCount ?? null;
   const simInverterCount = assignedSimulation?.results_json?.inverterCount ?? null;
   
-  // Layout inverter count (placed on canvas)
-  const layoutInverterCount = equipment.filter(e => e.type === 'Inverter').length;
+  // Layout inverter count (placed on canvas) - use enum for reliable matching
+  const layoutInverterCount = equipment.filter(e => e.type === EquipmentType.INVERTER).length;
   
   // Check if layout matches simulation
   const modulesMatch = simModuleCount === null || simModuleCount === panelCount;
@@ -399,7 +399,7 @@ export function SummaryPanel({
               ) : (
                 <div className="space-y-1">
                   {equipment
-                    .filter((e) => e.type === 'Inverter')
+                    .filter((e) => e.type === EquipmentType.INVERTER)
                     .map((inv, i) => (
                       <div
                         key={inv.id}
@@ -426,6 +426,7 @@ export function SummaryPanel({
                             size="icon"
                             className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
                             onClick={(e) => {
+                              e.preventDefault();
                               e.stopPropagation();
                               onDeleteItem(inv.id);
                             }}
