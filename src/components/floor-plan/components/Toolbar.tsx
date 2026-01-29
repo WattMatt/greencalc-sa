@@ -1,16 +1,15 @@
 import { useState } from 'react';
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
-  Upload, Settings, Undo2, Redo2, Save, Loader2, FolderOpen, ArrowLeft,
-  ChevronLeft, ChevronRight, ChevronDown, Factory, Check
+  Upload, Undo2, Redo2, Save, Loader2, ArrowLeft,
+  ChevronLeft, ChevronRight, ChevronDown
 } from 'lucide-react';
-import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig, SolarModuleConfig, InverterLayoutConfig, WalkwayConfig, CableTrayConfig } from '../types';
+import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig } from '../types';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { calculateTotalPVCapacity } from '../utils/geometry';
 import { PVArrayItem } from '../types';
@@ -101,15 +100,6 @@ interface ToolbarProps {
   onBackToBrowser?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
-  // Selected items for placement
-  selectedModuleId: string | null;
-  setSelectedModuleId: (id: string | null) => void;
-  selectedInverterId: string | null;
-  setSelectedInverterId: (id: string | null) => void;
-  selectedWalkwayId: string | null;
-  setSelectedWalkwayId: (id: string | null) => void;
-  selectedCableTrayId: string | null;
-  setSelectedCableTrayId: (id: string | null) => void;
 }
 
 export function Toolbar({
@@ -136,14 +126,6 @@ export function Toolbar({
   onBackToBrowser,
   isCollapsed,
   onToggleCollapse,
-  selectedModuleId,
-  setSelectedModuleId,
-  selectedInverterId,
-  setSelectedInverterId,
-  selectedWalkwayId,
-  setSelectedWalkwayId,
-  selectedCableTrayId,
-  setSelectedCableTrayId,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -302,159 +284,53 @@ export function Toolbar({
           isOpen={openSections.plantSetup}
           onToggle={() => toggleSection('plantSetup')}
         >
-          <div className="space-y-1">
-            {/* Solar Module - config button + selector */}
-            <div className="flex gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex-1 justify-between h-8"
-                onClick={() => onOpenPlantSetup('modules')}
-              >
-                <span className="text-xs">Solar Module</span>
-                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
-                  {plantSetupConfig.solarModules.length}
-                </Badge>
-              </Button>
-              {plantSetupConfig.solarModules.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 px-2">
-                      <ChevronDown className="h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    {plantSetupConfig.solarModules.map((module) => (
-                      <DropdownMenuItem
-                        key={module.id}
-                        onClick={() => setSelectedModuleId(module.id)}
-                        className="text-xs"
-                      >
-                        <span className="flex-1 truncate">{module.name}</span>
-                        {(selectedModuleId === module.id || (!selectedModuleId && module.isDefault)) && (
-                          <Check className="h-3 w-3 ml-2" />
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-            
-            {/* Inverter - config button + selector */}
-            <div className="flex gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex-1 justify-between h-8"
-                onClick={() => onOpenPlantSetup('inverters')}
-              >
-                <span className="text-xs">Inverter</span>
-                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
-                  {plantSetupConfig.inverters.length}
-                </Badge>
-              </Button>
-              {plantSetupConfig.inverters.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 px-2">
-                      <ChevronDown className="h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    {plantSetupConfig.inverters.map((inverter) => (
-                      <DropdownMenuItem
-                        key={inverter.id}
-                        onClick={() => setSelectedInverterId(inverter.id)}
-                        className="text-xs"
-                      >
-                        <span className="flex-1 truncate">{inverter.name}</span>
-                        {(selectedInverterId === inverter.id || (!selectedInverterId && inverter.isDefault)) && (
-                          <Check className="h-3 w-3 ml-2" />
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-            
-            {/* Walkway - config button + selector */}
-            <div className="flex gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex-1 justify-between h-8"
-                onClick={() => onOpenPlantSetup('walkways')}
-              >
-                <span className="text-xs">Walkway</span>
-                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
-                  {plantSetupConfig.walkways.length}
-                </Badge>
-              </Button>
-              {plantSetupConfig.walkways.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 px-2">
-                      <ChevronDown className="h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    {plantSetupConfig.walkways.map((walkway) => (
-                      <DropdownMenuItem
-                        key={walkway.id}
-                        onClick={() => setSelectedWalkwayId(walkway.id)}
-                        className="text-xs"
-                      >
-                        <span className="flex-1 truncate">{walkway.name}</span>
-                        {selectedWalkwayId === walkway.id && (
-                          <Check className="h-3 w-3 ml-2" />
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-            
-            {/* Cable Tray - config button + selector */}
-            <div className="flex gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex-1 justify-between h-8"
-                onClick={() => onOpenPlantSetup('cableTrays')}
-              >
-                <span className="text-xs">Cable Tray</span>
-                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
-                  {plantSetupConfig.cableTrays.length}
-                </Badge>
-              </Button>
-              {plantSetupConfig.cableTrays.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 px-2">
-                      <ChevronDown className="h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    {plantSetupConfig.cableTrays.map((tray) => (
-                      <DropdownMenuItem
-                        key={tray.id}
-                        onClick={() => setSelectedCableTrayId(tray.id)}
-                        className="text-xs"
-                      >
-                        <span className="flex-1 truncate">{tray.name}</span>
-                        {selectedCableTrayId === tray.id && (
-                          <Check className="h-3 w-3 ml-2" />
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-between h-8"
+            onClick={() => onOpenPlantSetup('modules')}
+          >
+            <span className="text-xs">Solar Module</span>
+            <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+              {plantSetupConfig.solarModules.length}
+            </Badge>
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-between h-8"
+            onClick={() => onOpenPlantSetup('inverters')}
+          >
+            <span className="text-xs">Inverter</span>
+            <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+              {plantSetupConfig.inverters.length}
+            </Badge>
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-between h-8"
+            onClick={() => onOpenPlantSetup('walkways')}
+          >
+            <span className="text-xs">Walkway</span>
+            <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+              {plantSetupConfig.walkways.length}
+            </Badge>
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-between h-8"
+            onClick={() => onOpenPlantSetup('cableTrays')}
+          >
+            <span className="text-xs">Cable Tray</span>
+            <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+              {plantSetupConfig.cableTrays.length}
+            </Badge>
+          </Button>
         </CollapsibleSection>
 
         <Separator className="my-2" />
