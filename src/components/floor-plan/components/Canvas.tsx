@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
-import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType } from '../types';
+import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig } from '../types';
 import { renderAllMarkups, drawPvArray } from '../utils/drawing';
 import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing } from '../utils/geometry';
 import { PVArrayConfig } from './PVArrayModal';
@@ -33,6 +33,7 @@ interface CanvasProps {
   onPVArrayDoubleClick?: (arrayId: string) => void;
   onCopyPvArray?: (array: PVArrayItem) => void;
   onCopyRoofMask?: (mask: RoofMask) => void;
+  plantSetupConfig?: PlantSetupConfig;
 }
 
 export function Canvas({
@@ -43,6 +44,7 @@ export function Canvas({
   selectedItemId, setSelectedItemId, placementRotation,
   pendingPvArrayConfig, onRoofMaskComplete, onRoofDirectionComplete, onArrayPlaced,
   pendingRoofMaskPoints, onPVArrayDoubleClick, onCopyPvArray, onCopyRoofMask,
+  plantSetupConfig,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -59,6 +61,8 @@ export function Canvas({
   const [directionLine, setDirectionLine] = useState<{ start: Point; end: Point } | null>(null);
   const [draggingPvArrayId, setDraggingPvArrayId] = useState<string | null>(null);
   const [pvArrayDragOffset, setPvArrayDragOffset] = useState<Point | null>(null);
+  const [draggingEquipmentId, setDraggingEquipmentId] = useState<string | null>(null);
+  const [equipmentDragOffset, setEquipmentDragOffset] = useState<Point | null>(null);
   const [mouseWorldPos, setMouseWorldPos] = useState<Point | null>(null);
 
   const SNAP_THRESHOLD = 15; // pixels in screen space
@@ -219,7 +223,7 @@ export function Canvas({
     renderAllMarkups(ctx, {
       equipment, lines, roofMasks, pvArrays,
       scaleInfo, pvPanelConfig, zoom: viewState.zoom,
-      selectedItemId, scaleLine,
+      selectedItemId, scaleLine, plantSetupConfig,
     });
     
     // Draw current drawing in progress
@@ -408,6 +412,11 @@ export function Canvas({
 
       if (hitEquipment) {
         setSelectedItemId(hitEquipment.id);
+        setDraggingEquipmentId(hitEquipment.id);
+        setEquipmentDragOffset({ 
+          x: worldPos.x - hitEquipment.position.x, 
+          y: worldPos.y - hitEquipment.position.y 
+        });
         return;
       }
 
@@ -580,6 +589,18 @@ export function Canvas({
       return;
     }
 
+    // Handle equipment dragging
+    if (draggingEquipmentId && equipmentDragOffset) {
+      const newPos = { 
+        x: worldPos.x - equipmentDragOffset.x, 
+        y: worldPos.y - equipmentDragOffset.y 
+      };
+      setEquipment(prev => prev.map(item => 
+        item.id === draggingEquipmentId ? { ...item, position: newPos } : item
+      ));
+      return;
+    }
+
     if (isPanning) {
       const dx = screenPos.x - lastMousePos.x;
       const dy = screenPos.y - lastMousePos.y;
@@ -619,6 +640,8 @@ export function Canvas({
     setIsPanning(false);
     setDraggingPvArrayId(null);
     setPvArrayDragOffset(null);
+    setDraggingEquipmentId(null);
+    setEquipmentDragOffset(null);
     
     if (activeTool === Tool.SCALE && scaleLine) {
       const dist = distance(scaleLine.start, scaleLine.end);

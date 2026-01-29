@@ -111,14 +111,18 @@ export function PlantSetupModal({
 
   // Inverter editing
   const [inverterForm, setInverterForm] = useState<InverterLayoutConfig>({ 
-    id: '', name: '', acCapacity: 50, count: 1 
+    id: '', name: '', acCapacity: 50, count: 1, width: 0.7, height: 0.5 
   });
 
   const startEditInverter = (inverter: InverterLayoutConfig | null) => {
     if (inverter) {
-      setInverterForm(inverter);
+      setInverterForm({
+        ...inverter,
+        width: inverter.width ?? 0.7,
+        height: inverter.height ?? 0.5,
+      });
     } else {
-      setInverterForm({ id: `inv-${Date.now()}`, name: '', acCapacity: 50, count: 1 });
+      setInverterForm({ id: `inv-${Date.now()}`, name: '', acCapacity: 50, count: 1, width: 0.7, height: 0.5 });
     }
     setEditing({ type: 'inverter', item: inverter, isNew: !inverter });
   };
@@ -338,6 +342,16 @@ export function PlantSetupModal({
                 className="h-8 text-sm"
               />
             </div>
+            <DimensionInput
+              label="Width"
+              value={inverterForm.width ?? 0.7}
+              onChange={(v) => setInverterForm(prev => ({ ...prev, width: v }))}
+            />
+            <DimensionInput
+              label="Height"
+              value={inverterForm.height ?? 0.5}
+              onChange={(v) => setInverterForm(prev => ({ ...prev, height: v }))}
+            />
           </div>
           <div className="flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
@@ -357,6 +371,9 @@ export function PlantSetupModal({
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {inverter.acCapacity} kW × {inverter.count} = {(inverter.acCapacity * inverter.count).toFixed(0)} kW
+                    {inverter.width && inverter.height && (
+                      <span className="ml-2">| {(inverter.width * 100).toFixed(0)}×{(inverter.height * 100).toFixed(0)} cm</span>
+                    )}
                   </p>
                 </div>
               </div>
