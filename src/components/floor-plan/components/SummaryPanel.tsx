@@ -1,10 +1,12 @@
-import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, Pencil, Trash2, Box, Footprints, AlertTriangle, Check } from 'lucide-react';
+import { useState } from 'react';
+import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig } from '../types';
 import { calculateTotalPVCapacity, calculatePolygonArea, calculateLineLength } from '../utils/geometry';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 
 interface SimulationData {
@@ -33,6 +35,44 @@ interface SummaryPanelProps {
   onToggleCollapse?: () => void;
   plantSetupConfig?: PlantSetupConfig;
   latestSimulation?: SimulationData | null;
+}
+
+// Reusable collapsible section component
+function CollapsibleSection({
+  icon,
+  title,
+  summary,
+  defaultOpen = true,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  summary?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <button className="flex items-center gap-2 w-full hover:bg-accent/50 rounded p-1 -ml-1 transition-colors">
+          {icon}
+          <span className="text-sm font-medium">{title}</span>
+          <span className="text-xs text-muted-foreground ml-auto mr-1">
+            {summary}
+          </span>
+          <ChevronDown className={cn(
+            "h-4 w-4 text-muted-foreground transition-transform",
+            isOpen && "rotate-180"
+          )} />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-2">
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 export function SummaryPanel({
@@ -216,15 +256,13 @@ export function SummaryPanel({
               </Card>
             </div>
 
-            {/* Roof Masks */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Layers className="h-4 w-4 text-purple-500" />
-                <span className="text-sm font-medium">Roof Areas</span>
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {totalRoofArea.toFixed(0)} m²
-                </span>
-              </div>
+            {/* Roof Masks - Collapsible */}
+            <CollapsibleSection
+              icon={<Layers className="h-4 w-4 text-purple-500" />}
+              title="Roof Areas"
+              summary={`${totalRoofArea.toFixed(0)} m²`}
+              defaultOpen={true}
+            >
               {roofMasks.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No roof masks defined</p>
               ) : (
@@ -280,17 +318,15 @@ export function SummaryPanel({
                   ))}
                 </div>
               )}
-            </div>
+            </CollapsibleSection>
 
-            {/* PV Arrays */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Sun className="h-4 w-4 text-yellow-500" />
-                <span className="text-sm font-medium">PV Arrays</span>
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {pvArrays.length} arrays
-                </span>
-              </div>
+            {/* PV Arrays - Collapsible */}
+            <CollapsibleSection
+              icon={<Sun className="h-4 w-4 text-yellow-500" />}
+              title="PV Arrays"
+              summary={`${pvArrays.length} arrays`}
+              defaultOpen={true}
+            >
               {pvArrays.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No arrays placed</p>
               ) : (
@@ -335,14 +371,15 @@ export function SummaryPanel({
                   })}
                 </div>
               )}
-            </div>
+            </CollapsibleSection>
 
-            {/* Cabling */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Cable className="h-4 w-4 text-orange-500" />
-                <span className="text-sm font-medium">Cabling</span>
-              </div>
+            {/* Cabling - Collapsible */}
+            <CollapsibleSection
+              icon={<Cable className="h-4 w-4 text-orange-500" />}
+              title="Cabling"
+              summary={`${(dcCableLength + acCableLength).toFixed(0)} m`}
+              defaultOpen={false}
+            >
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between p-2 bg-muted rounded">
                   <span className="flex items-center gap-1">
@@ -359,17 +396,15 @@ export function SummaryPanel({
                   <span>{acCableLength.toFixed(1)} m</span>
                 </div>
               </div>
-            </div>
+            </CollapsibleSection>
 
-            {/* Equipment */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Zap className="h-4 w-4 text-green-500" />
-                <span className="text-sm font-medium">Equipment</span>
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {equipment.length} items
-                </span>
-              </div>
+            {/* Equipment - Collapsible */}
+            <CollapsibleSection
+              icon={<Zap className="h-4 w-4 text-green-500" />}
+              title="Equipment"
+              summary={`${equipment.length} items`}
+              defaultOpen={false}
+            >
               {equipment.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No equipment placed</p>
               ) : (
@@ -388,7 +423,7 @@ export function SummaryPanel({
                   ))}
                 </div>
               )}
-            </div>
+            </CollapsibleSection>
           </div>
         </ScrollArea>
       </div>
