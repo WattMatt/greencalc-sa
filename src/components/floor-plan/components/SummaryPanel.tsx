@@ -31,6 +31,7 @@ interface SummaryPanelProps {
   onSelectItem: (id: string | null) => void;
   onEditRoofMask?: (id: string) => void;
   onDeleteItem?: (id: string) => void;
+  onDeletePlantSetupItem?: (type: 'walkway' | 'cableTray', id: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   plantSetupConfig?: PlantSetupConfig;
@@ -86,6 +87,7 @@ export function SummaryPanel({
   onSelectItem,
   onEditRoofMask,
   onDeleteItem,
+  onDeletePlantSetupItem,
   isCollapsed,
   onToggleCollapse,
   plantSetupConfig,
@@ -409,9 +411,22 @@ export function SummaryPanel({
               ) : (
                 <div className="space-y-1">
                   {plantSetupConfig.walkways.map((w, i) => (
-                    <div key={i} className="flex justify-between p-2 bg-muted rounded text-xs">
+                    <div key={w.id} className="flex items-center justify-between p-2 bg-muted rounded text-xs">
                       <span>Walkway {i + 1}</span>
-                      <span>{w.width}m × {w.length}m</span>
+                      <div className="flex items-center gap-2">
+                        <span>{w.width}m × {w.length}m</span>
+                        {onDeletePlantSetupItem && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                            onClick={() => onDeletePlantSetupItem('walkway', w.id)}
+                            title="Delete walkway"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -429,9 +444,22 @@ export function SummaryPanel({
               ) : (
                 <div className="space-y-1">
                   {plantSetupConfig.cableTrays.map((c, i) => (
-                    <div key={i} className="flex justify-between p-2 bg-muted rounded text-xs">
+                    <div key={c.id} className="flex items-center justify-between p-2 bg-muted rounded text-xs">
                       <span>Tray {i + 1}</span>
-                      <span>{c.width}m × {c.length}m</span>
+                      <div className="flex items-center gap-2">
+                        <span>{c.width}m × {c.length}m</span>
+                        {onDeletePlantSetupItem && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                            onClick={() => onDeletePlantSetupItem('cableTray', c.id)}
+                            title="Delete cable tray"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

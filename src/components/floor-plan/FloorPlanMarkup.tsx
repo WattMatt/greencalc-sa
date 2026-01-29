@@ -569,6 +569,25 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     }
   }, [selectedItemId, handleDeleteItem]);
 
+  // Delete plant setup items (walkways, cable trays)
+  const handleDeletePlantSetupItem = useCallback((type: 'walkway' | 'cableTray', id: string) => {
+    if (type === 'walkway') {
+      setPlantSetupConfig(prev => ({
+        ...prev,
+        walkways: prev.walkways.filter(w => w.id !== id)
+      }));
+      setHasUnsavedChanges(true);
+      toast.success('Walkway deleted');
+    } else if (type === 'cableTray') {
+      setPlantSetupConfig(prev => ({
+        ...prev,
+        cableTrays: prev.cableTrays.filter(c => c.id !== id)
+      }));
+      setHasUnsavedChanges(true);
+      toast.success('Cable tray deleted');
+    }
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     if (readOnly) return;
@@ -957,6 +976,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         onSelectItem={setSelectedItemId}
         onEditRoofMask={readOnly ? undefined : handleEditRoofMask}
         onDeleteItem={readOnly ? undefined : handleDeleteItem}
+        onDeletePlantSetupItem={readOnly ? undefined : handleDeletePlantSetupItem}
         isCollapsed={isSummaryCollapsed}
         onToggleCollapse={() => setIsSummaryCollapsed(!isSummaryCollapsed)}
         plantSetupConfig={plantSetupConfig}
