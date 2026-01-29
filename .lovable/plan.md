@@ -1,61 +1,46 @@
 
-# Fix Summary Panel Layout: Separate Cards from Dropdowns
+
+# Fix: Walkways and Cable Trays Showing Default Data
 
 ## Problem
-The current implementation incorrectly makes the 4 summary cards (Modules, Inverters, Walkways, Cable Trays) themselves into collapsible dropdown triggers. This mixes the summary display with the detailed list functionality.
+The Summary Panel displays walkway and cable tray quantities even when the user hasn't defined or placed any. This happens because:
 
-## Solution
-Restructure the Summary Panel to have:
-1. **Static 2x2 Summary Cards Grid** - Display metrics only, no dropdown functionality on the cards themselves
-2. **Separate Collapsible Sections Below** - Four dropdown sections in order: Modules (PV Arrays), Inverters (Equipment), Walkways, Cable Trays
+1. **Default Configuration**: The `defaultPlantSetupConfig` in `types.ts` includes pre-populated default walkways and cable trays
+2. **Data Source Confusion**: The Summary Panel reads from `plantSetupConfig.walkways` and `plantSetupConfig.cableTrays`, which are **configuration entries** (equipment specs for the BOM), not actually **placed items on the canvas**
 
-## Visual Structure
-
-```text
-+---------------------------+
-| Project Summary         > |
-+---------------------------+
-| Roof Areas      9659 m² v |  <- Collapsible section
-+---------------------------+
-| [Modules]    [Inverters]  |  <- Static cards (2x2 grid)
-|   1302           0        |
-| [Walkways]  [Cable Trays] |
-|    6 m           9 m      |
-+---------------------------+
-| # Modules           52  v |  <- Collapsible: PV Arrays list
-| z Inverters          0  v |  <- Collapsible: Equipment list
-| F Walkways         6 m  v |  <- Collapsible: Walkways list
-| B Cable Trays      9 m  v |  <- Collapsible: Cable Trays list
-+---------------------------+
-| Cabling            0 m  v |  <- Existing DC/AC cabling section
-+---------------------------+
+## Root Cause
+```typescript
+// src/components/floor-plan/types.ts (lines 142-147)
+export const defaultPlantSetupConfig: PlantSetupConfig = {
+  solarModules: [],
+  inverters: [],
+  walkways: [{ id: 'default-walkway', name: 'Standard', width: 0.6, length: 10 }],  // ← Default data!
+  cableTrays: [{ id: 'default-tray', name: 'Standard', width: 0.3, length: 10 }],   // ← Default data!
+};
 ```
 
-## Changes Required
+## Solution
+Remove the default walkway and cable tray entries so the Plant Setup starts empty - users must explicitly add items.
 
-### File: `src/components/floor-plan/components/SummaryPanel.tsx`
+### File: `src/components/floor-plan/types.ts`
 
-1. **Extract the 2x2 grid cards from Collapsible wrappers**
-   - Remove `<Collapsible>`, `<CollapsibleTrigger>`, and `<CollapsibleContent>` from around each card
-   - Keep the cards as static display-only components
-   - Remove the chevron icons from the cards
-   - Keep the simulation comparison indicators (amber border, checkmark/count)
+Change the `defaultPlantSetupConfig` to have empty arrays for walkways and cable trays:
 
-2. **Add four new `CollapsibleSection` components after the grid**
-   - **Modules section**: Uses `Hash` icon, shows PV arrays list with selection and delete
-   - **Inverters section**: Uses `Zap` icon, shows equipment grouped by type
-   - **Walkways section**: Uses `Footprints` icon, shows walkway dimensions list
-   - **Cable Trays section**: Uses `Box` icon, shows cable tray dimensions list
+```typescript
+export const defaultPlantSetupConfig: PlantSetupConfig = {
+  solarModules: [],
+  inverters: [],
+  walkways: [],     // Start empty
+  cableTrays: [],   // Start empty
+};
+```
 
-3. **All four new sections default to closed** (`defaultOpen={false}`)
+## Result
+After this change:
+- The Summary Panel will show **0 m** for Walkways and Cable Trays by default
+- The detail dropdowns will show "No walkways defined" and "No cable trays defined"
+- Users can add entries via the Plant Setup modal as needed
 
-4. **Keep the existing Cabling section** (DC/AC cables) at the bottom
+## Technical Note
+This change only affects the **initial state**. Existing layouts that have been saved with walkways/cable trays will continue to load their saved data correctly since the persistence layer restores `plantSetupConfig` from the database.
 
-## Technical Details
-
-The reusable `CollapsibleSection` component already exists and will be used for the new dropdown sections. Each section will receive:
-- `icon`: Matching icon from the corresponding card
-- `title`: "Modules", "Inverters", "Walkways", "Cable Trays"
-- `summary`: Count or length summary (e.g., "52", "0", "6 m", "9 m")
-- `defaultOpen`: `false`
-- `children`: The list content currently inside each card's `CollapsibleContent`
