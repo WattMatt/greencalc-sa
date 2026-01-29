@@ -219,227 +219,224 @@ export function SummaryPanel({
               )}
             </CollapsibleSection>
 
-            {/* Metrics Grid - 2x2 with integrated dropdowns */}
-            <div className="grid grid-cols-2 gap-2">
-              {/* Modules - Top Left with PV Arrays dropdown */}
-              <div className="space-y-1">
-                <Collapsible>
-                  <CollapsibleTrigger asChild>
-                    <Card className={cn("cursor-pointer hover:bg-accent/50 transition-colors", !modulesMatch && "border-amber-500")}>
-                      <CardContent className="p-3">
-                        <div className="flex items-center gap-2">
-                          <Hash className="h-4 w-4 text-blue-500" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs text-muted-foreground">Modules</p>
-                            <div className="flex items-center gap-1">
-                              <p className="font-semibold text-sm">{panelCount}</p>
-                              {simModuleCount !== null && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className={cn(
-                                      "text-[10px]",
-                                      modulesMatch ? "text-green-600" : "text-amber-600"
-                                    )}>
-                                      {modulesMatch ? (
-                                        <Check className="h-3 w-3" />
-                                      ) : (
-                                        <span>/{simModuleCount}</span>
-                                      )}
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    {modulesMatch 
-                                      ? "Matches simulation" 
-                                      : `Simulation expects ${simModuleCount} modules`}
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                            </div>
-                          </div>
-                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="pt-1 space-y-1">
-                      {pvArrays.length === 0 ? (
-                        <p className="text-xs text-muted-foreground p-2">No arrays placed</p>
-                      ) : (
-                        pvArrays.map((arr, i) => {
-                          const panels = arr.rows * arr.columns;
-                          const kWp = pvPanelConfig ? (panels * pvPanelConfig.wattage) / 1000 : 0;
-                          return (
-                            <div
-                              key={arr.id}
-                              className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
-                                selectedItemId === arr.id 
-                                  ? 'bg-primary/10 border border-primary' 
-                                  : 'bg-muted hover:bg-accent'
-                              }`}
-                            >
-                              <button
-                                className="flex-1 text-left"
-                                onClick={() => onSelectItem(arr.id)}
-                              >
-                                <span className="font-medium">Array {i + 1}</span>
-                                <span className="text-muted-foreground ml-2">
-                                  {arr.rows}×{arr.columns} • {kWp.toFixed(1)} kWp
-                                </span>
-                              </button>
-                              {onDeleteItem && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDeleteItem(arr.id);
-                                  }}
-                                  title="Delete PV array"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              )}
-                            </div>
-                          );
-                        })
-                      )}
+            {/* Static Metrics Grid - 2x2 */}
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {/* Modules - Top Left */}
+              <Card className={cn(!modulesMatch && "border-amber-500")}>
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <Hash className="h-4 w-4 text-blue-500" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground">Modules</p>
+                      <div className="flex items-center gap-1">
+                        <p className="font-semibold text-sm">{panelCount}</p>
+                        {simModuleCount !== null && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className={cn(
+                                "text-[10px]",
+                                modulesMatch ? "text-green-600" : "text-amber-600"
+                              )}>
+                                {modulesMatch ? (
+                                  <Check className="h-3 w-3" />
+                                ) : (
+                                  <span>/{simModuleCount}</span>
+                                )}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {modulesMatch 
+                                ? "Matches simulation" 
+                                : `Simulation expects ${simModuleCount} modules`}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
+                  </div>
+                </CardContent>
+              </Card>
               
-              {/* Inverters - Top Right with Equipment dropdown */}
-              <div className="space-y-1">
-                <Collapsible>
-                  <CollapsibleTrigger asChild>
-                    <Card className={cn("cursor-pointer hover:bg-accent/50 transition-colors", !invertersMatch && "border-amber-500")}>
-                      <CardContent className="p-3">
-                        <div className="flex items-center gap-2">
-                          <Zap className="h-4 w-4 text-green-500" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs text-muted-foreground">Inverters</p>
-                            <div className="flex items-center gap-1">
-                              <p className="font-semibold text-sm">{layoutInverterCount}</p>
-                              {simInverterCount !== null && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className={cn(
-                                      "text-[10px]",
-                                      invertersMatch ? "text-green-600" : "text-amber-600"
-                                    )}>
-                                      {invertersMatch ? (
-                                        <Check className="h-3 w-3" />
-                                      ) : (
-                                        <span>/{simInverterCount}</span>
-                                      )}
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    {invertersMatch 
-                                      ? "Matches simulation" 
-                                      : `Simulation expects ${simInverterCount} inverters`}
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                            </div>
-                          </div>
-                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="pt-1 space-y-1">
-                      {equipment.length === 0 ? (
-                        <p className="text-xs text-muted-foreground p-2">No equipment placed</p>
-                      ) : (
-                        Object.entries(
-                          equipment.reduce((acc, eq) => {
-                            acc[eq.type] = (acc[eq.type] || 0) + 1;
-                            return acc;
-                          }, {} as Record<string, number>)
-                        ).map(([type, count]) => (
-                          <div key={type} className="flex justify-between p-2 bg-muted rounded text-xs">
-                            <span>{type}</span>
-                            <span>×{count}</span>
-                          </div>
-                        ))
-                      )}
+              {/* Inverters - Top Right */}
+              <Card className={cn(!invertersMatch && "border-amber-500")}>
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-green-500" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground">Inverters</p>
+                      <div className="flex items-center gap-1">
+                        <p className="font-semibold text-sm">{layoutInverterCount}</p>
+                        {simInverterCount !== null && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className={cn(
+                                "text-[10px]",
+                                invertersMatch ? "text-green-600" : "text-amber-600"
+                              )}>
+                                {invertersMatch ? (
+                                  <Check className="h-3 w-3" />
+                                ) : (
+                                  <span>/{simInverterCount}</span>
+                                )}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {invertersMatch 
+                                ? "Matches simulation" 
+                                : `Simulation expects ${simInverterCount} inverters`}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
+                  </div>
+                </CardContent>
+              </Card>
               
-              {/* Walkways - Bottom Left with walkway list */}
-              <div className="space-y-1">
-                <Collapsible>
-                  <CollapsibleTrigger asChild>
-                    <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
-                      <CardContent className="p-3">
-                        <div className="flex items-center gap-2">
-                          <Footprints className="h-4 w-4 text-slate-500" />
-                          <div className="flex-1">
-                            <p className="text-xs text-muted-foreground">Walkways</p>
-                            <p className="font-semibold text-sm">{totalWalkwayLength.toFixed(0)} m</p>
-                          </div>
-                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="pt-1 space-y-1">
-                      {!plantSetupConfig?.walkways.length ? (
-                        <p className="text-xs text-muted-foreground p-2">No walkways defined</p>
-                      ) : (
-                        plantSetupConfig.walkways.map((w, i) => (
-                          <div key={i} className="flex justify-between p-2 bg-muted rounded text-xs">
-                            <span>Walkway {i + 1}</span>
-                            <span>{w.width}m × {w.length}m</span>
-                          </div>
-                        ))
-                      )}
+              {/* Walkways - Bottom Left */}
+              <Card>
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <Footprints className="h-4 w-4 text-slate-500" />
+                    <div className="flex-1">
+                      <p className="text-xs text-muted-foreground">Walkways</p>
+                      <p className="font-semibold text-sm">{totalWalkwayLength.toFixed(0)} m</p>
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
+                  </div>
+                </CardContent>
+              </Card>
               
-              {/* Cable Trays - Bottom Right with cabling dropdown */}
-              <div className="space-y-1">
-                <Collapsible>
-                  <CollapsibleTrigger asChild>
-                    <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
-                      <CardContent className="p-3">
-                        <div className="flex items-center gap-2">
-                          <Box className="h-4 w-4 text-orange-500" />
-                          <div className="flex-1">
-                            <p className="text-xs text-muted-foreground">Cable Trays</p>
-                            <p className="font-semibold text-sm">{totalCableTrayLength.toFixed(0)} m</p>
-                          </div>
-                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="pt-1 space-y-1">
-                      {!plantSetupConfig?.cableTrays.length ? (
-                        <p className="text-xs text-muted-foreground p-2">No cable trays defined</p>
-                      ) : (
-                        plantSetupConfig.cableTrays.map((c, i) => (
-                          <div key={i} className="flex justify-between p-2 bg-muted rounded text-xs">
-                            <span>Tray {i + 1}</span>
-                            <span>{c.width}m × {c.length}m</span>
-                          </div>
-                        ))
-                      )}
+              {/* Cable Trays - Bottom Right */}
+              <Card>
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2">
+                    <Box className="h-4 w-4 text-orange-500" />
+                    <div className="flex-1">
+                      <p className="text-xs text-muted-foreground">Cable Trays</p>
+                      <p className="font-semibold text-sm">{totalCableTrayLength.toFixed(0)} m</p>
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
+
+            {/* Collapsible Detail Sections */}
+            <CollapsibleSection
+              icon={<Hash className="h-4 w-4 text-blue-500" />}
+              title="Modules"
+              summary={`${panelCount}`}
+              defaultOpen={false}
+            >
+              {pvArrays.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No arrays placed</p>
+              ) : (
+                <div className="space-y-1">
+                  {pvArrays.map((arr, i) => {
+                    const panels = arr.rows * arr.columns;
+                    const kWp = pvPanelConfig ? (panels * pvPanelConfig.wattage) / 1000 : 0;
+                    return (
+                      <div
+                        key={arr.id}
+                        className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
+                          selectedItemId === arr.id 
+                            ? 'bg-primary/10 border border-primary' 
+                            : 'bg-muted hover:bg-accent'
+                        }`}
+                      >
+                        <button
+                          className="flex-1 text-left"
+                          onClick={() => onSelectItem(arr.id)}
+                        >
+                          <span className="font-medium">Array {i + 1}</span>
+                          <span className="text-muted-foreground ml-2">
+                            {arr.rows}×{arr.columns} • {kWp.toFixed(1)} kWp
+                          </span>
+                        </button>
+                        {onDeleteItem && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteItem(arr.id);
+                            }}
+                            title="Delete PV array"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              icon={<Zap className="h-4 w-4 text-green-500" />}
+              title="Inverters"
+              summary={`${layoutInverterCount}`}
+              defaultOpen={false}
+            >
+              {equipment.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No equipment placed</p>
+              ) : (
+                <div className="space-y-1">
+                  {Object.entries(
+                    equipment.reduce((acc, eq) => {
+                      acc[eq.type] = (acc[eq.type] || 0) + 1;
+                      return acc;
+                    }, {} as Record<string, number>)
+                  ).map(([type, count]) => (
+                    <div key={type} className="flex justify-between p-2 bg-muted rounded text-xs">
+                      <span>{type}</span>
+                      <span>×{count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              icon={<Footprints className="h-4 w-4 text-slate-500" />}
+              title="Walkways"
+              summary={`${totalWalkwayLength.toFixed(0)} m`}
+              defaultOpen={false}
+            >
+              {!plantSetupConfig?.walkways.length ? (
+                <p className="text-xs text-muted-foreground">No walkways defined</p>
+              ) : (
+                <div className="space-y-1">
+                  {plantSetupConfig.walkways.map((w, i) => (
+                    <div key={i} className="flex justify-between p-2 bg-muted rounded text-xs">
+                      <span>Walkway {i + 1}</span>
+                      <span>{w.width}m × {w.length}m</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              icon={<Box className="h-4 w-4 text-orange-500" />}
+              title="Cable Trays"
+              summary={`${totalCableTrayLength.toFixed(0)} m`}
+              defaultOpen={false}
+            >
+              {!plantSetupConfig?.cableTrays.length ? (
+                <p className="text-xs text-muted-foreground">No cable trays defined</p>
+              ) : (
+                <div className="space-y-1">
+                  {plantSetupConfig.cableTrays.map((c, i) => (
+                    <div key={i} className="flex justify-between p-2 bg-muted rounded text-xs">
+                      <span>Tray {i + 1}</span>
+                      <span>{c.width}m × {c.length}m</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CollapsibleSection>
 
             {/* Cabling - DC/AC cables */}
             <CollapsibleSection
