@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType } from '../types';
-import { renderAllMarkups } from '../utils/drawing';
+import { renderAllMarkups, drawPvArray } from '../utils/drawing';
 import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners } from '../utils/geometry';
 import { PVArrayConfig } from './PVArrayModal';
 
@@ -57,6 +57,7 @@ export function Canvas({
   const [directionLine, setDirectionLine] = useState<{ start: Point; end: Point } | null>(null);
   const [draggingPvArrayId, setDraggingPvArrayId] = useState<string | null>(null);
   const [pvArrayDragOffset, setPvArrayDragOffset] = useState<Point | null>(null);
+  const [mouseWorldPos, setMouseWorldPos] = useState<Point | null>(null);
 
   const SNAP_THRESHOLD = 15; // pixels in screen space
 
@@ -297,8 +298,26 @@ export function Canvas({
       ctx.stroke();
     }
     
+    // Draw ghost preview for PV array placement
+    if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig && pvPanelConfig && mouseWorldPos) {
+      const onMask = roofMasks.find(m => isPointInPolygon(mouseWorldPos, m.points));
+      const rotation = onMask ? calculateArrayRotationForRoof(mouseWorldPos, roofMasks, 0) : 0;
+      
+      const ghostArray: PVArrayItem = {
+        id: 'ghost-preview',
+        position: mouseWorldPos,
+        rows: pendingPvArrayConfig.rows,
+        columns: pendingPvArrayConfig.columns,
+        orientation: pendingPvArrayConfig.orientation,
+        rotation,
+        roofMaskId: onMask?.id,
+      };
+      
+      drawPvArray(ctx, ghostArray, true, pvPanelConfig, scaleInfo, roofMasks, viewState.zoom, false);
+    }
+    
     ctx.restore();
-  }, [viewState, equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, selectedItemId, scaleLine, currentDrawing, previewPoint, canvasSize, containerSize, activeTool, pendingRoofMaskPoints, directionLine]);
+  }, [viewState, equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, selectedItemId, scaleLine, currentDrawing, previewPoint, canvasSize, containerSize, activeTool, pendingRoofMaskPoints, directionLine, mouseWorldPos, pendingPvArrayConfig]);
 
   const getMousePos = (e: React.MouseEvent): Point => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -453,6 +472,13 @@ export function Canvas({
       const anchor = currentDrawing[currentDrawing.length - 1];
       const snappedPreview = isShiftHeld ? snapTo45Degrees(anchor, worldPos) : worldPos;
       setPreviewPoint(snappedPreview);
+    }
+    
+    // Track mouse position for PV array ghost preview
+    if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig) {
+      setMouseWorldPos(worldPos);
+    } else {
+      setMouseWorldPos(null);
     }
   };
 
