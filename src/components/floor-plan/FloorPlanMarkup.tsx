@@ -116,6 +116,14 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [pendingPvArrayConfig, setPendingPvArrayConfig] = useState<PVArrayConfig | null>(null);
   const [editingPvArrayId, setEditingPvArrayId] = useState<string | null>(null);
   
+  // Remember last used PV array settings for continuous placement
+  const [lastPvArraySettings, setLastPvArraySettings] = useState<PVArrayConfig>({
+    rows: 2,
+    columns: 10,
+    orientation: 'portrait',
+    minSpacing: 0.5,
+  });
+  
   // Plant Setup Config
   const [plantSetupConfig, setPlantSetupConfig] = useState<PlantSetupConfig>(defaultPlantSetupConfig);
   
@@ -753,6 +761,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     
     // Creating new array - set pending config and switch to placement mode
     setPendingPvArrayConfig(config);
+    setLastPvArraySettings(config); // Remember settings for next placement
     setIsPVArrayModalOpen(false);
     setActiveTool(Tool.PV_ARRAY);
     toast.info('Click on a roof mask to place the array');
@@ -934,7 +943,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
               onConfirm={handlePVArrayConfirm}
               initialConfig={editingPvArrayId 
                 ? pvArrays.find(arr => arr.id === editingPvArrayId)
-                : undefined
+                : lastPvArraySettings
               }
               isEditing={!!editingPvArrayId}
             />
