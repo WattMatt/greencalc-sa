@@ -1024,6 +1024,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         onPVArrayDoubleClick={readOnly ? undefined : handlePVArrayDoubleClick}
         onCopyPvArray={readOnly ? undefined : handleCopyPvArray}
         onCopyRoofMask={readOnly ? undefined : handleCopyRoofMask}
+        plantSetupConfig={plantSetupConfig}
       />
 
       <SummaryPanel

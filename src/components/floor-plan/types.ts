@@ -139,6 +139,8 @@ export interface InverterLayoutConfig {
   name: string;
   acCapacity: number; // kW
   count: number;
+  width?: number;     // meters (for layout sizing)
+  height?: number;    // meters (for layout sizing)
   isDefault?: boolean;
 }
 

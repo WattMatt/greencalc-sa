@@ -1,6 +1,6 @@
 import { 
   Point, PVArrayItem, PVPanelConfig, RoofMask, ScaleInfo, 
-  EquipmentItem, SupplyLine, EquipmentType 
+  EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig 
 } from '../types';
 import { TOOL_COLORS, EQUIPMENT_REAL_WORLD_SIZES, getDirectionLabel } from '../constants';
 import { isPointInPolygon, getPolygonCenter } from './geometry';
@@ -13,13 +13,26 @@ export const drawEquipmentIcon = (
   item: { type: EquipmentType; position: Point; rotation: number },
   isSelected: boolean,
   zoom: number,
-  scaleInfo: ScaleInfo
+  scaleInfo: ScaleInfo,
+  plantSetupConfig?: PlantSetupConfig
 ) => {
   ctx.save();
   ctx.translate(item.position.x, item.position.y);
   ctx.rotate(item.rotation * Math.PI / 180);
 
-  const realSizeInMeters = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
+  // Try to get custom size from plant setup config (for inverters)
+  let realSizeInMeters = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
+  let aspectRatio = 1; // width / height ratio for rendering
+  
+  if (item.type === EquipmentType.INVERTER && plantSetupConfig?.inverters?.length) {
+    const defaultInverter = plantSetupConfig.inverters.find(i => i.isDefault) || plantSetupConfig.inverters[0];
+    if (defaultInverter?.width && defaultInverter?.height) {
+      // Use the larger dimension for sizing
+      realSizeInMeters = Math.max(defaultInverter.width, defaultInverter.height);
+      aspectRatio = defaultInverter.width / defaultInverter.height;
+    }
+  }
+  
   const fixedSize = 12 / zoom;
   
   let size: number;
@@ -40,12 +53,16 @@ export const drawEquipmentIcon = (
   ctx.textBaseline = 'middle';
 
   switch (item.type) {
-    case EquipmentType.INVERTER:
-      ctx.strokeRect(-size/2, -size/2.5, size, size/1.25);
-      ctx.font = font(size * 0.6);
-      ctx.fillText('~', size * 0.1, 0);
-      ctx.fillText('=', -size * 0.2, 0);
+    case EquipmentType.INVERTER: {
+      // Use aspect ratio for inverter sizing
+      const width = aspectRatio >= 1 ? size : size * aspectRatio;
+      const height = aspectRatio >= 1 ? size / aspectRatio : size;
+      ctx.strokeRect(-width/2, -height/2, width, height);
+      ctx.font = font(Math.min(width, height) * 0.6);
+      ctx.fillText('~', width * 0.08, 0);
+      ctx.fillText('=', -width * 0.15, 0);
       break;
+    }
     case EquipmentType.DC_COMBINER:
       ctx.strokeRect(-size/2, -size/2, size, size);
       ctx.font = font(size);
@@ -299,6 +316,7 @@ export interface RenderAllParams {
   zoom: number;
   selectedItemId: string | null;
   scaleLine: { start: Point; end: Point } | null;
+  plantSetupConfig?: PlantSetupConfig;
 }
 
 /**
@@ -308,7 +326,7 @@ export const renderAllMarkups = (
   ctx: CanvasRenderingContext2D,
   params: RenderAllParams
 ) => {
-  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, scaleLine } = params;
+  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, scaleLine, plantSetupConfig } = params;
 
   // Draw roof masks first (background)
   for (const mask of roofMasks) {
@@ -329,7 +347,7 @@ export const renderAllMarkups = (
 
   // Draw equipment
   for (const item of equipment) {
-    drawEquipmentIcon(ctx, item, selectedItemId === item.id, zoom, scaleInfo);
+    drawEquipmentIcon(ctx, item, selectedItemId === item.id, zoom, scaleInfo, plantSetupConfig);
   }
 
   // Draw scale indicator
