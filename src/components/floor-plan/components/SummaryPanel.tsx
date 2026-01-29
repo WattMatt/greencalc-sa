@@ -137,7 +137,7 @@ export function SummaryPanel({
                     >
                       <span className="font-medium">Roof {i + 1}</span>
                       <span className="text-muted-foreground ml-2">
-                        {calculatePolygonArea(mask.points, scaleInfo.ratio).toFixed(0)} m² • {mask.pitch}°
+                         {calculatePolygonArea(mask.points, scaleInfo.ratio).toFixed(0)} m² • {mask.pitch}° • {mask.direction}°
                       </span>
                     </button>
                     {onEditRoofMask && (
