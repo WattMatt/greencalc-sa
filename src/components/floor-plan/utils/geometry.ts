@@ -167,3 +167,132 @@ export const snapTo45Degrees = (anchor: Point, target: Point): Point => {
     y: anchor.y + dist * Math.sin(snappedRad),
   };
 };
+
+/**
+ * Get the bounding box dimensions of a PV array in pixels
+ */
+export const getPVArrayDimensions = (
+  array: { rows: number; columns: number; orientation: 'portrait' | 'landscape' },
+  pvPanelConfig: PVPanelConfig,
+  roofMasks: RoofMask[],
+  scaleInfo: ScaleInfo,
+  position?: Point
+): { width: number; height: number } => {
+  if (!scaleInfo.ratio) return { width: 0, height: 0 };
+
+  let pitch = 0;
+  if (position) {
+    const panelIsOnMask = roofMasks.find(mask => isPointInPolygon(position, mask.points));
+    pitch = panelIsOnMask ? panelIsOnMask.pitch : 0;
+  }
+  const pitchRad = pitch * Math.PI / 180;
+
+  let panelW_px = pvPanelConfig.width / scaleInfo.ratio;
+  let panelL_px = pvPanelConfig.length / scaleInfo.ratio;
+  panelL_px *= Math.cos(pitchRad);
+
+  const arrayPanelW = array.orientation === 'portrait' ? panelW_px : panelL_px;
+  const arrayPanelL = array.orientation === 'portrait' ? panelL_px : panelW_px;
+
+  return {
+    width: array.columns * arrayPanelW,
+    height: array.rows * arrayPanelL,
+  };
+};
+
+/**
+ * Snap a ghost PV array to maintain minimum spacing from existing arrays.
+ * Returns the snapped position and rotation (matched to the snapped-to array).
+ */
+export const snapPVArrayToSpacing = (
+  mousePos: Point,
+  ghostConfig: { rows: number; columns: number; orientation: 'portrait' | 'landscape'; rotation: number },
+  existingArrays: PVArrayItem[],
+  pvPanelConfig: PVPanelConfig,
+  roofMasks: RoofMask[],
+  scaleInfo: ScaleInfo,
+  minSpacingMeters: number
+): { position: Point; rotation: number; snappedToId: string | null } => {
+  if (!scaleInfo.ratio || minSpacingMeters <= 0 || existingArrays.length === 0) {
+    return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
+  }
+
+  const minSpacingPx = minSpacingMeters / scaleInfo.ratio;
+  
+  // Get ghost array dimensions
+  const ghostDims = getPVArrayDimensions(ghostConfig, pvPanelConfig, roofMasks, scaleInfo, mousePos);
+  const ghostHalfW = ghostDims.width / 2;
+  const ghostHalfH = ghostDims.height / 2;
+
+  let closestArray: PVArrayItem | null = null;
+  let closestDist = Infinity;
+  let snapPosition = mousePos;
+
+  for (const arr of existingArrays) {
+    const arrDims = getPVArrayDimensions(arr, pvPanelConfig, roofMasks, scaleInfo, arr.position);
+    const arrHalfW = arrDims.width / 2;
+    const arrHalfH = arrDims.height / 2;
+
+    // Calculate center-to-center distance
+    const dx = mousePos.x - arr.position.x;
+    const dy = mousePos.y - arr.position.y;
+    const dist = Math.hypot(dx, dy);
+
+    // Calculate required minimum center-to-center distance based on array sizes
+    // This is a simplified axis-aligned check; for rotated arrays a more complex check would be needed
+    const angleRad = arr.rotation * Math.PI / 180;
+    const cosA = Math.abs(Math.cos(angleRad));
+    const sinA = Math.abs(Math.sin(angleRad));
+    
+    // Effective half-dimensions considering rotation
+    const effArrHalfW = arrHalfW * cosA + arrHalfH * sinA;
+    const effArrHalfH = arrHalfW * sinA + arrHalfH * cosA;
+    const effGhostHalfW = ghostHalfW * cosA + ghostHalfH * sinA;
+    const effGhostHalfH = ghostHalfW * sinA + ghostHalfH * cosA;
+
+    // Minimum distance for this pair (edge to edge + spacing)
+    const minDistX = effArrHalfW + effGhostHalfW + minSpacingPx;
+    const minDistY = effArrHalfH + effGhostHalfH + minSpacingPx;
+
+    // Check if we're within snapping range (using a threshold of 2x the minimum spacing)
+    const snapThreshold = Math.max(minDistX, minDistY) * 1.5;
+    
+    if (dist < snapThreshold && dist < closestDist) {
+      closestDist = dist;
+      closestArray = arr;
+
+      // Determine snap direction (horizontal or vertical alignment)
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+
+      if (absDx < minDistX && absDy < minDistY) {
+        // Too close - need to snap
+        if (absDx / minDistX > absDy / minDistY) {
+          // Snap horizontally
+          const signX = dx >= 0 ? 1 : -1;
+          snapPosition = {
+            x: arr.position.x + signX * minDistX,
+            y: arr.position.y, // Align vertically
+          };
+        } else {
+          // Snap vertically
+          const signY = dy >= 0 ? 1 : -1;
+          snapPosition = {
+            x: arr.position.x, // Align horizontally
+            y: arr.position.y + signY * minDistY,
+          };
+        }
+      }
+    }
+  }
+
+  if (closestArray) {
+    return {
+      position: snapPosition,
+      rotation: closestArray.rotation, // Match rotation of snapped-to array
+      snappedToId: closestArray.id,
+    };
+  }
+
+  return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
+};

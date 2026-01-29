@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType } from '../types';
 import { renderAllMarkups, drawPvArray } from '../utils/drawing';
-import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners } from '../utils/geometry';
+import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing } from '../utils/geometry';
 import { PVArrayConfig } from './PVArrayModal';
 
 interface CanvasProps {
@@ -299,20 +299,40 @@ export function Canvas({
     }
     
     // Draw ghost preview for PV array placement
-    if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig && pvPanelConfig && mouseWorldPos) {
+    if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig && pvPanelConfig && mouseWorldPos && scaleInfo.ratio) {
       const onMask = roofMasks.find(m => isPointInPolygon(mouseWorldPos, m.points));
       
-      // Use placementRotation for manual control, otherwise auto-calculate from roof
+      // Calculate base rotation from roof direction + manual adjustment
       const autoRotation = onMask ? calculateArrayRotationForRoof(mouseWorldPos, roofMasks, 0) : 0;
-      const rotation = (autoRotation + placementRotation) % 360;
+      const baseRotation = (autoRotation + placementRotation) % 360;
+      
+      // Apply snapping to adjacent arrays if minSpacing is set
+      const minSpacing = pendingPvArrayConfig.minSpacing ?? 0;
+      const snapResult = snapPVArrayToSpacing(
+        mouseWorldPos,
+        { 
+          rows: pendingPvArrayConfig.rows, 
+          columns: pendingPvArrayConfig.columns, 
+          orientation: pendingPvArrayConfig.orientation,
+          rotation: baseRotation,
+        },
+        pvArrays,
+        pvPanelConfig,
+        roofMasks,
+        scaleInfo,
+        minSpacing
+      );
+      
+      // Use snapped rotation if snapped to an array, otherwise use base rotation
+      const finalRotation = snapResult.snappedToId ? snapResult.rotation : baseRotation;
       
       const ghostArray: PVArrayItem = {
         id: 'ghost-preview',
-        position: mouseWorldPos,
+        position: snapResult.position,
         rows: pendingPvArrayConfig.rows,
         columns: pendingPvArrayConfig.columns,
         orientation: pendingPvArrayConfig.orientation,
-        rotation,
+        rotation: finalRotation,
         roofMaskId: onMask?.id,
       };
       
@@ -403,19 +423,41 @@ export function Canvas({
         ? snapTo45Degrees(currentDrawing[currentDrawing.length - 1], worldPos)
         : worldPos;
       setCurrentDrawing([...currentDrawing, snappedPos]);
-    } else if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig && pvPanelConfig) {
+    } else if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig && pvPanelConfig && scaleInfo.ratio) {
       // Check if clicking on a roof mask
       const onMask = roofMasks.find(m => isPointInPolygon(worldPos, m.points));
       if (onMask) {
+        // Calculate base rotation from roof direction + manual adjustment
         const autoRotation = calculateArrayRotationForRoof(worldPos, roofMasks, 0);
-        const rotation = (autoRotation + placementRotation) % 360;
+        const baseRotation = (autoRotation + placementRotation) % 360;
+        
+        // Apply snapping to adjacent arrays if minSpacing is set
+        const minSpacing = pendingPvArrayConfig.minSpacing ?? 0;
+        const snapResult = snapPVArrayToSpacing(
+          worldPos,
+          { 
+            rows: pendingPvArrayConfig.rows, 
+            columns: pendingPvArrayConfig.columns, 
+            orientation: pendingPvArrayConfig.orientation,
+            rotation: baseRotation,
+          },
+          pvArrays,
+          pvPanelConfig,
+          roofMasks,
+          scaleInfo,
+          minSpacing
+        );
+        
+        // Use snapped rotation if snapped to an array, otherwise use base rotation
+        const finalRotation = snapResult.snappedToId ? snapResult.rotation : baseRotation;
+        
         const newArray: PVArrayItem = {
           id: `array-${Date.now()}`,
-          position: worldPos,
+          position: snapResult.position,
           rows: pendingPvArrayConfig.rows,
           columns: pendingPvArrayConfig.columns,
           orientation: pendingPvArrayConfig.orientation,
-          rotation,
+          rotation: finalRotation,
           roofMaskId: onMask.id,
         };
         setPvArrays(prev => [...prev, newArray]);
