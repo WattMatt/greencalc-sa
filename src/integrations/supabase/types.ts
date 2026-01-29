@@ -714,6 +714,7 @@ export type Database = {
           pv_config: Json | null
           roof_masks: Json | null
           scale_pixels_per_meter: number | null
+          simulation_id: string | null
           updated_at: string
         }
         Insert: {
@@ -730,6 +731,7 @@ export type Database = {
           pv_config?: Json | null
           roof_masks?: Json | null
           scale_pixels_per_meter?: number | null
+          simulation_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -746,6 +748,7 @@ export type Database = {
           pv_config?: Json | null
           roof_masks?: Json | null
           scale_pixels_per_meter?: number | null
+          simulation_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -761,6 +764,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pv_layouts_simulation_id_fkey"
+            columns: ["simulation_id"]
+            isOneToOne: false
+            referencedRelation: "project_simulations"
             referencedColumns: ["id"]
           },
         ]
