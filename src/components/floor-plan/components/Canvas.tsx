@@ -490,8 +490,40 @@ export function Canvas({
     const worldPos = toWorld(screenPos);
 
     if (draggingPvArrayId && pvArrayDragOffset) {
-      const nextPos = { x: worldPos.x - pvArrayDragOffset.x, y: worldPos.y - pvArrayDragOffset.y };
-      setPvArrays(prev => prev.map(arr => (arr.id === draggingPvArrayId ? { ...arr, position: nextPos } : arr)));
+      const basePos = { x: worldPos.x - pvArrayDragOffset.x, y: worldPos.y - pvArrayDragOffset.y };
+      
+      // Find the dragged array to get its config
+      const draggedArray = pvArrays.find(arr => arr.id === draggingPvArrayId);
+      if (draggedArray && scaleInfo.ratio) {
+        // Get other arrays (exclude the one being dragged)
+        const otherArrays = pvArrays.filter(arr => arr.id !== draggingPvArrayId);
+        
+        // Apply snapping logic
+        const minSpacing = pendingPvArrayConfig?.minSpacing ?? 0;
+        const snapResult = snapPVArrayToSpacing(
+          basePos,
+          {
+            rows: draggedArray.rows,
+            columns: draggedArray.columns,
+            orientation: draggedArray.orientation,
+            rotation: draggedArray.rotation,
+          },
+          otherArrays,
+          pvPanelConfig,
+          roofMasks,
+          scaleInfo,
+          minSpacing,
+          isShiftHeld
+        );
+        
+        setPvArrays(prev => prev.map(arr => 
+          arr.id === draggingPvArrayId 
+            ? { ...arr, position: snapResult.position, rotation: isShiftHeld && snapResult.snappedToId ? snapResult.rotation : arr.rotation } 
+            : arr
+        ));
+      } else {
+        setPvArrays(prev => prev.map(arr => (arr.id === draggingPvArrayId ? { ...arr, position: basePos } : arr)));
+      }
       return;
     }
 
