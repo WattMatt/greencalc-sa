@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig } from './types';
+import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
@@ -782,6 +782,28 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     }
   };
 
+  // Handle copying a PV array - enter placement mode with the same config
+  const handleCopyPvArray = (array: PVArrayItem) => {
+    const copyConfig: PVArrayConfig = {
+      rows: array.rows,
+      columns: array.columns,
+      orientation: array.orientation,
+      minSpacing: lastPvArraySettings?.minSpacing ?? 0.5,
+    };
+    setPendingPvArrayConfig(copyConfig);
+    setLastPvArraySettings(copyConfig);
+    setActiveTool(Tool.PV_ARRAY);
+    toast.info('Click on a roof mask to place the copied array');
+  };
+
+  // Handle copying a roof mask - store config and enter drawing mode
+  const handleCopyRoofMask = (mask: RoofMask) => {
+    // Store the pitch for the next mask, then switch to drawing mode
+    setPendingRoofMask({ points: [], area: 0, pitch: mask.pitch });
+    setActiveTool(Tool.ROOF_MASK);
+    toast.info(`Draw a new roof mask (pitch: ${mask.pitch}°)`);
+  };
+
   // Show browser view first (unless in readOnly mode)
   if (viewMode === 'browser' && !readOnly) {
     return (
@@ -872,6 +894,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
             : pendingRoofMask?.points
         }
         onPVArrayDoubleClick={readOnly ? undefined : handlePVArrayDoubleClick}
+        onCopyPvArray={readOnly ? undefined : handleCopyPvArray}
+        onCopyRoofMask={readOnly ? undefined : handleCopyRoofMask}
       />
 
       <SummaryPanel

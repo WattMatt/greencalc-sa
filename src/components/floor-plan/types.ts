@@ -77,6 +77,8 @@ export enum Tool {
   ROOF_MASK = 'roof_mask',
   ROOF_DIRECTION = 'roof_direction',
   PV_ARRAY = 'pv_array',
+  COPY_ROOF_MASK = 'copy_roof_mask',
+  COPY_PV_ARRAY = 'copy_pv_array',
   PLACE_INVERTER = 'place_inverter',
   PLACE_DC_COMBINER = 'place_dc_combiner',
   PLACE_AC_DISCONNECT = 'place_ac_disconnect',

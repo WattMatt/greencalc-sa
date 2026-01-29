@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
   Upload, Undo2, Redo2, Save, Loader2, ArrowLeft,
-  ChevronLeft, ChevronRight, ChevronDown
+  ChevronLeft, ChevronRight, ChevronDown, Copy
 } from 'lucide-react';
 import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig } from '../types';
 import { Button } from '@/components/ui/button';
@@ -21,34 +21,62 @@ interface ToolButtonProps {
   onClick: () => void;
   disabled?: boolean;
   badge?: string;
+  copyButton?: {
+    isActive: boolean;
+    onClick: () => void;
+    disabled?: boolean;
+  };
 }
 
-const ToolButton = ({ icon: Icon, label, isActive, onClick, disabled, badge }: ToolButtonProps) => (
-  <TooltipProvider>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant={isActive ? 'default' : 'ghost'}
-          size="sm"
-          onClick={onClick}
-          disabled={disabled}
-          className={cn(
-            'relative justify-start w-full',
-            isActive && 'bg-primary text-primary-foreground'
-          )}
-        >
-          <Icon className="h-4 w-4 mr-2" />
-          <span className="text-xs">{label}</span>
-          {badge && (
-            <span className="absolute right-2 text-xs bg-muted text-muted-foreground px-1 rounded">
-              {badge}
-            </span>
-          )}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="right">{label}</TooltipContent>
-    </Tooltip>
-  </TooltipProvider>
+const ToolButton = ({ icon: Icon, label, isActive, onClick, disabled, badge, copyButton }: ToolButtonProps) => (
+  <div className="flex items-center gap-1">
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant={isActive ? 'default' : 'ghost'}
+            size="sm"
+            onClick={onClick}
+            disabled={disabled}
+            className={cn(
+              'relative justify-start flex-1',
+              isActive && 'bg-primary text-primary-foreground'
+            )}
+          >
+            <Icon className="h-4 w-4 mr-2" />
+            <span className="text-xs">{label}</span>
+            {badge && (
+              <span className="absolute right-2 text-xs bg-muted text-muted-foreground px-1 rounded">
+                {badge}
+              </span>
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+    {copyButton && (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={copyButton.isActive ? 'default' : 'ghost'}
+              size="icon"
+              className={cn(
+                'h-8 w-8 shrink-0',
+                copyButton.isActive && 'bg-primary text-primary-foreground'
+              )}
+              onClick={copyButton.onClick}
+              disabled={copyButton.disabled}
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Copy {label}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    )}
+  </div>
 );
 
 interface CollapsibleSectionProps {
@@ -377,6 +405,11 @@ export function Toolbar({
             isActive={activeTool === Tool.ROOF_MASK}
             onClick={() => setActiveTool(Tool.ROOF_MASK)}
             disabled={!scaleSet}
+            copyButton={{
+              isActive: activeTool === Tool.COPY_ROOF_MASK,
+              onClick: () => setActiveTool(Tool.COPY_ROOF_MASK),
+              disabled: !scaleSet,
+            }}
           />
           <ToolButton
             icon={Sun}
@@ -384,6 +417,11 @@ export function Toolbar({
             isActive={activeTool === Tool.PV_ARRAY}
             onClick={() => setActiveTool(Tool.PV_ARRAY)}
             disabled={!scaleSet || !pvConfigured}
+            copyButton={{
+              isActive: activeTool === Tool.COPY_PV_ARRAY,
+              onClick: () => setActiveTool(Tool.COPY_PV_ARRAY),
+              disabled: !scaleSet || !pvConfigured,
+            }}
           />
         </CollapsibleSection>
 
