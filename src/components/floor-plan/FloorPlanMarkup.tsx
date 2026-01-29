@@ -513,13 +513,13 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     setIsRoofMaskModalOpen(true);
   };
 
-  const handleRoofMaskConfirm = (pitch: number) => {
+  const handleRoofMaskConfirm = (pitch: number, direction: number) => {
     if (!pendingRoofMask) return;
     const newMask: RoofMask = {
       id: `roof-${Date.now()}`,
       points: pendingRoofMask.points,
       pitch,
-      direction: 180, // Default south-facing
+      direction,
       area: pendingRoofMask.area,
     };
     setRoofMasks(prev => [...prev, newMask]);
