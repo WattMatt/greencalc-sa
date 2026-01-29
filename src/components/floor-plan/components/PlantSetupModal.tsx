@@ -14,6 +14,7 @@ import {
   WalkwayConfig, 
   CableTrayConfig 
 } from '../types';
+import { DimensionInput } from './DimensionInput';
 
 interface PlantSetupModalProps {
   isOpen: boolean;
@@ -235,26 +236,16 @@ export function PlantSetupModal({
                 className="h-8 text-sm"
               />
             </div>
-            <div>
-              <Label className="text-xs">Width (m)</Label>
-              <Input 
-                type="number" 
-                step="0.001"
-                value={moduleForm.width} 
-                onChange={e => setModuleForm(prev => ({ ...prev, width: parseFloat(e.target.value) || 0 }))}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Length (m)</Label>
-              <Input 
-                type="number" 
-                step="0.001"
-                value={moduleForm.length} 
-                onChange={e => setModuleForm(prev => ({ ...prev, length: parseFloat(e.target.value) || 0 }))}
-                className="h-8 text-sm"
-              />
-            </div>
+            <DimensionInput
+              label="Width"
+              value={moduleForm.width}
+              onChange={(v) => setModuleForm(prev => ({ ...prev, width: v }))}
+            />
+            <DimensionInput
+              label="Length"
+              value={moduleForm.length}
+              onChange={(v) => setModuleForm(prev => ({ ...prev, length: v }))}
+            />
             <div>
               <Label className="text-xs">Power (Wp)</Label>
               <Input 
@@ -407,26 +398,16 @@ export function PlantSetupModal({
                 className="h-8 text-sm"
               />
             </div>
-            <div>
-              <Label className="text-xs">Width (m)</Label>
-              <Input 
-                type="number" 
-                step="0.1"
-                value={walkwayForm.width} 
-                onChange={e => setWalkwayForm(prev => ({ ...prev, width: parseFloat(e.target.value) || 0 }))}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Length (m)</Label>
-              <Input 
-                type="number" 
-                step="0.1"
-                value={walkwayForm.length} 
-                onChange={e => setWalkwayForm(prev => ({ ...prev, length: parseFloat(e.target.value) || 0 }))}
-                className="h-8 text-sm"
-              />
-            </div>
+            <DimensionInput
+              label="Width"
+              value={walkwayForm.width}
+              onChange={(v) => setWalkwayForm(prev => ({ ...prev, width: v }))}
+            />
+            <DimensionInput
+              label="Length"
+              value={walkwayForm.length}
+              onChange={(v) => setWalkwayForm(prev => ({ ...prev, length: v }))}
+            />
           </div>
           <div className="flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
@@ -477,26 +458,16 @@ export function PlantSetupModal({
                 className="h-8 text-sm"
               />
             </div>
-            <div>
-              <Label className="text-xs">Width (m)</Label>
-              <Input 
-                type="number" 
-                step="0.05"
-                value={cableTrayForm.width} 
-                onChange={e => setCableTrayForm(prev => ({ ...prev, width: parseFloat(e.target.value) || 0 }))}
-                className="h-8 text-sm"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Length (m)</Label>
-              <Input 
-                type="number" 
-                step="0.1"
-                value={cableTrayForm.length} 
-                onChange={e => setCableTrayForm(prev => ({ ...prev, length: parseFloat(e.target.value) || 0 }))}
-                className="h-8 text-sm"
-              />
-            </div>
+            <DimensionInput
+              label="Width"
+              value={cableTrayForm.width}
+              onChange={(v) => setCableTrayForm(prev => ({ ...prev, width: v }))}
+            />
+            <DimensionInput
+              label="Length"
+              value={cableTrayForm.length}
+              onChange={(v) => setCableTrayForm(prev => ({ ...prev, length: v }))}
+            />
           </div>
           <div className="flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
