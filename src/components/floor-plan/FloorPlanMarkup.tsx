@@ -586,14 +586,6 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           onBackToBrowser={() => setViewMode('browser')}
           isCollapsed={isToolbarCollapsed}
           onToggleCollapse={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
-          selectedModuleId={selectedModuleId}
-          setSelectedModuleId={setSelectedModuleId}
-          selectedInverterId={selectedInverterId}
-          setSelectedInverterId={setSelectedInverterId}
-          selectedWalkwayId={selectedWalkwayId}
-          setSelectedWalkwayId={setSelectedWalkwayId}
-          selectedCableTrayId={selectedCableTrayId}
-          setSelectedCableTrayId={setSelectedCableTrayId}
         />
       )}
       
