@@ -119,12 +119,14 @@ export interface WalkwayConfig {
   id: string;
   name: string;
   width: number;      // meters (default 0.6m)
+  length: number;     // meters
 }
 
 export interface CableTrayConfig {
   id: string;
   name: string;
   width: number;      // meters (default 0.3m)
+  length: number;     // meters
 }
 
 export interface PlantSetupConfig {
@@ -137,6 +139,6 @@ export interface PlantSetupConfig {
 export const defaultPlantSetupConfig: PlantSetupConfig = {
   solarModules: [],
   inverters: [],
-  walkways: [{ id: 'default-walkway', name: 'Standard', width: 0.6 }],
-  cableTrays: [{ id: 'default-tray', name: 'Standard', width: 0.3 }],
+  walkways: [{ id: 'default-walkway', name: 'Standard', width: 0.6, length: 10 }],
+  cableTrays: [{ id: 'default-tray', name: 'Standard', width: 0.3, length: 10 }],
 };
