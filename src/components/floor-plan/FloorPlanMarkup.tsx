@@ -509,22 +509,22 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     };
   }, []);
 
+  // Track R key held state for scroll-wheel rotation
+  const [isRKeyHeld, setIsRKeyHeld] = useState(false);
+  const isRKeyHeldRef = useRef(false);
+
   // Keyboard shortcuts
   useEffect(() => {
     if (readOnly) return;
+    
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Rotate selected PV array or placement rotation
+      // Don't handle shortcuts when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      // Track R key hold state for scroll rotation
       if (e.key === 'r' || e.key === 'R') {
-        // If a PV array is selected, rotate it
-        if (selectedItemId && pvArrays.some(arr => arr.id === selectedItemId)) {
-          setPvArrays(prev => prev.map(arr => 
-            arr.id === selectedItemId 
-              ? { ...arr, rotation: (arr.rotation + 15) % 360 }
-              : arr
-          ));
-        } else {
-          setPlacementRotation(r => (r + 45) % 360);
-        }
+        setIsRKeyHeld(true);
+        isRKeyHeldRef.current = true;
       }
       if (e.ctrlKey && e.key === 'z') {
         e.preventDefault();
@@ -554,9 +554,43 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         }
       }
     };
+    
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'r' || e.key === 'R') {
+        setIsRKeyHeld(false);
+        isRKeyHeldRef.current = false;
+      }
+    };
+    
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId, selectedItemId, pvArrays, setPvArrays]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId]);
+
+  // Scroll wheel rotation when R is held
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (!isRKeyHeldRef.current) return;
+      if (readOnly) return;
+      
+      // Check if a PV array is selected
+      if (selectedItemId && pvArrays.some(arr => arr.id === selectedItemId)) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 1 : -1; // 1° per scroll tick
+        setPvArrays(prev => prev.map(arr => 
+          arr.id === selectedItemId 
+            ? { ...arr, rotation: ((arr.rotation + delta) % 360 + 360) % 360 }
+            : arr
+        ));
+      }
+    };
+    
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [readOnly, selectedItemId, pvArrays, setPvArrays]);
 
   const handleImageLoad = (imageBase64: string) => {
     if (readOnly) return;
