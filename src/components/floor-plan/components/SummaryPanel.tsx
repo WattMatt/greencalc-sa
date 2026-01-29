@@ -394,21 +394,48 @@ export function SummaryPanel({
               summary={`${layoutInverterCount}`}
               defaultOpen={false}
             >
-              {equipment.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No equipment placed</p>
+              {layoutInverterCount === 0 ? (
+                <p className="text-xs text-muted-foreground">No inverters placed</p>
               ) : (
                 <div className="space-y-1">
-                  {Object.entries(
-                    equipment.reduce((acc, eq) => {
-                      acc[eq.type] = (acc[eq.type] || 0) + 1;
-                      return acc;
-                    }, {} as Record<string, number>)
-                  ).map(([type, count]) => (
-                    <div key={type} className="flex justify-between p-2 bg-muted rounded text-xs">
-                      <span>{type}</span>
-                      <span>×{count}</span>
-                    </div>
-                  ))}
+                  {equipment
+                    .filter((e) => e.type === 'Inverter')
+                    .map((inv, i) => (
+                      <div
+                        key={inv.id}
+                        className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
+                          selectedItemId === inv.id
+                            ? 'bg-primary/10 border border-primary'
+                            : 'bg-muted hover:bg-accent'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          className="flex-1 text-left"
+                          onClick={() => onSelectItem(inv.id)}
+                        >
+                          <span className="font-medium">Inverter {i + 1}</span>
+                          {inv.name && (
+                            <span className="text-muted-foreground ml-2">{inv.name}</span>
+                          )}
+                        </button>
+
+                        {onDeleteItem && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteItem(inv.id);
+                            }}
+                            title="Delete inverter"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
                 </div>
               )}
             </CollapsibleSection>
