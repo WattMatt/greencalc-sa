@@ -571,15 +571,23 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId]);
 
   // Scroll wheel rotation when R is held
+  // - R + scroll = 5° increments
+  // - R + Shift + scroll = 1° increments
+  // - While R is held, prevent canvas zoom
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       if (!isRKeyHeldRef.current) return;
       if (readOnly) return;
       
-      // Check if a PV array is selected
+      // Always prevent default when R is held (no canvas zoom)
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Check if a PV array is selected for rotation
       if (selectedItemId && pvArrays.some(arr => arr.id === selectedItemId)) {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? 1 : -1; // 1° per scroll tick
+        // Shift = fine control (1°), otherwise 5°
+        const increment = e.shiftKey ? 1 : 5;
+        const delta = e.deltaY > 0 ? increment : -increment;
         setPvArrays(prev => prev.map(arr => 
           arr.id === selectedItemId 
             ? { ...arr, rotation: ((arr.rotation + delta) % 360 + 360) % 360 }
@@ -588,8 +596,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       }
     };
     
-    window.addEventListener('wheel', handleWheel, { passive: false });
-    return () => window.removeEventListener('wheel', handleWheel);
+    // Use capture phase to intercept before Canvas wheel handler
+    window.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+    return () => window.removeEventListener('wheel', handleWheel, { capture: true });
   }, [readOnly, selectedItemId, pvArrays, setPvArrays]);
 
   const handleImageLoad = (imageBase64: string) => {
