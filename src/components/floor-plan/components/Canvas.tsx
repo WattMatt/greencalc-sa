@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState } from 'react';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig } from '../types';
-import { renderAllMarkups, drawPvArray } from '../utils/drawing';
+import { renderAllMarkups, drawPvArray, drawEquipmentIcon } from '../utils/drawing';
 import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing } from '../utils/geometry';
+import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
 import { PVArrayConfig } from './PVArrayModal';
 
 interface CanvasProps {
@@ -345,6 +346,31 @@ export function Canvas({
       
       drawPvArray(ctx, ghostArray, true, pvPanelConfig, scaleInfo, roofMasks, viewState.zoom, false);
     }
+
+    // Draw ghost preview for equipment placement
+    const equipmentPlacementTools = [Tool.PLACE_INVERTER, Tool.PLACE_DC_COMBINER, Tool.PLACE_AC_DISCONNECT, Tool.PLACE_MAIN_BOARD];
+    if (equipmentPlacementTools.includes(activeTool) && mouseWorldPos) {
+      const typeMap: Record<Tool, EquipmentType> = {
+        [Tool.PLACE_INVERTER]: EquipmentType.INVERTER,
+        [Tool.PLACE_DC_COMBINER]: EquipmentType.DC_COMBINER,
+        [Tool.PLACE_AC_DISCONNECT]: EquipmentType.AC_DISCONNECT,
+        [Tool.PLACE_MAIN_BOARD]: EquipmentType.MAIN_BOARD,
+      } as Record<Tool, EquipmentType>;
+      
+      const eqType = typeMap[activeTool];
+      if (eqType) {
+        ctx.globalAlpha = 0.6;
+        drawEquipmentIcon(
+          ctx,
+          { type: eqType, position: mouseWorldPos, rotation: placementRotation },
+          false,
+          viewState.zoom,
+          scaleInfo,
+          plantSetupConfig
+        );
+        ctx.globalAlpha = 1.0;
+      }
+    }
     
     ctx.restore();
   }, [viewState, equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, selectedItemId, scaleLine, currentDrawing, previewPoint, canvasSize, containerSize, activeTool, pendingRoofMaskPoints, directionLine, mouseWorldPos, pendingPvArrayConfig, placementRotation]);
@@ -392,14 +418,6 @@ export function Canvas({
       // Fallback: select equipment (inverters, etc.) using bounding box hit-test
       const hitEquipment = [...equipment].reverse().find(item => {
         // Calculate size in pixels based on real-world size and scale
-        const EQUIPMENT_REAL_WORLD_SIZES: Record<EquipmentType, number> = {
-          [EquipmentType.INVERTER]: 0.7,
-          [EquipmentType.DC_COMBINER]: 0.4,
-          [EquipmentType.AC_DISCONNECT]: 0.3,
-          [EquipmentType.MAIN_BOARD]: 1.2,
-          [EquipmentType.SUB_BOARD]: 0.8,
-        };
-        
         const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
         // Convert real size to world units (pixels at zoom=1)
         const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
@@ -628,8 +646,9 @@ export function Canvas({
       setPreviewPoint(snappedPreview);
     }
     
-    // Track mouse position for PV array ghost preview
-    if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig) {
+    // Track mouse position for ghost preview (PV array or equipment)
+    const equipmentPlacementTools = [Tool.PLACE_INVERTER, Tool.PLACE_DC_COMBINER, Tool.PLACE_AC_DISCONNECT, Tool.PLACE_MAIN_BOARD];
+    if ((activeTool === Tool.PV_ARRAY && pendingPvArrayConfig) || equipmentPlacementTools.includes(activeTool)) {
       setMouseWorldPos(worldPos);
     } else {
       setMouseWorldPos(null);
