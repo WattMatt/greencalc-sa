@@ -111,6 +111,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [plantSetupActiveTab, setPlantSetupActiveTab] = useState('modules');
   const [pendingScalePixels, setPendingScalePixels] = useState(0);
   const [editingRoofMask, setEditingRoofMask] = useState<RoofMask | null>(null);
+  const [editingRoofDirectionId, setEditingRoofDirectionId] = useState<string | null>(null);
   const [pendingRoofMask, setPendingRoofMask] = useState<{ points: Point[]; area: number; pitch: number } | null>(null);
   const [pendingPvArrayConfig, setPendingPvArrayConfig] = useState<PVArrayConfig | null>(null);
   
@@ -534,11 +535,16 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           setPendingRoofMask(null);
           toast.info('Roof mask cancelled');
         }
+        // Cancel direction editing mode
+        if (editingRoofDirectionId) {
+          setEditingRoofDirectionId(null);
+          toast.info('Roof direction edit cancelled');
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [historyIndex, history.length, handleSave, readOnly]);
+  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId]);
 
   const handleImageLoad = (imageBase64: string) => {
     if (readOnly) return;
@@ -599,6 +605,19 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
 
   // Handle direction line completion for roof mask
   const handleRoofDirectionComplete = (direction: number) => {
+    // Editing existing roof direction
+    if (editingRoofDirectionId) {
+      setRoofMasks(prev => prev.map(mask =>
+        mask.id === editingRoofDirectionId
+          ? { ...mask, direction }
+          : mask
+      ));
+      setEditingRoofDirectionId(null);
+      setActiveTool(Tool.SELECT);
+      toast.success('Roof direction updated');
+      return;
+    }
+
     if (!pendingRoofMask) return;
     
     const newMask: RoofMask = {
@@ -621,6 +640,15 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       setEditingRoofMask(mask);
       setIsRoofMaskModalOpen(true);
     }
+  };
+
+  const handleEditRoofDirection = () => {
+    if (!editingRoofMask) return;
+    setEditingRoofDirectionId(editingRoofMask.id);
+    setEditingRoofMask(null);
+    setIsRoofMaskModalOpen(false);
+    setActiveTool(Tool.ROOF_DIRECTION);
+    toast.info('Draw a line from high to low point to update slope direction');
   };
 
   const handlePVArrayConfirm = (config: PVArrayConfig) => {
@@ -710,7 +738,11 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         onRoofMaskComplete={handleRoofMaskComplete}
         onRoofDirectionComplete={handleRoofDirectionComplete}
         onArrayPlaced={() => setPendingPvArrayConfig(null)}
-        pendingRoofMaskPoints={pendingRoofMask?.points}
+          pendingRoofMaskPoints={
+            editingRoofDirectionId
+              ? roofMasks.find(m => m.id === editingRoofDirectionId)?.points
+              : pendingRoofMask?.points
+          }
       />
 
       <SummaryPanel
@@ -768,9 +800,11 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
               setIsRoofMaskModalOpen(false); 
               setPendingRoofMask(null); 
               setEditingRoofMask(null);
+              setEditingRoofDirectionId(null);
             }}
             area={editingRoofMask?.area || pendingRoofMask?.area || 0}
             onConfirm={handleRoofMaskConfirm}
+            onEditDirection={handleEditRoofDirection}
             initialPitch={editingRoofMask?.pitch}
             isEditing={!!editingRoofMask}
           />

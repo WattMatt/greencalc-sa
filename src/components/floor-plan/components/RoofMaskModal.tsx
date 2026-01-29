@@ -16,6 +16,7 @@ interface RoofMaskModalProps {
   onClose: () => void;
   area: number;
   onConfirm: (pitch: number) => void;
+  onEditDirection?: () => void;
   initialPitch?: number;
   isEditing?: boolean;
 }
@@ -25,6 +26,7 @@ export function RoofMaskModal({
   onClose, 
   area, 
   onConfirm,
+  onEditDirection,
   initialPitch = 15,
   isEditing = false,
 }: RoofMaskModalProps) {
@@ -88,6 +90,11 @@ export function RoofMaskModal({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
+          {isEditing && onEditDirection && (
+            <Button variant="outline" onClick={onEditDirection}>
+              Edit Direction
+            </Button>
+          )}
           <Button onClick={handleConfirm}>
             {isEditing ? 'Update' : 'Confirm & Draw Direction'}
           </Button>
