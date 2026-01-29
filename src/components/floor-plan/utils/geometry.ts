@@ -213,11 +213,14 @@ export const snapPVArrayToSpacing = (
   scaleInfo: ScaleInfo,
   minSpacingMeters: number
 ): { position: Point; rotation: number; snappedToId: string | null } => {
-  if (!scaleInfo.ratio || minSpacingMeters <= 0 || existingArrays.length === 0) {
+  // Always attempt snapping if there are existing arrays (use 0.1m default if no spacing set)
+  const effectiveSpacing = minSpacingMeters > 0 ? minSpacingMeters : 0.1;
+  
+  if (!scaleInfo.ratio || existingArrays.length === 0) {
     return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
   }
 
-  const minSpacingPx = minSpacingMeters / scaleInfo.ratio;
+  const minSpacingPx = effectiveSpacing / scaleInfo.ratio;
   
   // Get ghost array dimensions
   const ghostDims = getPVArrayDimensions(ghostConfig, pvPanelConfig, roofMasks, scaleInfo, mousePos);
@@ -254,34 +257,32 @@ export const snapPVArrayToSpacing = (
     const minDistX = effArrHalfW + effGhostHalfW + minSpacingPx;
     const minDistY = effArrHalfH + effGhostHalfH + minSpacingPx;
 
-    // Check if we're within snapping range (using a threshold of 2x the minimum spacing)
-    const snapThreshold = Math.max(minDistX, minDistY) * 1.5;
+    // Snap threshold: snap when within 2x array dimension of the target position
+    const snapThreshold = Math.max(minDistX, minDistY) * 2;
     
     if (dist < snapThreshold && dist < closestDist) {
       closestDist = dist;
       closestArray = arr;
 
-      // Determine snap direction (horizontal or vertical alignment)
+      // Determine snap direction based on which axis the mouse is approaching from
       const absDx = Math.abs(dx);
       const absDy = Math.abs(dy);
-
-      if (absDx < minDistX && absDy < minDistY) {
-        // Too close - need to snap
-        if (absDx / minDistX > absDy / minDistY) {
-          // Snap horizontally
-          const signX = dx >= 0 ? 1 : -1;
-          snapPosition = {
-            x: arr.position.x + signX * minDistX,
-            y: arr.position.y, // Align vertically
-          };
-        } else {
-          // Snap vertically
-          const signY = dy >= 0 ? 1 : -1;
-          snapPosition = {
-            x: arr.position.x, // Align horizontally
-            y: arr.position.y + signY * minDistY,
-          };
-        }
+      
+      // Determine primary approach direction
+      if (absDx > absDy) {
+        // Approaching horizontally - snap to side
+        const signX = dx >= 0 ? 1 : -1;
+        snapPosition = {
+          x: arr.position.x + signX * minDistX,
+          y: arr.position.y, // Align centers vertically
+        };
+      } else {
+        // Approaching vertically - snap above/below
+        const signY = dy >= 0 ? 1 : -1;
+        snapPosition = {
+          x: arr.position.x, // Align centers horizontally
+          y: arr.position.y + signY * minDistY,
+        };
       }
     }
   }
