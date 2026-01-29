@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType } from '../types';
 import { renderAllMarkups } from '../utils/drawing';
-import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees } from '../utils/geometry';
+import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners } from '../utils/geometry';
 import { PVArrayConfig } from './PVArrayModal';
 
 interface CanvasProps {
@@ -54,6 +54,8 @@ export function Canvas({
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const [isShiftHeld, setIsShiftHeld] = useState(false);
   const [directionLine, setDirectionLine] = useState<{ start: Point; end: Point } | null>(null);
+  const [draggingPvArrayId, setDraggingPvArrayId] = useState<string | null>(null);
+  const [pvArrayDragOffset, setPvArrayDragOffset] = useState<Point | null>(null);
 
   const SNAP_THRESHOLD = 15; // pixels in screen space
 
@@ -313,6 +315,35 @@ export function Canvas({
     const worldPos = toWorld(screenPos);
     setLastMousePos(screenPos);
 
+    // Selection + dragging
+    if (activeTool === Tool.SELECT && e.button === 0) {
+      // Prefer selecting PV arrays first (topmost)
+      const hitArray = (pvPanelConfig && scaleInfo.ratio)
+        ? [...pvArrays].reverse().find(arr => {
+            const corners = getPVArrayCorners(arr, pvPanelConfig, roofMasks, scaleInfo);
+            return corners.length === 4 && isPointInPolygon(worldPos, corners);
+          })
+        : undefined;
+
+      if (hitArray) {
+        setSelectedItemId(hitArray.id);
+        setDraggingPvArrayId(hitArray.id);
+        setPvArrayDragOffset({ x: worldPos.x - hitArray.position.x, y: worldPos.y - hitArray.position.y });
+        return;
+      }
+
+      // Fallback: select roof mask
+      const hitMask = [...roofMasks].reverse().find(m => isPointInPolygon(worldPos, m.points));
+      if (hitMask) {
+        setSelectedItemId(hitMask.id);
+        return;
+      }
+
+      // Clicked empty space
+      setSelectedItemId(null);
+      return;
+    }
+
     if (activeTool === Tool.PAN || e.button === 1) {
       setIsPanning(true);
       return;
@@ -390,6 +421,12 @@ export function Canvas({
     const screenPos = getMousePos(e);
     const worldPos = toWorld(screenPos);
 
+    if (draggingPvArrayId && pvArrayDragOffset) {
+      const nextPos = { x: worldPos.x - pvArrayDragOffset.x, y: worldPos.y - pvArrayDragOffset.y };
+      setPvArrays(prev => prev.map(arr => (arr.id === draggingPvArrayId ? { ...arr, position: nextPos } : arr)));
+      return;
+    }
+
     if (isPanning) {
       const dx = screenPos.x - lastMousePos.x;
       const dy = screenPos.y - lastMousePos.y;
@@ -420,6 +457,8 @@ export function Canvas({
 
   const handleMouseUp = () => {
     setIsPanning(false);
+    setDraggingPvArrayId(null);
+    setPvArrayDragOffset(null);
     
     if (activeTool === Tool.SCALE && scaleLine) {
       const dist = distance(scaleLine.start, scaleLine.end);
@@ -464,7 +503,10 @@ export function Canvas({
   return (
     <div 
       ref={containerRef}
-      className="relative flex-1 overflow-hidden bg-muted cursor-crosshair"
+      className={
+        "relative flex-1 overflow-hidden bg-muted " +
+        (activeTool === Tool.SELECT ? "cursor-default" : "cursor-crosshair")
+      }
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
