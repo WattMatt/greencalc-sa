@@ -213,14 +213,11 @@ export const snapPVArrayToSpacing = (
   scaleInfo: ScaleInfo,
   minSpacingMeters: number
 ): { position: Point; rotation: number; snappedToId: string | null } => {
-  // Always attempt snapping if there are existing arrays (use 0.1m default if no spacing set)
-  const effectiveSpacing = minSpacingMeters > 0 ? minSpacingMeters : 0.1;
-  
-  if (!scaleInfo.ratio || existingArrays.length === 0) {
+  if (!scaleInfo.ratio || minSpacingMeters <= 0 || existingArrays.length === 0) {
     return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
   }
 
-  const minSpacingPx = effectiveSpacing / scaleInfo.ratio;
+  const minSpacingPx = minSpacingMeters / scaleInfo.ratio;
   
   // Get ghost array dimensions
   const ghostDims = getPVArrayDimensions(ghostConfig, pvPanelConfig, roofMasks, scaleInfo, mousePos);
@@ -257,30 +254,41 @@ export const snapPVArrayToSpacing = (
     const minDistX = effArrHalfW + effGhostHalfW + minSpacingPx;
     const minDistY = effArrHalfH + effGhostHalfH + minSpacingPx;
 
-    // Snap threshold: snap when within 2x array dimension of the target position
-    const snapThreshold = Math.max(minDistX, minDistY) * 2;
+    // Only snap if ghost would violate minimum spacing (overlap or too close)
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
     
-    if (dist < snapThreshold && dist < closestDist) {
+    // Check if edges would be closer than minSpacing
+    const edgeDistX = absDx - (effArrHalfW + effGhostHalfW);
+    const edgeDistY = absDy - (effArrHalfH + effGhostHalfH);
+    
+    // If both edge distances are positive and greater than spacing, no snap needed
+    if (edgeDistX >= minSpacingPx && edgeDistY >= minSpacingPx) {
+      continue; // Far enough away, allow free placement
+    }
+    
+    // Check if we're actually close enough to this array to consider snapping
+    // Only snap if at least one axis would violate the spacing
+    const wouldViolateX = edgeDistX < minSpacingPx;
+    const wouldViolateY = edgeDistY < minSpacingPx;
+    
+    if ((wouldViolateX || wouldViolateY) && dist < closestDist) {
       closestDist = dist;
       closestArray = arr;
 
-      // Determine snap direction based on which axis the mouse is approaching from
-      const absDx = Math.abs(dx);
-      const absDy = Math.abs(dy);
-      
-      // Determine primary approach direction
+      // Snap based on primary approach direction
       if (absDx > absDy) {
         // Approaching horizontally - snap to side
         const signX = dx >= 0 ? 1 : -1;
         snapPosition = {
           x: arr.position.x + signX * minDistX,
-          y: arr.position.y, // Align centers vertically
+          y: arr.position.y,
         };
       } else {
         // Approaching vertically - snap above/below
         const signY = dy >= 0 ? 1 : -1;
         snapPosition = {
-          x: arr.position.x, // Align centers horizontally
+          x: arr.position.x,
           y: arr.position.y + signY * minDistY,
         };
       }
