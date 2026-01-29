@@ -487,6 +487,7 @@ export function Canvas({
           orientation: pendingPvArrayConfig.orientation,
           rotation: finalRotation,
           roofMaskId: onMask.id,
+          minSpacing: pendingPvArrayConfig.minSpacing,
         };
         setPvArrays(prev => [...prev, newArray]);
         onArrayPlaced();

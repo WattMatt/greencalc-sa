@@ -836,12 +836,12 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       rows: array.rows,
       columns: array.columns,
       orientation: array.orientation,
-      minSpacing: lastPvArraySettings?.minSpacing ?? 0.5,
+      minSpacing: array.minSpacing ?? lastPvArraySettings?.minSpacing ?? 0.5,
     };
     setPendingPvArrayConfig(copyConfig);
     setLastPvArraySettings(copyConfig);
     setActiveTool(Tool.PV_ARRAY);
-    toast.info('Click on a roof mask to place the copied array');
+    toast.info(`Click on a roof mask to place the copied array (spacing: ${copyConfig.minSpacing}m)`);
   };
 
   // Handle copying a roof mask - store config and enter drawing mode

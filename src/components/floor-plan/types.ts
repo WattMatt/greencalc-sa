@@ -40,6 +40,7 @@ export interface PVArrayItem {
   orientation: PanelOrientation;
   rotation: number; // in degrees
   roofMaskId?: string;
+  minSpacing?: number; // meters - spacing used when placing this array
 }
 
 export interface SupplyLine {
