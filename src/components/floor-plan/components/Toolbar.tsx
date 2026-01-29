@@ -154,7 +154,7 @@ export function Toolbar({
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     file: true,
-    general: true,
+    general: false,
     plantSetup: false,
     roofArrays: false,
     cabling: false,
