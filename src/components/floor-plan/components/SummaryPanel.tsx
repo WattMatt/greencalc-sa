@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig } from '../types';
+import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig, PlacedWalkway, PlacedCableTray } from '../types';
 import { calculateTotalPVCapacity, calculatePolygonArea, calculateLineLength } from '../utils/geometry';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
@@ -31,10 +31,12 @@ interface SummaryPanelProps {
   onSelectItem: (id: string | null) => void;
   onEditRoofMask?: (id: string) => void;
   onDeleteItem?: (id: string) => void;
-  onDeletePlantSetupItem?: (type: 'walkway' | 'cableTray', id: string) => void;
+  onDeletePlacedItem?: (type: 'walkway' | 'cableTray', id: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   plantSetupConfig?: PlantSetupConfig;
+  placedWalkways?: PlacedWalkway[];
+  placedCableTrays?: PlacedCableTray[];
   latestSimulation?: SimulationData | null;
 }
 
@@ -87,10 +89,12 @@ export function SummaryPanel({
   onSelectItem,
   onEditRoofMask,
   onDeleteItem,
-  onDeletePlantSetupItem,
+  onDeletePlacedItem,
   isCollapsed,
   onToggleCollapse,
   plantSetupConfig,
+  placedWalkways = [],
+  placedCableTrays = [],
   latestSimulation,
 }: SummaryPanelProps) {
   const { panelCount, capacityKwp } = pvPanelConfig
@@ -109,9 +113,9 @@ export function SummaryPanel({
     .filter(l => l.type === 'ac')
     .reduce((sum, l) => sum + calculateLineLength(l.points, scaleInfo.ratio), 0);
 
-  // Plant setup quantities
-  const totalWalkwayLength = plantSetupConfig?.walkways.reduce((sum, w) => sum + w.length, 0) ?? 0;
-  const totalCableTrayLength = plantSetupConfig?.cableTrays.reduce((sum, c) => sum + c.length, 0) ?? 0;
+  // Placed item quantities (from DesignState, not plant setup config)
+  const totalWalkwayLength = placedWalkways.reduce((sum, w) => sum + w.length, 0);
+  const totalCableTrayLength = placedCableTrays.reduce((sum, c) => sum + c.length, 0);
   
   // Simulation comparison values
   const simModuleCount = latestSimulation?.results_json?.moduleCount ?? null;
@@ -406,21 +410,21 @@ export function SummaryPanel({
               summary={`${totalWalkwayLength.toFixed(0)} m`}
               defaultOpen={false}
             >
-              {!plantSetupConfig?.walkways.length ? (
-                <p className="text-xs text-muted-foreground">No walkways defined</p>
+              {placedWalkways.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No walkways placed</p>
               ) : (
                 <div className="space-y-1">
-                  {plantSetupConfig.walkways.map((w, i) => (
+                  {placedWalkways.map((w, i) => (
                     <div key={w.id} className="flex items-center justify-between p-2 bg-muted rounded text-xs">
-                      <span>Walkway {i + 1}</span>
+                      <span>{w.name || `Walkway ${i + 1}`}</span>
                       <div className="flex items-center gap-2">
                         <span>{w.width}m × {w.length}m</span>
-                        {onDeletePlantSetupItem && (
+                        {onDeletePlacedItem && (
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
-                            onClick={() => onDeletePlantSetupItem('walkway', w.id)}
+                            onClick={() => onDeletePlacedItem('walkway', w.id)}
                             title="Delete walkway"
                           >
                             <Trash2 className="h-3 w-3" />
@@ -439,21 +443,21 @@ export function SummaryPanel({
               summary={`${totalCableTrayLength.toFixed(0)} m`}
               defaultOpen={false}
             >
-              {!plantSetupConfig?.cableTrays.length ? (
-                <p className="text-xs text-muted-foreground">No cable trays defined</p>
+              {placedCableTrays.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No cable trays placed</p>
               ) : (
                 <div className="space-y-1">
-                  {plantSetupConfig.cableTrays.map((c, i) => (
+                  {placedCableTrays.map((c, i) => (
                     <div key={c.id} className="flex items-center justify-between p-2 bg-muted rounded text-xs">
-                      <span>Tray {i + 1}</span>
+                      <span>{c.name || `Tray ${i + 1}`}</span>
                       <div className="flex items-center gap-2">
                         <span>{c.width}m × {c.length}m</span>
-                        {onDeletePlantSetupItem && (
+                        {onDeletePlacedItem && (
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
-                            onClick={() => onDeletePlantSetupItem('cableTray', c.id)}
+                            onClick={() => onDeletePlacedItem('cableTray', c.id)}
                             title="Delete cable tray"
                           >
                             <Trash2 className="h-3 w-3" />

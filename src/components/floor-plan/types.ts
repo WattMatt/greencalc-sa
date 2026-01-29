@@ -86,11 +86,33 @@ export enum Tool {
   PLACE_MAIN_BOARD = 'place_main_board',
 }
 
+// Placed instance of a walkway on the canvas/project
+export interface PlacedWalkway {
+  id: string;
+  configId: string;  // Reference to WalkwayConfig template
+  name: string;
+  width: number;     // meters
+  length: number;    // meters (specific to this placement)
+  position?: Point;  // Optional canvas position
+}
+
+// Placed instance of a cable tray on the canvas/project
+export interface PlacedCableTray {
+  id: string;
+  configId: string;  // Reference to CableTrayConfig template
+  name: string;
+  width: number;     // meters
+  length: number;    // meters (specific to this placement)
+  position?: Point;  // Optional canvas position
+}
+
 export interface DesignState {
   equipment: EquipmentItem[];
   lines: SupplyLine[];
   roofMasks: RoofMask[];
   pvArrays: PVArrayItem[];
+  placedWalkways: PlacedWalkway[];
+  placedCableTrays: PlacedCableTray[];
 }
 
 export const initialDesignState: DesignState = {
@@ -98,6 +120,8 @@ export const initialDesignState: DesignState = {
   lines: [],
   roofMasks: [],
   pvArrays: [],
+  placedWalkways: [],
+  placedCableTrays: [],
 };
 
 // Plant Setup Configuration Types
