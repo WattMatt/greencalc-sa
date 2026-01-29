@@ -583,30 +583,36 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       e.preventDefault();
       e.stopPropagation();
       
+      // Shift = fine control (1°), otherwise 5°
+      const increment = e.shiftKey ? 1 : 5;
+      
+      // Browsers convert Shift+scroll from deltaY to deltaX, so check both
+      const scrollDelta = e.shiftKey ? e.deltaX : e.deltaY;
+      const delta = scrollDelta > 0 ? increment : -increment;
+      
+      // Only rotate if there's actual scroll movement
+      if (scrollDelta === 0) return;
+      
+      // Check if placing a new PV array (ghost preview mode)
+      if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig) {
+        setPlacementRotation(prev => ((prev + delta) % 360 + 360) % 360);
+        return;
+      }
+      
       // Check if a PV array is selected for rotation
       if (selectedItemId && pvArrays.some(arr => arr.id === selectedItemId)) {
-        // Shift = fine control (1°), otherwise 5°
-        const increment = e.shiftKey ? 1 : 5;
-        
-        // Browsers convert Shift+scroll from deltaY to deltaX, so check both
-        const scrollDelta = e.shiftKey ? e.deltaX : e.deltaY;
-        const delta = scrollDelta > 0 ? increment : -increment;
-        
-        // Only rotate if there's actual scroll movement
-        if (scrollDelta !== 0) {
-          setPvArrays(prev => prev.map(arr => 
-            arr.id === selectedItemId 
-              ? { ...arr, rotation: ((arr.rotation + delta) % 360 + 360) % 360 }
-              : arr
-          ));
-        }
+        setPvArrays(prev => prev.map(arr => 
+          arr.id === selectedItemId 
+            ? { ...arr, rotation: ((arr.rotation + delta) % 360 + 360) % 360 }
+            : arr
+        ));
       }
     };
     
     // Use capture phase to intercept before Canvas wheel handler
     window.addEventListener('wheel', handleWheel, { passive: false, capture: true });
     return () => window.removeEventListener('wheel', handleWheel, { capture: true });
-  }, [readOnly, selectedItemId, pvArrays, setPvArrays]);
+  }, [readOnly, selectedItemId, pvArrays, setPvArrays, activeTool, pendingPvArrayConfig]);
 
   const handleImageLoad = (imageBase64: string) => {
     if (readOnly) return;
