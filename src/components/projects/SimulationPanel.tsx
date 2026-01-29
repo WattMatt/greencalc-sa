@@ -896,6 +896,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           productionReductionPercent,
           // Save advanced simulation config (degradation, financial, seasonal, etc.)
           advancedConfig,
+          // Save module and inverter counts for layout comparison
+          moduleCount: moduleMetrics.moduleCount,
+          inverterCount: inverterConfig.inverterCount,
         })),
       };
 

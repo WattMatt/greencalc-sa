@@ -161,70 +161,6 @@ export function SummaryPanel({
 
         <ScrollArea className="flex-1">
           <div className="p-3 space-y-3">
-            {/* Roof Areas - Standalone at top */}
-            <CollapsibleSection
-              icon={<Layers className="h-4 w-4 text-purple-500" />}
-              title="Roof Areas"
-              summary={`${totalRoofArea.toFixed(0)} m²`}
-              defaultOpen={false}
-            >
-              {roofMasks.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No roof masks defined</p>
-              ) : (
-                <div className="space-y-1">
-                  {roofMasks.map((mask, i) => (
-                    <div
-                      key={mask.id}
-                      className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
-                        selectedItemId === mask.id 
-                          ? 'bg-primary/10 border border-primary' 
-                          : 'bg-muted hover:bg-accent'
-                      }`}
-                    >
-                      <button
-                        className="flex-1 text-left"
-                        onClick={() => onSelectItem(mask.id)}
-                        onDoubleClick={() => onEditRoofMask?.(mask.id)}
-                      >
-                        <span className="font-medium">Roof {i + 1}</span>
-                        <span className="text-muted-foreground ml-2">
-                           {calculatePolygonArea(mask.points, scaleInfo.ratio).toFixed(0)} m² • {mask.pitch}° • {mask.direction}°
-                        </span>
-                      </button>
-                      {onEditRoofMask && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEditRoofMask(mask.id);
-                          }}
-                          title="Edit roof configuration"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </Button>
-                      )}
-                      {onDeleteItem && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteItem(mask.id);
-                          }}
-                          title="Delete roof mask"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CollapsibleSection>
-
             {/* Static Metrics Grid - 2x2 */}
             <div className="grid grid-cols-2 gap-2 mb-3">
               {/* Modules - Top Left */}
@@ -325,6 +261,70 @@ export function SummaryPanel({
                 </CardContent>
               </Card>
             </div>
+
+            {/* Roof Areas - Between grid and detail dropdowns */}
+            <CollapsibleSection
+              icon={<Layers className="h-4 w-4 text-purple-500" />}
+              title="Roof Areas"
+              summary={`${totalRoofArea.toFixed(0)} m²`}
+              defaultOpen={false}
+            >
+              {roofMasks.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No roof masks defined</p>
+              ) : (
+                <div className="space-y-1">
+                  {roofMasks.map((mask, i) => (
+                    <div
+                      key={mask.id}
+                      className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
+                        selectedItemId === mask.id 
+                          ? 'bg-primary/10 border border-primary' 
+                          : 'bg-muted hover:bg-accent'
+                      }`}
+                    >
+                      <button
+                        className="flex-1 text-left"
+                        onClick={() => onSelectItem(mask.id)}
+                        onDoubleClick={() => onEditRoofMask?.(mask.id)}
+                      >
+                        <span className="font-medium">Roof {i + 1}</span>
+                        <span className="text-muted-foreground ml-2">
+                           {calculatePolygonArea(mask.points, scaleInfo.ratio).toFixed(0)} m² • {mask.pitch}° • {mask.direction}°
+                        </span>
+                      </button>
+                      {onEditRoofMask && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditRoofMask(mask.id);
+                          }}
+                          title="Edit roof configuration"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      )}
+                      {onDeleteItem && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteItem(mask.id);
+                          }}
+                          title="Delete roof mask"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CollapsibleSection>
 
             {/* Collapsible Detail Sections */}
             <CollapsibleSection
