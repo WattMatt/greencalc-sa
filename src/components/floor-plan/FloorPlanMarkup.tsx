@@ -527,6 +527,48 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [isRKeyHeld, setIsRKeyHeld] = useState(false);
   const isRKeyHeldRef = useRef(false);
 
+  // Delete an item by ID (PV array, roof mask, equipment, or line)
+  const handleDeleteItem = useCallback((id: string) => {
+    // Try deleting PV array
+    if (pvArrays.some(arr => arr.id === id)) {
+      setPvArrays(prev => prev.filter(arr => arr.id !== id));
+      if (selectedItemId === id) setSelectedItemId(null);
+      toast.success('PV array deleted');
+      return;
+    }
+    
+    // Try deleting roof mask
+    if (roofMasks.some(mask => mask.id === id)) {
+      setRoofMasks(prev => prev.filter(mask => mask.id !== id));
+      if (selectedItemId === id) setSelectedItemId(null);
+      toast.success('Roof mask deleted');
+      return;
+    }
+    
+    // Try deleting equipment
+    if (equipment.some(eq => eq.id === id)) {
+      setEquipment(prev => prev.filter(eq => eq.id !== id));
+      if (selectedItemId === id) setSelectedItemId(null);
+      toast.success('Equipment deleted');
+      return;
+    }
+    
+    // Try deleting line
+    if (lines.some(line => line.id === id)) {
+      setLines(prev => prev.filter(line => line.id !== id));
+      if (selectedItemId === id) setSelectedItemId(null);
+      toast.success('Cable deleted');
+      return;
+    }
+  }, [selectedItemId, pvArrays, roofMasks, equipment, lines, setPvArrays, setRoofMasks, setEquipment, setLines]);
+
+  // Delete selected item (wrapper for keyboard shortcut)
+  const handleDeleteSelectedItem = useCallback(() => {
+    if (selectedItemId) {
+      handleDeleteItem(selectedItemId);
+    }
+  }, [selectedItemId, handleDeleteItem]);
+
   // Keyboard shortcuts
   useEffect(() => {
     if (readOnly) return;
@@ -584,6 +626,12 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         setActiveTool(Tool.SELECT);
         setEditingPvArrayId(null);
       }
+      
+      // Delete selected item with Delete or Backspace
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItemId) {
+        e.preventDefault();
+        handleDeleteSelectedItem();
+      }
     };
     
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -599,7 +647,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId, pendingPvArrayConfig, activeTool]);
+  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId, pendingPvArrayConfig, activeTool, selectedItemId]);
 
   // Scroll wheel rotation when R is held
   // - R + scroll = 5° increments
@@ -908,6 +956,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         selectedItemId={selectedItemId}
         onSelectItem={setSelectedItemId}
         onEditRoofMask={readOnly ? undefined : handleEditRoofMask}
+        onDeleteItem={readOnly ? undefined : handleDeleteItem}
         isCollapsed={isSummaryCollapsed}
         onToggleCollapse={() => setIsSummaryCollapsed(!isSummaryCollapsed)}
       />
