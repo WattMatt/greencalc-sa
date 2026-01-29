@@ -114,6 +114,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [editingRoofDirectionId, setEditingRoofDirectionId] = useState<string | null>(null);
   const [pendingRoofMask, setPendingRoofMask] = useState<{ points: Point[]; area: number; pitch: number } | null>(null);
   const [pendingPvArrayConfig, setPendingPvArrayConfig] = useState<PVArrayConfig | null>(null);
+  const [editingPvArrayId, setEditingPvArrayId] = useState<string | null>(null);
   
   // Plant Setup Config
   const [plantSetupConfig, setPlantSetupConfig] = useState<PlantSetupConfig>(defaultPlantSetupConfig);
@@ -512,8 +513,18 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   useEffect(() => {
     if (readOnly) return;
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Rotate selected PV array or placement rotation
       if (e.key === 'r' || e.key === 'R') {
-        setPlacementRotation(r => (r + 45) % 360);
+        // If a PV array is selected, rotate it
+        if (selectedItemId && pvArrays.some(arr => arr.id === selectedItemId)) {
+          setPvArrays(prev => prev.map(arr => 
+            arr.id === selectedItemId 
+              ? { ...arr, rotation: (arr.rotation + 15) % 360 }
+              : arr
+          ));
+        } else {
+          setPlacementRotation(r => (r + 45) % 360);
+        }
       }
       if (e.ctrlKey && e.key === 'z') {
         e.preventDefault();
@@ -530,6 +541,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       if (e.key === 'Escape') {
         setActiveTool(Tool.SELECT);
         setPendingPvArrayConfig(null);
+        setEditingPvArrayId(null);
         // Cancel pending roof direction drawing
         if (pendingRoofMask) {
           setPendingRoofMask(null);
@@ -544,7 +556,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId]);
+  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId, selectedItemId, pvArrays, setPvArrays]);
 
   const handleImageLoad = (imageBase64: string) => {
     if (readOnly) return;
@@ -652,10 +664,33 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   };
 
   const handlePVArrayConfirm = (config: PVArrayConfig) => {
+    // If editing an existing array, update it
+    if (editingPvArrayId) {
+      setPvArrays(prev => prev.map(arr => 
+        arr.id === editingPvArrayId 
+          ? { ...arr, rows: config.rows, columns: config.columns, orientation: config.orientation }
+          : arr
+      ));
+      setEditingPvArrayId(null);
+      setIsPVArrayModalOpen(false);
+      toast.success('PV array updated');
+      return;
+    }
+    
+    // Creating new array - set pending config and switch to placement mode
     setPendingPvArrayConfig(config);
     setIsPVArrayModalOpen(false);
     setActiveTool(Tool.PV_ARRAY);
     toast.info('Click on a roof mask to place the array');
+  };
+
+  // Handle double-click on PV array to edit
+  const handlePVArrayDoubleClick = (arrayId: string) => {
+    const arr = pvArrays.find(a => a.id === arrayId);
+    if (arr) {
+      setEditingPvArrayId(arrayId);
+      setIsPVArrayModalOpen(true);
+    }
   };
 
   // Show browser view first (unless in readOnly mode)
@@ -738,11 +773,12 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         onRoofMaskComplete={handleRoofMaskComplete}
         onRoofDirectionComplete={handleRoofDirectionComplete}
         onArrayPlaced={() => setPendingPvArrayConfig(null)}
-          pendingRoofMaskPoints={
-            editingRoofDirectionId
-              ? roofMasks.find(m => m.id === editingRoofDirectionId)?.points
-              : pendingRoofMask?.points
-          }
+        pendingRoofMaskPoints={
+          editingRoofDirectionId
+            ? roofMasks.find(m => m.id === editingRoofDirectionId)?.points
+            : pendingRoofMask?.points
+        }
+        onPVArrayDoubleClick={readOnly ? undefined : handlePVArrayDoubleClick}
       />
 
       <SummaryPanel
@@ -812,9 +848,17 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           {pvPanelConfig && (
             <PVArrayModal
               isOpen={isPVArrayModalOpen}
-              onClose={() => setIsPVArrayModalOpen(false)}
+              onClose={() => { 
+                setIsPVArrayModalOpen(false); 
+                setEditingPvArrayId(null);
+              }}
               pvPanelConfig={pvPanelConfig}
               onConfirm={handlePVArrayConfirm}
+              initialConfig={editingPvArrayId 
+                ? pvArrays.find(arr => arr.id === editingPvArrayId)
+                : undefined
+              }
+              isEditing={!!editingPvArrayId}
             />
           )}
           

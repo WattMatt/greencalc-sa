@@ -30,6 +30,7 @@ interface CanvasProps {
   onRoofDirectionComplete: (direction: number) => void;
   onArrayPlaced: () => void;
   pendingRoofMaskPoints?: Point[];
+  onPVArrayDoubleClick?: (arrayId: string) => void;
 }
 
 export function Canvas({
@@ -39,7 +40,7 @@ export function Canvas({
   equipment, setEquipment, lines, setLines,
   selectedItemId, setSelectedItemId, placementRotation,
   pendingPvArrayConfig, onRoofMaskComplete, onRoofDirectionComplete, onArrayPlaced,
-  pendingRoofMaskPoints,
+  pendingRoofMaskPoints, onPVArrayDoubleClick,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -479,7 +480,21 @@ export function Canvas({
     }
   };
 
-  const handleDoubleClick = () => {
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    // Check if double-clicking on a PV array in select mode
+    if (activeTool === Tool.SELECT && onPVArrayDoubleClick && pvPanelConfig && scaleInfo.ratio) {
+      const screenPos = getMousePos(e);
+      const worldPos = toWorld(screenPos);
+      const hitArray = [...pvArrays].reverse().find(arr => {
+        const corners = getPVArrayCorners(arr, pvPanelConfig, roofMasks, scaleInfo);
+        return corners.length === 4 && isPointInPolygon(worldPos, corners);
+      });
+      if (hitArray) {
+        onPVArrayDoubleClick(hitArray.id);
+        return;
+      }
+    }
+    // Default behavior for drawing tools
     completeDrawing();
   };
 

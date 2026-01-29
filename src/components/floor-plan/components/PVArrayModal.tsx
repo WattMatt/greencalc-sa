@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -24,12 +24,29 @@ interface PVArrayModalProps {
   onClose: () => void;
   pvPanelConfig: PVPanelConfig;
   onConfirm: (config: PVArrayConfig) => void;
+  initialConfig?: PVArrayConfig;
+  isEditing?: boolean;
 }
 
-export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm }: PVArrayModalProps) {
+export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm, initialConfig, isEditing }: PVArrayModalProps) {
   const [rows, setRows] = useState<string>('2');
   const [columns, setColumns] = useState<string>('10');
   const [orientation, setOrientation] = useState<PanelOrientation>('portrait');
+
+  // Reset form when modal opens, using initial values if editing
+  useEffect(() => {
+    if (isOpen) {
+      if (initialConfig) {
+        setRows(String(initialConfig.rows));
+        setColumns(String(initialConfig.columns));
+        setOrientation(initialConfig.orientation);
+      } else {
+        setRows('2');
+        setColumns('10');
+        setOrientation('portrait');
+      }
+    }
+  }, [isOpen, initialConfig]);
 
   const rowsNum = parseInt(rows) || 1;
   const colsNum = parseInt(columns) || 1;
@@ -48,18 +65,17 @@ export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm }: PVAr
       columns: colsNum,
       orientation,
     });
-    // Reset for next use
-    setRows('2');
-    setColumns('10');
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Place PV Array</DialogTitle>
+          <DialogTitle>{isEditing ? 'Edit PV Array' : 'Place PV Array'}</DialogTitle>
           <DialogDescription>
-            Configure the array layout then click on a roof mask to place it.
+            {isEditing 
+              ? 'Modify the array layout. Press R to rotate when selected.'
+              : 'Configure the array layout then click on a roof mask to place it.'}
           </DialogDescription>
         </DialogHeader>
         
@@ -116,7 +132,7 @@ export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm }: PVAr
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleConfirm}>Ready to Place</Button>
+          <Button onClick={handleConfirm}>{isEditing ? 'Update' : 'Ready to Place'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
