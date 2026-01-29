@@ -804,7 +804,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     if (editingPvArrayId) {
       setPvArrays(prev => prev.map(arr => 
         arr.id === editingPvArrayId 
-          ? { ...arr, rows: config.rows, columns: config.columns, orientation: config.orientation }
+          ? { ...arr, rows: config.rows, columns: config.columns, orientation: config.orientation, minSpacing: config.minSpacing }
           : arr
       ));
       setEditingPvArrayId(null);
