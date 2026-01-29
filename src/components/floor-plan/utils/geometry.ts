@@ -211,9 +211,15 @@ export const snapPVArrayToSpacing = (
   pvPanelConfig: PVPanelConfig,
   roofMasks: RoofMask[],
   scaleInfo: ScaleInfo,
-  minSpacingMeters: number
+  minSpacingMeters: number,
+  forceAlign: boolean = false
 ): { position: Point; rotation: number; snappedToId: string | null } => {
-  if (!scaleInfo.ratio || minSpacingMeters <= 0 || existingArrays.length === 0) {
+  if (!scaleInfo.ratio || existingArrays.length === 0) {
+    return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
+  }
+  
+  // If not force-aligning and no spacing configured, allow free placement
+  if (!forceAlign && minSpacingMeters <= 0) {
     return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
   }
 
@@ -269,8 +275,9 @@ export const snapPVArrayToSpacing = (
     const gapY = Math.max(0, edgeDistY);
     const minEdgeDistance = Math.hypot(gapX, gapY);
 
-    // If the true min distance is already >= configured spacing, allow free placement.
-    if (minEdgeDistance >= minSpacingPx) {
+    // If force-aligning (Shift held), always consider this array as a snap candidate.
+    // Otherwise, only snap if within the configured spacing threshold.
+    if (!forceAlign && minEdgeDistance >= minSpacingPx) {
       continue;
     }
 

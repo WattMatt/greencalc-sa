@@ -306,7 +306,7 @@ export function Canvas({
       const autoRotation = onMask ? calculateArrayRotationForRoof(mouseWorldPos, roofMasks, 0) : 0;
       const baseRotation = (autoRotation + placementRotation) % 360;
       
-      // Apply snapping to adjacent arrays if minSpacing is set
+      // Apply snapping to adjacent arrays if minSpacing is set OR Shift is held
       const minSpacing = pendingPvArrayConfig.minSpacing ?? 0;
       const snapResult = snapPVArrayToSpacing(
         mouseWorldPos,
@@ -320,7 +320,8 @@ export function Canvas({
         pvPanelConfig,
         roofMasks,
         scaleInfo,
-        minSpacing
+        minSpacing,
+        isShiftHeld // Force align when Shift is held
       );
       
       // Use snapped rotation if snapped to an array, otherwise use base rotation
@@ -431,7 +432,7 @@ export function Canvas({
         const autoRotation = calculateArrayRotationForRoof(worldPos, roofMasks, 0);
         const baseRotation = (autoRotation + placementRotation) % 360;
         
-        // Apply snapping to adjacent arrays if minSpacing is set
+        // Apply snapping to adjacent arrays if minSpacing is set OR Shift is held
         const minSpacing = pendingPvArrayConfig.minSpacing ?? 0;
         const snapResult = snapPVArrayToSpacing(
           worldPos,
@@ -445,7 +446,8 @@ export function Canvas({
           pvPanelConfig,
           roofMasks,
           scaleInfo,
-          minSpacing
+          minSpacing,
+          isShiftHeld // Force align when Shift is held
         );
         
         // Use snapped rotation if snapped to an array, otherwise use base rotation
