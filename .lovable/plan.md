@@ -1,59 +1,61 @@
 
-# Plan: Improve Roof Mask Completion UX
+# Fix Summary Panel Layout: Separate Cards from Dropdowns
 
 ## Problem
-When drawing a roof mask boundary, users have no indication of how to complete/close the polygon. The current implementation requires a **double-click** to finish, but this is not communicated anywhere in the UI.
+The current implementation incorrectly makes the 4 summary cards (Modules, Inverters, Walkways, Cable Trays) themselves into collapsible dropdown triggers. This mixes the summary display with the detailed list functionality.
 
 ## Solution
-Implement multiple ways to complete the roof mask drawing with clear visual feedback:
+Restructure the Summary Panel to have:
+1. **Static 2x2 Summary Cards Grid** - Display metrics only, no dropdown functionality on the cards themselves
+2. **Separate Collapsible Sections Below** - Four dropdown sections in order: Modules (PV Arrays), Inverters (Equipment), Walkways, Cable Trays
 
-### 1. Add Visual Instructions While Drawing
-Show a contextual hint at the bottom of the canvas when the roof mask tool is active and drawing is in progress:
-- "Click to add points. **Double-click** or press **Enter** to close. **Escape** to cancel."
-
-### 2. Add Keyboard Shortcuts
-- **Enter**: Complete the polygon (if 3+ points)
-- **Escape**: Cancel the current drawing
-
-### 3. Add "Close to Start" Auto-Completion
-When the user clicks near the starting point (within a threshold), automatically close the polygon.
-
-### 4. Visual Start Point Indicator
-Draw a small circle at the first point when drawing, making it clear where to click to close the shape.
-
----
-
-## Technical Changes
-
-### File: `src/components/floor-plan/components/Canvas.tsx`
-
-1. **Add keyboard event listener** for Enter and Escape keys during drawing
-2. **Implement snap-to-start detection**: When clicking within ~15 pixels of the start point, auto-close
-3. **Draw start point indicator**: Render a small filled circle at `currentDrawing[0]` while drawing
-4. **Add floating instruction overlay**: Display contextual help text when `activeTool === Tool.ROOF_MASK` and `currentDrawing.length > 0`
+## Visual Structure
 
 ```text
-Approximate Changes:
-- Add useEffect for keyboard shortcuts (Enter/Escape)
-- Modify handleMouseDown to detect click near start point
-- Update render useEffect to draw start point indicator
-- Add a small overlay div showing instructions
++---------------------------+
+| Project Summary         > |
++---------------------------+
+| Roof Areas      9659 m² v |  <- Collapsible section
++---------------------------+
+| [Modules]    [Inverters]  |  <- Static cards (2x2 grid)
+|   1302           0        |
+| [Walkways]  [Cable Trays] |
+|    6 m           9 m      |
++---------------------------+
+| # Modules           52  v |  <- Collapsible: PV Arrays list
+| z Inverters          0  v |  <- Collapsible: Equipment list
+| F Walkways         6 m  v |  <- Collapsible: Walkways list
+| B Cable Trays      9 m  v |  <- Collapsible: Cable Trays list
++---------------------------+
+| Cabling            0 m  v |  <- Existing DC/AC cabling section
++---------------------------+
 ```
 
-### Constants
-- Snap threshold: 15 world units (adjusted for zoom)
-- Start point indicator radius: 8 pixels
+## Changes Required
 
----
+### File: `src/components/floor-plan/components/SummaryPanel.tsx`
 
-## User Experience After Implementation
+1. **Extract the 2x2 grid cards from Collapsible wrappers**
+   - Remove `<Collapsible>`, `<CollapsibleTrigger>`, and `<CollapsibleContent>` from around each card
+   - Keep the cards as static display-only components
+   - Remove the chevron icons from the cards
+   - Keep the simulation comparison indicators (amber border, checkmark/count)
 
-1. User selects "Draw Roof Mask" tool
-2. Clicks to place first point - sees a small circle indicator
-3. Continues clicking to add vertices - sees instruction: "Double-click, Enter to close. Escape to cancel."
-4. Can complete by:
-   - Double-clicking anywhere
-   - Pressing Enter
-   - Clicking on/near the start point circle
-5. Can cancel by pressing Escape
+2. **Add four new `CollapsibleSection` components after the grid**
+   - **Modules section**: Uses `Hash` icon, shows PV arrays list with selection and delete
+   - **Inverters section**: Uses `Zap` icon, shows equipment grouped by type
+   - **Walkways section**: Uses `Footprints` icon, shows walkway dimensions list
+   - **Cable Trays section**: Uses `Box` icon, shows cable tray dimensions list
 
+3. **All four new sections default to closed** (`defaultOpen={false}`)
+
+4. **Keep the existing Cabling section** (DC/AC cables) at the bottom
+
+## Technical Details
+
+The reusable `CollapsibleSection` component already exists and will be used for the new dropdown sections. Each section will receive:
+- `icon`: Matching icon from the corresponding card
+- `title`: "Modules", "Inverters", "Walkways", "Cable Trays"
+- `summary`: Count or length summary (e.g., "52", "0", "6 m", "9 m")
+- `defaultOpen`: `false`
+- `children`: The list content currently inside each card's `CollapsibleContent`
