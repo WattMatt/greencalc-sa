@@ -1,4 +1,4 @@
-import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo } from '../types';
@@ -14,6 +14,7 @@ interface SummaryPanelProps {
   scaleInfo: ScaleInfo;
   selectedItemId: string | null;
   onSelectItem: (id: string | null) => void;
+  onEditRoofMask?: (id: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -27,6 +28,7 @@ export function SummaryPanel({
   scaleInfo,
   selectedItemId,
   onSelectItem,
+  onEditRoofMask,
   isCollapsed,
   onToggleCollapse,
 }: SummaryPanelProps) {
@@ -120,20 +122,39 @@ export function SummaryPanel({
             ) : (
               <div className="space-y-1">
                 {roofMasks.map((mask, i) => (
-                  <button
+                  <div
                     key={mask.id}
-                    className={`w-full text-left p-2 rounded text-xs transition-colors ${
+                    className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
                       selectedItemId === mask.id 
                         ? 'bg-primary/10 border border-primary' 
                         : 'bg-muted hover:bg-accent'
                     }`}
-                    onClick={() => onSelectItem(mask.id)}
                   >
-                    <span className="font-medium">Roof {i + 1}</span>
-                    <span className="text-muted-foreground ml-2">
-                      {calculatePolygonArea(mask.points, scaleInfo.ratio).toFixed(0)} m² • {mask.pitch}°
-                    </span>
-                  </button>
+                    <button
+                      className="flex-1 text-left"
+                      onClick={() => onSelectItem(mask.id)}
+                      onDoubleClick={() => onEditRoofMask?.(mask.id)}
+                    >
+                      <span className="font-medium">Roof {i + 1}</span>
+                      <span className="text-muted-foreground ml-2">
+                        {calculatePolygonArea(mask.points, scaleInfo.ratio).toFixed(0)} m² • {mask.pitch}°
+                      </span>
+                    </button>
+                    {onEditRoofMask && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditRoofMask(mask.id);
+                        }}
+                        title="Edit roof configuration"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
                 ))}
               </div>
             )}

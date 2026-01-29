@@ -103,6 +103,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [isPlantSetupModalOpen, setIsPlantSetupModalOpen] = useState(false);
   const [plantSetupActiveTab, setPlantSetupActiveTab] = useState('modules');
   const [pendingScalePixels, setPendingScalePixels] = useState(0);
+  const [editingRoofMask, setEditingRoofMask] = useState<RoofMask | null>(null);
   const [pendingRoofMask, setPendingRoofMask] = useState<{ points: Point[]; area: number } | null>(null);
   const [pendingPvArrayConfig, setPendingPvArrayConfig] = useState<PVArrayConfig | null>(null);
   
@@ -514,6 +515,19 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   };
 
   const handleRoofMaskConfirm = (pitch: number, direction: number) => {
+    if (editingRoofMask) {
+      // Update existing roof mask
+      setRoofMasks(prev => prev.map(mask => 
+        mask.id === editingRoofMask.id 
+          ? { ...mask, pitch, direction }
+          : mask
+      ));
+      setEditingRoofMask(null);
+      setIsRoofMaskModalOpen(false);
+      toast.success('Roof mask updated');
+      return;
+    }
+    
     if (!pendingRoofMask) return;
     const newMask: RoofMask = {
       id: `roof-${Date.now()}`,
@@ -526,6 +540,15 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     setPendingRoofMask(null);
     setIsRoofMaskModalOpen(false);
     toast.success('Roof mask added');
+  };
+
+  // Handle editing a roof mask (double-click or from summary panel)
+  const handleEditRoofMask = (roofMaskId: string) => {
+    const mask = roofMasks.find(m => m.id === roofMaskId);
+    if (mask) {
+      setEditingRoofMask(mask);
+      setIsRoofMaskModalOpen(true);
+    }
   };
 
   const handlePVArrayConfirm = (config: PVArrayConfig) => {
@@ -624,6 +647,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         scaleInfo={scaleInfo}
         selectedItemId={selectedItemId}
         onSelectItem={setSelectedItemId}
+        onEditRoofMask={readOnly ? undefined : handleEditRoofMask}
         isCollapsed={isSummaryCollapsed}
         onToggleCollapse={() => setIsSummaryCollapsed(!isSummaryCollapsed)}
       />
@@ -665,9 +689,16 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
 
           <RoofMaskModal
             isOpen={isRoofMaskModalOpen}
-            onClose={() => { setIsRoofMaskModalOpen(false); setPendingRoofMask(null); }}
-            area={pendingRoofMask?.area || 0}
+            onClose={() => { 
+              setIsRoofMaskModalOpen(false); 
+              setPendingRoofMask(null); 
+              setEditingRoofMask(null);
+            }}
+            area={editingRoofMask?.area || pendingRoofMask?.area || 0}
             onConfirm={handleRoofMaskConfirm}
+            initialPitch={editingRoofMask?.pitch}
+            initialDirection={editingRoofMask?.direction}
+            isEditing={!!editingRoofMask}
           />
 
           {pvPanelConfig && (

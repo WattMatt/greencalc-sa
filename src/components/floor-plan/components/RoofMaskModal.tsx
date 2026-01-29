@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,10 @@ interface RoofMaskModalProps {
   onClose: () => void;
   area: number;
   onConfirm: (pitch: number, direction: number) => void;
+  // For editing existing roof masks
+  initialPitch?: number;
+  initialDirection?: number;
+  isEditing?: boolean;
 }
 
 const DIRECTIONS = [
@@ -30,9 +34,25 @@ const DIRECTIONS = [
   { label: 'NW', value: 315, rotation: 315 },
 ];
 
-export function RoofMaskModal({ isOpen, onClose, area, onConfirm }: RoofMaskModalProps) {
-  const [pitch, setPitch] = useState<number>(15);
-  const [direction, setDirection] = useState<number>(0); // Default to North
+export function RoofMaskModal({ 
+  isOpen, 
+  onClose, 
+  area, 
+  onConfirm,
+  initialPitch = 15,
+  initialDirection = 0,
+  isEditing = false,
+}: RoofMaskModalProps) {
+  const [pitch, setPitch] = useState<number>(initialPitch);
+  const [direction, setDirection] = useState<number>(initialDirection);
+
+  // Reset values when modal opens with new initial values
+  useEffect(() => {
+    if (isOpen) {
+      setPitch(initialPitch);
+      setDirection(initialDirection);
+    }
+  }, [isOpen, initialPitch, initialDirection]);
 
   const handleConfirm = () => {
     onConfirm(pitch, direction);
@@ -44,9 +64,12 @@ export function RoofMaskModal({ isOpen, onClose, area, onConfirm }: RoofMaskModa
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Roof Configuration</DialogTitle>
+          <DialogTitle>{isEditing ? 'Edit Roof Configuration' : 'Roof Configuration'}</DialogTitle>
           <DialogDescription>
-            Set the pitch (slope) and direction of this roof section.
+            {isEditing 
+              ? 'Update the pitch (slope) and direction of this roof section.'
+              : 'Set the pitch (slope) and direction of this roof section.'
+            }
           </DialogDescription>
         </DialogHeader>
         
@@ -134,7 +157,7 @@ export function RoofMaskModal({ isOpen, onClose, area, onConfirm }: RoofMaskModa
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleConfirm}>Confirm</Button>
+          <Button onClick={handleConfirm}>{isEditing ? 'Update' : 'Confirm'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
