@@ -51,10 +51,47 @@ export function Canvas({
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const [isShiftHeld, setIsShiftHeld] = useState(false);
 
-  // Track Shift key state for 45-degree angle snapping
+  const SNAP_THRESHOLD = 15; // pixels in screen space
+
+  // Complete the current drawing (for roof mask or line tools)
+  const completeDrawing = () => {
+    if (currentDrawing.length >= 3 && activeTool === Tool.ROOF_MASK) {
+      const area = calculatePolygonArea(currentDrawing, scaleInfo.ratio);
+      onRoofMaskComplete(currentDrawing, area);
+      setCurrentDrawing([]);
+      setPreviewPoint(null);
+    } else if (currentDrawing.length >= 2 && (activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC)) {
+      const newLine: SupplyLine = {
+        id: `line-${Date.now()}`,
+        name: `${activeTool === Tool.LINE_DC ? 'DC' : 'AC'} Cable`,
+        type: activeTool === Tool.LINE_DC ? 'dc' : 'ac',
+        points: currentDrawing,
+        length: calculateLineLength(currentDrawing, scaleInfo.ratio),
+      };
+      setLines(prev => [...prev, newLine]);
+      setCurrentDrawing([]);
+      setPreviewPoint(null);
+    }
+  };
+
+  // Cancel the current drawing
+  const cancelDrawing = () => {
+    setCurrentDrawing([]);
+    setPreviewPoint(null);
+  };
+
+  // Track Shift key state for 45-degree angle snapping + Enter/Escape for drawing completion
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setIsShiftHeld(true);
+      if (e.key === 'Enter' && currentDrawing.length >= 3) {
+        e.preventDefault();
+        completeDrawing();
+      }
+      if (e.key === 'Escape' && currentDrawing.length > 0) {
+        e.preventDefault();
+        cancelDrawing();
+      }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setIsShiftHeld(false);
@@ -67,7 +104,7 @@ export function Canvas({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [currentDrawing, activeTool, scaleInfo.ratio]);
 
   // ResizeObserver to detect container size changes (e.g., when Summary panel collapses)
   useEffect(() => {
@@ -169,6 +206,18 @@ export function Canvas({
       currentDrawing.forEach(p => ctx.lineTo(p.x, p.y));
       if (previewPoint) ctx.lineTo(previewPoint.x, previewPoint.y);
       ctx.stroke();
+      
+      // Draw start point indicator for roof mask (visual hint to close polygon)
+      if (activeTool === Tool.ROOF_MASK) {
+        const startRadius = 8 / viewState.zoom;
+        ctx.beginPath();
+        ctx.arc(currentDrawing[0].x, currentDrawing[0].y, startRadius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(148, 112, 216, 0.6)';
+        ctx.fill();
+        ctx.strokeStyle = '#9470d8';
+        ctx.lineWidth = 2 / viewState.zoom;
+        ctx.stroke();
+      }
     }
     
     ctx.restore();
@@ -200,6 +249,22 @@ export function Canvas({
         setScaleLine({ start: worldPos, end: worldPos });
       }
     } else if (activeTool === Tool.ROOF_MASK || activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC) {
+      // Check for snap-to-start: if clicking near the first point, complete the polygon
+      if (currentDrawing.length >= 3 && activeTool === Tool.ROOF_MASK) {
+        const startPoint = currentDrawing[0];
+        const screenStart = {
+          x: startPoint.x * viewState.zoom + viewState.offset.x,
+          y: startPoint.y * viewState.zoom + viewState.offset.y,
+        };
+        const screenClick = { x: screenPos.x, y: screenPos.y };
+        const distToStart = distance(screenStart, screenClick);
+        
+        if (distToStart <= SNAP_THRESHOLD) {
+          completeDrawing();
+          return;
+        }
+      }
+      
       // Apply 45-degree snapping if Shift is held and we have a previous point
       const snappedPos = (isShiftHeld && currentDrawing.length > 0)
         ? snapTo45Degrees(currentDrawing[currentDrawing.length - 1], worldPos)
@@ -282,23 +347,7 @@ export function Canvas({
   };
 
   const handleDoubleClick = () => {
-    if (currentDrawing.length >= 3 && activeTool === Tool.ROOF_MASK) {
-      const area = calculatePolygonArea(currentDrawing, scaleInfo.ratio);
-      onRoofMaskComplete(currentDrawing, area);
-      setCurrentDrawing([]);
-      setPreviewPoint(null);
-    } else if (currentDrawing.length >= 2 && (activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC)) {
-      const newLine: SupplyLine = {
-        id: `line-${Date.now()}`,
-        name: `${activeTool === Tool.LINE_DC ? 'DC' : 'AC'} Cable`,
-        type: activeTool === Tool.LINE_DC ? 'dc' : 'ac',
-        points: currentDrawing,
-        length: calculateLineLength(currentDrawing, scaleInfo.ratio),
-      };
-      setLines(prev => [...prev, newLine]);
-      setCurrentDrawing([]);
-      setPreviewPoint(null);
-    }
+    completeDrawing();
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -347,6 +396,15 @@ export function Canvas({
             ref={drawingCanvasRef} 
             className="absolute inset-0 pointer-events-none" 
           />
+          
+          {/* Instruction overlay for drawing tools */}
+          {currentDrawing.length > 0 && (activeTool === Tool.ROOF_MASK || activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC) && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-background/90 backdrop-blur-sm border border-border rounded-lg px-4 py-2 shadow-lg z-10">
+              <p className="text-sm text-foreground">
+                Click to add points. <span className="font-semibold">Double-click</span> or press <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to close. <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Esc</kbd> to cancel.
+              </p>
+            </div>
+          )}
         </>
       )}
     </div>
