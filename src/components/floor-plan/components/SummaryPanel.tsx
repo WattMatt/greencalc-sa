@@ -117,20 +117,7 @@ export function SummaryPanel({
           <div className="p-3 space-y-3">
             {/* Key Metrics - 2x2 Grid */}
             <div className="grid grid-cols-2 gap-2">
-              {/* Capacity Card */}
-              <Card>
-                <CardContent className="p-3">
-                  <div className="flex items-center gap-2">
-                    <Sun className="h-4 w-4 text-yellow-500" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">Capacity</p>
-                      <p className="font-semibold text-sm">{capacityKwp.toFixed(1)} kWp</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              {/* Modules Card */}
+              {/* Modules Card - Top Left */}
               <Card className={cn(!modulesMatch && "border-amber-500")}>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2">
@@ -166,7 +153,7 @@ export function SummaryPanel({
                 </CardContent>
               </Card>
               
-              {/* Inverters Card */}
+              {/* Inverters Card - Top Right */}
               <Card className={cn(!invertersMatch && "border-amber-500")}>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2">
@@ -202,7 +189,7 @@ export function SummaryPanel({
                 </CardContent>
               </Card>
               
-              {/* Walkways Card */}
+              {/* Walkways Card - Bottom Left */}
               <Card>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2">
@@ -214,20 +201,20 @@ export function SummaryPanel({
                   </div>
                 </CardContent>
               </Card>
-            </div>
-            
-            {/* Cable Trays Row */}
-            <Card>
-              <CardContent className="p-2">
-                <div className="flex items-center justify-between">
+              
+              {/* Cable Trays Card - Bottom Right */}
+              <Card>
+                <CardContent className="p-3">
                   <div className="flex items-center gap-2">
                     <Box className="h-4 w-4 text-orange-500" />
-                    <span className="text-xs">Cable Trays</span>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Cable Trays</p>
+                      <p className="font-semibold text-sm">{totalCableTrayLength.toFixed(0)} m</p>
+                    </div>
                   </div>
-                  <span className="text-xs font-medium">{totalCableTrayLength.toFixed(0)} m</span>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Roof Masks */}
             <div>
