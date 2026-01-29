@@ -93,7 +93,7 @@ export function SimulationSelector({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={readOnly || !layoutId}>
+      <DropdownMenuTrigger asChild disabled={readOnly}>
         <Button
           variant={currentSimulationId ? "secondary" : "outline"}
           size="sm"
