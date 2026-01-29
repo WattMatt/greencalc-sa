@@ -587,12 +587,19 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       if (selectedItemId && pvArrays.some(arr => arr.id === selectedItemId)) {
         // Shift = fine control (1°), otherwise 5°
         const increment = e.shiftKey ? 1 : 5;
-        const delta = e.deltaY > 0 ? increment : -increment;
-        setPvArrays(prev => prev.map(arr => 
-          arr.id === selectedItemId 
-            ? { ...arr, rotation: ((arr.rotation + delta) % 360 + 360) % 360 }
-            : arr
-        ));
+        
+        // Browsers convert Shift+scroll from deltaY to deltaX, so check both
+        const scrollDelta = e.shiftKey ? e.deltaX : e.deltaY;
+        const delta = scrollDelta > 0 ? increment : -increment;
+        
+        // Only rotate if there's actual scroll movement
+        if (scrollDelta !== 0) {
+          setPvArrays(prev => prev.map(arr => 
+            arr.id === selectedItemId 
+              ? { ...arr, rotation: ((arr.rotation + delta) % 360 + 360) % 360 }
+              : arr
+          ));
+        }
       }
     };
     
