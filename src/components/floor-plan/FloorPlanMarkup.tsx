@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem } from './types';
+import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
@@ -68,7 +68,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [historyIndex, setHistoryIndex] = useState(0);
   
   const currentDesign = history[historyIndex];
-  const { equipment, lines, roofMasks, pvArrays } = currentDesign;
+  const { equipment, lines, roofMasks, pvArrays, placedWalkways, placedCableTrays } = currentDesign;
   
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
@@ -90,6 +90,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     commitState({ ...currentDesign, roofMasks: updater(roofMasks) });
   const setPvArrays = (updater: (prev: typeof pvArrays) => typeof pvArrays) => 
     commitState({ ...currentDesign, pvArrays: updater(pvArrays) });
+  const setPlacedWalkways = (updater: (prev: PlacedWalkway[]) => PlacedWalkway[]) => 
+    commitState({ ...currentDesign, placedWalkways: updater(placedWalkways) });
+  const setPlacedCableTrays = (updater: (prev: PlacedCableTray[]) => PlacedCableTray[]) => 
+    commitState({ ...currentDesign, placedCableTrays: updater(placedCableTrays) });
 
   const handleUndo = () => !readOnly && historyIndex > 0 && setHistoryIndex(historyIndex - 1);
   const handleRedo = () => !readOnly && historyIndex < history.length - 1 && setHistoryIndex(historyIndex + 1);
@@ -171,11 +175,26 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         }
 
         // Restore design state
+        const plantSetup = data.plant_setup as unknown as PlantSetupConfig;
         const loadedState: DesignState = {
           roofMasks: (data.roof_masks as unknown as RoofMask[]) || [],
           pvArrays: (data.pv_arrays as unknown as any[]) || [],
           equipment: (data.equipment as unknown as any[]) || [],
           lines: (data.cables as unknown as any[]) || [],
+          placedWalkways: plantSetup?.walkways?.map(w => ({
+            id: w.id,
+            configId: w.id,
+            name: w.name,
+            width: w.width,
+            length: w.length,
+          })) || [],
+          placedCableTrays: plantSetup?.cableTrays?.map(c => ({
+            id: c.id,
+            configId: c.id,
+            name: c.name,
+            width: c.width,
+            length: c.length,
+          })) || [],
         };
         setHistory([loadedState]);
         setHistoryIndex(0);
@@ -486,7 +505,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       if (!silent) setIsSaving(false);
       isAutoSavingRef.current = false;
     }
-  }, [readOnly, projectId, currentLayoutName, scaleInfo.ratio, pvPanelConfig, roofMasks, pvArrays, equipment, lines, backgroundImage, layoutId, plantSetupConfig]);
+  }, [readOnly, projectId, currentLayoutName, scaleInfo.ratio, pvPanelConfig, roofMasks, pvArrays, equipment, lines, backgroundImage, layoutId, plantSetupConfig, placedWalkways, placedCableTrays]);
 
   // Manual save handler
   const handleSave = async () => {
@@ -512,7 +531,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [hasUnsavedChanges, roofMasks, pvArrays, equipment, lines, backgroundImage, scaleInfo, plantSetupConfig, readOnly, saveLayout]);
+  }, [hasUnsavedChanges, roofMasks, pvArrays, equipment, lines, backgroundImage, scaleInfo, plantSetupConfig, placedWalkways, placedCableTrays, readOnly, saveLayout]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -569,24 +588,16 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     }
   }, [selectedItemId, handleDeleteItem]);
 
-  // Delete plant setup items (walkways, cable trays)
-  const handleDeletePlantSetupItem = useCallback((type: 'walkway' | 'cableTray', id: string) => {
+  // Delete placed walkway or cable tray instances (not templates)
+  const handleDeletePlacedItem = useCallback((type: 'walkway' | 'cableTray', id: string) => {
     if (type === 'walkway') {
-      setPlantSetupConfig(prev => ({
-        ...prev,
-        walkways: prev.walkways.filter(w => w.id !== id)
-      }));
-      setHasUnsavedChanges(true);
+      setPlacedWalkways(prev => prev.filter(w => w.id !== id));
       toast.success('Walkway deleted');
     } else if (type === 'cableTray') {
-      setPlantSetupConfig(prev => ({
-        ...prev,
-        cableTrays: prev.cableTrays.filter(c => c.id !== id)
-      }));
-      setHasUnsavedChanges(true);
+      setPlacedCableTrays(prev => prev.filter(c => c.id !== id));
       toast.success('Cable tray deleted');
     }
-  }, []);
+  }, [setPlacedWalkways, setPlacedCableTrays]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -976,10 +987,12 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         onSelectItem={setSelectedItemId}
         onEditRoofMask={readOnly ? undefined : handleEditRoofMask}
         onDeleteItem={readOnly ? undefined : handleDeleteItem}
-        onDeletePlantSetupItem={readOnly ? undefined : handleDeletePlantSetupItem}
+        onDeletePlacedItem={readOnly ? undefined : handleDeletePlacedItem}
         isCollapsed={isSummaryCollapsed}
         onToggleCollapse={() => setIsSummaryCollapsed(!isSummaryCollapsed)}
         plantSetupConfig={plantSetupConfig}
+        placedWalkways={placedWalkways}
+        placedCableTrays={placedCableTrays}
         latestSimulation={latestSimulation}
       />
 
