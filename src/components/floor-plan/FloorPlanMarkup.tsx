@@ -111,7 +111,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [plantSetupActiveTab, setPlantSetupActiveTab] = useState('modules');
   const [pendingScalePixels, setPendingScalePixels] = useState(0);
   const [editingRoofMask, setEditingRoofMask] = useState<RoofMask | null>(null);
-  const [pendingRoofMask, setPendingRoofMask] = useState<{ points: Point[]; area: number } | null>(null);
+  const [pendingRoofMask, setPendingRoofMask] = useState<{ points: Point[]; area: number; pitch: number } | null>(null);
   const [pendingPvArrayConfig, setPendingPvArrayConfig] = useState<PVArrayConfig | null>(null);
   
   // Plant Setup Config
@@ -529,6 +529,11 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       if (e.key === 'Escape') {
         setActiveTool(Tool.SELECT);
         setPendingPvArrayConfig(null);
+        // Cancel pending roof direction drawing
+        if (pendingRoofMask) {
+          setPendingRoofMask(null);
+          toast.info('Roof mask cancelled');
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -565,35 +570,47 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
 
   const handleRoofMaskComplete = (points: Point[], area: number) => {
     if (readOnly) return;
-    setPendingRoofMask({ points, area });
+    setPendingRoofMask({ points, area, pitch: 15 }); // Default pitch, will be set in modal
     setIsRoofMaskModalOpen(true);
   };
 
-  const handleRoofMaskConfirm = (pitch: number, direction: number) => {
+  const handleRoofMaskConfirm = (pitch: number) => {
     if (editingRoofMask) {
-      // Update existing roof mask
+      // When editing, we're only updating the pitch (direction is already set)
       setRoofMasks(prev => prev.map(mask => 
         mask.id === editingRoofMask.id 
-          ? { ...mask, pitch, direction }
+          ? { ...mask, pitch }
           : mask
       ));
       setEditingRoofMask(null);
       setIsRoofMaskModalOpen(false);
-      toast.success('Roof mask updated');
+      toast.success('Roof pitch updated');
       return;
     }
     
     if (!pendingRoofMask) return;
+    
+    // Store the pitch with the pending roof mask and switch to direction drawing mode
+    setPendingRoofMask({ ...pendingRoofMask, pitch });
+    setIsRoofMaskModalOpen(false);
+    setActiveTool(Tool.ROOF_DIRECTION);
+    toast.info('Draw a line from high to low point to set slope direction');
+  };
+
+  // Handle direction line completion for roof mask
+  const handleRoofDirectionComplete = (direction: number) => {
+    if (!pendingRoofMask) return;
+    
     const newMask: RoofMask = {
       id: `roof-${Date.now()}`,
       points: pendingRoofMask.points,
-      pitch,
+      pitch: pendingRoofMask.pitch,
       direction,
       area: pendingRoofMask.area,
     };
     setRoofMasks(prev => [...prev, newMask]);
     setPendingRoofMask(null);
-    setIsRoofMaskModalOpen(false);
+    setActiveTool(Tool.SELECT);
     toast.success('Roof mask added');
   };
 
@@ -691,7 +708,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         placementRotation={placementRotation}
         pendingPvArrayConfig={pendingPvArrayConfig}
         onRoofMaskComplete={handleRoofMaskComplete}
+        onRoofDirectionComplete={handleRoofDirectionComplete}
         onArrayPlaced={() => setPendingPvArrayConfig(null)}
+        pendingRoofMaskPoints={pendingRoofMask?.points}
       />
 
       <SummaryPanel
@@ -753,7 +772,6 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
             area={editingRoofMask?.area || pendingRoofMask?.area || 0}
             onConfirm={handleRoofMaskConfirm}
             initialPitch={editingRoofMask?.pitch}
-            initialDirection={editingRoofMask?.direction}
             isEditing={!!editingRoofMask}
           />
 

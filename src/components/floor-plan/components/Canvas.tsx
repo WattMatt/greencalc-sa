@@ -27,7 +27,9 @@ interface CanvasProps {
   placementRotation: number;
   pendingPvArrayConfig: PVArrayConfig | null;
   onRoofMaskComplete: (points: Point[], area: number) => void;
+  onRoofDirectionComplete: (direction: number) => void;
   onArrayPlaced: () => void;
+  pendingRoofMaskPoints?: Point[];
 }
 
 export function Canvas({
@@ -36,7 +38,8 @@ export function Canvas({
   pvPanelConfig, roofMasks, setRoofMasks, pvArrays, setPvArrays,
   equipment, setEquipment, lines, setLines,
   selectedItemId, setSelectedItemId, placementRotation,
-  pendingPvArrayConfig, onRoofMaskComplete, onArrayPlaced,
+  pendingPvArrayConfig, onRoofMaskComplete, onRoofDirectionComplete, onArrayPlaced,
+  pendingRoofMaskPoints,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,8 +53,24 @@ export function Canvas({
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const [isShiftHeld, setIsShiftHeld] = useState(false);
+  const [directionLine, setDirectionLine] = useState<{ start: Point; end: Point } | null>(null);
 
   const SNAP_THRESHOLD = 15; // pixels in screen space
+
+  // Calculate azimuth from a direction line (from high to low point)
+  // Returns degrees where 0=North, 90=East, 180=South, 270=West
+  const calculateAzimuth = (start: Point, end: Point): number => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    // atan2 gives angle from positive X-axis, counterclockwise
+    // We want angle from positive Y-axis (North), clockwise
+    // Canvas Y is inverted (down is positive)
+    const angleRad = Math.atan2(dx, -dy); // Note: -dy because canvas Y is flipped
+    let angleDeg = angleRad * (180 / Math.PI);
+    // Normalize to 0-360
+    if (angleDeg < 0) angleDeg += 360;
+    return Math.round(angleDeg);
+  };
 
   // Complete the current drawing (for roof mask or line tools)
   const completeDrawing = () => {
@@ -219,9 +238,64 @@ export function Canvas({
         ctx.stroke();
       }
     }
+
+    // Draw pending roof mask outline when in direction mode
+    if (activeTool === Tool.ROOF_DIRECTION && pendingRoofMaskPoints && pendingRoofMaskPoints.length >= 3) {
+      ctx.strokeStyle = '#9470d8';
+      ctx.lineWidth = 2 / viewState.zoom;
+      ctx.setLineDash([5 / viewState.zoom, 5 / viewState.zoom]);
+      ctx.beginPath();
+      ctx.moveTo(pendingRoofMaskPoints[0].x, pendingRoofMaskPoints[0].y);
+      pendingRoofMaskPoints.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.closePath();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Fill with semi-transparent
+      ctx.fillStyle = 'rgba(148, 112, 216, 0.15)';
+      ctx.fill();
+    }
+
+    // Draw direction line
+    if (directionLine) {
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 3 / viewState.zoom;
+      ctx.beginPath();
+      ctx.moveTo(directionLine.start.x, directionLine.start.y);
+      ctx.lineTo(directionLine.end.x, directionLine.end.y);
+      ctx.stroke();
+      
+      // Draw arrow head at end
+      const dx = directionLine.end.x - directionLine.start.x;
+      const dy = directionLine.end.y - directionLine.start.y;
+      const angle = Math.atan2(dy, dx);
+      const arrowSize = 15 / viewState.zoom;
+      
+      ctx.beginPath();
+      ctx.moveTo(directionLine.end.x, directionLine.end.y);
+      ctx.lineTo(
+        directionLine.end.x - arrowSize * Math.cos(angle - Math.PI / 6),
+        directionLine.end.y - arrowSize * Math.sin(angle - Math.PI / 6)
+      );
+      ctx.moveTo(directionLine.end.x, directionLine.end.y);
+      ctx.lineTo(
+        directionLine.end.x - arrowSize * Math.cos(angle + Math.PI / 6),
+        directionLine.end.y - arrowSize * Math.sin(angle + Math.PI / 6)
+      );
+      ctx.stroke();
+      
+      // Draw start point (high point)
+      ctx.beginPath();
+      ctx.arc(directionLine.start.x, directionLine.start.y, 6 / viewState.zoom, 0, Math.PI * 2);
+      ctx.fillStyle = '#22c55e';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2 / viewState.zoom;
+      ctx.stroke();
+    }
     
     ctx.restore();
-  }, [viewState, equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, selectedItemId, scaleLine, currentDrawing, previewPoint, canvasSize, containerSize, activeTool]);
+  }, [viewState, equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, selectedItemId, scaleLine, currentDrawing, previewPoint, canvasSize, containerSize, activeTool, pendingRoofMaskPoints, directionLine]);
 
   const getMousePos = (e: React.MouseEvent): Point => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -247,6 +321,11 @@ export function Canvas({
     if (activeTool === Tool.SCALE) {
       if (!scaleLine) {
         setScaleLine({ start: worldPos, end: worldPos });
+      }
+    } else if (activeTool === Tool.ROOF_DIRECTION) {
+      // Start direction line drawing
+      if (!directionLine) {
+        setDirectionLine({ start: worldPos, end: worldPos });
       }
     } else if (activeTool === Tool.ROOF_MASK || activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC) {
       // Check for snap-to-start: if clicking near the first point, complete the polygon
@@ -325,6 +404,12 @@ export function Canvas({
       setScaleLine({ ...scaleLine, end: snappedEnd });
     }
 
+    if (activeTool === Tool.ROOF_DIRECTION && directionLine) {
+      // Update direction line end point
+      const snappedEnd = isShiftHeld ? snapTo45Degrees(directionLine.start, worldPos) : worldPos;
+      setDirectionLine({ ...directionLine, end: snappedEnd });
+    }
+
     if (currentDrawing.length > 0) {
       // Apply 45-degree snapping to preview line if Shift is held
       const anchor = currentDrawing[currentDrawing.length - 1];
@@ -343,6 +428,15 @@ export function Canvas({
       } else {
         setScaleLine(null);
       }
+    }
+    
+    if (activeTool === Tool.ROOF_DIRECTION && directionLine) {
+      const dist = distance(directionLine.start, directionLine.end);
+      if (dist > 10) {
+        const azimuth = calculateAzimuth(directionLine.start, directionLine.end);
+        onRoofDirectionComplete(azimuth);
+      }
+      setDirectionLine(null);
     }
   };
 
@@ -402,6 +496,15 @@ export function Canvas({
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-background/90 backdrop-blur-sm border border-border rounded-lg px-4 py-2 shadow-lg z-10">
               <p className="text-sm text-foreground">
                 Click to add points. <span className="font-semibold">Double-click</span> or press <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to close. <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Esc</kbd> to cancel.
+              </p>
+            </div>
+          )}
+          
+          {/* Instruction overlay for direction drawing */}
+          {activeTool === Tool.ROOF_DIRECTION && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-blue-50 dark:bg-blue-950/80 backdrop-blur-sm border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2 shadow-lg z-10">
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                <span className="font-semibold">Draw slope direction:</span> Click and drag from the <span className="text-green-600 font-semibold">high point</span> to the <span className="text-blue-600 font-semibold">low point</span> of the roof.
               </p>
             </div>
           )}
