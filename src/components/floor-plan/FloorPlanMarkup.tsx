@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
@@ -37,6 +37,8 @@ interface FloorPlanMarkupProps {
   latestSimulation?: SimulationData;
 }
 
+const AUTO_SAVE_DEBOUNCE_MS = 1500;
+
 export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation }: FloorPlanMarkupProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('browser');
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
@@ -49,6 +51,11 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  
+  // Refs for auto-save
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isAutoSavingRef = useRef(false);
   const [isLoadLayoutModalOpen, setIsLoadLayoutModalOpen] = useState(false);
   const [isLayoutManagerOpen, setIsLayoutManagerOpen] = useState(false);
   const [projectCoordinates, setProjectCoordinates] = useState<{ latitude: number | null; longitude: number | null }>({
@@ -405,10 +412,16 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     await createLayout(name, id);
   }, [createLayout]);
 
-  // Save layout to database
-  const handleSave = async () => {
+  // Save layout to database (internal, silent option for auto-save)
+  const saveLayout = useCallback(async (silent: boolean = false) => {
     if (readOnly) return;
-    setIsSaving(true);
+    
+    // Prevent concurrent saves
+    if (isAutoSavingRef.current && !silent) return;
+    
+    if (!silent) setIsSaving(true);
+    isAutoSavingRef.current = true;
+    
     try {
       const layoutData: any = {
         project_id: projectId,
@@ -443,14 +456,56 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       setLayoutId(result.data.id);
       setCurrentLayoutName(result.data.name);
       setHasUnsavedChanges(false);
-      toast.success('Layout saved successfully');
+      setLastSavedAt(new Date());
+      
+      if (!silent) {
+        toast.success('Layout saved successfully');
+      }
     } catch (error: any) {
       console.error('Error saving layout:', error);
-      toast.error('Failed to save layout: ' + error.message);
+      if (!silent) {
+        toast.error('Failed to save layout: ' + error.message);
+      }
     } finally {
-      setIsSaving(false);
+      if (!silent) setIsSaving(false);
+      isAutoSavingRef.current = false;
     }
+  }, [readOnly, projectId, currentLayoutName, scaleInfo.ratio, pvPanelConfig, roofMasks, pvArrays, equipment, lines, backgroundImage, layoutId]);
+
+  // Manual save handler
+  const handleSave = async () => {
+    await saveLayout(false);
   };
+
+  // Auto-save effect: triggers when design state changes
+  useEffect(() => {
+    if (readOnly || !hasUnsavedChanges) return;
+    
+    // Clear any pending auto-save
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    
+    // Schedule auto-save
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveLayout(true);
+    }, AUTO_SAVE_DEBOUNCE_MS);
+    
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [hasUnsavedChanges, roofMasks, pvArrays, equipment, lines, backgroundImage, scaleInfo, readOnly, saveLayout]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -602,6 +657,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           canRedo={canRedo}
           isSaving={isSaving}
           hasUnsavedChanges={hasUnsavedChanges}
+          lastSavedAt={lastSavedAt}
           placementRotation={placementRotation}
           setPlacementRotation={setPlacementRotation}
           layoutLoaded={!!backgroundImage}

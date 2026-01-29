@@ -76,6 +76,17 @@ const CollapsibleSection = ({ title, children, isOpen, onToggle }: CollapsibleSe
   </Collapsible>
 );
 
+// Helper to format relative time
+const formatRelativeTime = (date: Date | null): string => {
+  if (!date) return '';
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
 interface ToolbarProps {
   activeTool: Tool;
   setActiveTool: (tool: Tool) => void;
@@ -93,6 +104,7 @@ interface ToolbarProps {
   canRedo: boolean;
   isSaving: boolean;
   hasUnsavedChanges: boolean;
+  lastSavedAt: Date | null;
   placementRotation: number;
   setPlacementRotation: (rotation: number) => void;
   layoutLoaded: boolean;
@@ -119,6 +131,7 @@ export function Toolbar({
   canRedo,
   isSaving,
   hasUnsavedChanges,
+  lastSavedAt,
   placementRotation,
   setPlacementRotation,
   layoutLoaded,
@@ -195,7 +208,16 @@ export function Toolbar({
             <h2 className="font-semibold text-sm">PV Layout Tool</h2>
             <p className="text-xs text-muted-foreground mt-1 truncate" title={currentLayoutName}>
               {currentLayoutName}
-              {hasUnsavedChanges && <span className="text-primary ml-1">•</span>}
+            </p>
+            {/* Auto-save status */}
+            <p className="text-[10px] text-muted-foreground">
+              {isSaving ? (
+                <span className="text-primary">Saving...</span>
+              ) : hasUnsavedChanges ? (
+                <span className="text-amber-500">Unsaved changes</span>
+              ) : lastSavedAt ? (
+                <span className="text-green-600">Saved {formatRelativeTime(lastSavedAt)}</span>
+              ) : null}
             </p>
             {pvConfigured && panelCount > 0 && (
               <p className="text-xs text-muted-foreground">
