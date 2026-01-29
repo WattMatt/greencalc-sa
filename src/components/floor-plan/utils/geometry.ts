@@ -278,19 +278,19 @@ export const snapPVArrayToSpacing = (
       closestDist = dist;
       closestArray = arr;
 
-      // Snap based on primary approach direction
+      // Snap based on primary approach direction and align with existing array
       if (absDx > absDy) {
-        // Approaching horizontally - snap to side
+        // Approaching horizontally - snap to side and align vertically
         const signX = dx >= 0 ? 1 : -1;
         snapPosition = {
           x: arr.position.x + signX * minDistX,
-          y: mousePos.y,
+          y: arr.position.y, // Align with existing array
         };
       } else {
-        // Approaching vertically - snap above/below
+        // Approaching vertically - snap above/below and align horizontally
         const signY = dy >= 0 ? 1 : -1;
         snapPosition = {
-          x: mousePos.x,
+          x: arr.position.x, // Align with existing array
           y: arr.position.y + signY * minDistY,
         };
       }
