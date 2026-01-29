@@ -1,4 +1,4 @@
-import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo } from '../types';
@@ -15,6 +15,7 @@ interface SummaryPanelProps {
   selectedItemId: string | null;
   onSelectItem: (id: string | null) => void;
   onEditRoofMask?: (id: string) => void;
+  onDeleteItem?: (id: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -29,6 +30,7 @@ export function SummaryPanel({
   selectedItemId,
   onSelectItem,
   onEditRoofMask,
+  onDeleteItem,
   isCollapsed,
   onToggleCollapse,
 }: SummaryPanelProps) {
@@ -154,6 +156,20 @@ export function SummaryPanel({
                         <Pencil className="h-3 w-3" />
                       </Button>
                     )}
+                    {onDeleteItem && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteItem(mask.id);
+                        }}
+                        title="Delete roof mask"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -177,20 +193,38 @@ export function SummaryPanel({
                   const panels = arr.rows * arr.columns;
                   const kWp = pvPanelConfig ? (panels * pvPanelConfig.wattage) / 1000 : 0;
                   return (
-                    <button
+                    <div
                       key={arr.id}
-                      className={`w-full text-left p-2 rounded text-xs transition-colors ${
+                      className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
                         selectedItemId === arr.id 
                           ? 'bg-primary/10 border border-primary' 
                           : 'bg-muted hover:bg-accent'
                       }`}
-                      onClick={() => onSelectItem(arr.id)}
                     >
-                      <span className="font-medium">Array {i + 1}</span>
-                      <span className="text-muted-foreground ml-2">
-                        {arr.rows}×{arr.columns} • {kWp.toFixed(1)} kWp
-                      </span>
-                    </button>
+                      <button
+                        className="flex-1 text-left"
+                        onClick={() => onSelectItem(arr.id)}
+                      >
+                        <span className="font-medium">Array {i + 1}</span>
+                        <span className="text-muted-foreground ml-2">
+                          {arr.rows}×{arr.columns} • {kWp.toFixed(1)} kWp
+                        </span>
+                      </button>
+                      {onDeleteItem && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteItem(arr.id);
+                          }}
+                          title="Delete PV array"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   );
                 })}
               </div>
