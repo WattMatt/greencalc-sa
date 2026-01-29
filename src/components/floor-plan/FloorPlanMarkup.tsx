@@ -539,19 +539,36 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         handleSave();
       }
       if (e.key === 'Escape') {
-        setActiveTool(Tool.SELECT);
-        setPendingPvArrayConfig(null);
-        setEditingPvArrayId(null);
+        // Exit PV array placement mode
+        if (pendingPvArrayConfig) {
+          setPendingPvArrayConfig(null);
+          setPlacementRotation(0);
+          setActiveTool(Tool.SELECT);
+          toast.info('PV array placement cancelled');
+          return;
+        }
+        // Exit roof mask drawing mode
+        if (activeTool === Tool.ROOF_MASK) {
+          setActiveTool(Tool.SELECT);
+          toast.info('Roof mask drawing cancelled');
+          return;
+        }
         // Cancel pending roof direction drawing
         if (pendingRoofMask) {
           setPendingRoofMask(null);
           toast.info('Roof mask cancelled');
+          return;
         }
         // Cancel direction editing mode
         if (editingRoofDirectionId) {
           setEditingRoofDirectionId(null);
+          setActiveTool(Tool.SELECT);
           toast.info('Roof direction edit cancelled');
+          return;
         }
+        // Default: clear selection and editing state
+        setActiveTool(Tool.SELECT);
+        setEditingPvArrayId(null);
       }
     };
     
@@ -568,7 +585,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId]);
+  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId, pendingPvArrayConfig, activeTool]);
 
   // Scroll wheel rotation when R is held
   // - R + scroll = 5° increments
@@ -697,8 +714,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     };
     setRoofMasks(prev => [...prev, newMask]);
     setPendingRoofMask(null);
-    setActiveTool(Tool.SELECT);
-    toast.success('Roof mask added');
+    // Stay in ROOF_MASK mode for continuous placement - user presses ESC to exit
+    setActiveTool(Tool.ROOF_MASK);
+    toast.success('Roof mask added - draw another or press ESC to finish');
   };
 
   // Handle editing a roof mask (double-click or from summary panel)
@@ -828,7 +846,11 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         pendingPvArrayConfig={pendingPvArrayConfig}
         onRoofMaskComplete={handleRoofMaskComplete}
         onRoofDirectionComplete={handleRoofDirectionComplete}
-        onArrayPlaced={() => setPendingPvArrayConfig(null)}
+        onArrayPlaced={() => {
+          // Reset placement rotation for next array but keep config for continuous placement
+          setPlacementRotation(0);
+          // Config stays active - user presses ESC to exit placement mode
+        }}
         pendingRoofMaskPoints={
           editingRoofDirectionId
             ? roofMasks.find(m => m.id === editingRoofDirectionId)?.points
