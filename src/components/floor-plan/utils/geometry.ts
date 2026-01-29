@@ -285,21 +285,36 @@ export const snapPVArrayToSpacing = (
       closestDist = dist;
       closestArray = arr;
 
-      // Snap based on primary approach direction and align with existing array
-      if (absDx > absDy) {
-        // Approaching horizontally - snap to side and align vertically
-        const signX = dx >= 0 ? 1 : -1;
-        snapPosition = {
-          x: arr.position.x + signX * minDistX,
-          y: arr.position.y, // Align with existing array
-        };
+      if (forceAlign) {
+        // Shift held: Only align axis, keep mouse distance
+        if (absDx > absDy) {
+          // Align vertically (match Y), keep mouse X
+          snapPosition = {
+            x: mousePos.x,
+            y: arr.position.y,
+          };
+        } else {
+          // Align horizontally (match X), keep mouse Y
+          snapPosition = {
+            x: arr.position.x,
+            y: mousePos.y,
+          };
+        }
       } else {
-        // Approaching vertically - snap above/below and align horizontally
-        const signY = dy >= 0 ? 1 : -1;
-        snapPosition = {
-          x: arr.position.x, // Align with existing array
-          y: arr.position.y + signY * minDistY,
-        };
+        // Normal snap: Enforce minimum spacing and align
+        if (absDx > absDy) {
+          const signX = dx >= 0 ? 1 : -1;
+          snapPosition = {
+            x: arr.position.x + signX * minDistX,
+            y: arr.position.y,
+          };
+        } else {
+          const signY = dy >= 0 ? 1 : -1;
+          snapPosition = {
+            x: arr.position.x,
+            y: arr.position.y + signY * minDistY,
+          };
+        }
       }
     }
   }
