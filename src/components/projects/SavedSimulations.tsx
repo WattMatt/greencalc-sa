@@ -74,6 +74,7 @@ interface SavedSimulationsProps {
     advancedConfig?: any;
     lossCalculationMode?: "simplified" | "pvsyst";
     productionReductionPercent?: number;
+    moduleCount?: number;
   };
   currentResults: SimulationResult;
   onLoadSimulation: (config: {
@@ -177,6 +178,9 @@ export function SavedSimulations({
           advancedConfig: currentConfig.advancedConfig,
           lossCalculationMode: currentConfig.lossCalculationMode,
           productionReductionPercent: currentConfig.productionReductionPercent,
+          // Include module and inverter counts for PV Layout comparison
+          moduleCount: currentConfig.moduleCount,
+          inverterCount: currentConfig.inverterConfig?.inverterCount,
         },
       });
       if (error) throw error;
