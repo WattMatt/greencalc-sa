@@ -467,11 +467,13 @@ export function SavedSimulations({
               {savedSimulations.map((sim) => (
                 <div
                   key={sim.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                  className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer"
+                  onClick={() => handleLoad(sim)}
                 >
                   <Checkbox
                     checked={selectedForCompare.includes(sim.id)}
                     onCheckedChange={() => toggleCompare(sim.id)}
+                    onClick={(e) => e.stopPropagation()}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -494,7 +496,10 @@ export function SavedSimulations({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleLoad(sim)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleLoad(sim);
+                      }}
                       className="h-8 w-8 p-0"
                     >
                       <Download className="h-4 w-4" />
@@ -502,7 +507,10 @@ export function SavedSimulations({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => deleteMutation.mutate(sim.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteMutation.mutate(sim.id);
+                      }}
                       disabled={deleteMutation.isPending}
                       className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                     >
