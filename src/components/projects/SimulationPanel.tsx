@@ -1448,30 +1448,63 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     value={blendedRateType} 
                     onValueChange={(value: BlendedRateType) => onBlendedRateTypeChange?.(value)}
                   >
-                    <SelectTrigger className="w-48">
+                    <SelectTrigger className="w-56">
                       <SelectValue placeholder="Select rate type" />
                     </SelectTrigger>
                     <SelectContent>
+                      {/* Solar Hours options */}
                       <SelectItem value="solarHours">
                         <div className="flex items-center gap-2">
                           <Sun className="h-4 w-4 text-amber-500" />
-                          <span>Solar Sun Hours (6h)</span>
+                          <span>Solar Hours - Annual</span>
                         </div>
                       </SelectItem>
+                      <SelectItem value="solarHoursHigh">
+                        <div className="flex items-center gap-2">
+                          <Sun className="h-4 w-4 text-orange-500" />
+                          <span>Solar Hours - High (Winter)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="solarHoursLow">
+                        <div className="flex items-center gap-2">
+                          <Sun className="h-4 w-4 text-yellow-500" />
+                          <span>Solar Hours - Low (Summer)</span>
+                        </div>
+                      </SelectItem>
+                      {/* All Hours options */}
                       <SelectItem value="allHours">
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4" />
-                          <span>All Hours (24/7/365)</span>
+                          <span>All Hours - Annual</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="allHoursHigh">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-orange-500" />
+                          <span>All Hours - High (Winter)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="allHoursLow">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-yellow-500" />
+                          <span>All Hours - Low (Summer)</span>
                         </div>
                       </SelectItem>
                     </SelectContent>
                   </Select>
                   
-                  <span className={`text-lg font-bold ml-auto ${blendedRateType === 'solarHours' ? 'text-amber-600' : ''}`}>
-                    R{(blendedRateType === 'solarHours' 
-                      ? annualBlendedRates.solarHours.annual 
-                      : annualBlendedRates.allHours.annual
-                    ).toFixed(4)}/kWh
+                  <span className={`text-lg font-bold ml-auto ${blendedRateType?.startsWith('solarHours') ? 'text-amber-600' : ''}`}>
+                    R{(() => {
+                      switch (blendedRateType) {
+                        case 'solarHours': return annualBlendedRates.solarHours.annual;
+                        case 'solarHoursHigh': return annualBlendedRates.solarHours.high;
+                        case 'solarHoursLow': return annualBlendedRates.solarHours.low;
+                        case 'allHours': return annualBlendedRates.allHours.annual;
+                        case 'allHoursHigh': return annualBlendedRates.allHours.high;
+                        case 'allHoursLow': return annualBlendedRates.allHours.low;
+                        default: return annualBlendedRates.solarHours.annual;
+                      }
+                    })().toFixed(4)}/kWh
                   </span>
                 </div>
               </CardContent>
