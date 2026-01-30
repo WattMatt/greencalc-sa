@@ -1196,13 +1196,17 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         placedCableTrays={placedCableTrays}
         setPlacedCableTrays={readOnly ? undefined : setPlacedCableTrays}
         pendingWalkwayConfig={
-          activeTool === Tool.PLACE_WALKWAY && plantSetupConfig.walkways.length > 0
-            ? plantSetupConfig.walkways.find(w => w.id === selectedWalkwayId) || plantSetupConfig.walkways[0]
+          activeTool === Tool.PLACE_WALKWAY
+            ? (plantSetupConfig.walkways.find(w => w.id === selectedWalkwayId) 
+               || plantSetupConfig.walkways[0]
+               || { id: 'default-walkway', name: 'Walkway', width: 0.6, length: 2 })
             : null
         }
         pendingCableTrayConfig={
-          activeTool === Tool.PLACE_CABLE_TRAY && plantSetupConfig.cableTrays.length > 0
-            ? plantSetupConfig.cableTrays.find(c => c.id === selectedCableTrayId) || plantSetupConfig.cableTrays[0]
+          activeTool === Tool.PLACE_CABLE_TRAY
+            ? (plantSetupConfig.cableTrays.find(c => c.id === selectedCableTrayId) 
+               || plantSetupConfig.cableTrays[0]
+               || { id: 'default-tray', name: 'Cable Tray', width: 0.3, length: 2 })
             : null
         }
       />
