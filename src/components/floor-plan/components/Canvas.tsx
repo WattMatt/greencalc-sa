@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig } from '../types';
 import { renderAllMarkups, drawPvArray, drawEquipmentIcon } from '../utils/drawing';
-import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing } from '../utils/geometry';
+import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing } from '../utils/geometry';
 import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
 import { PVArrayConfig } from './PVArrayModal';
 
@@ -359,10 +359,23 @@ export function Canvas({
       
       const eqType = typeMap[activeTool];
       if (eqType) {
+        // Apply snapping for equipment placement
+        const equipmentMinSpacing = 0.3; // 30cm default spacing between equipment
+        const snapResult = snapEquipmentToSpacing(
+          mouseWorldPos,
+          eqType,
+          placementRotation,
+          equipment,
+          scaleInfo,
+          equipmentMinSpacing,
+          isShiftHeld,
+          plantSetupConfig
+        );
+        
         ctx.globalAlpha = 0.6;
         drawEquipmentIcon(
           ctx,
-          { type: eqType, position: mouseWorldPos, rotation: placementRotation },
+          { type: eqType, position: snapResult.position, rotation: snapResult.rotation },
           false,
           viewState.zoom,
           scaleInfo,
@@ -555,11 +568,24 @@ export function Canvas({
       
       const eqType = typeMap[activeTool];
       if (eqType) {
+        // Apply snapping for equipment placement
+        const equipmentMinSpacing = 0.3; // 30cm default spacing
+        const snapResult = snapEquipmentToSpacing(
+          worldPos,
+          eqType,
+          placementRotation,
+          equipment,
+          scaleInfo,
+          equipmentMinSpacing,
+          isShiftHeld,
+          plantSetupConfig
+        );
+        
         setEquipment(prev => [...prev, {
           id: `eq-${Date.now()}`,
           type: eqType,
-          position: worldPos,
-          rotation: placementRotation,
+          position: snapResult.position,
+          rotation: snapResult.snappedToId ? snapResult.rotation : placementRotation,
         }]);
       }
     }
@@ -607,15 +633,39 @@ export function Canvas({
       return;
     }
 
-    // Handle equipment dragging
+    // Handle equipment dragging with snapping
     if (draggingEquipmentId && equipmentDragOffset) {
-      const newPos = { 
+      const basePos = { 
         x: worldPos.x - equipmentDragOffset.x, 
         y: worldPos.y - equipmentDragOffset.y 
       };
-      setEquipment(prev => prev.map(item => 
-        item.id === draggingEquipmentId ? { ...item, position: newPos } : item
-      ));
+      
+      const draggedEquipment = equipment.find(e => e.id === draggingEquipmentId);
+      if (draggedEquipment) {
+        const otherEquipment = equipment.filter(e => e.id !== draggingEquipmentId);
+        const equipmentMinSpacing = 0.3; // 30cm default spacing
+        
+        const snapResult = snapEquipmentToSpacing(
+          basePos,
+          draggedEquipment.type,
+          draggedEquipment.rotation,
+          otherEquipment,
+          scaleInfo,
+          equipmentMinSpacing,
+          isShiftHeld,
+          plantSetupConfig
+        );
+        
+        setEquipment(prev => prev.map(item => 
+          item.id === draggingEquipmentId 
+            ? { ...item, position: snapResult.position, rotation: isShiftHeld && snapResult.snappedToId ? snapResult.rotation : item.rotation } 
+            : item
+        ));
+      } else {
+        setEquipment(prev => prev.map(item => 
+          item.id === draggingEquipmentId ? { ...item, position: basePos } : item
+        ));
+      }
       return;
     }
 
