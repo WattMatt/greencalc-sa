@@ -14,6 +14,8 @@ interface GeocodeRequest {
   latitude?: number;
   longitude?: number;
   reverse?: boolean;
+  // Search suggestions
+  limit?: number;
 }
 
 interface MapboxFeature {
@@ -38,7 +40,7 @@ serve(async (req) => {
   }
 
   try {
-    const { project_id, location, save_to_project = false, latitude, longitude, reverse = false } = await req.json() as GeocodeRequest;
+    const { project_id, location, save_to_project = false, latitude, longitude, reverse = false, limit = 1 } = await req.json() as GeocodeRequest;
 
     // Get Mapbox token
     const mapboxToken = Deno.env.get("MAPBOX_PUBLIC_TOKEN");
@@ -171,7 +173,8 @@ serve(async (req) => {
     
     // Call Mapbox Geocoding API
     // Bias results towards South Africa using bbox and country filter
-    const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedLocation}.json?access_token=${mapboxToken}&country=ZA&limit=1&types=place,locality,neighborhood,address`;
+    const searchLimit = Math.min(Math.max(limit, 1), 10); // Clamp between 1-10
+    const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedLocation}.json?access_token=${mapboxToken}&country=ZA&limit=${searchLimit}&types=place,locality,neighborhood,address`;
     
     console.log(`Calling Mapbox API for: ${searchText}`);
     
@@ -194,7 +197,28 @@ serve(async (req) => {
         JSON.stringify({ 
           success: false, 
           error: "Location not found",
-          location 
+          location,
+          suggestions: []
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Return multiple suggestions if limit > 1
+    if (searchLimit > 1) {
+      console.log(`Returning ${data.features.length} suggestions for: ${searchText}`);
+      const suggestions = data.features.map((f: MapboxFeature) => ({
+        place_name: f.place_name,
+        latitude: f.center[1],
+        longitude: f.center[0],
+        relevance: f.relevance
+      }));
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          suggestions,
+          original_location: location 
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
