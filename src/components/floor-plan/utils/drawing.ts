@@ -334,7 +334,13 @@ export const drawWalkway = (
   ctx.fillStyle = 'rgba(156, 163, 175, 0.4)'; // Gray
   ctx.fillRect(-widthPx / 2, -lengthPx / 2, widthPx, lengthPx);
 
-  // Hatching pattern (diagonal lines)
+  // Create clipping region for hatching pattern
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-widthPx / 2, -lengthPx / 2, widthPx, lengthPx);
+  ctx.clip();
+
+  // Hatching pattern (diagonal lines) - now clipped to rectangle
   ctx.strokeStyle = 'rgba(107, 114, 128, 0.6)';
   ctx.lineWidth = 1 / zoom;
   const hatchSpacing = 8 / zoom;
@@ -345,6 +351,7 @@ export const drawWalkway = (
     ctx.lineTo(-widthPx / 2 + i - lengthPx, lengthPx / 2);
   }
   ctx.stroke();
+  ctx.restore(); // Restore to remove clipping
 
   // Border
   ctx.strokeStyle = isSelected ? '#34D399' : '#6b7280';
