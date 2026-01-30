@@ -312,9 +312,9 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
   };
 
   return (
-    <div className="flex gap-6">
+    <div className="flex flex-col lg:flex-row gap-6 min-w-0">
       {/* Left Panel - Parameters */}
-      <div className="w-80 flex-shrink-0">
+      <div className="w-full lg:w-80 lg:flex-shrink-0">
         <Card>
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -564,7 +564,7 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
                 <p className="text-xs text-muted-foreground mt-1">Run a simulation in the Simulation tab to see KPIs here</p>
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="p-3 rounded-lg border bg-card">
                   <div className="flex items-center gap-2 mb-1">
                     <Sun className="h-3 w-3 text-amber-500" />
@@ -1042,7 +1042,7 @@ export default function ProjectDetail() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full overflow-x-hidden">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate("/projects")}>
           <ArrowLeft className="h-5 w-5" />
@@ -1075,7 +1075,7 @@ export default function ProjectDetail() {
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TooltipProvider delayDuration={300}>
-          <TabsList className="flex-wrap h-auto gap-1">
+          <TabsList className="flex-wrap h-auto gap-1 w-full justify-start">
             <TabWithStatus value="overview" status={tabStatuses.overview.status} tooltip={tabStatuses.overview.tooltip}>
               <LayoutDashboard className="h-4 w-4 mr-2" />
               Overview

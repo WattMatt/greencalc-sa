@@ -1276,7 +1276,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       {/* Note: System Costs are now configured exclusively in the Costs tab */}
 
       {/* System Configuration */}
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-4 lg:gap-6 grid-cols-1 lg:grid-cols-3">
         {/* Solar PV System - includes capacity slider + inverter size & module config */}
         <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
           <CardHeader className="pb-3">
@@ -1733,7 +1733,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       )}
 
       {/* Energy Results Summary (always visible - tariff-independent) */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Daily Load</CardDescription>
@@ -2195,7 +2195,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4 md:grid-cols-4">
+                <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
                   <div className="text-center p-3 rounded-lg bg-muted/50">
                     <p className="text-xs text-muted-foreground mb-1">Solar Output</p>
                     <p className={`text-lg font-semibold ${energyResultsSolcast.totalDailySolar >= energyResultsGeneric.totalDailySolar
