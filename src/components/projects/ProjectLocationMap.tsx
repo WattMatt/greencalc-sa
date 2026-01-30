@@ -14,11 +14,11 @@ import { usePVGISProfile, PVGISTMYResponse, PVGISMonthlyResponse } from "@/hooks
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-interface SearchResult {
+interface GooglePlacesSuggestion {
+  place_id: string;
   place_name: string;
-  latitude: number;
-  longitude: number;
-  relevance: number;
+  main_text: string;
+  secondary_text: string;
 }
 
 interface ProjectLocationMapProps {
@@ -62,7 +62,7 @@ export function ProjectLocationMap({
   
   // Location search state
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchResults, setSearchResults] = useState<GooglePlacesSuggestion[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -286,7 +286,7 @@ export function ProjectLocationMap({
     setEditLng(lng?.toFixed(6) || "");
   };
 
-  // Location search handlers
+  // Location search handlers - using Google Places API
   const handleSearchChange = useCallback((query: string) => {
     setSearchQuery(query);
     
@@ -305,8 +305,8 @@ export function ProjectLocationMap({
     searchTimeoutRef.current = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const { data, error } = await supabase.functions.invoke("geocode-location", {
-          body: { location: query, limit: 5 }
+        const { data, error } = await supabase.functions.invoke("google-places-search", {
+          body: { query }
         });
         
         if (error) throw error;
@@ -326,18 +326,37 @@ export function ProjectLocationMap({
     }, 300);
   }, []);
 
-  const handleSelectSearchResult = useCallback((result: SearchResult) => {
-    setPendingCoords({ lat: result.latitude, lng: result.longitude });
-    setEditLat(result.latitude.toFixed(6));
-    setEditLng(result.longitude.toFixed(6));
-    updateMarker(result.latitude, result.longitude, true);
-    map.current?.flyTo({ 
-      center: [result.longitude, result.latitude], 
-      zoom: 14 
-    });
-    setSearchQuery("");
-    setShowSuggestions(false);
-    setSearchResults([]);
+  const handleSelectSearchResult = useCallback(async (result: GooglePlacesSuggestion) => {
+    // Fetch place details to get coordinates
+    setIsSearching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("google-places-search", {
+        body: { place_id: result.place_id }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success && data.latitude && data.longitude) {
+        setPendingCoords({ lat: data.latitude, lng: data.longitude });
+        setEditLat(data.latitude.toFixed(6));
+        setEditLng(data.longitude.toFixed(6));
+        updateMarker(data.latitude, data.longitude, true);
+        map.current?.flyTo({ 
+          center: [data.longitude, data.latitude], 
+          zoom: 14 
+        });
+      } else {
+        toast.error("Could not get coordinates for this location");
+      }
+    } catch (err) {
+      console.error("Failed to get place details:", err);
+      toast.error("Failed to get location details");
+    } finally {
+      setSearchQuery("");
+      setShowSuggestions(false);
+      setSearchResults([]);
+      setIsSearching(false);
+    }
   }, [updateMarker]);
 
   // Close suggestions when clicking outside
@@ -463,12 +482,15 @@ export function ProjectLocationMap({
                 <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-50 max-h-[200px] overflow-y-auto">
                   {searchResults.map((result, i) => (
                     <button
-                      key={i}
+                      key={result.place_id || i}
                       onClick={() => handleSelectSearchResult(result)}
                       className="w-full px-3 py-2 text-left text-xs hover:bg-accent flex items-start gap-2 border-b border-border/50 last:border-0"
                     >
                       <MapPin className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
-                      <span className="line-clamp-2">{result.place_name}</span>
+                      <div className="flex flex-col overflow-hidden">
+                        <span className="font-medium truncate">{result.main_text}</span>
+                        <span className="text-muted-foreground text-[10px] truncate">{result.secondary_text}</span>
+                      </div>
                     </button>
                   ))}
                 </div>
