@@ -167,16 +167,24 @@ serve(async (req) => {
 
     console.log(`Geocoding location: "${location}"`);
 
-    // Add South Africa context for better results
-    const searchText = location.includes("South Africa") ? location : `${location}, South Africa`;
-    const encodedLocation = encodeURIComponent(searchText);
+    // Preprocess query for better results:
+    // - Replace "&" and "and" with space (intersection syntax not supported by Mapbox)
+    // - This helps combine multiple street names into a single search
+    let processedLocation = location
+      .replace(/\s*&\s*/g, ' ')
+      .replace(/\s+and\s+/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    const encodedLocation = encodeURIComponent(processedLocation);
     
     // Call Mapbox Geocoding API
-    // Bias results towards South Africa using bbox and country filter
+    // Use country=ZA to bias to South Africa, include all types for better POI matching
+    // proximity parameter centers results around South Africa (lon,lat format)
     const searchLimit = Math.min(Math.max(limit, 1), 10); // Clamp between 1-10
-    const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedLocation}.json?access_token=${mapboxToken}&country=ZA&limit=${searchLimit}&types=place,locality,neighborhood,address`;
+    const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedLocation}.json?access_token=${mapboxToken}&country=ZA&limit=${searchLimit}&proximity=25,-29&fuzzyMatch=true`;
     
-    console.log(`Calling Mapbox API for: ${searchText}`);
+    console.log(`Calling Mapbox API for: ${processedLocation}`);
     
     const response = await fetch(mapboxUrl);
     
@@ -192,7 +200,7 @@ serve(async (req) => {
     const data = await response.json() as MapboxResponse;
     
     if (!data.features || data.features.length === 0) {
-      console.log(`No results found for: ${searchText}`);
+      console.log(`No results found for: ${location}`);
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -206,13 +214,50 @@ serve(async (req) => {
 
     // Return multiple suggestions if limit > 1
     if (searchLimit > 1) {
-      console.log(`Returning ${data.features.length} suggestions for: ${searchText}`);
-      const suggestions = data.features.map((f: MapboxFeature) => ({
+      console.log(`Returning ${data.features.length} suggestions for: ${location}`);
+      
+      // Check if this looks like an intersection search (had & or and)
+      const isIntersectionSearch = /\s*(&|and)\s*/i.test(location);
+      
+      // If intersection search and we have 2+ results in the same area, 
+      // add a combined intersection result at the top
+      let suggestions = data.features.map((f: MapboxFeature) => ({
         place_name: f.place_name,
         latitude: f.center[1],
         longitude: f.center[0],
         relevance: f.relevance
       }));
+      
+      if (isIntersectionSearch && data.features.length >= 2) {
+        // Check if first two results are nearby (within ~500m = ~0.005 degrees)
+        const [f1, f2] = data.features;
+        const latDiff = Math.abs(f1.center[1] - f2.center[1]);
+        const lngDiff = Math.abs(f1.center[0] - f2.center[0]);
+        
+        if (latDiff < 0.01 && lngDiff < 0.01) {
+          // Calculate midpoint as intersection approximation
+          const midLat = (f1.center[1] + f2.center[1]) / 2;
+          const midLng = (f1.center[0] + f2.center[0]) / 2;
+          
+          // Extract street names from place_name (first part before comma)
+          const street1 = f1.place_name.split(',')[0].trim();
+          const street2 = f2.place_name.split(',')[0].trim();
+          
+          // Get area context from the first result
+          const areaContext = f1.place_name.split(',').slice(1).join(',').trim();
+          
+          // Add intersection result at the top
+          const intersectionResult = {
+            place_name: `${street1} & ${street2}, ${areaContext}`,
+            latitude: midLat,
+            longitude: midLng,
+            relevance: 1.0 // Highest relevance for the intersection
+          };
+          
+          console.log(`Created intersection result: ${intersectionResult.place_name}`);
+          suggestions = [intersectionResult, ...suggestions];
+        }
+      }
       
       return new Response(
         JSON.stringify({ 
