@@ -1796,8 +1796,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           batteryPower: includesBattery ? batteryPower : 0,
           pvConfig,
           usingSolcast: solarDataSource === "solcast",
+          solarDataSource,
           inverterConfig,
           systemCosts,
+          pvsystConfig,
+          advancedConfig,
+          lossCalculationMode,
+          productionReductionPercent,
         }}
         currentResults={{
           totalDailyLoad: energyResults.totalDailyLoad,
@@ -1824,9 +1829,75 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           if (config.inverterConfig) {
             setInverterConfig((prev) => ({ ...prev, ...config.inverterConfig }));
           }
+          // Load solar data source if present
+          if (config.solarDataSource) {
+            setSolarDataSource(config.solarDataSource);
+          }
+          // Load PVsyst config if present
+          if (config.pvsystConfig) {
+            setPvsystConfig((prev) => ({
+              ...DEFAULT_PVSYST_CONFIG,
+              ...prev,
+              ...config.pvsystConfig,
+              irradiance: {
+                ...DEFAULT_PVSYST_CONFIG.irradiance,
+                ...config.pvsystConfig?.irradiance,
+              },
+              array: {
+                ...DEFAULT_PVSYST_CONFIG.array,
+                ...config.pvsystConfig?.array,
+              },
+              system: {
+                ...DEFAULT_PVSYST_CONFIG.system,
+                inverter: {
+                  ...DEFAULT_PVSYST_CONFIG.system.inverter,
+                  ...config.pvsystConfig?.system?.inverter,
+                },
+              },
+              lossesAfterInverter: {
+                ...DEFAULT_PVSYST_CONFIG.lossesAfterInverter,
+                ...config.pvsystConfig?.lossesAfterInverter,
+              },
+            }));
+          }
+          // Load loss calculation mode if present
+          if (config.lossCalculationMode) {
+            setLossCalculationMode(config.lossCalculationMode);
+          }
+          // Load production reduction if present
+          if (config.productionReductionPercent !== undefined) {
+            setProductionReductionPercent(config.productionReductionPercent);
+          }
+          // Load advanced config if present
+          if (config.advancedConfig) {
+            setAdvancedConfig((prev) => ({
+              ...DEFAULT_ADVANCED_CONFIG,
+              ...prev,
+              ...config.advancedConfig,
+              seasonal: {
+                ...DEFAULT_ADVANCED_CONFIG.seasonal,
+                ...config.advancedConfig?.seasonal,
+              },
+              degradation: {
+                ...DEFAULT_ADVANCED_CONFIG.degradation,
+                ...config.advancedConfig?.degradation,
+              },
+              financial: {
+                ...DEFAULT_ADVANCED_CONFIG.financial,
+                ...config.advancedConfig?.financial,
+              },
+              gridConstraints: {
+                ...DEFAULT_ADVANCED_CONFIG.gridConstraints,
+                ...config.advancedConfig?.gridConstraints,
+              },
+              loadGrowth: {
+                ...DEFAULT_ADVANCED_CONFIG.loadGrowth,
+                ...config.advancedConfig?.loadGrowth,
+              },
+            }));
+          }
           // Load system costs if present
           if (config.systemCosts) {
-            // Handle legacy data that may have old maintenancePercentage field or missing new fields
             const savedCosts = config.systemCosts as any;
             onSystemCostsChange({
               solarCostPerKwp: savedCosts.solarCostPerKwp,
@@ -1834,19 +1905,15 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               solarMaintenancePercentage: savedCosts.solarMaintenancePercentage ?? savedCosts.maintenancePercentage ?? 3.5,
               batteryMaintenancePercentage: savedCosts.batteryMaintenancePercentage ?? 1.5,
               maintenancePerYear: savedCosts.maintenancePerYear ?? 0,
-              // Additional Fixed Costs
               healthAndSafetyCost: savedCosts.healthAndSafetyCost ?? 0,
               waterPointsCost: savedCosts.waterPointsCost ?? 0,
               cctvCost: savedCosts.cctvCost ?? 0,
               mvSwitchGearCost: savedCosts.mvSwitchGearCost ?? 0,
-              // Insurance
               insuranceCostPerYear: savedCosts.insuranceCostPerYear ?? 0,
               insuranceRatePercent: savedCosts.insuranceRatePercent ?? 1.0,
-              // Percentage-based Fees
               professionalFeesPercent: savedCosts.professionalFeesPercent ?? 0,
               projectManagementPercent: savedCosts.projectManagementPercent ?? 0,
               contingencyPercent: savedCosts.contingencyPercent ?? 0,
-              // Replacement Costs (Year 10)
               replacementYear: savedCosts.replacementYear ?? 10,
               equipmentCostPercent: savedCosts.equipmentCostPercent ?? 45,
               moduleSharePercent: savedCosts.moduleSharePercent ?? 70,
@@ -1854,7 +1921,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               solarModuleReplacementPercent: savedCosts.solarModuleReplacementPercent ?? 10,
               inverterReplacementPercent: savedCosts.inverterReplacementPercent ?? 50,
               batteryReplacementPercent: savedCosts.batteryReplacementPercent ?? 30,
-              // Financial Return Parameters
               costOfCapital: savedCosts.costOfCapital ?? 9.0,
               cpi: savedCosts.cpi ?? 6.0,
               electricityInflation: savedCosts.electricityInflation ?? 10.0,
