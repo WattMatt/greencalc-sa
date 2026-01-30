@@ -29,7 +29,10 @@ import {
   ANNUAL_HOURS_SOLAR,
 } from "@/lib/tariffCalculations";
 
-export type BlendedRateType = 'allHours' | 'solarHours';
+// Extended to support all 6 rate options: category (allHours/solarHours) + period (annual/high/low)
+export type BlendedRateType = 
+  | 'allHours' | 'allHoursHigh' | 'allHoursLow'
+  | 'solarHours' | 'solarHoursHigh' | 'solarHoursLow';
 
 interface TariffRate {
   id: string;
@@ -712,20 +715,20 @@ function EskomBlendedRatesCard({
       
       <div className="grid grid-cols-2 gap-4">
         {/* All Hours Column */}
-        <div 
-          className={`space-y-3 ${isSelectable ? 'cursor-pointer' : ''}`}
-          onClick={() => onTypeChange?.('allHours')}
-        >
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Clock className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs font-medium text-muted-foreground">All Hours (24/7/365)</span>
           </div>
           
-          <div className={`p-3 rounded-lg border transition-all ${
-            selectedType === 'allHours' 
-              ? 'bg-primary/10 border-primary ring-2 ring-primary/30' 
-              : 'bg-muted/50 hover:bg-muted/80'
-          }`}>
+          <div 
+            className={`p-3 rounded-lg border transition-all ${isSelectable ? 'cursor-pointer' : ''} ${
+              selectedType === 'allHours' 
+                ? 'bg-primary/10 border-primary ring-2 ring-primary/30' 
+                : 'bg-muted/50 hover:bg-muted/80'
+            }`}
+            onClick={() => onTypeChange?.('allHours')}
+          >
             <div className="flex items-baseline gap-1">
               <span className={`text-xl font-bold ${selectedType === 'allHours' ? 'text-primary' : ''}`}>
                 R{blendedRates.allHours.annual.toFixed(4)}
@@ -743,13 +746,37 @@ function EskomBlendedRatesCard({
           </div>
           
           <div className="grid grid-cols-2 gap-2">
-            <div className="p-2 rounded bg-muted/30 text-center">
-              <div className="text-sm font-semibold">R{blendedRates.allHours.high.toFixed(4)}</div>
+            <div 
+              className={`p-2 rounded text-center transition-all ${isSelectable ? 'cursor-pointer' : ''} ${
+                selectedType === 'allHoursHigh'
+                  ? 'bg-primary/20 ring-2 ring-primary/30'
+                  : 'bg-muted/30 hover:bg-muted/50'
+              }`}
+              onClick={() => onTypeChange?.('allHoursHigh')}
+            >
+              <div className={`text-sm font-semibold ${selectedType === 'allHoursHigh' ? 'text-primary' : ''}`}>
+                R{blendedRates.allHours.high.toFixed(4)}
+              </div>
               <div className="text-[10px] text-muted-foreground">High (Winter)</div>
+              {selectedType === 'allHoursHigh' && isSelectable && (
+                <Badge variant="default" className="mt-1 text-[8px] px-1 py-0">✓ Selected</Badge>
+              )}
             </div>
-            <div className="p-2 rounded bg-muted/30 text-center">
-              <div className="text-sm font-semibold">R{blendedRates.allHours.low.toFixed(4)}</div>
+            <div 
+              className={`p-2 rounded text-center transition-all ${isSelectable ? 'cursor-pointer' : ''} ${
+                selectedType === 'allHoursLow'
+                  ? 'bg-primary/20 ring-2 ring-primary/30'
+                  : 'bg-muted/30 hover:bg-muted/50'
+              }`}
+              onClick={() => onTypeChange?.('allHoursLow')}
+            >
+              <div className={`text-sm font-semibold ${selectedType === 'allHoursLow' ? 'text-primary' : ''}`}>
+                R{blendedRates.allHours.low.toFixed(4)}
+              </div>
               <div className="text-[10px] text-muted-foreground">Low (Summer)</div>
+              {selectedType === 'allHoursLow' && isSelectable && (
+                <Badge variant="default" className="mt-1 text-[8px] px-1 py-0">✓ Selected</Badge>
+              )}
             </div>
           </div>
           
@@ -770,22 +797,22 @@ function EskomBlendedRatesCard({
         </div>
         
         {/* Solar Sun Hours Column */}
-        <div 
-          className={`space-y-3 ${isSelectable ? 'cursor-pointer' : ''}`}
-          onClick={() => onTypeChange?.('solarHours')}
-        >
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Sun className="h-3.5 w-3.5 text-amber-500" />
             <span className="text-xs font-medium text-amber-600">Solar Sun Hours (6h)</span>
           </div>
           
-          <div className={`p-3 rounded-lg border transition-all ${
-            selectedType === 'solarHours' 
-              ? 'bg-amber-500/20 border-amber-500 ring-2 ring-amber-500/30' 
-              : 'bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20'
-          }`}>
+          <div 
+            className={`p-3 rounded-lg border transition-all ${isSelectable ? 'cursor-pointer' : ''} ${
+              selectedType === 'solarHours' 
+                ? 'bg-amber-500/20 border-amber-500 ring-2 ring-amber-500/30' 
+                : 'bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20'
+            }`}
+            onClick={() => onTypeChange?.('solarHours')}
+          >
             <div className="flex items-baseline gap-1">
-              <span className={`text-xl font-bold ${selectedType === 'solarHours' ? 'text-amber-600' : 'text-amber-600'}`}>
+              <span className="text-xl font-bold text-amber-600">
                 R{blendedRates.solarHours.annual.toFixed(4)}
               </span>
               <span className="text-xs text-muted-foreground">/kWh</span>
@@ -801,13 +828,37 @@ function EskomBlendedRatesCard({
           </div>
           
           <div className="grid grid-cols-2 gap-2">
-            <div className="p-2 rounded bg-amber-500/10 text-center">
-              <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">R{blendedRates.solarHours.high.toFixed(4)}</div>
+            <div 
+              className={`p-2 rounded text-center transition-all ${isSelectable ? 'cursor-pointer' : ''} ${
+                selectedType === 'solarHoursHigh'
+                  ? 'bg-amber-500/30 ring-2 ring-amber-500/50'
+                  : 'bg-amber-500/10 hover:bg-amber-500/20'
+              }`}
+              onClick={() => onTypeChange?.('solarHoursHigh')}
+            >
+              <div className={`text-sm font-semibold ${selectedType === 'solarHoursHigh' ? 'text-amber-700 dark:text-amber-300' : 'text-amber-700 dark:text-amber-400'}`}>
+                R{blendedRates.solarHours.high.toFixed(4)}
+              </div>
               <div className="text-[10px] text-muted-foreground">High (Winter)</div>
+              {selectedType === 'solarHoursHigh' && isSelectable && (
+                <Badge className="mt-1 text-[8px] px-1 py-0 bg-amber-500">✓ Selected</Badge>
+              )}
             </div>
-            <div className="p-2 rounded bg-amber-500/10 text-center">
-              <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">R{blendedRates.solarHours.low.toFixed(4)}</div>
+            <div 
+              className={`p-2 rounded text-center transition-all ${isSelectable ? 'cursor-pointer' : ''} ${
+                selectedType === 'solarHoursLow'
+                  ? 'bg-amber-500/30 ring-2 ring-amber-500/50'
+                  : 'bg-amber-500/10 hover:bg-amber-500/20'
+              }`}
+              onClick={() => onTypeChange?.('solarHoursLow')}
+            >
+              <div className={`text-sm font-semibold ${selectedType === 'solarHoursLow' ? 'text-amber-700 dark:text-amber-300' : 'text-amber-700 dark:text-amber-400'}`}>
+                R{blendedRates.solarHours.low.toFixed(4)}
+              </div>
               <div className="text-[10px] text-muted-foreground">Low (Summer)</div>
+              {selectedType === 'solarHoursLow' && isSelectable && (
+                <Badge className="mt-1 text-[8px] px-1 py-0 bg-amber-500">✓ Selected</Badge>
+              )}
             </div>
           </div>
           

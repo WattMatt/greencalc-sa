@@ -693,11 +693,26 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   );
   
   // Use the selected blended rate type (from Tariff tab or default to solarHours)
+  // Now supports all 6 rate options
   const selectedBlendedRate = useMemo(() => {
     if (!annualBlendedRates) return 2.5; // Fallback default
-    return blendedRateType === 'allHours' 
-      ? annualBlendedRates.allHours.annual 
-      : annualBlendedRates.solarHours.annual;
+    
+    switch (blendedRateType) {
+      case 'allHours':
+        return annualBlendedRates.allHours.annual;
+      case 'allHoursHigh':
+        return annualBlendedRates.allHours.high;
+      case 'allHoursLow':
+        return annualBlendedRates.allHours.low;
+      case 'solarHours':
+        return annualBlendedRates.solarHours.annual;
+      case 'solarHoursHigh':
+        return annualBlendedRates.solarHours.high;
+      case 'solarHoursLow':
+        return annualBlendedRates.solarHours.low;
+      default:
+        return annualBlendedRates.solarHours.annual;
+    }
   }, [annualBlendedRates, blendedRateType]);
   
   const tariffData: TariffData = useMemo(() => ({
