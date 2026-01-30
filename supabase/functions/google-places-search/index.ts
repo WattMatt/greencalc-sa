@@ -99,12 +99,14 @@ serve(async (req) => {
     const autocompleteUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&components=country:za&key=${apiKey}`;
     
     const response = await fetch(autocompleteUrl);
-    const data = await response.json() as AutocompleteResponse;
+    const data = await response.json() as AutocompleteResponse & { error_message?: string };
+    
+    console.log(`Places API response status: ${data.status}, error: ${data.error_message || 'none'}`);
     
     if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-      console.error(`Places API error: ${data.status}`);
+      console.error(`Places API error: ${data.status} - ${data.error_message}`);
       return new Response(
-        JSON.stringify({ error: `Places search failed: ${data.status}` }),
+        JSON.stringify({ error: `Places search failed: ${data.status}`, details: data.error_message }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
