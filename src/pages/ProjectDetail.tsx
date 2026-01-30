@@ -634,7 +634,9 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
-  const [blendedRateType, setBlendedRateType] = useState<'allHours' | 'solarHours'>('solarHours');
+  const [blendedRateType, setBlendedRateType] = useState<
+    'allHours' | 'allHoursHigh' | 'allHoursLow' | 'solarHours' | 'solarHoursHigh' | 'solarHoursLow'
+  >('solarHours');
   const dashboardRef = useRef<DashboardTabContentRef>(null);
   const simulationRef = useRef<SimulationModesRef>(null);
   
