@@ -495,29 +495,6 @@ export function Canvas({
       return;
     }
 
-    // Copy PV Array tool - click on array to copy its config and enter placement mode
-    if (activeTool === Tool.COPY_PV_ARRAY && e.button === 0 && onCopyPvArray) {
-      const hitArray = (pvPanelConfig && scaleInfo.ratio)
-        ? [...pvArrays].reverse().find(arr => {
-            const corners = getPVArrayCorners(arr, pvPanelConfig, roofMasks, scaleInfo);
-            return corners.length === 4 && isPointInPolygon(worldPos, corners);
-          })
-        : undefined;
-      
-      if (hitArray) {
-        onCopyPvArray(hitArray);
-      }
-      return;
-    }
-
-    // Copy Roof Mask tool - click on mask to copy its config
-    if (activeTool === Tool.COPY_ROOF_MASK && e.button === 0 && onCopyRoofMask) {
-      const hitMask = [...roofMasks].reverse().find(m => isPointInPolygon(worldPos, m.points));
-      if (hitMask) {
-        onCopyRoofMask(hitMask);
-      }
-      return;
-    }
 
     if (activeTool === Tool.PAN || e.button === 1) {
       setIsPanning(true);

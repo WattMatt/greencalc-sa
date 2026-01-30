@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
   Upload, Undo2, Redo2, Save, Loader2, ArrowLeft,
-  ChevronLeft, ChevronRight, ChevronDown, Copy
+  ChevronLeft, ChevronRight, ChevronDown
 } from 'lucide-react';
 import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig } from '../types';
 import { Button } from '@/components/ui/button';
@@ -21,62 +21,34 @@ interface ToolButtonProps {
   onClick: () => void;
   disabled?: boolean;
   badge?: string;
-  copyButton?: {
-    isActive: boolean;
-    onClick: () => void;
-    disabled?: boolean;
-  };
 }
 
-const ToolButton = ({ icon: Icon, label, isActive, onClick, disabled, badge, copyButton }: ToolButtonProps) => (
-  <div className="flex items-center gap-1">
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant={isActive ? 'default' : 'ghost'}
-            size="sm"
-            onClick={onClick}
-            disabled={disabled}
-            className={cn(
-              'relative justify-start flex-1',
-              isActive && 'bg-primary text-primary-foreground'
-            )}
-          >
-            <Icon className="h-4 w-4 mr-2" />
-            <span className="text-xs">{label}</span>
-            {badge && (
-              <span className="absolute right-2 text-xs bg-muted text-muted-foreground px-1 rounded">
-                {badge}
-              </span>
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="right">{label}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-    {copyButton && (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={copyButton.isActive ? 'default' : 'ghost'}
-              size="icon"
-              className={cn(
-                'h-8 w-8 shrink-0',
-                copyButton.isActive && 'bg-primary text-primary-foreground'
-              )}
-              onClick={copyButton.onClick}
-              disabled={copyButton.disabled}
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">Copy {label}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    )}
-  </div>
+const ToolButton = ({ icon: Icon, label, isActive, onClick, disabled, badge }: ToolButtonProps) => (
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={isActive ? 'default' : 'ghost'}
+          size="sm"
+          onClick={onClick}
+          disabled={disabled}
+          className={cn(
+            'relative justify-start w-full',
+            isActive && 'bg-primary text-primary-foreground'
+          )}
+        >
+          <Icon className="h-4 w-4 mr-2" />
+          <span className="text-xs">{label}</span>
+          {badge && (
+            <span className="absolute right-2 text-xs bg-muted text-muted-foreground px-1 rounded">
+              {badge}
+            </span>
+          )}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
 );
 
 interface CollapsibleSectionProps {
@@ -400,6 +372,8 @@ export function Toolbar({
           </Button>
         </CollapsibleSection>
 
+        <Separator className="my-2" />
+
         {/* Roof Masks */}
         <CollapsibleSection 
           title="Roof Masks"
@@ -412,11 +386,6 @@ export function Toolbar({
             isActive={activeTool === Tool.ROOF_MASK}
             onClick={() => setActiveTool(Tool.ROOF_MASK)}
             disabled={!scaleSet}
-            copyButton={{
-              isActive: activeTool === Tool.COPY_ROOF_MASK,
-              onClick: () => setActiveTool(Tool.COPY_ROOF_MASK),
-              disabled: !scaleSet,
-            }}
           />
         </CollapsibleSection>
 
@@ -434,11 +403,6 @@ export function Toolbar({
             isActive={activeTool === Tool.PV_ARRAY}
             onClick={() => setActiveTool(Tool.PV_ARRAY)}
             disabled={!scaleSet || !pvConfigured}
-            copyButton={{
-              isActive: activeTool === Tool.COPY_PV_ARRAY,
-              onClick: () => setActiveTool(Tool.COPY_PV_ARRAY),
-              disabled: !scaleSet || !pvConfigured,
-            }}
           />
           <ToolButton
             icon={() => <span className="text-xs font-mono">~=</span>}
@@ -508,72 +472,8 @@ export function Toolbar({
           />
         </CollapsibleSection>
 
-        {/* Placement configuration for equipment and materials */}
-        {[Tool.PLACE_INVERTER, Tool.PLACE_WALKWAY, Tool.PLACE_CABLE_TRAY].includes(activeTool) && (
-          <>
-            <Separator className="my-2" />
-            <div className="px-2 space-y-3">
-              <div className="text-xs font-medium text-muted-foreground">Placement Options</div>
-              
-              {/* Orientation selector */}
-              {setPlacementOrientation && (
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Orientation</label>
-                  <div className="flex gap-1">
-                    <Button
-                      variant={placementOrientation === 'portrait' ? 'default' : 'outline'}
-                      size="sm"
-                      className="flex-1 text-xs h-7"
-                      onClick={() => setPlacementOrientation('portrait')}
-                    >
-                      Portrait
-                    </Button>
-                    <Button
-                      variant={placementOrientation === 'landscape' ? 'default' : 'outline'}
-                      size="sm"
-                      className="flex-1 text-xs h-7"
-                      onClick={() => setPlacementOrientation('landscape')}
-                    >
-                      Landscape
-                    </Button>
-                  </div>
-                </div>
-              )}
-              
-              {/* Minimum spacing input */}
-              {setPlacementMinSpacing && (
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Min. Spacing (m)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={placementMinSpacing ?? 0.3}
-                    onChange={(e) => setPlacementMinSpacing(parseFloat(e.target.value) || 0.3)}
-                    className="w-full h-7 px-2 text-xs border rounded bg-background"
-                  />
-                </div>
-              )}
-              
-              {/* Rotation control */}
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={rotateNext}
-              >
-                <RotateCw className="h-4 w-4 mr-2" />
-                <span className="text-xs">Rotate ({placementRotation}°)</span>
-              </Button>
-              <p className="text-xs text-muted-foreground text-center">
-                Press R to rotate
-              </p>
-            </div>
-          </>
-        )}
-
-        {/* Rotation control for other equipment (DC Combiner, AC Disconnect, Main Board) */}
-        {[Tool.PLACE_DC_COMBINER, Tool.PLACE_AC_DISCONNECT, Tool.PLACE_MAIN_BOARD].includes(activeTool) && (
+        {/* Rotation control for placement tools */}
+        {[Tool.PLACE_INVERTER, Tool.PLACE_WALKWAY, Tool.PLACE_CABLE_TRAY, Tool.PLACE_DC_COMBINER, Tool.PLACE_AC_DISCONNECT, Tool.PLACE_MAIN_BOARD].includes(activeTool) && (
           <>
             <Separator className="my-2" />
             <div className="px-2">

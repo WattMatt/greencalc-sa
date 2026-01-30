@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray } from './types';
+import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
@@ -13,6 +13,7 @@ import { LayoutManagerModal } from './components/LayoutManagerModal';
 import { LayoutBrowser } from './components/LayoutBrowser';
 import { PlantSetupModal } from './components/PlantSetupModal';
 import { SimulationSelector } from './components/SimulationSelector';
+import { PlacementOptionsModal, PlacementConfig, toolToPlacementType, PlacementItemType } from './components/PlacementOptionsModal';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
@@ -119,6 +120,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [isRoofMaskModalOpen, setIsRoofMaskModalOpen] = useState(false);
   const [isPVArrayModalOpen, setIsPVArrayModalOpen] = useState(false);
   const [isPlantSetupModalOpen, setIsPlantSetupModalOpen] = useState(false);
+  const [isPlacementOptionsModalOpen, setIsPlacementOptionsModalOpen] = useState(false);
+  const [pendingPlacementTool, setPendingPlacementTool] = useState<Tool | null>(null);
   const [plantSetupActiveTab, setPlantSetupActiveTab] = useState('modules');
   const [pendingScalePixels, setPendingScalePixels] = useState(0);
   const [editingRoofMask, setEditingRoofMask] = useState<RoofMask | null>(null);
@@ -143,6 +146,80 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [selectedInverterId, setSelectedInverterId] = useState<string | null>(null);
   const [selectedWalkwayId, setSelectedWalkwayId] = useState<string | null>(null);
   const [selectedCableTrayId, setSelectedCableTrayId] = useState<string | null>(null);
+
+  // Tools that require the placement options modal
+  const PLACEMENT_TOOLS = [
+    Tool.PLACE_INVERTER,
+    Tool.PLACE_WALKWAY,
+    Tool.PLACE_CABLE_TRAY,
+    Tool.PLACE_DC_COMBINER,
+    Tool.PLACE_AC_DISCONNECT,
+    Tool.PLACE_MAIN_BOARD,
+  ];
+
+  // Get placement item name based on pending tool
+  const getPlacementItemName = (tool: Tool): string => {
+    switch (tool) {
+      case Tool.PLACE_INVERTER:
+        const defaultInverter = plantSetupConfig.inverters.find(i => i.isDefault) || plantSetupConfig.inverters[0];
+        return defaultInverter?.name || 'Inverter';
+      case Tool.PLACE_WALKWAY:
+        const defaultWalkway = plantSetupConfig.walkways[0];
+        return defaultWalkway?.name || 'Walkway';
+      case Tool.PLACE_CABLE_TRAY:
+        const defaultTray = plantSetupConfig.cableTrays[0];
+        return defaultTray?.name || 'Cable Tray';
+      case Tool.PLACE_DC_COMBINER:
+        return 'DC Combiner';
+      case Tool.PLACE_AC_DISCONNECT:
+        return 'AC Disconnect';
+      case Tool.PLACE_MAIN_BOARD:
+        return 'Main Board';
+      default:
+        return 'Item';
+    }
+  };
+
+  // Get dimensions for placement item
+  const getPlacementDimensions = (tool: Tool): { width: number; height: number } | undefined => {
+    switch (tool) {
+      case Tool.PLACE_INVERTER:
+        const inv = plantSetupConfig.inverters.find(i => i.isDefault) || plantSetupConfig.inverters[0];
+        return inv ? { width: inv.width || 0.7, height: inv.height || 0.5 } : { width: 0.7, height: 0.5 };
+      case Tool.PLACE_WALKWAY:
+        const walk = plantSetupConfig.walkways[0];
+        return walk ? { width: walk.width, height: walk.length } : { width: 0.6, height: 2 };
+      case Tool.PLACE_CABLE_TRAY:
+        const tray = plantSetupConfig.cableTrays[0];
+        return tray ? { width: tray.width, height: tray.length } : { width: 0.3, height: 2 };
+      default:
+        return { width: 0.5, height: 0.5 };
+    }
+  };
+
+  // Handle tool selection - show placement options modal for equipment/materials
+  const handleToolSelect = useCallback((tool: Tool) => {
+    if (tool === Tool.PV_ARRAY && pvPanelConfig) {
+      setIsPVArrayModalOpen(true);
+    } else if (PLACEMENT_TOOLS.includes(tool)) {
+      setPendingPlacementTool(tool);
+      setIsPlacementOptionsModalOpen(true);
+    } else {
+      setActiveTool(tool);
+    }
+  }, [pvPanelConfig]);
+
+  // Handle placement options modal confirm
+  const handlePlacementOptionsConfirm = useCallback((config: PlacementConfig) => {
+    setPlacementOrientation(config.orientation);
+    setPlacementMinSpacing(config.minSpacing);
+    setIsPlacementOptionsModalOpen(false);
+    if (pendingPlacementTool) {
+      setActiveTool(pendingPlacementTool);
+      toast.info('Click on the canvas to place. Press ESC to cancel.');
+    }
+    setPendingPlacementTool(null);
+  }, [pendingPlacementTool]);
 
   // Reset to blank layout state
   const resetToBlankLayout = useCallback(() => {
@@ -668,18 +745,96 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         setIsRKeyHeld(true);
         isRKeyHeldRef.current = true;
       }
-      if (e.ctrlKey && e.key === 'z') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
         handleUndo();
       }
-      if (e.ctrlKey && e.key === 'y') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         e.preventDefault();
         handleRedo();
       }
-      if (e.ctrlKey && e.key === 's') {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         handleSave();
       }
+      
+      // Ctrl/Cmd+C to copy selected item
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedItemId) {
+        e.preventDefault();
+        
+        // Check if selected item is a PV array
+        const selectedPvArray = pvArrays.find(a => a.id === selectedItemId);
+        if (selectedPvArray) {
+          // Inline copy logic for PV array
+          const copyConfig: PVArrayConfig = {
+            rows: selectedPvArray.rows,
+            columns: selectedPvArray.columns,
+            orientation: selectedPvArray.orientation,
+            minSpacing: selectedPvArray.minSpacing ?? lastPvArraySettings?.minSpacing ?? 0.5,
+          };
+          setPendingPvArrayConfig(copyConfig);
+          setLastPvArraySettings(copyConfig);
+          setActiveTool(Tool.PV_ARRAY);
+          toast.info(`Copied PV Array. Click on a roof mask to place.`);
+          return;
+        }
+        
+        // Check if selected item is a roof mask
+        const selectedRoofMask = roofMasks.find(m => m.id === selectedItemId);
+        if (selectedRoofMask) {
+          // Inline copy logic for roof mask
+          setPendingRoofMask({ points: [], area: 0, pitch: selectedRoofMask.pitch });
+          setActiveTool(Tool.ROOF_MASK);
+          toast.info(`Copied Roof Mask (pitch: ${selectedRoofMask.pitch}°). Draw a new mask.`);
+          return;
+        }
+        
+        // Check if selected item is equipment
+        const selectedEquipment = equipment.find(eq => eq.id === selectedItemId);
+        if (selectedEquipment) {
+          // Copy equipment configuration and enter placement mode
+          setPlacementRotation(selectedEquipment.rotation);
+          switch (selectedEquipment.type) {
+            case 'Inverter':
+              setActiveTool(Tool.PLACE_INVERTER);
+              break;
+            case 'DC Combiner Box':
+              setActiveTool(Tool.PLACE_DC_COMBINER);
+              break;
+            case 'AC Disconnect':
+              setActiveTool(Tool.PLACE_AC_DISCONNECT);
+              break;
+            case 'Main Board':
+              setActiveTool(Tool.PLACE_MAIN_BOARD);
+              break;
+          }
+          toast.info(`Copied ${selectedEquipment.type}. Click to place.`);
+          return;
+        }
+        
+        // Check if selected item is a placed walkway
+        const selectedWalkway = placedWalkways.find(w => w.id === selectedItemId);
+        if (selectedWalkway) {
+          setPlacementRotation(selectedWalkway.rotation);
+          setPlacementMinSpacing(selectedWalkway.minSpacing ?? 0.3);
+          setSelectedWalkwayId(selectedWalkway.configId);
+          setActiveTool(Tool.PLACE_WALKWAY);
+          toast.info(`Copied Walkway. Click to place.`);
+          return;
+        }
+        
+        // Check if selected item is a placed cable tray
+        const selectedCableTray = placedCableTrays.find(c => c.id === selectedItemId);
+        if (selectedCableTray) {
+          setPlacementRotation(selectedCableTray.rotation);
+          setPlacementMinSpacing(selectedCableTray.minSpacing ?? 0.3);
+          setSelectedCableTrayId(selectedCableTray.configId);
+          setActiveTool(Tool.PLACE_CABLE_TRAY);
+          toast.info(`Copied Cable Tray. Click to place.`);
+          return;
+        }
+      }
+      
       if (e.key === 'Escape') {
         // Exit PV array placement mode
         if (pendingPvArrayConfig) {
@@ -687,6 +842,13 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           setPlacementRotation(0);
           setActiveTool(Tool.SELECT);
           toast.info('PV array placement cancelled');
+          return;
+        }
+        // Exit equipment/material placement mode
+        if (PLACEMENT_TOOLS.includes(activeTool)) {
+          setActiveTool(Tool.SELECT);
+          setPlacementRotation(0);
+          toast.info('Placement cancelled');
           return;
         }
         // Exit roof mask drawing mode
@@ -733,7 +895,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId, pendingPvArrayConfig, activeTool, selectedItemId]);
+  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId, pendingPvArrayConfig, activeTool, selectedItemId, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays, lastPvArraySettings]);
 
   // Scroll wheel rotation when R is held
   // - R + scroll = 5° increments
@@ -958,13 +1120,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       {!readOnly && (
         <Toolbar
           activeTool={activeTool}
-          setActiveTool={(tool) => {
-            if (tool === Tool.PV_ARRAY && pvPanelConfig) {
-              setIsPVArrayModalOpen(true);
-            } else {
-              setActiveTool(tool);
-            }
-          }}
+          setActiveTool={handleToolSelect}
           scaleInfo={scaleInfo}
           pvPanelConfig={pvPanelConfig}
           pvArrays={pvArrays}
@@ -1208,6 +1364,22 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
               }
             }}
           />
+
+          {pendingPlacementTool && (
+            <PlacementOptionsModal
+              isOpen={isPlacementOptionsModalOpen}
+              onClose={() => {
+                setIsPlacementOptionsModalOpen(false);
+                setPendingPlacementTool(null);
+              }}
+              itemType={toolToPlacementType(pendingPlacementTool) || 'inverter'}
+              itemName={getPlacementItemName(pendingPlacementTool)}
+              defaultOrientation={placementOrientation}
+              defaultMinSpacing={placementMinSpacing}
+              dimensions={getPlacementDimensions(pendingPlacementTool)}
+              onConfirm={handlePlacementOptionsConfirm}
+            />
+          )}
         </>
       )}
     </div>
