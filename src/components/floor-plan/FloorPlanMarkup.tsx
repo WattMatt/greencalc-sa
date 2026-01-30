@@ -110,6 +110,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [moduleName, setModuleName] = useState<string>('');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [placementRotation, setPlacementRotation] = useState(0);
+  const [placementOrientation, setPlacementOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [placementMinSpacing, setPlacementMinSpacing] = useState(0.3);
 
   // Modals
   const [isScaleModalOpen, setIsScaleModalOpen] = useState(false);
@@ -209,20 +211,24 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           pvArrays: (data.pv_arrays as unknown as any[]) || [],
           equipment: (data.equipment as unknown as any[]) || [],
           lines: (data.cables as unknown as any[]) || [],
-          placedWalkways: plantSetup?.walkways?.map(w => ({
+          placedWalkways: (plantSetup?.walkways?.map(w => ({
             id: w.id,
             configId: w.id,
             name: w.name,
             width: w.width,
             length: w.length,
-          })) || [],
-          placedCableTrays: plantSetup?.cableTrays?.map(c => ({
+            position: { x: 0, y: 0 },
+            rotation: 0,
+          })) || []) as PlacedWalkway[],
+          placedCableTrays: (plantSetup?.cableTrays?.map(c => ({
             id: c.id,
             configId: c.id,
             name: c.name,
             width: c.width,
             length: c.length,
-          })) || [],
+            position: { x: 0, y: 0 },
+            rotation: 0,
+          })) || []) as PlacedCableTray[],
         };
         setHistory([loadedState]);
         setHistoryIndex(0);
@@ -984,6 +990,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           onBackToBrowser={() => setViewMode('browser')}
           isCollapsed={isToolbarCollapsed}
           onToggleCollapse={() => setIsToolbarCollapsed(!isToolbarCollapsed)}
+          placementOrientation={placementOrientation}
+          setPlacementOrientation={setPlacementOrientation}
+          placementMinSpacing={placementMinSpacing}
+          setPlacementMinSpacing={setPlacementMinSpacing}
         />
       )}
       
@@ -1025,6 +1035,20 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         onCopyPvArray={readOnly ? undefined : handleCopyPvArray}
         onCopyRoofMask={readOnly ? undefined : handleCopyRoofMask}
         plantSetupConfig={plantSetupConfig}
+        placedWalkways={placedWalkways}
+        setPlacedWalkways={readOnly ? undefined : setPlacedWalkways}
+        placedCableTrays={placedCableTrays}
+        setPlacedCableTrays={readOnly ? undefined : setPlacedCableTrays}
+        pendingWalkwayConfig={
+          activeTool === Tool.PLACE_WALKWAY && plantSetupConfig.walkways.length > 0
+            ? plantSetupConfig.walkways.find(w => w.id === selectedWalkwayId) || plantSetupConfig.walkways[0]
+            : null
+        }
+        pendingCableTrayConfig={
+          activeTool === Tool.PLACE_CABLE_TRAY && plantSetupConfig.cableTrays.length > 0
+            ? plantSetupConfig.cableTrays.find(c => c.id === selectedCableTrayId) || plantSetupConfig.cableTrays[0]
+            : null
+        }
       />
 
       <SummaryPanel

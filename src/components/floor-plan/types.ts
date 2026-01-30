@@ -84,6 +84,8 @@ export enum Tool {
   PLACE_DC_COMBINER = 'place_dc_combiner',
   PLACE_AC_DISCONNECT = 'place_ac_disconnect',
   PLACE_MAIN_BOARD = 'place_main_board',
+  PLACE_WALKWAY = 'place_walkway',
+  PLACE_CABLE_TRAY = 'place_cable_tray',
 }
 
 // Placed instance of a walkway on the canvas/project
@@ -93,7 +95,9 @@ export interface PlacedWalkway {
   name: string;
   width: number;     // meters
   length: number;    // meters (specific to this placement)
-  position?: Point;  // Optional canvas position
+  position: Point;   // Canvas position (required for placed items)
+  rotation: number;  // Rotation in degrees
+  minSpacing?: number; // Minimum spacing in meters
 }
 
 // Placed instance of a cable tray on the canvas/project
@@ -103,7 +107,9 @@ export interface PlacedCableTray {
   name: string;
   width: number;     // meters
   length: number;    // meters (specific to this placement)
-  position?: Point;  // Optional canvas position
+  position: Point;   // Canvas position (required for placed items)
+  rotation: number;  // Rotation in degrees
+  minSpacing?: number; // Minimum spacing in meters
 }
 
 export interface DesignState {
