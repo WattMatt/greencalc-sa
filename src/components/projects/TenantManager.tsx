@@ -422,7 +422,14 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     let comparison = 0;
     switch (sortColumn) {
       case 'shop_number':
-        comparison = (a.shop_number || '').localeCompare(b.shop_number || '');
+        // Parse as numbers for numeric sorting, fallback to text comparison
+        const numA = parseFloat(a.shop_number || '') || 0;
+        const numB = parseFloat(b.shop_number || '') || 0;
+        if (numA !== 0 || numB !== 0) {
+          comparison = numA - numB;
+        } else {
+          comparison = (a.shop_number || '').localeCompare(b.shop_number || '');
+        }
         break;
       case 'shop_name':
         comparison = getTenantDisplayName(a).localeCompare(getTenantDisplayName(b));
