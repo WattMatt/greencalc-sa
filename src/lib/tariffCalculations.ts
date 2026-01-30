@@ -126,12 +126,21 @@ export function getCombinedRate(
 ): number {
   const seasonFilter = season === 'high' ? 'High/Winter' : 'Low/Summer';
   
+  // 1. First try: TOU-specific rate for the season
   let rate = rates.find(r => 
     r.time_of_use === timeOfUse && 
     (r.season === seasonFilter || r.season?.includes(season === 'high' ? 'High' : 'Low'))
   );
   
-  // Fallback to flat rate if no TOU-specific rate found
+  // 2. Fallback to "Any" TOU rate for the same season (seasonal non-TOU tariffs)
+  if (!rate) {
+    rate = rates.find(r => 
+      (r.time_of_use === 'Any' || !r.time_of_use) &&
+      (r.season === seasonFilter || r.season?.includes(season === 'high' ? 'High' : 'Low'))
+    );
+  }
+  
+  // 3. Final fallback: flat rate (All Year + Any TOU)
   if (!rate) {
     rate = rates.find(r => 
       (r.time_of_use === 'Any' || !r.time_of_use) &&
