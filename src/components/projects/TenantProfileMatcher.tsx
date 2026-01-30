@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 interface Tenant {
     id: string;
     name: string;
+    shop_number: string | null;
+    shop_name: string | null;
     area_sqm: number;
     shop_type_id: string | null;
     shop_types?: { name: string } | null;
@@ -57,18 +59,20 @@ export function TenantProfileMatcher({ projectId, tenants }: TenantProfileMatche
         if (!tenants || !meters) return [];
 
         return tenants.map(tenant => {
+            const tenantName = tenant.shop_name || tenant.name || '';
+            
             // 1. Try to find explicit match if we had that stored (future)
 
             // 2. Fuzzy match on name
             const exactNameMatch = meters.find(m =>
-                (m.shop_name && m.shop_name.toLowerCase() === tenant.name.toLowerCase()) ||
-                (m.meter_label && m.meter_label.toLowerCase() === tenant.name.toLowerCase())
+                (m.shop_name && m.shop_name.toLowerCase() === tenantName.toLowerCase()) ||
+                (m.meter_label && m.meter_label.toLowerCase() === tenantName.toLowerCase())
             );
 
             if (exactNameMatch) return { tenant, match: exactNameMatch, type: "exact" };
 
             const containsNameMatch = meters.find(m => {
-                const tName = tenant.name.toLowerCase();
+                const tName = tenantName.toLowerCase();
                 const mName = m.shop_name?.toLowerCase();
                 const mLabel = m.meter_label?.toLowerCase();
 
@@ -170,7 +174,12 @@ export function TenantProfileMatcher({ projectId, tenants }: TenantProfileMatche
                             <div key={tenant.id} className="flex items-center gap-4 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                        <p className="font-medium truncate">{tenant.name}</p>
+                                        <p className="font-medium truncate">
+                                            {tenant.shop_number && (
+                                                <span className="text-muted-foreground mr-1">{tenant.shop_number}</span>
+                                            )}
+                                            {tenant.shop_name || tenant.name}
+                                        </p>
                                         {tenant.shop_types && (
                                             <Badge variant="outline" className="text-xs">
                                                 {tenant.shop_types.name}

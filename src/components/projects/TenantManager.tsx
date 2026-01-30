@@ -28,6 +28,8 @@ import { ScaledMeterPreview } from "./ScaledMeterPreview";
 interface Tenant {
   id: string;
   name: string;
+  shop_number: string | null;
+  shop_name: string | null;
   area_sqm: number;
   shop_type_id: string | null;
   scada_import_id: string | null;
@@ -223,14 +225,14 @@ function getSortedProfilesWithSuggestions(
 }
 
 // Sorting state type
-type SortColumn = 'name' | 'area' | 'kwh';
+type SortColumn = 'shop_number' | 'shop_name' | 'area' | 'kwh';
 type SortDirection = 'asc' | 'desc';
 
 export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [newTenant, setNewTenant] = useState({ name: "", area_sqm: "", scada_import_id: "" });
+  const [newTenant, setNewTenant] = useState({ shop_number: "", shop_name: "", area_sqm: "", scada_import_id: "" });
   const [profilePopoverOpen, setProfilePopoverOpen] = useState(false);
   const [addDialogSortByArea, setAddDialogSortByArea] = useState(false);
   
@@ -249,7 +251,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   const [previewContext, setPreviewContext] = useState<{ meter: ScadaImport; tenant: Tenant } | null>(null);
   
   // Edit tenant state
-  const [editTenant, setEditTenant] = useState<{ id: string; name: string; area_sqm: string } | null>(null);
+  const [editTenant, setEditTenant] = useState<{ id: string; shop_number: string; shop_name: string; area_sqm: string } | null>(null);
   
   // Table sorting state
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
@@ -293,10 +295,14 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   });
 
   const addTenant = useMutation({
-    mutationFn: async (tenant: { name: string; area_sqm: number; scada_import_id: string | null }) => {
+    mutationFn: async (tenant: { shop_number: string | null; shop_name: string; area_sqm: number; scada_import_id: string | null }) => {
       const { error } = await supabase.from("project_tenants").insert({
         project_id: projectId,
-        ...tenant,
+        name: tenant.shop_name, // Keep name for backwards compatibility
+        shop_number: tenant.shop_number,
+        shop_name: tenant.shop_name,
+        area_sqm: tenant.area_sqm,
+        scada_import_id: tenant.scada_import_id,
       });
       if (error) throw error;
     },
@@ -304,7 +310,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
       toast.success("Tenant added");
       setDialogOpen(false);
-      setNewTenant({ name: "", area_sqm: "", scada_import_id: "" });
+      setNewTenant({ shop_number: "", shop_name: "", area_sqm: "", scada_import_id: "" });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -351,10 +357,15 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   });
 
   const updateTenant = useMutation({
-    mutationFn: async ({ tenantId, name, area_sqm }: { tenantId: string; name: string; area_sqm: number }) => {
+    mutationFn: async ({ tenantId, shop_number, shop_name, area_sqm }: { tenantId: string; shop_number: string | null; shop_name: string; area_sqm: number }) => {
       const { error } = await supabase
         .from("project_tenants")
-        .update({ name, area_sqm })
+        .update({ 
+          name: shop_name, // Keep name for backwards compatibility
+          shop_number,
+          shop_name,
+          area_sqm 
+        })
         .eq("id", tenantId);
       if (error) throw error;
     },
@@ -381,6 +392,11 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       setSortDirection('asc');
     }
   };
+  
+  // Get display name for tenant (shop_name or fallback to name)
+  const getTenantDisplayName = (tenant: Tenant): string => {
+    return tenant.shop_name || tenant.name || '';
+  };
 
   // Calculate kWh for a tenant (used for sorting)
   const calculateTenantKwh = (tenant: Tenant): number => {
@@ -405,8 +421,11 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     
     let comparison = 0;
     switch (sortColumn) {
-      case 'name':
-        comparison = a.name.localeCompare(b.name);
+      case 'shop_number':
+        comparison = (a.shop_number || '').localeCompare(b.shop_number || '');
+        break;
+      case 'shop_name':
+        comparison = getTenantDisplayName(a).localeCompare(getTenantDisplayName(b));
         break;
       case 'area':
         comparison = (Number(a.area_sqm) || 0) - (Number(b.area_sqm) || 0);
@@ -435,15 +454,20 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         throw new Error(errorMsg);
       }
       
-      // Find name and area columns
-      const nameIdx = headers.findIndex((h) => 
-        h.includes("name") || h.includes("tenant") || h.includes("shop")
+      // Find shop_number, shop_name/name, and area columns
+      const shopNumberIdx = headers.findIndex((h) => 
+        h.includes("shop_number") || h.includes("shop number") || h.includes("unit") || 
+        (h.includes("number") && !h.includes("phone"))
+      );
+      const shopNameIdx = headers.findIndex((h) => 
+        h.includes("shop_name") || h.includes("shop name") || h.includes("tenant") || 
+        h.includes("name") || h.includes("shop")
       );
       const areaIdx = headers.findIndex((h) => 
         h.includes("area") || h.includes("sqm") || h.includes("size") || h.includes("m2") || h.includes("m²")
       );
 
-      if (nameIdx === -1 || areaIdx === -1) {
+      if (shopNameIdx === -1 || areaIdx === -1) {
         const detection = detectCsvType(parsedData.headers);
         const errorMsg = buildMismatchErrorMessage("tenant-list", detection, parsedData.headers);
         throw new Error(errorMsg || `Missing required columns. Need 'name' and 'area' columns.\nFound: ${parsedData.headers.join(", ")}`);
@@ -451,14 +475,17 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
 
       const tenantsToInsert = [];
       for (const row of parsedData.rows) {
-        const name = row[nameIdx]?.trim();
+        const shopNumber = shopNumberIdx !== -1 ? row[shopNumberIdx]?.trim() || null : null;
+        const shopName = row[shopNameIdx]?.trim();
         const areaStr = row[areaIdx]?.replace(/[^\d.]/g, "");
         const area = parseFloat(areaStr);
         
-        if (name && !isNaN(area) && area > 0) {
+        if (shopName && !isNaN(area) && area > 0) {
           tenantsToInsert.push({
             project_id: projectId,
-            name,
+            name: shopName, // Keep for backwards compatibility
+            shop_number: shopNumber,
+            shop_name: shopName,
             area_sqm: area,
           });
         }
@@ -508,7 +535,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   };
 
   const downloadTemplate = () => {
-    const csv = "name,area_sqm\nWoolworths,850\nPick n Pay,1200\nCape Union Mart,320\n";
+    const csv = "shop_number,shop_name,area_sqm\nG12,Woolworths,850\nG15,Pick n Pay,1200\nL01,Cape Union Mart,320\n";
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -570,13 +597,23 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                 <DialogTitle>Add Tenant</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Shop Name</Label>
-                  <Input
-                    placeholder="e.g., Woolworths"
-                    value={newTenant.name}
-                    onChange={(e) => setNewTenant({ ...newTenant, name: e.target.value })}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Shop Number</Label>
+                    <Input
+                      placeholder="e.g., G12"
+                      value={newTenant.shop_number}
+                      onChange={(e) => setNewTenant({ ...newTenant, shop_number: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Shop Name</Label>
+                    <Input
+                      placeholder="e.g., Woolworths"
+                      value={newTenant.shop_name}
+                      onChange={(e) => setNewTenant({ ...newTenant, shop_name: e.target.value })}
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Area (m²)</Label>
@@ -638,7 +675,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                           <CommandEmpty>No profile found.</CommandEmpty>
                           <CommandGroup>
                             {getSortedProfilesWithSuggestions(
-                              newTenant.name,
+                              newTenant.shop_name,
                               parseFloat(newTenant.area_sqm) || 0,
                               scadaImports || [],
                               addDialogSortByArea
@@ -681,12 +718,13 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                   className="w-full"
                   onClick={() =>
                     addTenant.mutate({
-                      name: newTenant.name,
+                      shop_number: newTenant.shop_number || null,
+                      shop_name: newTenant.shop_name,
                       area_sqm: parseFloat(newTenant.area_sqm),
                       scada_import_id: newTenant.scada_import_id || null,
                     })
                   }
-                  disabled={!newTenant.name || !newTenant.area_sqm}
+                  disabled={!newTenant.shop_name || !newTenant.area_sqm}
                 >
                   Add Tenant
                 </Button>
@@ -731,13 +769,26 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[100px]">
+                  <button 
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                    onClick={() => handleSort('shop_number')}
+                  >
+                    Shop #
+                    {sortColumn === 'shop_number' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-50" />
+                    )}
+                  </button>
+                </TableHead>
                 <TableHead>
                   <button 
                     className="flex items-center gap-1 hover:text-foreground transition-colors"
-                    onClick={() => handleSort('name')}
+                    onClick={() => handleSort('shop_name')}
                   >
-                    Tenant Name
-                    {sortColumn === 'name' ? (
+                    Shop Name
+                    {sortColumn === 'shop_name' ? (
                       sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                     ) : (
                       <ArrowUpDown className="h-3 w-3 opacity-50" />
@@ -809,7 +860,8 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
 
                 return (
                   <TableRow key={tenant.id}>
-                    <TableCell className="font-medium">{tenant.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{tenant.shop_number || '-'}</TableCell>
+                    <TableCell className="font-medium">{getTenantDisplayName(tenant)}</TableCell>
                     <TableCell>{tenantArea.toLocaleString()}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -973,7 +1025,8 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                           <DropdownMenuItem
                             onClick={() => setEditTenant({ 
                               id: tenant.id, 
-                              name: tenant.name, 
+                              shop_number: tenant.shop_number || '', 
+                              shop_name: tenant.shop_name || tenant.name || '',
                               area_sqm: String(tenant.area_sqm)
                             })}
                           >
@@ -1095,13 +1148,23 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
             <DialogTitle>Edit Tenant</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Shop Name</Label>
-              <Input
-                placeholder="e.g., Woolworths"
-                value={editTenant?.name || ""}
-                onChange={(e) => setEditTenant(prev => prev ? { ...prev, name: e.target.value } : null)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Shop Number</Label>
+                <Input
+                  placeholder="e.g., G12"
+                  value={editTenant?.shop_number || ""}
+                  onChange={(e) => setEditTenant(prev => prev ? { ...prev, shop_number: e.target.value } : null)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Shop Name</Label>
+                <Input
+                  placeholder="e.g., Woolworths"
+                  value={editTenant?.shop_name || ""}
+                  onChange={(e) => setEditTenant(prev => prev ? { ...prev, shop_name: e.target.value } : null)}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Area (m²)</Label>
@@ -1118,12 +1181,13 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                 if (editTenant) {
                   updateTenant.mutate({
                     tenantId: editTenant.id,
-                    name: editTenant.name,
+                    shop_number: editTenant.shop_number || null,
+                    shop_name: editTenant.shop_name,
                     area_sqm: parseFloat(editTenant.area_sqm),
                   });
                 }
               }}
-              disabled={!editTenant?.name || !editTenant?.area_sqm || updateTenant.isPending}
+              disabled={!editTenant?.shop_name || !editTenant?.area_sqm || updateTenant.isPending}
             >
               {updateTenant.isPending ? "Saving..." : "Save Changes"}
             </Button>
