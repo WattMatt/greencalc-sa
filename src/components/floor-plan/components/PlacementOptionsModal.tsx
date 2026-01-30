@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
 import { Tool } from '../types';
+import { DimensionInput } from './DimensionInput';
 
 export type PlacementItemType = 'inverter' | 'walkway' | 'cable_tray' | 'dc_combiner' | 'ac_disconnect' | 'main_board';
 
@@ -73,17 +74,17 @@ export function PlacementOptionsModal({
   onConfirm,
 }: PlacementOptionsModalProps) {
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>(defaultOrientation);
-  const [minSpacing, setMinSpacing] = useState<string>(String(defaultMinSpacing));
+  const [minSpacing, setMinSpacing] = useState<number>(defaultMinSpacing);
 
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
       setOrientation(defaultOrientation);
-      setMinSpacing(String(defaultMinSpacing));
+      setMinSpacing(defaultMinSpacing);
     }
   }, [isOpen, defaultOrientation, defaultMinSpacing]);
 
-  const spacingNum = parseFloat(minSpacing) || 0.3;
+  const spacingNum = minSpacing;
   const itemLabel = itemName || ITEM_TYPE_LABELS[itemType];
 
   // Calculate displayed dimensions based on orientation
@@ -127,15 +128,10 @@ export function PlacementOptionsModal({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="placement-spacing">Minimum Spacing (m)</Label>
-            <Input
-              id="placement-spacing"
-              type="number"
-              min="0"
-              max="10"
-              step="0.1"
+            <DimensionInput
+              label="Minimum Spacing"
               value={minSpacing}
-              onChange={(e) => setMinSpacing(e.target.value)}
+              onChange={setMinSpacing}
             />
             <p className="text-xs text-muted-foreground">
               Minimum gap between placed items for maintenance access.

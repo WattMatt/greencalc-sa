@@ -8,8 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { DimensionInput } from './DimensionInput';
 
 interface ScaleModalProps {
   isOpen: boolean;
@@ -19,13 +18,12 @@ interface ScaleModalProps {
 }
 
 export function ScaleModal({ isOpen, onClose, pixelDistance, onConfirm }: ScaleModalProps) {
-  const [realDistance, setRealDistance] = useState<string>('');
+  const [realDistance, setRealDistance] = useState<number>(0);
 
   const handleConfirm = () => {
-    const distance = parseFloat(realDistance);
-    if (!isNaN(distance) && distance > 0) {
-      onConfirm(distance);
-      setRealDistance('');
+    if (realDistance > 0) {
+      onConfirm(realDistance);
+      setRealDistance(0);
     }
   };
 
@@ -41,31 +39,22 @@ export function ScaleModal({ isOpen, onClose, pixelDistance, onConfirm }: ScaleM
         </DialogHeader>
         
         <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="distance">Real-world distance (meters)</Label>
-            <Input
-              id="distance"
-              type="number"
-              step="0.01"
-              min="0.01"
-              placeholder="e.g., 10.5"
-              value={realDistance}
-              onChange={(e) => setRealDistance(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
-              autoFocus
-            />
-          </div>
+          <DimensionInput
+            label="Real-world distance"
+            value={realDistance}
+            onChange={setRealDistance}
+          />
           
-          {realDistance && !isNaN(parseFloat(realDistance)) && parseFloat(realDistance) > 0 && (
+          {realDistance > 0 && (
             <p className="text-sm text-muted-foreground">
-              Scale ratio: {(parseFloat(realDistance) / pixelDistance * 1000).toFixed(2)} mm/pixel
+              Scale ratio: {(realDistance / pixelDistance * 1000).toFixed(2)} mm/pixel
             </p>
           )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleConfirm} disabled={!realDistance || parseFloat(realDistance) <= 0}>
+          <Button onClick={handleConfirm} disabled={realDistance <= 0}>
             Set Scale
           </Button>
         </DialogFooter>

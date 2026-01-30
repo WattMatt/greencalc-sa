@@ -15,6 +15,7 @@ import { PanelOrientation, PVPanelConfig } from '../types';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, Settings2 } from 'lucide-react';
+import { DimensionInput } from './DimensionInput';
 
 export interface PVArrayConfig {
   rows: number;
@@ -36,7 +37,7 @@ export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm, initia
   const [rows, setRows] = useState<string>('2');
   const [columns, setColumns] = useState<string>('10');
   const [orientation, setOrientation] = useState<PanelOrientation>('portrait');
-  const [minSpacing, setMinSpacing] = useState<string>('0.5');
+  const [minSpacing, setMinSpacing] = useState<number>(0.5);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Reset form when modal opens, using initial values if editing
@@ -46,12 +47,12 @@ export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm, initia
         setRows(String(initialConfig.rows));
         setColumns(String(initialConfig.columns));
         setOrientation(initialConfig.orientation);
-        setMinSpacing(String(initialConfig.minSpacing ?? 0.5));
+        setMinSpacing(initialConfig.minSpacing ?? 0.5);
       } else {
         setRows('2');
         setColumns('10');
         setOrientation('portrait');
-        setMinSpacing('0.5');
+        setMinSpacing(0.5);
       }
     }
   }, [isOpen, initialConfig]);
@@ -60,7 +61,7 @@ export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm, initia
   const colsNum = parseInt(columns) || 1;
   const panelCount = rowsNum * colsNum;
   const capacityKwp = (panelCount * pvPanelConfig.wattage) / 1000;
-  const spacingNum = parseFloat(minSpacing) || 0;
+  const spacingNum = minSpacing;
 
   // Calculate array dimensions
   const panelW = orientation === 'portrait' ? pvPanelConfig.width : pvPanelConfig.length;
@@ -145,15 +146,10 @@ export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm, initia
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-3 space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="minSpacing">Minimum Spacing Between Arrays (m)</Label>
-                <Input
-                  id="minSpacing"
-                  type="number"
-                  min="0"
-                  max="10"
-                  step="0.1"
+                <DimensionInput
+                  label="Minimum Spacing Between Arrays"
                   value={minSpacing}
-                  onChange={(e) => setMinSpacing(e.target.value)}
+                  onChange={setMinSpacing}
                 />
                 <p className="text-xs text-muted-foreground">
                   Minimum gap between array groups for walkways and maintenance access.
