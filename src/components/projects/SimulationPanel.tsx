@@ -1815,6 +1815,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           advancedConfig,
           lossCalculationMode,
           productionReductionPercent,
+          moduleCount: moduleMetrics.moduleCount,
         }}
         currentResults={{
           totalDailyLoad: energyResults.totalDailyLoad,
