@@ -1,79 +1,236 @@
 
-## Goal
-Make placed inverters behave like other selectable items (PV arrays, roof masks):
-- Click an inverter on the canvas to select it (highlight + enables keyboard delete).
-- Delete an inverter from the Project Summary dropdown reliably.
 
-## What’s happening now (root cause)
-The canvas selection logic (`Canvas.tsx`) only hit-tests PV arrays and roof masks. It never checks “equipment” items (inverters, combiner, etc.), so clicking an inverter can’t select it.
+# Toolbar Reorganization & Placement Configuration Plan
 
-Deletion from the Project Summary should theoretically work (it calls `onDeleteItem(inv.id)`), but in practice it can fail if:
-- the inverter list filter doesn’t match the stored `type` values in all cases (string vs enum), or
-- the click event gets swallowed/treated like a selection click (needs `preventDefault` + `stopPropagation` consistently).
-
-## Proposed changes
-
-### 1) Add equipment hit-testing + selection on the canvas
-**File:** `src/components/floor-plan/components/Canvas.tsx`
-
-**Implementation approach:**
-- In the `handleMouseDown` block for `Tool.SELECT`:
-  1. Keep existing priority: PV Arrays (topmost) first.
-  2. Then Roof Masks.
-  3. Then add a new step: detect if the click hits an equipment icon (inverter etc.) and select it.
-  4. Otherwise clear selection.
-
-**How to hit-test equipment (simple + consistent with drawing):**
-- Reuse the same size logic used in `drawEquipmentIcon`:
-  - If `scaleInfo.ratio` exists: `sizePx = EQUIPMENT_REAL_WORLD_SIZES[type] / scaleInfo.ratio`
-  - Else fallback to `fixedSize = 12 / zoom` style sizing (or a small constant adjusted by zoom).
-- Use a conservative axis-aligned bounding box around the item’s center:
-  - `abs(worldPos.x - item.position.x) <= sizePx/2 + padding`
-  - `abs(worldPos.y - item.position.y) <= sizePx/2 + padding`
-- Iterate equipment in reverse order so the most recently placed (visually “top”) wins, similar to PV arrays.
-
-**Notes / edge cases:**
-- Ignore rotation in the hit test initially (simple bounding box). This is good enough for selection and matches user expectations.
-- Later enhancement (optional) could do rotated-rect hit testing, but not needed to solve the issue.
-
-**Expected outcome:**
-- Clicking an inverter selects it.
-- `selectedItemId` becomes the inverter’s id.
-- Highlighting already works because `renderAllMarkups()` passes `selectedItemId` into `drawEquipmentIcon`.
+## Overview
+This plan reorganizes the PV Layout Toolbar dropdowns, adds new placement tools for walkways and cable trays, and introduces configuration options (orientation and spacing) for inverters, walkways, and cable trays before placement.
 
 ---
 
-### 2) Make inverter deletion from the Summary Panel robust
-**File:** `src/components/floor-plan/components/SummaryPanel.tsx`
+## Summary of Changes
 
-**Implementation approach:**
-- Ensure filtering uses the enum value (or otherwise matches actual stored values):
-  - Replace `e.type === 'Inverter'` with `e.type === EquipmentType.INVERTER` by importing `EquipmentType` from `../types`.
-- Harden delete click handling:
-  - In the trash button `onClick`, call `e.preventDefault()` + `e.stopPropagation()` before invoking `onDeleteItem(inv.id)`.
-  - This prevents the click from being interpreted as a selection click or triggering any parent handlers.
+### 1. Toolbar Dropdown Reorganization
+- **Rename** "Roof & Arrays" → "Roof Masks"
+- **Rename** "Draw Roof Mask" → "Roof Mask" (remove "Draw" prefix)
+- **Move** "Place PV Array" to "Equipment" dropdown, renamed to "Solar Module"
+- **Reorder** dropdowns: File → General → Plant Setup → **Roof Masks** → **Equipment** → **Materials**
+- **Rename** "Cabling" → "Materials"
+- **Move** DC Combiner and AC Disconnect from Equipment to Materials
+- **Add** Walkway and Cable Tray tools to "Materials" section
 
-**Expected outcome:**
-- Clicking the trash icon reliably deletes that inverter instance (calls `handleDeleteItem`, which filters `equipment` by id).
-- Works regardless of whether `type` is represented as a string literal or enum in persisted data.
+### 2. New Dropdown Structure
+
+**Roof Masks** (was "Roof & Arrays"):
+- Roof Mask (with copy button)
+
+**Equipment** (moved above Materials):
+- Solar Module (was "Place PV Array", with copy button)
+- Inverter
+- Main Board
+
+**Materials** (was "Cabling"):
+- DC Cable
+- AC Cable
+- DC Combiner (moved from Equipment)
+- AC Disconnect (moved from Equipment)
+- Walkway (NEW)
+- Cable Tray (NEW)
+
+### 3. New Tool Types
+Add two new tool types to the `Tool` enum:
+- `PLACE_WALKWAY = 'place_walkway'`
+- `PLACE_CABLE_TRAY = 'place_cable_tray'`
+
+### 4. Placement Configuration
+When selecting inverter, walkway, or cable tray tools, show inline controls for:
+- **Orientation** selector (portrait/landscape)
+- **Minimum Spacing** input (in meters, default 0.3m)
+
+### 5. Canvas Updates
+- Ghost previews for walkway and cable tray placement
+- Snapping/alignment logic for new items
+- Placement click handlers
 
 ---
 
-### 3) Verification checklist (manual tests)
-1. Place an inverter using the Equipment tool.
-2. Switch to Select tool.
-3. Click the inverter on the canvas:
-   - It should highlight (selected state).
-4. Press Delete/Backspace:
-   - The inverter should be removed.
-5. Open Project Summary → Inverters:
-   - Confirm the inverter appears in the list.
-6. Click the trash icon for that inverter:
-   - It should be removed immediately.
+## Technical Implementation Details
 
-## Optional follow-up (nice-to-have, not required for the fix)
-- Add equipment dragging in Select mode (similar to PV arrays) once selection works:
-  - drag start when clicking selected equipment,
-  - update equipment position on mouse move,
-  - release on mouse up.
-This would improve usability but is not necessary to resolve the current “cannot select” blocker.
+### File: `src/components/floor-plan/types.ts`
+
+Add new tool types and update interfaces:
+
+```typescript
+export enum Tool {
+  // ...existing tools...
+  PLACE_WALKWAY = 'place_walkway',
+  PLACE_CABLE_TRAY = 'place_cable_tray',
+}
+
+// Update PlacedWalkway with rotation and spacing
+export interface PlacedWalkway {
+  id: string;
+  configId: string;
+  name: string;
+  width: number;
+  length: number;
+  position: Point;
+  rotation: number;
+  minSpacing?: number;
+}
+
+// Update PlacedCableTray with rotation and spacing
+export interface PlacedCableTray {
+  id: string;
+  configId: string;
+  name: string;
+  width: number;
+  length: number;
+  position: Point;
+  rotation: number;
+  minSpacing?: number;
+}
+```
+
+### File: `src/components/floor-plan/components/Toolbar.tsx`
+
+**Section State Keys Update:**
+```typescript
+const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+  file: true,
+  general: false,
+  plantSetup: false,
+  roofMasks: false,
+  equipment: false,
+  materials: false,
+});
+```
+
+**New Section Order and Contents:**
+
+1. **Roof Masks**:
+   - Roof Mask (Tool.ROOF_MASK) + copy button
+
+2. **Equipment**:
+   - Solar Module (Tool.PV_ARRAY) + copy button
+   - Inverter (Tool.PLACE_INVERTER)
+   - Main Board (Tool.PLACE_MAIN_BOARD)
+
+3. **Materials**:
+   - DC Cable (Tool.LINE_DC)
+   - AC Cable (Tool.LINE_AC)
+   - DC Combiner (Tool.PLACE_DC_COMBINER)
+   - AC Disconnect (Tool.PLACE_AC_DISCONNECT)
+   - Walkway (Tool.PLACE_WALKWAY) - NEW
+   - Cable Tray (Tool.PLACE_CABLE_TRAY) - NEW
+
+**Configuration Controls:**
+Show orientation, spacing, and rotation controls when these tools are active:
+- `Tool.PLACE_INVERTER`
+- `Tool.PLACE_WALKWAY`
+- `Tool.PLACE_CABLE_TRAY`
+
+### File: `src/components/floor-plan/utils/drawing.ts`
+
+Add rendering functions for walkways and cable trays:
+
+```typescript
+export function drawWalkway(
+  ctx: CanvasRenderingContext2D,
+  walkway: PlacedWalkway,
+  isSelected: boolean,
+  zoom: number,
+  scaleInfo: ScaleInfo
+) {
+  // Draw hatched rectangle for walkway
+  // Color: light gray with diagonal stripe pattern
+}
+
+export function drawCableTray(
+  ctx: CanvasRenderingContext2D,
+  tray: PlacedCableTray,
+  isSelected: boolean,
+  zoom: number,
+  scaleInfo: ScaleInfo
+) {
+  // Draw rectangle with ladder/rail pattern
+  // Color: dark gray or metallic appearance
+}
+```
+
+### File: `src/components/floor-plan/components/Canvas.tsx`
+
+**Mouse Tracking Updates:**
+```typescript
+const placementTools = [
+  Tool.PV_ARRAY,
+  Tool.PLACE_INVERTER,
+  Tool.PLACE_DC_COMBINER,
+  Tool.PLACE_AC_DISCONNECT,
+  Tool.PLACE_MAIN_BOARD,
+  Tool.PLACE_WALKWAY,
+  Tool.PLACE_CABLE_TRAY,
+];
+```
+
+**Ghost Preview Rendering:**
+- Add walkway ghost preview with configured dimensions and rotation
+- Add cable tray ghost preview with configured dimensions and rotation
+- Apply snapping logic to both
+
+**Placement Handlers:**
+- Handle click events for placing walkways (add to placedWalkways array)
+- Handle click events for placing cable trays (add to placedCableTrays array)
+
+### File: `src/components/floor-plan/FloorPlanMarkup.tsx`
+
+Wire up new state and pass props to Canvas and Toolbar:
+- Pending walkway/cable tray configuration state
+- Handlers for adding placed walkways and cable trays
+- Pass placedWalkways and placedCableTrays to Canvas for rendering
+
+---
+
+## Visual Changes Summary
+
+```text
+Before:                          After:
+├── File                         ├── File
+├── General                      ├── General
+├── Plant Setup                  ├── Plant Setup
+├── Roof & Arrays                ├── Roof Masks
+│   ├── Draw Roof Mask           │   └── Roof Mask
+│   └── Place PV Array           ├── Equipment
+├── Cabling                      │   ├── Solar Module
+│   ├── DC Cable                 │   ├── Inverter
+│   └── AC Cable                 │   └── Main Board
+└── Equipment                    └── Materials
+    ├── Inverter                     ├── DC Cable
+    ├── DC Combiner                  ├── AC Cable
+    ├── AC Disconnect                ├── DC Combiner
+    └── Main Board                   ├── AC Disconnect
+                                     ├── Walkway
+                                     └── Cable Tray
+```
+
+---
+
+## Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| `src/components/floor-plan/types.ts` | Modify - Add new tools and update interfaces |
+| `src/components/floor-plan/components/Toolbar.tsx` | Modify - Reorganize dropdowns and add config controls |
+| `src/components/floor-plan/utils/drawing.ts` | Modify - Add walkway/cable tray rendering |
+| `src/components/floor-plan/components/Canvas.tsx` | Modify - Add ghost previews and placement handlers |
+| `src/components/floor-plan/FloorPlanMarkup.tsx` | Modify - Wire up new state and props |
+
+---
+
+## Implementation Order
+
+1. **Types** - Add new Tool enum values and update placed item interfaces
+2. **Toolbar** - Reorganize dropdowns, rename labels, add inline config controls
+3. **Drawing Utils** - Add walkway and cable tray rendering functions
+4. **Canvas** - Add ghost previews, snapping, and placement handlers
+5. **FloorPlanMarkup** - Wire up state and pass props to child components
+
