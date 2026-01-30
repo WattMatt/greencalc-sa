@@ -679,7 +679,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [isRKeyHeld, setIsRKeyHeld] = useState(false);
   const isRKeyHeldRef = useRef(false);
 
-  // Delete an item by ID (PV array, roof mask, equipment, or line)
+  // Delete an item by ID (PV array, roof mask, equipment, line, walkway, or cable tray)
   const handleDeleteItem = useCallback((id: string) => {
     // Try deleting PV array
     if (pvArrays.some(arr => arr.id === id)) {
@@ -712,7 +712,23 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       toast.success('Cable deleted');
       return;
     }
-  }, [selectedItemId, pvArrays, roofMasks, equipment, lines, setPvArrays, setRoofMasks, setEquipment, setLines]);
+    
+    // Try deleting placed walkway
+    if (placedWalkways.some(w => w.id === id)) {
+      setPlacedWalkways(prev => prev.filter(w => w.id !== id));
+      if (selectedItemId === id) setSelectedItemId(null);
+      toast.success('Walkway deleted');
+      return;
+    }
+    
+    // Try deleting placed cable tray
+    if (placedCableTrays.some(c => c.id === id)) {
+      setPlacedCableTrays(prev => prev.filter(c => c.id !== id));
+      if (selectedItemId === id) setSelectedItemId(null);
+      toast.success('Cable tray deleted');
+      return;
+    }
+  }, [selectedItemId, pvArrays, roofMasks, equipment, lines, placedWalkways, placedCableTrays, setPvArrays, setRoofMasks, setEquipment, setLines, setPlacedWalkways, setPlacedCableTrays]);
 
   // Delete selected item (wrapper for keyboard shortcut)
   const handleDeleteSelectedItem = useCallback(() => {
@@ -926,6 +942,12 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         return;
       }
       
+      // Check if placing equipment/walkway/cable tray (update placement rotation)
+      if (PLACEMENT_TOOLS.includes(activeTool)) {
+        setPlacementRotation(prev => ((prev + delta) % 360 + 360) % 360);
+        return;
+      }
+      
       // Check if a PV array is selected for rotation
       if (selectedItemId && pvArrays.some(arr => arr.id === selectedItemId)) {
         setPvArrays(prev => prev.map(arr => 
@@ -933,13 +955,44 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
             ? { ...arr, rotation: ((arr.rotation + delta) % 360 + 360) % 360 }
             : arr
         ));
+        return;
+      }
+      
+      // Check if a placed walkway is selected for rotation
+      if (selectedItemId && placedWalkways.some(w => w.id === selectedItemId)) {
+        setPlacedWalkways(prev => prev.map(w => 
+          w.id === selectedItemId 
+            ? { ...w, rotation: (((w.rotation || 0) + delta) % 360 + 360) % 360 }
+            : w
+        ));
+        return;
+      }
+      
+      // Check if a placed cable tray is selected for rotation
+      if (selectedItemId && placedCableTrays.some(c => c.id === selectedItemId)) {
+        setPlacedCableTrays(prev => prev.map(c => 
+          c.id === selectedItemId 
+            ? { ...c, rotation: (((c.rotation || 0) + delta) % 360 + 360) % 360 }
+            : c
+        ));
+        return;
+      }
+      
+      // Check if equipment is selected for rotation
+      if (selectedItemId && equipment.some(eq => eq.id === selectedItemId)) {
+        setEquipment(prev => prev.map(eq => 
+          eq.id === selectedItemId 
+            ? { ...eq, rotation: ((eq.rotation + delta) % 360 + 360) % 360 }
+            : eq
+        ));
+        return;
       }
     };
     
     // Use capture phase to intercept before Canvas wheel handler
     window.addEventListener('wheel', handleWheel, { passive: false, capture: true });
     return () => window.removeEventListener('wheel', handleWheel, { capture: true });
-  }, [readOnly, selectedItemId, pvArrays, setPvArrays, activeTool, pendingPvArrayConfig]);
+  }, [readOnly, selectedItemId, pvArrays, setPvArrays, placedWalkways, setPlacedWalkways, placedCableTrays, setPlacedCableTrays, equipment, setEquipment, activeTool, pendingPvArrayConfig, PLACEMENT_TOOLS]);
 
   const handleImageLoad = (imageBase64: string) => {
     if (readOnly) return;
