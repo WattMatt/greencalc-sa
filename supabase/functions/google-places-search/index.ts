@@ -5,32 +5,27 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface PlacePrediction {
-  place_id: string;
-  description: string;
-  structured_formatting: {
-    main_text: string;
-    secondary_text: string;
+interface AutocompleteSuggestion {
+  placePrediction: {
+    placeId: string;
+    text: { text: string };
+    structuredFormat: {
+      mainText: { text: string };
+      secondaryText: { text: string };
+    };
   };
 }
 
 interface AutocompleteResponse {
-  predictions: PlacePrediction[];
-  status: string;
+  suggestions?: AutocompleteSuggestion[];
+  error?: { message: string; status: string };
 }
 
 interface PlaceDetailsResponse {
-  result: {
-    geometry: {
-      location: {
-        lat: number;
-        lng: number;
-      };
-    };
-    formatted_address: string;
-    name: string;
-  };
-  status: string;
+  location?: { latitude: number; longitude: number };
+  formattedAddress?: string;
+  displayName?: { text: string };
+  error?: { message: string; status: string };
 }
 
 serve(async (req) => {
@@ -55,25 +50,42 @@ serve(async (req) => {
     if (place_id) {
       console.log(`Fetching place details for: ${place_id}`);
       
-      const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(place_id)}&fields=geometry,formatted_address,name&key=${apiKey}`;
+      // Use Places API (New) - Place Details
+      const detailsUrl = `https://places.googleapis.com/v1/places/${place_id}`;
       
-      const response = await fetch(detailsUrl);
+      const response = await fetch(detailsUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "location,formattedAddress,displayName"
+        }
+      });
+      
       const data = await response.json() as PlaceDetailsResponse;
       
-      if (data.status !== "OK") {
-        console.error(`Place Details API error: ${data.status}`);
+      if (data.error) {
+        console.error(`Place Details API error: ${data.error.status} - ${data.error.message}`);
         return new Response(
-          JSON.stringify({ error: `Place details failed: ${data.status}` }),
+          JSON.stringify({ error: `Place details failed: ${data.error.message}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      if (!data.location) {
+        console.error("No location data in response");
+        return new Response(
+          JSON.stringify({ error: "No location data found" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
       const result = {
         success: true,
-        latitude: data.result.geometry.location.lat,
-        longitude: data.result.geometry.location.lng,
-        place_name: data.result.formatted_address,
-        name: data.result.name
+        latitude: data.location.latitude,
+        longitude: data.location.longitude,
+        place_name: data.formattedAddress || "",
+        name: data.displayName?.text || ""
       };
       
       console.log(`Place details: ${result.place_name} (${result.latitude}, ${result.longitude})`);
@@ -94,28 +106,39 @@ serve(async (req) => {
 
     console.log(`Searching for: ${query}`);
 
-    // Use Places Autocomplete API
-    // Bias to South Africa with components and location
-    const autocompleteUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&components=country:za&key=${apiKey}`;
+    // Use Places API (New) - Autocomplete
+    const autocompleteUrl = "https://places.googleapis.com/v1/places:autocomplete";
     
-    const response = await fetch(autocompleteUrl);
-    const data = await response.json() as AutocompleteResponse & { error_message?: string };
+    const response = await fetch(autocompleteUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey
+      },
+      body: JSON.stringify({
+        input: query,
+        includedRegionCodes: ["ZA"],
+        languageCode: "en"
+      })
+    });
     
-    console.log(`Places API response status: ${data.status}, error: ${data.error_message || 'none'}`);
+    const data = await response.json() as AutocompleteResponse;
     
-    if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-      console.error(`Places API error: ${data.status} - ${data.error_message}`);
+    console.log(`Places API response: ${JSON.stringify(data).substring(0, 200)}`);
+    
+    if (data.error) {
+      console.error(`Places API error: ${data.error.status} - ${data.error.message}`);
       return new Response(
-        JSON.stringify({ error: `Places search failed: ${data.status}`, details: data.error_message }),
+        JSON.stringify({ error: `Places search failed: ${data.error.message}` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const suggestions = data.predictions.map((p) => ({
-      place_id: p.place_id,
-      place_name: p.description,
-      main_text: p.structured_formatting.main_text,
-      secondary_text: p.structured_formatting.secondary_text
+    const suggestions = (data.suggestions || []).map((s) => ({
+      place_id: s.placePrediction.placeId,
+      place_name: s.placePrediction.text.text,
+      main_text: s.placePrediction.structuredFormat?.mainText?.text || s.placePrediction.text.text,
+      secondary_text: s.placePrediction.structuredFormat?.secondaryText?.text || ""
     }));
 
     console.log(`Found ${suggestions.length} suggestions for: ${query}`);
