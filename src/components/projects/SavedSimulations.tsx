@@ -50,6 +50,7 @@ interface SavedSimulationsProps {
     batteryPower: number;
     pvConfig: any;
     usingSolcast: boolean;
+    solarDataSource?: "solcast" | "pvgis_monthly" | "pvgis_tmy";
     inverterConfig?: {
       inverterSize: number;
       inverterCount: number;
@@ -61,7 +62,6 @@ interface SavedSimulationsProps {
       solarMaintenancePercentage: number;
       batteryMaintenancePercentage: number;
       maintenancePerYear: number;
-      // Financial Return Parameters
       costOfCapital?: number;
       cpi?: number;
       electricityInflation?: number;
@@ -70,6 +70,10 @@ interface SavedSimulationsProps {
       mirrFinanceRate?: number;
       mirrReinvestmentRate?: number;
     };
+    pvsystConfig?: any;
+    advancedConfig?: any;
+    lossCalculationMode?: "simplified" | "pvsyst";
+    productionReductionPercent?: number;
   };
   currentResults: SimulationResult;
   onLoadSimulation: (config: {
@@ -79,26 +83,17 @@ interface SavedSimulationsProps {
     pvConfig: any;
     simulationName: string;
     simulationDate: string;
+    solarDataSource?: "solcast" | "pvgis_monthly" | "pvgis_tmy";
     inverterConfig?: {
       inverterSize: number;
       inverterCount: number;
       dcAcRatio: number;
     };
-    systemCosts?: {
-      solarCostPerKwp: number;
-      batteryCostPerKwh: number;
-      solarMaintenancePercentage: number;
-      batteryMaintenancePercentage: number;
-      maintenancePerYear: number;
-      // Financial Return Parameters
-      costOfCapital?: number;
-      cpi?: number;
-      electricityInflation?: number;
-      projectDurationYears?: number;
-      lcoeDiscountRate?: number;
-      mirrFinanceRate?: number;
-      mirrReinvestmentRate?: number;
-    };
+    systemCosts?: any;
+    pvsystConfig?: any;
+    advancedConfig?: any;
+    lossCalculationMode?: "simplified" | "pvsyst";
+    productionReductionPercent?: number;
   }) => void;
   includesBattery?: boolean;
 }
@@ -154,25 +149,33 @@ export function SavedSimulations({
   // Save simulation mutation
   const saveMutation = useMutation({
     mutationFn: async (name: string) => {
+      // Determine simulation type from solarDataSource or usingSolcast flag
+      const simType = currentConfig.solarDataSource || (currentConfig.usingSolcast ? "solcast" : "pvgis_monthly");
+      
       const { error } = await supabase.from("project_simulations").insert({
         project_id: projectId,
         name,
-        simulation_type: currentConfig.usingSolcast ? "solcast" : "generic",
+        simulation_type: simType,
         solar_capacity_kwp: currentConfig.solarCapacity,
         battery_capacity_kwh: currentConfig.batteryCapacity,
         battery_power_kw: currentConfig.batteryPower,
         solar_orientation: currentConfig.pvConfig.location,
         solar_tilt_degrees: currentConfig.pvConfig.tilt,
         annual_solar_savings: currentResults.annualSavings,
-        annual_grid_cost: currentResults.totalGridImport * 2.5 * 365, // Rough estimate
+        annual_grid_cost: currentResults.totalGridImport * 2.5 * 365,
         payback_years: currentResults.paybackYears,
         roi_percentage: currentResults.roi,
         results_json: {
           ...currentResults,
           pvConfig: currentConfig.pvConfig,
           usingSolcast: currentConfig.usingSolcast,
+          solarDataSource: currentConfig.solarDataSource,
           inverterConfig: currentConfig.inverterConfig,
           systemCosts: currentConfig.systemCosts,
+          pvsystConfig: currentConfig.pvsystConfig,
+          advancedConfig: currentConfig.advancedConfig,
+          lossCalculationMode: currentConfig.lossCalculationMode,
+          productionReductionPercent: currentConfig.productionReductionPercent,
         },
       });
       if (error) throw error;
@@ -243,6 +246,19 @@ export function SavedSimulations({
 
   const handleLoad = (sim: SavedSimulation) => {
     const resultsJson = sim.results_json as any;
+    
+    // Determine solar data source from simulation_type or saved value
+    let solarDataSource: "solcast" | "pvgis_monthly" | "pvgis_tmy" = "pvgis_monthly";
+    if (resultsJson?.solarDataSource) {
+      solarDataSource = resultsJson.solarDataSource;
+    } else if (sim.simulation_type === "solcast") {
+      solarDataSource = "solcast";
+    } else if (sim.simulation_type === "pvgis_tmy") {
+      solarDataSource = "pvgis_tmy";
+    } else if (sim.simulation_type === "pvgis_monthly") {
+      solarDataSource = "pvgis_monthly";
+    }
+    
     onLoadSimulation({
       solarCapacity: sim.solar_capacity_kwp || 100,
       batteryCapacity: sim.battery_capacity_kwh || 50,
@@ -250,8 +266,13 @@ export function SavedSimulations({
       pvConfig: resultsJson?.pvConfig || {},
       simulationName: sim.name,
       simulationDate: sim.created_at,
+      solarDataSource,
       inverterConfig: resultsJson?.inverterConfig,
       systemCosts: resultsJson?.systemCosts,
+      pvsystConfig: resultsJson?.pvsystConfig,
+      advancedConfig: resultsJson?.advancedConfig,
+      lossCalculationMode: resultsJson?.lossCalculationMode,
+      productionReductionPercent: resultsJson?.productionReductionPercent,
     });
     toast.success(`Loaded configuration: ${sim.name}`);
   };
