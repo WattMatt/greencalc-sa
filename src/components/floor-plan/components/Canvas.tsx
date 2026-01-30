@@ -467,6 +467,54 @@ export function Canvas({
         return;
       }
 
+      // Fallback: select walkways using rotated bounding box hit-test
+      if (placedWalkways && scaleInfo.ratio) {
+        const hitWalkway = [...placedWalkways].reverse().find(walkway => {
+          const widthPx = walkway.width / scaleInfo.ratio!;
+          const lengthPx = walkway.length / scaleInfo.ratio!;
+          const halfW = widthPx / 2;
+          const halfL = lengthPx / 2;
+          
+          // Transform click point to walkway's local coordinate system
+          const rotation = (walkway.rotation || 0) * Math.PI / 180;
+          const dx = worldPos.x - walkway.position.x;
+          const dy = worldPos.y - walkway.position.y;
+          const localX = dx * Math.cos(-rotation) - dy * Math.sin(-rotation);
+          const localY = dx * Math.sin(-rotation) + dy * Math.cos(-rotation);
+          
+          return Math.abs(localX) <= halfW && Math.abs(localY) <= halfL;
+        });
+
+        if (hitWalkway) {
+          setSelectedItemId(hitWalkway.id);
+          return;
+        }
+      }
+
+      // Fallback: select cable trays using rotated bounding box hit-test
+      if (placedCableTrays && scaleInfo.ratio) {
+        const hitTray = [...placedCableTrays].reverse().find(tray => {
+          const widthPx = tray.width / scaleInfo.ratio!;
+          const lengthPx = tray.length / scaleInfo.ratio!;
+          const halfW = widthPx / 2;
+          const halfL = lengthPx / 2;
+          
+          // Transform click point to tray's local coordinate system
+          const rotation = (tray.rotation || 0) * Math.PI / 180;
+          const dx = worldPos.x - tray.position.x;
+          const dy = worldPos.y - tray.position.y;
+          const localX = dx * Math.cos(-rotation) - dy * Math.sin(-rotation);
+          const localY = dx * Math.sin(-rotation) + dy * Math.cos(-rotation);
+          
+          return Math.abs(localX) <= halfW && Math.abs(localY) <= halfL;
+        });
+
+        if (hitTray) {
+          setSelectedItemId(hitTray.id);
+          return;
+        }
+      }
+
       // Fallback: select equipment (inverters, etc.) using bounding box hit-test
       const hitEquipment = [...equipment].reverse().find(item => {
         // Calculate size in pixels based on real-world size and scale
