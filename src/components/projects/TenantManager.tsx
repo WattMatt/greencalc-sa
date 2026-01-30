@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ChevronsUpDown, Check, Layers, MoreVertical, Eye } from "lucide-react";
+import { ChevronsUpDown, Check, Layers, MoreVertical, Eye, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -222,6 +222,10 @@ function getSortedProfilesWithSuggestions(
   });
 }
 
+// Sorting state type
+type SortColumn = 'name' | 'area' | 'kwh';
+type SortDirection = 'asc' | 'desc';
+
 export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -243,6 +247,13 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   
   // Profile preview state
   const [previewContext, setPreviewContext] = useState<{ meter: ScadaImport; tenant: Tenant } | null>(null);
+  
+  // Edit tenant state
+  const [editTenant, setEditTenant] = useState<{ id: string; name: string; area_sqm: string } | null>(null);
+  
+  // Table sorting state
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   // Fetch multi-meter counts for all tenants
   const { data: tenantMeterCounts = {} } = useQuery({
@@ -337,6 +348,75 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       toast.success("kWh override updated");
     },
     onError: (error) => toast.error(error.message),
+  });
+
+  const updateTenant = useMutation({
+    mutationFn: async ({ tenantId, name, area_sqm }: { tenantId: string; name: string; area_sqm: number }) => {
+      const { error } = await supabase
+        .from("project_tenants")
+        .update({ name, area_sqm })
+        .eq("id", tenantId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
+      toast.success("Tenant updated");
+      setEditTenant(null);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  // Toggle sort column
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      // Toggle direction or clear sort
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else {
+        setSortColumn(null);
+        setSortDirection('asc');
+      }
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  // Calculate kWh for a tenant (used for sorting)
+  const calculateTenantKwh = (tenant: Tenant): number => {
+    if (tenant.monthly_kwh_override) return tenant.monthly_kwh_override;
+    const tenantArea = Number(tenant.area_sqm) || 0;
+    const scadaArea = tenant.scada_imports?.area_sqm || null;
+    let scaleFactor: number | null = null;
+    if (tenant.scada_import_id && scadaArea && scadaArea > 0) {
+      scaleFactor = tenantArea / scadaArea;
+    }
+    if (tenant.scada_imports?.load_profile_weekday) {
+      const dailyKwh = calculateDailyKwh(tenant.scada_imports.load_profile_weekday);
+      const scaled = scaleFactor ? dailyKwh * scaleFactor : dailyKwh;
+      return scaled * 30;
+    }
+    return (tenant.shop_types?.kwh_per_sqm_month || 50) * tenantArea;
+  };
+
+  // Sort tenants
+  const sortedTenants = [...tenants].sort((a, b) => {
+    if (!sortColumn) return 0;
+    
+    let comparison = 0;
+    switch (sortColumn) {
+      case 'name':
+        comparison = a.name.localeCompare(b.name);
+        break;
+      case 'area':
+        comparison = (Number(a.area_sqm) || 0) - (Number(b.area_sqm) || 0);
+        break;
+      case 'kwh':
+        comparison = calculateTenantKwh(a) - calculateTenantKwh(b);
+        break;
+    }
+    
+    return sortDirection === 'asc' ? comparison : -comparison;
   });
 
   const processWizardData = useCallback(async (
@@ -651,17 +731,53 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Tenant Name</TableHead>
-                <TableHead>Area (m²)</TableHead>
+                <TableHead>
+                  <button 
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                    onClick={() => handleSort('name')}
+                  >
+                    Tenant Name
+                    {sortColumn === 'name' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-50" />
+                    )}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button 
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                    onClick={() => handleSort('area')}
+                  >
+                    Area (m²)
+                    {sortColumn === 'area' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-50" />
+                    )}
+                  </button>
+                </TableHead>
                 <TableHead>Load Profile</TableHead>
                 <TableHead className="text-center">Scale</TableHead>
-                <TableHead className="text-right">Est. kWh/month</TableHead>
+                <TableHead className="text-right">
+                  <button 
+                    className="flex items-center gap-1 hover:text-foreground transition-colors ml-auto"
+                    onClick={() => handleSort('kwh')}
+                  >
+                    Est. kWh/month
+                    {sortColumn === 'kwh' ? (
+                      sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-50" />
+                    )}
+                  </button>
+                </TableHead>
                 <TableHead className="text-center">Source</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tenants.map((tenant) => {
+              {sortedTenants.map((tenant) => {
                 const tenantArea = Number(tenant.area_sqm) || 0;
                 const scadaArea = tenant.scada_imports?.area_sqm || null;
                 const meterCount = tenantMeterCounts[tenant.id] || 0;
@@ -855,6 +971,16 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
+                            onClick={() => setEditTenant({ 
+                              id: tenant.id, 
+                              name: tenant.name, 
+                              area_sqm: String(tenant.area_sqm)
+                            })}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit Tenant
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onClick={() => setMultiMeterTenant({ 
                               id: tenant.id, 
                               name: tenant.name, 
@@ -961,6 +1087,49 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         tenantArea={Number(previewContext?.tenant.area_sqm) || 0}
         shopTypeIntensity={previewContext?.tenant.shop_types?.kwh_per_sqm_month}
       />
+      
+      {/* Edit Tenant Dialog */}
+      <Dialog open={!!editTenant} onOpenChange={(open) => !open && setEditTenant(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Tenant</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Shop Name</Label>
+              <Input
+                placeholder="e.g., Woolworths"
+                value={editTenant?.name || ""}
+                onChange={(e) => setEditTenant(prev => prev ? { ...prev, name: e.target.value } : null)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Area (m²)</Label>
+              <Input
+                type="number"
+                placeholder="e.g., 500"
+                value={editTenant?.area_sqm || ""}
+                onChange={(e) => setEditTenant(prev => prev ? { ...prev, area_sqm: e.target.value } : null)}
+              />
+            </div>
+            <Button
+              className="w-full"
+              onClick={() => {
+                if (editTenant) {
+                  updateTenant.mutate({
+                    tenantId: editTenant.id,
+                    name: editTenant.name,
+                    area_sqm: parseFloat(editTenant.area_sqm),
+                  });
+                }
+              }}
+              disabled={!editTenant?.name || !editTenant?.area_sqm || updateTenant.isPending}
+            >
+              {updateTenant.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
