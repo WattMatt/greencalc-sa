@@ -417,6 +417,8 @@ export type Database = {
           name: string
           project_id: string
           scada_import_id: string | null
+          shop_name: string | null
+          shop_number: string | null
           shop_type_id: string | null
           updated_at: string
         }
@@ -428,6 +430,8 @@ export type Database = {
           name: string
           project_id: string
           scada_import_id?: string | null
+          shop_name?: string | null
+          shop_number?: string | null
           shop_type_id?: string | null
           updated_at?: string
         }
@@ -439,6 +443,8 @@ export type Database = {
           name?: string
           project_id?: string
           scada_import_id?: string | null
+          shop_name?: string | null
+          shop_number?: string | null
           shop_type_id?: string | null
           updated_at?: string
         }
