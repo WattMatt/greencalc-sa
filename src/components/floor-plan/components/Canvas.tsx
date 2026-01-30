@@ -74,6 +74,10 @@ export function Canvas({
   const [pvArrayDragOffset, setPvArrayDragOffset] = useState<Point | null>(null);
   const [draggingEquipmentId, setDraggingEquipmentId] = useState<string | null>(null);
   const [equipmentDragOffset, setEquipmentDragOffset] = useState<Point | null>(null);
+  const [draggingWalkwayId, setDraggingWalkwayId] = useState<string | null>(null);
+  const [walkwayDragOffset, setWalkwayDragOffset] = useState<Point | null>(null);
+  const [draggingCableTrayId, setDraggingCableTrayId] = useState<string | null>(null);
+  const [cableTrayDragOffset, setCableTrayDragOffset] = useState<Point | null>(null);
   const [mouseWorldPos, setMouseWorldPos] = useState<Point | null>(null);
 
   const SNAP_THRESHOLD = 15; // pixels in screen space
@@ -460,8 +464,7 @@ export function Canvas({
         return;
       }
 
-      // Fallback: select walkways / cable trays BEFORE roof masks
-      // (walkways are usually inside a roof mask, so roof masks must not steal the click)
+      // Select walkways (higher priority than roof masks since they sit inside them)
       if (placedWalkways && scaleInfo.ratio) {
         const hitWalkway = [...placedWalkways].reverse().find(walkway => {
           const widthPx = walkway.width / scaleInfo.ratio!;
@@ -481,10 +484,16 @@ export function Canvas({
 
         if (hitWalkway) {
           setSelectedItemId(hitWalkway.id);
+          setDraggingWalkwayId(hitWalkway.id);
+          setWalkwayDragOffset({
+            x: worldPos.x - hitWalkway.position.x,
+            y: worldPos.y - hitWalkway.position.y,
+          });
           return;
         }
       }
 
+      // Select cable trays (higher priority than roof masks)
       if (placedCableTrays && scaleInfo.ratio) {
         const hitTray = [...placedCableTrays].reverse().find(tray => {
           const widthPx = tray.width / scaleInfo.ratio!;
@@ -504,6 +513,11 @@ export function Canvas({
 
         if (hitTray) {
           setSelectedItemId(hitTray.id);
+          setDraggingCableTrayId(hitTray.id);
+          setCableTrayDragOffset({
+            x: worldPos.x - hitTray.position.x,
+            y: worldPos.y - hitTray.position.y,
+          });
           return;
         }
       }
@@ -513,54 +527,6 @@ export function Canvas({
       if (hitMask) {
         setSelectedItemId(hitMask.id);
         return;
-      }
-
-      // Fallback: select walkways using rotated bounding box hit-test
-      if (placedWalkways && scaleInfo.ratio) {
-        const hitWalkway = [...placedWalkways].reverse().find(walkway => {
-          const widthPx = walkway.width / scaleInfo.ratio!;
-          const lengthPx = walkway.length / scaleInfo.ratio!;
-          const halfW = widthPx / 2;
-          const halfL = lengthPx / 2;
-          
-          // Transform click point to walkway's local coordinate system
-          const rotation = (walkway.rotation || 0) * Math.PI / 180;
-          const dx = worldPos.x - walkway.position.x;
-          const dy = worldPos.y - walkway.position.y;
-          const localX = dx * Math.cos(-rotation) - dy * Math.sin(-rotation);
-          const localY = dx * Math.sin(-rotation) + dy * Math.cos(-rotation);
-          
-          return Math.abs(localX) <= halfW && Math.abs(localY) <= halfL;
-        });
-
-        if (hitWalkway) {
-          setSelectedItemId(hitWalkway.id);
-          return;
-        }
-      }
-
-      // Fallback: select cable trays using rotated bounding box hit-test
-      if (placedCableTrays && scaleInfo.ratio) {
-        const hitTray = [...placedCableTrays].reverse().find(tray => {
-          const widthPx = tray.width / scaleInfo.ratio!;
-          const lengthPx = tray.length / scaleInfo.ratio!;
-          const halfW = widthPx / 2;
-          const halfL = lengthPx / 2;
-          
-          // Transform click point to tray's local coordinate system
-          const rotation = (tray.rotation || 0) * Math.PI / 180;
-          const dx = worldPos.x - tray.position.x;
-          const dy = worldPos.y - tray.position.y;
-          const localX = dx * Math.cos(-rotation) - dy * Math.sin(-rotation);
-          const localY = dx * Math.sin(-rotation) + dy * Math.cos(-rotation);
-          
-          return Math.abs(localX) <= halfW && Math.abs(localY) <= halfL;
-        });
-
-        if (hitTray) {
-          setSelectedItemId(hitTray.id);
-          return;
-        }
       }
 
       // Fallback: select equipment (inverters, etc.) using bounding box hit-test
@@ -807,6 +773,30 @@ export function Canvas({
       return;
     }
 
+    // Handle walkway dragging
+    if (draggingWalkwayId && walkwayDragOffset && setPlacedWalkways) {
+      const basePos = { 
+        x: worldPos.x - walkwayDragOffset.x, 
+        y: worldPos.y - walkwayDragOffset.y 
+      };
+      setPlacedWalkways(prev => prev.map(item => 
+        item.id === draggingWalkwayId ? { ...item, position: basePos } : item
+      ));
+      return;
+    }
+
+    // Handle cable tray dragging
+    if (draggingCableTrayId && cableTrayDragOffset && setPlacedCableTrays) {
+      const basePos = { 
+        x: worldPos.x - cableTrayDragOffset.x, 
+        y: worldPos.y - cableTrayDragOffset.y 
+      };
+      setPlacedCableTrays(prev => prev.map(item => 
+        item.id === draggingCableTrayId ? { ...item, position: basePos } : item
+      ));
+      return;
+    }
+
     if (isPanning) {
       const dx = screenPos.x - lastMousePos.x;
       const dy = screenPos.y - lastMousePos.y;
@@ -834,9 +824,14 @@ export function Canvas({
       setPreviewPoint(snappedPreview);
     }
     
-    // Track mouse position for ghost preview (PV array or equipment)
+    // Track mouse position for ghost preview (PV array, equipment, walkways, cable trays)
     const equipmentPlacementTools = [Tool.PLACE_INVERTER, Tool.PLACE_DC_COMBINER, Tool.PLACE_AC_DISCONNECT, Tool.PLACE_MAIN_BOARD];
-    if ((activeTool === Tool.PV_ARRAY && pendingPvArrayConfig) || equipmentPlacementTools.includes(activeTool)) {
+    const materialPlacementTools = [Tool.PLACE_WALKWAY, Tool.PLACE_CABLE_TRAY];
+    if (
+      (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig) || 
+      equipmentPlacementTools.includes(activeTool) ||
+      materialPlacementTools.includes(activeTool)
+    ) {
       setMouseWorldPos(worldPos);
     } else {
       setMouseWorldPos(null);
@@ -849,6 +844,10 @@ export function Canvas({
     setPvArrayDragOffset(null);
     setDraggingEquipmentId(null);
     setEquipmentDragOffset(null);
+    setDraggingWalkwayId(null);
+    setWalkwayDragOffset(null);
+    setDraggingCableTrayId(null);
+    setCableTrayDragOffset(null);
     
     if (activeTool === Tool.SCALE && scaleLine) {
       const dist = distance(scaleLine.start, scaleLine.end);
