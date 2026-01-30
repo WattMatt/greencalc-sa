@@ -865,13 +865,25 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const autoSaveMutation = useMutation({
     mutationFn: async () => {
       const simulationName = `Auto-saved ${format(new Date(), "MMM d, HH:mm")}`;
-      
-      // Check if we have an existing simulation to update
-      const existingId = lastSavedSimulation?.id;
+
+      // IMPORTANT:
+      // Auto-save must NEVER overwrite a manually saved (named) simulation.
+      // Instead, maintain a dedicated auto-save record per project.
+      const { data: existingAuto, error: existingAutoError } = await supabase
+        .from("project_simulations")
+        .select("id,name")
+        .eq("project_id", projectId)
+        .ilike("name", "Auto-saved%")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existingAutoError) throw existingAutoError;
+
+      const existingId = existingAuto?.id;
       
       const simulationData = {
         project_id: projectId,
-        name: existingId ? lastSavedSimulation.name : simulationName,
+        name: simulationName,
         simulation_type: solarDataSource,
         solar_capacity_kwp: solarCapacity,
         battery_capacity_kwh: includesBattery ? batteryCapacity : 0,
