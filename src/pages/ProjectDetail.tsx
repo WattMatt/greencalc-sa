@@ -338,12 +338,18 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
             <div className="space-y-2">
               <div className="flex items-center gap-1">
                 <Label htmlFor="location" className="text-xs">Location</Label>
+                {project.latitude && project.longitude && (
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 text-green-600 border-green-300">
+                    <MapPin className="h-2.5 w-2.5 mr-0.5" />
+                    Pin set
+                  </Badge>
+                )}
                 <Dialog open={mapDialogOpen} onOpenChange={setMapDialogOpen}>
                   <DialogTrigger asChild>
                     <Button 
                       variant="ghost" 
                       size="icon" 
-                      className="h-5 w-5 p-0 text-muted-foreground hover:text-primary"
+                      className="h-5 w-5 p-0 text-muted-foreground hover:text-primary ml-auto"
                       title="Open map to set location"
                     >
                       <MapPin className="h-3.5 w-3.5" />
@@ -372,7 +378,9 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
                 value={params.location}
                 onChange={(e) => handleParamChange("location", e.target.value)}
                 onBlur={handleFieldBlur}
-                placeholder="Enter location"
+                placeholder={project.latitude && project.longitude 
+                  ? `${project.latitude.toFixed(4)}, ${project.longitude.toFixed(4)}`
+                  : "Enter location"}
                 className="h-8"
               />
             </div>
