@@ -72,59 +72,98 @@ async function generateImage(prompt: string, apiKey: string, retries = 2): Promi
   for (let attempt = 0; attempt <= retries; attempt++) {
     console.log(`Image generation attempt ${attempt + 1}/${retries + 1}`);
     
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-pro-image-preview",
-        messages: [
-          {
-            role: "user",
-            content: `Generate an image: ${prompt}. IMPORTANT: You MUST generate an actual image, not just describe it.`,
-          },
-        ],
-        modalities: ["image", "text"],
-      }),
-    });
+    try {
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-pro-image-preview",
+          messages: [
+            {
+              role: "user",
+              content: `Generate an image: ${prompt}. IMPORTANT: You MUST generate an actual image, not just describe it.`,
+            },
+          ],
+          modalities: ["image", "text"],
+        }),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
+      // Always consume the response body to prevent resource leaks
+      const responseText = await response.text();
       
-      if (response.status === 429) {
-        throw { status: 429, message: "Rate limit exceeded. Please try again later." };
+      if (!response.ok) {
+        console.error("AI gateway error:", response.status, responseText);
+        
+        if (response.status === 429) {
+          throw { status: 429, message: "Rate limit exceeded. Please try again later." };
+        }
+        if (response.status === 402) {
+          throw { status: 402, message: "AI credits exhausted. Please add funds to continue." };
+        }
+        
+        throw new Error(`AI gateway error: ${response.status}`);
       }
-      if (response.status === 402) {
-        throw { status: 402, message: "AI credits exhausted. Please add funds to continue." };
-      }
-      
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
 
-    const result = await response.json();
-    console.log("API Response structure:", JSON.stringify(Object.keys(result)));
-    
-    // Check multiple possible image locations in the response
-    const imageUrl = 
-      result.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
-      result.choices?.[0]?.message?.images?.[0]?.url ||
-      result.choices?.[0]?.message?.image_url?.url ||
-      result.data?.[0]?.url;
-    
-    if (imageUrl) {
-      console.log("Successfully generated image");
-      return imageUrl;
-    }
-    
-    console.warn(`Attempt ${attempt + 1}: No image in response, content:`, 
-      result.choices?.[0]?.message?.content?.substring(0, 200));
-    
-    if (attempt < retries) {
-      console.log("Retrying image generation...");
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Handle empty response
+      if (!responseText || responseText.trim() === '') {
+        console.warn(`Attempt ${attempt + 1}: Empty response from API`);
+        if (attempt < retries) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+        throw new Error("Empty response from AI gateway");
+      }
+
+      // Parse JSON safely
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.warn(`Attempt ${attempt + 1}: Invalid JSON response:`, responseText.substring(0, 200));
+        if (attempt < retries) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+        throw new Error("Invalid JSON response from AI gateway");
+      }
+      
+      console.log("API Response structure:", JSON.stringify(Object.keys(result)));
+      
+      // Check multiple possible image locations in the response
+      const imageUrl = 
+        result.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
+        result.choices?.[0]?.message?.images?.[0]?.url ||
+        result.choices?.[0]?.message?.image_url?.url ||
+        result.data?.[0]?.url;
+      
+      if (imageUrl) {
+        console.log("Successfully generated image");
+        return imageUrl;
+      }
+      
+      console.warn(`Attempt ${attempt + 1}: No image in response, content:`, 
+        result.choices?.[0]?.message?.content?.substring(0, 200));
+      
+      if (attempt < retries) {
+        console.log("Retrying image generation...");
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch (fetchError) {
+      console.error(`Attempt ${attempt + 1} failed:`, fetchError);
+      
+      // Re-throw status errors immediately
+      if (typeof fetchError === 'object' && fetchError !== null && 'status' in fetchError) {
+        throw fetchError;
+      }
+      
+      if (attempt < retries) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      }
+      throw fetchError;
     }
   }
   
