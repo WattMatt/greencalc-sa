@@ -140,6 +140,11 @@ interface ToolbarProps {
   onBackToBrowser?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  // Placement configuration
+  placementOrientation?: 'portrait' | 'landscape';
+  setPlacementOrientation?: (orientation: 'portrait' | 'landscape') => void;
+  placementMinSpacing?: number;
+  setPlacementMinSpacing?: (spacing: number) => void;
 }
 
 export function Toolbar({
@@ -167,6 +172,10 @@ export function Toolbar({
   onBackToBrowser,
   isCollapsed,
   onToggleCollapse,
+  placementOrientation,
+  setPlacementOrientation,
+  placementMinSpacing,
+  setPlacementMinSpacing,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -179,9 +188,9 @@ export function Toolbar({
     file: true,
     general: false,
     plantSetup: false,
-    roofArrays: false,
-    cabling: false,
+    roofMasks: false,
     equipment: false,
+    materials: false,
   });
 
   const toggleSection = (section: string) => {
@@ -391,17 +400,15 @@ export function Toolbar({
           </Button>
         </CollapsibleSection>
 
-        <Separator className="my-2" />
-
-        {/* Roof & Arrays */}
+        {/* Roof Masks */}
         <CollapsibleSection 
-          title="Roof & Arrays"
-          isOpen={openSections.roofArrays}
-          onToggle={() => toggleSection('roofArrays')}
+          title="Roof Masks"
+          isOpen={openSections.roofMasks}
+          onToggle={() => toggleSection('roofMasks')}
         >
           <ToolButton
             icon={Layers}
-            label="Draw Roof Mask"
+            label="Roof Mask"
             isActive={activeTool === Tool.ROOF_MASK}
             onClick={() => setActiveTool(Tool.ROOF_MASK)}
             disabled={!scaleSet}
@@ -411,9 +418,19 @@ export function Toolbar({
               disabled: !scaleSet,
             }}
           />
+        </CollapsibleSection>
+
+        <Separator className="my-2" />
+
+        {/* Equipment */}
+        <CollapsibleSection 
+          title="Equipment"
+          isOpen={openSections.equipment}
+          onToggle={() => toggleSection('equipment')}
+        >
           <ToolButton
             icon={Sun}
-            label="Place PV Array"
+            label="Solar Module"
             isActive={activeTool === Tool.PV_ARRAY}
             onClick={() => setActiveTool(Tool.PV_ARRAY)}
             disabled={!scaleSet || !pvConfigured}
@@ -423,15 +440,29 @@ export function Toolbar({
               disabled: !scaleSet || !pvConfigured,
             }}
           />
+          <ToolButton
+            icon={() => <span className="text-xs font-mono">~=</span>}
+            label="Inverter"
+            isActive={activeTool === Tool.PLACE_INVERTER}
+            onClick={() => setActiveTool(Tool.PLACE_INVERTER)}
+            disabled={!scaleSet}
+          />
+          <ToolButton
+            icon={() => <span className="text-xs font-mono">▮</span>}
+            label="Main Board"
+            isActive={activeTool === Tool.PLACE_MAIN_BOARD}
+            onClick={() => setActiveTool(Tool.PLACE_MAIN_BOARD)}
+            disabled={!scaleSet}
+          />
         </CollapsibleSection>
 
         <Separator className="my-2" />
 
-        {/* Cabling */}
+        {/* Materials */}
         <CollapsibleSection 
-          title="Cabling"
-          isOpen={openSections.cabling}
-          onToggle={() => toggleSection('cabling')}
+          title="Materials"
+          isOpen={openSections.materials}
+          onToggle={() => toggleSection('materials')}
         >
           <ToolButton
             icon={() => <div className="w-4 h-0.5 bg-orange-500 rounded" />}
@@ -445,23 +476,6 @@ export function Toolbar({
             label="AC Cable"
             isActive={activeTool === Tool.LINE_AC}
             onClick={() => setActiveTool(Tool.LINE_AC)}
-            disabled={!scaleSet}
-          />
-        </CollapsibleSection>
-
-        <Separator className="my-2" />
-
-        {/* Equipment */}
-        <CollapsibleSection 
-          title="Equipment"
-          isOpen={openSections.equipment}
-          onToggle={() => toggleSection('equipment')}
-        >
-          <ToolButton
-            icon={() => <span className="text-xs font-mono">~=</span>}
-            label="Inverter"
-            isActive={activeTool === Tool.PLACE_INVERTER}
-            onClick={() => setActiveTool(Tool.PLACE_INVERTER)}
             disabled={!scaleSet}
           />
           <ToolButton
@@ -479,16 +493,87 @@ export function Toolbar({
             disabled={!scaleSet}
           />
           <ToolButton
-            icon={() => <span className="text-xs font-mono">▮</span>}
-            label="Main Board"
-            isActive={activeTool === Tool.PLACE_MAIN_BOARD}
-            onClick={() => setActiveTool(Tool.PLACE_MAIN_BOARD)}
+            icon={() => <span className="text-xs font-mono">═</span>}
+            label="Walkway"
+            isActive={activeTool === Tool.PLACE_WALKWAY}
+            onClick={() => setActiveTool(Tool.PLACE_WALKWAY)}
+            disabled={!scaleSet}
+          />
+          <ToolButton
+            icon={() => <span className="text-xs font-mono">≡</span>}
+            label="Cable Tray"
+            isActive={activeTool === Tool.PLACE_CABLE_TRAY}
+            onClick={() => setActiveTool(Tool.PLACE_CABLE_TRAY)}
             disabled={!scaleSet}
           />
         </CollapsibleSection>
 
-        {/* Rotation control for equipment placement */}
-        {[Tool.PLACE_INVERTER, Tool.PLACE_DC_COMBINER, Tool.PLACE_AC_DISCONNECT, Tool.PLACE_MAIN_BOARD].includes(activeTool) && (
+        {/* Placement configuration for equipment and materials */}
+        {[Tool.PLACE_INVERTER, Tool.PLACE_WALKWAY, Tool.PLACE_CABLE_TRAY].includes(activeTool) && (
+          <>
+            <Separator className="my-2" />
+            <div className="px-2 space-y-3">
+              <div className="text-xs font-medium text-muted-foreground">Placement Options</div>
+              
+              {/* Orientation selector */}
+              {setPlacementOrientation && (
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Orientation</label>
+                  <div className="flex gap-1">
+                    <Button
+                      variant={placementOrientation === 'portrait' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1 text-xs h-7"
+                      onClick={() => setPlacementOrientation('portrait')}
+                    >
+                      Portrait
+                    </Button>
+                    <Button
+                      variant={placementOrientation === 'landscape' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1 text-xs h-7"
+                      onClick={() => setPlacementOrientation('landscape')}
+                    >
+                      Landscape
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Minimum spacing input */}
+              {setPlacementMinSpacing && (
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Min. Spacing (m)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={placementMinSpacing ?? 0.3}
+                    onChange={(e) => setPlacementMinSpacing(parseFloat(e.target.value) || 0.3)}
+                    className="w-full h-7 px-2 text-xs border rounded bg-background"
+                  />
+                </div>
+              )}
+              
+              {/* Rotation control */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={rotateNext}
+              >
+                <RotateCw className="h-4 w-4 mr-2" />
+                <span className="text-xs">Rotate ({placementRotation}°)</span>
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Press R to rotate
+              </p>
+            </div>
+          </>
+        )}
+
+        {/* Rotation control for other equipment (DC Combiner, AC Disconnect, Main Board) */}
+        {[Tool.PLACE_DC_COMBINER, Tool.PLACE_AC_DISCONNECT, Tool.PLACE_MAIN_BOARD].includes(activeTool) && (
           <>
             <Separator className="my-2" />
             <div className="px-2">

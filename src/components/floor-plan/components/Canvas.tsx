@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
-import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig } from '../types';
-import { renderAllMarkups, drawPvArray, drawEquipmentIcon } from '../utils/drawing';
+import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig } from '../types';
+import { renderAllMarkups, drawPvArray, drawEquipmentIcon, drawWalkway, drawCableTray } from '../utils/drawing';
 import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing } from '../utils/geometry';
 import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
 import { PVArrayConfig } from './PVArrayModal';
@@ -35,6 +35,13 @@ interface CanvasProps {
   onCopyPvArray?: (array: PVArrayItem) => void;
   onCopyRoofMask?: (mask: RoofMask) => void;
   plantSetupConfig?: PlantSetupConfig;
+  // Walkway and cable tray props
+  placedWalkways?: PlacedWalkway[];
+  setPlacedWalkways?: (updater: (prev: PlacedWalkway[]) => PlacedWalkway[]) => void;
+  placedCableTrays?: PlacedCableTray[];
+  setPlacedCableTrays?: (updater: (prev: PlacedCableTray[]) => PlacedCableTray[]) => void;
+  pendingWalkwayConfig?: WalkwayConfig | null;
+  pendingCableTrayConfig?: CableTrayConfig | null;
 }
 
 export function Canvas({
@@ -46,6 +53,9 @@ export function Canvas({
   pendingPvArrayConfig, onRoofMaskComplete, onRoofDirectionComplete, onArrayPlaced,
   pendingRoofMaskPoints, onPVArrayDoubleClick, onCopyPvArray, onCopyRoofMask,
   plantSetupConfig,
+  placedWalkways, setPlacedWalkways,
+  placedCableTrays, setPlacedCableTrays,
+  pendingWalkwayConfig, pendingCableTrayConfig,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -225,6 +235,7 @@ export function Canvas({
       equipment, lines, roofMasks, pvArrays,
       scaleInfo, pvPanelConfig, zoom: viewState.zoom,
       selectedItemId, scaleLine, plantSetupConfig,
+      placedWalkways, placedCableTrays,
     });
     
     // Draw current drawing in progress
@@ -384,9 +395,37 @@ export function Canvas({
         ctx.globalAlpha = 1.0;
       }
     }
+
+    // Draw ghost preview for walkway placement
+    if (activeTool === Tool.PLACE_WALKWAY && mouseWorldPos && pendingWalkwayConfig && scaleInfo.ratio) {
+      const ghostWalkway: PlacedWalkway = {
+        id: 'ghost-walkway',
+        configId: pendingWalkwayConfig.id,
+        name: pendingWalkwayConfig.name,
+        width: pendingWalkwayConfig.width,
+        length: pendingWalkwayConfig.length,
+        position: mouseWorldPos,
+        rotation: placementRotation,
+      };
+      drawWalkway(ctx, ghostWalkway, false, true, viewState.zoom, scaleInfo);
+    }
+
+    // Draw ghost preview for cable tray placement
+    if (activeTool === Tool.PLACE_CABLE_TRAY && mouseWorldPos && pendingCableTrayConfig && scaleInfo.ratio) {
+      const ghostTray: PlacedCableTray = {
+        id: 'ghost-tray',
+        configId: pendingCableTrayConfig.id,
+        name: pendingCableTrayConfig.name,
+        width: pendingCableTrayConfig.width,
+        length: pendingCableTrayConfig.length,
+        position: mouseWorldPos,
+        rotation: placementRotation,
+      };
+      drawCableTray(ctx, ghostTray, false, true, viewState.zoom, scaleInfo);
+    }
     
     ctx.restore();
-  }, [viewState, equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, selectedItemId, scaleLine, currentDrawing, previewPoint, canvasSize, containerSize, activeTool, pendingRoofMaskPoints, directionLine, mouseWorldPos, pendingPvArrayConfig, placementRotation]);
+  }, [viewState, equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, selectedItemId, scaleLine, currentDrawing, previewPoint, canvasSize, containerSize, activeTool, pendingRoofMaskPoints, directionLine, mouseWorldPos, pendingPvArrayConfig, placementRotation, placedWalkways, placedCableTrays, pendingWalkwayConfig, pendingCableTrayConfig]);
 
   const getMousePos = (e: React.MouseEvent): Point => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -588,6 +627,32 @@ export function Canvas({
           rotation: snapResult.snappedToId ? snapResult.rotation : placementRotation,
         }]);
       }
+    } else if (activeTool === Tool.PLACE_WALKWAY && pendingWalkwayConfig && setPlacedWalkways) {
+      // Place walkway
+      const newWalkway: PlacedWalkway = {
+        id: `walkway-${Date.now()}`,
+        configId: pendingWalkwayConfig.id,
+        name: pendingWalkwayConfig.name,
+        width: pendingWalkwayConfig.width,
+        length: pendingWalkwayConfig.length,
+        position: worldPos,
+        rotation: placementRotation,
+        minSpacing: 0.3,
+      };
+      setPlacedWalkways(prev => [...prev, newWalkway]);
+    } else if (activeTool === Tool.PLACE_CABLE_TRAY && pendingCableTrayConfig && setPlacedCableTrays) {
+      // Place cable tray
+      const newTray: PlacedCableTray = {
+        id: `tray-${Date.now()}`,
+        configId: pendingCableTrayConfig.id,
+        name: pendingCableTrayConfig.name,
+        width: pendingCableTrayConfig.width,
+        length: pendingCableTrayConfig.length,
+        position: worldPos,
+        rotation: placementRotation,
+        minSpacing: 0.3,
+      };
+      setPlacedCableTrays(prev => [...prev, newTray]);
     }
   };
 

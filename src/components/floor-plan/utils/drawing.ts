@@ -1,6 +1,7 @@
 import { 
   Point, PVArrayItem, PVPanelConfig, RoofMask, ScaleInfo, 
-  EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig 
+  EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig,
+  PlacedWalkway, PlacedCableTray
 } from '../types';
 import { TOOL_COLORS, EQUIPMENT_REAL_WORLD_SIZES, getDirectionLabel } from '../constants';
 import { isPointInPolygon, getPolygonCenter } from './geometry';
@@ -306,6 +307,109 @@ export const drawScaleIndicator = (
   ctx.restore();
 };
 
+/**
+ * Draw a walkway on canvas (hatched rectangle pattern)
+ */
+export const drawWalkway = (
+  ctx: CanvasRenderingContext2D,
+  walkway: PlacedWalkway,
+  isSelected: boolean,
+  isGhost: boolean,
+  zoom: number,
+  scaleInfo: ScaleInfo
+) => {
+  if (!scaleInfo.ratio) return;
+
+  ctx.save();
+  if (isGhost) {
+    ctx.globalAlpha = 0.6;
+  }
+  ctx.translate(walkway.position.x, walkway.position.y);
+  ctx.rotate((walkway.rotation || 0) * Math.PI / 180);
+
+  const widthPx = walkway.width / scaleInfo.ratio;
+  const lengthPx = walkway.length / scaleInfo.ratio;
+
+  // Background fill
+  ctx.fillStyle = 'rgba(156, 163, 175, 0.4)'; // Gray
+  ctx.fillRect(-widthPx / 2, -lengthPx / 2, widthPx, lengthPx);
+
+  // Hatching pattern (diagonal lines)
+  ctx.strokeStyle = 'rgba(107, 114, 128, 0.6)';
+  ctx.lineWidth = 1 / zoom;
+  const hatchSpacing = 8 / zoom;
+  
+  ctx.beginPath();
+  for (let i = -lengthPx; i < widthPx + lengthPx; i += hatchSpacing) {
+    ctx.moveTo(-widthPx / 2 + i, -lengthPx / 2);
+    ctx.lineTo(-widthPx / 2 + i - lengthPx, lengthPx / 2);
+  }
+  ctx.stroke();
+
+  // Border
+  ctx.strokeStyle = isSelected ? '#34D399' : '#6b7280';
+  ctx.lineWidth = (isSelected ? 2.5 : 1.5) / zoom;
+  ctx.strokeRect(-widthPx / 2, -lengthPx / 2, widthPx, lengthPx);
+
+  ctx.restore();
+};
+
+/**
+ * Draw a cable tray on canvas (ladder/rail pattern)
+ */
+export const drawCableTray = (
+  ctx: CanvasRenderingContext2D,
+  tray: PlacedCableTray,
+  isSelected: boolean,
+  isGhost: boolean,
+  zoom: number,
+  scaleInfo: ScaleInfo
+) => {
+  if (!scaleInfo.ratio) return;
+
+  ctx.save();
+  if (isGhost) {
+    ctx.globalAlpha = 0.6;
+  }
+  ctx.translate(tray.position.x, tray.position.y);
+  ctx.rotate((tray.rotation || 0) * Math.PI / 180);
+
+  const widthPx = tray.width / scaleInfo.ratio;
+  const lengthPx = tray.length / scaleInfo.ratio;
+
+  // Background fill (dark metallic gray)
+  ctx.fillStyle = 'rgba(75, 85, 99, 0.5)';
+  ctx.fillRect(-widthPx / 2, -lengthPx / 2, widthPx, lengthPx);
+
+  // Ladder rungs pattern
+  ctx.strokeStyle = 'rgba(55, 65, 81, 0.8)';
+  ctx.lineWidth = 2 / zoom;
+  const rungSpacing = 10 / zoom;
+  
+  ctx.beginPath();
+  for (let y = -lengthPx / 2 + rungSpacing; y < lengthPx / 2; y += rungSpacing) {
+    ctx.moveTo(-widthPx / 2, y);
+    ctx.lineTo(widthPx / 2, y);
+  }
+  ctx.stroke();
+
+  // Side rails
+  ctx.lineWidth = 2.5 / zoom;
+  ctx.beginPath();
+  ctx.moveTo(-widthPx / 2, -lengthPx / 2);
+  ctx.lineTo(-widthPx / 2, lengthPx / 2);
+  ctx.moveTo(widthPx / 2, -lengthPx / 2);
+  ctx.lineTo(widthPx / 2, lengthPx / 2);
+  ctx.stroke();
+
+  // Border
+  ctx.strokeStyle = isSelected ? '#34D399' : '#374151';
+  ctx.lineWidth = (isSelected ? 2.5 : 1.5) / zoom;
+  ctx.strokeRect(-widthPx / 2, -lengthPx / 2, widthPx, lengthPx);
+
+  ctx.restore();
+};
+
 export interface RenderAllParams {
   equipment: EquipmentItem[];
   lines: SupplyLine[];
@@ -317,6 +421,8 @@ export interface RenderAllParams {
   selectedItemId: string | null;
   scaleLine: { start: Point; end: Point } | null;
   plantSetupConfig?: PlantSetupConfig;
+  placedWalkways?: PlacedWalkway[];
+  placedCableTrays?: PlacedCableTray[];
 }
 
 /**
@@ -326,11 +432,25 @@ export const renderAllMarkups = (
   ctx: CanvasRenderingContext2D,
   params: RenderAllParams
 ) => {
-  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, scaleLine, plantSetupConfig } = params;
+  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, scaleLine, plantSetupConfig, placedWalkways, placedCableTrays } = params;
 
   // Draw roof masks first (background)
   for (const mask of roofMasks) {
     drawRoofMask(ctx, mask, zoom, selectedItemId === mask.id);
+  }
+
+  // Draw walkways (below PV arrays)
+  if (placedWalkways) {
+    for (const walkway of placedWalkways) {
+      drawWalkway(ctx, walkway, selectedItemId === walkway.id, false, zoom, scaleInfo);
+    }
+  }
+
+  // Draw cable trays (below PV arrays)
+  if (placedCableTrays) {
+    for (const tray of placedCableTrays) {
+      drawCableTray(ctx, tray, selectedItemId === tray.id, false, zoom, scaleInfo);
+    }
   }
 
   // Draw PV arrays
