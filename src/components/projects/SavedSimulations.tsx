@@ -247,6 +247,8 @@ export function SavedSimulations({
   const handleLoad = (sim: SavedSimulation) => {
     const resultsJson = sim.results_json as any;
     
+    console.log("Loading simulation:", sim.name, "resultsJson:", resultsJson);
+    
     // Determine solar data source from simulation_type or saved value
     let solarDataSource: "solcast" | "pvgis_monthly" | "pvgis_tmy" = "pvgis_monthly";
     if (resultsJson?.solarDataSource) {
@@ -259,7 +261,7 @@ export function SavedSimulations({
       solarDataSource = "pvgis_monthly";
     }
     
-    onLoadSimulation({
+    const configToLoad = {
       solarCapacity: sim.solar_capacity_kwp || 100,
       batteryCapacity: sim.battery_capacity_kwh || 50,
       batteryPower: sim.battery_power_kw || 25,
@@ -273,7 +275,10 @@ export function SavedSimulations({
       advancedConfig: resultsJson?.advancedConfig,
       lossCalculationMode: resultsJson?.lossCalculationMode,
       productionReductionPercent: resultsJson?.productionReductionPercent,
-    });
+    };
+    
+    console.log("Calling onLoadSimulation with:", configToLoad);
+    onLoadSimulation(configToLoad);
     toast.success(`Loaded configuration: ${sim.name}`);
   };
 
