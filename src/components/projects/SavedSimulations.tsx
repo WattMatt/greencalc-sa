@@ -133,7 +133,7 @@ export function SavedSimulations({
   const { generating: generatingInfographics, generateInfographics } = useInfographicGeneration();
 
   // Fetch saved simulations
-  // Fetch saved simulations (exclude auto-saves from the list)
+  // Fetch saved simulations (including auto-save)
   const { data: savedSimulations, isLoading } = useQuery({
     queryKey: ["project-simulations", projectId],
     queryFn: async () => {
@@ -141,7 +141,6 @@ export function SavedSimulations({
         .from("project_simulations")
         .select("*")
         .eq("project_id", projectId)
-        .not("name", "ilike", "Auto-saved%")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as SavedSimulation[];
