@@ -7,12 +7,19 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { MapPin, Sun, Cloud, Thermometer, RefreshCw, Navigation, Zap, Locate, Database, Radio, Check, X } from "lucide-react";
+import { MapPin, Sun, Cloud, Thermometer, RefreshCw, Navigation, Zap, Locate, Database, Radio, Check, X, Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSolcastForecast, SolcastForecastResponse } from "@/hooks/useSolcastForecast";
 import { usePVGISProfile, PVGISTMYResponse, PVGISMonthlyResponse } from "@/hooks/usePVGISProfile";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+
+interface SearchResult {
+  place_name: string;
+  latitude: number;
+  longitude: number;
+  relevance: number;
+}
 
 interface ProjectLocationMapProps {
   projectId: string;
@@ -52,6 +59,14 @@ export function ProjectLocationMap({
   const [editLat, setEditLat] = useState<string>("");
   const [editLng, setEditLng] = useState<string>("");
   const [isEditingCoords, setIsEditingCoords] = useState(false);
+  
+  // Location search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch Mapbox token
   const { data: mapboxToken } = useQuery({
@@ -271,6 +286,81 @@ export function ProjectLocationMap({
     setEditLng(lng?.toFixed(6) || "");
   };
 
+  // Location search handlers
+  const handleSearchChange = useCallback((query: string) => {
+    setSearchQuery(query);
+    
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    if (query.length < 3) {
+      setSearchResults([]);
+      setShowSuggestions(false);
+      return;
+    }
+    
+    // Debounce search
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("geocode-location", {
+          body: { location: query, limit: 5 }
+        });
+        
+        if (error) throw error;
+        
+        if (data?.suggestions && data.suggestions.length > 0) {
+          setSearchResults(data.suggestions);
+          setShowSuggestions(true);
+        } else {
+          setSearchResults([]);
+        }
+      } catch (err) {
+        console.error("Search failed:", err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+  }, []);
+
+  const handleSelectSearchResult = useCallback((result: SearchResult) => {
+    setPendingCoords({ lat: result.latitude, lng: result.longitude });
+    setEditLat(result.latitude.toFixed(6));
+    setEditLng(result.longitude.toFixed(6));
+    updateMarker(result.latitude, result.longitude, true);
+    map.current?.flyTo({ 
+      center: [result.longitude, result.latitude], 
+      zoom: 14 
+    });
+    setSearchQuery("");
+    setShowSuggestions(false);
+    setSearchResults([]);
+  }, [updateMarker]);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (mapLoaded && latitude && longitude && !pendingCoords) {
       updateMarker(latitude, longitude, false);
@@ -344,14 +434,49 @@ export function ProjectLocationMap({
       {/* Map */}
       <Card className="lg:col-span-2">
         <CardHeader className="pb-2 space-y-3">
-          {/* Row 1: Title + Location Name */}
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-base">
+          {/* Row 1: Title + Search */}
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2 text-base shrink-0">
               <MapPin className="h-4 w-4" />
               Site Location
             </CardTitle>
+            
+            {/* Location Search */}
+            <div ref={searchContainerRef} className="relative flex-1 max-w-[280px]">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onFocus={() => searchResults.length > 0 && setShowSuggestions(true)}
+                  placeholder="Search location..."
+                  className="h-7 text-xs pl-7 pr-8"
+                />
+                {isSearching && (
+                  <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              
+              {/* Suggestions Dropdown */}
+              {showSuggestions && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-50 max-h-[200px] overflow-y-auto">
+                  {searchResults.map((result, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleSelectSearchResult(result)}
+                      className="w-full px-3 py-2 text-left text-xs hover:bg-accent flex items-start gap-2 border-b border-border/50 last:border-0"
+                    >
+                      <MapPin className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                      <span className="line-clamp-2">{result.place_name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            
             {location && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-xs shrink-0 hidden sm:inline-flex">
                 {location}
               </Badge>
             )}
