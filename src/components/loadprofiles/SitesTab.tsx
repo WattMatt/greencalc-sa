@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock, Settings, Globe, Navigation, List, Map as MapIcon } from "lucide-react";
+import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock, Settings, Navigation, List, Map as MapIcon } from "lucide-react";
 import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
 import { BulkCsvDropzone } from "@/components/loadprofiles/BulkCsvDropzone";
@@ -79,7 +79,6 @@ export function SitesTab() {
     latitude: null as number | null,
     longitude: null as number | null,
   });
-  const [isGeocoding, setIsGeocoding] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
 
   const { data: sites, isLoading } = useQuery({
@@ -1161,27 +1160,6 @@ export function SitesTab() {
     });
   };
 
-  // Batch geocode all sites without coordinates
-  const handleBatchGeocode = async () => {
-    setIsGeocoding(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("batch-geocode-sites");
-      if (error) throw error;
-      
-      queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
-      toast.success(`Geocoded ${data.success} sites`);
-      
-      if (data.failed > 0) {
-        toast.warning(`${data.failed} sites could not be geocoded`);
-      }
-    } catch (err) {
-      console.error("Geocoding failed:", err);
-      toast.error("Failed to geocode sites");
-    } finally {
-      setIsGeocoding(false);
-    }
-  };
-
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "-";
     return new Date(dateStr).toLocaleDateString();
@@ -1528,20 +1506,6 @@ export function SitesTab() {
               <MapIcon className="h-4 w-4" />
             </ToggleGroupItem>
           </ToggleGroup>
-          {/* Geocode button */}
-          <Button
-            variant="outline" 
-            size="sm"
-            onClick={handleBatchGeocode}
-            disabled={isGeocoding}
-          >
-            {isGeocoding ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Globe className="h-4 w-4 mr-2" />
-            )}
-            Geocode All
-          </Button>
           <Button variant="outline" onClick={() => setSheetImportOpen(true)}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Import Sheet
