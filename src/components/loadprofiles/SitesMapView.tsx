@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { MapPin, Loader2, Plus, X } from "lucide-react";
+import { MapPin, Loader2, Plus, X, Search, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -21,6 +23,13 @@ interface Site {
   meter_count?: number;
   meters_with_data?: number;
   meters_listed_only?: number;
+}
+
+interface GooglePlacesSuggestion {
+  place_id: string;
+  place_name: string;
+  main_text: string;
+  secondary_text: string;
 }
 
 interface SitesMapViewProps {
@@ -50,6 +59,14 @@ export function SitesMapView({
   const [isPlacingPin, setIsPlacingPin] = useState(false);
   const [pendingLocation, setPendingLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [siteWithoutLocation, setSiteWithoutLocation] = useState<Site | null>(null);
+  
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<GooglePlacesSuggestion[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch Mapbox token
   const { data: mapboxToken } = useQuery({
@@ -227,12 +244,113 @@ export function SitesMapView({
     }
   }, [mapLoaded, sitesWithLocation, selectedSiteId, onSiteSelect, createMarkerElement]);
 
+  // Location search handlers
+  const handleSearchChange = useCallback((query: string) => {
+    setSearchQuery(query);
+    
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    if (query.length < 3) {
+      setSearchResults([]);
+      setShowSuggestions(false);
+      return;
+    }
+    
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("google-places-search", {
+          body: { query }
+        });
+        
+        if (error) throw error;
+        
+        if (data?.suggestions && data.suggestions.length > 0) {
+          setSearchResults(data.suggestions);
+          setShowSuggestions(true);
+        } else {
+          setSearchResults([]);
+        }
+      } catch (err) {
+        console.error("Search failed:", err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+  }, []);
+
+  const handleSelectSearchResult = useCallback(async (result: GooglePlacesSuggestion) => {
+    if (!siteWithoutLocation) return;
+    
+    setIsSearching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("google-places-search", {
+        body: { place_id: result.place_id }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success && data.latitude && data.longitude) {
+        setPendingLocation({ lat: data.latitude, lng: data.longitude });
+        
+        // Show temporary marker
+        if (tempMarkerRef.current) {
+          tempMarkerRef.current.remove();
+        }
+        
+        const el = createMarkerElement(siteWithoutLocation.name, true);
+        tempMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: "bottom" })
+          .setLngLat([data.longitude, data.latitude])
+          .addTo(map.current!);
+        
+        map.current?.flyTo({ 
+          center: [data.longitude, data.latitude], 
+          zoom: 14 
+        });
+      } else {
+        toast.error("Could not get coordinates for this location");
+      }
+    } catch (err) {
+      console.error("Failed to get place details:", err);
+      toast.error("Failed to get location details");
+    } finally {
+      setSearchQuery("");
+      setShowSuggestions(false);
+      setSearchResults([]);
+      setIsSearching(false);
+    }
+  }, [siteWithoutLocation, createMarkerElement]);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Start placing pin for a site
   const startPlacingPin = (site: Site) => {
     setSiteWithoutLocation(site);
     setIsPlacingPin(true);
     setPendingLocation(null);
-    toast.info(`Click on the map to set location for "${site.name}"`);
+    setSearchQuery("");
   };
 
   // Cancel pin placement
@@ -240,6 +358,9 @@ export function SitesMapView({
     setIsPlacingPin(false);
     setSiteWithoutLocation(null);
     setPendingLocation(null);
+    setSearchQuery("");
+    setSearchResults([]);
+    setShowSuggestions(false);
     tempMarkerRef.current?.remove();
     tempMarkerRef.current = null;
   };
@@ -268,62 +389,98 @@ export function SitesMapView({
       {sitesWithoutLocation.length > 0 && !isPlacingPin && (
         <Card className="absolute top-4 left-4 p-3 max-w-xs bg-background/95 backdrop-blur">
           <div className="flex items-center gap-2 mb-2">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Sites without location</span>
-            <Badge variant="secondary" className="ml-auto">{sitesWithoutLocation.length}</Badge>
+            <AlertCircle className="h-4 w-4 text-destructive" />
+            <span className="text-sm font-medium">Sites missing location</span>
+            <Badge variant="destructive" className="ml-auto">{sitesWithoutLocation.length}</Badge>
           </div>
-          <div className="space-y-1 max-h-40 overflow-y-auto">
-            {sitesWithoutLocation.slice(0, 5).map(site => (
-              <Button
-                key={site.id}
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start text-xs h-7"
-                onClick={() => startPlacingPin(site)}
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                {site.name}
-              </Button>
-            ))}
-            {sitesWithoutLocation.length > 5 && (
-              <p className="text-xs text-muted-foreground px-2">
-                +{sitesWithoutLocation.length - 5} more...
-              </p>
-            )}
-          </div>
+          <ScrollArea className="max-h-48">
+            <div className="space-y-1 pr-2">
+              {sitesWithoutLocation.map(site => (
+                <Button
+                  key={site.id}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start text-xs h-7"
+                  onClick={() => startPlacingPin(site)}
+                >
+                  <MapPin className="h-3 w-3 mr-1 text-muted-foreground" />
+                  {site.name}
+                </Button>
+              ))}
+            </div>
+          </ScrollArea>
         </Card>
       )}
 
-      {/* Pin placement mode */}
+      {/* Pin placement mode with search */}
       {isPlacingPin && siteWithoutLocation && (
-        <Card className="absolute top-4 left-1/2 -translate-x-1/2 p-3 bg-background/95 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="text-sm">
-              <span className="text-muted-foreground">Setting location for:</span>{" "}
-              <span className="font-medium">{siteWithoutLocation.name}</span>
+        <Card className="absolute top-4 left-4 right-4 mx-auto max-w-lg p-4 bg-background/95 backdrop-blur">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm">
+                <span className="text-muted-foreground">Setting location for:</span>{" "}
+                <span className="font-medium">{siteWithoutLocation.name}</span>
+              </div>
+              <Button size="sm" variant="ghost" onClick={cancelPlacement}>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-            {pendingLocation ? (
-              <>
+            
+            {/* Search input */}
+            <div ref={searchContainerRef} className="relative">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onFocus={() => searchResults.length > 0 && setShowSuggestions(true)}
+                  placeholder="Search location or click on map..."
+                  className="pl-8 pr-8 h-9"
+                  autoFocus
+                />
+                {isSearching && (
+                  <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              
+              {/* Suggestions Dropdown */}
+              {showSuggestions && searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
+                  {searchResults.map((result, i) => (
+                    <button
+                      key={result.place_id || i}
+                      className="w-full text-left px-3 py-2 hover:bg-accent transition-colors border-b border-border/50 last:border-0"
+                      onClick={() => handleSelectSearchResult(result)}
+                    >
+                      <div className="font-medium text-sm">{result.main_text}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {result.secondary_text}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Pending location actions */}
+            {pendingLocation && (
+              <div className="flex items-center justify-between pt-2 border-t border-border">
                 <Badge variant="secondary" className="font-mono text-xs">
                   {pendingLocation.lat.toFixed(4)}, {pendingLocation.lng.toFixed(4)}
                 </Badge>
                 <Button size="sm" onClick={confirmPlacement}>
-                  Confirm
+                  Confirm Location
                 </Button>
-              </>
-            ) : (
-              <span className="text-xs text-muted-foreground">Click map to place pin</span>
+              </div>
             )}
-            <Button size="sm" variant="ghost" onClick={cancelPlacement}>
-              <X className="h-4 w-4" />
-            </Button>
           </div>
         </Card>
       )}
 
       {/* Stats badge */}
       <Badge 
-        variant="secondary" 
+        variant={sitesWithoutLocation.length > 0 ? "destructive" : "secondary"} 
         className="absolute bottom-4 left-4 bg-background/80 backdrop-blur"
       >
         {sitesWithLocation.length} / {sites.length} sites mapped
