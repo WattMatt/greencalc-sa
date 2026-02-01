@@ -79,7 +79,6 @@ export function SitesTab() {
     latitude: null as number | null,
     longitude: null as number | null,
   });
-  const [isSyncing, setIsSyncing] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
 
@@ -1162,27 +1161,6 @@ export function SitesTab() {
     });
   };
 
-  // Sync sites from external source (engi-ops-nexus)
-  const handleSyncFromExternal = async () => {
-    setIsSyncing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("sync-external-sites");
-      if (error) throw error;
-      
-      queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
-      toast.success(`Synced ${data.updated} site locations from external source`);
-      
-      if (data.not_found > 0) {
-        toast.info(`${data.not_found} sites not found in external system`);
-      }
-    } catch (err) {
-      console.error("Sync failed:", err);
-      toast.error("Failed to sync from external source");
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   // Batch geocode all sites without coordinates
   const handleBatchGeocode = async () => {
     setIsGeocoding(true);
@@ -1550,21 +1528,8 @@ export function SitesTab() {
               <MapIcon className="h-4 w-4" />
             </ToggleGroupItem>
           </ToggleGroup>
-          {/* Sync/Geocode buttons */}
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={handleSyncFromExternal}
-            disabled={isSyncing}
-          >
-            {isSyncing ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4 mr-2" />
-            )}
-            Sync Locations
-          </Button>
-          <Button 
+          {/* Geocode button */}
+          <Button
             variant="outline" 
             size="sm"
             onClick={handleBatchGeocode}
