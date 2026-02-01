@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock, Settings, Globe, Navigation, List, Map } from "lucide-react";
+import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock, Settings, Globe, Navigation, List, Map as MapIcon } from "lucide-react";
 import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
 import { BulkCsvDropzone } from "@/components/loadprofiles/BulkCsvDropzone";
@@ -1547,7 +1547,7 @@ export function SitesTab() {
               <List className="h-4 w-4" />
             </ToggleGroupItem>
             <ToggleGroupItem value="map" size="sm" aria-label="Map view">
-              <Map className="h-4 w-4" />
+              <MapIcon className="h-4 w-4" />
             </ToggleGroupItem>
           </ToggleGroup>
           {/* Sync/Geocode buttons */}
