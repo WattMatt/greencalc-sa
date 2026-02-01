@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet, CheckCircle2, AlertCircle, Lock, Circle, CalendarIcon, Save, TrendingUp, Leaf, Battery, Building2, MapPin } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet, CheckCircle2, AlertCircle, Lock, Circle, CalendarIcon, Save, TrendingUp, Leaf, Battery, Building2, MapPin, CalendarDays } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { TenantManager } from "@/components/projects/TenantManager";
@@ -25,6 +25,7 @@ import { ProjectLocationMap } from "@/components/projects/ProjectLocationMap";
 import { ProposalManager } from "@/components/projects/ProposalManager";
 import { SystemCostsManager, SystemCostsData } from "@/components/projects/SystemCostsManager";
 import { DEFAULT_SYSTEM_COSTS } from "@/components/projects/simulation/FinancialAnalysis";
+import { ProjectGantt } from "@/components/gantt";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -923,6 +924,20 @@ export default function ProjectDetail() {
     enabled: !!id,
   });
 
+  // Fetch gantt task count for status tracking
+  const { data: ganttTaskCount = 0 } = useQuery({
+    queryKey: ["project-gantt-tasks-count", id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("gantt_tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", id);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!id,
+  });
+
   const updateProject = useMutation({
     mutationFn: async (updates: { tariff_id?: string; total_area_sqm?: number; connection_size_kva?: number }) => {
       const { error } = await supabase.from("projects").update(updates).eq("id", id);
@@ -1048,6 +1063,12 @@ export default function ProjectDetail() {
     reports: {
       status: "complete",
       tooltip: "Generate project reports"
+    },
+    schedule: {
+      status: ganttTaskCount > 0 ? "complete" : "pending",
+      tooltip: ganttTaskCount > 0 
+        ? `${ganttTaskCount} task${ganttTaskCount > 1 ? 's' : ''} scheduled`
+        : "Create project schedule"
     }
   };
 
@@ -1125,6 +1146,10 @@ export default function ProjectDetail() {
             <TabWithStatus value="reports" status={tabStatuses.reports.status} tooltip={tabStatuses.reports.tooltip}>
               <FileText className="h-4 w-4 mr-2" />
               Reports
+            </TabWithStatus>
+            <TabWithStatus value="schedule" status={tabStatuses.schedule.status} tooltip={tabStatuses.schedule.tooltip}>
+              <CalendarDays className="h-4 w-4 mr-2" />
+              Schedule
             </TabWithStatus>
           </TabsList>
         </TooltipProvider>
@@ -1233,6 +1258,10 @@ export default function ProjectDetail() {
             projectName={project.name}
             branding={latestProposal?.branding as any}
           />
+        </TabsContent>
+
+        <TabsContent value="schedule" className="mt-6">
+          <ProjectGantt projectId={id!} projectName={project.name} />
         </TabsContent>
       </Tabs>
     </div>

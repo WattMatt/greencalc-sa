@@ -120,6 +120,219 @@ export type Database = {
           },
         ]
       }
+      gantt_baseline_tasks: {
+        Row: {
+          baseline_id: string
+          created_at: string
+          end_date: string
+          id: string
+          name: string
+          start_date: string
+          task_id: string
+        }
+        Insert: {
+          baseline_id: string
+          created_at?: string
+          end_date: string
+          id?: string
+          name: string
+          start_date: string
+          task_id: string
+        }
+        Update: {
+          baseline_id?: string
+          created_at?: string
+          end_date?: string
+          id?: string
+          name?: string
+          start_date?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gantt_baseline_tasks_baseline_id_fkey"
+            columns: ["baseline_id"]
+            isOneToOne: false
+            referencedRelation: "gantt_baselines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gantt_baseline_tasks_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "gantt_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gantt_baselines: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          project_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          project_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gantt_baselines_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gantt_milestones: {
+        Row: {
+          color: string | null
+          created_at: string
+          date: string
+          description: string | null
+          id: string
+          name: string
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          date: string
+          description?: string | null
+          id?: string
+          name: string
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          date?: string
+          description?: string | null
+          id?: string
+          name?: string
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gantt_milestones_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gantt_task_dependencies: {
+        Row: {
+          created_at: string
+          dependency_type: Database["public"]["Enums"]["gantt_dependency_type"]
+          id: string
+          predecessor_id: string
+          successor_id: string
+        }
+        Insert: {
+          created_at?: string
+          dependency_type?: Database["public"]["Enums"]["gantt_dependency_type"]
+          id?: string
+          predecessor_id: string
+          successor_id: string
+        }
+        Update: {
+          created_at?: string
+          dependency_type?: Database["public"]["Enums"]["gantt_dependency_type"]
+          id?: string
+          predecessor_id?: string
+          successor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gantt_task_dependencies_predecessor_id_fkey"
+            columns: ["predecessor_id"]
+            isOneToOne: false
+            referencedRelation: "gantt_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gantt_task_dependencies_successor_id_fkey"
+            columns: ["successor_id"]
+            isOneToOne: false
+            referencedRelation: "gantt_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gantt_tasks: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          end_date: string
+          id: string
+          name: string
+          owner: string | null
+          progress: number
+          project_id: string
+          sort_order: number
+          start_date: string
+          status: Database["public"]["Enums"]["gantt_task_status"]
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          end_date: string
+          id?: string
+          name: string
+          owner?: string | null
+          progress?: number
+          project_id: string
+          sort_order?: number
+          start_date: string
+          status?: Database["public"]["Enums"]["gantt_task_status"]
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          end_date?: string
+          id?: string
+          name?: string
+          owner?: string | null
+          progress?: number
+          project_id?: string
+          sort_order?: number
+          start_date?: string
+          status?: Database["public"]["Enums"]["gantt_task_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gantt_tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       municipalities: {
         Row: {
           ai_confidence: number | null
@@ -1533,6 +1746,12 @@ export type Database = {
     }
     Enums: {
       day_type: "Weekday" | "Saturday" | "Sunday"
+      gantt_dependency_type:
+        | "finish_to_start"
+        | "start_to_start"
+        | "finish_to_finish"
+        | "start_to_finish"
+      gantt_task_status: "not_started" | "in_progress" | "completed"
       phase_type: "Single Phase" | "Three Phase"
       season_type: "All Year" | "High/Winter" | "Low/Summer"
       tariff_type: "Fixed" | "IBT" | "TOU"
@@ -1678,6 +1897,13 @@ export const Constants = {
   public: {
     Enums: {
       day_type: ["Weekday", "Saturday", "Sunday"],
+      gantt_dependency_type: [
+        "finish_to_start",
+        "start_to_start",
+        "finish_to_finish",
+        "start_to_finish",
+      ],
+      gantt_task_status: ["not_started", "in_progress", "completed"],
       phase_type: ["Single Phase", "Three Phase"],
       season_type: ["All Year", "High/Winter", "Low/Summer"],
       tariff_type: ["Fixed", "IBT", "TOU"],
