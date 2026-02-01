@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock, Settings, Globe, Navigation } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock, Settings, Globe, Navigation, List, Map } from "lucide-react";
 import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
 import { BulkCsvDropzone } from "@/components/loadprofiles/BulkCsvDropzone";
@@ -19,6 +20,7 @@ import { ColumnSelectionDialog } from "@/components/loadprofiles/ColumnSelection
 import { CsvImportWizard, WizardParseConfig, ParsedData } from "@/components/loadprofiles/CsvImportWizard";
 import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
 import { SiteLocationMap } from "@/components/loadprofiles/SiteLocationMap";
+import { SitesMapView } from "@/components/loadprofiles/SitesMapView";
 
 interface Site {
   id: string;
@@ -79,6 +81,7 @@ export function SitesTab() {
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
 
   const { data: sites, isLoading } = useQuery({
     queryKey: ["sites-with-stats"],
@@ -1509,6 +1512,24 @@ export function SitesTab() {
     );
   }
 
+  // Handle setting location from map view
+  const handleMapLocationSet = async (siteId: string, lat: number, lng: number) => {
+    try {
+      const { error } = await supabase
+        .from("sites")
+        .update({ latitude: lat, longitude: lng })
+        .eq("id", siteId);
+      
+      if (error) throw error;
+      
+      queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
+      toast.success("Site location updated");
+    } catch (error) {
+      console.error("Failed to update site location:", error);
+      toast.error("Failed to update location");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1519,7 +1540,16 @@ export function SitesTab() {
             Manage sites and upload meter data for each location
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* View toggle */}
+          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as "list" | "map")}>
+            <ToggleGroupItem value="list" size="sm" aria-label="List view">
+              <List className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="map" size="sm" aria-label="Map view">
+              <Map className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
           {/* Sync/Geocode buttons */}
           <Button 
             variant="outline" 
@@ -1652,7 +1682,7 @@ export function SitesTab() {
         </DialogContent>
       </Dialog>
 
-      {/* Sites Grid */}
+      {/* Sites View - List or Map */}
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground">Loading sites...</div>
       ) : !sites?.length ? (
@@ -1669,6 +1699,13 @@ export function SitesTab() {
             </Button>
           </CardContent>
         </Card>
+      ) : viewMode === "map" ? (
+        <SitesMapView
+          sites={sites}
+          onSiteSelect={setSelectedSite}
+          onLocationSet={handleMapLocationSet}
+          selectedSiteId={selectedSite?.id}
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {sites.map((site) => (
