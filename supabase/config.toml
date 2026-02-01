@@ -24,6 +24,12 @@ verify_jwt = false
 [functions.sync-external-projects]
 verify_jwt = false
 
+[functions.sync-external-sites]
+verify_jwt = false
+
+[functions.batch-geocode-sites]
+verify_jwt = false
+
 [functions.solcast-forecast]
 verify_jwt = false
 

@@ -1160,7 +1160,9 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          latitude: number | null
           location: string | null
+          longitude: number | null
           name: string
           site_type: string | null
           total_area_sqm: number | null
@@ -1170,7 +1172,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          latitude?: number | null
           location?: string | null
+          longitude?: number | null
           name: string
           site_type?: string | null
           total_area_sqm?: number | null
@@ -1180,7 +1184,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          latitude?: number | null
           location?: string | null
+          longitude?: number | null
           name?: string
           site_type?: string | null
           total_area_sqm?: number | null

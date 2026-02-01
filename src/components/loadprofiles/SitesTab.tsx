@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Play, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock, Settings } from "lucide-react";
+import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock, Settings, Globe, Navigation } from "lucide-react";
 import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
 import { BulkCsvDropzone } from "@/components/loadprofiles/BulkCsvDropzone";
@@ -18,12 +18,15 @@ import { MeterReimportDialog } from "@/components/loadprofiles/MeterReimportDial
 import { ColumnSelectionDialog } from "@/components/loadprofiles/ColumnSelectionDialog";
 import { CsvImportWizard, WizardParseConfig, ParsedData } from "@/components/loadprofiles/CsvImportWizard";
 import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
+import { SiteLocationMap } from "@/components/loadprofiles/SiteLocationMap";
 
 interface Site {
   id: string;
   name: string;
   site_type: string | null;
   location: string | null;
+  latitude: number | null;
+  longitude: number | null;
   total_area_sqm: number | null;
   created_at: string;
   meter_count?: number;
@@ -71,7 +74,11 @@ export function SitesTab() {
     name: "",
     site_type: "",
     location: "",
+    latitude: null as number | null,
+    longitude: null as number | null,
   });
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
 
   const { data: sites, isLoading } = useQuery({
     queryKey: ["sites-with-stats"],
@@ -145,6 +152,8 @@ export function SitesTab() {
       name: string;
       site_type: string | null;
       location: string | null;
+      latitude: number | null;
+      longitude: number | null;
     }) => {
       if (editingSite) {
         const { error } = await supabase
@@ -1123,7 +1132,7 @@ export function SitesTab() {
   };
 
   const resetForm = () => {
-    setFormData({ name: "", site_type: "", location: "" });
+    setFormData({ name: "", site_type: "", location: "", latitude: null, longitude: null });
     setEditingSite(null);
   };
 
@@ -1134,6 +1143,8 @@ export function SitesTab() {
       name: site.name,
       site_type: site.site_type || "",
       location: site.location || "",
+      latitude: site.latitude,
+      longitude: site.longitude,
     });
     setSiteDialogOpen(true);
   };
@@ -1143,7 +1154,51 @@ export function SitesTab() {
       name: formData.name,
       site_type: formData.site_type || null,
       location: formData.location || null,
+      latitude: formData.latitude,
+      longitude: formData.longitude,
     });
+  };
+
+  // Sync sites from external source (engi-ops-nexus)
+  const handleSyncFromExternal = async () => {
+    setIsSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-external-sites");
+      if (error) throw error;
+      
+      queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
+      toast.success(`Synced ${data.updated} site locations from external source`);
+      
+      if (data.not_found > 0) {
+        toast.info(`${data.not_found} sites not found in external system`);
+      }
+    } catch (err) {
+      console.error("Sync failed:", err);
+      toast.error("Failed to sync from external source");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Batch geocode all sites without coordinates
+  const handleBatchGeocode = async () => {
+    setIsGeocoding(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("batch-geocode-sites");
+      if (error) throw error;
+      
+      queryClient.invalidateQueries({ queryKey: ["sites-with-stats"] });
+      toast.success(`Geocoded ${data.success} sites`);
+      
+      if (data.failed > 0) {
+        toast.warning(`${data.failed} sites could not be geocoded`);
+      }
+    } catch (err) {
+      console.error("Geocoding failed:", err);
+      toast.error("Failed to geocode sites");
+    } finally {
+      setIsGeocoding(false);
+    }
   };
 
   const formatDate = (dateStr: string | null) => {
@@ -1465,6 +1520,33 @@ export function SitesTab() {
           </p>
         </div>
         <div className="flex gap-2">
+          {/* Sync/Geocode buttons */}
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleSyncFromExternal}
+            disabled={isSyncing}
+          >
+            {isSyncing ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            Sync Locations
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleBatchGeocode}
+            disabled={isGeocoding}
+          >
+            {isGeocoding ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Globe className="h-4 w-4 mr-2" />
+            )}
+            Geocode All
+          </Button>
           <Button variant="outline" onClick={() => setSheetImportOpen(true)}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Import Sheet
@@ -1482,7 +1564,7 @@ export function SitesTab() {
                 Add Site
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-lg">
               <DialogHeader>
                 <DialogTitle>{editingSite ? "Edit" : "Add"} Site</DialogTitle>
                 <DialogDescription>
@@ -1499,7 +1581,7 @@ export function SitesTab() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Location</Label>
+                  <Label>Location Text</Label>
                   <Input
                     placeholder="e.g., Johannesburg, South Africa"
                     value={formData.location}
@@ -1512,6 +1594,25 @@ export function SitesTab() {
                     placeholder="e.g., Shopping Centre, Office Park, Industrial"
                     value={formData.site_type}
                     onChange={(e) => setFormData({ ...formData, site_type: e.target.value })}
+                  />
+                </div>
+                {/* Map for location selection */}
+                <div className="space-y-2">
+                  <Label className="flex items-center justify-between">
+                    <span>Map Location</span>
+                    {formData.latitude && formData.longitude && (
+                      <Badge variant="secondary" className="font-mono text-xs">
+                        {formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)}
+                      </Badge>
+                    )}
+                  </Label>
+                  <SiteLocationMap
+                    latitude={formData.latitude}
+                    longitude={formData.longitude}
+                    siteName={formData.name}
+                    editable={true}
+                    onLocationChange={(lat, lng) => setFormData({ ...formData, latitude: lat, longitude: lng })}
+                    compact={true}
                   />
                 </div>
                 <Button
@@ -1632,10 +1733,23 @@ export function SitesTab() {
                       {site.meters_listed_only || 0}
                     </Badge>
                   </div>
-                  {site.location && (
+                  {/* Coordinates badge */}
+                  {site.latitude && site.longitude ? (
+                    <div className="flex items-center gap-1 text-sm">
+                      <Navigation className="h-4 w-4 text-primary" />
+                      <Badge variant="secondary" className="font-mono text-xs">
+                        {site.latitude.toFixed(4)}, {site.longitude.toFixed(4)}
+                      </Badge>
+                    </div>
+                  ) : site.location ? (
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <MapPin className="h-4 w-4" />
                       {site.location}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground/50">
+                      <MapPin className="h-4 w-4" />
+                      No location set
                     </div>
                   )}
                   {site.total_area_sqm && (
