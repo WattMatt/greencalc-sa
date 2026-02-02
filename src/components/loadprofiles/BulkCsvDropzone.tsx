@@ -127,9 +127,10 @@ function autoDetectConfig(content: string): {
 // Helper: check if a string looks like a datetime value
 function looksLikeDatetime(val: string): boolean {
   if (!val) return false;
+  const cleanVal = val.replace(/"/g, '').trim();
   // Match patterns like: 2025-11-20 00:30:00, 2025/11/20 00:30, 20-11-2025 00:30:00
-  const datetimePattern = /\d{2,4}[-\/]\d{1,2}[-\/]\d{1,4}\s+\d{1,2}:\d{2}/;
-  return datetimePattern.test(val);
+  const datetimePattern = /\d{2,4}[-\/]\d{1,2}[-\/]\d{1,4}[\sT]\d{1,2}:\d{2}/;
+  return datetimePattern.test(cleanVal);
 }
 
 // Score columns to find date and value columns
@@ -142,7 +143,6 @@ function detectColumns(headers: string[], sampleRows: string[][]) {
 
   const datePatterns = ['date', 'rdate', 'datetime', 'timestamp', 'datum', 'zeit'];
   const timePatterns = ['time', 'rtime', 'zeit', 'hour'];
-  const valuePatterns = ['kwh', 'kwh_del', 'energy', 'consumption', 'kw', 'power', 'demand', 'value', 'reading'];
 
   headers.forEach((header, idx) => {
     const lower = header.toLowerCase().trim();
@@ -156,7 +156,9 @@ function detectColumns(headers: string[], sampleRows: string[][]) {
     if (dateCol === -1 && timePatterns.some(p => lower === p || lower.startsWith(p))) {
       // Check if the data in this column looks like datetime (has date + time)
       if (sampleRows.length > 0) {
+        const sampleVal = sampleRows[0]?.[idx];
         const datetimeCount = sampleRows.filter(row => looksLikeDatetime(row[idx])).length;
+        console.log(`[detectColumns] Time column check: header="${header}", sampleVal="${sampleVal}", datetimeCount=${datetimeCount}/${sampleRows.length}, looksLikeDatetime=${looksLikeDatetime(sampleVal || '')}`);
         if (datetimeCount > sampleRows.length * 0.5) {
           // This "time" column actually contains datetime values - use as date column
           dateCol = idx;
