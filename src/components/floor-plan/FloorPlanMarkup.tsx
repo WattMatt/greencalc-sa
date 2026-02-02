@@ -288,24 +288,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           pvArrays: (data.pv_arrays as unknown as any[]) || [],
           equipment: (data.equipment as unknown as any[]) || [],
           lines: (data.cables as unknown as any[]) || [],
-          placedWalkways: (plantSetup?.walkways?.map(w => ({
-            id: w.id,
-            configId: w.id,
-            name: w.name,
-            width: w.width,
-            length: w.length,
-            position: { x: 0, y: 0 },
-            rotation: 0,
-          })) || []) as PlacedWalkway[],
-          placedCableTrays: (plantSetup?.cableTrays?.map(c => ({
-            id: c.id,
-            configId: c.id,
-            name: c.name,
-            width: c.width,
-            length: c.length,
-            position: { x: 0, y: 0 },
-            rotation: 0,
-          })) || []) as PlacedCableTray[],
+          // Load actual placed instances, NOT templates
+          placedWalkways: (plantSetup?.placedWalkways || []) as PlacedWalkway[],
+          placedCableTrays: (plantSetup?.placedCableTrays || []) as PlacedCableTray[],
         };
         setHistory([loadedState]);
         setHistoryIndex(0);
@@ -578,7 +563,12 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         equipment: equipment,
         cables: lines,
         pdf_data: backgroundImage,
-        plant_setup: plantSetupConfig,
+        // Include placed instances in plant_setup alongside templates
+        plant_setup: {
+          ...plantSetupConfig,
+          placedWalkways: placedWalkways,
+          placedCableTrays: placedCableTrays,
+        },
         simulation_id: assignedSimulationId,
       };
 

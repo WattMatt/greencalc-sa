@@ -165,8 +165,10 @@ export interface CableTrayConfig {
 export interface PlantSetupConfig {
   solarModules: SolarModuleConfig[];
   inverters: InverterLayoutConfig[];
-  walkways: WalkwayConfig[];
-  cableTrays: CableTrayConfig[];
+  walkways: WalkwayConfig[];           // Templates
+  cableTrays: CableTrayConfig[];       // Templates
+  placedWalkways?: PlacedWalkway[];    // Actual placed instances
+  placedCableTrays?: PlacedCableTray[]; // Actual placed instances
 }
 
 export const defaultPlantSetupConfig: PlantSetupConfig = {
