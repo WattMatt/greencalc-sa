@@ -80,13 +80,13 @@ export function GanttChart({
       if (isDragging) {
         updateDrag(e.clientX);
       }
-      if (isDraggingDependency && chartRef.current && scrollRef.current) {
-        const chartRect = chartRef.current.getBoundingClientRect();
+      if (isDraggingDependency && scrollRef.current) {
         const scrollRect = scrollRef.current.getBoundingClientRect();
-        // Account for scroll position
+        // Account for scroll position and header height
         const scrollLeft = scrollRef.current.scrollLeft;
         const x = e.clientX - scrollRect.left + scrollLeft;
-        const y = e.clientY - chartRect.top - HEADER_HEIGHT;
+        // y is relative to the task bars container (after header)
+        const y = e.clientY - scrollRect.top - HEADER_HEIGHT;
         updateDependencyDrag(x, y);
       }
     };
@@ -611,13 +611,10 @@ export function GanttChart({
                                       onMouseDown={(e) => {
                                         e.stopPropagation();
                                         e.preventDefault();
-                                        if (scrollRef.current) {
-                                          const scrollRect = scrollRef.current.getBoundingClientRect();
-                                          const scrollLeft = scrollRef.current.scrollLeft;
-                                          const x = e.clientX - scrollRect.left + scrollLeft;
-                                          const y = index * ROW_HEIGHT + ROW_HEIGHT / 2;
-                                          startDependencyDrag(task.id, 'start', x, y);
-                                        }
+                                        // Calculate start position using task bar position
+                                        const startX = left;
+                                        const startY = index * ROW_HEIGHT + ROW_HEIGHT / 2;
+                                        startDependencyDrag(task.id, 'start', startX, startY);
                                       }}
                                       onMouseUp={(e) => {
                                         if (isDraggingDependency && dependencyDragState) {
@@ -634,13 +631,10 @@ export function GanttChart({
                                       onMouseDown={(e) => {
                                         e.stopPropagation();
                                         e.preventDefault();
-                                        if (scrollRef.current) {
-                                          const scrollRect = scrollRef.current.getBoundingClientRect();
-                                          const scrollLeft = scrollRef.current.scrollLeft;
-                                          const x = e.clientX - scrollRect.left + scrollLeft;
-                                          const y = index * ROW_HEIGHT + ROW_HEIGHT / 2;
-                                          startDependencyDrag(task.id, 'end', x, y);
-                                        }
+                                        // Calculate start position using task bar position
+                                        const startX = left + width;
+                                        const startY = index * ROW_HEIGHT + ROW_HEIGHT / 2;
+                                        startDependencyDrag(task.id, 'end', startX, startY);
                                       }}
                                       onMouseUp={(e) => {
                                         if (isDraggingDependency && dependencyDragState) {
