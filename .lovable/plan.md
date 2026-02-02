@@ -1,114 +1,259 @@
 
 
-# Fix: Minimum Spacing Not Applied When Placing Walkways
+# Plan: Add "Tools" Dropdown with Copy and Dimension Tool
 
-## Problem
+## Overview
 
-Looking at the user's screenshot, the walkways are being placed edge-to-edge with **zero gap** between them, even though minimum spacing functionality should be enforced. The PlacementOptionsModal shows "Min Spacing: 0.0m" in the preview area.
+This plan adds a new "Tools" collapsible section in the toolbar with two features:
+1. **Copy Tool**: Button that copies the currently selected object and enters placement mode
+2. **Dimension Tool**: New tool mode that allows measuring/setting distance between two objects
 
-## Root Cause
+## Feature Details
 
-The `snapMaterialToSpacing` function in `geometry.ts` has an early exit condition (line 522-525):
+### 1. Copy Tool Button
+A button in the Tools section that:
+- Is enabled only when an item is selected
+- When clicked, copies the selected item's configuration and enters placement mode (same behavior as Ctrl+C)
+- Works for all object types: PV Arrays, Roof Masks, Equipment, Walkways, Cable Trays
+
+### 2. Dimension Tool (Set Distance Between Objects)
+
+A new tool that allows the user to:
+1. Select **Object 1** (the object that will move)
+2. Select **Object 2** (the stationary reference object)
+3. A popup appears showing the current distance and an input to set the desired distance
+4. Object 1 moves along the line connecting the two objects to achieve the specified distance
+
+**Workflow:**
+```text
++------------------+     +------------------+     +------------------+
+| Click DIMENSION  | --> | Click Object 1   | --> | Click Object 2   |
+| tool in toolbar  |     | (will move)      |     | (stationary)     |
++------------------+     +------------------+     +------------------+
+                                                           |
+                                                           v
+                                              +------------------------+
+                                              | Set Distance Modal     |
+                                              | - Current: 1.5m        |
+                                              | - New Distance: [____] |
+                                              | [Cancel] [Apply]       |
+                                              +------------------------+
+                                                           |
+                                                           v
+                                              Object 1 moves to the
+                                              specified distance from
+                                              Object 2 (center-to-center)
+```
+
+## Implementation
+
+### 1. Update Tool Enum
+
+Add new tool type in `src/components/floor-plan/types.ts`:
 
 ```typescript
-// If not force-aligning and no spacing configured, allow free placement
-if (!forceAlign && minSpacingMeters <= 0) {
-  return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
+export enum Tool {
+  // ... existing tools
+  DIMENSION = 'dimension', // NEW: Set distance between two objects
 }
 ```
 
-**When `minSpacingMeters = 0`, the snapping algorithm exits immediately without enforcing any spacing.**
+### 2. Add Tools Section to Toolbar
 
-This means:
-1. User opens PlacementOptionsModal with default spacing of 0.3m
-2. User (possibly accidentally) sets spacing to 0.0m or clears the input
-3. User clicks "Ready to Place"
-4. All subsequent walkway placements have NO snapping protection
+Update `src/components/floor-plan/components/Toolbar.tsx`:
 
-Additionally, the snapping logic is designed to be **reactive** (only activates when items are getting too close) rather than **proactive** (always maintaining minimum distance). This is fine for preventing overlaps but doesn't help when the configured spacing is 0.
-
-## Solution
-
-### Option A: Enforce Minimum Threshold (Recommended)
-
-Prevent the user from setting minSpacing below a reasonable threshold (e.g., 0.05m = 5cm):
-
-**File: `src/components/floor-plan/components/PlacementOptionsModal.tsx`**
+- Add new icons: `Copy`, `MoveHorizontal` (for dimension tool)
+- Add new section "Tools" after "Materials"
+- Add `onCopySelected` prop callback
+- Add `onSetDimensionTool` callback
 
 ```typescript
-const handleConfirm = () => {
-  onConfirm({
-    orientation,
-    minSpacing: Math.max(0.05, spacingNum), // Enforce minimum 5cm
-  });
+// New section in Toolbar
+<CollapsibleSection 
+  title="Tools"
+  isOpen={openSections.tools}
+  onToggle={() => toggleSection('tools')}
+>
+  <ToolButton
+    icon={Copy}
+    label="Copy"
+    isActive={false}
+    onClick={onCopySelected}
+    disabled={!selectedItemId}
+  />
+  <ToolButton
+    icon={MoveHorizontal}
+    label="Set Distance"
+    isActive={activeTool === Tool.DIMENSION}
+    onClick={() => setActiveTool(Tool.DIMENSION)}
+    disabled={!scaleSet}
+  />
+</CollapsibleSection>
+```
+
+### 3. Create SetDistanceModal Component
+
+New file: `src/components/floor-plan/components/SetDistanceModal.tsx`
+
+Props:
+- `isOpen: boolean`
+- `onClose: () => void`
+- `currentDistance: number` (in meters)
+- `object1Label: string` (e.g., "PV Array")
+- `object2Label: string` (e.g., "Inverter")
+- `onConfirm: (newDistance: number) => void`
+
+Modal shows:
+- Current distance between objects (center-to-center)
+- DimensionInput for new distance
+- Preview of the change (optional)
+- Cancel/Apply buttons
+
+### 4. Add Dimension Tool State Management
+
+Update `src/components/floor-plan/FloorPlanMarkup.tsx`:
+
+New state:
+```typescript
+// Dimension tool state
+const [dimensionObject1Id, setDimensionObject1Id] = useState<string | null>(null);
+const [dimensionObject2Id, setDimensionObject2Id] = useState<string | null>(null);
+const [isSetDistanceModalOpen, setIsSetDistanceModalOpen] = useState(false);
+const [currentMeasuredDistance, setCurrentMeasuredDistance] = useState(0);
+```
+
+New handler:
+```typescript
+const handleDimensionApply = (newDistance: number) => {
+  // Calculate direction vector from object2 to object1
+  // Move object1 along that vector to achieve newDistance
+  // Update the appropriate state (pvArrays, equipment, placedWalkways, etc.)
 };
 ```
 
-Or add validation in the DimensionInput:
+### 5. Handle Dimension Tool Clicks in Canvas
+
+Update `src/components/floor-plan/components/Canvas.tsx`:
+
+When dimension tool is active and user clicks:
+1. First click selects Object 1 (highlight it, show instruction)
+2. Second click selects Object 2 (highlight both, trigger modal)
+
+Add callbacks:
+- `onDimensionObject1Selected: (id: string) => void`
+- `onDimensionObject2Selected: (id: string) => void`
+
+### 6. Add Distance Calculation Utility
+
+Add to `src/components/floor-plan/utils/geometry.ts`:
 
 ```typescript
-const handleValueChange = (inputValue: string) => {
-  setDisplayValue(inputValue);
-  const numericValue = parseFloat(inputValue);
-  if (!isNaN(numericValue)) {
-    const meters = displayToMeters(numericValue, unit);
-    onChange(Math.max(0, meters)); // Already allows 0
+/**
+ * Calculate center-to-center distance between two objects in meters
+ */
+export const getObjectCenterDistance = (
+  pos1: Point,
+  pos2: Point,
+  scaleRatio: number
+): number => {
+  const pixelDistance = distance(pos1, pos2);
+  return pixelDistance * scaleRatio;
+};
+
+/**
+ * Calculate new position for object1 to be at specified distance from object2
+ */
+export const calculateNewPositionAtDistance = (
+  object1Pos: Point,
+  object2Pos: Point,
+  targetDistanceMeters: number,
+  scaleRatio: number
+): Point => {
+  const dx = object1Pos.x - object2Pos.x;
+  const dy = object1Pos.y - object2Pos.y;
+  const currentPixelDist = Math.hypot(dx, dy);
+  
+  if (currentPixelDist === 0) {
+    // Objects at same position, move along X axis
+    return {
+      x: object2Pos.x + targetDistanceMeters / scaleRatio,
+      y: object2Pos.y,
+    };
   }
+  
+  const targetPixelDist = targetDistanceMeters / scaleRatio;
+  const unitX = dx / currentPixelDist;
+  const unitY = dy / currentPixelDist;
+  
+  return {
+    x: object2Pos.x + unitX * targetPixelDist,
+    y: object2Pos.y + unitY * targetPixelDist,
+  };
 };
 ```
 
-### Option B: Always Allow Snapping for Alignment (Even at 0 Spacing)
+### 7. Add Copy Handler in FloorPlanMarkup
 
-Modify the snapping algorithm to still snap for alignment purposes even when minSpacing is 0:
-
-**File: `src/components/floor-plan/utils/geometry.ts`**
-
-Change lines 522-525:
+Extract the existing Ctrl+C logic into a reusable function:
 
 ```typescript
-// BEFORE
-if (!forceAlign && minSpacingMeters <= 0) {
-  return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
-}
-
-// AFTER - Remove this early exit, let snapping still work for alignment
-// (snapping will just enforce 0 gap, which is edge-to-edge)
+const handleCopySelected = useCallback(() => {
+  if (!selectedItemId) return;
+  
+  // Check PV array
+  const selectedPvArray = pvArrays.find(a => a.id === selectedItemId);
+  if (selectedPvArray) {
+    // ... existing copy logic
+    return;
+  }
+  
+  // ... rest of existing copy logic for other types
+}, [selectedItemId, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays]);
 ```
 
-This allows snapping behavior to still work for alignment (matching rotations, grid alignment) even when the user explicitly sets 0 spacing.
-
-### Option C: Add Visual Warning for 0 Spacing
-
-Add a warning in the PlacementOptionsModal when spacing is 0:
-
-```typescript
-{spacingNum === 0 && (
-  <p className="text-xs text-amber-600">
-    Warning: Items will be placed edge-to-edge without gap.
-  </p>
-)}
-```
-
-## Recommended Implementation
-
-Combine **Option A** (enforce minimum threshold) with **Option C** (visual warning):
-
-1. Set a minimum enforced spacing of **0.05m (5cm)** to ensure there's always some gap
-2. If user tries to set below this, clamp the value and show a note
-3. This matches real-world requirements (maintenance access, thermal expansion, etc.)
+Pass this to Toolbar as `onCopySelected` prop.
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/floor-plan/components/PlacementOptionsModal.tsx` | Enforce minimum spacing threshold of 0.05m, add validation message |
-| `src/components/floor-plan/components/DimensionInput.tsx` | (Optional) Add `min` prop for enforcing minimum values |
-| `src/components/floor-plan/utils/geometry.ts` | (Optional) Remove early-exit for 0 spacing to allow alignment snapping |
+| `src/components/floor-plan/types.ts` | Add `DIMENSION` to Tool enum |
+| `src/components/floor-plan/components/Toolbar.tsx` | Add "Tools" section with Copy and Dimension buttons, add new props |
+| `src/components/floor-plan/FloorPlanMarkup.tsx` | Add dimension tool state, modal handlers, copy handler, pass new props |
+| `src/components/floor-plan/components/Canvas.tsx` | Handle dimension tool clicks for object selection |
+| `src/components/floor-plan/utils/geometry.ts` | Add distance calculation utilities |
 
-## Expected Behavior After Fix
+## New File
 
-1. **PlacementOptionsModal**: Default remains 0.3m, minimum enforced at 0.05m
-2. **Validation**: If user enters 0 or negative, value clamps to 0.05m with visual feedback
-3. **Snapping**: Always activates when items are within threshold distance
-4. **Edge-to-edge placement**: No longer possible - minimum 5cm gap enforced
+| File | Purpose |
+|------|---------|
+| `src/components/floor-plan/components/SetDistanceModal.tsx` | Modal for setting distance between two objects |
+
+## UI Behavior
+
+### Tools Section in Toolbar
+- Located after "Materials" section
+- Contains:
+  - **Copy**: Enabled when an item is selected. Copies selection and enters placement mode.
+  - **Set Distance**: Activates dimension tool mode.
+
+### Dimension Tool Mode
+1. **Instruction overlay**: "Click on the first object (will move)"
+2. After first click: "Now click on the reference object (stationary)"
+3. After second click: Modal appears with distance input
+4. On Apply: Object 1 moves, tool returns to Select mode
+5. On Cancel: Both selections cleared, tool returns to Select mode
+
+### Visual Feedback
+- Object 1 highlighted in one color (e.g., blue)
+- Object 2 highlighted in another color (e.g., green)
+- Dashed line drawn between centers showing current distance
+
+## Expected Result
+
+1. **Tools section** appears in toolbar after Materials
+2. **Copy button** works same as Ctrl+C but via toolbar click
+3. **Set Distance button** activates dimension tool
+4. User can select two objects and set exact distance between them
+5. Object 1 moves to the specified distance from Object 2
 
