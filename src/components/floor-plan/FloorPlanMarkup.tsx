@@ -15,11 +15,12 @@ import { PlantSetupModal } from './components/PlantSetupModal';
 import { SimulationSelector } from './components/SimulationSelector';
 import { PlacementOptionsModal, PlacementConfig, toolToPlacementType, PlacementItemType } from './components/PlacementOptionsModal';
 import { SetDistanceModal } from './components/SetDistanceModal';
+import { AlignEdgesModal, AlignmentEdge } from './components/AlignEdgesModal';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { getModulePresetById, getDefaultModulePreset, SolarModulePreset } from '../projects/SolarModulePresets';
-import { getObjectCenterDistance, calculateNewPositionAtDistance } from './utils/geometry';
+import { getObjectCenterDistance, calculateNewPositionAtDistance, calculateAlignedPosition, getPVArrayDimensions, getEquipmentDimensions, getMaterialDimensions } from './utils/geometry';
 
 type ViewMode = 'browser' | 'editor';
 
@@ -121,6 +122,11 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [dimensionObject2Id, setDimensionObject2Id] = useState<string | null>(null);
   const [isSetDistanceModalOpen, setIsSetDistanceModalOpen] = useState(false);
   const [currentMeasuredDistance, setCurrentMeasuredDistance] = useState(0);
+
+  // Align edges tool state
+  const [alignObject1Id, setAlignObject1Id] = useState<string | null>(null);
+  const [alignObject2Id, setAlignObject2Id] = useState<string | null>(null);
+  const [isAlignEdgesModalOpen, setIsAlignEdgesModalOpen] = useState(false);
   const [isScaleModalOpen, setIsScaleModalOpen] = useState(false);
   const [isPVConfigModalOpen, setIsPVConfigModalOpen] = useState(false);
   const [isRoofMaskModalOpen, setIsRoofMaskModalOpen] = useState(false);
@@ -915,6 +921,108 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       setDimensionObject2Id(null);
     }
   }, [activeTool]);
+
+  // Clear align edges tool state when tool changes
+  useEffect(() => {
+    if (activeTool !== Tool.ALIGN_EDGES) {
+      setAlignObject1Id(null);
+      setAlignObject2Id(null);
+    }
+  }, [activeTool]);
+
+  // Get object dimensions by ID (for align edges tool)
+  const getObjectDimensions = useCallback((id: string): { width: number; height: number; rotation: number } | null => {
+    // Check PV arrays
+    const pvArray = pvArrays.find(a => a.id === id);
+    if (pvArray && pvPanelConfig && scaleInfo.ratio) {
+      const dims = getPVArrayDimensions(pvArray, pvPanelConfig, roofMasks, scaleInfo, pvArray.position);
+      return { width: dims.width, height: dims.height, rotation: pvArray.rotation };
+    }
+    
+    // Check equipment
+    const eq = equipment.find(e => e.id === id);
+    if (eq && scaleInfo.ratio) {
+      const dims = getEquipmentDimensions(eq.type, scaleInfo, plantSetupConfig);
+      return { width: dims.width, height: dims.height, rotation: eq.rotation };
+    }
+    
+    // Check walkways
+    const walkway = placedWalkways.find(w => w.id === id);
+    if (walkway && scaleInfo.ratio) {
+      const dims = getMaterialDimensions(walkway, scaleInfo);
+      return { width: dims.width, height: dims.height, rotation: walkway.rotation };
+    }
+    
+    // Check cable trays
+    const cableTray = placedCableTrays.find(c => c.id === id);
+    if (cableTray && scaleInfo.ratio) {
+      const dims = getMaterialDimensions(cableTray, scaleInfo);
+      return { width: dims.width, height: dims.height, rotation: cableTray.rotation };
+    }
+    
+    return null;
+  }, [pvArrays, equipment, placedWalkways, placedCableTrays, pvPanelConfig, scaleInfo, roofMasks, plantSetupConfig]);
+
+  // Handle align edges tool object selection
+  const handleAlignEdgesObjectClick = useCallback((id: string) => {
+    if (!alignObject1Id) {
+      // First selection
+      setAlignObject1Id(id);
+      toast.info('Now click the reference object (stationary)');
+    } else if (alignObject1Id !== id) {
+      // Second selection - open modal
+      setAlignObject2Id(id);
+      setIsAlignEdgesModalOpen(true);
+    }
+  }, [alignObject1Id]);
+
+  // Apply edge alignment
+  const handleAlignEdgesApply = useCallback((alignmentEdge: AlignmentEdge) => {
+    if (!alignObject1Id || !alignObject2Id) return;
+    
+    const pos1 = getObjectPosition(alignObject1Id);
+    const pos2 = getObjectPosition(alignObject2Id);
+    const dims1 = getObjectDimensions(alignObject1Id);
+    const dims2 = getObjectDimensions(alignObject2Id);
+    
+    if (!pos1 || !pos2 || !dims1 || !dims2) return;
+    
+    const newPos = calculateAlignedPosition(
+      pos1,
+      { width: dims1.width, height: dims1.height },
+      dims1.rotation,
+      pos2,
+      { width: dims2.width, height: dims2.height },
+      dims2.rotation,
+      alignmentEdge
+    );
+    
+    // Update the position of object 1
+    if (pvArrays.find(a => a.id === alignObject1Id)) {
+      setPvArrays(prev => prev.map(arr => 
+        arr.id === alignObject1Id ? { ...arr, position: newPos } : arr
+      ));
+    } else if (equipment.find(e => e.id === alignObject1Id)) {
+      setEquipment(prev => prev.map(eq => 
+        eq.id === alignObject1Id ? { ...eq, position: newPos } : eq
+      ));
+    } else if (placedWalkways.find(w => w.id === alignObject1Id)) {
+      setPlacedWalkways(prev => prev.map(w => 
+        w.id === alignObject1Id ? { ...w, position: newPos } : w
+      ));
+    } else if (placedCableTrays.find(c => c.id === alignObject1Id)) {
+      setPlacedCableTrays(prev => prev.map(c => 
+        c.id === alignObject1Id ? { ...c, position: newPos } : c
+      ));
+    }
+    
+    // Reset align edges tool state
+    setAlignObject1Id(null);
+    setAlignObject2Id(null);
+    setIsAlignEdgesModalOpen(false);
+    setActiveTool(Tool.SELECT);
+    toast.success(`Edges aligned (${alignmentEdge})`);
+  }, [alignObject1Id, alignObject2Id, getObjectPosition, getObjectDimensions, pvArrays, equipment, placedWalkways, placedCableTrays, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays]);
   useEffect(() => {
     if (readOnly) return;
     
@@ -1373,6 +1481,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           selectedItemId={selectedItemId}
           dimensionObject1Id={dimensionObject1Id}
           dimensionObject2Id={dimensionObject2Id}
+          alignObject1Id={alignObject1Id}
+          alignObject2Id={alignObject2Id}
         />
       )}
       
@@ -1435,6 +1545,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         placementMinSpacing={placementMinSpacing}
         onDimensionObjectClick={readOnly ? undefined : handleDimensionObjectClick}
         dimensionObject1Id={dimensionObject1Id}
+        onAlignEdgesObjectClick={readOnly ? undefined : handleAlignEdgesObjectClick}
+        alignObject1Id={alignObject1Id}
       />
 
       <SummaryPanel
@@ -1623,6 +1735,19 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
             object1Label={dimensionObject1Id ? getObjectLabel(dimensionObject1Id) : 'Object 1'}
             object2Label={dimensionObject2Id ? getObjectLabel(dimensionObject2Id) : 'Object 2'}
             onConfirm={handleDimensionApply}
+          />
+
+          <AlignEdgesModal
+            isOpen={isAlignEdgesModalOpen}
+            onClose={() => {
+              setIsAlignEdgesModalOpen(false);
+              setAlignObject1Id(null);
+              setAlignObject2Id(null);
+              setActiveTool(Tool.SELECT);
+            }}
+            object1Label={alignObject1Id ? getObjectLabel(alignObject1Id) : 'Object 1'}
+            object2Label={alignObject2Id ? getObjectLabel(alignObject2Id) : 'Object 2'}
+            onConfirm={handleAlignEdgesApply}
           />
         </>
       )}

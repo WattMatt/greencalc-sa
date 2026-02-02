@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
   Upload, Undo2, Redo2, Save, Loader2, ArrowLeft,
-  ChevronLeft, ChevronRight, ChevronDown, Copy, MoveHorizontal
+  ChevronLeft, ChevronRight, ChevronDown, Copy, MoveHorizontal, AlignVerticalJustifyStart
 } from 'lucide-react';
 import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig } from '../types';
 import { Button } from '@/components/ui/button';
@@ -124,6 +124,9 @@ interface ToolbarProps {
   // Dimension tool state
   dimensionObject1Id?: string | null;
   dimensionObject2Id?: string | null;
+  // Align edges tool state
+  alignObject1Id?: string | null;
+  alignObject2Id?: string | null;
 }
 
 export function Toolbar({
@@ -159,6 +162,8 @@ export function Toolbar({
   selectedItemId,
   dimensionObject1Id,
   dimensionObject2Id,
+  alignObject1Id,
+  alignObject2Id,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -506,6 +511,13 @@ export function Toolbar({
             onClick={() => setActiveTool(Tool.DIMENSION)}
             disabled={!scaleSet}
           />
+          <ToolButton
+            icon={AlignVerticalJustifyStart}
+            label="Align Edges"
+            isActive={activeTool === Tool.ALIGN_EDGES}
+            onClick={() => setActiveTool(Tool.ALIGN_EDGES)}
+            disabled={!scaleSet}
+          />
           
           {/* Dimension tool instructions */}
           {activeTool === Tool.DIMENSION && (
@@ -517,6 +529,21 @@ export function Toolbar({
                 <p className="text-blue-600 dark:text-blue-400">Now click the reference object (stationary)</p>
               )}
               {dimensionObject1Id && dimensionObject2Id && (
+                <p className="text-green-600 dark:text-green-400">Both objects selected!</p>
+              )}
+            </div>
+          )}
+
+          {/* Align edges tool instructions */}
+          {activeTool === Tool.ALIGN_EDGES && (
+            <div className="mt-2 p-2 bg-muted/50 rounded text-xs text-muted-foreground">
+              {!alignObject1Id && !alignObject2Id && (
+                <p>Click on the first object (will move)</p>
+              )}
+              {alignObject1Id && !alignObject2Id && (
+                <p className="text-blue-600 dark:text-blue-400">Now click the reference object (stationary)</p>
+              )}
+              {alignObject1Id && alignObject2Id && (
                 <p className="text-green-600 dark:text-green-400">Both objects selected!</p>
               )}
             </div>
