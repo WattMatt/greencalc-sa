@@ -10,6 +10,7 @@ import { useFilterPresets } from '@/hooks/useFilterPresets';
 import { useKeyboardShortcuts, getDefaultGanttShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useOnboardingProgress } from '@/hooks/useOnboardingProgress';
 import { useUndoRedo } from '@/hooks/useUndoRedo';
+import { useCelebration } from '@/hooks/useCelebration';
 import { GanttToolbar } from './GanttToolbar';
 import { GanttChart } from './GanttChart';
 import { TaskForm } from './TaskForm';
@@ -21,6 +22,7 @@ import { ResourceWorkloadView } from './ResourceWorkloadView';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { OnboardingChecklist } from './OnboardingChecklist';
 import { ColorLegend } from './ColorLegend';
+import { toast } from 'sonner';
 import { 
   GanttChartConfig, 
   GanttFilters, 
@@ -49,6 +51,7 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
   const { presets: filterPresets, createPreset, deletePreset, applyPreset } = useFilterPresets(projectId);
   const { steps: onboardingSteps, progress: onboardingProgress, completedCount, totalSteps, isComplete: onboardingComplete, isDismissed: onboardingDismissed, completeStep, dismissOnboarding, resetOnboarding } = useOnboardingProgress(projectId);
   const { canUndo, canRedo, undo, redo, pushAction } = useUndoRedo();
+  const { celebrate, celebrateSubtle, celebrateAllComplete } = useCelebration();
 
   // UI State
   const [config, setConfig] = useState<GanttChartConfig>(DEFAULT_CHART_CONFIG);
@@ -119,9 +122,12 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
     }
   }, [createTask, completeStep]);
 
-  // Handle task update
+  // Handle task update with celebration
   const handleUpdateTask = useCallback(async (formData: TaskFormData) => {
     if (!editingTask) return;
+    
+    const wasNotCompleted = editingTask.status !== 'completed';
+    const isNowCompleted = formData.status === 'completed';
     
     await updateTask.mutateAsync({
       id: editingTask.id,
@@ -135,13 +141,32 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
       color: formData.color,
     });
     
+    // Celebrate task completion!
+    if (wasNotCompleted && isNowCompleted) {
+      // Check if ALL tasks are now completed
+      const otherTasks = tasks.filter(t => t.id !== editingTask.id);
+      const allOthersCompleted = otherTasks.every(t => t.status === 'completed');
+      
+      if (allOthersCompleted && otherTasks.length > 0) {
+        // All tasks complete - big celebration!
+        celebrateAllComplete();
+        toast.success('🎉 All tasks completed! Amazing work!', {
+          duration: 5000,
+        });
+      } else {
+        // Single task complete - subtle celebration
+        celebrateSubtle();
+        toast.success(`✅ "${formData.name}" completed!`);
+      }
+    }
+    
     if (formData.owner) {
       completeStep('assign_owner');
     }
     
     setEditingTask(null);
     setIsTaskFormOpen(false);
-  }, [editingTask, updateTask, completeStep]);
+  }, [editingTask, updateTask, completeStep, tasks, celebrateSubtle, celebrateAllComplete]);
 
   // Handle milestone creation
   const handleCreateMilestone = useCallback(async (formData: MilestoneFormData) => {
@@ -399,7 +424,27 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
             selectedTasks={selectedTasks}
             onSelectTask={handleSelectTask}
             onEditTask={handleEditTask}
-            onUpdateTask={(id, updates) => updateTask.mutate({ id, ...updates })}
+            onUpdateTask={(id, updates) => {
+              const existingTask = tasks.find(t => t.id === id);
+              const wasNotCompleted = existingTask?.status !== 'completed';
+              const isNowCompleted = updates.status === 'completed';
+              
+              updateTask.mutate({ id, ...updates });
+              
+              // Celebrate if task just became completed
+              if (wasNotCompleted && isNowCompleted && existingTask) {
+                const otherTasks = tasks.filter(t => t.id !== id);
+                const allOthersCompleted = otherTasks.every(t => t.status === 'completed');
+                
+                if (allOthersCompleted && otherTasks.length > 0) {
+                  celebrateAllComplete();
+                  toast.success('🎉 All tasks completed! Amazing work!', { duration: 5000 });
+                } else {
+                  celebrateSubtle();
+                  toast.success(`✅ "${existingTask.name}" completed!`);
+                }
+              }
+            }}
             onDeleteTask={(id) => deleteTask.mutate(id)}
             onCreateDependency={(pred, succ, type) => {
               createDependency.mutate({ predecessorId: pred, successorId: succ, dependencyType: type });
