@@ -124,6 +124,14 @@ function autoDetectConfig(content: string): {
   return { delimiter, startRow, isPnpScada, meterName, dateRange };
 }
 
+// Helper: check if a string looks like a datetime value
+function looksLikeDatetime(val: string): boolean {
+  if (!val) return false;
+  // Match patterns like: 2025-11-20 00:30:00, 2025/11/20 00:30, 20-11-2025 00:30:00
+  const datetimePattern = /\d{2,4}[-\/]\d{1,2}[-\/]\d{1,4}\s+\d{1,2}:\d{2}/;
+  return datetimePattern.test(val);
+}
+
 // Score columns to find date and value columns
 function detectColumns(headers: string[], sampleRows: string[][]) {
   let dateCol = -1;
@@ -132,24 +140,31 @@ function detectColumns(headers: string[], sampleRows: string[][]) {
   let bestValueScore = 0;
   let valueUnit: 'kWh' | 'kW' = 'kWh';
 
-  const datePatterns = ['date', 'rdate', 'datetime', 'timestamp', 'datum', 'zeit', 'time'];
+  const datePatterns = ['date', 'rdate', 'datetime', 'timestamp', 'datum', 'zeit'];
   const timePatterns = ['time', 'rtime', 'zeit', 'hour'];
   const valuePatterns = ['kwh', 'kwh_del', 'energy', 'consumption', 'kw', 'power', 'demand', 'value', 'reading'];
 
   headers.forEach((header, idx) => {
     const lower = header.toLowerCase().trim();
     
-    // Date detection
+    // Date detection - check header name
     if (dateCol === -1 && datePatterns.some(p => lower.includes(p))) {
-      // Prefer date-only columns, not time
-      if (!lower.includes('time') || lower.includes('datetime') || lower.includes('timestamp')) {
-        dateCol = idx;
-      }
+      dateCol = idx;
     }
     
-    // Time detection (separate column)
-    if (timeCol === -1 && timePatterns.some(p => lower === p || lower.startsWith(p))) {
-      if (!lower.includes('date')) {
+    // Time column that contains actual datetime data should be treated as date column
+    if (dateCol === -1 && timePatterns.some(p => lower === p || lower.startsWith(p))) {
+      // Check if the data in this column looks like datetime (has date + time)
+      if (sampleRows.length > 0) {
+        const datetimeCount = sampleRows.filter(row => looksLikeDatetime(row[idx])).length;
+        if (datetimeCount > sampleRows.length * 0.5) {
+          // This "time" column actually contains datetime values - use as date column
+          dateCol = idx;
+          console.log(`[detectColumns] Promoted 'Time' column to dateCol - contains datetime values`);
+        } else if (!lower.includes('date')) {
+          timeCol = idx;
+        }
+      } else if (!lower.includes('date')) {
         timeCol = idx;
       }
     }
@@ -159,6 +174,7 @@ function detectColumns(headers: string[], sampleRows: string[][]) {
     let unit: 'kWh' | 'kW' = 'kWh';
     
     if (lower === 'kwh' || lower === 'kwh_del') { score = 100; unit = 'kWh'; }
+    else if (lower === 'p1 (kwh)' || lower === 'p1(kwh)') { score = 95; unit = 'kWh'; } // PnP SCADA format
     else if (lower === 'kw' || lower === 'power') { score = 80; unit = 'kW'; }
     else if (lower.includes('kwh') || lower.includes('energy') || lower.includes('consumption')) { score = 70; unit = 'kWh'; }
     else if (lower.includes('kw') || lower.includes('demand')) { score = 60; unit = 'kW'; }
@@ -197,7 +213,6 @@ function detectColumns(headers: string[], sampleRows: string[][]) {
       }
     }
   }
-
   return { dateCol, timeCol, valueCol, valueUnit };
 }
 
