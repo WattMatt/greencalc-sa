@@ -467,7 +467,36 @@ export function Canvas({
     }
     
     ctx.restore();
-  }, [viewState, equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, selectedItemId, scaleLine, currentDrawing, previewPoint, canvasSize, containerSize, activeTool, pendingRoofMaskPoints, directionLine, mouseWorldPos, pendingPvArrayConfig, placementRotation, placedWalkways, placedCableTrays, pendingWalkwayConfig, pendingCableTrayConfig]);
+  }, [
+    viewState,
+    equipment,
+    lines,
+    roofMasks,
+    pvArrays,
+    scaleInfo,
+    pvPanelConfig,
+    selectedItemId,
+    scaleLine,
+    currentDrawing,
+    previewPoint,
+    canvasSize,
+    containerSize,
+    activeTool,
+    pendingRoofMaskPoints,
+    directionLine,
+    mouseWorldPos,
+    pendingPvArrayConfig,
+    placementRotation,
+    placedWalkways,
+    placedCableTrays,
+    pendingWalkwayConfig,
+    pendingCableTrayConfig,
+    plantSetupConfig,
+    dimensionObject1Id,
+    dimensionObject2Id,
+    alignObject1Id,
+    alignObject2Id,
+  ]);
 
   const getMousePos = (e: React.MouseEvent): Point => {
     const rect = containerRef.current?.getBoundingClientRect();
