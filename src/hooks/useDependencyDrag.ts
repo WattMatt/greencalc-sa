@@ -22,32 +22,32 @@ export function useDependencyDrag({ onCreateDependency, onRequestDependencyType 
   const startDependencyDrag = useCallback((
     taskId: string,
     point: 'start' | 'end',
-    clientX: number,
-    clientY: number
+    x: number,
+    y: number
   ) => {
     const state: DependencyDragState = {
       sourceTaskId: taskId,
       sourcePoint: point,
-      startX: clientX,
-      startY: clientY,
-      currentX: clientX,
-      currentY: clientY,
+      startX: x,
+      startY: y,
+      currentX: x,
+      currentY: y,
     };
     
     dragRef.current = state;
     setDragState(state);
   }, []);
 
-  const updateDependencyDrag = useCallback((clientX: number, clientY: number) => {
+  const updateDependencyDrag = useCallback((x: number, y: number) => {
     if (!dragRef.current) return;
 
     dragRef.current = {
       ...dragRef.current,
-      currentX: clientX,
-      currentY: clientY,
+      currentX: x,
+      currentY: y,
     };
     
-    setDragState(dragRef.current);
+    setDragState({ ...dragRef.current });
   }, []);
 
   const endDependencyDrag = useCallback((
