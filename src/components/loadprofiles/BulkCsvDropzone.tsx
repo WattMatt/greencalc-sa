@@ -94,16 +94,18 @@ function autoDetectConfig(content: string): {
       meterName = parts[1] || parts[0];
       
       // Scan for header row (look for date/time/kwh patterns)
+      // startRow convention: startRow - 1 = header row index, startRow = first data row index
       for (let i = lineOffset + 1; i < Math.min(lines.length, lineOffset + 10); i++) {
         const lineLower = lines[i].toLowerCase();
         if ((lineLower.includes('date') || lineLower.includes('rdate') || lineLower.includes('time')) &&
             (lineLower.includes('kwh') || lineLower.includes('kw') || lineLower.includes('energy'))) {
-          startRow = i + 2; // +1 for 0-index, +1 to skip header
-          console.log(`[autoDetect] Found SCADA headers at line ${i + 1}: ${lines[i].substring(0, 50)}...`);
+          // i is 0-indexed line of header, so startRow = i + 1 means headerIdx = i + 1 - 1 = i (correct!)
+          startRow = i + 1;
+          console.log(`[autoDetect] Found SCADA headers at line index ${i} (1-indexed: ${i + 1}): ${lines[i].substring(0, 50)}...`);
           break;
         }
       }
-      console.log(`[autoDetect] Detected PnP SCADA with non-standard headers, meter: ${meterName}, startRow: ${startRow}`);
+      console.log(`[autoDetect] Detected PnP SCADA with non-standard headers, meter: ${meterName}, startRow: ${startRow}, headerIdx will be: ${startRow - 1}`);
     }
   }
 
