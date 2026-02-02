@@ -477,3 +477,133 @@ export const snapEquipmentToSpacing = (
 
   return { position: mousePos, rotation: ghostRotation, snappedToId: null };
 };
+
+/**
+ * Get material (walkway/cable tray) dimensions in pixels
+ */
+export const getMaterialDimensions = (
+  item: { width: number; length: number; rotation: number },
+  scaleInfo: ScaleInfo
+): { width: number; height: number } => {
+  if (!scaleInfo.ratio) {
+    return { width: 50, height: 100 }; // Fallback pixels
+  }
+
+  const widthPx = item.width / scaleInfo.ratio;
+  const lengthPx = item.length / scaleInfo.ratio;
+
+  // Apply rotation to get effective bounding box dimensions
+  const angleRad = item.rotation * Math.PI / 180;
+  const cosA = Math.abs(Math.cos(angleRad));
+  const sinA = Math.abs(Math.sin(angleRad));
+
+  return {
+    width: widthPx * cosA + lengthPx * sinA,
+    height: widthPx * sinA + lengthPx * cosA,
+  };
+};
+
+/**
+ * Snap walkways and cable trays to maintain minimum spacing from existing items.
+ * Returns the snapped position and rotation (matched to nearest item).
+ */
+export const snapMaterialToSpacing = (
+  mousePos: Point,
+  ghostConfig: { width: number; length: number; rotation: number },
+  existingItems: Array<{ id: string; width: number; length: number; position: Point; rotation: number }>,
+  scaleInfo: ScaleInfo,
+  minSpacingMeters: number,
+  forceAlign: boolean = false
+): { position: Point; rotation: number; snappedToId: string | null } => {
+  if (!scaleInfo.ratio || existingItems.length === 0) {
+    return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
+  }
+
+  // If not force-aligning and no spacing configured, allow free placement
+  if (!forceAlign && minSpacingMeters <= 0) {
+    return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
+  }
+
+  const minSpacingPx = minSpacingMeters / scaleInfo.ratio;
+
+  // Get ghost material dimensions (raw, before rotation transform for effective size)
+  const ghostWidthPx = ghostConfig.width / scaleInfo.ratio;
+  const ghostLengthPx = ghostConfig.length / scaleInfo.ratio;
+  const ghostAngleRad = ghostConfig.rotation * Math.PI / 180;
+  const ghostCosA = Math.abs(Math.cos(ghostAngleRad));
+  const ghostSinA = Math.abs(Math.sin(ghostAngleRad));
+  const ghostHalfW = (ghostWidthPx * ghostCosA + ghostLengthPx * ghostSinA) / 2;
+  const ghostHalfH = (ghostWidthPx * ghostSinA + ghostLengthPx * ghostCosA) / 2;
+
+  let closestItem: typeof existingItems[0] | null = null;
+  let closestDist = Infinity;
+  let snapPosition = mousePos;
+
+  for (const item of existingItems) {
+    const itemWidthPx = item.width / scaleInfo.ratio;
+    const itemLengthPx = item.length / scaleInfo.ratio;
+    const itemAngleRad = item.rotation * Math.PI / 180;
+    const itemCosA = Math.abs(Math.cos(itemAngleRad));
+    const itemSinA = Math.abs(Math.sin(itemAngleRad));
+    const itemHalfW = (itemWidthPx * itemCosA + itemLengthPx * itemSinA) / 2;
+    const itemHalfH = (itemWidthPx * itemSinA + itemLengthPx * itemCosA) / 2;
+
+    // Calculate center-to-center distance
+    const dx = mousePos.x - item.position.x;
+    const dy = mousePos.y - item.position.y;
+    const dist = Math.hypot(dx, dy);
+
+    // Minimum distance for this pair (edge to edge + spacing)
+    const minDistX = itemHalfW + ghostHalfW + minSpacingPx;
+    const minDistY = itemHalfH + ghostHalfH + minSpacingPx;
+
+    // Edge-to-edge gaps
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    const edgeDistX = absDx - (itemHalfW + ghostHalfW);
+    const edgeDistY = absDy - (itemHalfH + ghostHalfH);
+
+    const gapX = Math.max(0, edgeDistX);
+    const gapY = Math.max(0, edgeDistY);
+    const minEdgeDistance = Math.hypot(gapX, gapY);
+
+    // If force-aligning (Shift held), always consider this item as a snap candidate.
+    // Otherwise, only snap if within the configured spacing threshold.
+    if (!forceAlign && minEdgeDistance >= minSpacingPx) {
+      continue;
+    }
+
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestItem = item;
+
+      if (forceAlign) {
+        // Shift held: Only align axis, keep mouse distance
+        if (absDx > absDy) {
+          snapPosition = { x: mousePos.x, y: item.position.y };
+        } else {
+          snapPosition = { x: item.position.x, y: mousePos.y };
+        }
+      } else {
+        // Normal snap: Enforce minimum spacing and align
+        if (absDx > absDy) {
+          const signX = dx >= 0 ? 1 : -1;
+          snapPosition = { x: item.position.x + signX * minDistX, y: item.position.y };
+        } else {
+          const signY = dy >= 0 ? 1 : -1;
+          snapPosition = { x: item.position.x, y: item.position.y + signY * minDistY };
+        }
+      }
+    }
+  }
+
+  if (closestItem) {
+    return {
+      position: snapPosition,
+      rotation: closestItem.rotation,
+      snappedToId: closestItem.id,
+    };
+  }
+
+  return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
+};
