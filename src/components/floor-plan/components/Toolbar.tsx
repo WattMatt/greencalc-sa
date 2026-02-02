@@ -506,14 +506,14 @@ export function Toolbar({
           />
           <ToolButton
             icon={MoveHorizontal}
-            label="Set Distance"
+            label="Distance Between"
             isActive={activeTool === Tool.DIMENSION}
             onClick={() => setActiveTool(Tool.DIMENSION)}
             disabled={!scaleSet}
           />
           <ToolButton
             icon={AlignVerticalJustifyStart}
-            label="Align Edges"
+            label="Edge Align"
             isActive={activeTool === Tool.ALIGN_EDGES}
             onClick={() => setActiveTool(Tool.ALIGN_EDGES)}
             disabled={!scaleSet}
