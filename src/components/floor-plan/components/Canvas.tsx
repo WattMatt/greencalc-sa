@@ -46,6 +46,9 @@ interface CanvasProps {
   // Dimension tool
   onDimensionObjectClick?: (id: string) => void;
   dimensionObject1Id?: string | null;
+  // Align edges tool
+  onAlignEdgesObjectClick?: (id: string) => void;
+  alignObject1Id?: string | null;
 }
 
 export function Canvas({
@@ -63,6 +66,8 @@ export function Canvas({
   placementMinSpacing = 0.3,
   onDimensionObjectClick,
   dimensionObject1Id,
+  onAlignEdgesObjectClick,
+  alignObject1Id,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -648,6 +653,76 @@ export function Canvas({
       });
       if (hitEquipment) {
         onDimensionObjectClick(hitEquipment.id);
+        return;
+      }
+
+      return;
+    }
+
+    // Align edges tool - select objects to align edges between
+    if (activeTool === Tool.ALIGN_EDGES && onAlignEdgesObjectClick && e.button === 0) {
+      // Check PV arrays
+      const hitArray = (pvPanelConfig && scaleInfo.ratio)
+        ? [...pvArrays].reverse().find(arr => {
+            const corners = getPVArrayCorners(arr, pvPanelConfig, roofMasks, scaleInfo);
+            return corners.length === 4 && isPointInPolygon(worldPos, corners);
+          })
+        : undefined;
+      if (hitArray) {
+        onAlignEdgesObjectClick(hitArray.id);
+        return;
+      }
+
+      // Check walkways
+      if (placedWalkways && scaleInfo.ratio) {
+        const hitWalkway = [...placedWalkways].reverse().find(walkway => {
+          const widthPx = walkway.width / scaleInfo.ratio!;
+          const lengthPx = walkway.length / scaleInfo.ratio!;
+          const halfW = widthPx / 2;
+          const halfL = lengthPx / 2;
+          const rotation = (walkway.rotation || 0) * Math.PI / 180;
+          const dx = worldPos.x - walkway.position.x;
+          const dy = worldPos.y - walkway.position.y;
+          const localX = dx * Math.cos(-rotation) - dy * Math.sin(-rotation);
+          const localY = dx * Math.sin(-rotation) + dy * Math.cos(-rotation);
+          return Math.abs(localX) <= halfW && Math.abs(localY) <= halfL;
+        });
+        if (hitWalkway) {
+          onAlignEdgesObjectClick(hitWalkway.id);
+          return;
+        }
+      }
+
+      // Check cable trays
+      if (placedCableTrays && scaleInfo.ratio) {
+        const hitTray = [...placedCableTrays].reverse().find(tray => {
+          const widthPx = tray.width / scaleInfo.ratio!;
+          const lengthPx = tray.length / scaleInfo.ratio!;
+          const halfW = widthPx / 2;
+          const halfL = lengthPx / 2;
+          const rotation = (tray.rotation || 0) * Math.PI / 180;
+          const dx = worldPos.x - tray.position.x;
+          const dy = worldPos.y - tray.position.y;
+          const localX = dx * Math.cos(-rotation) - dy * Math.sin(-rotation);
+          const localY = dx * Math.sin(-rotation) + dy * Math.cos(-rotation);
+          return Math.abs(localX) <= halfW && Math.abs(localY) <= halfL;
+        });
+        if (hitTray) {
+          onAlignEdgesObjectClick(hitTray.id);
+          return;
+        }
+      }
+
+      // Check equipment
+      const hitEquipment = [...equipment].reverse().find(item => {
+        const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
+        const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
+        const halfSize = sizePx / 2;
+        return Math.abs(worldPos.x - item.position.x) <= halfSize &&
+               Math.abs(worldPos.y - item.position.y) <= halfSize;
+      });
+      if (hitEquipment) {
+        onAlignEdgesObjectClick(hitEquipment.id);
         return;
       }
 

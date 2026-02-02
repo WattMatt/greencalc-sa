@@ -649,3 +649,66 @@ export const calculateNewPositionAtDistance = (
     y: object2Pos.y + unitY * targetPixelDist,
   };
 };
+
+export type AlignmentEdge = 'left' | 'right' | 'top' | 'bottom';
+
+/**
+ * Get bounding box edges for any object type
+ * Returns edge positions in world coordinates (pixels)
+ */
+export const getObjectEdges = (
+  position: Point,
+  dimensions: { width: number; height: number },
+  rotation: number
+): { left: number; right: number; top: number; bottom: number } => {
+  // For rotated objects, we use axis-aligned bounding box
+  const angleRad = rotation * Math.PI / 180;
+  const cosA = Math.abs(Math.cos(angleRad));
+  const sinA = Math.abs(Math.sin(angleRad));
+  
+  const effectiveWidth = dimensions.width * cosA + dimensions.height * sinA;
+  const effectiveHeight = dimensions.width * sinA + dimensions.height * cosA;
+  
+  return {
+    left: position.x - effectiveWidth / 2,
+    right: position.x + effectiveWidth / 2,
+    top: position.y - effectiveHeight / 2,
+    bottom: position.y + effectiveHeight / 2,
+  };
+};
+
+/**
+ * Calculate new position to align Object 1's edge with Object 2's edge
+ */
+export const calculateAlignedPosition = (
+  object1Pos: Point,
+  object1Dims: { width: number; height: number },
+  object1Rotation: number,
+  object2Pos: Point,
+  object2Dims: { width: number; height: number },
+  object2Rotation: number,
+  alignmentEdge: AlignmentEdge
+): Point => {
+  const edges1 = getObjectEdges(object1Pos, object1Dims, object1Rotation);
+  const edges2 = getObjectEdges(object2Pos, object2Dims, object2Rotation);
+  
+  switch (alignmentEdge) {
+    case 'left': {
+      // Move Object 1 so its left edge matches Object 2's left edge
+      const leftOffset = edges2.left - edges1.left;
+      return { x: object1Pos.x + leftOffset, y: object1Pos.y };
+    }
+    case 'right': {
+      const rightOffset = edges2.right - edges1.right;
+      return { x: object1Pos.x + rightOffset, y: object1Pos.y };
+    }
+    case 'top': {
+      const topOffset = edges2.top - edges1.top;
+      return { x: object1Pos.x, y: object1Pos.y + topOffset };
+    }
+    case 'bottom': {
+      const bottomOffset = edges2.bottom - edges1.bottom;
+      return { x: object1Pos.x, y: object1Pos.y + bottomOffset };
+    }
+  }
+};

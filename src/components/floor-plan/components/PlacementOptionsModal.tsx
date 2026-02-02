@@ -49,6 +49,7 @@ const TOOL_TO_TYPE: Record<Tool, PlacementItemType | null> = {
   [Tool.ROOF_DIRECTION]: null,
   [Tool.PV_ARRAY]: null,
   [Tool.DIMENSION]: null,
+  [Tool.ALIGN_EDGES]: null,
 };
 
 export function toolToPlacementType(tool: Tool): PlacementItemType | null {
