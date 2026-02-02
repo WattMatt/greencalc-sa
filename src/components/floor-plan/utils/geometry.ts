@@ -777,3 +777,54 @@ export const calculateAlignedPosition = (
     }
   }
 };
+
+/**
+ * Detect which edge of an object was clicked, if any.
+ * Returns null if click is in the interior.
+ * 
+ * @param clickPos - The click position in world coordinates
+ * @param objectPos - The object's center position
+ * @param objectDims - The object's dimensions in pixels
+ * @param objectRotation - The object's rotation in degrees
+ * @param edgeThreshold - How close to edge counts as "on edge" (in pixels)
+ */
+export const detectClickedEdge = (
+  clickPos: Point,
+  objectPos: Point,
+  objectDims: { width: number; height: number },
+  objectRotation: number,
+  edgeThreshold: number
+): AlignmentEdge | null => {
+  // Transform click to object's local coordinate space
+  const angleRad = -objectRotation * Math.PI / 180;
+  const dx = clickPos.x - objectPos.x;
+  const dy = clickPos.y - objectPos.y;
+  const localX = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+  const localY = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
+  
+  const halfW = objectDims.width / 2;
+  const halfH = objectDims.height / 2;
+  
+  // Check if click is within the object bounds
+  if (Math.abs(localX) > halfW || Math.abs(localY) > halfH) {
+    return null; // Outside object
+  }
+  
+  // Calculate distance from each edge
+  const distFromLeft = Math.abs(localX - (-halfW));
+  const distFromRight = Math.abs(localX - halfW);
+  const distFromTop = Math.abs(localY - (-halfH));
+  const distFromBottom = Math.abs(localY - halfH);
+  
+  const minDist = Math.min(distFromLeft, distFromRight, distFromTop, distFromBottom);
+  
+  // If minimum distance is within threshold, it's an edge click
+  if (minDist <= edgeThreshold) {
+    if (minDist === distFromLeft) return 'left';
+    if (minDist === distFromRight) return 'right';
+    if (minDist === distFromTop) return 'top';
+    if (minDist === distFromBottom) return 'bottom';
+  }
+  
+  return null; // Interior click
+};
