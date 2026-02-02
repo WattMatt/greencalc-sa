@@ -607,6 +607,44 @@ export const snapMaterialToSpacing = (
 };
 
 /**
+ * Calculate edge-to-edge distance between two objects in meters.
+ * This calculates the gap between the closest edges of two bounding boxes.
+ */
+export const getObjectEdgeDistance = (
+  pos1: Point,
+  dims1: { width: number; height: number },
+  rotation1: number,
+  pos2: Point,
+  dims2: { width: number; height: number },
+  rotation2: number,
+  scaleRatio: number
+): number => {
+  const edges1 = getObjectEdges(pos1, dims1, rotation1);
+  const edges2 = getObjectEdges(pos2, dims2, rotation2);
+  
+  // Calculate the gap on each axis (negative means overlap)
+  const gapX = Math.max(edges1.left - edges2.right, edges2.left - edges1.right);
+  const gapY = Math.max(edges1.top - edges2.bottom, edges2.top - edges1.bottom);
+  
+  // If both gaps are negative, objects overlap - return 0
+  if (gapX < 0 && gapY < 0) {
+    return 0;
+  }
+  
+  // If one gap is negative, only the other axis matters
+  if (gapX < 0) {
+    return Math.max(0, gapY) * scaleRatio;
+  }
+  if (gapY < 0) {
+    return Math.max(0, gapX) * scaleRatio;
+  }
+  
+  // If both gaps are positive, return the Euclidean distance to corner
+  return Math.hypot(gapX, gapY) * scaleRatio;
+};
+
+/**
+ * @deprecated Use getObjectEdgeDistance instead for edge-to-edge measurements
  * Calculate center-to-center distance between two objects in meters
  */
 export const getObjectCenterDistance = (
@@ -619,34 +657,61 @@ export const getObjectCenterDistance = (
 };
 
 /**
- * Calculate new position for object1 to be at specified distance from object2.
- * Object1 moves along the line connecting the two objects.
+ * Calculate new position for object1 to achieve a target edge-to-edge distance from object2.
+ * Object1 moves along the line connecting the two object centers.
+ * The distance is measured from the boundary of each object, not their centers.
  */
 export const calculateNewPositionAtDistance = (
   object1Pos: Point,
+  object1Dims: { width: number; height: number },
+  object1Rotation: number,
   object2Pos: Point,
+  object2Dims: { width: number; height: number },
+  object2Rotation: number,
   targetDistanceMeters: number,
   scaleRatio: number
 ): Point => {
   const dx = object1Pos.x - object2Pos.x;
   const dy = object1Pos.y - object2Pos.y;
-  const currentPixelDist = Math.hypot(dx, dy);
+  const centerDist = Math.hypot(dx, dy);
   
-  if (currentPixelDist === 0) {
+  // Get the effective half-dimensions considering rotation
+  const edges1 = getObjectEdges(object1Pos, object1Dims, object1Rotation);
+  const edges2 = getObjectEdges(object2Pos, object2Dims, object2Rotation);
+  
+  const halfWidth1 = (edges1.right - edges1.left) / 2;
+  const halfHeight1 = (edges1.bottom - edges1.top) / 2;
+  const halfWidth2 = (edges2.right - edges2.left) / 2;
+  const halfHeight2 = (edges2.bottom - edges2.top) / 2;
+  
+  if (centerDist === 0) {
     // Objects at same position, move along X axis
+    const edgeToEdgeOffset = halfWidth1 + halfWidth2 + (targetDistanceMeters / scaleRatio);
     return {
-      x: object2Pos.x + targetDistanceMeters / scaleRatio,
+      x: object2Pos.x + edgeToEdgeOffset,
       y: object2Pos.y,
     };
   }
   
-  const targetPixelDist = targetDistanceMeters / scaleRatio;
-  const unitX = dx / currentPixelDist;
-  const unitY = dy / currentPixelDist;
+  // Normalize direction
+  const unitX = dx / centerDist;
+  const unitY = dy / centerDist;
+  
+  // Calculate the edge offsets in the direction of movement
+  // For axis-aligned bounding boxes, we use the half-dimension that aligns with the movement direction
+  const absDx = Math.abs(unitX);
+  const absDy = Math.abs(unitY);
+  
+  // Weighted average of half-dimensions based on direction
+  const edgeOffset1 = halfWidth1 * absDx + halfHeight1 * absDy;
+  const edgeOffset2 = halfWidth2 * absDx + halfHeight2 * absDy;
+  
+  // Target center-to-center distance = edge1 + gap + edge2
+  const targetCenterDist = edgeOffset1 + (targetDistanceMeters / scaleRatio) + edgeOffset2;
   
   return {
-    x: object2Pos.x + unitX * targetPixelDist,
-    y: object2Pos.y + unitY * targetPixelDist,
+    x: object2Pos.x + unitX * targetCenterDist,
+    y: object2Pos.y + unitY * targetCenterDist,
   };
 };
 

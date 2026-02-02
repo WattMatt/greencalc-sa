@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { getModulePresetById, getDefaultModulePreset, SolarModulePreset } from '../projects/SolarModulePresets';
-import { getObjectCenterDistance, calculateNewPositionAtDistance, calculateAlignedPosition, getPVArrayDimensions, getEquipmentDimensions, getMaterialDimensions } from './utils/geometry';
+import { getObjectEdgeDistance, calculateNewPositionAtDistance, calculateAlignedPosition, getPVArrayDimensions, getEquipmentDimensions, getMaterialDimensions } from './utils/geometry';
 
 type ViewMode = 'browser' | 'editor';
 
@@ -858,79 +858,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     return 'Object';
   }, [pvArrays, equipment, placedWalkways, placedCableTrays]);
 
-  // Handle dimension tool object selection
-  const handleDimensionObjectClick = useCallback((id: string) => {
-    if (!dimensionObject1Id) {
-      // First selection
-      setDimensionObject1Id(id);
-      toast.info('Now click the reference object (stationary)');
-    } else if (dimensionObject1Id !== id) {
-      // Second selection - calculate distance and open modal
-      setDimensionObject2Id(id);
-      const pos1 = getObjectPosition(dimensionObject1Id);
-      const pos2 = getObjectPosition(id);
-      if (pos1 && pos2 && scaleInfo.ratio) {
-        const dist = getObjectCenterDistance(pos1, pos2, scaleInfo.ratio);
-        setCurrentMeasuredDistance(dist);
-        setIsSetDistanceModalOpen(true);
-      }
-    }
-  }, [dimensionObject1Id, getObjectPosition, scaleInfo.ratio]);
-
-  // Apply new distance from dimension tool
-  const handleDimensionApply = useCallback((newDistance: number) => {
-    if (!dimensionObject1Id || !dimensionObject2Id || !scaleInfo.ratio) return;
-    
-    const pos1 = getObjectPosition(dimensionObject1Id);
-    const pos2 = getObjectPosition(dimensionObject2Id);
-    if (!pos1 || !pos2) return;
-    
-    const newPos = calculateNewPositionAtDistance(pos1, pos2, newDistance, scaleInfo.ratio);
-    
-    // Update the position of object 1
-    if (pvArrays.find(a => a.id === dimensionObject1Id)) {
-      setPvArrays(prev => prev.map(arr => 
-        arr.id === dimensionObject1Id ? { ...arr, position: newPos } : arr
-      ));
-    } else if (equipment.find(e => e.id === dimensionObject1Id)) {
-      setEquipment(prev => prev.map(eq => 
-        eq.id === dimensionObject1Id ? { ...eq, position: newPos } : eq
-      ));
-    } else if (placedWalkways.find(w => w.id === dimensionObject1Id)) {
-      setPlacedWalkways(prev => prev.map(w => 
-        w.id === dimensionObject1Id ? { ...w, position: newPos } : w
-      ));
-    } else if (placedCableTrays.find(c => c.id === dimensionObject1Id)) {
-      setPlacedCableTrays(prev => prev.map(c => 
-        c.id === dimensionObject1Id ? { ...c, position: newPos } : c
-      ));
-    }
-    
-    // Reset dimension tool state
-    setDimensionObject1Id(null);
-    setDimensionObject2Id(null);
-    setIsSetDistanceModalOpen(false);
-    setActiveTool(Tool.SELECT);
-    toast.success(`Distance set to ${newDistance.toFixed(2)}m`);
-  }, [dimensionObject1Id, dimensionObject2Id, scaleInfo.ratio, getObjectPosition, pvArrays, equipment, placedWalkways, placedCableTrays, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays]);
-
-  // Clear dimension tool state when tool changes
-  useEffect(() => {
-    if (activeTool !== Tool.DIMENSION) {
-      setDimensionObject1Id(null);
-      setDimensionObject2Id(null);
-    }
-  }, [activeTool]);
-
-  // Clear align edges tool state when tool changes
-  useEffect(() => {
-    if (activeTool !== Tool.ALIGN_EDGES) {
-      setAlignObject1Id(null);
-      setAlignObject2Id(null);
-    }
-  }, [activeTool]);
-
-  // Get object dimensions by ID (for align edges tool)
+  // Get object dimensions by ID (for dimension and align edges tools)
   const getObjectDimensions = useCallback((id: string): { width: number; height: number; rotation: number } | null => {
     // Check PV arrays
     const pvArray = pvArrays.find(a => a.id === id);
@@ -962,6 +890,101 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     
     return null;
   }, [pvArrays, equipment, placedWalkways, placedCableTrays, pvPanelConfig, scaleInfo, roofMasks, plantSetupConfig]);
+
+  // Handle dimension tool object selection
+  const handleDimensionObjectClick = useCallback((id: string) => {
+    if (!dimensionObject1Id) {
+      // First selection
+      setDimensionObject1Id(id);
+      toast.info('Now click the reference object (stationary)');
+    } else if (dimensionObject1Id !== id) {
+      // Second selection - calculate edge-to-edge distance and open modal
+      setDimensionObject2Id(id);
+      const pos1 = getObjectPosition(dimensionObject1Id);
+      const pos2 = getObjectPosition(id);
+      const dims1 = getObjectDimensions(dimensionObject1Id);
+      const dims2 = getObjectDimensions(id);
+      
+      if (pos1 && pos2 && dims1 && dims2 && scaleInfo.ratio) {
+        const dist = getObjectEdgeDistance(
+          pos1,
+          { width: dims1.width, height: dims1.height },
+          dims1.rotation,
+          pos2,
+          { width: dims2.width, height: dims2.height },
+          dims2.rotation,
+          scaleInfo.ratio
+        );
+        setCurrentMeasuredDistance(dist);
+        setIsSetDistanceModalOpen(true);
+      }
+    }
+  }, [dimensionObject1Id, getObjectPosition, getObjectDimensions, scaleInfo.ratio]);
+
+  // Apply new distance from dimension tool
+  const handleDimensionApply = useCallback((newDistance: number) => {
+    if (!dimensionObject1Id || !dimensionObject2Id || !scaleInfo.ratio) return;
+    
+    const pos1 = getObjectPosition(dimensionObject1Id);
+    const pos2 = getObjectPosition(dimensionObject2Id);
+    const dims1 = getObjectDimensions(dimensionObject1Id);
+    const dims2 = getObjectDimensions(dimensionObject2Id);
+    
+    if (!pos1 || !pos2 || !dims1 || !dims2) return;
+    
+    const newPos = calculateNewPositionAtDistance(
+      pos1,
+      { width: dims1.width, height: dims1.height },
+      dims1.rotation,
+      pos2,
+      { width: dims2.width, height: dims2.height },
+      dims2.rotation,
+      newDistance,
+      scaleInfo.ratio
+    );
+    
+    // Update the position of object 1
+    if (pvArrays.find(a => a.id === dimensionObject1Id)) {
+      setPvArrays(prev => prev.map(arr => 
+        arr.id === dimensionObject1Id ? { ...arr, position: newPos } : arr
+      ));
+    } else if (equipment.find(e => e.id === dimensionObject1Id)) {
+      setEquipment(prev => prev.map(eq => 
+        eq.id === dimensionObject1Id ? { ...eq, position: newPos } : eq
+      ));
+    } else if (placedWalkways.find(w => w.id === dimensionObject1Id)) {
+      setPlacedWalkways(prev => prev.map(w => 
+        w.id === dimensionObject1Id ? { ...w, position: newPos } : w
+      ));
+    } else if (placedCableTrays.find(c => c.id === dimensionObject1Id)) {
+      setPlacedCableTrays(prev => prev.map(c => 
+        c.id === dimensionObject1Id ? { ...c, position: newPos } : c
+      ));
+    }
+    
+    // Reset dimension tool state
+    setDimensionObject1Id(null);
+    setDimensionObject2Id(null);
+    setIsSetDistanceModalOpen(false);
+    setActiveTool(Tool.SELECT);
+    toast.success(`Distance set to ${newDistance.toFixed(2)}m`);
+  }, [dimensionObject1Id, dimensionObject2Id, scaleInfo.ratio, getObjectPosition, getObjectDimensions, pvArrays, equipment, placedWalkways, placedCableTrays, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays]);
+
+  // Clear dimension tool state when tool changes
+  useEffect(() => {
+    if (activeTool !== Tool.DIMENSION) {
+      setDimensionObject1Id(null);
+      setDimensionObject2Id(null);
+    }
+  }, [activeTool]);
+
+  // Clear align edges tool state when tool changes
+  useEffect(() => {
+    if (activeTool !== Tool.ALIGN_EDGES) {
+      setAlignObject1Id(null);
+      setAlignObject2Id(null);
+    }
+  }, [activeTool]);
 
   // Handle align edges tool object selection
   const handleAlignEdgesObjectClick = useCallback((id: string) => {
