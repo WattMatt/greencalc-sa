@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig } from '../types';
 import { renderAllMarkups, drawPvArray, drawEquipmentIcon, drawWalkway, drawCableTray } from '../utils/drawing';
-import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing } from '../utils/geometry';
+import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing } from '../utils/geometry';
 import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
 import { PVArrayConfig } from './PVArrayModal';
 
@@ -42,6 +42,7 @@ interface CanvasProps {
   setPlacedCableTrays?: (updater: (prev: PlacedCableTray[]) => PlacedCableTray[]) => void;
   pendingWalkwayConfig?: WalkwayConfig | null;
   pendingCableTrayConfig?: CableTrayConfig | null;
+  placementMinSpacing?: number;
 }
 
 export function Canvas({
@@ -56,6 +57,7 @@ export function Canvas({
   placedWalkways, setPlacedWalkways,
   placedCableTrays, setPlacedCableTrays,
   pendingWalkwayConfig, pendingCableTrayConfig,
+  placementMinSpacing = 0.3,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -400,30 +402,50 @@ export function Canvas({
       }
     }
 
-    // Draw ghost preview for walkway placement
+    // Draw ghost preview for walkway placement with snapping
     if (activeTool === Tool.PLACE_WALKWAY && mouseWorldPos && pendingWalkwayConfig && scaleInfo.ratio) {
+      // Apply snapping to other walkways
+      const snapResult = snapMaterialToSpacing(
+        mouseWorldPos,
+        { width: pendingWalkwayConfig.width, length: pendingWalkwayConfig.length, rotation: placementRotation },
+        placedWalkways || [],
+        scaleInfo,
+        placementMinSpacing,
+        isShiftHeld
+      );
+      
       const ghostWalkway: PlacedWalkway = {
         id: 'ghost-walkway',
         configId: pendingWalkwayConfig.id,
         name: pendingWalkwayConfig.name,
         width: pendingWalkwayConfig.width,
         length: pendingWalkwayConfig.length,
-        position: mouseWorldPos,
-        rotation: placementRotation,
+        position: snapResult.position,
+        rotation: snapResult.snappedToId ? snapResult.rotation : placementRotation,
       };
       drawWalkway(ctx, ghostWalkway, false, true, viewState.zoom, scaleInfo);
     }
 
-    // Draw ghost preview for cable tray placement
+    // Draw ghost preview for cable tray placement with snapping
     if (activeTool === Tool.PLACE_CABLE_TRAY && mouseWorldPos && pendingCableTrayConfig && scaleInfo.ratio) {
+      // Apply snapping to other cable trays
+      const snapResult = snapMaterialToSpacing(
+        mouseWorldPos,
+        { width: pendingCableTrayConfig.width, length: pendingCableTrayConfig.length, rotation: placementRotation },
+        placedCableTrays || [],
+        scaleInfo,
+        placementMinSpacing,
+        isShiftHeld
+      );
+      
       const ghostTray: PlacedCableTray = {
         id: 'ghost-tray',
         configId: pendingCableTrayConfig.id,
         name: pendingCableTrayConfig.name,
         width: pendingCableTrayConfig.width,
         length: pendingCableTrayConfig.length,
-        position: mouseWorldPos,
-        rotation: placementRotation,
+        position: snapResult.position,
+        rotation: snapResult.snappedToId ? snapResult.rotation : placementRotation,
       };
       drawCableTray(ctx, ghostTray, false, true, viewState.zoom, scaleInfo);
     }
@@ -666,30 +688,48 @@ export function Canvas({
           rotation: snapResult.snappedToId ? snapResult.rotation : placementRotation,
         }]);
       }
-    } else if (activeTool === Tool.PLACE_WALKWAY && pendingWalkwayConfig && setPlacedWalkways) {
-      // Place walkway
+    } else if (activeTool === Tool.PLACE_WALKWAY && pendingWalkwayConfig && setPlacedWalkways && scaleInfo.ratio) {
+      // Apply snapping for walkway placement
+      const snapResult = snapMaterialToSpacing(
+        worldPos,
+        { width: pendingWalkwayConfig.width, length: pendingWalkwayConfig.length, rotation: placementRotation },
+        placedWalkways || [],
+        scaleInfo,
+        placementMinSpacing,
+        isShiftHeld
+      );
+      
       const newWalkway: PlacedWalkway = {
         id: `walkway-${Date.now()}`,
         configId: pendingWalkwayConfig.id,
         name: pendingWalkwayConfig.name,
         width: pendingWalkwayConfig.width,
         length: pendingWalkwayConfig.length,
-        position: worldPos,
-        rotation: placementRotation,
-        minSpacing: 0.3,
+        position: snapResult.position,
+        rotation: snapResult.snappedToId ? snapResult.rotation : placementRotation,
+        minSpacing: placementMinSpacing,
       };
       setPlacedWalkways(prev => [...prev, newWalkway]);
-    } else if (activeTool === Tool.PLACE_CABLE_TRAY && pendingCableTrayConfig && setPlacedCableTrays) {
-      // Place cable tray
+    } else if (activeTool === Tool.PLACE_CABLE_TRAY && pendingCableTrayConfig && setPlacedCableTrays && scaleInfo.ratio) {
+      // Apply snapping for cable tray placement
+      const snapResult = snapMaterialToSpacing(
+        worldPos,
+        { width: pendingCableTrayConfig.width, length: pendingCableTrayConfig.length, rotation: placementRotation },
+        placedCableTrays || [],
+        scaleInfo,
+        placementMinSpacing,
+        isShiftHeld
+      );
+      
       const newTray: PlacedCableTray = {
         id: `tray-${Date.now()}`,
         configId: pendingCableTrayConfig.id,
         name: pendingCableTrayConfig.name,
         width: pendingCableTrayConfig.width,
         length: pendingCableTrayConfig.length,
-        position: worldPos,
-        rotation: placementRotation,
-        minSpacing: 0.3,
+        position: snapResult.position,
+        rotation: snapResult.snappedToId ? snapResult.rotation : placementRotation,
+        minSpacing: placementMinSpacing,
       };
       setPlacedCableTrays(prev => [...prev, newTray]);
     }
@@ -773,27 +813,71 @@ export function Canvas({
       return;
     }
 
-    // Handle walkway dragging
+    // Handle walkway dragging with snapping
     if (draggingWalkwayId && walkwayDragOffset && setPlacedWalkways) {
       const basePos = { 
         x: worldPos.x - walkwayDragOffset.x, 
         y: worldPos.y - walkwayDragOffset.y 
       };
-      setPlacedWalkways(prev => prev.map(item => 
-        item.id === draggingWalkwayId ? { ...item, position: basePos } : item
-      ));
+      
+      const draggedWalkway = placedWalkways?.find(w => w.id === draggingWalkwayId);
+      if (draggedWalkway && scaleInfo.ratio) {
+        const otherWalkways = (placedWalkways || []).filter(w => w.id !== draggingWalkwayId);
+        const minSpacing = draggedWalkway.minSpacing ?? placementMinSpacing;
+        
+        const snapResult = snapMaterialToSpacing(
+          basePos,
+          { width: draggedWalkway.width, length: draggedWalkway.length, rotation: draggedWalkway.rotation },
+          otherWalkways,
+          scaleInfo,
+          minSpacing,
+          isShiftHeld
+        );
+        
+        setPlacedWalkways(prev => prev.map(item => 
+          item.id === draggingWalkwayId 
+            ? { ...item, position: snapResult.position, rotation: isShiftHeld && snapResult.snappedToId ? snapResult.rotation : item.rotation } 
+            : item
+        ));
+      } else {
+        setPlacedWalkways(prev => prev.map(item => 
+          item.id === draggingWalkwayId ? { ...item, position: basePos } : item
+        ));
+      }
       return;
     }
 
-    // Handle cable tray dragging
+    // Handle cable tray dragging with snapping
     if (draggingCableTrayId && cableTrayDragOffset && setPlacedCableTrays) {
       const basePos = { 
         x: worldPos.x - cableTrayDragOffset.x, 
         y: worldPos.y - cableTrayDragOffset.y 
       };
-      setPlacedCableTrays(prev => prev.map(item => 
-        item.id === draggingCableTrayId ? { ...item, position: basePos } : item
-      ));
+      
+      const draggedTray = placedCableTrays?.find(t => t.id === draggingCableTrayId);
+      if (draggedTray && scaleInfo.ratio) {
+        const otherTrays = (placedCableTrays || []).filter(t => t.id !== draggingCableTrayId);
+        const minSpacing = draggedTray.minSpacing ?? placementMinSpacing;
+        
+        const snapResult = snapMaterialToSpacing(
+          basePos,
+          { width: draggedTray.width, length: draggedTray.length, rotation: draggedTray.rotation },
+          otherTrays,
+          scaleInfo,
+          minSpacing,
+          isShiftHeld
+        );
+        
+        setPlacedCableTrays(prev => prev.map(item => 
+          item.id === draggingCableTrayId 
+            ? { ...item, position: snapResult.position, rotation: isShiftHeld && snapResult.snappedToId ? snapResult.rotation : item.rotation } 
+            : item
+        ));
+      } else {
+        setPlacedCableTrays(prev => prev.map(item => 
+          item.id === draggingCableTrayId ? { ...item, position: basePos } : item
+        ));
+      }
       return;
     }
 

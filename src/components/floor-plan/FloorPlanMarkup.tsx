@@ -1252,6 +1252,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
                || { id: 'default-tray', name: 'Cable Tray', width: 0.3, length: 2 })
             : null
         }
+        placementMinSpacing={placementMinSpacing}
       />
 
       <SummaryPanel
