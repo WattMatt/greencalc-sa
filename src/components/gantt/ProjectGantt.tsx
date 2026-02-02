@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useGanttTasks } from '@/hooks/useGanttTasks';
 import { useGanttDependencies } from '@/hooks/useGanttDependencies';
 import { useGanttMilestones } from '@/hooks/useGanttMilestones';
-import { useGanttBaselines } from '@/hooks/useGanttBaselines';
+import { useGanttBaselines, useBaselineTasks } from '@/hooks/useGanttBaselines';
 import { useFilterPresets } from '@/hooks/useFilterPresets';
 import { useKeyboardShortcuts, getDefaultGanttShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useOnboardingProgress } from '@/hooks/useOnboardingProgress';
@@ -22,6 +22,7 @@ import { ResourceWorkloadView } from './ResourceWorkloadView';
 import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { OnboardingChecklist } from './OnboardingChecklist';
 import { ColorLegend } from './ColorLegend';
+import { DependencyTypeSelector } from './DependencyTypeSelector';
 import { toast } from 'sonner';
 import { 
   GanttChartConfig, 
@@ -62,8 +63,12 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
   const [isMilestoneFormOpen, setIsMilestoneFormOpen] = useState(false);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
   const [showWorkloadView, setShowWorkloadView] = useState(false);
+  const [pendingDependency, setPendingDependency] = useState<{ predecessorId: string; successorId: string } | null>(null);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch baseline tasks when a baseline is selected
+  const { data: baselineTasks = [] } = useBaselineTasks(config.showBaseline);
 
   const isLoading = isLoadingTasks || isLoadingDeps || isLoadingMilestones;
 
@@ -422,6 +427,7 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
             milestones={config.showMilestones ? milestones : []}
             config={config}
             selectedTasks={selectedTasks}
+            baselineTasks={baselineTasks}
             onSelectTask={handleSelectTask}
             onEditTask={handleEditTask}
             onUpdateTask={(id, updates) => {
@@ -452,6 +458,9 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
             }}
             onDeleteDependency={(id) => deleteDependency.mutate(id)}
             onReorderTasks={(orderedIds) => reorderTasks.mutate(orderedIds)}
+            onRequestDependencyType={(predecessorId, successorId) => {
+              setPendingDependency({ predecessorId, successorId });
+            }}
           />
         </div>
       </div>
@@ -481,6 +490,25 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
         open={isKeyboardShortcutsOpen}
         onOpenChange={setIsKeyboardShortcutsOpen}
         shortcuts={keyboardShortcuts}
+      />
+
+      {/* Dependency Type Selector Dialog */}
+      <DependencyTypeSelector
+        open={!!pendingDependency}
+        onOpenChange={(open) => !open && setPendingDependency(null)}
+        predecessorName={tasks.find(t => t.id === pendingDependency?.predecessorId)?.name || ''}
+        successorName={tasks.find(t => t.id === pendingDependency?.successorId)?.name || ''}
+        onConfirm={(type) => {
+          if (pendingDependency) {
+            createDependency.mutate({
+              predecessorId: pendingDependency.predecessorId,
+              successorId: pendingDependency.successorId,
+              dependencyType: type,
+            });
+            completeStep('create_dependency');
+            setPendingDependency(null);
+          }
+        }}
       />
     </div>
   );
