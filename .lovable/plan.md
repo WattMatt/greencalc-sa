@@ -1,250 +1,204 @@
 
 
-# Plan: Add Selection Highlighting with Object Numbers for Distance Between and Edge Align Tools
+# Plan: Smart Edge Detection for Align Edges Tool
 
 ## Overview
 
-This plan adds visual highlighting for selected objects when using the "Distance Between" and "Edge Align" tools. When objects are selected:
-1. A semi-transparent colored mask overlay is placed over each selected object, constrained to its boundary
-2. The object number ("1" or "2") is displayed prominently within the mask
-3. Object 1 (the one that will move) uses one color (e.g., blue)
-4. Object 2 (the stationary reference) uses a different color (e.g., green)
+This plan updates the **Edge Align** tool to support two interaction modes:
+1. **Interior Click** - Clicking on the interior of an object shows the alignment popup modal (current behavior)
+2. **Edge Click** - Clicking directly on an object's edge performs instant alignment without showing the popup
 
-## Visual Design
+When clicking near an object's edge, the system will detect which edge (left, right, top, or bottom) was clicked and automatically align that edge between the two selected objects.
+
+## Visual Concept
 
 ```text
-+----------------------------------+
-|  [PV Array]                      |
-|  +----------+                    |
-|  |  [1]     |  <- Blue overlay   |
-|  |  Object  |     with "1"       |
-|  +----------+                    |
-|                                  |
-|     [Inverter]                   |
-|     +----+                       |
-|     |[2] |  <- Green overlay     |
-|     +----+      with "2"         |
-+----------------------------------+
++------------------+
+|                  |
+|   INTERIOR       |  <- Click here: Shows popup modal
+|   (center area)  |
+|                  |
++------------------+
+    ^
+    |
+   EDGE            <- Click here: Direct alignment (no popup)
+   (near boundary)
 ```
 
 ## Implementation Details
 
-### 1. Add Highlight Drawing Function to `drawing.ts`
+### 1. Add Edge Detection Function to `geometry.ts`
 
-Create a new function `drawObjectHighlight` that:
-- Takes object position, dimensions, rotation, zoom, and selection number
-- Draws a semi-transparent overlay matching the object's bounding box
-- Renders the selection number (1 or 2) centered within the overlay
+Create a function that determines if a click is near an object's edge and which edge it's closest to:
 
 ```typescript
+export type DetectedEdge = AlignmentEdge | null;
+
 /**
- * Draw a highlight overlay on a selected object for dimension/align tools
+ * Detect which edge of an object was clicked, if any.
+ * Returns null if click is in the interior.
  */
-export const drawObjectHighlight = (
-  ctx: CanvasRenderingContext2D,
-  position: Point,
-  dimensions: { width: number; height: number },
-  rotation: number,
-  zoom: number,
-  selectionNumber: 1 | 2
-) => {
-  ctx.save();
-  ctx.translate(position.x, position.y);
-  ctx.rotate(rotation * Math.PI / 180);
+export const detectClickedEdge = (
+  clickPos: Point,
+  objectPos: Point,
+  objectDims: { width: number; height: number },
+  objectRotation: number,
+  edgeThreshold: number // pixels - how close to edge counts as "on edge"
+): DetectedEdge => {
+  // Transform click to object's local coordinate space
+  const angleRad = -objectRotation * Math.PI / 180;
+  const dx = clickPos.x - objectPos.x;
+  const dy = clickPos.y - objectPos.y;
+  const localX = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+  const localY = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
   
-  const { width, height } = dimensions;
+  const halfW = objectDims.width / 2;
+  const halfH = objectDims.height / 2;
   
-  // Draw semi-transparent overlay
-  ctx.fillStyle = selectionNumber === 1 
-    ? 'rgba(59, 130, 246, 0.3)'  // Blue for object 1
-    : 'rgba(34, 197, 94, 0.3)';  // Green for object 2
-  ctx.fillRect(-width / 2, -height / 2, width, height);
+  // Check if click is within the object bounds
+  if (Math.abs(localX) > halfW || Math.abs(localY) > halfH) {
+    return null; // Outside object
+  }
   
-  // Draw border
-  ctx.strokeStyle = selectionNumber === 1 
-    ? 'rgba(59, 130, 246, 0.8)'
-    : 'rgba(34, 197, 94, 0.8)';
-  ctx.lineWidth = 3 / zoom;
-  ctx.strokeRect(-width / 2, -height / 2, width, height);
+  // Calculate distance from each edge
+  const distFromLeft = Math.abs(localX - (-halfW));
+  const distFromRight = Math.abs(localX - halfW);
+  const distFromTop = Math.abs(localY - (-halfH));
+  const distFromBottom = Math.abs(localY - halfH);
   
-  // Draw selection number
-  const fontSize = Math.min(width, height) * 0.4;
-  ctx.font = `bold ${Math.max(fontSize, 14 / zoom)}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = selectionNumber === 1 
-    ? 'rgba(59, 130, 246, 1)'
-    : 'rgba(34, 197, 94, 1)';
-  ctx.fillText(selectionNumber.toString(), 0, 0);
+  const minDist = Math.min(distFromLeft, distFromRight, distFromTop, distFromBottom);
   
-  ctx.restore();
+  // If minimum distance is within threshold, it's an edge click
+  if (minDist <= edgeThreshold) {
+    if (minDist === distFromLeft) return 'left';
+    if (minDist === distFromRight) return 'right';
+    if (minDist === distFromTop) return 'top';
+    if (minDist === distFromBottom) return 'bottom';
+  }
+  
+  return null; // Interior click
 };
 ```
 
-### 2. Update `RenderAllParams` Interface
+### 2. Update Canvas Click Handler
 
-Add new parameters to track tool selection state:
+Modify the `handleMouseDown` function in `Canvas.tsx` to detect edge clicks and pass additional information to the parent:
 
+The current callback signature:
 ```typescript
-export interface RenderAllParams {
-  // ... existing params
-  dimensionObject1Id?: string | null;
-  dimensionObject2Id?: string | null;
-  alignObject1Id?: string | null;
-  alignObject2Id?: string | null;
-}
+onAlignEdgesObjectClick?: (id: string) => void;
 ```
 
-### 3. Update `renderAllMarkups` Function
-
-Add logic to draw highlights for selected objects after drawing the normal objects:
-
+Will be extended to:
 ```typescript
-export const renderAllMarkups = (ctx, params) => {
-  // ... existing drawing code ...
-  
-  // Draw dimension/align tool highlights at the end (on top of everything)
-  const highlightIds = [
-    { id: params.dimensionObject1Id, num: 1 as const },
-    { id: params.dimensionObject2Id, num: 2 as const },
-    { id: params.alignObject1Id, num: 1 as const },
-    { id: params.alignObject2Id, num: 2 as const },
-  ].filter(h => h.id);
-  
-  for (const { id, num } of highlightIds) {
-    const objInfo = findObjectById(id, params);
-    if (objInfo) {
-      drawObjectHighlight(ctx, objInfo.position, objInfo.dimensions, objInfo.rotation, zoom, num);
+onAlignEdgesObjectClick?: (id: string, clickedEdge: AlignmentEdge | null) => void;
+```
+
+The Canvas will:
+1. Detect which object was clicked (current behavior)
+2. Determine if the click was on an edge or interior
+3. Pass both the object ID and clicked edge (or null for interior) to the parent
+
+### 3. Update FloorPlanMarkup State and Handlers
+
+Add new state to track clicked edges:
+```typescript
+const [alignEdge1, setAlignEdge1] = useState<AlignmentEdge | null>(null);
+const [alignEdge2, setAlignEdge2] = useState<AlignmentEdge | null>(null);
+```
+
+Update `handleAlignEdgesObjectClick`:
+```typescript
+const handleAlignEdgesObjectClick = useCallback((id: string, clickedEdge: AlignmentEdge | null) => {
+  if (!alignObject1Id) {
+    // First selection
+    setAlignObject1Id(id);
+    setAlignEdge1(clickedEdge);
+    
+    if (clickedEdge) {
+      toast.info(`Selected ${clickedEdge} edge. Click an edge on the reference object.`);
+    } else {
+      toast.info('Now click the reference object (stationary)');
+    }
+  } else if (alignObject1Id !== id) {
+    // Second selection
+    setAlignObject2Id(id);
+    setAlignEdge2(clickedEdge);
+    
+    // If both clicks were on edges, auto-align without showing modal
+    if (alignEdge1 && clickedEdge) {
+      // Perform direct alignment using alignEdge1 (the edge to align)
+      performDirectEdgeAlign(alignEdge1);
+    } else {
+      // At least one interior click - show modal
+      setIsAlignEdgesModalOpen(true);
     }
   }
-};
+}, [alignObject1Id, alignEdge1]);
 ```
 
-### 4. Add Helper Function to Find Object Info
+### 4. Add Direct Alignment Function
 
-Create a helper function that finds an object by ID and returns its position, dimensions, and rotation:
-
+Create a helper function for immediate edge alignment:
 ```typescript
-const findObjectForHighlight = (
-  id: string,
-  params: RenderAllParams
-): { position: Point; dimensions: { width: number; height: number }; rotation: number } | null => {
-  // Check PV arrays
-  const pvArray = params.pvArrays.find(a => a.id === id);
-  if (pvArray && params.pvPanelConfig && params.scaleInfo.ratio) {
-    const dims = getPVArrayDimensions(pvArray, params.pvPanelConfig, params.roofMasks, params.scaleInfo, pvArray.position);
-    return { position: pvArray.position, dimensions: dims, rotation: pvArray.rotation };
-  }
+const performDirectEdgeAlign = useCallback((alignmentEdge: AlignmentEdge) => {
+  // Same logic as handleAlignEdgesApply but called directly
+  // ...alignment calculation...
   
-  // Check equipment
-  const equip = params.equipment.find(e => e.id === id);
-  if (equip) {
-    const dims = getEquipmentDimensions(equip.type, params.scaleInfo, params.plantSetupConfig);
-    return { position: equip.position, dimensions: dims, rotation: equip.rotation };
-  }
+  toast.success(`Edges aligned (${alignmentEdge})`);
   
-  // Check walkways
-  const walkway = params.placedWalkways?.find(w => w.id === id);
-  if (walkway && params.scaleInfo.ratio) {
-    return {
-      position: walkway.position,
-      dimensions: { width: walkway.width / params.scaleInfo.ratio, height: walkway.length / params.scaleInfo.ratio },
-      rotation: walkway.rotation || 0,
-    };
-  }
-  
-  // Check cable trays
-  const tray = params.placedCableTrays?.find(t => t.id === id);
-  if (tray && params.scaleInfo.ratio) {
-    return {
-      position: tray.position,
-      dimensions: { width: tray.width / params.scaleInfo.ratio, height: tray.length / params.scaleInfo.ratio },
-      rotation: tray.rotation || 0,
-    };
-  }
-  
-  return null;
-};
+  // Reset state
+  setAlignObject1Id(null);
+  setAlignObject2Id(null);
+  setAlignEdge1(null);
+  setAlignEdge2(null);
+  setActiveTool(Tool.SELECT);
+}, [...dependencies...]);
 ```
 
-### 5. Update Canvas.tsx
+### 5. Visual Edge Highlighting (Optional Enhancement)
 
-Pass the dimension/align object IDs to `renderAllMarkups`:
-
-```typescript
-renderAllMarkups(ctx, {
-  // ... existing params
-  dimensionObject1Id,
-  dimensionObject2Id: dimensionObject2Id, // Need to add this prop
-  alignObject1Id,
-  alignObject2Id: alignObject2Id,         // Need to add this prop
-});
-```
-
-### 6. Update Canvas Props
-
-Add the missing `dimensionObject2Id` and `alignObject2Id` props to Canvas:
-
-```typescript
-interface CanvasProps {
-  // ... existing props
-  dimensionObject1Id?: string | null;
-  dimensionObject2Id?: string | null;  // NEW
-  alignObject1Id?: string | null;
-  alignObject2Id?: string | null;      // NEW
-}
-```
-
-### 7. Update FloorPlanMarkup.tsx
-
-Pass the second object IDs to Canvas:
-
-```typescript
-<Canvas
-  // ... existing props
-  dimensionObject1Id={dimensionObject1Id}
-  dimensionObject2Id={dimensionObject2Id}  // NEW
-  alignObject1Id={alignObject1Id}
-  alignObject2Id={alignObject2Id}          // NEW
-/>
-```
+Update the highlight drawing to show which edge was selected:
+- When an edge is clicked, draw a thicker/different colored line on that specific edge
+- This provides visual feedback about which edge will be aligned
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/floor-plan/utils/drawing.ts` | Add `drawObjectHighlight` function, update `RenderAllParams` interface, update `renderAllMarkups` to draw highlights |
-| `src/components/floor-plan/components/Canvas.tsx` | Add `dimensionObject2Id` and `alignObject2Id` props, pass to `renderAllMarkups` |
-| `src/components/floor-plan/FloorPlanMarkup.tsx` | Pass `dimensionObject2Id` and `alignObject2Id` to Canvas |
+| `src/components/floor-plan/utils/geometry.ts` | Add `detectClickedEdge` function |
+| `src/components/floor-plan/components/Canvas.tsx` | Update click handler to detect edges and pass edge info to callback |
+| `src/components/floor-plan/FloorPlanMarkup.tsx` | Add edge state, update handler to support direct alignment |
+| `src/components/floor-plan/utils/drawing.ts` | (Optional) Update highlight to show selected edge |
 
-## Color Scheme
+## Edge Detection Parameters
 
-| Selection | Fill Color | Border Color | Label Color |
-|-----------|------------|--------------|-------------|
-| Object 1 (moves) | `rgba(59, 130, 246, 0.3)` (Blue 30%) | `rgba(59, 130, 246, 0.8)` | Blue |
-| Object 2 (stationary) | `rgba(34, 197, 94, 0.3)` (Green 30%) | `rgba(34, 197, 94, 0.8)` | Green |
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| Edge Threshold | ~15-20% of smallest dimension | How close to boundary counts as "edge click" |
+| Minimum Threshold | 10 pixels (screen space) | Prevents too-small edge zones on small objects |
+| Maximum Threshold | 30 pixels (screen space) | Prevents entire object being "edge" on large objects |
 
 ## Expected Behavior
 
-1. **When using Distance Between tool:**
-   - Click first object: Blue overlay appears with "1" inside
-   - Click second object: Green overlay appears with "2" inside, modal opens
-   - Both overlays visible until modal is closed
+### Scenario 1: Both Edge Clicks (Direct Align)
+1. User clicks the **right edge** of Object A → Blue highlight with "1", right edge emphasized
+2. User clicks the **right edge** of Object B → Object A moves so its right edge aligns with Object B's right edge
+3. No modal shown, alignment happens immediately
 
-2. **When using Edge Align tool:**
-   - Same behavior as Distance Between tool
-   - Object 1 (blue, "1") will move to align with Object 2 (green, "2")
+### Scenario 2: Mixed Clicks (Show Modal)
+1. User clicks the **interior** of Object A → Blue highlight with "1"
+2. User clicks the **left edge** of Object B → Modal opens
+3. User selects alignment edge in modal → Alignment performed
 
-3. **Overlay appearance:**
-   - Semi-transparent fill matching object boundary
-   - Solid border for visibility
-   - Large centered number indicating selection order
-   - Respects object rotation
+### Scenario 3: Both Interior Clicks (Current Behavior)
+1. User clicks interior of Object A → Blue highlight with "1"
+2. User clicks interior of Object B → Modal opens
+3. User selects edge → Alignment performed
 
-## Technical Notes
+## Technical Considerations
 
-- Highlights are drawn last in `renderAllMarkups` so they appear on top of all other elements
-- The highlight follows the object's bounding box (axis-aligned after rotation)
-- Font size scales with object size but has a minimum size for readability
-- Colors match Tailwind's blue-500 and green-500 for consistency with the UI
+- Edge threshold should scale with zoom to maintain consistent UX at different zoom levels
+- The threshold calculation in screen space ensures consistent click targets regardless of zoom
+- When both objects have edge clicks, Object 1's clicked edge is used for alignment (user controls which edge moves to match)
 
