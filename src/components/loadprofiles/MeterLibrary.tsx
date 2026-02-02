@@ -10,8 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle, Info, Eye, Settings, Zap } from "lucide-react";
+import { Database, Edit2, Trash2, Tag, Palette, Hash, Store, Ruler, Search, X, ArrowUpDown, RefreshCw, Loader2, CheckCircle2, Circle, Info, Eye, Settings, Zap, Upload, ChevronDown, ChevronUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { processCSVToLoadProfile, validateLoadProfile } from "./utils/csvToLoadProfile";
@@ -19,7 +20,7 @@ import { WizardParseConfig, ColumnConfig, ParsedData } from "./types/csvImportTy
 import { MeterProfilePreview } from "./MeterProfilePreview";
 import { CsvImportWizard } from "./CsvImportWizard";
 import { OneClickBatchProcessor } from "./OneClickBatchProcessor";
-// BulkCsvDropzone moved to SitesTab for site-specific bulk imports
+import { BulkCsvDropzone } from "./BulkCsvDropzone";
 
 interface RawDataStats {
   csvContent?: string;
@@ -129,7 +130,8 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   const [showOneClickProcessor, setShowOneClickProcessor] = useState(false);
   const [oneClickMeterIds, setOneClickMeterIds] = useState<string[]>([]);
   
-  // Bulk CSV dropzone moved to SitesTab
+  // Bulk CSV dropzone state for importing new meters without a site
+  const [showBulkImport, setShowBulkImport] = useState(false);
   
   const BATCH_SIZE = 20; // Process 20 meters at a time
 
@@ -1202,7 +1204,39 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
 
   return (
     <div className="space-y-4">
-      {/* Bulk CSV import is now in SitesTab upload dialog */}
+      {/* Bulk CSV Import Section - allows importing meters without a site */}
+      <Collapsible open={showBulkImport} onOpenChange={setShowBulkImport}>
+        <Card>
+          <CardHeader className="py-3">
+            <CollapsibleTrigger asChild>
+              <div className="flex items-center justify-between cursor-pointer">
+                <div className="flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  <CardTitle className="text-base">Bulk CSV Import</CardTitle>
+                  <Badge variant="outline">New Meters</Badge>
+                </div>
+                <Button variant="ghost" size="sm">
+                  {showBulkImport ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </Button>
+              </div>
+            </CollapsibleTrigger>
+          </CardHeader>
+          <CollapsibleContent>
+            <CardContent className="pt-0">
+              <p className="text-sm text-muted-foreground mb-4">
+                Drop CSV files here to create new meters. Files will be auto-parsed and meters created without requiring a site.
+              </p>
+              <BulkCsvDropzone 
+                siteId={siteId || null}
+                onComplete={() => {
+                  queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+                  setShowBulkImport(false);
+                }}
+              />
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
       
       <Card>
         <CardHeader>
