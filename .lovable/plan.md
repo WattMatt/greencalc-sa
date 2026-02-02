@@ -1,243 +1,144 @@
 
+# Fix: Summary Panel Showing Plant Setup Templates Instead of Placed Instances
 
-# GanttPro Integration Plan
+## Problem Summary
 
-## Overview
+The Summary Panel incorrectly displays Plant Setup templates (walkway/cable tray configurations from the library) as if they were placed instances on the canvas. Your screenshots clearly show:
+- **Walkways showing "6m"** when no walkways have been placed
+- **Cable Trays showing "9m"** (sum of 3m + 3m + 3m) from the three templates
 
-Integrate the complete GanttPro project management application as a new "Schedule" tab within each project in your solar energy platform. This will add professional Gantt chart capabilities for tracking installation timelines, milestones, and task dependencies.
+This happens because the code conflates two distinct concepts:
+1. **Plant Setup Templates**: Library of available types (e.g., "Onvlee 76×76", "Onvlee 152×76")
+2. **Placed Instances**: Actual items placed on the canvas
 
----
+## Root Cause
 
-## Features Being Integrated
-
-Based on the GanttPro source code analysis:
-
-### Core Features
-- **Interactive Gantt Chart**: Drag-and-drop timeline visualization with day/week/month views
-- **Task Management**: Create, edit, delete tasks with status tracking (not started, in progress, completed)
-- **Task Dependencies**: Link tasks with 4 dependency types (finish-to-start, start-to-start, finish-to-finish, start-to-finish)
-- **Milestones**: Mark key project dates with customizable markers
-- **Progress Tracking**: Visual progress bars and completion percentages
-- **Critical Path Analysis**: Automatically identify tasks that determine project duration
-
-### Advanced Features
-- **Baselines**: Save schedule snapshots for variance tracking
-- **Resource Workload View**: Visualize task assignments by owner
-- **Bulk Actions**: Select and update multiple tasks at once
-- **Undo/Redo**: Track and reverse changes
-- **Filter Presets**: Save and reuse filter combinations
-- **Chart Export**: Export as PNG, JPEG, or PDF
-- **Report Export**: Export to Excel, Word, and Calendar (ICS) formats
-- **Keyboard Shortcuts**: Power-user navigation
-- **Onboarding Checklist**: Guide users through first-time setup
-- **Color Coding**: Tag tasks with preset colors for categorization
-- **Search and Filters**: Filter by status, owner, color, date range
-
----
-
-## Database Schema
-
-Create 5 new tables linked to your existing `projects` table:
-
-```text
-+-------------------+       +-------------------+
-|     projects      |       |   gantt_tasks     |
-+-------------------+       +-------------------+
-| id (uuid) PK      |<------| project_id (uuid) |
-| name              |       | id (uuid) PK      |
-| ...               |       | name              |
-+-------------------+       | description       |
-                            | start_date        |
-                            | end_date          |
-                            | status            |
-                            | owner             |
-                            | progress (0-100)  |
-                            | sort_order        |
-                            | color             |
-                            +-------------------+
-                                    |
-                                    v
-+-------------------+       +------------------------+
-| gantt_milestones  |       | gantt_task_dependencies|
-+-------------------+       +------------------------+
-| id (uuid) PK      |       | id (uuid) PK           |
-| project_id (uuid) |       | predecessor_id (uuid)  |
-| name              |       | successor_id (uuid)    |
-| date              |       | dependency_type        |
-| description       |       +------------------------+
-| color             |
-+-------------------+
-
-+-------------------+       +------------------------+
-| gantt_baselines   |       | gantt_baseline_tasks   |
-+-------------------+       +------------------------+
-| id (uuid) PK      |       | id (uuid) PK           |
-| project_id (uuid) |       | baseline_id (uuid)     |
-| name              |       | task_id (uuid)         |
-| description       |       | name                   |
-| created_at        |       | start_date             |
-+-------------------+       | end_date               |
-                            +------------------------+
-```
-
-### Table Details
-
-**gantt_tasks**
-- `id`: UUID primary key
-- `project_id`: Foreign key to projects table
-- `name`: Task name (required)
-- `description`: Optional task description
-- `start_date`: Task start date
-- `end_date`: Task end date
-- `status`: Enum ('not_started', 'in_progress', 'completed')
-- `owner`: Optional assignee name
-- `progress`: Integer 0-100
-- `sort_order`: Integer for ordering
-- `color`: Optional color code
-- `created_at`, `updated_at`: Timestamps
-
-**gantt_task_dependencies**
-- Links predecessor and successor tasks
-- `dependency_type`: Enum (finish_to_start, start_to_start, finish_to_finish, start_to_finish)
-
-**gantt_milestones**
-- Key dates marked on the timeline
-- Color-coded for visual distinction
-
-**gantt_baselines** and **gantt_baseline_tasks**
-- Snapshot system for tracking schedule changes over time
-
----
-
-## Implementation Steps
-
-### Phase 1: Database Setup
-1. Create database migration with all 5 tables
-2. Add RLS policies (authenticated users can CRUD on their project's data)
-3. Add foreign key relationships to projects table
-
-### Phase 2: Component Structure
-Create new components under `src/components/gantt/`:
-
-```text
-src/components/gantt/
-  index.ts                    # Barrel export
-  ProjectGantt.tsx            # Main wrapper component (replaces Project.tsx page)
-  GanttChart.tsx              # Timeline visualization
-  GanttToolbar.tsx            # Controls: view mode, filters, exports
-  TaskForm.tsx                # Task create/edit dialog
-  MilestoneForm.tsx           # Milestone create/edit dialog
-  ProgressPanel.tsx           # Progress statistics sidebar
-  DependencyArrows.tsx        # SVG dependency lines
-  DependencyDragLine.tsx      # Drag-to-create dependencies
-  DependencyTypeSelector.tsx  # Dependency type picker
-  BulkActionsBar.tsx          # Multi-select actions
-  ColorLegend.tsx             # Color coding legend
-  BaselineSelector.tsx        # Baseline management
-  MilestoneMarker.tsx         # Milestone display
-  ResourceWorkloadView.tsx    # Resource allocation view
-  KeyboardShortcutsModal.tsx  # Shortcut reference
-  OnboardingChecklist.tsx     # First-time user guide
-  GettingStartedGuide.tsx     # Empty state helper
-```
-
-### Phase 3: Hooks
-Create hooks under `src/hooks/`:
-
-```text
-src/hooks/
-  useGanttTasks.ts           # Task CRUD operations
-  useGanttMilestones.ts      # Milestone CRUD operations
-  useGanttBaselines.ts       # Baseline management
-  useGanttDrag.ts            # Drag-to-resize/move tasks
-  useDependencyDrag.ts       # Drag-to-create dependencies
-  useTaskReorder.ts          # Drag-and-drop reordering
-  useUndoRedo.ts             # Undo/redo stack
-  useFilterPresets.ts        # Saved filter configurations
-  useChartExport.ts          # PNG/JPEG/PDF export
-  useKeyboardShortcuts.ts    # Keyboard navigation
-  useOnboardingProgress.ts   # Track onboarding completion
-```
-
-### Phase 4: Utility Libraries
-Create under `src/lib/`:
-
-```text
-src/lib/
-  criticalPath.ts            # Critical path calculation algorithm
-  taskColors.ts              # Color preset definitions
-  calendarExport.ts          # ICS file generation
-  reportExport.ts            # Excel/Word export (extend existing)
-```
-
-### Phase 5: Type Definitions
-Add to `src/types/gantt.ts`:
-- Task, TaskDependency, Milestone, Baseline, BaselineTask interfaces
-- ViewMode, GroupByMode, ChartViewType enums
-- GanttChartConfig interface
-
-### Phase 6: Integration into ProjectDetail
-1. Add new "Schedule" tab to ProjectDetail.tsx
-2. Import ProjectGantt component
-3. Pass projectId to enable per-project scheduling
-4. Add tab status tracking (pending/partial/complete based on task count)
-
----
-
-## Technical Details
-
-### New Dependencies Required
-- `html-to-image` (for chart export) - needs to be added
-- `jspdf` (for PDF export) - needs to be added
-
-Existing dependencies that will be reused:
-- `date-fns` (already installed)
-- `recharts` (already installed)
-- `xlsx` (already installed for Excel)
-
-### Key Adaptations
-1. **Project ID Linking**: Replace GanttPro's standalone project system with references to your existing `projects` table
-2. **Authentication**: Use your existing `useAuth` hook instead of GanttPro's version
-3. **Styling**: Components already use Tailwind and shadcn/ui, matching your current stack
-4. **Database Client**: Use your existing Supabase client from `@/integrations/supabase/client`
-
-### UI Integration Point
-
-In `ProjectDetail.tsx`, add after the "Reports" tab:
+In `src/components/floor-plan/FloorPlanMarkup.tsx` (lines 291-309), when loading a layout:
 
 ```typescript
-<TabWithStatus 
-  value="schedule" 
-  status={tabStatuses.schedule.status} 
-  tooltip={tabStatuses.schedule.tooltip}
->
-  <Calendar className="h-4 w-4 mr-2" />
-  Schedule
-</TabWithStatus>
-
-// And in TabsContent:
-<TabsContent value="schedule" className="mt-6">
-  <ProjectGantt projectId={id!} projectName={project.name} />
-</TabsContent>
+// BUGGY CODE - converts templates to placed instances
+placedWalkways: (plantSetup?.walkways?.map(w => ({
+  id: w.id,
+  configId: w.id,
+  name: w.name,
+  width: w.width,
+  length: w.length,
+  position: { x: 0, y: 0 },  // Fake position!
+  rotation: 0,
+})) || []) as PlacedWalkway[],
 ```
 
----
+The code is taking templates and creating "placed" items from them with dummy positions. Additionally, the save function never persists actual placed instances.
 
-## Summary
+## Solution
 
-This integration brings a full-featured project scheduling system to your solar energy platform:
+### 1. Database: Extend plant_setup JSONB Structure
 
-| Component | Files to Create | Complexity |
-|-----------|-----------------|------------|
-| Database Tables | 1 migration | Medium |
-| Gantt Components | ~15 files | High |
-| Custom Hooks | ~11 files | Medium |
-| Utility Libraries | ~4 files | Medium |
-| Type Definitions | 1 file | Low |
-| ProjectDetail Integration | 1 file edit | Low |
+Add `placedWalkways` and `placedCableTrays` keys within the existing `plant_setup` column:
 
-**Estimated Components**: ~32 new files
-**Estimated Lines of Code**: ~6,000+ lines
+```typescript
+// Current structure
+plant_setup: {
+  solarModules: [...],
+  inverters: [...],
+  walkways: WalkwayConfig[],      // Templates
+  cableTrays: CableTrayConfig[],  // Templates
+}
 
-The implementation will preserve all original GanttPro functionality while adapting it to work within your existing project context, allowing you to track solar installation schedules, equipment delivery milestones, and contractor dependencies directly within each project.
+// New structure
+plant_setup: {
+  solarModules: [...],
+  inverters: [...],
+  walkways: WalkwayConfig[],      // Templates (unchanged)
+  cableTrays: CableTrayConfig[],  // Templates (unchanged)
+  placedWalkways: PlacedWalkway[],    // NEW: Actual placed instances
+  placedCableTrays: PlacedCableTray[], // NEW: Actual placed instances
+}
+```
 
+### 2. Fix Loading Logic
+
+Update `loadLayout` in `FloorPlanMarkup.tsx`:
+
+```typescript
+// FIXED: Load placed instances separately from templates
+const loadedState: DesignState = {
+  roofMasks: (data.roof_masks as unknown as RoofMask[]) || [],
+  pvArrays: (data.pv_arrays as unknown as any[]) || [],
+  equipment: (data.equipment as unknown as any[]) || [],
+  lines: (data.cables as unknown as any[]) || [],
+  // Load actual placed instances, NOT templates
+  placedWalkways: (plantSetup?.placedWalkways || []) as PlacedWalkway[],
+  placedCableTrays: (plantSetup?.placedCableTrays || []) as PlacedCableTray[],
+};
+```
+
+### 3. Fix Saving Logic
+
+Update `saveLayout` to persist placed instances:
+
+```typescript
+const layoutData: any = {
+  // ... existing fields ...
+  plant_setup: {
+    ...plantSetupConfig,
+    // Include placed instances in plant_setup
+    placedWalkways: placedWalkways,
+    placedCableTrays: placedCableTrays,
+  },
+};
+```
+
+### 4. Update Type Definition (Optional but Recommended)
+
+Extend `PlantSetupConfig` type to include placed instances:
+
+```typescript
+export interface PlantSetupConfig {
+  solarModules: SolarModuleConfig[];
+  inverters: InverterLayoutConfig[];
+  walkways: WalkwayConfig[];        // Templates
+  cableTrays: CableTrayConfig[];    // Templates
+  placedWalkways?: PlacedWalkway[]; // Placed instances
+  placedCableTrays?: PlacedCableTray[]; // Placed instances
+}
+```
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/components/floor-plan/FloorPlanMarkup.tsx` | Fix `loadLayout` (lines 286-309), fix `saveLayout` (lines 571-583) |
+| `src/components/floor-plan/types.ts` | Optionally extend `PlantSetupConfig` interface |
+
+## Expected Result After Fix
+
+- **Summary Panel Metrics Grid**: Shows "0 m" for Walkways and Cable Trays when nothing is placed
+- **Collapsible Sections**: Show "No walkways placed" / "No cable trays placed" when empty
+- **After Placement**: Only items actually clicked onto the canvas appear in the Summary Panel
+- **Plant Setup Modal**: Remains a separate library of templates, unaffected by Summary Panel
+
+## Technical Diagram
+
+```text
++---------------------------+
+|      Plant Setup Modal    |  <-- Template Library
+|  - Onvlee 76x76           |
+|  - Onvlee 152x76          |
+|  - Onvlee 304x76          |
++---------------------------+
+           |
+           v (select template)
++---------------------------+
+|      Canvas Click         |  <-- Creates PlacedCableTray instance
++---------------------------+
+           |
+           v (instance created)
++---------------------------+
+|     Summary Panel         |  <-- Shows only placed instances
+|  - Cable Trays: 3m        |      (NOT templates)
+|    └ Onvlee 76x76 (1x)    |
++---------------------------+
+```
+
+No database migration needed - uses existing JSONB column.
