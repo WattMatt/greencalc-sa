@@ -1,9 +1,10 @@
 import { useRef, useEffect, useState } from 'react';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig } from '../types';
 import { renderAllMarkups, drawPvArray, drawEquipmentIcon, drawWalkway, drawCableTray } from '../utils/drawing';
-import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing } from '../utils/geometry';
+import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing, getPVArrayDimensions, getEquipmentDimensions, detectClickedEdge } from '../utils/geometry';
 import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
 import { PVArrayConfig } from './PVArrayModal';
+import { AlignmentEdge } from './AlignEdgesModal';
 
 interface CanvasProps {
   backgroundImage: string | null;
@@ -48,9 +49,11 @@ interface CanvasProps {
   dimensionObject1Id?: string | null;
   dimensionObject2Id?: string | null;
   // Align edges tool
-  onAlignEdgesObjectClick?: (id: string) => void;
+  onAlignEdgesObjectClick?: (id: string, clickedEdge: AlignmentEdge | null) => void;
   alignObject1Id?: string | null;
   alignObject2Id?: string | null;
+  alignEdge1?: AlignmentEdge | null;
+  alignEdge2?: AlignmentEdge | null;
 }
 
 export function Canvas({
@@ -72,6 +75,8 @@ export function Canvas({
   onAlignEdgesObjectClick,
   alignObject1Id,
   alignObject2Id,
+  alignEdge1,
+  alignEdge2,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -258,6 +263,7 @@ export function Canvas({
       placedWalkways, placedCableTrays,
       dimensionObject1Id, dimensionObject2Id,
       alignObject1Id, alignObject2Id,
+      alignEdge1, alignEdge2,
     });
     
     // Draw current drawing in progress
@@ -496,6 +502,8 @@ export function Canvas({
     dimensionObject2Id,
     alignObject1Id,
     alignObject2Id,
+    alignEdge1,
+    alignEdge2,
   ]);
 
   const getMousePos = (e: React.MouseEvent): Point => {
@@ -696,6 +704,11 @@ export function Canvas({
 
     // Align edges tool - select objects to align edges between
     if (activeTool === Tool.ALIGN_EDGES && onAlignEdgesObjectClick && e.button === 0) {
+      // Calculate edge threshold based on zoom (consistent screen-space click target)
+      // Use 15-20% of smallest dimension, clamped between 10-30 pixels in screen space
+      const baseThresholdScreenPx = 20; // pixels in screen space
+      const edgeThresholdWorld = baseThresholdScreenPx / viewState.zoom;
+      
       // Check PV arrays
       const hitArray = (pvPanelConfig && scaleInfo.ratio)
         ? [...pvArrays].reverse().find(arr => {
@@ -703,8 +716,10 @@ export function Canvas({
             return corners.length === 4 && isPointInPolygon(worldPos, corners);
           })
         : undefined;
-      if (hitArray) {
-        onAlignEdgesObjectClick(hitArray.id);
+      if (hitArray && pvPanelConfig && scaleInfo.ratio) {
+        const dims = getPVArrayDimensions(hitArray, pvPanelConfig, roofMasks, scaleInfo, hitArray.position);
+        const clickedEdge = detectClickedEdge(worldPos, hitArray.position, dims, hitArray.rotation, edgeThresholdWorld);
+        onAlignEdgesObjectClick(hitArray.id, clickedEdge);
         return;
       }
 
@@ -723,7 +738,16 @@ export function Canvas({
           return Math.abs(localX) <= halfW && Math.abs(localY) <= halfL;
         });
         if (hitWalkway) {
-          onAlignEdgesObjectClick(hitWalkway.id);
+          const widthPx = hitWalkway.width / scaleInfo.ratio!;
+          const lengthPx = hitWalkway.length / scaleInfo.ratio!;
+          const clickedEdge = detectClickedEdge(
+            worldPos, 
+            hitWalkway.position, 
+            { width: widthPx, height: lengthPx }, 
+            hitWalkway.rotation || 0, 
+            edgeThresholdWorld
+          );
+          onAlignEdgesObjectClick(hitWalkway.id, clickedEdge);
           return;
         }
       }
@@ -743,7 +767,16 @@ export function Canvas({
           return Math.abs(localX) <= halfW && Math.abs(localY) <= halfL;
         });
         if (hitTray) {
-          onAlignEdgesObjectClick(hitTray.id);
+          const widthPx = hitTray.width / scaleInfo.ratio!;
+          const lengthPx = hitTray.length / scaleInfo.ratio!;
+          const clickedEdge = detectClickedEdge(
+            worldPos, 
+            hitTray.position, 
+            { width: widthPx, height: lengthPx }, 
+            hitTray.rotation || 0, 
+            edgeThresholdWorld
+          );
+          onAlignEdgesObjectClick(hitTray.id, clickedEdge);
           return;
         }
       }
@@ -757,7 +790,9 @@ export function Canvas({
                Math.abs(worldPos.y - item.position.y) <= halfSize;
       });
       if (hitEquipment) {
-        onAlignEdgesObjectClick(hitEquipment.id);
+        const dims = getEquipmentDimensions(hitEquipment.type, scaleInfo, plantSetupConfig);
+        const clickedEdge = detectClickedEdge(worldPos, hitEquipment.position, dims, hitEquipment.rotation, edgeThresholdWorld);
+        onAlignEdgesObjectClick(hitEquipment.id, clickedEdge);
         return;
       }
 

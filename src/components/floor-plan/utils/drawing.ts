@@ -5,6 +5,7 @@ import {
 } from '../types';
 import { TOOL_COLORS, EQUIPMENT_REAL_WORLD_SIZES, getDirectionLabel } from '../constants';
 import { isPointInPolygon, getPolygonCenter, getPVArrayDimensions, getEquipmentDimensions } from './geometry';
+import { AlignmentEdge } from '../components/AlignEdgesModal';
 
 /**
  * Draw a highlight overlay on a selected object for dimension/align tools
@@ -15,7 +16,8 @@ export const drawObjectHighlight = (
   dimensions: { width: number; height: number },
   rotation: number,
   zoom: number,
-  selectionNumber: 1 | 2
+  selectionNumber: 1 | 2,
+  selectedEdge?: AlignmentEdge | null
 ) => {
   ctx.save();
   ctx.translate(position.x, position.y);
@@ -35,6 +37,36 @@ export const drawObjectHighlight = (
     : 'rgba(34, 197, 94, 0.8)';
   ctx.lineWidth = 3 / zoom;
   ctx.strokeRect(-width / 2, -height / 2, width, height);
+  
+  // Draw edge highlight if an edge was clicked
+  if (selectedEdge) {
+    ctx.strokeStyle = selectionNumber === 1 
+      ? 'rgba(59, 130, 246, 1)'  // Solid blue for object 1
+      : 'rgba(34, 197, 94, 1)';  // Solid green for object 2
+    ctx.lineWidth = 6 / zoom;
+    ctx.lineCap = 'round';
+    
+    ctx.beginPath();
+    switch (selectedEdge) {
+      case 'left':
+        ctx.moveTo(-width / 2, -height / 2);
+        ctx.lineTo(-width / 2, height / 2);
+        break;
+      case 'right':
+        ctx.moveTo(width / 2, -height / 2);
+        ctx.lineTo(width / 2, height / 2);
+        break;
+      case 'top':
+        ctx.moveTo(-width / 2, -height / 2);
+        ctx.lineTo(width / 2, -height / 2);
+        break;
+      case 'bottom':
+        ctx.moveTo(-width / 2, height / 2);
+        ctx.lineTo(width / 2, height / 2);
+        break;
+    }
+    ctx.stroke();
+  }
   
   // Draw selection number
   const fontSize = Math.min(width, height) * 0.4;
@@ -522,6 +554,8 @@ export interface RenderAllParams {
   dimensionObject2Id?: string | null;
   alignObject1Id?: string | null;
   alignObject2Id?: string | null;
+  alignEdge1?: AlignmentEdge | null;
+  alignEdge2?: AlignmentEdge | null;
 }
 
 /**
@@ -573,16 +607,16 @@ export const renderAllMarkups = (
   drawScaleIndicator(ctx, scaleLine, scaleInfo, zoom);
 
   // Draw dimension/align tool highlights at the end (on top of everything)
-  const highlightIds: { id: string; num: 1 | 2 }[] = [];
+  const highlightIds: { id: string; num: 1 | 2; edge?: AlignmentEdge | null }[] = [];
   if (params.dimensionObject1Id) highlightIds.push({ id: params.dimensionObject1Id, num: 1 });
   if (params.dimensionObject2Id) highlightIds.push({ id: params.dimensionObject2Id, num: 2 });
-  if (params.alignObject1Id) highlightIds.push({ id: params.alignObject1Id, num: 1 });
-  if (params.alignObject2Id) highlightIds.push({ id: params.alignObject2Id, num: 2 });
+  if (params.alignObject1Id) highlightIds.push({ id: params.alignObject1Id, num: 1, edge: params.alignEdge1 });
+  if (params.alignObject2Id) highlightIds.push({ id: params.alignObject2Id, num: 2, edge: params.alignEdge2 });
   
-  for (const { id, num } of highlightIds) {
+  for (const { id, num, edge } of highlightIds) {
     const objInfo = findObjectForHighlight(id, params);
     if (objInfo) {
-      drawObjectHighlight(ctx, objInfo.position, objInfo.dimensions, objInfo.rotation, zoom, num);
+      drawObjectHighlight(ctx, objInfo.position, objInfo.dimensions, objInfo.rotation, zoom, num, edge);
     }
   }
 };

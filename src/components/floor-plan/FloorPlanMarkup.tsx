@@ -126,6 +126,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   // Align edges tool state
   const [alignObject1Id, setAlignObject1Id] = useState<string | null>(null);
   const [alignObject2Id, setAlignObject2Id] = useState<string | null>(null);
+  const [alignEdge1, setAlignEdge1] = useState<AlignmentEdge | null>(null);
+  const [alignEdge2, setAlignEdge2] = useState<AlignmentEdge | null>(null);
   const [isAlignEdgesModalOpen, setIsAlignEdgesModalOpen] = useState(false);
   const [isScaleModalOpen, setIsScaleModalOpen] = useState(false);
   const [isPVConfigModalOpen, setIsPVConfigModalOpen] = useState(false);
@@ -974,20 +976,84 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   // when changing tools, so the selection mask remains visible while using Select/Pan tools.
   // The states are cleared when the modals are closed or when the operation is completed.
 
+  // Perform direct edge alignment (called when both clicks were on edges)
+  const performDirectEdgeAlign = useCallback((object2Id: string, alignmentEdge: AlignmentEdge) => {
+    if (!alignObject1Id) return;
+    
+    const pos1 = getObjectPosition(alignObject1Id);
+    const pos2 = getObjectPosition(object2Id);
+    const dims1 = getObjectDimensions(alignObject1Id);
+    const dims2 = getObjectDimensions(object2Id);
+    
+    if (!pos1 || !pos2 || !dims1 || !dims2) return;
+    
+    const newPos = calculateAlignedPosition(
+      pos1,
+      { width: dims1.width, height: dims1.height },
+      dims1.rotation,
+      pos2,
+      { width: dims2.width, height: dims2.height },
+      dims2.rotation,
+      alignmentEdge
+    );
+    
+    // Update the position of object 1
+    if (pvArrays.find(a => a.id === alignObject1Id)) {
+      setPvArrays(prev => prev.map(arr => 
+        arr.id === alignObject1Id ? { ...arr, position: newPos } : arr
+      ));
+    } else if (equipment.find(e => e.id === alignObject1Id)) {
+      setEquipment(prev => prev.map(eq => 
+        eq.id === alignObject1Id ? { ...eq, position: newPos } : eq
+      ));
+    } else if (placedWalkways.find(w => w.id === alignObject1Id)) {
+      setPlacedWalkways(prev => prev.map(w => 
+        w.id === alignObject1Id ? { ...w, position: newPos } : w
+      ));
+    } else if (placedCableTrays.find(c => c.id === alignObject1Id)) {
+      setPlacedCableTrays(prev => prev.map(c => 
+        c.id === alignObject1Id ? { ...c, position: newPos } : c
+      ));
+    }
+    
+    // Reset align edges tool state
+    setAlignObject1Id(null);
+    setAlignObject2Id(null);
+    setAlignEdge1(null);
+    setAlignEdge2(null);
+    setActiveTool(Tool.SELECT);
+    toast.success(`Edges aligned (${alignmentEdge})`);
+  }, [alignObject1Id, getObjectPosition, getObjectDimensions, pvArrays, equipment, placedWalkways, placedCableTrays, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays]);
+
   // Handle align edges tool object selection
-  const handleAlignEdgesObjectClick = useCallback((id: string) => {
+  const handleAlignEdgesObjectClick = useCallback((id: string, clickedEdge: AlignmentEdge | null) => {
     if (!alignObject1Id) {
       // First selection
       setAlignObject1Id(id);
-      toast.info('Now click the reference object (stationary)');
+      setAlignEdge1(clickedEdge);
+      
+      if (clickedEdge) {
+        toast.info(`Selected ${clickedEdge} edge. Click an edge on the reference object.`);
+      } else {
+        toast.info('Now click the reference object (stationary)');
+      }
     } else if (alignObject1Id !== id) {
-      // Second selection - open modal
+      // Second selection
       setAlignObject2Id(id);
-      setIsAlignEdgesModalOpen(true);
+      setAlignEdge2(clickedEdge);
+      
+      // If both clicks were on edges, auto-align without showing modal
+      if (alignEdge1 && clickedEdge) {
+        // Perform direct alignment using alignEdge1 (the edge to align)
+        performDirectEdgeAlign(id, alignEdge1);
+      } else {
+        // At least one interior click - show modal
+        setIsAlignEdgesModalOpen(true);
+      }
     }
-  }, [alignObject1Id]);
+  }, [alignObject1Id, alignEdge1, performDirectEdgeAlign]);
 
-  // Apply edge alignment
+  // Apply edge alignment (from modal)
   const handleAlignEdgesApply = useCallback((alignmentEdge: AlignmentEdge) => {
     if (!alignObject1Id || !alignObject2Id) return;
     
@@ -1030,6 +1096,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     // Reset align edges tool state
     setAlignObject1Id(null);
     setAlignObject2Id(null);
+    setAlignEdge1(null);
+    setAlignEdge2(null);
     setIsAlignEdgesModalOpen(false);
     setActiveTool(Tool.SELECT);
     toast.success(`Edges aligned (${alignmentEdge})`);
@@ -1560,6 +1628,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         onAlignEdgesObjectClick={readOnly ? undefined : handleAlignEdgesObjectClick}
         alignObject1Id={alignObject1Id}
         alignObject2Id={alignObject2Id}
+        alignEdge1={alignEdge1}
+        alignEdge2={alignEdge2}
       />
 
       <SummaryPanel
