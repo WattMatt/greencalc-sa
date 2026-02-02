@@ -14,10 +14,12 @@ import { LayoutBrowser } from './components/LayoutBrowser';
 import { PlantSetupModal } from './components/PlantSetupModal';
 import { SimulationSelector } from './components/SimulationSelector';
 import { PlacementOptionsModal, PlacementConfig, toolToPlacementType, PlacementItemType } from './components/PlacementOptionsModal';
+import { SetDistanceModal } from './components/SetDistanceModal';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { getModulePresetById, getDefaultModulePreset, SolarModulePreset } from '../projects/SolarModulePresets';
+import { getObjectCenterDistance, calculateNewPositionAtDistance } from './utils/geometry';
 
 type ViewMode = 'browser' | 'editor';
 
@@ -114,7 +116,11 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [placementOrientation, setPlacementOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [placementMinSpacing, setPlacementMinSpacing] = useState(0.3);
 
-  // Modals
+  // Dimension tool state
+  const [dimensionObject1Id, setDimensionObject1Id] = useState<string | null>(null);
+  const [dimensionObject2Id, setDimensionObject2Id] = useState<string | null>(null);
+  const [isSetDistanceModalOpen, setIsSetDistanceModalOpen] = useState(false);
+  const [currentMeasuredDistance, setCurrentMeasuredDistance] = useState(0);
   const [isScaleModalOpen, setIsScaleModalOpen] = useState(false);
   const [isPVConfigModalOpen, setIsPVConfigModalOpen] = useState(false);
   const [isRoofMaskModalOpen, setIsRoofMaskModalOpen] = useState(false);
@@ -738,7 +744,177 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     }
   }, [setPlacedWalkways, setPlacedCableTrays]);
 
-  // Keyboard shortcuts
+  // Copy selected item handler (for toolbar button)
+  const handleCopySelected = useCallback(() => {
+    if (!selectedItemId) return;
+    
+    // Check if selected item is a PV array
+    const selectedPvArray = pvArrays.find(a => a.id === selectedItemId);
+    if (selectedPvArray) {
+      const copyConfig: PVArrayConfig = {
+        rows: selectedPvArray.rows,
+        columns: selectedPvArray.columns,
+        orientation: selectedPvArray.orientation,
+        minSpacing: selectedPvArray.minSpacing ?? lastPvArraySettings?.minSpacing ?? 0.5,
+      };
+      setPendingPvArrayConfig(copyConfig);
+      setLastPvArraySettings(copyConfig);
+      setActiveTool(Tool.PV_ARRAY);
+      toast.info(`Copied PV Array. Click on a roof mask to place.`);
+      return;
+    }
+    
+    // Check if selected item is a roof mask
+    const selectedRoofMask = roofMasks.find(m => m.id === selectedItemId);
+    if (selectedRoofMask) {
+      setPendingRoofMask({ points: [], area: 0, pitch: selectedRoofMask.pitch });
+      setActiveTool(Tool.ROOF_MASK);
+      toast.info(`Copied Roof Mask (pitch: ${selectedRoofMask.pitch}°). Draw a new mask.`);
+      return;
+    }
+    
+    // Check if selected item is equipment
+    const selectedEquipment = equipment.find(eq => eq.id === selectedItemId);
+    if (selectedEquipment) {
+      setPlacementRotation(selectedEquipment.rotation);
+      switch (selectedEquipment.type) {
+        case 'Inverter':
+          setActiveTool(Tool.PLACE_INVERTER);
+          break;
+        case 'DC Combiner Box':
+          setActiveTool(Tool.PLACE_DC_COMBINER);
+          break;
+        case 'AC Disconnect':
+          setActiveTool(Tool.PLACE_AC_DISCONNECT);
+          break;
+        case 'Main Board':
+          setActiveTool(Tool.PLACE_MAIN_BOARD);
+          break;
+      }
+      toast.info(`Copied ${selectedEquipment.type}. Click to place.`);
+      return;
+    }
+    
+    // Check if selected item is a placed walkway
+    const selectedWalkway = placedWalkways.find(w => w.id === selectedItemId);
+    if (selectedWalkway) {
+      setPlacementRotation(selectedWalkway.rotation);
+      setPlacementMinSpacing(selectedWalkway.minSpacing ?? 0.3);
+      setSelectedWalkwayId(selectedWalkway.configId);
+      setActiveTool(Tool.PLACE_WALKWAY);
+      toast.info(`Copied Walkway. Click to place.`);
+      return;
+    }
+    
+    // Check if selected item is a placed cable tray
+    const selectedCableTray = placedCableTrays.find(c => c.id === selectedItemId);
+    if (selectedCableTray) {
+      setPlacementRotation(selectedCableTray.rotation);
+      setPlacementMinSpacing(selectedCableTray.minSpacing ?? 0.3);
+      setSelectedCableTrayId(selectedCableTray.configId);
+      setActiveTool(Tool.PLACE_CABLE_TRAY);
+      toast.info(`Copied Cable Tray. Click to place.`);
+      return;
+    }
+  }, [selectedItemId, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays, lastPvArraySettings]);
+
+  // Get object position by ID (for dimension tool)
+  const getObjectPosition = useCallback((id: string): Point | null => {
+    const pvArray = pvArrays.find(a => a.id === id);
+    if (pvArray) return pvArray.position;
+    
+    const eq = equipment.find(e => e.id === id);
+    if (eq) return eq.position;
+    
+    const walkway = placedWalkways.find(w => w.id === id);
+    if (walkway) return walkway.position;
+    
+    const cableTray = placedCableTrays.find(c => c.id === id);
+    if (cableTray) return cableTray.position;
+    
+    return null;
+  }, [pvArrays, equipment, placedWalkways, placedCableTrays]);
+
+  // Get object label by ID (for dimension tool modal)
+  const getObjectLabel = useCallback((id: string): string => {
+    const pvArray = pvArrays.find(a => a.id === id);
+    if (pvArray) return `PV Array (${pvArray.rows}×${pvArray.columns})`;
+    
+    const eq = equipment.find(e => e.id === id);
+    if (eq) return eq.type;
+    
+    const walkway = placedWalkways.find(w => w.id === id);
+    if (walkway) return walkway.name || 'Walkway';
+    
+    const cableTray = placedCableTrays.find(c => c.id === id);
+    if (cableTray) return cableTray.name || 'Cable Tray';
+    
+    return 'Object';
+  }, [pvArrays, equipment, placedWalkways, placedCableTrays]);
+
+  // Handle dimension tool object selection
+  const handleDimensionObjectClick = useCallback((id: string) => {
+    if (!dimensionObject1Id) {
+      // First selection
+      setDimensionObject1Id(id);
+      toast.info('Now click the reference object (stationary)');
+    } else if (dimensionObject1Id !== id) {
+      // Second selection - calculate distance and open modal
+      setDimensionObject2Id(id);
+      const pos1 = getObjectPosition(dimensionObject1Id);
+      const pos2 = getObjectPosition(id);
+      if (pos1 && pos2 && scaleInfo.ratio) {
+        const dist = getObjectCenterDistance(pos1, pos2, scaleInfo.ratio);
+        setCurrentMeasuredDistance(dist);
+        setIsSetDistanceModalOpen(true);
+      }
+    }
+  }, [dimensionObject1Id, getObjectPosition, scaleInfo.ratio]);
+
+  // Apply new distance from dimension tool
+  const handleDimensionApply = useCallback((newDistance: number) => {
+    if (!dimensionObject1Id || !dimensionObject2Id || !scaleInfo.ratio) return;
+    
+    const pos1 = getObjectPosition(dimensionObject1Id);
+    const pos2 = getObjectPosition(dimensionObject2Id);
+    if (!pos1 || !pos2) return;
+    
+    const newPos = calculateNewPositionAtDistance(pos1, pos2, newDistance, scaleInfo.ratio);
+    
+    // Update the position of object 1
+    if (pvArrays.find(a => a.id === dimensionObject1Id)) {
+      setPvArrays(prev => prev.map(arr => 
+        arr.id === dimensionObject1Id ? { ...arr, position: newPos } : arr
+      ));
+    } else if (equipment.find(e => e.id === dimensionObject1Id)) {
+      setEquipment(prev => prev.map(eq => 
+        eq.id === dimensionObject1Id ? { ...eq, position: newPos } : eq
+      ));
+    } else if (placedWalkways.find(w => w.id === dimensionObject1Id)) {
+      setPlacedWalkways(prev => prev.map(w => 
+        w.id === dimensionObject1Id ? { ...w, position: newPos } : w
+      ));
+    } else if (placedCableTrays.find(c => c.id === dimensionObject1Id)) {
+      setPlacedCableTrays(prev => prev.map(c => 
+        c.id === dimensionObject1Id ? { ...c, position: newPos } : c
+      ));
+    }
+    
+    // Reset dimension tool state
+    setDimensionObject1Id(null);
+    setDimensionObject2Id(null);
+    setIsSetDistanceModalOpen(false);
+    setActiveTool(Tool.SELECT);
+    toast.success(`Distance set to ${newDistance.toFixed(2)}m`);
+  }, [dimensionObject1Id, dimensionObject2Id, scaleInfo.ratio, getObjectPosition, pvArrays, equipment, placedWalkways, placedCableTrays, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays]);
+
+  // Clear dimension tool state when tool changes
+  useEffect(() => {
+    if (activeTool !== Tool.DIMENSION) {
+      setDimensionObject1Id(null);
+      setDimensionObject2Id(null);
+    }
+  }, [activeTool]);
   useEffect(() => {
     if (readOnly) return;
     
@@ -1193,6 +1369,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           setPlacementOrientation={setPlacementOrientation}
           placementMinSpacing={placementMinSpacing}
           setPlacementMinSpacing={setPlacementMinSpacing}
+          onCopySelected={handleCopySelected}
+          selectedItemId={selectedItemId}
+          dimensionObject1Id={dimensionObject1Id}
+          dimensionObject2Id={dimensionObject2Id}
         />
       )}
       
@@ -1253,6 +1433,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
             : null
         }
         placementMinSpacing={placementMinSpacing}
+        onDimensionObjectClick={readOnly ? undefined : handleDimensionObjectClick}
+        dimensionObject1Id={dimensionObject1Id}
       />
 
       <SummaryPanel
@@ -1428,6 +1610,20 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
               onConfirm={handlePlacementOptionsConfirm}
             />
           )}
+
+          <SetDistanceModal
+            isOpen={isSetDistanceModalOpen}
+            onClose={() => {
+              setIsSetDistanceModalOpen(false);
+              setDimensionObject1Id(null);
+              setDimensionObject2Id(null);
+              setActiveTool(Tool.SELECT);
+            }}
+            currentDistance={currentMeasuredDistance}
+            object1Label={dimensionObject1Id ? getObjectLabel(dimensionObject1Id) : 'Object 1'}
+            object2Label={dimensionObject2Id ? getObjectLabel(dimensionObject2Id) : 'Object 2'}
+            onConfirm={handleDimensionApply}
+          />
         </>
       )}
     </div>
