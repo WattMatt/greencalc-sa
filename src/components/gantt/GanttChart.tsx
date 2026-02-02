@@ -323,31 +323,118 @@ export function GanttChart({
                 Task Name
               </div>
               
-              {/* Task rows */}
+              {/* Task rows - with grouping support */}
               <div className="divide-y">
-                {tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={cn(
-                      "flex items-center gap-2 px-2 hover:bg-muted/50 cursor-pointer group",
-                      selectedTasks.has(task.id) && "bg-primary/10"
-                    )}
-                    style={{ height: ROW_HEIGHT }}
-                    onClick={() => onEditTask(task)}
-                  >
-                    <Checkbox
-                      checked={selectedTasks.has(task.id)}
-                      onCheckedChange={(checked) => onSelectTask(task.id, !!checked)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">{task.name}</p>
+                {config.groupBy !== 'none' ? (
+                  // Render grouped tasks
+                  Object.entries(groupedTasks).map(([groupKey, groupTasks]) => (
+                    <div key={groupKey || 'ungrouped'}>
+                      <TaskGroupHeader
+                        groupKey={groupKey || 'No Value'}
+                        groupBy={config.groupBy as 'status' | 'owner' | 'color'}
+                        taskCount={groupTasks.length}
+                        isExpanded={!collapsedGroups.has(groupKey)}
+                        onToggle={() => toggleGroup(groupKey)}
+                      />
+                      {!collapsedGroups.has(groupKey) && groupTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={cn(
+                            "flex items-center gap-2 px-2 hover:bg-muted/50 cursor-pointer group",
+                            selectedTasks.has(task.id) && "bg-primary/10",
+                            dragReorderTaskId === task.id && "opacity-50"
+                          )}
+                          style={{ height: ROW_HEIGHT }}
+                          onClick={() => onEditTask(task)}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = 'move';
+                            setDragReorderTaskId(task.id);
+                          }}
+                          onDragEnd={() => setDragReorderTaskId(null)}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            if (dragReorderTaskId && dragReorderTaskId !== task.id && onReorderTasks) {
+                              const orderedIds = tasks.map(t => t.id);
+                              const fromIndex = orderedIds.indexOf(dragReorderTaskId);
+                              const toIndex = orderedIds.indexOf(task.id);
+                              orderedIds.splice(fromIndex, 1);
+                              orderedIds.splice(toIndex, 0, dragReorderTaskId);
+                              onReorderTasks(orderedIds);
+                            }
+                            setDragReorderTaskId(null);
+                          }}
+                        >
+                          <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab" />
+                          <Checkbox
+                            checked={selectedTasks.has(task.id)}
+                            onCheckedChange={(checked) => onSelectTask(task.id, !!checked)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm truncate">{task.name}</p>
+                          </div>
+                          <Badge variant="outline" className={cn("text-[10px] h-5", statusColors[task.status])}>
+                            {task.progress}%
+                          </Badge>
+                        </div>
+                      ))}
                     </div>
-                    <Badge variant="outline" className={cn("text-[10px] h-5", statusColors[task.status])}>
-                      {task.progress}%
-                    </Badge>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  // Flat task list (no grouping)
+                  tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className={cn(
+                        "flex items-center gap-2 px-2 hover:bg-muted/50 cursor-pointer group",
+                        selectedTasks.has(task.id) && "bg-primary/10",
+                        dragReorderTaskId === task.id && "opacity-50"
+                      )}
+                      style={{ height: ROW_HEIGHT }}
+                      onClick={() => onEditTask(task)}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move';
+                        setDragReorderTaskId(task.id);
+                      }}
+                      onDragEnd={() => setDragReorderTaskId(null)}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (dragReorderTaskId && dragReorderTaskId !== task.id && onReorderTasks) {
+                          const orderedIds = tasks.map(t => t.id);
+                          const fromIndex = orderedIds.indexOf(dragReorderTaskId);
+                          const toIndex = orderedIds.indexOf(task.id);
+                          orderedIds.splice(fromIndex, 1);
+                          orderedIds.splice(toIndex, 0, dragReorderTaskId);
+                          onReorderTasks(orderedIds);
+                        }
+                        setDragReorderTaskId(null);
+                      }}
+                    >
+                      <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab" />
+                      <Checkbox
+                        checked={selectedTasks.has(task.id)}
+                        onCheckedChange={(checked) => onSelectTask(task.id, !!checked)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate">{task.name}</p>
+                      </div>
+                      <Badge variant="outline" className={cn("text-[10px] h-5", statusColors[task.status])}>
+                        {task.progress}%
+                      </Badge>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -512,7 +599,10 @@ export function GanttChart({
 
                                     {/* Dependency connection points */}
                                     <div 
-                                      className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-background opacity-0 group-hover:opacity-100 cursor-crosshair"
+                                      className={cn(
+                                        "absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity",
+                                        isDraggingDependency ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                      )}
                                       onMouseDown={(e) => {
                                         e.stopPropagation();
                                         const rect = chartRef.current?.getBoundingClientRect();
@@ -520,14 +610,29 @@ export function GanttChart({
                                           startDependencyDrag(task.id, 'start', e.clientX - rect.left, e.clientY - rect.top);
                                         }
                                       }}
+                                      onMouseUp={(e) => {
+                                        if (isDraggingDependency && dependencyDragState) {
+                                          e.stopPropagation();
+                                          endDependencyDrag(task.id, 'start');
+                                        }
+                                      }}
                                     />
                                     <div 
-                                      className="absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-background opacity-0 group-hover:opacity-100 cursor-crosshair"
+                                      className={cn(
+                                        "absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity",
+                                        isDraggingDependency ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                      )}
                                       onMouseDown={(e) => {
                                         e.stopPropagation();
                                         const rect = chartRef.current?.getBoundingClientRect();
                                         if (rect) {
                                           startDependencyDrag(task.id, 'end', e.clientX - rect.left, e.clientY - rect.top);
+                                        }
+                                      }}
+                                      onMouseUp={(e) => {
+                                        if (isDraggingDependency && dependencyDragState) {
+                                          e.stopPropagation();
+                                          endDependencyDrag(task.id, 'end');
                                         }
                                       }}
                                     />
