@@ -1,197 +1,114 @@
 
-# Plan: Add Snapping and Copying Functionality for Walkways, Cable Trays, and Inverters
 
-## Problem Summary
+# Fix: Minimum Spacing Not Applied When Placing Walkways
 
-The snapping and copying functionality that works for **PV Arrays** is not implemented for **Walkways**, **Cable Trays**, and **Inverters**. Specifically:
+## Problem
 
-1. **Missing Snapping for Ghost Previews**: When placing walkways and cable trays, the ghost preview follows the mouse directly without snapping to existing items
-2. **Missing Snapping During Dragging**: When dragging walkways and cable trays, there's no snapping to maintain alignment/spacing with other items
-3. **Inverter Snapping Works Partially**: Equipment snapping exists but only snaps to other equipment, not to walkways/cable trays
-4. **Copy Skips Placement Options Modal**: When copying walkways/cable trays via Ctrl+C, the placement options modal is bypassed
+Looking at the user's screenshot, the walkways are being placed edge-to-edge with **zero gap** between them, even though minimum spacing functionality should be enforced. The PlacementOptionsModal shows "Min Spacing: 0.0m" in the preview area.
 
-## Current State Analysis
+## Root Cause
 
-### What Works (PV Arrays)
-- Ghost preview applies `snapPVArrayToSpacing()` to maintain minimum spacing
-- Dragging applies the same snapping logic
-- Shift key enables force-alignment mode
-- Copy (Ctrl+C) enters placement mode with same configuration
+The `snapMaterialToSpacing` function in `geometry.ts` has an early exit condition (line 522-525):
 
-### What's Missing (Walkways, Cable Trays)
+```typescript
+// If not force-aligning and no spacing configured, allow free placement
+if (!forceAlign && minSpacingMeters <= 0) {
+  return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
+}
+```
 
-| Feature | PV Arrays | Walkways | Cable Trays | Inverters |
-|---------|-----------|----------|-------------|-----------|
-| Ghost Preview Snapping | Yes | **No** | **No** | Yes (equipment only) |
-| Drag Snapping | Yes | **No** | **No** | Yes (equipment only) |
-| Shift Force-Align | Yes | **No** | **No** | Yes |
-| minSpacing from PlacementOptions | Yes | Stored but unused | Stored but unused | Hardcoded 0.3m |
+**When `minSpacingMeters = 0`, the snapping algorithm exits immediately without enforcing any spacing.**
+
+This means:
+1. User opens PlacementOptionsModal with default spacing of 0.3m
+2. User (possibly accidentally) sets spacing to 0.0m or clears the input
+3. User clicks "Ready to Place"
+4. All subsequent walkway placements have NO snapping protection
+
+Additionally, the snapping logic is designed to be **reactive** (only activates when items are getting too close) rather than **proactive** (always maintaining minimum distance). This is fine for preventing overlaps but doesn't help when the configured spacing is 0.
 
 ## Solution
 
-### 1. Create Snapping Functions for Materials
+### Option A: Enforce Minimum Threshold (Recommended)
 
-Add two new functions to `src/components/floor-plan/utils/geometry.ts`:
+Prevent the user from setting minSpacing below a reasonable threshold (e.g., 0.05m = 5cm):
+
+**File: `src/components/floor-plan/components/PlacementOptionsModal.tsx`**
 
 ```typescript
-// Get material dimensions in pixels
-export const getMaterialDimensions = (
-  item: { width: number; length: number; rotation: number },
-  scaleInfo: ScaleInfo
-): { width: number; height: number } => { ... }
-
-// Snap walkways and cable trays to each other
-export const snapMaterialToSpacing = (
-  mousePos: Point,
-  ghostConfig: { width: number; length: number; rotation: number },
-  existingItems: Array<{ id: string; width: number; length: number; position: Point; rotation: number }>,
-  scaleInfo: ScaleInfo,
-  minSpacingMeters: number,
-  forceAlign: boolean = false
-): { position: Point; rotation: number; snappedToId: string | null } => { ... }
+const handleConfirm = () => {
+  onConfirm({
+    orientation,
+    minSpacing: Math.max(0.05, spacingNum), // Enforce minimum 5cm
+  });
+};
 ```
 
-### 2. Apply Snapping to Ghost Previews
+Or add validation in the DimensionInput:
 
-Update `Canvas.tsx` ghost preview rendering (lines 403-429):
-
-**Walkway Ghost Preview (before):**
 ```typescript
-position: mouseWorldPos,
+const handleValueChange = (inputValue: string) => {
+  setDisplayValue(inputValue);
+  const numericValue = parseFloat(inputValue);
+  if (!isNaN(numericValue)) {
+    const meters = displayToMeters(numericValue, unit);
+    onChange(Math.max(0, meters)); // Already allows 0
+  }
+};
 ```
 
-**Walkway Ghost Preview (after):**
+### Option B: Always Allow Snapping for Alignment (Even at 0 Spacing)
+
+Modify the snapping algorithm to still snap for alignment purposes even when minSpacing is 0:
+
+**File: `src/components/floor-plan/utils/geometry.ts`**
+
+Change lines 522-525:
+
 ```typescript
-const snapResult = snapMaterialToSpacing(
-  mouseWorldPos,
-  { width: pendingWalkwayConfig.width, length: pendingWalkwayConfig.length, rotation: placementRotation },
-  placedWalkways || [],
-  scaleInfo,
-  placementMinSpacing,  // From PlacementOptionsModal
-  isShiftHeld
-);
-// Use snapResult.position and snapResult.rotation
-```
-
-Same pattern for Cable Tray ghost preview.
-
-### 3. Apply Snapping During Dragging
-
-Update `Canvas.tsx` drag handlers (lines 776-797):
-
-**Walkway Dragging (before):**
-```typescript
-setPlacedWalkways(prev => prev.map(item => 
-  item.id === draggingWalkwayId ? { ...item, position: basePos } : item
-));
-```
-
-**Walkway Dragging (after):**
-```typescript
-const draggedWalkway = placedWalkways.find(w => w.id === draggingWalkwayId);
-if (draggedWalkway) {
-  const otherWalkways = placedWalkways.filter(w => w.id !== draggingWalkwayId);
-  const snapResult = snapMaterialToSpacing(
-    basePos,
-    { width: draggedWalkway.width, length: draggedWalkway.length, rotation: draggedWalkway.rotation },
-    otherWalkways,
-    scaleInfo,
-    placementMinSpacing,
-    isShiftHeld
-  );
-  setPlacedWalkways(prev => prev.map(item => 
-    item.id === draggingWalkwayId 
-      ? { ...item, position: snapResult.position, rotation: isShiftHeld && snapResult.snappedToId ? snapResult.rotation : item.rotation } 
-      : item
-  ));
+// BEFORE
+if (!forceAlign && minSpacingMeters <= 0) {
+  return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
 }
+
+// AFTER - Remove this early exit, let snapping still work for alignment
+// (snapping will just enforce 0 gap, which is edge-to-edge)
 ```
 
-Same pattern for Cable Tray dragging.
+This allows snapping behavior to still work for alignment (matching rotations, grid alignment) even when the user explicitly sets 0 spacing.
 
-### 4. Apply Snapping During Placement Click
+### Option C: Add Visual Warning for 0 Spacing
 
-Update `Canvas.tsx` placement handlers (lines 669-694):
-
-**Walkway Placement (before):**
-```typescript
-position: worldPos,
-```
-
-**Walkway Placement (after):**
-```typescript
-const snapResult = snapMaterialToSpacing(
-  worldPos,
-  { width: pendingWalkwayConfig.width, length: pendingWalkwayConfig.length, rotation: placementRotation },
-  placedWalkways || [],
-  scaleInfo,
-  placementMinSpacing,
-  isShiftHeld
-);
-// Use snapResult.position and snapResult.rotation
-```
-
-Same for Cable Tray placement.
-
-### 5. Pass `placementMinSpacing` to Canvas
-
-Update Canvas props to receive `placementMinSpacing` from `FloorPlanMarkup.tsx`:
+Add a warning in the PlacementOptionsModal when spacing is 0:
 
 ```typescript
-interface CanvasProps {
-  // ... existing props
-  placementMinSpacing?: number;  // NEW
-}
+{spacingNum === 0 && (
+  <p className="text-xs text-amber-600">
+    Warning: Items will be placed edge-to-edge without gap.
+  </p>
+)}
 ```
 
-### 6. Fix Copy to Respect minSpacing
+## Recommended Implementation
 
-The keyboard copy handler (lines 821-841) already copies `minSpacing`, but should ensure `placementMinSpacing` state is also updated:
+Combine **Option A** (enforce minimum threshold) with **Option C** (visual warning):
 
-```typescript
-// Already implemented - just verify it's working
-const selectedWalkway = placedWalkways.find(w => w.id === selectedItemId);
-if (selectedWalkway) {
-  setPlacementRotation(selectedWalkway.rotation);
-  setPlacementMinSpacing(selectedWalkway.minSpacing ?? 0.3); // Already present
-  ...
-}
-```
+1. Set a minimum enforced spacing of **0.05m (5cm)** to ensure there's always some gap
+2. If user tries to set below this, clamp the value and show a note
+3. This matches real-world requirements (maintenance access, thermal expansion, etc.)
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/floor-plan/utils/geometry.ts` | Add `getMaterialDimensions()` and `snapMaterialToSpacing()` functions |
-| `src/components/floor-plan/components/Canvas.tsx` | Apply snapping to ghost previews, placement clicks, and dragging for walkways/cable trays. Add `placementMinSpacing` prop. |
-| `src/components/floor-plan/FloorPlanMarkup.tsx` | Pass `placementMinSpacing` to Canvas component |
-
-## Technical Details
-
-### Snapping Algorithm (Mirror of Equipment Snapping)
-
-The `snapMaterialToSpacing` function will follow the same algorithm as `snapEquipmentToSpacing`:
-
-1. Calculate ghost item dimensions in pixels using width/length and scaleInfo.ratio
-2. For each existing item:
-   - Calculate center-to-center distance
-   - Apply rotation transforms to get effective bounding box
-   - Calculate edge-to-edge gap distance
-   - If gap < minSpacing (or forceAlign), consider as snap candidate
-3. Find closest candidate and compute snap position:
-   - **Normal mode**: Enforce minimum spacing, align on dominant axis
-   - **Shift mode**: Align axis only, keep mouse distance
-
-### Edge Cases
-
-- **Mixed snapping**: Walkways should snap to other walkways, cable trays should snap to other cable trays (not cross-type for now)
-- **Empty state**: When no existing items, return mouse position unchanged
-- **No scale**: When scaleInfo.ratio is null, return mouse position unchanged
+| `src/components/floor-plan/components/PlacementOptionsModal.tsx` | Enforce minimum spacing threshold of 0.05m, add validation message |
+| `src/components/floor-plan/components/DimensionInput.tsx` | (Optional) Add `min` prop for enforcing minimum values |
+| `src/components/floor-plan/utils/geometry.ts` | (Optional) Remove early-exit for 0 spacing to allow alignment snapping |
 
 ## Expected Behavior After Fix
 
-1. **Ghost Preview**: Snaps to maintain minSpacing when approaching other items
-2. **Shift + Move**: Forces alignment on one axis while maintaining free movement on the other
-3. **Placement Click**: Applies same snapping as ghost preview
-4. **Dragging**: Applies snapping while dragging existing items
-5. **Copy (Ctrl+C)**: Preserves rotation and minSpacing from source item
+1. **PlacementOptionsModal**: Default remains 0.3m, minimum enforced at 0.05m
+2. **Validation**: If user enters 0 or negative, value clamps to 0.05m with visual feedback
+3. **Snapping**: Always activates when items are within threshold distance
+4. **Edge-to-edge placement**: No longer possible - minimum 5cm gap enforced
+
