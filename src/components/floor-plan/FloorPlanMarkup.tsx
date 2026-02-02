@@ -970,21 +970,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     toast.success(`Distance set to ${newDistance.toFixed(2)}m`);
   }, [dimensionObject1Id, dimensionObject2Id, scaleInfo.ratio, getObjectPosition, getObjectDimensions, pvArrays, equipment, placedWalkways, placedCableTrays, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays]);
 
-  // Clear dimension tool state when tool changes
-  useEffect(() => {
-    if (activeTool !== Tool.DIMENSION) {
-      setDimensionObject1Id(null);
-      setDimensionObject2Id(null);
-    }
-  }, [activeTool]);
-
-  // Clear align edges tool state when tool changes
-  useEffect(() => {
-    if (activeTool !== Tool.ALIGN_EDGES) {
-      setAlignObject1Id(null);
-      setAlignObject2Id(null);
-    }
-  }, [activeTool]);
+  // Note: Dimension and align edges tool selection states are intentionally NOT cleared
+  // when changing tools, so the selection mask remains visible while using Select/Pan tools.
+  // The states are cleared when the modals are closed or when the operation is completed.
 
   // Handle align edges tool object selection
   const handleAlignEdgesObjectClick = useCallback((id: string) => {
