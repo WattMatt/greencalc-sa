@@ -80,9 +80,14 @@ export function GanttChart({
       if (isDragging) {
         updateDrag(e.clientX);
       }
-      if (isDraggingDependency && chartRef.current) {
-        const rect = chartRef.current.getBoundingClientRect();
-        updateDependencyDrag(e.clientX - rect.left, e.clientY - rect.top);
+      if (isDraggingDependency && chartRef.current && scrollRef.current) {
+        const chartRect = chartRef.current.getBoundingClientRect();
+        const scrollRect = scrollRef.current.getBoundingClientRect();
+        // Account for scroll position
+        const scrollLeft = scrollRef.current.scrollLeft;
+        const x = e.clientX - scrollRect.left + scrollLeft;
+        const y = e.clientY - chartRect.top - HEADER_HEIGHT;
+        updateDependencyDrag(x, y);
       }
     };
 
@@ -600,14 +605,18 @@ export function GanttChart({
                                     {/* Dependency connection points */}
                                     <div 
                                       className={cn(
-                                        "absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity",
+                                        "absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity z-20",
                                         isDraggingDependency ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                                       )}
                                       onMouseDown={(e) => {
                                         e.stopPropagation();
-                                        const rect = chartRef.current?.getBoundingClientRect();
-                                        if (rect) {
-                                          startDependencyDrag(task.id, 'start', e.clientX - rect.left, e.clientY - rect.top);
+                                        e.preventDefault();
+                                        if (scrollRef.current) {
+                                          const scrollRect = scrollRef.current.getBoundingClientRect();
+                                          const scrollLeft = scrollRef.current.scrollLeft;
+                                          const x = e.clientX - scrollRect.left + scrollLeft;
+                                          const y = index * ROW_HEIGHT + ROW_HEIGHT / 2;
+                                          startDependencyDrag(task.id, 'start', x, y);
                                         }
                                       }}
                                       onMouseUp={(e) => {
@@ -619,14 +628,18 @@ export function GanttChart({
                                     />
                                     <div 
                                       className={cn(
-                                        "absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity",
+                                        "absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity z-20",
                                         isDraggingDependency ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                                       )}
                                       onMouseDown={(e) => {
                                         e.stopPropagation();
-                                        const rect = chartRef.current?.getBoundingClientRect();
-                                        if (rect) {
-                                          startDependencyDrag(task.id, 'end', e.clientX - rect.left, e.clientY - rect.top);
+                                        e.preventDefault();
+                                        if (scrollRef.current) {
+                                          const scrollRect = scrollRef.current.getBoundingClientRect();
+                                          const scrollLeft = scrollRef.current.scrollLeft;
+                                          const x = e.clientX - scrollRect.left + scrollLeft;
+                                          const y = index * ROW_HEIGHT + ROW_HEIGHT / 2;
+                                          startDependencyDrag(task.id, 'end', x, y);
                                         }
                                       }}
                                       onMouseUp={(e) => {
