@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,10 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { GanttChartConfig, GanttFilters, GanttBaseline, GanttTask, GanttMilestone, TASK_COLORS, DEFAULT_FILTERS } from '@/types/gantt';
+import { GanttChartConfig, GanttFilters, GanttBaseline, GanttTask, GanttMilestone, GanttTaskDependency, GanttFilterPreset, TASK_COLORS, DEFAULT_FILTERS } from '@/types/gantt';
 import { downloadICS } from '@/lib/calendarExport';
+import { exportToExcel, exportToImage, exportToPDF, exportToWord } from '@/lib/ganttExport';
 import { 
   CalendarDays, 
   CalendarRange, 
@@ -28,7 +29,10 @@ import {
   Link2,
   Flag,
   MoreVertical,
-  ChevronDown
+  ChevronDown,
+  Keyboard,
+  Bookmark,
+  FileType2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -43,7 +47,14 @@ interface GanttToolbarProps {
   onDeleteBaseline: (id: string) => void;
   tasks: GanttTask[];
   milestones: GanttMilestone[];
+  dependencies: GanttTaskDependency[];
   projectName: string;
+  filterPresets?: GanttFilterPreset[];
+  onSaveFilterPreset?: (name: string) => void;
+  onApplyFilterPreset?: (presetId: string) => void;
+  onDeleteFilterPreset?: (presetId: string) => void;
+  onOpenKeyboardShortcuts?: () => void;
+  searchInputRef?: React.RefObject<HTMLInputElement>;
 }
 
 export function GanttToolbar({
@@ -57,12 +68,21 @@ export function GanttToolbar({
   onDeleteBaseline,
   tasks,
   milestones,
+  dependencies,
   projectName,
+  filterPresets = [],
+  onSaveFilterPreset,
+  onApplyFilterPreset,
+  onDeleteFilterPreset,
+  onOpenKeyboardShortcuts,
+  searchInputRef,
 }: GanttToolbarProps) {
   const [isBaselineDialogOpen, setIsBaselineDialogOpen] = useState(false);
   const [baselineName, setBaselineName] = useState('');
   const [baselineDescription, setBaselineDescription] = useState('');
   const [isSavingBaseline, setIsSavingBaseline] = useState(false);
+  const [filterPresetName, setFilterPresetName] = useState('');
+  const [isFilterPresetDialogOpen, setIsFilterPresetDialogOpen] = useState(false);
 
   const activeFiltersCount = [
     filters.search,
@@ -93,8 +113,51 @@ export function GanttToolbar({
     toast.success('Calendar exported');
   };
 
-  const handleExportImage = async () => {
-    toast.info('Image export coming soon');
+  const handleExportExcel = () => {
+    try {
+      exportToExcel(tasks, milestones, dependencies, projectName);
+      toast.success('Excel file exported');
+    } catch (error) {
+      toast.error('Failed to export Excel');
+    }
+  };
+
+  const handleExportWord = () => {
+    try {
+      exportToWord(tasks, milestones, projectName);
+      toast.success('Word document exported');
+    } catch (error) {
+      toast.error('Failed to export Word document');
+    }
+  };
+
+  const handleExportImage = async (format: 'png' | 'jpeg') => {
+    try {
+      await exportToImage('gantt-chart-container', format, projectName);
+      toast.success(`${format.toUpperCase()} image exported`);
+    } catch (error) {
+      toast.error('Failed to export image');
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      await exportToPDF('gantt-chart-container', projectName);
+      toast.success('PDF exported');
+    } catch (error) {
+      toast.error('Failed to export PDF');
+    }
+  };
+
+  const handleSaveFilterPreset = () => {
+    if (!filterPresetName.trim()) {
+      toast.error('Please enter a preset name');
+      return;
+    }
+    onSaveFilterPreset?.(filterPresetName);
+    setFilterPresetName('');
+    setIsFilterPresetDialogOpen(false);
+    toast.success('Filter preset saved');
   };
 
   const clearFilters = () => {
@@ -139,6 +202,7 @@ export function GanttToolbar({
       {/* Search */}
       <div className="relative">
         <Input
+          ref={searchInputRef}
           placeholder="Search tasks..."
           value={filters.search}
           onChange={(e) => onFiltersChange({ ...filters, search: e.target.value })}
@@ -247,7 +311,49 @@ export function GanttToolbar({
                   />
                 ))}
               </div>
-            </div>
+          </div>
+
+            {/* Filter Presets */}
+            {filterPresets.length > 0 && (
+              <div className="space-y-2 pt-2 border-t">
+                <Label className="text-xs">Saved Presets</Label>
+                <div className="space-y-1">
+                  {filterPresets.map((preset) => (
+                    <div key={preset.id} className="flex items-center justify-between">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 justify-start h-7"
+                        onClick={() => onApplyFilterPreset?.(preset.id)}
+                      >
+                        <Bookmark className="h-3 w-3 mr-2" />
+                        {preset.name}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => onDeleteFilterPreset?.(preset.id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {onSaveFilterPreset && activeFiltersCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full mt-2"
+                onClick={() => setIsFilterPresetDialogOpen(true)}
+              >
+                <Save className="h-3 w-3 mr-2" />
+                Save as Preset
+              </Button>
+            )}
           </div>
         </PopoverContent>
       </Popover>
@@ -274,6 +380,18 @@ export function GanttToolbar({
         <Flag className="h-4 w-4 mr-1" />
         Milestones
       </Button>
+
+      {/* Keyboard shortcuts button */}
+      {onOpenKeyboardShortcuts && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8"
+          onClick={onOpenKeyboardShortcuts}
+        >
+          <Keyboard className="h-4 w-4" />
+        </Button>
+      )}
 
       <div className="flex-1" />
 
@@ -324,19 +442,68 @@ export function GanttToolbar({
             <ChevronDown className="h-3 w-3 ml-1" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleExportImage}>
-            <Image className="h-4 w-4 mr-2" />
-            Export as Image
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Image className="h-4 w-4 mr-2" />
+              Export as Image
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onClick={() => handleExportImage('png')}>
+                PNG (High Quality)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExportImage('jpeg')}>
+                JPEG (Smaller Size)
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuItem onClick={handleExportPDF}>
+            <FileText className="h-4 w-4 mr-2" />
+            Export as PDF
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleExportExcel}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Export to Excel
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleExportWord}>
+            <FileType2 className="h-4 w-4 mr-2" />
+            Export to Word
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleExportCalendar}>
             <CalendarDays className="h-4 w-4 mr-2" />
             Export to Calendar (.ics)
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Save Baseline Dialog */}
+      {/* Save Filter Preset Dialog */}
+      <Dialog open={isFilterPresetDialogOpen} onOpenChange={setIsFilterPresetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save Filter Preset</DialogTitle>
+            <DialogDescription>
+              Save your current filter configuration for quick access later.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>Preset Name</Label>
+            <Input
+              value={filterPresetName}
+              onChange={(e) => setFilterPresetName(e.target.value)}
+              placeholder="e.g., My Open Tasks, High Priority"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsFilterPresetDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveFilterPreset}>
+              Save Preset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={isBaselineDialogOpen} onOpenChange={setIsBaselineDialogOpen}>
         <DialogContent>
           <DialogHeader>

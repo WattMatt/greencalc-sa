@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -6,6 +6,10 @@ import { useGanttTasks } from '@/hooks/useGanttTasks';
 import { useGanttDependencies } from '@/hooks/useGanttDependencies';
 import { useGanttMilestones } from '@/hooks/useGanttMilestones';
 import { useGanttBaselines } from '@/hooks/useGanttBaselines';
+import { useFilterPresets } from '@/hooks/useFilterPresets';
+import { useKeyboardShortcuts, getDefaultGanttShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useOnboardingProgress } from '@/hooks/useOnboardingProgress';
+import { useUndoRedo } from '@/hooks/useUndoRedo';
 import { GanttToolbar } from './GanttToolbar';
 import { GanttChart } from './GanttChart';
 import { TaskForm } from './TaskForm';
@@ -13,6 +17,10 @@ import { MilestoneForm } from './MilestoneForm';
 import { ProgressPanel } from './ProgressPanel';
 import { BulkActionsBar } from './BulkActionsBar';
 import { GettingStartedGuide } from './GettingStartedGuide';
+import { ResourceWorkloadView } from './ResourceWorkloadView';
+import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
+import { OnboardingChecklist } from './OnboardingChecklist';
+import { ColorLegend } from './ColorLegend';
 import { 
   GanttChartConfig, 
   GanttFilters, 
@@ -22,7 +30,7 @@ import {
   TaskFormData,
   MilestoneFormData,
 } from '@/types/gantt';
-import { Plus, Flag, CalendarDays } from 'lucide-react';
+import { Plus, Flag, CalendarDays, Users } from 'lucide-react';
 import { parseISO, isWithinInterval } from 'date-fns';
 
 interface ProjectGanttProps {
@@ -32,10 +40,15 @@ interface ProjectGanttProps {
 
 export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
   // Data hooks
-  const { tasks, isLoading: isLoadingTasks, createTask, updateTask, deleteTask, bulkUpdateTasks, bulkDeleteTasks } = useGanttTasks(projectId);
+  const { tasks, isLoading: isLoadingTasks, createTask, updateTask, deleteTask, bulkUpdateTasks, bulkDeleteTasks, reorderTasks } = useGanttTasks(projectId);
   const { dependencies, isLoading: isLoadingDeps, createDependency, deleteDependency } = useGanttDependencies(projectId);
   const { milestones, isLoading: isLoadingMilestones, createMilestone, updateMilestone, deleteMilestone } = useGanttMilestones(projectId);
   const { baselines, createBaseline, deleteBaseline } = useGanttBaselines(projectId);
+  
+  // Feature hooks
+  const { presets: filterPresets, createPreset, deletePreset, applyPreset } = useFilterPresets(projectId);
+  const { steps: onboardingSteps, progress: onboardingProgress, completedCount, totalSteps, isComplete: onboardingComplete, isDismissed: onboardingDismissed, completeStep, dismissOnboarding, resetOnboarding } = useOnboardingProgress(projectId);
+  const { canUndo, canRedo, undo, redo, pushAction } = useUndoRedo();
 
   // UI State
   const [config, setConfig] = useState<GanttChartConfig>(DEFAULT_CHART_CONFIG);
@@ -44,6 +57,10 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
   const [editingTask, setEditingTask] = useState<GanttTask | null>(null);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isMilestoneFormOpen, setIsMilestoneFormOpen] = useState(false);
+  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
+  const [showWorkloadView, setShowWorkloadView] = useState(false);
+  
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const isLoading = isLoadingTasks || isLoadingDeps || isLoadingMilestones;
 
@@ -96,7 +113,11 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
   const handleCreateTask = useCallback(async (formData: TaskFormData) => {
     await createTask.mutateAsync(formData);
     setIsTaskFormOpen(false);
-  }, [createTask]);
+    completeStep('create_task');
+    if (formData.owner) {
+      completeStep('assign_owner');
+    }
+  }, [createTask, completeStep]);
 
   // Handle task update
   const handleUpdateTask = useCallback(async (formData: TaskFormData) => {
@@ -114,15 +135,20 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
       color: formData.color,
     });
     
+    if (formData.owner) {
+      completeStep('assign_owner');
+    }
+    
     setEditingTask(null);
     setIsTaskFormOpen(false);
-  }, [editingTask, updateTask]);
+  }, [editingTask, updateTask, completeStep]);
 
   // Handle milestone creation
   const handleCreateMilestone = useCallback(async (formData: MilestoneFormData) => {
     await createMilestone.mutateAsync(formData);
     setIsMilestoneFormOpen(false);
-  }, [createMilestone]);
+    completeStep('add_milestone');
+  }, [createMilestone, completeStep]);
 
   // Handle selection
   const handleSelectTask = useCallback((taskId: string, selected: boolean) => {
@@ -159,13 +185,59 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
   // Save baseline
   const handleSaveBaseline = useCallback(async (name: string, description: string) => {
     await createBaseline.mutateAsync({ name, description, tasks });
-  }, [createBaseline, tasks]);
+    completeStep('save_baseline');
+  }, [createBaseline, tasks, completeStep]);
 
   // Open task edit form
   const handleEditTask = useCallback((task: GanttTask) => {
     setEditingTask(task);
     setIsTaskFormOpen(true);
   }, []);
+
+  // Handle filter presets
+  const handleApplyFilterPreset = useCallback((presetId: string) => {
+    const newFilters = applyPreset(presetId);
+    if (newFilters) {
+      setFilters(newFilters);
+      completeStep('use_filters');
+    }
+  }, [applyPreset, completeStep]);
+
+  const handleSaveFilterPreset = useCallback((name: string) => {
+    createPreset(name, filters);
+    completeStep('use_filters');
+  }, [createPreset, filters, completeStep]);
+
+  // Used colors for color legend
+  const usedColors = useMemo(() => {
+    return Array.from(new Set(tasks.map(t => t.color).filter(Boolean) as string[]));
+  }, [tasks]);
+
+  // Keyboard shortcuts
+  const keyboardShortcuts = useMemo(() => getDefaultGanttShortcuts({
+    onNewTask: () => { setEditingTask(null); setIsTaskFormOpen(true); },
+    onNewMilestone: () => setIsMilestoneFormOpen(true),
+    onDelete: () => {
+      if (selectedTasks.size > 0) {
+        handleBulkDelete();
+      }
+    },
+    onUndo: () => undo(),
+    onRedo: () => redo(),
+    onSelectAll: handleSelectAll,
+    onEscape: () => setSelectedTasks(new Set()),
+    onZoomIn: () => {
+      if (config.viewMode === 'month') setConfig(c => ({ ...c, viewMode: 'week' }));
+      else if (config.viewMode === 'week') setConfig(c => ({ ...c, viewMode: 'day' }));
+    },
+    onZoomOut: () => {
+      if (config.viewMode === 'day') setConfig(c => ({ ...c, viewMode: 'week' }));
+      else if (config.viewMode === 'week') setConfig(c => ({ ...c, viewMode: 'month' }));
+    },
+    onFocusSearch: () => searchInputRef.current?.focus(),
+  }), [selectedTasks.size, handleBulkDelete, handleSelectAll, undo, redo, config.viewMode]);
+
+  useKeyboardShortcuts({ shortcuts: keyboardShortcuts, enabled: true });
 
   if (isLoading) {
     return (
@@ -232,15 +304,40 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
         config={config}
         onConfigChange={setConfig}
         filters={filters}
-        onFiltersChange={setFilters}
+        onFiltersChange={(newFilters) => {
+          setFilters(newFilters);
+          if (newFilters.search || newFilters.status.length > 0 || newFilters.owners.length > 0 || newFilters.colors.length > 0) {
+            completeStep('use_filters');
+          }
+        }}
         owners={uniqueOwners}
         baselines={baselines}
         onSaveBaseline={handleSaveBaseline}
         onDeleteBaseline={(id) => deleteBaseline.mutate(id)}
         tasks={tasks}
         milestones={milestones}
+        dependencies={dependencies}
         projectName={projectName}
+        filterPresets={filterPresets}
+        onSaveFilterPreset={handleSaveFilterPreset}
+        onApplyFilterPreset={handleApplyFilterPreset}
+        onDeleteFilterPreset={deletePreset}
+        onOpenKeyboardShortcuts={() => setIsKeyboardShortcutsOpen(true)}
+        searchInputRef={searchInputRef}
       />
+
+      {/* Onboarding Checklist */}
+      {!onboardingDismissed && !onboardingComplete && tasks.length > 0 && (
+        <OnboardingChecklist
+          steps={onboardingSteps}
+          progress={onboardingProgress}
+          completedCount={completedCount}
+          totalSteps={totalSteps}
+          isComplete={onboardingComplete}
+          onDismiss={dismissOnboarding}
+          onReset={resetOnboarding}
+        />
+      )}
 
       {/* Bulk actions bar */}
       {selectedTasks.size > 0 && (
@@ -256,9 +353,40 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
 
       {/* Main content */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Progress Panel */}
-        <div className="lg:col-span-1">
+        {/* Sidebar */}
+        <div className="lg:col-span-1 space-y-4">
           <ProgressPanel tasks={tasks} dependencies={dependencies} />
+          
+          {/* Color Legend */}
+          {usedColors.length > 0 && (
+            <ColorLegend
+              usedColors={usedColors}
+              onFilterColor={(color) => {
+                const newColors = filters.colors.includes(color)
+                  ? filters.colors.filter(c => c !== color)
+                  : [...filters.colors, color];
+                setFilters({ ...filters, colors: newColors });
+                completeStep('use_filters');
+              }}
+              activeColors={filters.colors}
+              onClearFilters={() => setFilters({ ...filters, colors: [] })}
+            />
+          )}
+          
+          {/* Toggle Workload View */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => setShowWorkloadView(!showWorkloadView)}
+          >
+            <Users className="h-4 w-4 mr-2" />
+            {showWorkloadView ? 'Hide' : 'Show'} Workload
+          </Button>
+          
+          {showWorkloadView && (
+            <ResourceWorkloadView tasks={tasks} />
+          )}
         </div>
 
         {/* Gantt Chart */}
@@ -273,8 +401,12 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
             onEditTask={handleEditTask}
             onUpdateTask={(id, updates) => updateTask.mutate({ id, ...updates })}
             onDeleteTask={(id) => deleteTask.mutate(id)}
-            onCreateDependency={(pred, succ, type) => createDependency.mutate({ predecessorId: pred, successorId: succ, dependencyType: type })}
+            onCreateDependency={(pred, succ, type) => {
+              createDependency.mutate({ predecessorId: pred, successorId: succ, dependencyType: type });
+              completeStep('create_dependency');
+            }}
             onDeleteDependency={(id) => deleteDependency.mutate(id)}
+            onReorderTasks={(orderedIds) => reorderTasks.mutate(orderedIds)}
           />
         </div>
       </div>
@@ -297,6 +429,13 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
         onOpenChange={setIsMilestoneFormOpen}
         onSubmit={handleCreateMilestone}
         isSubmitting={createMilestone.isPending}
+      />
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        open={isKeyboardShortcutsOpen}
+        onOpenChange={setIsKeyboardShortcutsOpen}
+        shortcuts={keyboardShortcuts}
       />
     </div>
   );
