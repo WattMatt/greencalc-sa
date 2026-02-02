@@ -1,106 +1,160 @@
 
-# Fix: Summary Panel Showing Plant Setup Templates Instead of Placed Instances
+# Plan: Add Snapping and Copying Functionality for Walkways, Cable Trays, and Inverters
 
 ## Problem Summary
 
-The Summary Panel incorrectly displays Plant Setup templates (walkway/cable tray configurations from the library) as if they were placed instances on the canvas. Your screenshots clearly show:
-- **Walkways showing "6m"** when no walkways have been placed
-- **Cable Trays showing "9m"** (sum of 3m + 3m + 3m) from the three templates
+The snapping and copying functionality that works for **PV Arrays** is not implemented for **Walkways**, **Cable Trays**, and **Inverters**. Specifically:
 
-This happens because the code conflates two distinct concepts:
-1. **Plant Setup Templates**: Library of available types (e.g., "Onvlee 76×76", "Onvlee 152×76")
-2. **Placed Instances**: Actual items placed on the canvas
+1. **Missing Snapping for Ghost Previews**: When placing walkways and cable trays, the ghost preview follows the mouse directly without snapping to existing items
+2. **Missing Snapping During Dragging**: When dragging walkways and cable trays, there's no snapping to maintain alignment/spacing with other items
+3. **Inverter Snapping Works Partially**: Equipment snapping exists but only snaps to other equipment, not to walkways/cable trays
+4. **Copy Skips Placement Options Modal**: When copying walkways/cable trays via Ctrl+C, the placement options modal is bypassed
 
-## Root Cause
+## Current State Analysis
 
-In `src/components/floor-plan/FloorPlanMarkup.tsx` (lines 291-309), when loading a layout:
+### What Works (PV Arrays)
+- Ghost preview applies `snapPVArrayToSpacing()` to maintain minimum spacing
+- Dragging applies the same snapping logic
+- Shift key enables force-alignment mode
+- Copy (Ctrl+C) enters placement mode with same configuration
 
-```typescript
-// BUGGY CODE - converts templates to placed instances
-placedWalkways: (plantSetup?.walkways?.map(w => ({
-  id: w.id,
-  configId: w.id,
-  name: w.name,
-  width: w.width,
-  length: w.length,
-  position: { x: 0, y: 0 },  // Fake position!
-  rotation: 0,
-})) || []) as PlacedWalkway[],
-```
+### What's Missing (Walkways, Cable Trays)
 
-The code is taking templates and creating "placed" items from them with dummy positions. Additionally, the save function never persists actual placed instances.
+| Feature | PV Arrays | Walkways | Cable Trays | Inverters |
+|---------|-----------|----------|-------------|-----------|
+| Ghost Preview Snapping | Yes | **No** | **No** | Yes (equipment only) |
+| Drag Snapping | Yes | **No** | **No** | Yes (equipment only) |
+| Shift Force-Align | Yes | **No** | **No** | Yes |
+| minSpacing from PlacementOptions | Yes | Stored but unused | Stored but unused | Hardcoded 0.3m |
 
 ## Solution
 
-### 1. Database: Extend plant_setup JSONB Structure
+### 1. Create Snapping Functions for Materials
 
-Add `placedWalkways` and `placedCableTrays` keys within the existing `plant_setup` column:
+Add two new functions to `src/components/floor-plan/utils/geometry.ts`:
 
 ```typescript
-// Current structure
-plant_setup: {
-  solarModules: [...],
-  inverters: [...],
-  walkways: WalkwayConfig[],      // Templates
-  cableTrays: CableTrayConfig[],  // Templates
+// Get material dimensions in pixels
+export const getMaterialDimensions = (
+  item: { width: number; length: number; rotation: number },
+  scaleInfo: ScaleInfo
+): { width: number; height: number } => { ... }
+
+// Snap walkways and cable trays to each other
+export const snapMaterialToSpacing = (
+  mousePos: Point,
+  ghostConfig: { width: number; length: number; rotation: number },
+  existingItems: Array<{ id: string; width: number; length: number; position: Point; rotation: number }>,
+  scaleInfo: ScaleInfo,
+  minSpacingMeters: number,
+  forceAlign: boolean = false
+): { position: Point; rotation: number; snappedToId: string | null } => { ... }
+```
+
+### 2. Apply Snapping to Ghost Previews
+
+Update `Canvas.tsx` ghost preview rendering (lines 403-429):
+
+**Walkway Ghost Preview (before):**
+```typescript
+position: mouseWorldPos,
+```
+
+**Walkway Ghost Preview (after):**
+```typescript
+const snapResult = snapMaterialToSpacing(
+  mouseWorldPos,
+  { width: pendingWalkwayConfig.width, length: pendingWalkwayConfig.length, rotation: placementRotation },
+  placedWalkways || [],
+  scaleInfo,
+  placementMinSpacing,  // From PlacementOptionsModal
+  isShiftHeld
+);
+// Use snapResult.position and snapResult.rotation
+```
+
+Same pattern for Cable Tray ghost preview.
+
+### 3. Apply Snapping During Dragging
+
+Update `Canvas.tsx` drag handlers (lines 776-797):
+
+**Walkway Dragging (before):**
+```typescript
+setPlacedWalkways(prev => prev.map(item => 
+  item.id === draggingWalkwayId ? { ...item, position: basePos } : item
+));
+```
+
+**Walkway Dragging (after):**
+```typescript
+const draggedWalkway = placedWalkways.find(w => w.id === draggingWalkwayId);
+if (draggedWalkway) {
+  const otherWalkways = placedWalkways.filter(w => w.id !== draggingWalkwayId);
+  const snapResult = snapMaterialToSpacing(
+    basePos,
+    { width: draggedWalkway.width, length: draggedWalkway.length, rotation: draggedWalkway.rotation },
+    otherWalkways,
+    scaleInfo,
+    placementMinSpacing,
+    isShiftHeld
+  );
+  setPlacedWalkways(prev => prev.map(item => 
+    item.id === draggingWalkwayId 
+      ? { ...item, position: snapResult.position, rotation: isShiftHeld && snapResult.snappedToId ? snapResult.rotation : item.rotation } 
+      : item
+  ));
 }
+```
 
-// New structure
-plant_setup: {
-  solarModules: [...],
-  inverters: [...],
-  walkways: WalkwayConfig[],      // Templates (unchanged)
-  cableTrays: CableTrayConfig[],  // Templates (unchanged)
-  placedWalkways: PlacedWalkway[],    // NEW: Actual placed instances
-  placedCableTrays: PlacedCableTray[], // NEW: Actual placed instances
+Same pattern for Cable Tray dragging.
+
+### 4. Apply Snapping During Placement Click
+
+Update `Canvas.tsx` placement handlers (lines 669-694):
+
+**Walkway Placement (before):**
+```typescript
+position: worldPos,
+```
+
+**Walkway Placement (after):**
+```typescript
+const snapResult = snapMaterialToSpacing(
+  worldPos,
+  { width: pendingWalkwayConfig.width, length: pendingWalkwayConfig.length, rotation: placementRotation },
+  placedWalkways || [],
+  scaleInfo,
+  placementMinSpacing,
+  isShiftHeld
+);
+// Use snapResult.position and snapResult.rotation
+```
+
+Same for Cable Tray placement.
+
+### 5. Pass `placementMinSpacing` to Canvas
+
+Update Canvas props to receive `placementMinSpacing` from `FloorPlanMarkup.tsx`:
+
+```typescript
+interface CanvasProps {
+  // ... existing props
+  placementMinSpacing?: number;  // NEW
 }
 ```
 
-### 2. Fix Loading Logic
+### 6. Fix Copy to Respect minSpacing
 
-Update `loadLayout` in `FloorPlanMarkup.tsx`:
-
-```typescript
-// FIXED: Load placed instances separately from templates
-const loadedState: DesignState = {
-  roofMasks: (data.roof_masks as unknown as RoofMask[]) || [],
-  pvArrays: (data.pv_arrays as unknown as any[]) || [],
-  equipment: (data.equipment as unknown as any[]) || [],
-  lines: (data.cables as unknown as any[]) || [],
-  // Load actual placed instances, NOT templates
-  placedWalkways: (plantSetup?.placedWalkways || []) as PlacedWalkway[],
-  placedCableTrays: (plantSetup?.placedCableTrays || []) as PlacedCableTray[],
-};
-```
-
-### 3. Fix Saving Logic
-
-Update `saveLayout` to persist placed instances:
+The keyboard copy handler (lines 821-841) already copies `minSpacing`, but should ensure `placementMinSpacing` state is also updated:
 
 ```typescript
-const layoutData: any = {
-  // ... existing fields ...
-  plant_setup: {
-    ...plantSetupConfig,
-    // Include placed instances in plant_setup
-    placedWalkways: placedWalkways,
-    placedCableTrays: placedCableTrays,
-  },
-};
-```
-
-### 4. Update Type Definition (Optional but Recommended)
-
-Extend `PlantSetupConfig` type to include placed instances:
-
-```typescript
-export interface PlantSetupConfig {
-  solarModules: SolarModuleConfig[];
-  inverters: InverterLayoutConfig[];
-  walkways: WalkwayConfig[];        // Templates
-  cableTrays: CableTrayConfig[];    // Templates
-  placedWalkways?: PlacedWalkway[]; // Placed instances
-  placedCableTrays?: PlacedCableTray[]; // Placed instances
+// Already implemented - just verify it's working
+const selectedWalkway = placedWalkways.find(w => w.id === selectedItemId);
+if (selectedWalkway) {
+  setPlacementRotation(selectedWalkway.rotation);
+  setPlacementMinSpacing(selectedWalkway.minSpacing ?? 0.3); // Already present
+  ...
 }
 ```
 
@@ -108,37 +162,36 @@ export interface PlantSetupConfig {
 
 | File | Changes |
 |------|---------|
-| `src/components/floor-plan/FloorPlanMarkup.tsx` | Fix `loadLayout` (lines 286-309), fix `saveLayout` (lines 571-583) |
-| `src/components/floor-plan/types.ts` | Optionally extend `PlantSetupConfig` interface |
+| `src/components/floor-plan/utils/geometry.ts` | Add `getMaterialDimensions()` and `snapMaterialToSpacing()` functions |
+| `src/components/floor-plan/components/Canvas.tsx` | Apply snapping to ghost previews, placement clicks, and dragging for walkways/cable trays. Add `placementMinSpacing` prop. |
+| `src/components/floor-plan/FloorPlanMarkup.tsx` | Pass `placementMinSpacing` to Canvas component |
 
-## Expected Result After Fix
+## Technical Details
 
-- **Summary Panel Metrics Grid**: Shows "0 m" for Walkways and Cable Trays when nothing is placed
-- **Collapsible Sections**: Show "No walkways placed" / "No cable trays placed" when empty
-- **After Placement**: Only items actually clicked onto the canvas appear in the Summary Panel
-- **Plant Setup Modal**: Remains a separate library of templates, unaffected by Summary Panel
+### Snapping Algorithm (Mirror of Equipment Snapping)
 
-## Technical Diagram
+The `snapMaterialToSpacing` function will follow the same algorithm as `snapEquipmentToSpacing`:
 
-```text
-+---------------------------+
-|      Plant Setup Modal    |  <-- Template Library
-|  - Onvlee 76x76           |
-|  - Onvlee 152x76          |
-|  - Onvlee 304x76          |
-+---------------------------+
-           |
-           v (select template)
-+---------------------------+
-|      Canvas Click         |  <-- Creates PlacedCableTray instance
-+---------------------------+
-           |
-           v (instance created)
-+---------------------------+
-|     Summary Panel         |  <-- Shows only placed instances
-|  - Cable Trays: 3m        |      (NOT templates)
-|    └ Onvlee 76x76 (1x)    |
-+---------------------------+
-```
+1. Calculate ghost item dimensions in pixels using width/length and scaleInfo.ratio
+2. For each existing item:
+   - Calculate center-to-center distance
+   - Apply rotation transforms to get effective bounding box
+   - Calculate edge-to-edge gap distance
+   - If gap < minSpacing (or forceAlign), consider as snap candidate
+3. Find closest candidate and compute snap position:
+   - **Normal mode**: Enforce minimum spacing, align on dominant axis
+   - **Shift mode**: Align axis only, keep mouse distance
 
-No database migration needed - uses existing JSONB column.
+### Edge Cases
+
+- **Mixed snapping**: Walkways should snap to other walkways, cable trays should snap to other cable trays (not cross-type for now)
+- **Empty state**: When no existing items, return mouse position unchanged
+- **No scale**: When scaleInfo.ratio is null, return mouse position unchanged
+
+## Expected Behavior After Fix
+
+1. **Ghost Preview**: Snaps to maintain minSpacing when approaching other items
+2. **Shift + Move**: Forces alignment on one axis while maintaining free movement on the other
+3. **Placement Click**: Applies same snapping as ghost preview
+4. **Dragging**: Applies snapping while dragging existing items
+5. **Copy (Ctrl+C)**: Preserves rotation and minSpacing from source item
