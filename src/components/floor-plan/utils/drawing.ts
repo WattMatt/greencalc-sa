@@ -4,7 +4,94 @@ import {
   PlacedWalkway, PlacedCableTray
 } from '../types';
 import { TOOL_COLORS, EQUIPMENT_REAL_WORLD_SIZES, getDirectionLabel } from '../constants';
-import { isPointInPolygon, getPolygonCenter } from './geometry';
+import { isPointInPolygon, getPolygonCenter, getPVArrayDimensions, getEquipmentDimensions } from './geometry';
+
+/**
+ * Draw a highlight overlay on a selected object for dimension/align tools
+ */
+export const drawObjectHighlight = (
+  ctx: CanvasRenderingContext2D,
+  position: Point,
+  dimensions: { width: number; height: number },
+  rotation: number,
+  zoom: number,
+  selectionNumber: 1 | 2
+) => {
+  ctx.save();
+  ctx.translate(position.x, position.y);
+  ctx.rotate(rotation * Math.PI / 180);
+  
+  const { width, height } = dimensions;
+  
+  // Draw semi-transparent overlay
+  ctx.fillStyle = selectionNumber === 1 
+    ? 'rgba(59, 130, 246, 0.3)'  // Blue for object 1
+    : 'rgba(34, 197, 94, 0.3)';  // Green for object 2
+  ctx.fillRect(-width / 2, -height / 2, width, height);
+  
+  // Draw border
+  ctx.strokeStyle = selectionNumber === 1 
+    ? 'rgba(59, 130, 246, 0.8)'
+    : 'rgba(34, 197, 94, 0.8)';
+  ctx.lineWidth = 3 / zoom;
+  ctx.strokeRect(-width / 2, -height / 2, width, height);
+  
+  // Draw selection number
+  const fontSize = Math.min(width, height) * 0.4;
+  ctx.font = `bold ${Math.max(fontSize, 14 / zoom)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = selectionNumber === 1 
+    ? 'rgba(59, 130, 246, 1)'
+    : 'rgba(34, 197, 94, 1)';
+  ctx.fillText(selectionNumber.toString(), 0, 0);
+  
+  ctx.restore();
+};
+
+/**
+ * Find an object by ID and return its position, dimensions (in pixels), and rotation
+ */
+const findObjectForHighlight = (
+  id: string,
+  params: RenderAllParams
+): { position: Point; dimensions: { width: number; height: number }; rotation: number } | null => {
+  // Check PV arrays
+  const pvArray = params.pvArrays.find(a => a.id === id);
+  if (pvArray && params.pvPanelConfig && params.scaleInfo.ratio) {
+    const dims = getPVArrayDimensions(pvArray, params.pvPanelConfig, params.roofMasks, params.scaleInfo, pvArray.position);
+    return { position: pvArray.position, dimensions: dims, rotation: pvArray.rotation };
+  }
+  
+  // Check equipment
+  const equip = params.equipment.find(e => e.id === id);
+  if (equip && params.scaleInfo.ratio) {
+    const dims = getEquipmentDimensions(equip.type, params.scaleInfo, params.plantSetupConfig);
+    return { position: equip.position, dimensions: dims, rotation: equip.rotation };
+  }
+  
+  // Check walkways
+  const walkway = params.placedWalkways?.find(w => w.id === id);
+  if (walkway && params.scaleInfo.ratio) {
+    return {
+      position: walkway.position,
+      dimensions: { width: walkway.width / params.scaleInfo.ratio, height: walkway.length / params.scaleInfo.ratio },
+      rotation: walkway.rotation || 0,
+    };
+  }
+  
+  // Check cable trays
+  const tray = params.placedCableTrays?.find(t => t.id === id);
+  if (tray && params.scaleInfo.ratio) {
+    return {
+      position: tray.position,
+      dimensions: { width: tray.width / params.scaleInfo.ratio, height: tray.length / params.scaleInfo.ratio },
+      rotation: tray.rotation || 0,
+    };
+  }
+  
+  return null;
+};
 
 /**
  * Draw equipment icon on canvas
@@ -430,6 +517,11 @@ export interface RenderAllParams {
   plantSetupConfig?: PlantSetupConfig;
   placedWalkways?: PlacedWalkway[];
   placedCableTrays?: PlacedCableTray[];
+  // Dimension/align tool selection IDs
+  dimensionObject1Id?: string | null;
+  dimensionObject2Id?: string | null;
+  alignObject1Id?: string | null;
+  alignObject2Id?: string | null;
 }
 
 /**
@@ -479,4 +571,18 @@ export const renderAllMarkups = (
 
   // Draw scale indicator
   drawScaleIndicator(ctx, scaleLine, scaleInfo, zoom);
+
+  // Draw dimension/align tool highlights at the end (on top of everything)
+  const highlightIds: { id: string; num: 1 | 2 }[] = [];
+  if (params.dimensionObject1Id) highlightIds.push({ id: params.dimensionObject1Id, num: 1 });
+  if (params.dimensionObject2Id) highlightIds.push({ id: params.dimensionObject2Id, num: 2 });
+  if (params.alignObject1Id) highlightIds.push({ id: params.alignObject1Id, num: 1 });
+  if (params.alignObject2Id) highlightIds.push({ id: params.alignObject2Id, num: 2 });
+  
+  for (const { id, num } of highlightIds) {
+    const objInfo = findObjectForHighlight(id, params);
+    if (objInfo) {
+      drawObjectHighlight(ctx, objInfo.position, objInfo.dimensions, objInfo.rotation, zoom, num);
+    }
+  }
 };

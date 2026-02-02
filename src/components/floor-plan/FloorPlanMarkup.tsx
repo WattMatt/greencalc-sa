@@ -1568,8 +1568,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         placementMinSpacing={placementMinSpacing}
         onDimensionObjectClick={readOnly ? undefined : handleDimensionObjectClick}
         dimensionObject1Id={dimensionObject1Id}
+        dimensionObject2Id={dimensionObject2Id}
         onAlignEdgesObjectClick={readOnly ? undefined : handleAlignEdgesObjectClick}
         alignObject1Id={alignObject1Id}
+        alignObject2Id={alignObject2Id}
       />
 
       <SummaryPanel
