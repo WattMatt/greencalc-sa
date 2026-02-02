@@ -46,9 +46,11 @@ interface CanvasProps {
   // Dimension tool
   onDimensionObjectClick?: (id: string) => void;
   dimensionObject1Id?: string | null;
+  dimensionObject2Id?: string | null;
   // Align edges tool
   onAlignEdgesObjectClick?: (id: string) => void;
   alignObject1Id?: string | null;
+  alignObject2Id?: string | null;
 }
 
 export function Canvas({
@@ -66,8 +68,10 @@ export function Canvas({
   placementMinSpacing = 0.3,
   onDimensionObjectClick,
   dimensionObject1Id,
+  dimensionObject2Id,
   onAlignEdgesObjectClick,
   alignObject1Id,
+  alignObject2Id,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -252,6 +256,8 @@ export function Canvas({
       scaleInfo, pvPanelConfig, zoom: viewState.zoom,
       selectedItemId, scaleLine, plantSetupConfig,
       placedWalkways, placedCableTrays,
+      dimensionObject1Id, dimensionObject2Id,
+      alignObject1Id, alignObject2Id,
     });
     
     // Draw current drawing in progress
