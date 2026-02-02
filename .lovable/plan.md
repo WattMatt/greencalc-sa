@@ -1,51 +1,47 @@
 
-
-# Plan: Add "Tools" Dropdown with Copy and Dimension Tool
+# Plan: Add "Align Edges" Tool
 
 ## Overview
 
-This plan adds a new "Tools" collapsible section in the toolbar with two features:
-1. **Copy Tool**: Button that copies the currently selected object and enters placement mode
-2. **Dimension Tool**: New tool mode that allows measuring/setting distance between two objects
+This plan adds a new **Align Edges** tool that mirrors the Dimension tool workflow but aligns the edges of two objects instead of setting a distance. Object 1 will move so that one of its edges aligns with the corresponding edge of Object 2 (which remains stationary).
 
 ## Feature Details
 
-### 1. Copy Tool Button
-A button in the Tools section that:
-- Is enabled only when an item is selected
-- When clicked, copies the selected item's configuration and enters placement mode (same behavior as Ctrl+C)
-- Works for all object types: PV Arrays, Roof Masks, Equipment, Walkways, Cable Trays
+### Workflow
+1. User clicks "Align Edges" tool in the Tools section
+2. User clicks **Object 1** (the object that will move)
+3. User clicks **Object 2** (the stationary reference)
+4. A modal appears with alignment options:
+   - **Left edges** - Align left edge of Object 1 with left edge of Object 2
+   - **Right edges** - Align right edge of Object 1 with right edge of Object 2
+   - **Top edges** - Align top edge of Object 1 with top edge of Object 2
+   - **Bottom edges** - Align bottom edge of Object 1 with bottom edge of Object 2
+5. User selects alignment type and clicks Apply
+6. Object 1 moves to align with Object 2
 
-### 2. Dimension Tool (Set Distance Between Objects)
-
-A new tool that allows the user to:
-1. Select **Object 1** (the object that will move)
-2. Select **Object 2** (the stationary reference object)
-3. A popup appears showing the current distance and an input to set the desired distance
-4. Object 1 moves along the line connecting the two objects to achieve the specified distance
-
-**Workflow:**
 ```text
 +------------------+     +------------------+     +------------------+
-| Click DIMENSION  | --> | Click Object 1   | --> | Click Object 2   |
+| Click ALIGN      | --> | Click Object 1   | --> | Click Object 2   |
 | tool in toolbar  |     | (will move)      |     | (stationary)     |
 +------------------+     +------------------+     +------------------+
                                                            |
                                                            v
                                               +------------------------+
-                                              | Set Distance Modal     |
-                                              | - Current: 1.5m        |
-                                              | - New Distance: [____] |
+                                              | Align Edges Modal      |
+                                              | O Left edges           |
+                                              | O Right edges          |
+                                              | O Top edges            |
+                                              | O Bottom edges         |
                                               | [Cancel] [Apply]       |
                                               +------------------------+
                                                            |
                                                            v
-                                              Object 1 moves to the
-                                              specified distance from
-                                              Object 2 (center-to-center)
+                                              Object 1 moves so its
+                                              selected edge matches
+                                              Object 2's edge
 ```
 
-## Implementation
+## Implementation Details
 
 ### 1. Update Tool Enum
 
@@ -54,206 +50,206 @@ Add new tool type in `src/components/floor-plan/types.ts`:
 ```typescript
 export enum Tool {
   // ... existing tools
-  DIMENSION = 'dimension', // NEW: Set distance between two objects
+  DIMENSION = 'dimension',
+  ALIGN_EDGES = 'align_edges', // NEW: Align edges of two objects
 }
 ```
 
-### 2. Add Tools Section to Toolbar
-
-Update `src/components/floor-plan/components/Toolbar.tsx`:
-
-- Add new icons: `Copy`, `MoveHorizontal` (for dimension tool)
-- Add new section "Tools" after "Materials"
-- Add `onCopySelected` prop callback
-- Add `onSetDimensionTool` callback
-
-```typescript
-// New section in Toolbar
-<CollapsibleSection 
-  title="Tools"
-  isOpen={openSections.tools}
-  onToggle={() => toggleSection('tools')}
->
-  <ToolButton
-    icon={Copy}
-    label="Copy"
-    isActive={false}
-    onClick={onCopySelected}
-    disabled={!selectedItemId}
-  />
-  <ToolButton
-    icon={MoveHorizontal}
-    label="Set Distance"
-    isActive={activeTool === Tool.DIMENSION}
-    onClick={() => setActiveTool(Tool.DIMENSION)}
-    disabled={!scaleSet}
-  />
-</CollapsibleSection>
-```
-
-### 3. Create SetDistanceModal Component
-
-New file: `src/components/floor-plan/components/SetDistanceModal.tsx`
-
-Props:
-- `isOpen: boolean`
-- `onClose: () => void`
-- `currentDistance: number` (in meters)
-- `object1Label: string` (e.g., "PV Array")
-- `object2Label: string` (e.g., "Inverter")
-- `onConfirm: (newDistance: number) => void`
-
-Modal shows:
-- Current distance between objects (center-to-center)
-- DimensionInput for new distance
-- Preview of the change (optional)
-- Cancel/Apply buttons
-
-### 4. Add Dimension Tool State Management
-
-Update `src/components/floor-plan/FloorPlanMarkup.tsx`:
-
-New state:
-```typescript
-// Dimension tool state
-const [dimensionObject1Id, setDimensionObject1Id] = useState<string | null>(null);
-const [dimensionObject2Id, setDimensionObject2Id] = useState<string | null>(null);
-const [isSetDistanceModalOpen, setIsSetDistanceModalOpen] = useState(false);
-const [currentMeasuredDistance, setCurrentMeasuredDistance] = useState(0);
-```
-
-New handler:
-```typescript
-const handleDimensionApply = (newDistance: number) => {
-  // Calculate direction vector from object2 to object1
-  // Move object1 along that vector to achieve newDistance
-  // Update the appropriate state (pvArrays, equipment, placedWalkways, etc.)
-};
-```
-
-### 5. Handle Dimension Tool Clicks in Canvas
-
-Update `src/components/floor-plan/components/Canvas.tsx`:
-
-When dimension tool is active and user clicks:
-1. First click selects Object 1 (highlight it, show instruction)
-2. Second click selects Object 2 (highlight both, trigger modal)
-
-Add callbacks:
-- `onDimensionObject1Selected: (id: string) => void`
-- `onDimensionObject2Selected: (id: string) => void`
-
-### 6. Add Distance Calculation Utility
+### 2. Add Geometry Utility Functions
 
 Add to `src/components/floor-plan/utils/geometry.ts`:
 
 ```typescript
-/**
- * Calculate center-to-center distance between two objects in meters
- */
-export const getObjectCenterDistance = (
-  pos1: Point,
-  pos2: Point,
-  scaleRatio: number
-): number => {
-  const pixelDistance = distance(pos1, pos2);
-  return pixelDistance * scaleRatio;
-};
+export type AlignmentEdge = 'left' | 'right' | 'top' | 'bottom';
 
 /**
- * Calculate new position for object1 to be at specified distance from object2
+ * Get bounding box edges for any object type
+ * Returns edge positions in world coordinates
  */
-export const calculateNewPositionAtDistance = (
-  object1Pos: Point,
-  object2Pos: Point,
-  targetDistanceMeters: number,
-  scaleRatio: number
-): Point => {
-  const dx = object1Pos.x - object2Pos.x;
-  const dy = object1Pos.y - object2Pos.y;
-  const currentPixelDist = Math.hypot(dx, dy);
+export const getObjectEdges = (
+  position: Point,
+  dimensions: { width: number; height: number },
+  rotation: number
+): { left: number; right: number; top: number; bottom: number } => {
+  // For rotated objects, we use axis-aligned bounding box
+  const angleRad = rotation * Math.PI / 180;
+  const cosA = Math.abs(Math.cos(angleRad));
+  const sinA = Math.abs(Math.sin(angleRad));
   
-  if (currentPixelDist === 0) {
-    // Objects at same position, move along X axis
-    return {
-      x: object2Pos.x + targetDistanceMeters / scaleRatio,
-      y: object2Pos.y,
-    };
-  }
-  
-  const targetPixelDist = targetDistanceMeters / scaleRatio;
-  const unitX = dx / currentPixelDist;
-  const unitY = dy / currentPixelDist;
+  const effectiveWidth = dimensions.width * cosA + dimensions.height * sinA;
+  const effectiveHeight = dimensions.width * sinA + dimensions.height * cosA;
   
   return {
-    x: object2Pos.x + unitX * targetPixelDist,
-    y: object2Pos.y + unitY * targetPixelDist,
+    left: position.x - effectiveWidth / 2,
+    right: position.x + effectiveWidth / 2,
+    top: position.y - effectiveHeight / 2,
+    bottom: position.y + effectiveHeight / 2,
   };
+};
+
+/**
+ * Calculate new position to align Object 1's edge with Object 2's edge
+ */
+export const calculateAlignedPosition = (
+  object1Pos: Point,
+  object1Dims: { width: number; height: number },
+  object1Rotation: number,
+  object2Pos: Point,
+  object2Dims: { width: number; height: number },
+  object2Rotation: number,
+  alignmentEdge: AlignmentEdge
+): Point => {
+  const edges1 = getObjectEdges(object1Pos, object1Dims, object1Rotation);
+  const edges2 = getObjectEdges(object2Pos, object2Dims, object2Rotation);
+  
+  switch (alignmentEdge) {
+    case 'left':
+      // Move Object 1 so its left edge matches Object 2's left edge
+      const leftOffset = edges2.left - edges1.left;
+      return { x: object1Pos.x + leftOffset, y: object1Pos.y };
+    case 'right':
+      const rightOffset = edges2.right - edges1.right;
+      return { x: object1Pos.x + rightOffset, y: object1Pos.y };
+    case 'top':
+      const topOffset = edges2.top - edges1.top;
+      return { x: object1Pos.x, y: object1Pos.y + topOffset };
+    case 'bottom':
+      const bottomOffset = edges2.bottom - edges1.bottom;
+      return { x: object1Pos.x, y: object1Pos.y + bottomOffset };
+  }
 };
 ```
 
-### 7. Add Copy Handler in FloorPlanMarkup
+### 3. Create AlignEdgesModal Component
 
-Extract the existing Ctrl+C logic into a reusable function:
+New file: `src/components/floor-plan/components/AlignEdgesModal.tsx`
+
+Props:
+- `isOpen: boolean`
+- `onClose: () => void`
+- `object1Label: string`
+- `object2Label: string`
+- `onConfirm: (edge: AlignmentEdge) => void`
+
+Modal shows:
+- Labels for both objects
+- Radio buttons for alignment options (Left, Right, Top, Bottom)
+- Cancel/Apply buttons
+
+### 4. Add State Management in FloorPlanMarkup
+
+Add new state and handlers in `src/components/floor-plan/FloorPlanMarkup.tsx`:
 
 ```typescript
-const handleCopySelected = useCallback(() => {
-  if (!selectedItemId) return;
-  
-  // Check PV array
-  const selectedPvArray = pvArrays.find(a => a.id === selectedItemId);
-  if (selectedPvArray) {
-    // ... existing copy logic
-    return;
+// Align edges tool state (reuses dimension object selection)
+const [alignObject1Id, setAlignObject1Id] = useState<string | null>(null);
+const [alignObject2Id, setAlignObject2Id] = useState<string | null>(null);
+const [isAlignEdgesModalOpen, setIsAlignEdgesModalOpen] = useState(false);
+
+// Get object dimensions by ID
+const getObjectDimensions = useCallback((id: string): { width: number; height: number; rotation: number } | null => {
+  // Check each object type and return dimensions in pixels
+  // ...implementation
+}, [pvArrays, equipment, placedWalkways, placedCableTrays, scaleInfo, pvPanelConfig, roofMasks]);
+
+// Handle alignment selection
+const handleAlignEdgesObjectClick = useCallback((id: string) => {
+  if (!alignObject1Id) {
+    setAlignObject1Id(id);
+    toast.info('Now click the reference object (stationary)');
+  } else if (alignObject1Id !== id) {
+    setAlignObject2Id(id);
+    setIsAlignEdgesModalOpen(true);
   }
-  
-  // ... rest of existing copy logic for other types
-}, [selectedItemId, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays]);
+}, [alignObject1Id]);
+
+// Apply edge alignment
+const handleAlignEdgesApply = useCallback((edge: AlignmentEdge) => {
+  // Calculate new position and update object 1
+  // ...implementation
+}, [...]);
 ```
 
-Pass this to Toolbar as `onCopySelected` prop.
+### 5. Update Toolbar
+
+Add new button in the Tools section of `src/components/floor-plan/components/Toolbar.tsx`:
+
+```typescript
+<ToolButton
+  icon={AlignVerticalJustifyStart} // or similar alignment icon
+  label="Align Edges"
+  isActive={activeTool === Tool.ALIGN_EDGES}
+  onClick={() => setActiveTool(Tool.ALIGN_EDGES)}
+  disabled={!scaleSet}
+/>
+
+{/* Align edges tool instructions */}
+{activeTool === Tool.ALIGN_EDGES && (
+  <div className="mt-2 p-2 bg-muted/50 rounded text-xs text-muted-foreground">
+    {!alignObject1Id && !alignObject2Id && (
+      <p>Click on the first object (will move)</p>
+    )}
+    {alignObject1Id && !alignObject2Id && (
+      <p className="text-blue-600">Now click the reference object (stationary)</p>
+    )}
+  </div>
+)}
+```
+
+### 6. Update Canvas for Align Edges Tool
+
+In `src/components/floor-plan/components/Canvas.tsx`, handle clicks when `Tool.ALIGN_EDGES` is active (similar to dimension tool):
+
+```typescript
+if (activeTool === Tool.ALIGN_EDGES) {
+  const clickedId = findClickedObjectId(worldPos);
+  if (clickedId) {
+    onAlignEdgesObjectClick?.(clickedId);
+  }
+  return;
+}
+```
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/floor-plan/types.ts` | Add `DIMENSION` to Tool enum |
-| `src/components/floor-plan/components/Toolbar.tsx` | Add "Tools" section with Copy and Dimension buttons, add new props |
-| `src/components/floor-plan/FloorPlanMarkup.tsx` | Add dimension tool state, modal handlers, copy handler, pass new props |
-| `src/components/floor-plan/components/Canvas.tsx` | Handle dimension tool clicks for object selection |
-| `src/components/floor-plan/utils/geometry.ts` | Add distance calculation utilities |
+| `src/components/floor-plan/types.ts` | Add `ALIGN_EDGES` to Tool enum |
+| `src/components/floor-plan/utils/geometry.ts` | Add `getObjectEdges()`, `calculateAlignedPosition()`, and `AlignmentEdge` type |
+| `src/components/floor-plan/components/Toolbar.tsx` | Add "Align Edges" button and instructions in Tools section |
+| `src/components/floor-plan/FloorPlanMarkup.tsx` | Add align edges state, handlers, modal integration |
+| `src/components/floor-plan/components/Canvas.tsx` | Handle ALIGN_EDGES tool clicks |
 
 ## New File
 
 | File | Purpose |
 |------|---------|
-| `src/components/floor-plan/components/SetDistanceModal.tsx` | Modal for setting distance between two objects |
+| `src/components/floor-plan/components/AlignEdgesModal.tsx` | Modal with edge alignment options |
 
 ## UI Behavior
 
-### Tools Section in Toolbar
-- Located after "Materials" section
-- Contains:
-  - **Copy**: Enabled when an item is selected. Copies selection and enters placement mode.
-  - **Set Distance**: Activates dimension tool mode.
+### Tools Section (Updated)
+- **Copy**: Enabled when item selected, copies and enters placement mode
+- **Set Distance**: Activates dimension tool
+- **Align Edges**: Activates edge alignment tool (NEW)
 
-### Dimension Tool Mode
-1. **Instruction overlay**: "Click on the first object (will move)"
-2. After first click: "Now click on the reference object (stationary)"
-3. After second click: Modal appears with distance input
-4. On Apply: Object 1 moves, tool returns to Select mode
-5. On Cancel: Both selections cleared, tool returns to Select mode
+### Align Edges Tool Mode
+1. **Instruction**: "Click on the first object (will move)"
+2. After first click: "Now click the reference object (stationary)"
+3. After second click: Modal appears with alignment options
+4. User selects Left/Right/Top/Bottom and clicks Apply
+5. Object 1 moves, tool returns to Select mode
 
-### Visual Feedback
-- Object 1 highlighted in one color (e.g., blue)
-- Object 2 highlighted in another color (e.g., green)
-- Dashed line drawn between centers showing current distance
+### Edge Alignment Behavior
+- **Left**: Object 1's left edge aligns with Object 2's left edge (horizontal shift)
+- **Right**: Object 1's right edge aligns with Object 2's right edge (horizontal shift)
+- **Top**: Object 1's top edge aligns with Object 2's top edge (vertical shift)
+- **Bottom**: Object 1's bottom edge aligns with Object 2's bottom edge (vertical shift)
 
 ## Expected Result
 
-1. **Tools section** appears in toolbar after Materials
-2. **Copy button** works same as Ctrl+C but via toolbar click
-3. **Set Distance button** activates dimension tool
-4. User can select two objects and set exact distance between them
-5. Object 1 moves to the specified distance from Object 2
-
+1. New "Align Edges" button appears in Tools section
+2. Selecting two objects opens alignment modal
+3. User can choose which edges to align
+4. Object 1 moves horizontally or vertically to match Object 2's edge
+5. Works across all object types (PV Arrays, Equipment, Walkways, Cable Trays)
