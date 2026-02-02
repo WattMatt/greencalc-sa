@@ -91,10 +91,14 @@ export function PlacementOptionsModal({
   const displayWidth = dimensions ? (orientation === 'portrait' ? dimensions.width : dimensions.height) : null;
   const displayHeight = dimensions ? (orientation === 'portrait' ? dimensions.height : dimensions.width) : null;
 
+  const MIN_SPACING_THRESHOLD = 0.05; // 5cm minimum
+  const effectiveSpacing = Math.max(MIN_SPACING_THRESHOLD, spacingNum);
+  const isBelowMinimum = spacingNum < MIN_SPACING_THRESHOLD;
+
   const handleConfirm = () => {
     onConfirm({
       orientation,
-      minSpacing: spacingNum,
+      minSpacing: effectiveSpacing,
     });
   };
 
@@ -136,6 +140,11 @@ export function PlacementOptionsModal({
             <p className="text-xs text-muted-foreground">
               Minimum gap between placed items for maintenance access.
             </p>
+            {isBelowMinimum && (
+              <p className="text-xs text-amber-600">
+                Minimum spacing enforced at 5cm for maintenance access.
+              </p>
+            )}
           </div>
 
           <Separator />
@@ -145,7 +154,7 @@ export function PlacementOptionsModal({
             {displayWidth !== null && displayHeight !== null && (
               <p>Size: <span className="font-medium">{displayWidth.toFixed(2)}m × {displayHeight.toFixed(2)}m</span></p>
             )}
-            <p>Min Spacing: <span className="font-medium">{spacingNum.toFixed(1)}m</span></p>
+            <p>Min Spacing: <span className="font-medium">{effectiveSpacing.toFixed(2)}m</span></p>
           </div>
         </div>
 

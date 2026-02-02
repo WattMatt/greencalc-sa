@@ -519,12 +519,10 @@ export const snapMaterialToSpacing = (
     return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
   }
 
-  // If not force-aligning and no spacing configured, allow free placement
-  if (!forceAlign && minSpacingMeters <= 0) {
-    return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
-  }
-
-  const minSpacingPx = minSpacingMeters / scaleInfo.ratio;
+  // Always allow snapping for alignment even when minSpacing is very low
+  // This enables edge-to-edge alignment when user sets spacing to 0
+  const effectiveMinSpacing = Math.max(0.01, minSpacingMeters); // At least 1cm for calculations
+  const minSpacingPx = effectiveMinSpacing / scaleInfo.ratio;
 
   // Get ghost material dimensions (raw, before rotation transform for effective size)
   const ghostWidthPx = ghostConfig.width / scaleInfo.ratio;
