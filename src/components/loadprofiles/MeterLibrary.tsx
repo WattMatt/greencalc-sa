@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, lazy, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +20,8 @@ import { WizardParseConfig, ColumnConfig, ParsedData } from "./types/csvImportTy
 import { MeterProfilePreview } from "./MeterProfilePreview";
 import { CsvImportWizard } from "./CsvImportWizard";
 import { OneClickBatchProcessor } from "./OneClickBatchProcessor";
-import { BulkCsvDropzone } from "./BulkCsvDropzone";
+// Lazy load BulkCsvDropzone to avoid chunk loading issues
+const BulkCsvDropzone = lazy(() => import("./BulkCsvDropzone").then(m => ({ default: m.BulkCsvDropzone })));
 
 interface RawDataStats {
   csvContent?: string;
@@ -1226,13 +1227,15 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
               <p className="text-sm text-muted-foreground mb-4">
                 Drop CSV files here to create new meters. Files will be auto-parsed and meters created without requiring a site.
               </p>
-              <BulkCsvDropzone 
-                siteId={siteId || null}
-                onComplete={() => {
-                  queryClient.invalidateQueries({ queryKey: ["meter-library"] });
-                  setShowBulkImport(false);
-                }}
-              />
+              <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
+                <BulkCsvDropzone 
+                  siteId={siteId || null}
+                  onComplete={() => {
+                    queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+                    setShowBulkImport(false);
+                  }}
+                />
+              </Suspense>
             </CardContent>
           </CollapsibleContent>
         </Card>
