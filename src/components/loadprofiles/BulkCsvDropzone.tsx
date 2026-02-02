@@ -62,15 +62,48 @@ function autoDetectConfig(content: string): {
   // Check for PnP SCADA format (after skipping sep= line)
   if (lines.length >= 2 + lineOffset) {
     const firstLine = lines[lineOffset];
+    
+    // Format 1: "meterName",2024-01-01,2024-12-31
     const meterMatch = firstLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
+    
+    // Format 2: pnpscada.com,meterNumber (simple format)
+    const pnpSimpleMatch = firstLine.toLowerCase().includes('pnpscada') || 
+                           firstLine.toLowerCase().includes('scada.com');
+    
     const secondLine = lines[lineOffset + 1]?.toLowerCase() || "";
     const hasScadaHeaders = secondLine.includes('rdate') && secondLine.includes('rtime') && secondLine.includes('kwh');
     
     if (meterMatch && hasScadaHeaders) {
+      // Format 1: Full meter info with date range
       isPnpScada = true;
       meterName = meterMatch[1];
       dateRange = { start: meterMatch[2], end: meterMatch[3] };
       startRow = lineOffset + 3; // Skip sep= (if present), meter info line, and header line
+    } else if (pnpSimpleMatch && hasScadaHeaders) {
+      // Format 2: Simple pnpscada.com,meterNumber format
+      isPnpScada = true;
+      // Try to extract meter name/number from first line
+      const parts = firstLine.split(',').map(p => p.replace(/"/g, '').trim());
+      meterName = parts[1] || parts[0]; // Use second part (meter number) or first
+      startRow = lineOffset + 3; // Skip pnpscada line and header line
+      console.log(`[autoDetect] Detected simple PnP SCADA format, meter: ${meterName}`);
+    } else if (pnpSimpleMatch) {
+      // Format 3: pnpscada.com line but different header format - need to scan for headers
+      isPnpScada = true;
+      const parts = firstLine.split(',').map(p => p.replace(/"/g, '').trim());
+      meterName = parts[1] || parts[0];
+      
+      // Scan for header row (look for date/time/kwh patterns)
+      for (let i = lineOffset + 1; i < Math.min(lines.length, lineOffset + 10); i++) {
+        const lineLower = lines[i].toLowerCase();
+        if ((lineLower.includes('date') || lineLower.includes('rdate') || lineLower.includes('time')) &&
+            (lineLower.includes('kwh') || lineLower.includes('kw') || lineLower.includes('energy'))) {
+          startRow = i + 2; // +1 for 0-index, +1 to skip header
+          console.log(`[autoDetect] Found SCADA headers at line ${i + 1}: ${lines[i].substring(0, 50)}...`);
+          break;
+        }
+      }
+      console.log(`[autoDetect] Detected PnP SCADA with non-standard headers, meter: ${meterName}, startRow: ${startRow}`);
     }
   }
 
@@ -85,7 +118,7 @@ function autoDetectConfig(content: string): {
     else if (semicolonCount > commaCount) delimiter = ';';
   }
 
-  console.log(`[autoDetect] Result: delimiter="${delimiter}", startRow=${startRow}, isPnpScada=${isPnpScada}`);
+  console.log(`[autoDetect] Result: delimiter="${delimiter}", startRow=${startRow}, isPnpScada=${isPnpScada}, meterName=${meterName}`);
   return { delimiter, startRow, isPnpScada, meterName, dateRange };
 }
 
