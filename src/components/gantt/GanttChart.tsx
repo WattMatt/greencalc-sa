@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,8 +8,11 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator,
 import { GanttTask, GanttTaskDependency, GanttMilestone, GanttChartConfig, GanttDependencyType } from '@/types/gantt';
 import { calculateCriticalPath } from '@/lib/criticalPath';
 import { format, parseISO, differenceInDays, addDays, startOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, isSameMonth, isWeekend, isToday } from 'date-fns';
-import { ChevronLeft, ChevronRight, Flag, Trash2, Edit2, Link, Unlink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, Trash2, Edit2, Link, Unlink, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useGanttDrag, DragMode } from '@/hooks/useGanttDrag';
+import { useDependencyDrag } from '@/hooks/useDependencyDrag';
+import { DependencyDragLine } from './DependencyDragLine';
 
 interface GanttChartProps {
   tasks: GanttTask[];
@@ -23,12 +26,14 @@ interface GanttChartProps {
   onDeleteTask: (id: string) => void;
   onCreateDependency: (predecessorId: string, successorId: string, type: GanttDependencyType) => void;
   onDeleteDependency: (id: string) => void;
+  onReorderTasks?: (orderedIds: string[]) => void;
 }
 
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 60;
 const TASK_BAR_HEIGHT = 28;
 const DAY_WIDTH = { day: 40, week: 20, month: 8 };
+const DRAG_HANDLE_WIDTH = 8;
 
 export function GanttChart({
   tasks,
@@ -42,9 +47,64 @@ export function GanttChart({
   onDeleteTask,
   onCreateDependency,
   onDeleteDependency,
+  onReorderTasks,
 }: GanttChartProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
   const [viewOffset, setViewOffset] = useState(0);
+
+  const dayWidth = DAY_WIDTH[config.viewMode];
+
+  // Drag hooks
+  const { isDragging, dragState, startDrag, updateDrag, endDrag, cancelDrag, getDragPreview } = useGanttDrag({
+    dayWidth,
+    onUpdateTask: (id, updates) => onUpdateTask(id, updates),
+  });
+
+  const { isDraggingDependency, dependencyDragState, startDependencyDrag, updateDependencyDrag, endDependencyDrag, cancelDependencyDrag } = useDependencyDrag({
+    onCreateDependency,
+  });
+
+  // Mouse move handler for drag operations
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging) {
+        updateDrag(e.clientX);
+      }
+      if (isDraggingDependency && chartRef.current) {
+        const rect = chartRef.current.getBoundingClientRect();
+        updateDependencyDrag(e.clientX - rect.left, e.clientY - rect.top);
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isDragging) {
+        endDrag();
+      }
+      if (isDraggingDependency) {
+        cancelDependencyDrag();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        cancelDrag();
+        cancelDependencyDrag();
+      }
+    };
+
+    if (isDragging || isDraggingDependency) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isDragging, isDraggingDependency, updateDrag, endDrag, cancelDrag, updateDependencyDrag, cancelDependencyDrag]);
 
   // Calculate date range
   const { startDate, endDate, totalDays } = useMemo(() => {
@@ -80,8 +140,6 @@ export function GanttChart({
   const criticalPathIds = useMemo(() => {
     return new Set(calculateCriticalPath(tasks, dependencies));
   }, [tasks, dependencies]);
-
-  const dayWidth = DAY_WIDTH[config.viewMode];
   const chartWidth = totalDays * dayWidth;
 
   // Generate time header cells
@@ -136,9 +194,9 @@ export function GanttChart({
   }, [startDate, endDate, config.viewMode, dayWidth]);
 
   // Calculate task bar positions
-  const getTaskPosition = useCallback((task: GanttTask) => {
-    const taskStart = parseISO(task.start_date);
-    const taskEnd = parseISO(task.end_date);
+  const getTaskPosition = useCallback((task: GanttTask, preview?: { startDate: Date; endDate: Date } | null) => {
+    const taskStart = preview?.startDate || parseISO(task.start_date);
+    const taskEnd = preview?.endDate || parseISO(task.end_date);
     const left = differenceInDays(taskStart, startDate) * dayWidth;
     const width = (differenceInDays(taskEnd, taskStart) + 1) * dayWidth;
     return { left, width };
@@ -167,7 +225,7 @@ export function GanttChart({
   return (
     <Card>
       <CardContent className="p-0">
-        <div className="flex flex-col">
+        <div className="flex flex-col" id="gantt-chart-container" ref={chartRef}>
           {/* Controls */}
           <div className="flex items-center justify-between p-2 border-b bg-muted/30">
             <div className="flex items-center gap-2">
@@ -276,8 +334,10 @@ export function GanttChart({
 
                   {/* Task rows */}
                   {tasks.map((task, index) => {
-                    const { left, width } = getTaskPosition(task);
+                    const dragPreview = getDragPreview(task.id);
+                    const { left, width } = getTaskPosition(task, dragPreview);
                     const isCritical = criticalPathIds.has(task.id);
+                    const isBeingDragged = dragState?.taskId === task.id;
 
                     return (
                       <TooltipProvider key={task.id}>
@@ -313,9 +373,11 @@ export function GanttChart({
                                 <TooltipTrigger asChild>
                                   <div
                                     className={cn(
-                                      "absolute rounded cursor-pointer transition-all hover:ring-2 hover:ring-primary/50",
+                                      "absolute rounded cursor-pointer transition-all group",
+                                      !isBeingDragged && "hover:ring-2 hover:ring-primary/50",
                                       isCritical ? "ring-1 ring-destructive" : "",
-                                      task.color ? "" : "bg-primary"
+                                      task.color ? "" : "bg-primary",
+                                      isBeingDragged && "ring-2 ring-primary shadow-lg opacity-90"
                                     )}
                                     style={{
                                       left,
@@ -324,20 +386,69 @@ export function GanttChart({
                                       height: TASK_BAR_HEIGHT,
                                       backgroundColor: task.color || undefined,
                                     }}
-                                    onClick={() => onEditTask(task)}
+                                    onClick={() => !isDragging && onEditTask(task)}
+                                    onMouseDown={(e) => {
+                                      if (e.button === 0) {
+                                        // Check if clicking on resize handles
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        const offsetX = e.clientX - rect.left;
+                                        if (offsetX < DRAG_HANDLE_WIDTH) {
+                                          e.preventDefault();
+                                          startDrag(task, 'resize-start', e.clientX);
+                                        } else if (offsetX > rect.width - DRAG_HANDLE_WIDTH) {
+                                          e.preventDefault();
+                                          startDrag(task, 'resize-end', e.clientX);
+                                        } else {
+                                          e.preventDefault();
+                                          startDrag(task, 'move', e.clientX);
+                                        }
+                                      }
+                                    }}
                                   >
+                                    {/* Left resize handle */}
+                                    <div 
+                                      className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-background/30 rounded-l"
+                                    />
+                                    
+                                    {/* Right resize handle */}
+                                    <div 
+                                      className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-background/30 rounded-r"
+                                    />
+
                                     {/* Progress fill */}
                                     <div
-                                      className="absolute inset-0 rounded opacity-40 bg-background"
+                                      className="absolute inset-0 rounded opacity-40 bg-background pointer-events-none"
                                       style={{ width: `${100 - task.progress}%`, right: 0, left: 'auto' }}
                                     />
                                     
                                     {/* Task name if wide enough */}
                                     {width > 60 && (
-                                      <span className="absolute inset-0 flex items-center px-2 text-xs text-primary-foreground truncate font-medium">
+                                      <span className="absolute inset-0 flex items-center px-3 text-xs text-primary-foreground truncate font-medium pointer-events-none">
                                         {task.name}
                                       </span>
                                     )}
+
+                                    {/* Dependency connection points */}
+                                    <div 
+                                      className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-background opacity-0 group-hover:opacity-100 cursor-crosshair"
+                                      onMouseDown={(e) => {
+                                        e.stopPropagation();
+                                        const rect = chartRef.current?.getBoundingClientRect();
+                                        if (rect) {
+                                          startDependencyDrag(task.id, 'start', e.clientX - rect.left, e.clientY - rect.top);
+                                        }
+                                      }}
+                                    />
+                                    <div 
+                                      className="absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-background opacity-0 group-hover:opacity-100 cursor-crosshair"
+                                      onMouseDown={(e) => {
+                                        e.stopPropagation();
+                                        const rect = chartRef.current?.getBoundingClientRect();
+                                        if (rect) {
+                                          startDependencyDrag(task.id, 'end', e.clientX - rect.left, e.clientY - rect.top);
+                                        }
+                                      }}
+                                    />
                                   </div>
                                 </TooltipTrigger>
                                 <TooltipContent side="top">
@@ -464,6 +575,17 @@ export function GanttChart({
                         </marker>
                       </defs>
                     </svg>
+                  )}
+
+                  {/* Dependency drag line */}
+                  {isDraggingDependency && dependencyDragState && (
+                    <DependencyDragLine
+                      startX={dependencyDragState.startX}
+                      startY={dependencyDragState.startY}
+                      endX={dependencyDragState.currentX}
+                      endY={dependencyDragState.currentY}
+                      isValid={true}
+                    />
                   )}
                 </div>
               </div>
