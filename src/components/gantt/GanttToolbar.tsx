@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { GanttChartConfig, GanttFilters, GanttBaseline, GanttTask, GanttMilestone, GanttTaskDependency, GanttFilterPreset, TASK_COLORS, DEFAULT_FILTERS } from '@/types/gantt';
+import { GanttChartConfig, GanttFilters, GanttBaseline, GanttTask, GanttMilestone, GanttTaskDependency, GanttFilterPreset, TASK_COLORS, DEFAULT_FILTERS, GroupByMode } from '@/types/gantt';
 import { downloadICS } from '@/lib/calendarExport';
 import { exportToExcel, exportToImage, exportToPDF, exportToWord } from '@/lib/ganttExport';
+import { BaselineSelector } from './BaselineSelector';
 import { 
   CalendarDays, 
   CalendarRange, 
@@ -32,7 +33,10 @@ import {
   ChevronDown,
   Keyboard,
   Bookmark,
-  FileType2
+  FileType2,
+  Layers,
+  Users,
+  Palette
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -381,6 +385,53 @@ export function GanttToolbar({
         Milestones
       </Button>
 
+      <Separator orientation="vertical" className="h-8" />
+
+      {/* Group By */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant={config.groupBy !== 'none' ? 'secondary' : 'ghost'} size="sm" className="h-8">
+            <Layers className="h-4 w-4 mr-1" />
+            Group
+            {config.groupBy !== 'none' && (
+              <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                {config.groupBy}
+              </Badge>
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem 
+            onClick={() => onConfigChange({ ...config, groupBy: 'none' })}
+            className={config.groupBy === 'none' ? 'bg-primary/10' : ''}
+          >
+            No Grouping
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem 
+            onClick={() => onConfigChange({ ...config, groupBy: 'status' })}
+            className={config.groupBy === 'status' ? 'bg-primary/10' : ''}
+          >
+            <Layers className="h-4 w-4 mr-2" />
+            By Status
+          </DropdownMenuItem>
+          <DropdownMenuItem 
+            onClick={() => onConfigChange({ ...config, groupBy: 'owner' })}
+            className={config.groupBy === 'owner' ? 'bg-primary/10' : ''}
+          >
+            <Users className="h-4 w-4 mr-2" />
+            By Owner
+          </DropdownMenuItem>
+          <DropdownMenuItem 
+            onClick={() => onConfigChange({ ...config, groupBy: 'color' })}
+            className={config.groupBy === 'color' ? 'bg-primary/10' : ''}
+          >
+            <Palette className="h-4 w-4 mr-2" />
+            By Color
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       {/* Keyboard shortcuts button */}
       {onOpenKeyboardShortcuts && (
         <Button
@@ -394,6 +445,13 @@ export function GanttToolbar({
       )}
 
       <div className="flex-1" />
+
+      {/* Baseline Selector (compare mode) */}
+      <BaselineSelector
+        baselines={baselines}
+        selectedBaselineId={config.showBaseline}
+        onSelect={(id) => onConfigChange({ ...config, showBaseline: id })}
+      />
 
       {/* Baselines */}
       <DropdownMenu>

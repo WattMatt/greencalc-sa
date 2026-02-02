@@ -5,14 +5,15 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/ui/context-menu';
-import { GanttTask, GanttTaskDependency, GanttMilestone, GanttChartConfig, GanttDependencyType } from '@/types/gantt';
+import { GanttTask, GanttTaskDependency, GanttMilestone, GanttChartConfig, GanttDependencyType, GanttBaselineTask, GroupByMode } from '@/types/gantt';
 import { calculateCriticalPath } from '@/lib/criticalPath';
 import { format, parseISO, differenceInDays, addDays, startOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, isSameMonth, isWeekend, isToday } from 'date-fns';
-import { ChevronLeft, ChevronRight, Flag, Trash2, Edit2, Link, Unlink, GripVertical } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flag, Trash2, Edit2, Link, Unlink, GripVertical, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useGanttDrag, DragMode } from '@/hooks/useGanttDrag';
 import { useDependencyDrag } from '@/hooks/useDependencyDrag';
 import { DependencyDragLine } from './DependencyDragLine';
+import { TaskGroupHeader } from './TaskGroupHeader';
 
 interface GanttChartProps {
   tasks: GanttTask[];
@@ -20,6 +21,7 @@ interface GanttChartProps {
   milestones: GanttMilestone[];
   config: GanttChartConfig;
   selectedTasks: Set<string>;
+  baselineTasks?: GanttBaselineTask[];
   onSelectTask: (taskId: string, selected: boolean) => void;
   onEditTask: (task: GanttTask) => void;
   onUpdateTask: (id: string, updates: Partial<GanttTask>) => void;
@@ -27,11 +29,13 @@ interface GanttChartProps {
   onCreateDependency: (predecessorId: string, successorId: string, type: GanttDependencyType) => void;
   onDeleteDependency: (id: string) => void;
   onReorderTasks?: (orderedIds: string[]) => void;
+  onRequestDependencyType?: (predecessorId: string, successorId: string) => void;
 }
 
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 60;
 const TASK_BAR_HEIGHT = 28;
+const BASELINE_BAR_HEIGHT = 8;
 const DAY_WIDTH = { day: 40, week: 20, month: 8 };
 const DRAG_HANDLE_WIDTH = 8;
 
@@ -41,6 +45,7 @@ export function GanttChart({
   milestones,
   config,
   selectedTasks,
+  baselineTasks = [],
   onSelectTask,
   onEditTask,
   onUpdateTask,
@@ -48,10 +53,13 @@ export function GanttChart({
   onCreateDependency,
   onDeleteDependency,
   onReorderTasks,
+  onRequestDependencyType,
 }: GanttChartProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const [viewOffset, setViewOffset] = useState(0);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [dragReorderTaskId, setDragReorderTaskId] = useState<string | null>(null);
 
   const dayWidth = DAY_WIDTH[config.viewMode];
 
@@ -63,6 +71,7 @@ export function GanttChart({
 
   const { isDraggingDependency, dependencyDragState, startDependencyDrag, updateDependencyDrag, endDependencyDrag, cancelDependencyDrag } = useDependencyDrag({
     onCreateDependency,
+    onRequestDependencyType,
   });
 
   // Mouse move handler for drag operations
@@ -141,6 +150,55 @@ export function GanttChart({
     return new Set(calculateCriticalPath(tasks, dependencies));
   }, [tasks, dependencies]);
   const chartWidth = totalDays * dayWidth;
+
+  // Group tasks by specified field
+  const groupedTasks = useMemo(() => {
+    if (config.groupBy === 'none') {
+      return { '': tasks };
+    }
+
+    const groups: Record<string, GanttTask[]> = {};
+    for (const task of tasks) {
+      let groupKey = '';
+      if (config.groupBy === 'status') {
+        groupKey = task.status;
+      } else if (config.groupBy === 'owner') {
+        groupKey = task.owner || '';
+      } else if (config.groupBy === 'color') {
+        groupKey = task.color || '';
+      }
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(task);
+    }
+    return groups;
+  }, [tasks, config.groupBy]);
+
+  // Calculate baseline position for a task
+  const getBaselinePosition = useCallback((taskId: string) => {
+    const baselineTask = baselineTasks.find(bt => bt.task_id === taskId);
+    if (!baselineTask) return null;
+    
+    const taskStart = parseISO(baselineTask.start_date);
+    const taskEnd = parseISO(baselineTask.end_date);
+    const left = differenceInDays(taskStart, startDate) * dayWidth;
+    const width = (differenceInDays(taskEnd, taskStart) + 1) * dayWidth;
+    return { left, width };
+  }, [baselineTasks, startDate, dayWidth]);
+
+  // Toggle group expansion
+  const toggleGroup = useCallback((groupKey: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  }, []);
 
   // Generate time header cells
   const timeHeaders = useMemo(() => {
@@ -365,6 +423,30 @@ export function GanttChart({
                                 ))}
                             </>
                           )}
+
+                          {/* Baseline overlay (ghost bar) */}
+                          {config.showBaseline && (() => {
+                            const baselinePos = getBaselinePosition(task.id);
+                            if (!baselinePos) return null;
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div
+                                    className="absolute rounded-sm border-2 border-dashed border-muted-foreground/50 bg-muted-foreground/10"
+                                    style={{
+                                      left: baselinePos.left,
+                                      width: Math.max(baselinePos.width, 10),
+                                      top: ROW_HEIGHT - BASELINE_BAR_HEIGHT - 4,
+                                      height: BASELINE_BAR_HEIGHT,
+                                    }}
+                                  />
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-xs">
+                                  Baseline dates
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          })()}
 
                           {/* Task bar */}
                           <ContextMenu>

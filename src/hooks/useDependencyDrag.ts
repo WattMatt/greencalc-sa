@@ -12,9 +12,10 @@ interface DependencyDragState {
 
 interface UseDependencyDragOptions {
   onCreateDependency: (predecessorId: string, successorId: string, type: GanttDependencyType) => void;
+  onRequestDependencyType?: (predecessorId: string, successorId: string) => void;
 }
 
-export function useDependencyDrag({ onCreateDependency }: UseDependencyDragOptions) {
+export function useDependencyDrag({ onCreateDependency, onRequestDependencyType }: UseDependencyDragOptions) {
   const [dragState, setDragState] = useState<DependencyDragState | null>(null);
   const dragRef = useRef<DependencyDragState | null>(null);
 
@@ -66,6 +67,13 @@ export function useDependencyDrag({ onCreateDependency }: UseDependencyDragOptio
       return;
     }
 
+    // If callback for type selection is provided, use that instead
+    if (onRequestDependencyType) {
+      onRequestDependencyType(source.sourceTaskId, targetTaskId);
+      cancelDependencyDrag();
+      return;
+    }
+
     // Determine dependency type based on connection points
     let dependencyType: GanttDependencyType;
     
@@ -81,7 +89,7 @@ export function useDependencyDrag({ onCreateDependency }: UseDependencyDragOptio
 
     onCreateDependency(source.sourceTaskId, targetTaskId, dependencyType);
     cancelDependencyDrag();
-  }, [onCreateDependency]);
+  }, [onCreateDependency, onRequestDependencyType]);
 
   const cancelDependencyDrag = useCallback(() => {
     dragRef.current = null;

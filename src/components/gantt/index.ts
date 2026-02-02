@@ -12,3 +12,6 @@ export { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 export { OnboardingChecklist } from './OnboardingChecklist';
 export { ColorLegend } from './ColorLegend';
 export { DependencyDragLine } from './DependencyDragLine';
+export { BaselineSelector } from './BaselineSelector';
+export { DependencyTypeSelector } from './DependencyTypeSelector';
+export { TaskGroupHeader } from './TaskGroupHeader';
