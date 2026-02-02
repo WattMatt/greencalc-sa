@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
   Upload, Undo2, Redo2, Save, Loader2, ArrowLeft,
-  ChevronLeft, ChevronRight, ChevronDown
+  ChevronLeft, ChevronRight, ChevronDown, Copy, MoveHorizontal
 } from 'lucide-react';
 import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig } from '../types';
 import { Button } from '@/components/ui/button';
@@ -117,6 +117,13 @@ interface ToolbarProps {
   setPlacementOrientation?: (orientation: 'portrait' | 'landscape') => void;
   placementMinSpacing?: number;
   setPlacementMinSpacing?: (spacing: number) => void;
+  // Copy handler
+  onCopySelected?: () => void;
+  // Selected item for copy button state
+  selectedItemId?: string | null;
+  // Dimension tool state
+  dimensionObject1Id?: string | null;
+  dimensionObject2Id?: string | null;
 }
 
 export function Toolbar({
@@ -148,6 +155,10 @@ export function Toolbar({
   setPlacementOrientation,
   placementMinSpacing,
   setPlacementMinSpacing,
+  onCopySelected,
+  selectedItemId,
+  dimensionObject1Id,
+  dimensionObject2Id,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -163,6 +174,7 @@ export function Toolbar({
     roofMasks: false,
     equipment: false,
     materials: false,
+    tools: false,
   });
 
   const toggleSection = (section: string) => {
@@ -470,6 +482,45 @@ export function Toolbar({
             onClick={() => setActiveTool(Tool.PLACE_CABLE_TRAY)}
             disabled={!scaleSet}
           />
+        </CollapsibleSection>
+
+        <Separator className="my-2" />
+
+        {/* Tools */}
+        <CollapsibleSection 
+          title="Tools"
+          isOpen={openSections.tools}
+          onToggle={() => toggleSection('tools')}
+        >
+          <ToolButton
+            icon={Copy}
+            label="Copy"
+            isActive={false}
+            onClick={() => onCopySelected?.()}
+            disabled={!selectedItemId}
+          />
+          <ToolButton
+            icon={MoveHorizontal}
+            label="Set Distance"
+            isActive={activeTool === Tool.DIMENSION}
+            onClick={() => setActiveTool(Tool.DIMENSION)}
+            disabled={!scaleSet}
+          />
+          
+          {/* Dimension tool instructions */}
+          {activeTool === Tool.DIMENSION && (
+            <div className="mt-2 p-2 bg-muted/50 rounded text-xs text-muted-foreground">
+              {!dimensionObject1Id && !dimensionObject2Id && (
+                <p>Click on the first object (will move)</p>
+              )}
+              {dimensionObject1Id && !dimensionObject2Id && (
+                <p className="text-blue-600 dark:text-blue-400">Now click the reference object (stationary)</p>
+              )}
+              {dimensionObject1Id && dimensionObject2Id && (
+                <p className="text-green-600 dark:text-green-400">Both objects selected!</p>
+              )}
+            </div>
+          )}
         </CollapsibleSection>
 
         {/* Rotation control for placement tools */}

@@ -84,6 +84,7 @@ export enum Tool {
   PLACE_MAIN_BOARD = 'place_main_board',
   PLACE_WALKWAY = 'place_walkway',
   PLACE_CABLE_TRAY = 'place_cable_tray',
+  DIMENSION = 'dimension', // Set distance between two objects
 }
 
 // Placed instance of a walkway on the canvas/project

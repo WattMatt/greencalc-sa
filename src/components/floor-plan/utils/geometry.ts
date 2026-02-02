@@ -605,3 +605,47 @@ export const snapMaterialToSpacing = (
 
   return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
 };
+
+/**
+ * Calculate center-to-center distance between two objects in meters
+ */
+export const getObjectCenterDistance = (
+  pos1: Point,
+  pos2: Point,
+  scaleRatio: number
+): number => {
+  const pixelDistance = distance(pos1, pos2);
+  return pixelDistance * scaleRatio;
+};
+
+/**
+ * Calculate new position for object1 to be at specified distance from object2.
+ * Object1 moves along the line connecting the two objects.
+ */
+export const calculateNewPositionAtDistance = (
+  object1Pos: Point,
+  object2Pos: Point,
+  targetDistanceMeters: number,
+  scaleRatio: number
+): Point => {
+  const dx = object1Pos.x - object2Pos.x;
+  const dy = object1Pos.y - object2Pos.y;
+  const currentPixelDist = Math.hypot(dx, dy);
+  
+  if (currentPixelDist === 0) {
+    // Objects at same position, move along X axis
+    return {
+      x: object2Pos.x + targetDistanceMeters / scaleRatio,
+      y: object2Pos.y,
+    };
+  }
+  
+  const targetPixelDist = targetDistanceMeters / scaleRatio;
+  const unitX = dx / currentPixelDist;
+  const unitY = dy / currentPixelDist;
+  
+  return {
+    x: object2Pos.x + unitX * targetPixelDist,
+    y: object2Pos.y + unitY * targetPixelDist,
+  };
+};
