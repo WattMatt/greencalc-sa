@@ -817,20 +817,22 @@ export function Canvas({
 
     // Dimension tool - select objects to measure/set distance between
     if (activeTool === Tool.DIMENSION && onDimensionObjectClick && e.button === 0) {
-      // Check PV arrays
-      const hitArray = (pvPanelConfig && scaleInfo.ratio)
-        ? [...pvArrays].reverse().find(arr => {
-            const corners = getPVArrayCorners(arr, pvPanelConfig, roofMasks, scaleInfo);
-            return corners.length === 4 && isPointInPolygon(worldPos, corners);
-          })
-        : undefined;
-      if (hitArray) {
-        onDimensionObjectClick(hitArray.id);
-        return;
+      // Check PV arrays (only if layer is visible)
+      if (layerVisibility.pvArrays) {
+        const hitArray = (pvPanelConfig && scaleInfo.ratio)
+          ? [...pvArrays].reverse().find(arr => {
+              const corners = getPVArrayCorners(arr, pvPanelConfig, roofMasks, scaleInfo);
+              return corners.length === 4 && isPointInPolygon(worldPos, corners);
+            })
+          : undefined;
+        if (hitArray) {
+          onDimensionObjectClick(hitArray.id);
+          return;
+        }
       }
 
-      // Check walkways
-      if (placedWalkways && scaleInfo.ratio) {
+      // Check walkways (only if layer is visible)
+      if (placedWalkways && scaleInfo.ratio && layerVisibility.walkways) {
         const hitWalkway = [...placedWalkways].reverse().find(walkway => {
           const widthPx = walkway.width / scaleInfo.ratio!;
           const lengthPx = walkway.length / scaleInfo.ratio!;
@@ -849,8 +851,8 @@ export function Canvas({
         }
       }
 
-      // Check cable trays
-      if (placedCableTrays && scaleInfo.ratio) {
+      // Check cable trays (only if layer is visible)
+      if (placedCableTrays && scaleInfo.ratio && layerVisibility.cableTrays) {
         const hitTray = [...placedCableTrays].reverse().find(tray => {
           const widthPx = tray.width / scaleInfo.ratio!;
           const lengthPx = tray.length / scaleInfo.ratio!;
@@ -869,17 +871,19 @@ export function Canvas({
         }
       }
 
-      // Check equipment
-      const hitEquipment = [...equipment].reverse().find(item => {
-        const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
-        const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
-        const halfSize = sizePx / 2;
-        return Math.abs(worldPos.x - item.position.x) <= halfSize &&
-               Math.abs(worldPos.y - item.position.y) <= halfSize;
-      });
-      if (hitEquipment) {
-        onDimensionObjectClick(hitEquipment.id);
-        return;
+      // Check equipment (only if layer is visible)
+      if (layerVisibility.equipment) {
+        const hitEquipment = [...equipment].reverse().find(item => {
+          const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
+          const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
+          const halfSize = sizePx / 2;
+          return Math.abs(worldPos.x - item.position.x) <= halfSize &&
+                 Math.abs(worldPos.y - item.position.y) <= halfSize;
+        });
+        if (hitEquipment) {
+          onDimensionObjectClick(hitEquipment.id);
+          return;
+        }
       }
 
       return;
@@ -892,22 +896,24 @@ export function Canvas({
       const baseThresholdScreenPx = 20; // pixels in screen space
       const edgeThresholdWorld = baseThresholdScreenPx / viewState.zoom;
       
-      // Check PV arrays
-      const hitArray = (pvPanelConfig && scaleInfo.ratio)
-        ? [...pvArrays].reverse().find(arr => {
-            const corners = getPVArrayCorners(arr, pvPanelConfig, roofMasks, scaleInfo);
-            return corners.length === 4 && isPointInPolygon(worldPos, corners);
-          })
-        : undefined;
-      if (hitArray && pvPanelConfig && scaleInfo.ratio) {
-        const dims = getPVArrayDimensions(hitArray, pvPanelConfig, roofMasks, scaleInfo, hitArray.position);
-        const clickedEdge = detectClickedEdge(worldPos, hitArray.position, dims, hitArray.rotation, edgeThresholdWorld);
-        onAlignEdgesObjectClick(hitArray.id, clickedEdge);
-        return;
+      // Check PV arrays (only if layer is visible)
+      if (layerVisibility.pvArrays) {
+        const hitArray = (pvPanelConfig && scaleInfo.ratio)
+          ? [...pvArrays].reverse().find(arr => {
+              const corners = getPVArrayCorners(arr, pvPanelConfig, roofMasks, scaleInfo);
+              return corners.length === 4 && isPointInPolygon(worldPos, corners);
+            })
+          : undefined;
+        if (hitArray && pvPanelConfig && scaleInfo.ratio) {
+          const dims = getPVArrayDimensions(hitArray, pvPanelConfig, roofMasks, scaleInfo, hitArray.position);
+          const clickedEdge = detectClickedEdge(worldPos, hitArray.position, dims, hitArray.rotation, edgeThresholdWorld);
+          onAlignEdgesObjectClick(hitArray.id, clickedEdge);
+          return;
+        }
       }
 
-      // Check walkways
-      if (placedWalkways && scaleInfo.ratio) {
+      // Check walkways (only if layer is visible)
+      if (placedWalkways && scaleInfo.ratio && layerVisibility.walkways) {
         const hitWalkway = [...placedWalkways].reverse().find(walkway => {
           const widthPx = walkway.width / scaleInfo.ratio!;
           const lengthPx = walkway.length / scaleInfo.ratio!;
@@ -935,8 +941,8 @@ export function Canvas({
         }
       }
 
-      // Check cable trays
-      if (placedCableTrays && scaleInfo.ratio) {
+      // Check cable trays (only if layer is visible)
+      if (placedCableTrays && scaleInfo.ratio && layerVisibility.cableTrays) {
         const hitTray = [...placedCableTrays].reverse().find(tray => {
           const widthPx = tray.width / scaleInfo.ratio!;
           const lengthPx = tray.length / scaleInfo.ratio!;
@@ -964,19 +970,21 @@ export function Canvas({
         }
       }
 
-      // Check equipment
-      const hitEquipment = [...equipment].reverse().find(item => {
-        const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
-        const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
-        const halfSize = sizePx / 2;
-        return Math.abs(worldPos.x - item.position.x) <= halfSize &&
-               Math.abs(worldPos.y - item.position.y) <= halfSize;
-      });
-      if (hitEquipment) {
-        const dims = getEquipmentDimensions(hitEquipment.type, scaleInfo, plantSetupConfig);
-        const clickedEdge = detectClickedEdge(worldPos, hitEquipment.position, dims, hitEquipment.rotation, edgeThresholdWorld);
-        onAlignEdgesObjectClick(hitEquipment.id, clickedEdge);
-        return;
+      // Check equipment (only if layer is visible)
+      if (layerVisibility.equipment) {
+        const hitEquipment = [...equipment].reverse().find(item => {
+          const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
+          const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
+          const halfSize = sizePx / 2;
+          return Math.abs(worldPos.x - item.position.x) <= halfSize &&
+                 Math.abs(worldPos.y - item.position.y) <= halfSize;
+        });
+        if (hitEquipment) {
+          const dims = getEquipmentDimensions(hitEquipment.type, scaleInfo, plantSetupConfig);
+          const clickedEdge = detectClickedEdge(worldPos, hitEquipment.position, dims, hitEquipment.rotation, edgeThresholdWorld);
+          onAlignEdgesObjectClick(hitEquipment.id, clickedEdge);
+          return;
+        }
       }
 
       return;
