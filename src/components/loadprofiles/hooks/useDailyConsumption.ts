@@ -94,9 +94,20 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
   const lines = csvContent.split('\n').filter(l => l.trim() && !l.toLowerCase().startsWith('sep='));
   if (lines.length < 2) return [];
   
-  let headerIdx = 0;
-  while (headerIdx < lines.length && !lines[headerIdx].includes(',')) headerIdx++;
-  if (headerIdx >= lines.length) return [];
+  // Find header row by looking for expected column names (Time, Date, kWh, etc.)
+  // Skip metadata rows like "pnpscada.com,36724794A"
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    const line = lines[i].toLowerCase();
+    // Check if this line contains typical header column names
+    if (line.includes('time') || line.includes('date') || line.includes('rdate') || 
+        line.includes('kwh') || line.includes('timestamp')) {
+      headerIdx = i;
+      break;
+    }
+  }
+  
+  if (headerIdx === -1 || headerIdx >= lines.length) return [];
   
   const headers = lines[headerIdx].split(',').map(h => h.trim().toLowerCase());
   // Look for date/time column - include 'time' as a valid column name
