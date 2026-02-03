@@ -5,8 +5,8 @@ import { Point, PVArrayItem, PVPanelConfig, RoofMask, ScaleInfo, EquipmentType, 
  * This is separate from the minimum spacing (the gap to enforce).
  * Snapping only triggers when within this distance of an object.
  */
-const SNAP_PROXIMITY_THRESHOLD_METERS = 1.0; // 1 meter for normal snapping
-const SNAP_PROXIMITY_THRESHOLD_FORCE_MULTIPLIER = 3; // 3m when Shift is held
+const SNAP_PROXIMITY_THRESHOLD_METERS = 0.25; // 0.25 meter for normal snapping
+const SNAP_PROXIMITY_THRESHOLD_FORCE_MULTIPLIER = 4; // 1m when Shift is held (0.25 * 4)
 
 /**
  * Checks if a point is inside a given polygon using the ray-casting algorithm.
