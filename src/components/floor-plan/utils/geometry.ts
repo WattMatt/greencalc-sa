@@ -1,6 +1,14 @@
 import { Point, PVArrayItem, PVPanelConfig, RoofMask, ScaleInfo, EquipmentType, EquipmentItem, PlantSetupConfig } from '../types';
 
 /**
+ * Proximity threshold in meters - determines when snapping activates.
+ * This is separate from the minimum spacing (the gap to enforce).
+ * Snapping only triggers when within this distance of an object.
+ */
+const SNAP_PROXIMITY_THRESHOLD_METERS = 1.0; // 1 meter for normal snapping
+const SNAP_PROXIMITY_THRESHOLD_FORCE_MULTIPLIER = 3; // 3m when Shift is held
+
+/**
  * Checks if a point is inside a given polygon using the ray-casting algorithm.
  */
 export const isPointInPolygon = (point: Point, polygon: Point[]): boolean => {
@@ -275,9 +283,15 @@ export const snapPVArrayToSpacing = (
     const gapY = Math.max(0, edgeDistY);
     const minEdgeDistance = Math.hypot(gapX, gapY);
 
-    // If force-aligning (Shift held), always consider this array as a snap candidate.
-    // Otherwise, only snap if within the configured spacing threshold.
-    if (!forceAlign && minEdgeDistance >= minSpacingPx) {
+    // Use a dedicated proximity threshold for when snapping should activate
+    // This is separate from the minimum spacing to enforce
+    const proximityThresholdPx = SNAP_PROXIMITY_THRESHOLD_METERS / scaleInfo.ratio;
+    const activeThreshold = forceAlign 
+      ? proximityThresholdPx * SNAP_PROXIMITY_THRESHOLD_FORCE_MULTIPLIER
+      : proximityThresholdPx;
+    
+    // Skip items outside the proximity threshold
+    if (minEdgeDistance > activeThreshold) {
       continue;
     }
 
@@ -437,9 +451,14 @@ export const snapEquipmentToSpacing = (
     const gapY = Math.max(0, edgeDistY);
     const minEdgeDistance = Math.hypot(gapX, gapY);
 
-    // If force-aligning (Shift held), always consider this item as a snap candidate.
-    // Otherwise, only snap if within the configured spacing threshold.
-    if (!forceAlign && minEdgeDistance >= minSpacingPx) {
+    // Use a dedicated proximity threshold for when snapping should activate
+    const proximityThresholdPx = SNAP_PROXIMITY_THRESHOLD_METERS / scaleInfo.ratio;
+    const activeThreshold = forceAlign 
+      ? proximityThresholdPx * SNAP_PROXIMITY_THRESHOLD_FORCE_MULTIPLIER
+      : proximityThresholdPx;
+    
+    // Skip items outside the proximity threshold
+    if (minEdgeDistance > activeThreshold) {
       continue;
     }
 
@@ -565,9 +584,14 @@ export const snapMaterialToSpacing = (
     const gapY = Math.max(0, edgeDistY);
     const minEdgeDistance = Math.hypot(gapX, gapY);
 
-    // If force-aligning (Shift held), always consider this item as a snap candidate.
-    // Otherwise, only snap if within the configured spacing threshold.
-    if (!forceAlign && minEdgeDistance >= minSpacingPx) {
+    // Use a dedicated proximity threshold for when snapping should activate
+    const proximityThresholdPx = SNAP_PROXIMITY_THRESHOLD_METERS / scaleInfo.ratio;
+    const activeThreshold = forceAlign 
+      ? proximityThresholdPx * SNAP_PROXIMITY_THRESHOLD_FORCE_MULTIPLIER
+      : proximityThresholdPx;
+    
+    // Skip items outside the proximity threshold
+    if (minEdgeDistance > activeThreshold) {
       continue;
     }
 
