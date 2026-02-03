@@ -963,12 +963,15 @@ export function SitesTab() {
 
   // Load a meter's CSV content and open the wizard
   const loadMeterForWizard = async (meterId: string) => {
+    console.log('[loadMeterForWizard] Loading meter:', meterId);
     try {
       const { data: meter, error } = await supabase
         .from("scada_imports")
         .select("id, raw_data, shop_name, site_name")
         .eq("id", meterId)
         .single();
+      
+      console.log('[loadMeterForWizard] Query result:', { meter: meter?.id, error, hasRawData: !!meter?.raw_data });
       
       if (error || !meter) {
         console.error("Failed to fetch meter for wizard:", error);
@@ -977,11 +980,31 @@ export function SitesTab() {
         return;
       }
       
-      const rawData = meter.raw_data as { csvContent?: string }[] | null;
-      const csvContent = rawData?.[0]?.csvContent;
+      // Handle various raw_data structures
+      let csvContent: string | null = null;
+      const rawData = meter.raw_data;
+      
+      console.log('[loadMeterForWizard] raw_data type:', typeof rawData, Array.isArray(rawData));
+      
+      if (Array.isArray(rawData) && rawData.length > 0) {
+        const firstItem = rawData[0] as Record<string, unknown> | string;
+        // Check if it's the new format with csvContent
+        if (typeof firstItem === 'object' && firstItem !== null && 'csvContent' in firstItem) {
+          csvContent = firstItem.csvContent as string;
+        } else if (typeof firstItem === 'string') {
+          // Sometimes the CSV is stored directly as a string in the first element
+          csvContent = firstItem;
+        }
+      } else if (typeof rawData === 'string') {
+        csvContent = rawData;
+      } else if (rawData && typeof rawData === 'object' && !Array.isArray(rawData) && 'csvContent' in rawData) {
+        csvContent = (rawData as Record<string, unknown>).csvContent as string;
+      }
+      
+      console.log('[loadMeterForWizard] Extracted csvContent length:', csvContent?.length || 0);
       
       if (!csvContent) {
-        console.warn("No CSV content for meter:", meterId);
+        console.warn("No CSV content for meter:", meterId, "raw_data:", rawData);
         toast.error("No CSV data stored for this meter", {
           description: "Use the upload button to import CSV data first"
         });
@@ -990,6 +1013,7 @@ export function SitesTab() {
       }
       
       const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
+      console.log('[loadMeterForWizard] Opening wizard for:', displayName);
       setCurrentWizardMeterId(meterId);
       setCurrentWizardCsvContent(csvContent);
       setCurrentWizardFileName(displayName);
