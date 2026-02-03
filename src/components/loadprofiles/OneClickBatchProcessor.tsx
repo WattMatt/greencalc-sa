@@ -120,25 +120,47 @@ export function OneClickBatchProcessor({
   }) => {
     const lines = csvContent.split('\n').filter(l => l.trim());
     
-    // Detect PnP SCADA format
-    let isPnPScada = false;
+    // Header keywords to identify the actual data header row
+    const headerKeywords = ['time', 'date', 'rdate', 'rtime', 'kwh', 'kw', 
+      'power', 'energy', 'value', 'p1', 'p14', 'active', 'timestamp'];
+    
+    const isValidHeaderRow = (line: string): boolean => {
+      const lowerLine = line.toLowerCase();
+      return headerKeywords.some(kw => lowerLine.includes(kw));
+    };
+    
     let meterName: string | undefined;
     let dateRange: { start: string; end: string } | undefined;
-    let startRow = 1;
 
-    if (lines.length >= 2) {
-      const firstLine = lines[0];
-      const meterMatch = firstLine.match(/^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})/);
-      const secondLine = lines[1]?.toLowerCase() || "";
-      const hasScadaHeaders = secondLine.includes('rdate') && secondLine.includes('rtime') && secondLine.includes('kwh');
-      
-      if (meterMatch && hasScadaHeaders) {
-        isPnPScada = true;
-        meterName = meterMatch[1];
-        dateRange = { start: meterMatch[2], end: meterMatch[3] };
-        startRow = 2;
+    // Detect PnP SCADA format by checking for domain in first line
+    const firstLineLower = lines[0]?.toLowerCase() || "";
+    const isPnPScada = firstLineLower.includes('pnpscada') || 
+                       firstLineLower.includes('scada.com');
+
+    // Find actual header row by scanning for valid column keywords
+    let headerRow = 0;
+    for (let i = 0; i < Math.min(lines.length, 10); i++) {
+      if (isValidHeaderRow(lines[i])) {
+        headerRow = i;
+        break;
       }
     }
+
+    // If PnP format, try to extract meter name from first line
+    if (isPnPScada && headerRow > 0) {
+      const parts = lines[0].split(',');
+      meterName = parts[1]?.trim() || undefined;
+      // Try to find date range in metadata rows
+      for (let i = 0; i < headerRow; i++) {
+        const dateMatch = lines[i].match(/(\d{4}-\d{2}-\d{2})/g);
+        if (dateMatch && dateMatch.length >= 2) {
+          dateRange = { start: dateMatch[0], end: dateMatch[1] };
+          break;
+        }
+      }
+    }
+
+    const startRow = headerRow + 1;
 
     // Auto-detect delimiter with improved counting
     const sampleLine = lines[startRow - 1] || lines[0] || "";
