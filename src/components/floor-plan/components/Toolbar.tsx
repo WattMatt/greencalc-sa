@@ -2,14 +2,18 @@ import { useState } from 'react';
 import { 
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
   Upload, Undo2, Redo2, Save, Loader2, ArrowLeft,
-  ChevronLeft, ChevronRight, ChevronDown, Copy, MoveHorizontal, AlignVerticalJustifyStart
+  ChevronLeft, ChevronRight, ChevronDown, Copy, MoveHorizontal, AlignVerticalJustifyStart,
+  Settings
 } from 'lucide-react';
-import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig } from '../types';
+import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig, WalkwayConfig, CableTrayConfig } from '../types';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { calculateTotalPVCapacity } from '../utils/geometry';
 import { PVArrayItem } from '../types';
@@ -76,6 +80,49 @@ const CollapsibleSection = ({ title, children, isOpen, onToggle }: CollapsibleSe
   </Collapsible>
 );
 
+// Material selector popover for walkways and cable trays
+function MaterialSelectorPopover({
+  items,
+  selectedId,
+  onSelect,
+  label,
+}: {
+  items: (WalkwayConfig | CableTrayConfig)[];
+  selectedId: string | null | undefined;
+  onSelect: (id: string) => void;
+  label: string;
+}) {
+  const effectiveSelectedId = selectedId || items[0]?.id;
+  
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
+          <Settings className="h-3 w-3" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56" align="start">
+        <div className="space-y-2">
+          <p className="text-sm font-medium">{label}</p>
+          <RadioGroup value={effectiveSelectedId} onValueChange={onSelect}>
+            {items.map((item) => (
+              <div key={item.id} className="flex items-center space-x-2">
+                <RadioGroupItem value={item.id} id={`material-${item.id}`} />
+                <Label htmlFor={`material-${item.id}`} className="flex-1 cursor-pointer text-sm">
+                  <span>{item.name}</span>
+                  <span className="text-muted-foreground ml-2">
+                    {item.width.toFixed(3)}m
+                  </span>
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // Helper to format relative time
 const formatRelativeTime = (date: Date | null): string => {
   if (!date) return '';
@@ -128,6 +175,11 @@ interface ToolbarProps {
   // Align edges tool state
   alignObject1Id?: string | null;
   alignObject2Id?: string | null;
+  // Material selection
+  selectedWalkwayId?: string | null;
+  setSelectedWalkwayId?: (id: string | null) => void;
+  selectedCableTrayId?: string | null;
+  setSelectedCableTrayId?: (id: string | null) => void;
 }
 
 export function Toolbar({
@@ -166,6 +218,10 @@ export function Toolbar({
   dimensionObject2Id,
   alignObject1Id,
   alignObject2Id,
+  selectedWalkwayId,
+  setSelectedWalkwayId,
+  selectedCableTrayId,
+  setSelectedCableTrayId,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -475,20 +531,55 @@ export function Toolbar({
             onClick={() => setActiveTool(Tool.PLACE_AC_DISCONNECT)}
             disabled={!scaleSet}
           />
-          <ToolButton
-            icon={() => <span className="text-xs font-mono">═</span>}
-            label="Walkway"
-            isActive={activeTool === Tool.PLACE_WALKWAY}
-            onClick={() => setActiveTool(Tool.PLACE_WALKWAY)}
-            disabled={!scaleSet}
-          />
-          <ToolButton
-            icon={() => <span className="text-xs font-mono">≡</span>}
-            label="Cable Tray"
-            isActive={activeTool === Tool.PLACE_CABLE_TRAY}
-            onClick={() => setActiveTool(Tool.PLACE_CABLE_TRAY)}
-            disabled={!scaleSet}
-          />
+          {/* Walkway with selector */}
+          <div className="flex items-center gap-1">
+            <ToolButton
+              icon={() => <span className="text-xs font-mono">═</span>}
+              label="Walkway"
+              isActive={activeTool === Tool.PLACE_WALKWAY}
+              onClick={() => setActiveTool(Tool.PLACE_WALKWAY)}
+              disabled={!scaleSet || plantSetupConfig.walkways.length === 0}
+            />
+            {plantSetupConfig.walkways.length > 1 && setSelectedWalkwayId && (
+              <MaterialSelectorPopover
+                items={plantSetupConfig.walkways}
+                selectedId={selectedWalkwayId}
+                onSelect={setSelectedWalkwayId}
+                label="Select Walkway"
+              />
+            )}
+          </div>
+          {/* Show currently selected walkway */}
+          {plantSetupConfig.walkways.length > 0 && (
+            <p className="text-[10px] text-muted-foreground pl-6 -mt-1 truncate">
+              {(plantSetupConfig.walkways.find(w => w.id === selectedWalkwayId) || plantSetupConfig.walkways[0])?.name}
+            </p>
+          )}
+          
+          {/* Cable Tray with selector */}
+          <div className="flex items-center gap-1">
+            <ToolButton
+              icon={() => <span className="text-xs font-mono">≡</span>}
+              label="Cable Tray"
+              isActive={activeTool === Tool.PLACE_CABLE_TRAY}
+              onClick={() => setActiveTool(Tool.PLACE_CABLE_TRAY)}
+              disabled={!scaleSet || plantSetupConfig.cableTrays.length === 0}
+            />
+            {plantSetupConfig.cableTrays.length > 1 && setSelectedCableTrayId && (
+              <MaterialSelectorPopover
+                items={plantSetupConfig.cableTrays}
+                selectedId={selectedCableTrayId}
+                onSelect={setSelectedCableTrayId}
+                label="Select Cable Tray"
+              />
+            )}
+          </div>
+          {/* Show currently selected cable tray */}
+          {plantSetupConfig.cableTrays.length > 0 && (
+            <p className="text-[10px] text-muted-foreground pl-6 -mt-1 truncate">
+              {(plantSetupConfig.cableTrays.find(c => c.id === selectedCableTrayId) || plantSetupConfig.cableTrays[0])?.name}
+            </p>
+          )}
         </CollapsibleSection>
 
         <Separator className="my-2" />
