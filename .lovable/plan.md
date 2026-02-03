@@ -1,160 +1,118 @@
 
-# Site-Isolated Meter Viewing and Preview Options
+# Fix: PnP SCADA Header Detection in OneClickBatchProcessor
 
-## Current State Analysis
+## Problem Summary
+The batch processor fails to parse PnP SCADA CSV files because the header detection logic doesn't recognize the newer PnP SCADA format. This causes empty load profiles with the error message "Empty profile - check column mapping".
 
-When you select a site in the Sites Tab, you currently have:
-- A meter table showing all meters assigned to the site
-- Individual meter preview dialogs (triggered by the eye icon)
-- Bulk actions like reprocess and delete
-
-However, the more advanced analysis views (MeterAnalysis, MeterComparison, ProfileStacking) operate globally and are not scoped to the selected site.
-
----
-
-## Options for Enhancing Site-Scoped Meter Views
-
-### Option A: Add Analysis Tabs to Site Detail View
-Add tabbed navigation within the selected site context:
-
+## Root Cause Analysis
+Looking at the console logs:
 ```
-Selected Site: "Segonyana Mall"
-[Meters] [Analysis] [Comparison] [Stacking]
+[processCSV] Headers: ["pnpscada.com", "36791889"]
+[processCSV] Missing required columns. Date: -1, kWh: 0
 ```
 
-**Technical approach:**
-- Extend SitesTab.tsx to include tabs when a site is selected
-- Reuse existing components with `siteId` prop:
-  - MeterAnalysis already supports `siteId` filtering
-  - MeterLibrary already supports `siteId` filtering
-- Add `siteId` support to MeterComparison and ProfileStacking
-
-**Benefits:**
-- All analysis tools scoped to site context
-- Consistent UX - stay within site workflow
-- Reuses existing components
-
----
-
-### Option B: Create a Site Dashboard Component
-A dedicated `SiteMeterDashboard` component that provides:
-
-1. **Summary Stats Card**
-   - Total meters, meters with data, total kWh, peak demand
-   
-2. **Aggregated Site Load Profile Chart**
-   - Combines all site meters into one stacked view
-   - Weekday/Weekend toggle
-   - Date range selection
-
-3. **Top Contributors Panel**
-   - Ranked list of meters by consumption
-   
-4. **Quick Actions**
-   - Jump to individual meter preview
-   - Export site-wide report
-
-**Technical approach:**
-- New component: `SiteMeterDashboard.tsx`
-- Fetch all meters for site with profiles
-- Calculate aggregated profile from individual meter profiles
-
----
-
-### Option C: Interactive Plotly-Style Graph (Based on Uploaded File)
-Implement a similar visualization to the uploaded HTML file using Plotly.js:
-
-1. **Multi-meter line chart**
-   - Multiple series overlaid
-   - Interactive zoom/pan
-   - Hover tooltips with exact values
-
-2. **Controls**
-   - Meter selection checkboxes
-   - Date range picker
-   - Aggregation period (hourly/daily)
-
-**Technical approach:**
-- Install `plotly.js-dist` or `react-plotly.js`
-- New component: `SiteLoadProfileGraph.tsx`
-- Similar to ProfileStacking but with Plotly rendering
-
----
-
-### Option D: Hybrid Approach (Recommended)
-Combine Options A and B for the best coverage:
-
-**Phase 1: Site-scoped tabs**
+The PnP SCADA detection in `autoParseCSV` expects:
 ```
-Site Detail View:
-├── [Meters Tab] - Current meter table
-├── [Analysis Tab] - MeterAnalysis with siteId
-├── [Stacking Tab] - ProfileStacking with siteId  
-└── [Overview Tab] - New summary dashboard
+"MeterName",2024-01-01,2024-12-31
+rdate,rtime,kwh,...
 ```
 
-**Phase 2: Site overview dashboard**
-- Aggregated load profile chart
-- Consumption summary by meter
-- Quick preview links
+But the actual format is:
+```
+pnpscada.com,36791889
+Time,P1 (kWh),Q1 (kvarh),...
+```
+
+The regex `^,?"([^"]+)"?,(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})` doesn't match this pattern, so `startRow` stays at 1 instead of 2.
+
+## Solution
+
+Update the `autoParseCSV` function in `OneClickBatchProcessor.tsx` to use a smarter header detection approach similar to what was added to `ColumnSelectionDialog.tsx` and `useDailyConsumption.ts`:
+
+1. **Add header keyword validation** - Scan the first 10 lines to find the actual header row containing keywords like "time", "date", "kwh", "p1", etc.
+
+2. **Skip metadata rows** - Any row that doesn't contain valid header keywords should be skipped (e.g., `pnpscada.com,36791889`)
+
+3. **Improve PnP SCADA detection** - Recognize the domain-based format (`pnpscada.com` or `scada.com` in first line) as a trigger to look for headers in subsequent rows
 
 ---
 
-## Implementation Plan (Option D - Hybrid)
+## Technical Implementation
 
-### Step 1: Add Tab Navigation to Site Detail
-Modify SitesTab.tsx to include internal tabs when a site is selected:
-- Meters (current view)
-- Analysis
-- Stacking
-- Overview (new)
+### File: `src/components/loadprofiles/OneClickBatchProcessor.tsx`
 
-### Step 2: Pass siteId to Existing Components
-- MeterAnalysis already accepts `siteId`
-- Update ProfileStacking to accept and use `siteId`
-- Update MeterComparison to accept and use `siteId`
+**Changes to `autoParseCSV` function (around lines 114-196):**
 
-### Step 3: Create SiteMeterOverview Component
-New component with:
-- Summary statistics for the site
-- Aggregated stacked profile chart (all meters combined)
-- Table of meters ranked by consumption
-- Links to individual meter previews
+```text
+1. Add header keyword list (after line 127):
+   const headerKeywords = ['time', 'date', 'rdate', 'rtime', 'kwh', 'kw', 
+     'power', 'energy', 'value', 'p1', 'p14', 'active', 'timestamp'];
 
-### Step 4: Optional Plotly Enhancement
-If richer interactivity is needed:
-- Add `react-plotly.js` dependency
-- Create enhanced chart component with zoom/pan
+2. Add header validation helper:
+   const isValidHeaderRow = (line: string): boolean => {
+     const lowerLine = line.toLowerCase();
+     return headerKeywords.some(kw => lowerLine.includes(kw));
+   };
 
----
+3. Replace the current PnP SCADA detection (lines 129-141) with:
+   - Check if first line contains "pnpscada" or "scada.com" → mark as PnP format
+   - Scan through initial lines until finding one with valid header keywords
+   - Set startRow to headerIndex + 1 (for data rows)
 
-## Technical Details
+4. Update headerIdx calculation (lines 194-196):
+   - Use the new dynamic header detection instead of fixed startRow - 1
+```
 
-### Files to Modify
-1. `SitesTab.tsx` - Add internal tabs for site detail view
-2. `ProfileStacking.tsx` - Add optional `siteId` prop for filtering
-3. `MeterComparison.tsx` - Add optional `siteId` prop for filtering
+**Specific code replacement:**
 
-### Files to Create
-1. `SiteMeterOverview.tsx` - New dashboard component
-2. Optional: `SiteLoadProfileChart.tsx` - Plotly-based visualization
+Replace lines 129-141 with logic that:
+```typescript
+// Detect PnP SCADA format by checking for domain in first line
+const firstLineLower = lines[0]?.toLowerCase() || "";
+const isPnPScada = firstLineLower.includes('pnpscada') || 
+                   firstLineLower.includes('scada.com');
 
-### Database Queries
-All components will use existing `scada_imports` table queries filtered by `site_id`:
-```sql
-SELECT * FROM scada_imports WHERE site_id = :selectedSiteId
+// Find actual header row by scanning for valid column keywords
+let headerRow = 0;
+for (let i = 0; i < Math.min(lines.length, 10); i++) {
+  if (isValidHeaderRow(lines[i])) {
+    headerRow = i;
+    break;
+  }
+}
+
+// If PnP format, try to extract meter name from first line
+if (isPnPScada && headerRow > 0) {
+  const parts = lines[0].split(',');
+  meterName = parts[1]?.trim() || undefined;
+  // Try to find date range in metadata
+  const dateMatch = lines[0].match(/(\d{4}-\d{2}-\d{2})/g);
+  if (dateMatch && dateMatch.length >= 2) {
+    dateRange = { start: dateMatch[0], end: dateMatch[1] };
+  }
+}
+
+const startRow = headerRow + 1;
 ```
 
 ---
 
-## User Flow After Implementation
+## Files to Modify
 
-1. Go to Load Profiles > Sites tab
-2. Click on a site (e.g., "Segonyana Mall")
-3. See tabs: **Meters | Analysis | Stacking | Overview**
-4. **Meters tab**: Current meter table with individual previews
-5. **Analysis tab**: Deep-dive into raw data for any site meter
-6. **Stacking tab**: Combine site meters into aggregated profile
-7. **Overview tab**: Site-wide summary and aggregated chart
+| File | Change |
+|------|--------|
+| `src/components/loadprofiles/OneClickBatchProcessor.tsx` | Update `autoParseCSV` function with smart header detection |
 
-All views remain isolated to the selected site context.
+## Expected Outcome
+
+After this fix:
+- Console will show: `[processCSV] Headers: ["Time", "P1 (kWh)", "Q1 (kvarh)", ...]`
+- Column detection will find: `date=0, value=1`
+- Load profiles will be correctly parsed and saved
+
+## Testing Steps
+1. Navigate to Load Profiles page
+2. Select one or more meters with PnP SCADA data
+3. Click the batch process button
+4. Verify meters process successfully (green checkmarks)
+5. Open a meter preview to confirm the load profile chart displays data
