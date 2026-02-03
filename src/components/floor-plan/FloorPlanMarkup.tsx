@@ -113,9 +113,48 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [pvPanelConfig, setPvPanelConfig] = useState<PVPanelConfig | null>(null);
   const [moduleName, setModuleName] = useState<string>('');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [placementRotation, setPlacementRotation] = useState(0);
   const [placementOrientation, setPlacementOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [placementMinSpacing, setPlacementMinSpacing] = useState(0.3);
+
+  // Multi-selection helpers
+  const selectionCount = selectedItemIds.size;
+  const primarySelectedId = selectionCount > 0 ? Array.from(selectedItemIds)[0] : null;
+  
+  // Keep selectedItemId in sync with selectedItemIds for backward compatibility
+  useEffect(() => {
+    if (selectedItemIds.size === 0) {
+      setSelectedItemId(null);
+    } else if (selectedItemIds.size === 1) {
+      setSelectedItemId(Array.from(selectedItemIds)[0]);
+    } else {
+      // Multiple selected - primarySelectedId is first
+      setSelectedItemId(primarySelectedId);
+    }
+  }, [selectedItemIds, primarySelectedId]);
+
+  // Handle single selection (replaces existing selection)
+  const handleSelectSingle = useCallback((id: string | null) => {
+    if (id === null) {
+      setSelectedItemIds(new Set());
+    } else {
+      setSelectedItemIds(new Set([id]));
+    }
+  }, []);
+
+  // Handle toggle selection (add/remove from selection with Shift/Ctrl)
+  const handleToggleSelection = useCallback((id: string) => {
+    setSelectedItemIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   // Dimension tool state
   const [dimensionObject1Id, setDimensionObject1Id] = useState<string | null>(null);
@@ -688,7 +727,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     // Try deleting PV array
     if (pvArrays.some(arr => arr.id === id)) {
       setPvArrays(prev => prev.filter(arr => arr.id !== id));
-      if (selectedItemId === id) setSelectedItemId(null);
+      setSelectedItemIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       toast.success('PV array deleted');
       return;
     }
@@ -696,7 +735,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     // Try deleting roof mask
     if (roofMasks.some(mask => mask.id === id)) {
       setRoofMasks(prev => prev.filter(mask => mask.id !== id));
-      if (selectedItemId === id) setSelectedItemId(null);
+      setSelectedItemIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       toast.success('Roof mask deleted');
       return;
     }
@@ -704,7 +743,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     // Try deleting equipment
     if (equipment.some(eq => eq.id === id)) {
       setEquipment(prev => prev.filter(eq => eq.id !== id));
-      if (selectedItemId === id) setSelectedItemId(null);
+      setSelectedItemIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       toast.success('Equipment deleted');
       return;
     }
@@ -712,7 +751,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     // Try deleting line
     if (lines.some(line => line.id === id)) {
       setLines(prev => prev.filter(line => line.id !== id));
-      if (selectedItemId === id) setSelectedItemId(null);
+      setSelectedItemIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       toast.success('Cable deleted');
       return;
     }
@@ -720,7 +759,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     // Try deleting placed walkway
     if (placedWalkways.some(w => w.id === id)) {
       setPlacedWalkways(prev => prev.filter(w => w.id !== id));
-      if (selectedItemId === id) setSelectedItemId(null);
+      setSelectedItemIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       toast.success('Walkway deleted');
       return;
     }
@@ -728,18 +767,70 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     // Try deleting placed cable tray
     if (placedCableTrays.some(c => c.id === id)) {
       setPlacedCableTrays(prev => prev.filter(c => c.id !== id));
-      if (selectedItemId === id) setSelectedItemId(null);
+      setSelectedItemIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       toast.success('Cable tray deleted');
       return;
     }
-  }, [selectedItemId, pvArrays, roofMasks, equipment, lines, placedWalkways, placedCableTrays, setPvArrays, setRoofMasks, setEquipment, setLines, setPlacedWalkways, setPlacedCableTrays]);
+  }, [pvArrays, roofMasks, equipment, lines, placedWalkways, placedCableTrays, setPvArrays, setRoofMasks, setEquipment, setLines, setPlacedWalkways, setPlacedCableTrays]);
 
-  // Delete selected item (wrapper for keyboard shortcut)
+  // Delete all selected items (for multi-selection)
+  const handleDeleteSelectedItems = useCallback(() => {
+    if (selectedItemIds.size === 0) return;
+    
+    const idsToDelete = Array.from(selectedItemIds);
+    let deletedCount = 0;
+    
+    // Delete PV arrays
+    const pvToDelete = pvArrays.filter(arr => selectedItemIds.has(arr.id));
+    if (pvToDelete.length > 0) {
+      setPvArrays(prev => prev.filter(arr => !selectedItemIds.has(arr.id)));
+      deletedCount += pvToDelete.length;
+    }
+    
+    // Delete equipment
+    const eqToDelete = equipment.filter(eq => selectedItemIds.has(eq.id));
+    if (eqToDelete.length > 0) {
+      setEquipment(prev => prev.filter(eq => !selectedItemIds.has(eq.id)));
+      deletedCount += eqToDelete.length;
+    }
+    
+    // Delete walkways
+    const walkwaysToDelete = placedWalkways.filter(w => selectedItemIds.has(w.id));
+    if (walkwaysToDelete.length > 0) {
+      setPlacedWalkways(prev => prev.filter(w => !selectedItemIds.has(w.id)));
+      deletedCount += walkwaysToDelete.length;
+    }
+    
+    // Delete cable trays
+    const traysToDelete = placedCableTrays.filter(c => selectedItemIds.has(c.id));
+    if (traysToDelete.length > 0) {
+      setPlacedCableTrays(prev => prev.filter(c => !selectedItemIds.has(c.id)));
+      deletedCount += traysToDelete.length;
+    }
+    
+    // Delete roof masks
+    const masksToDelete = roofMasks.filter(m => selectedItemIds.has(m.id));
+    if (masksToDelete.length > 0) {
+      setRoofMasks(prev => prev.filter(m => !selectedItemIds.has(m.id)));
+      deletedCount += masksToDelete.length;
+    }
+    
+    // Clear selection
+    setSelectedItemIds(new Set());
+    
+    if (deletedCount > 0) {
+      toast.success(`Deleted ${deletedCount} item${deletedCount > 1 ? 's' : ''}`);
+    }
+  }, [selectedItemIds, pvArrays, equipment, placedWalkways, placedCableTrays, roofMasks, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays, setRoofMasks]);
+
+  // Delete selected item (wrapper for keyboard shortcut) - handles both single and multi
   const handleDeleteSelectedItem = useCallback(() => {
-    if (selectedItemId) {
+    if (selectedItemIds.size > 1) {
+      handleDeleteSelectedItems();
+    } else if (selectedItemId) {
       handleDeleteItem(selectedItemId);
     }
-  }, [selectedItemId, handleDeleteItem]);
+  }, [selectedItemIds, selectedItemId, handleDeleteItem, handleDeleteSelectedItems]);
 
   // Delete placed walkway or cable tray instances (not templates)
   const handleDeletePlacedItem = useCallback((type: 'walkway' | 'cableTray', id: string) => {
@@ -1558,6 +1649,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           setPlacementMinSpacing={setPlacementMinSpacing}
           onCopySelected={handleCopySelected}
           selectedItemId={selectedItemId}
+          selectionCount={selectionCount}
           dimensionObject1Id={dimensionObject1Id}
           dimensionObject2Id={dimensionObject2Id}
           alignObject1Id={alignObject1Id}
@@ -1584,7 +1676,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         lines={lines}
         setLines={readOnly ? (() => {}) : setLines}
         selectedItemId={selectedItemId}
-        setSelectedItemId={setSelectedItemId}
+        setSelectedItemId={handleSelectSingle}
+        selectedItemIds={selectedItemIds}
+        onToggleSelection={handleToggleSelection}
         placementRotation={placementRotation}
         pendingPvArrayConfig={pendingPvArrayConfig}
         onRoofMaskComplete={handleRoofMaskComplete}

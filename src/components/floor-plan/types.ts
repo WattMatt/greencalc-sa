@@ -130,6 +130,40 @@ export const initialDesignState: DesignState = {
   placedCableTrays: [],
 };
 
+// Batch placement configuration for multi-copy
+export interface BatchPVArrayConfig {
+  items: Array<{
+    offset: Point; // Relative to group center
+    config: {
+      rows: number;
+      columns: number;
+      orientation: PanelOrientation;
+      minSpacing?: number;
+    };
+    rotation: number;
+  }>;
+}
+
+export interface BatchMaterialConfig {
+  items: Array<{
+    offset: Point;
+    rotation: number;
+    minSpacing: number;
+    configId: string;
+    width: number;
+    length: number;
+    name: string;
+  }>;
+}
+
+export interface BatchEquipmentConfig {
+  items: Array<{
+    offset: Point;
+    rotation: number;
+    type: EquipmentType;
+  }>;
+}
+
 // Plant Setup Configuration Types
 export interface SolarModuleConfig {
   id: string;

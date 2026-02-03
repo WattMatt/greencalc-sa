@@ -121,6 +121,7 @@ interface ToolbarProps {
   onCopySelected?: () => void;
   // Selected item for copy button state
   selectedItemId?: string | null;
+  selectionCount?: number;
   // Dimension tool state
   dimensionObject1Id?: string | null;
   dimensionObject2Id?: string | null;
@@ -160,6 +161,7 @@ export function Toolbar({
   setPlacementMinSpacing,
   onCopySelected,
   selectedItemId,
+  selectionCount = 0,
   dimensionObject1Id,
   dimensionObject2Id,
   alignObject1Id,
@@ -499,10 +501,10 @@ export function Toolbar({
         >
           <ToolButton
             icon={Copy}
-            label="Copy"
+            label={selectionCount > 1 ? `Copy (${selectionCount})` : "Copy"}
             isActive={false}
             onClick={() => onCopySelected?.()}
-            disabled={!selectedItemId}
+            disabled={!selectedItemId && selectionCount === 0}
           />
           <ToolButton
             icon={MoveHorizontal}
