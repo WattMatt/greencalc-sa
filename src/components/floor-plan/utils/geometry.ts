@@ -715,14 +715,29 @@ export const calculateNewPositionAtDistance = (
   const unitX = dx / centerDist;
   const unitY = dy / centerDist;
   
-  // Calculate the edge offsets in the direction of movement
-  // For axis-aligned bounding boxes, we use the half-dimension that aligns with the movement direction
-  const absDx = Math.abs(unitX);
-  const absDy = Math.abs(unitY);
+  // Calculate edge offset using ray-box intersection
+  // For each object, find where a ray from center in direction (unitX, unitY) intersects the AABB edge
+  const calcEdgeOffset = (halfW: number, halfH: number, ux: number, uy: number): number => {
+    const absUx = Math.abs(ux);
+    const absUy = Math.abs(uy);
+    
+    // Handle axis-aligned cases to avoid division by near-zero
+    if (absUx < EPSILON) {
+      return halfH; // Moving purely vertically
+    }
+    if (absUy < EPSILON) {
+      return halfW; // Moving purely horizontally
+    }
+    
+    // Ray-box intersection: find t where ray hits edge
+    // Ray: P + t * direction, check which edge is hit first
+    const tX = halfW / absUx; // t when ray hits left/right edge
+    const tY = halfH / absUy; // t when ray hits top/bottom edge
+    return Math.min(tX, tY); // Distance from center to edge along ray
+  };
   
-  // Weighted average of half-dimensions based on direction
-  const edgeOffset1 = halfWidth1 * absDx + halfHeight1 * absDy;
-  const edgeOffset2 = halfWidth2 * absDx + halfHeight2 * absDy;
+  const edgeOffset1 = calcEdgeOffset(halfWidth1, halfHeight1, unitX, unitY);
+  const edgeOffset2 = calcEdgeOffset(halfWidth2, halfHeight2, unitX, unitY);
   
   // Target center-to-center distance = edge1 + gap + edge2
   const targetCenterDist = edgeOffset1 + (targetDistanceMeters / scaleRatio) + edgeOffset2;
