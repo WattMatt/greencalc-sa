@@ -1268,8 +1268,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       return;
     }
     
-    // Determine which IDs to move
-    const idsToMove = selectedItemIds.size > 1 
+    // Determine which IDs to move - only batch-move if the primary object is actually in the current selection
+    const isPrimaryInSelection = selectedItemIds.has(dimensionObject1Id);
+    const idsToMove = (isPrimaryInSelection && selectedItemIds.size > 1)
       ? new Set(Array.from(selectedItemIds).filter(id => id !== dimensionObject2Id))
       : new Set([dimensionObject1Id]);
     
@@ -1345,8 +1346,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       return;
     }
     
-    // Determine which IDs to move - all selected items except the reference object
-    const idsToMove = selectedItemIds.size > 1 
+    // Determine which IDs to move - only batch-move if the primary object is actually in the current selection
+    const isPrimaryInSelection = selectedItemIds.has(alignObject1Id);
+    const idsToMove = (isPrimaryInSelection && selectedItemIds.size > 1)
       ? new Set(Array.from(selectedItemIds).filter(id => id !== object2Id))
       : new Set([alignObject1Id]);
     
@@ -1448,8 +1450,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       return;
     }
     
-    // Determine which IDs to move - all selected items except the reference object
-    const idsToMove = selectedItemIds.size > 1 
+    // Determine which IDs to move - only batch-move if the primary object is actually in the current selection
+    const isPrimaryInSelection = selectedItemIds.has(alignObject1Id);
+    const idsToMove = (isPrimaryInSelection && selectedItemIds.size > 1)
       ? new Set(Array.from(selectedItemIds).filter(id => id !== alignObject2Id))
       : new Set([alignObject1Id]);
     
