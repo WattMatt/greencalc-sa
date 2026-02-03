@@ -1324,24 +1324,49 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       alignmentEdge
     );
     
-    // Update the position of object 1
-    if (pvArrays.find(a => a.id === alignObject1Id)) {
-      setPvArrays(prev => prev.map(arr => 
-        arr.id === alignObject1Id ? { ...arr, position: newPos } : arr
-      ));
-    } else if (equipment.find(e => e.id === alignObject1Id)) {
-      setEquipment(prev => prev.map(eq => 
-        eq.id === alignObject1Id ? { ...eq, position: newPos } : eq
-      ));
-    } else if (placedWalkways.find(w => w.id === alignObject1Id)) {
-      setPlacedWalkways(prev => prev.map(w => 
-        w.id === alignObject1Id ? { ...w, position: newPos } : w
-      ));
-    } else if (placedCableTrays.find(c => c.id === alignObject1Id)) {
-      setPlacedCableTrays(prev => prev.map(c => 
-        c.id === alignObject1Id ? { ...c, position: newPos } : c
-      ));
+    // Calculate delta to apply to all selected items (same as Distance Between)
+    const delta: Point = {
+      x: newPos.x - pos1.x,
+      y: newPos.y - pos1.y,
+    };
+    
+    // Skip if no movement needed
+    if (Math.abs(delta.x) < 0.001 && Math.abs(delta.y) < 0.001) {
+      toast.info('Already aligned');
+      return;
     }
+    
+    // Determine which IDs to move - all selected items except the reference object
+    const idsToMove = selectedItemIds.size > 1 
+      ? new Set(Array.from(selectedItemIds).filter(id => id !== object2Id))
+      : new Set([alignObject1Id]);
+    
+    // Apply movement to ALL object types in a SINGLE atomic commit
+    commitState((prev) => ({
+      ...prev,
+      pvArrays: prev.pvArrays.map(arr => 
+        idsToMove.has(arr.id) 
+          ? { ...arr, position: { x: arr.position.x + delta.x, y: arr.position.y + delta.y } }
+          : arr
+      ),
+      equipment: prev.equipment.map(eq => 
+        idsToMove.has(eq.id)
+          ? { ...eq, position: { x: eq.position.x + delta.x, y: eq.position.y + delta.y } }
+          : eq
+      ),
+      placedWalkways: prev.placedWalkways.map(w => 
+        idsToMove.has(w.id)
+          ? { ...w, position: { x: w.position.x + delta.x, y: w.position.y + delta.y } }
+          : w
+      ),
+      placedCableTrays: prev.placedCableTrays.map(c => 
+        idsToMove.has(c.id)
+          ? { ...c, position: { x: c.position.x + delta.x, y: c.position.y + delta.y } }
+          : c
+      ),
+    }));
+    
+    const movedCount = idsToMove.size;
     
     // Reset align edges tool state
     setAlignObject1Id(null);
@@ -1349,8 +1374,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     setAlignEdge1(null);
     setAlignEdge2(null);
     setActiveTool(Tool.SELECT);
-    toast.success(`Edges aligned (${alignmentEdge})`);
-  }, [alignObject1Id, getObjectPosition, getObjectDimensions, pvArrays, equipment, placedWalkways, placedCableTrays, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays]);
+    toast.success(`Edges aligned (${alignmentEdge})${movedCount > 1 ? ` - ${movedCount} items moved` : ''}`);
+  }, [alignObject1Id, getObjectPosition, getObjectDimensions, selectedItemIds, commitState]);
 
   // Handle align edges tool object selection
   const handleAlignEdgesObjectClick = useCallback((id: string, clickedEdge: AlignmentEdge | null) => {
@@ -1401,24 +1426,50 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       alignmentEdge
     );
     
-    // Update the position of object 1
-    if (pvArrays.find(a => a.id === alignObject1Id)) {
-      setPvArrays(prev => prev.map(arr => 
-        arr.id === alignObject1Id ? { ...arr, position: newPos } : arr
-      ));
-    } else if (equipment.find(e => e.id === alignObject1Id)) {
-      setEquipment(prev => prev.map(eq => 
-        eq.id === alignObject1Id ? { ...eq, position: newPos } : eq
-      ));
-    } else if (placedWalkways.find(w => w.id === alignObject1Id)) {
-      setPlacedWalkways(prev => prev.map(w => 
-        w.id === alignObject1Id ? { ...w, position: newPos } : w
-      ));
-    } else if (placedCableTrays.find(c => c.id === alignObject1Id)) {
-      setPlacedCableTrays(prev => prev.map(c => 
-        c.id === alignObject1Id ? { ...c, position: newPos } : c
-      ));
+    // Calculate delta to apply to all selected items (same as Distance Between)
+    const delta: Point = {
+      x: newPos.x - pos1.x,
+      y: newPos.y - pos1.y,
+    };
+    
+    // Skip if no movement needed
+    if (Math.abs(delta.x) < 0.001 && Math.abs(delta.y) < 0.001) {
+      toast.info('Already aligned');
+      setIsAlignEdgesModalOpen(false);
+      return;
     }
+    
+    // Determine which IDs to move - all selected items except the reference object
+    const idsToMove = selectedItemIds.size > 1 
+      ? new Set(Array.from(selectedItemIds).filter(id => id !== alignObject2Id))
+      : new Set([alignObject1Id]);
+    
+    // Apply movement to ALL object types in a SINGLE atomic commit
+    commitState((prev) => ({
+      ...prev,
+      pvArrays: prev.pvArrays.map(arr => 
+        idsToMove.has(arr.id) 
+          ? { ...arr, position: { x: arr.position.x + delta.x, y: arr.position.y + delta.y } }
+          : arr
+      ),
+      equipment: prev.equipment.map(eq => 
+        idsToMove.has(eq.id)
+          ? { ...eq, position: { x: eq.position.x + delta.x, y: eq.position.y + delta.y } }
+          : eq
+      ),
+      placedWalkways: prev.placedWalkways.map(w => 
+        idsToMove.has(w.id)
+          ? { ...w, position: { x: w.position.x + delta.x, y: w.position.y + delta.y } }
+          : w
+      ),
+      placedCableTrays: prev.placedCableTrays.map(c => 
+        idsToMove.has(c.id)
+          ? { ...c, position: { x: c.position.x + delta.x, y: c.position.y + delta.y } }
+          : c
+      ),
+    }));
+    
+    const movedCount = idsToMove.size;
     
     // Reset align edges tool state
     setAlignObject1Id(null);
@@ -1427,8 +1478,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     setAlignEdge2(null);
     setIsAlignEdgesModalOpen(false);
     setActiveTool(Tool.SELECT);
-    toast.success(`Edges aligned (${alignmentEdge})`);
-  }, [alignObject1Id, alignObject2Id, getObjectPosition, getObjectDimensions, pvArrays, equipment, placedWalkways, placedCableTrays, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays]);
+    toast.success(`Edges aligned (${alignmentEdge})${movedCount > 1 ? ` - ${movedCount} items moved` : ''}`);
+  }, [alignObject1Id, alignObject2Id, getObjectPosition, getObjectDimensions, selectedItemIds, commitState]);
   useEffect(() => {
     if (readOnly) return;
     
