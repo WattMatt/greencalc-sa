@@ -51,6 +51,7 @@ interface ScadaImport {
   weekend_days: number | null;
   processed_at: string | null;
   category_id: string | null;
+  file_name: string | null;
 }
 
 interface Site {
@@ -162,7 +163,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       // Use a higher limit to fetch all meters (default is 1000)
       let query = supabase
         .from("scada_imports")
-        .select("id, site_name, site_id, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at, load_profile_weekday, load_profile_weekend, weekday_days, weekend_days, processed_at, category_id")
+        .select("id, site_name, site_id, shop_number, shop_name, area_sqm, meter_label, meter_color, date_range_start, date_range_end, data_points, created_at, load_profile_weekday, load_profile_weekend, weekday_days, weekend_days, processed_at, category_id, file_name")
         .order("created_at", { ascending: false })
         .limit(5000);
       
@@ -1578,11 +1579,19 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
                       <TableCell>
                       <div>
                         <div className="font-medium">{getMeterDisplayName(meter)}</div>
-                        {meter.meter_label && (
-                          <div className="text-xs text-muted-foreground">
-                            {meter.shop_name || meter.shop_number || meter.site_name}
-                          </div>
-                        )}
+                        <div className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+                          {meter.meter_label && (
+                            <span>{meter.shop_name || meter.shop_number || meter.site_name}</span>
+                          )}
+                          {meter.file_name && (
+                            <>
+                              {meter.meter_label && <span className="text-muted-foreground/50">•</span>}
+                              <span className="text-muted-foreground/70 truncate max-w-[200px]" title={meter.file_name}>
+                                {meter.file_name}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
