@@ -1217,15 +1217,6 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     
     if (!pos1 || !pos2 || !dims1 || !dims2) return;
     
-    console.log('[Set Distance] Input:', {
-      object1Id: dimensionObject1Id,
-      pos1, dims1,
-      object2Id: dimensionObject2Id,
-      pos2, dims2,
-      newDistance,
-      scaleRatio: scaleInfo.ratio,
-    });
-    
     const newPos = calculateNewPositionAtDistance(
       pos1,
       { width: dims1.width, height: dims1.height },
@@ -1237,38 +1228,66 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       scaleInfo.ratio
     );
     
-    console.log('[Set Distance] Result:', {
-      oldPos: pos1,
-      newPos,
-      delta: { x: newPos.x - pos1.x, y: newPos.y - pos1.y },
+    // Calculate delta to apply to all selected items
+    const delta: Point = {
+      x: newPos.x - pos1.x,
+      y: newPos.y - pos1.y,
+    };
+    
+    console.log('[Set Distance] Moving group:', {
+      object1Id: dimensionObject1Id,
+      delta,
+      selectedCount: selectedItemIds.size,
+      selectedIds: Array.from(selectedItemIds),
     });
     
-    // Update the position of object 1
-    if (pvArrays.find(a => a.id === dimensionObject1Id)) {
-      setPvArrays(prev => prev.map(arr => 
-        arr.id === dimensionObject1Id ? { ...arr, position: newPos } : arr
-      ));
-    } else if (equipment.find(e => e.id === dimensionObject1Id)) {
-      setEquipment(prev => prev.map(eq => 
-        eq.id === dimensionObject1Id ? { ...eq, position: newPos } : eq
-      ));
-    } else if (placedWalkways.find(w => w.id === dimensionObject1Id)) {
-      setPlacedWalkways(prev => prev.map(w => 
-        w.id === dimensionObject1Id ? { ...w, position: newPos } : w
-      ));
-    } else if (placedCableTrays.find(c => c.id === dimensionObject1Id)) {
-      setPlacedCableTrays(prev => prev.map(c => 
-        c.id === dimensionObject1Id ? { ...c, position: newPos } : c
-      ));
-    }
+    // If we have a multi-selection (more than just object1), move ALL selected items by the delta
+    // Object2 (reference) should NOT move, so exclude it from the selection
+    const idsToMove = selectedItemIds.size > 1 
+      ? new Set(Array.from(selectedItemIds).filter(id => id !== dimensionObject2Id))
+      : new Set([dimensionObject1Id]);
+    
+    // Move all PV arrays in selection
+    setPvArrays(prev => prev.map(arr => {
+      if (idsToMove.has(arr.id)) {
+        return { ...arr, position: { x: arr.position.x + delta.x, y: arr.position.y + delta.y } };
+      }
+      return arr;
+    }));
+    
+    // Move all equipment in selection
+    setEquipment(prev => prev.map(eq => {
+      if (idsToMove.has(eq.id)) {
+        return { ...eq, position: { x: eq.position.x + delta.x, y: eq.position.y + delta.y } };
+      }
+      return eq;
+    }));
+    
+    // Move all walkways in selection
+    setPlacedWalkways(prev => prev.map(w => {
+      if (idsToMove.has(w.id)) {
+        return { ...w, position: { x: w.position.x + delta.x, y: w.position.y + delta.y } };
+      }
+      return w;
+    }));
+    
+    // Move all cable trays in selection
+    setPlacedCableTrays(prev => prev.map(c => {
+      if (idsToMove.has(c.id)) {
+        return { ...c, position: { x: c.position.x + delta.x, y: c.position.y + delta.y } };
+      }
+      return c;
+    }));
+    
+    const movedCount = idsToMove.size;
     
     // Reset dimension tool state
     setDimensionObject1Id(null);
     setDimensionObject2Id(null);
     setIsSetDistanceModalOpen(false);
     setActiveTool(Tool.SELECT);
-    toast.success(`Distance set to ${newDistance.toFixed(2)}m`);
-  }, [dimensionObject1Id, dimensionObject2Id, scaleInfo.ratio, getObjectPosition, getObjectDimensions, pvArrays, equipment, placedWalkways, placedCableTrays, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays]);
+    toast.success(`Distance set to ${newDistance.toFixed(2)}m${movedCount > 1 ? ` (${movedCount} items moved)` : ''}`);
+  }, [dimensionObject1Id, dimensionObject2Id, scaleInfo.ratio, getObjectPosition, getObjectDimensions, selectedItemIds, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays]);
 
   // Note: Dimension and align edges tool selection states are intentionally NOT cleared
   // when changing tools, so the selection mask remains visible while using Select/Pan tools.
