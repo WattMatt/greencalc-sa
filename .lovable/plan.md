@@ -1,42 +1,28 @@
 
-
-# Fix: Distance Between Tool Not Moving Objects to Correct Position
+# Fix: DimensionInput Unit Conversion Overwrites User Input
 
 ## Problem Identified
 
-The "Set Distance Between Objects" tool works for some object types but fails for **cable trays and walkways**. The issue is a **double rotation bug** where dimensions are being rotated twice:
+When using the "Set Distance Between Objects" modal:
+1. User opens modal (current distance: 1.89m displayed)
+2. User changes unit dropdown from "m" to "mm"
+3. The `useEffect` in `DimensionInput` triggers and converts the parent value (1.89m) to the new unit (1890mm)
+4. This **overwrites** any value the user intended to type
+5. User types "50" but may be confused by the large number already in the field
+6. If user clears and types "50", it correctly converts to 0.05m
 
-1. **First rotation**: `getMaterialDimensions()` applies rotation to calculate the effective bounding box dimensions
-2. **Second rotation**: `getObjectEdges()` applies rotation again when calculating edge positions
+### The Real Issue from Screenshot
+Looking at the screenshot, the New Distance shows "1,8851" m - this suggests the value was NOT updated when the user clicked Apply. The comma (`,`) in "1,8851" indicates a locale issue where the decimal separator is a comma instead of a period, which can cause `parseFloat()` to fail silently.
 
-This causes incorrect edge calculations, resulting in `calculateNewPositionAtDistance()` producing wrong position values.
-
-### Evidence from Code
-
-```text
-FloorPlanMarkup.tsx (getObjectDimensions - lines 1094-1105):
-─────────────────────────────────────────────────────────────
-const dims = getMaterialDimensions(walkway, scaleInfo);  // ← Already rotated!
-return { width: dims.width, height: dims.height, rotation: walkway.rotation };
-                                                         ↓
-getObjectEdges() applies rotation AGAIN → Wrong edges → Wrong position
-```
-
-**Compare with correct implementations:**
+**Root Cause**: When using a locale with comma as decimal separator (e.g., European locales), the `<input type="number">` displays values with commas, but `parseFloat()` only recognizes periods as decimal separators. This causes the conversion to fail, and `onChange()` is never called with the correct value.
 
 ```text
-drawing.ts (findObjectForHighlight - lines 108-112):
-────────────────────────────────────────────────────
-dimensions: { 
-  width: walkway.width / params.scaleInfo.ratio,   // ← Raw dimensions
-  height: walkway.length / params.scaleInfo.ratio  // ← No rotation applied
-}
-
-useMultiSelection.ts (getItemInfo - lines 119-125):
-────────────────────────────────────────────────────
-dimensions: { 
-  width: walkway.width / scaleInfo.ratio,   // ← Raw dimensions
-  height: walkway.length / scaleInfo.ratio  // ← No rotation applied
+DimensionInput.tsx (line 47):
+─────────────────────────────
+const numericValue = parseFloat(inputValue);  // "1,8851" → NaN!
+if (!isNaN(numericValue)) {  // Fails - onChange never called
+  const meters = displayToMeters(numericValue, unit);
+  onChange(meters);  // ← Never executed!
 }
 ```
 
@@ -44,74 +30,41 @@ dimensions: {
 
 ## Solution
 
-Modify `getObjectDimensions()` in `FloorPlanMarkup.tsx` to return **raw dimensions** for walkways and cable trays, matching the pattern used in `drawing.ts` and `useMultiSelection.ts`.
+Fix the `DimensionInput` component to handle locale-specific number formats by normalizing the input before parsing:
 
-### File: `src/components/floor-plan/FloorPlanMarkup.tsx`
+### File: `src/components/floor-plan/components/DimensionInput.tsx`
 
-**Change 1**: Update walkway dimension calculation (lines ~1094-1098)
-
-```typescript
-// BEFORE (incorrect - double rotation):
-const walkway = placedWalkways.find(w => w.id === id);
-if (walkway && scaleInfo.ratio) {
-  const dims = getMaterialDimensions(walkway, scaleInfo);
-  return { width: dims.width, height: dims.height, rotation: walkway.rotation };
-}
-
-// AFTER (correct - raw dimensions):
-const walkway = placedWalkways.find(w => w.id === id);
-if (walkway && scaleInfo.ratio) {
-  return { 
-    width: walkway.width / scaleInfo.ratio, 
-    height: walkway.length / scaleInfo.ratio, 
-    rotation: walkway.rotation 
-  };
-}
-```
-
-**Change 2**: Update cable tray dimension calculation (lines ~1101-1105)
+**Change**: Normalize comma to period before parsing in `handleValueChange`:
 
 ```typescript
-// BEFORE (incorrect - double rotation):
-const cableTray = placedCableTrays.find(c => c.id === id);
-if (cableTray && scaleInfo.ratio) {
-  const dims = getMaterialDimensions(cableTray, scaleInfo);
-  return { width: dims.width, height: dims.height, rotation: cableTray.rotation };
-}
-
-// AFTER (correct - raw dimensions):
-const cableTray = placedCableTrays.find(c => c.id === id);
-if (cableTray && scaleInfo.ratio) {
-  return { 
-    width: cableTray.width / scaleInfo.ratio, 
-    height: cableTray.length / scaleInfo.ratio, 
-    rotation: cableTray.rotation 
-  };
-}
+const handleValueChange = (inputValue: string) => {
+  setDisplayValue(inputValue);
+  // Normalize locale decimal separators (comma → period)
+  const normalizedValue = inputValue.replace(',', '.');
+  const numericValue = parseFloat(normalizedValue);
+  if (!isNaN(numericValue)) {
+    const meters = displayToMeters(numericValue, unit);
+    onChange(meters);
+  }
+};
 ```
 
 ---
 
 ## Expected Behavior After Fix
 
-| Object Pair | Distance Tool | Align Edges Tool |
-|-------------|---------------|------------------|
-| Cable Tray ↔ Cable Tray | Works correctly | Works correctly |
-| Walkway ↔ Walkway | Works correctly | Works correctly |
-| Solar Module ↔ Solar Module | Works correctly | Works correctly |
-| Cable Tray ↔ Walkway | Works correctly | Works correctly |
-| Cable Tray ↔ Solar Module | Works correctly | Works correctly |
-| Walkway ↔ Solar Module | Works correctly | Works correctly |
-| Any ↔ Inverter/Equipment | Works correctly | Works correctly |
+| User Action | Before Fix | After Fix |
+|-------------|-----------|-----------|
+| Enter "50" with mm selected | Correctly sets 0.05m | Correctly sets 0.05m |
+| Enter "1,5" with m selected (EU locale) | Silent failure, no change | Correctly sets 1.5m |
+| Enter "0,05" with m selected | Silent failure | Correctly sets 0.05m |
+| Switch units after typing | Value preserved | Value preserved |
 
 ---
 
 ## Testing Scenarios
 
-1. **Cable Tray to Cable Tray**: Place two cable trays, use Distance Between tool, set distance to 0.5m → verify actual distance is 0.5m
-2. **Walkway to Walkway**: Same test with walkways
-3. **Cross-type**: Set distance between cable tray and walkway → verify correct positioning
-4. **Solar Module to Cable Tray**: Ensure PV arrays work with materials
-5. **Rotated Objects**: Test with objects at 45°, 90° rotations to ensure rotation is applied correctly once
-6. **Align Edges**: Verify left/right/top/bottom edge alignment works for all object combinations
-
+1. **Standard Input**: Open Set Distance modal, change to mm, type "50", click Apply - object should move to 50mm distance
+2. **Decimal with Comma**: With locale using commas, enter "0,5" in meters, Apply - should set 0.5m distance
+3. **Unit Switch Flow**: Enter "500" in mm (0.5m), switch to m, display shows "0.5", switch to cm, display shows "50"
+4. **Edge Align Tool**: Verify edge alignment still works correctly after this fix
