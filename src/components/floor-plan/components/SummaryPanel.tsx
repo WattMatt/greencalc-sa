@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check } from 'lucide-react';
+import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check, Eye, EyeOff } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig, PlacedWalkway, PlacedCableTray, EquipmentType } from '../types';
+import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig, PlacedWalkway, PlacedCableTray, EquipmentType, LayerVisibility } from '../types';
 import { calculateTotalPVCapacity, calculatePolygonArea, calculateLineLength } from '../utils/geometry';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
@@ -39,39 +39,75 @@ interface SummaryPanelProps {
   placedCableTrays?: PlacedCableTray[];
   assignedSimulation?: SimulationData | null;
   simulationSelector?: React.ReactNode;
+  layerVisibility?: LayerVisibility;
+  onToggleLayerVisibility?: (layer: keyof LayerVisibility) => void;
 }
 
-// Reusable collapsible section component
+// Reusable collapsible section component with visibility toggle
 function CollapsibleSection({
   icon,
   title,
   summary,
   defaultOpen = true,
   children,
+  isVisible,
+  onToggleVisibility,
 }: {
   icon: React.ReactNode;
   title: string;
   summary?: string;
   defaultOpen?: boolean;
   children: React.ReactNode;
+  isVisible?: boolean;
+  onToggleVisibility?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger asChild>
-        <button className="flex items-center gap-2 w-full hover:bg-accent/50 rounded p-1 -ml-1 transition-colors">
-          {icon}
-          <span className="text-sm font-medium">{title}</span>
-          <span className="text-xs text-muted-foreground ml-auto mr-1">
-            {summary}
-          </span>
-          <ChevronDown className={cn(
-            "h-4 w-4 text-muted-foreground transition-transform",
-            isOpen && "rotate-180"
-          )} />
-        </button>
-      </CollapsibleTrigger>
+      <div className="flex items-center gap-1 w-full">
+        {/* Visibility toggle button */}
+        {onToggleVisibility !== undefined && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0 -ml-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleVisibility();
+                }}
+              >
+                {isVisible ? (
+                  <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                ) : (
+                  <EyeOff className="h-3.5 w-3.5 text-muted-foreground/50" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              {isVisible ? 'Hide on canvas' : 'Show on canvas'}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        <CollapsibleTrigger asChild>
+          <button className={cn(
+            "flex items-center gap-2 flex-1 hover:bg-accent/50 rounded p-1 transition-colors",
+            !isVisible && "opacity-50"
+          )}>
+            {icon}
+            <span className="text-sm font-medium">{title}</span>
+            <span className="text-xs text-muted-foreground ml-auto mr-1">
+              {summary}
+            </span>
+            <ChevronDown className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform",
+              isOpen && "rotate-180"
+            )} />
+          </button>
+        </CollapsibleTrigger>
+      </div>
       <CollapsibleContent className="pt-2">
         {children}
       </CollapsibleContent>
@@ -98,6 +134,8 @@ export function SummaryPanel({
   placedCableTrays = [],
   assignedSimulation,
   simulationSelector,
+  layerVisibility,
+  onToggleLayerVisibility,
 }: SummaryPanelProps) {
   const { panelCount, capacityKwp } = pvPanelConfig
     ? calculateTotalPVCapacity(pvArrays, pvPanelConfig)
@@ -277,6 +315,8 @@ export function SummaryPanel({
               title="Roof Areas"
               summary={`${totalRoofArea.toFixed(0)} m²`}
               defaultOpen={false}
+              isVisible={layerVisibility?.roofMasks}
+              onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('roofMasks') : undefined}
             >
               {roofMasks.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No roof masks defined</p>
@@ -341,6 +381,8 @@ export function SummaryPanel({
               title="Modules"
               summary={`${panelCount}`}
               defaultOpen={false}
+              isVisible={layerVisibility?.pvArrays}
+              onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('pvArrays') : undefined}
             >
               {pvArrays.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No arrays placed</p>
@@ -393,6 +435,8 @@ export function SummaryPanel({
               title="Inverters"
               summary={`${layoutInverterCount}`}
               defaultOpen={false}
+              isVisible={layerVisibility?.equipment}
+              onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('equipment') : undefined}
             >
               {layoutInverterCount === 0 ? (
                 <p className="text-xs text-muted-foreground">No inverters placed</p>
@@ -446,6 +490,8 @@ export function SummaryPanel({
               title="Walkways"
               summary={`${totalWalkwayLength.toFixed(0)} m`}
               defaultOpen={false}
+              isVisible={layerVisibility?.walkways}
+              onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('walkways') : undefined}
             >
               {placedWalkways.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No walkways placed</p>
@@ -479,6 +525,8 @@ export function SummaryPanel({
               title="Cable Trays"
               summary={`${totalCableTrayLength.toFixed(0)} m`}
               defaultOpen={false}
+              isVisible={layerVisibility?.cableTrays}
+              onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('cableTrays') : undefined}
             >
               {placedCableTrays.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No cable trays placed</p>
@@ -513,6 +561,8 @@ export function SummaryPanel({
               title="Cabling"
               summary={`${(dcCableLength + acCableLength).toFixed(0)} m`}
               defaultOpen={false}
+              isVisible={layerVisibility?.cables}
+              onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('cables') : undefined}
             >
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between p-2 bg-muted rounded">

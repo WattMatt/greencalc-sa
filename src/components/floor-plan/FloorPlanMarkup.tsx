@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem } from './types';
+import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem, LayerVisibility, defaultLayerVisibility } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
@@ -61,6 +61,16 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   // Assigned simulation for this layout
   const [assignedSimulationId, setAssignedSimulationId] = useState<string | null>(null);
   const [assignedSimulation, setAssignedSimulation] = useState<SimulationData>(null);
+  
+  // Layer visibility for canvas rendering
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>(defaultLayerVisibility);
+  
+  const handleToggleLayerVisibility = useCallback((layer: keyof LayerVisibility) => {
+    setLayerVisibility(prev => ({
+      ...prev,
+      [layer]: !prev[layer],
+    }));
+  }, []);
   
   // Refs for auto-save
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1965,6 +1975,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         alignObject2Id={alignObject2Id}
         alignEdge1={alignEdge1}
         alignEdge2={alignEdge2}
+        layerVisibility={layerVisibility}
       />
 
       <SummaryPanel
@@ -1994,6 +2005,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
             readOnly={readOnly}
           />
         }
+        layerVisibility={layerVisibility}
+        onToggleLayerVisibility={handleToggleLayerVisibility}
       />
 
       {!readOnly && (

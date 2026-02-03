@@ -256,3 +256,22 @@ export const defaultPlantSetupConfig: PlantSetupConfig = {
   walkways: [],
   cableTrays: [],
 };
+
+// Layer visibility state for canvas rendering
+export interface LayerVisibility {
+  roofMasks: boolean;
+  pvArrays: boolean;
+  equipment: boolean;
+  walkways: boolean;
+  cableTrays: boolean;
+  cables: boolean;
+}
+
+export const defaultLayerVisibility: LayerVisibility = {
+  roofMasks: true,
+  pvArrays: true,
+  equipment: true,
+  walkways: true,
+  cableTrays: true,
+  cables: true,
+};
