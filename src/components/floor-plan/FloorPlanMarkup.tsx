@@ -1234,49 +1234,49 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       y: newPos.y - pos1.y,
     };
     
-    console.log('[Set Distance] Moving group:', {
+    console.log('[Set Distance] Applying:', {
       object1Id: dimensionObject1Id,
+      oldPos: pos1,
+      newPos,
       delta,
-      selectedCount: selectedItemIds.size,
-      selectedIds: Array.from(selectedItemIds),
+      targetDistance: newDistance,
     });
     
-    // If we have a multi-selection (more than just object1), move ALL selected items by the delta
-    // Object2 (reference) should NOT move, so exclude it from the selection
+    // Skip if no movement needed (delta is effectively zero)
+    if (Math.abs(delta.x) < 0.001 && Math.abs(delta.y) < 0.001) {
+      console.warn('[Set Distance] Delta is zero - no movement');
+      toast.error('No movement needed - already at target distance');
+      return;
+    }
+    
+    // Determine which IDs to move
     const idsToMove = selectedItemIds.size > 1 
       ? new Set(Array.from(selectedItemIds).filter(id => id !== dimensionObject2Id))
       : new Set([dimensionObject1Id]);
     
-    // Move all PV arrays in selection
-    setPvArrays(prev => prev.map(arr => {
-      if (idsToMove.has(arr.id)) {
-        return { ...arr, position: { x: arr.position.x + delta.x, y: arr.position.y + delta.y } };
-      }
-      return arr;
-    }));
-    
-    // Move all equipment in selection
-    setEquipment(prev => prev.map(eq => {
-      if (idsToMove.has(eq.id)) {
-        return { ...eq, position: { x: eq.position.x + delta.x, y: eq.position.y + delta.y } };
-      }
-      return eq;
-    }));
-    
-    // Move all walkways in selection
-    setPlacedWalkways(prev => prev.map(w => {
-      if (idsToMove.has(w.id)) {
-        return { ...w, position: { x: w.position.x + delta.x, y: w.position.y + delta.y } };
-      }
-      return w;
-    }));
-    
-    // Move all cable trays in selection
-    setPlacedCableTrays(prev => prev.map(c => {
-      if (idsToMove.has(c.id)) {
-        return { ...c, position: { x: c.position.x + delta.x, y: c.position.y + delta.y } };
-      }
-      return c;
+    // Apply movement to ALL object types in a SINGLE atomic commit
+    commitState((prev) => ({
+      ...prev,
+      pvArrays: prev.pvArrays.map(arr => 
+        idsToMove.has(arr.id) 
+          ? { ...arr, position: { x: arr.position.x + delta.x, y: arr.position.y + delta.y } }
+          : arr
+      ),
+      equipment: prev.equipment.map(eq => 
+        idsToMove.has(eq.id)
+          ? { ...eq, position: { x: eq.position.x + delta.x, y: eq.position.y + delta.y } }
+          : eq
+      ),
+      placedWalkways: prev.placedWalkways.map(w => 
+        idsToMove.has(w.id)
+          ? { ...w, position: { x: w.position.x + delta.x, y: w.position.y + delta.y } }
+          : w
+      ),
+      placedCableTrays: prev.placedCableTrays.map(c => 
+        idsToMove.has(c.id)
+          ? { ...c, position: { x: c.position.x + delta.x, y: c.position.y + delta.y } }
+          : c
+      ),
     }));
     
     const movedCount = idsToMove.size;
@@ -1287,7 +1287,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     setIsSetDistanceModalOpen(false);
     setActiveTool(Tool.SELECT);
     toast.success(`Distance set to ${newDistance.toFixed(2)}m${movedCount > 1 ? ` (${movedCount} items moved)` : ''}`);
-  }, [dimensionObject1Id, dimensionObject2Id, scaleInfo.ratio, getObjectPosition, getObjectDimensions, selectedItemIds, setPvArrays, setEquipment, setPlacedWalkways, setPlacedCableTrays]);
+  }, [dimensionObject1Id, dimensionObject2Id, scaleInfo.ratio, getObjectPosition, getObjectDimensions, selectedItemIds, commitState]);
 
   // Note: Dimension and align edges tool selection states are intentionally NOT cleared
   // when changing tools, so the selection mask remains visible while using Select/Pan tools.
