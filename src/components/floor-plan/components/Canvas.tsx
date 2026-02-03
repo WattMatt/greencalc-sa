@@ -28,6 +28,7 @@ interface CanvasProps {
   setSelectedItemId: (id: string | null) => void;
   selectedItemIds?: Set<string>;
   onToggleSelection?: (id: string) => void;
+  onBoxSelection?: (ids: string[], addToSelection: boolean) => void;
   placementRotation: number;
   pendingPvArrayConfig: PVArrayConfig | null;
   onRoofMaskComplete: (points: Point[], area: number) => void;
@@ -66,7 +67,7 @@ export function Canvas({
   scaleInfo, scaleLine, setScaleLine, onScaleComplete,
   pvPanelConfig, roofMasks, setRoofMasks, pvArrays, setPvArrays,
   equipment, setEquipment, lines, setLines,
-  selectedItemId, setSelectedItemId, selectedItemIds, onToggleSelection, placementRotation,
+  selectedItemId, setSelectedItemId, selectedItemIds, onToggleSelection, onBoxSelection, placementRotation,
   pendingPvArrayConfig, onRoofMaskComplete, onRoofDirectionComplete, onArrayPlaced,
   pendingRoofMaskPoints, onPVArrayDoubleClick, onCopyPvArray, onCopyRoofMask,
   plantSetupConfig,
@@ -107,6 +108,10 @@ export function Canvas({
   const [draggingCableTrayId, setDraggingCableTrayId] = useState<string | null>(null);
   const [cableTrayDragOffset, setCableTrayDragOffset] = useState<Point | null>(null);
   const [mouseWorldPos, setMouseWorldPos] = useState<Point | null>(null);
+  
+  // Marquee selection state
+  const [marqueeStart, setMarqueeStart] = useState<Point | null>(null);
+  const [marqueeEnd, setMarqueeEnd] = useState<Point | null>(null);
 
   const SNAP_THRESHOLD = 15; // pixels in screen space
 
@@ -548,6 +553,26 @@ export function Canvas({
       ctx.globalAlpha = 1.0;
     }
     
+    // Draw marquee selection box
+    if (marqueeStart && marqueeEnd) {
+      const minX = Math.min(marqueeStart.x, marqueeEnd.x);
+      const maxX = Math.max(marqueeStart.x, marqueeEnd.x);
+      const minY = Math.min(marqueeStart.y, marqueeEnd.y);
+      const maxY = Math.max(marqueeStart.y, marqueeEnd.y);
+      
+      ctx.strokeStyle = '#3b82f6';
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+      ctx.lineWidth = 1.5 / viewState.zoom;
+      ctx.setLineDash([6 / viewState.zoom, 4 / viewState.zoom]);
+      
+      ctx.beginPath();
+      ctx.rect(minX, minY, maxX - minX, maxY - minY);
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.setLineDash([]);
+    }
+    
     ctx.restore();
   }, [
     viewState,
@@ -582,6 +607,8 @@ export function Canvas({
     alignObject2Id,
     alignEdge1,
     alignEdge2,
+    marqueeStart,
+    marqueeEnd,
   ]);
 
   const getMousePos = (e: React.MouseEvent): Point => {
@@ -724,10 +751,9 @@ export function Canvas({
         return;
       }
 
-      // Clicked empty space - clear selection (only if not using modifier)
-      if (!isMultiSelectModifier) {
-        setSelectedItemId(null);
-      }
+      // Clicked empty space - start marquee selection
+      setMarqueeStart(worldPos);
+      setMarqueeEnd(worldPos);
       return;
     }
 
@@ -1139,6 +1165,12 @@ export function Canvas({
     const screenPos = getMousePos(e);
     const worldPos = toWorld(screenPos);
 
+    // Update marquee selection box
+    if (marqueeStart) {
+      setMarqueeEnd(worldPos);
+      return;
+    }
+
     if (draggingPvArrayId && pvArrayDragOffset) {
       const basePos = { x: worldPos.x - pvArrayDragOffset.x, y: worldPos.y - pvArrayDragOffset.y };
       
@@ -1322,7 +1354,88 @@ export function Canvas({
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent) => {
+    // Complete marquee selection
+    if (marqueeStart && marqueeEnd && onBoxSelection) {
+      const minX = Math.min(marqueeStart.x, marqueeEnd.x);
+      const maxX = Math.max(marqueeStart.x, marqueeEnd.x);
+      const minY = Math.min(marqueeStart.y, marqueeEnd.y);
+      const maxY = Math.max(marqueeStart.y, marqueeEnd.y);
+      
+      // Only process if we dragged more than 5 pixels to distinguish from click
+      const boxWidth = maxX - minX;
+      const boxHeight = maxY - minY;
+      
+      if (boxWidth > 5 || boxHeight > 5) {
+        const selectedIds: string[] = [];
+        
+        // Check if rectangle is valid (more than just a point/line)
+        const isPointInBox = (p: Point) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
+        const isCenterInBox = (center: Point) => isPointInBox(center);
+        
+        // Check PV arrays
+        if (pvPanelConfig && scaleInfo.ratio) {
+          pvArrays.forEach(arr => {
+            const dims = getPVArrayDimensions(arr, pvPanelConfig, roofMasks, scaleInfo, arr.position);
+            // Use center point for selection
+            if (isCenterInBox(arr.position)) {
+              selectedIds.push(arr.id);
+            }
+          });
+        }
+        
+        // Check walkways
+        placedWalkways?.forEach(walkway => {
+          if (isCenterInBox(walkway.position)) {
+            selectedIds.push(walkway.id);
+          }
+        });
+        
+        // Check cable trays
+        placedCableTrays?.forEach(tray => {
+          if (isCenterInBox(tray.position)) {
+            selectedIds.push(tray.id);
+          }
+        });
+        
+        // Check equipment
+        equipment.forEach(eq => {
+          if (isCenterInBox(eq.position)) {
+            selectedIds.push(eq.id);
+          }
+        });
+        
+        // Check roof masks (by center)
+        roofMasks.forEach(mask => {
+          if (mask.points.length > 0) {
+            const cx = mask.points.reduce((s, p) => s + p.x, 0) / mask.points.length;
+            const cy = mask.points.reduce((s, p) => s + p.y, 0) / mask.points.length;
+            if (isCenterInBox({ x: cx, y: cy })) {
+              selectedIds.push(mask.id);
+            }
+          }
+        });
+        
+        // Determine if adding to selection (Shift held)
+        const addToSelection = e.shiftKey || e.ctrlKey || e.metaKey;
+        onBoxSelection(selectedIds, addToSelection);
+      } else {
+        // Clicked without dragging - clear selection if no modifier
+        const addToSelection = e.shiftKey || e.ctrlKey || e.metaKey;
+        if (!addToSelection) {
+          setSelectedItemId(null);
+        }
+      }
+      
+      setMarqueeStart(null);
+      setMarqueeEnd(null);
+      return;
+    }
+    
+    // Clear marquee state if no callback
+    setMarqueeStart(null);
+    setMarqueeEnd(null);
+    
     setIsPanning(false);
     setDraggingPvArrayId(null);
     setPvArrayDragOffset(null);
@@ -1397,7 +1510,20 @@ export function Canvas({
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseLeave={() => {
+        // Clear all drag/selection states without triggering box selection
+        setMarqueeStart(null);
+        setMarqueeEnd(null);
+        setIsPanning(false);
+        setDraggingPvArrayId(null);
+        setPvArrayDragOffset(null);
+        setDraggingEquipmentId(null);
+        setEquipmentDragOffset(null);
+        setDraggingWalkwayId(null);
+        setWalkwayDragOffset(null);
+        setDraggingCableTrayId(null);
+        setCableTrayDragOffset(null);
+      }}
       onDoubleClick={handleDoubleClick}
       onWheel={handleWheel}
     >

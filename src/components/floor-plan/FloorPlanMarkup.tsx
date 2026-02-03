@@ -201,6 +201,24 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     });
   }, []);
 
+  // Handle box/marquee selection
+  const handleBoxSelection = useCallback((ids: string[], addToSelection: boolean) => {
+    if (ids.length === 0 && !addToSelection) {
+      setSelectedItemIds(new Set());
+      return;
+    }
+    
+    setSelectedItemIds(prev => {
+      if (addToSelection) {
+        const next = new Set(prev);
+        ids.forEach(id => next.add(id));
+        return next;
+      } else {
+        return new Set(ids);
+      }
+    });
+  }, []);
+
   // Dimension tool state
   const [dimensionObject1Id, setDimensionObject1Id] = useState<string | null>(null);
   const [dimensionObject2Id, setDimensionObject2Id] = useState<string | null>(null);
@@ -1861,6 +1879,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         setSelectedItemId={handleSelectSingle}
         selectedItemIds={selectedItemIds}
         onToggleSelection={handleToggleSelection}
+        onBoxSelection={handleBoxSelection}
         placementRotation={placementRotation}
         pendingPvArrayConfig={pendingPvArrayConfig}
         onRoofMaskComplete={handleRoofMaskComplete}
