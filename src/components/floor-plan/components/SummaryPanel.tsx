@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check, Eye, EyeOff } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+
+// Type for grouped materials
+interface GroupedMaterial<T> {
+  name: string;
+  items: T[];
+  totalLength: number;
+}
 
 interface SimulationData {
   id: string;
@@ -117,6 +124,140 @@ function CollapsibleSection({
   );
 }
 
+// Grouped material section with nested collapsibles
+function GroupedMaterialSection<T extends { id: string; name: string; width: number; length: number }>({
+  icon,
+  title,
+  totalSummary,
+  groupedItems,
+  itemType,
+  onDeleteItem,
+  isVisible,
+  onToggleVisibility,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  totalSummary: string;
+  groupedItems: Record<string, GroupedMaterial<T>>;
+  itemType: 'walkway' | 'cableTray';
+  onDeleteItem?: (type: 'walkway' | 'cableTray', id: string) => void;
+  isVisible?: boolean;
+  onToggleVisibility?: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  const groupKeys = Object.keys(groupedItems);
+  const visible = isVisible !== false;
+  
+  const toggleGroup = (key: string) => {
+    setOpenGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="flex items-center gap-1 w-full">
+        {onToggleVisibility !== undefined && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0 -ml-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleVisibility();
+                }}
+              >
+                {visible ? (
+                  <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                ) : (
+                  <EyeOff className="h-3.5 w-3.5 text-muted-foreground/50" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              {visible ? 'Hide on canvas' : 'Show on canvas'}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        <CollapsibleTrigger asChild>
+          <button className={cn(
+            "flex items-center gap-2 flex-1 hover:bg-accent/50 rounded p-1 transition-colors",
+            !visible && "opacity-50"
+          )}>
+            {icon}
+            <span className="text-sm font-medium">{title}</span>
+            <span className="text-xs text-muted-foreground ml-auto mr-1">
+              {totalSummary}
+            </span>
+            <ChevronDown className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform",
+              isOpen && "rotate-180"
+            )} />
+          </button>
+        </CollapsibleTrigger>
+      </div>
+      <CollapsibleContent className="pt-2">
+        {groupKeys.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No {title.toLowerCase()} placed</p>
+        ) : (
+          <div className="space-y-1 pl-2">
+            {groupKeys.map((key) => {
+              const group = groupedItems[key];
+              const isGroupOpen = openGroups.has(key);
+              return (
+                <Collapsible key={key} open={isGroupOpen} onOpenChange={() => toggleGroup(key)}>
+                  <CollapsibleTrigger asChild>
+                    <button className="flex items-center gap-2 w-full hover:bg-accent/50 rounded p-1 text-xs transition-colors">
+                      <ChevronDown className={cn(
+                        "h-3 w-3 text-muted-foreground transition-transform",
+                        isGroupOpen && "rotate-180"
+                      )} />
+                      <span className="font-medium">{group.name}</span>
+                      <span className="text-muted-foreground ml-auto">
+                        {group.totalLength.toFixed(1)}m ({group.items.length})
+                      </span>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-1 pl-4 space-y-1">
+                    {group.items.map((item, i) => (
+                      <div key={item.id} className="flex items-center justify-between p-1.5 bg-muted rounded text-xs">
+                        <span className="text-muted-foreground">{item.width.toFixed(3)}m × {item.length.toFixed(2)}m</span>
+                        {onDeleteItem && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 shrink-0 text-destructive hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteItem(itemType, item.id);
+                            }}
+                            title={`Delete ${itemType === 'walkway' ? 'walkway' : 'cable tray'}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            })}
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 export function SummaryPanel({
   pvArrays,
   roofMasks,
@@ -158,6 +299,34 @@ export function SummaryPanel({
   // Placed item quantities (from DesignState, not plant setup config)
   const totalWalkwayLength = placedWalkways.reduce((sum, w) => sum + w.length, 0);
   const totalCableTrayLength = placedCableTrays.reduce((sum, c) => sum + c.length, 0);
+  
+  // Group walkways by configId
+  const groupedWalkways = useMemo(() => {
+    const groups: Record<string, GroupedMaterial<PlacedWalkway>> = {};
+    placedWalkways.forEach(item => {
+      const key = item.configId || 'default';
+      if (!groups[key]) {
+        groups[key] = { name: item.name, items: [], totalLength: 0 };
+      }
+      groups[key].items.push(item);
+      groups[key].totalLength += item.length;
+    });
+    return groups;
+  }, [placedWalkways]);
+  
+  // Group cable trays by configId
+  const groupedCableTrays = useMemo(() => {
+    const groups: Record<string, GroupedMaterial<PlacedCableTray>> = {};
+    placedCableTrays.forEach(item => {
+      const key = item.configId || 'default';
+      if (!groups[key]) {
+        groups[key] = { name: item.name, items: [], totalLength: 0 };
+      }
+      groups[key].items.push(item);
+      groups[key].totalLength += item.length;
+    });
+    return groups;
+  }, [placedCableTrays]);
   
   // Simulation comparison values
   const simModuleCount = assignedSimulation?.results_json?.moduleCount ?? null;
@@ -487,75 +656,27 @@ export function SummaryPanel({
               )}
             </CollapsibleSection>
 
-            <CollapsibleSection
+            <GroupedMaterialSection
               icon={<Footprints className="h-4 w-4 text-slate-500" />}
               title="Walkways"
-              summary={`${totalWalkwayLength.toFixed(0)} m`}
-              defaultOpen={false}
+              totalSummary={`${totalWalkwayLength.toFixed(0)} m`}
+              groupedItems={groupedWalkways}
+              itemType="walkway"
+              onDeleteItem={onDeletePlacedItem}
               isVisible={layerVisibility?.walkways}
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('walkways') : undefined}
-            >
-              {placedWalkways.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No walkways placed</p>
-              ) : (
-                <div className="space-y-1">
-                  {placedWalkways.map((w, i) => (
-                    <div key={w.id} className="flex items-center justify-between p-2 bg-muted rounded text-xs">
-                      <span>{w.name || `Walkway ${i + 1}`}</span>
-                      <div className="flex items-center gap-2">
-                        <span>{w.width}m × {w.length}m</span>
-                        {onDeletePlacedItem && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
-                            onClick={() => onDeletePlacedItem('walkway', w.id)}
-                            title="Delete walkway"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CollapsibleSection>
+            />
 
-            <CollapsibleSection
+            <GroupedMaterialSection
               icon={<Box className="h-4 w-4 text-orange-500" />}
               title="Cable Trays"
-              summary={`${totalCableTrayLength.toFixed(0)} m`}
-              defaultOpen={false}
+              totalSummary={`${totalCableTrayLength.toFixed(0)} m`}
+              groupedItems={groupedCableTrays}
+              itemType="cableTray"
+              onDeleteItem={onDeletePlacedItem}
               isVisible={layerVisibility?.cableTrays}
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('cableTrays') : undefined}
-            >
-              {placedCableTrays.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No cable trays placed</p>
-              ) : (
-                <div className="space-y-1">
-                  {placedCableTrays.map((c, i) => (
-                    <div key={c.id} className="flex items-center justify-between p-2 bg-muted rounded text-xs">
-                      <span>{c.name || `Tray ${i + 1}`}</span>
-                      <div className="flex items-center gap-2">
-                        <span>{c.width}m × {c.length}m</span>
-                        {onDeletePlacedItem && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
-                            onClick={() => onDeletePlacedItem('cableTray', c.id)}
-                            title="Delete cable tray"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CollapsibleSection>
+            />
 
             {/* Cabling - DC/AC cables */}
             <CollapsibleSection

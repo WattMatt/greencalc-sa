@@ -286,6 +286,16 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     Tool.PLACE_MAIN_BOARD,
   ];
 
+  // Get the selected or default walkway template
+  const getSelectedWalkway = () => {
+    return plantSetupConfig.walkways.find(w => w.id === selectedWalkwayId) || plantSetupConfig.walkways[0];
+  };
+  
+  // Get the selected or default cable tray template  
+  const getSelectedCableTray = () => {
+    return plantSetupConfig.cableTrays.find(c => c.id === selectedCableTrayId) || plantSetupConfig.cableTrays[0];
+  };
+
   // Get placement item name based on pending tool
   const getPlacementItemName = (tool: Tool): string => {
     switch (tool) {
@@ -293,11 +303,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         const defaultInverter = plantSetupConfig.inverters.find(i => i.isDefault) || plantSetupConfig.inverters[0];
         return defaultInverter?.name || 'Inverter';
       case Tool.PLACE_WALKWAY:
-        const defaultWalkway = plantSetupConfig.walkways[0];
-        return defaultWalkway?.name || 'Walkway';
+        return getSelectedWalkway()?.name || 'Walkway';
       case Tool.PLACE_CABLE_TRAY:
-        const defaultTray = plantSetupConfig.cableTrays[0];
-        return defaultTray?.name || 'Cable Tray';
+        return getSelectedCableTray()?.name || 'Cable Tray';
       case Tool.PLACE_DC_COMBINER:
         return 'DC Combiner';
       case Tool.PLACE_AC_DISCONNECT:
@@ -316,10 +324,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         const inv = plantSetupConfig.inverters.find(i => i.isDefault) || plantSetupConfig.inverters[0];
         return inv ? { width: inv.width || 0.7, height: inv.height || 0.5 } : { width: 0.7, height: 0.5 };
       case Tool.PLACE_WALKWAY:
-        const walk = plantSetupConfig.walkways[0];
+        const walk = getSelectedWalkway();
         return walk ? { width: walk.width, height: walk.length } : { width: 0.6, height: 2 };
       case Tool.PLACE_CABLE_TRAY:
-        const tray = plantSetupConfig.cableTrays[0];
+        const tray = getSelectedCableTray();
         return tray ? { width: tray.width, height: tray.length } : { width: 0.3, height: 2 };
       default:
         return { width: 0.5, height: 0.5 };
@@ -1989,6 +1997,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           dimensionObject2Id={dimensionObject2Id}
           alignObject1Id={alignObject1Id}
           alignObject2Id={alignObject2Id}
+          selectedWalkwayId={selectedWalkwayId}
+          setSelectedWalkwayId={setSelectedWalkwayId}
+          selectedCableTrayId={selectedCableTrayId}
+          setSelectedCableTrayId={setSelectedCableTrayId}
         />
       )}
       
