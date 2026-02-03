@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
-import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig, BatchPlacementConfig, LayerVisibility, defaultLayerVisibility } from '../types';
+import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig, BatchPlacementConfig, LayerVisibility, defaultLayerVisibility, SubgroupVisibility } from '../types';
 import { renderAllMarkups, drawPvArray, drawEquipmentIcon, drawWalkway, drawCableTray } from '../utils/drawing';
 import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing, getPVArrayDimensions, getEquipmentDimensions, detectClickedEdge } from '../utils/geometry';
 import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
@@ -62,6 +62,8 @@ interface CanvasProps {
   alignEdge2?: AlignmentEdge | null;
   // Layer visibility
   layerVisibility?: LayerVisibility;
+  // Subgroup visibility for filtering walkways/cable trays by configId
+  subgroupVisibility?: SubgroupVisibility;
 }
 
 export function Canvas({
@@ -88,6 +90,7 @@ export function Canvas({
   alignEdge1,
   alignEdge2,
   layerVisibility = defaultLayerVisibility,
+  subgroupVisibility,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -285,6 +288,7 @@ export function Canvas({
       alignObject1Id, alignObject2Id,
       alignEdge1, alignEdge2,
       layerVisibility,
+      subgroupVisibility,
     });
     
     // Draw current drawing in progress

@@ -1,7 +1,8 @@
 import { 
   Point, PVArrayItem, PVPanelConfig, RoofMask, ScaleInfo, 
   EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig,
-  PlacedWalkway, PlacedCableTray, LayerVisibility, defaultLayerVisibility
+  PlacedWalkway, PlacedCableTray, LayerVisibility, defaultLayerVisibility,
+  SubgroupVisibility
 } from '../types';
 import { TOOL_COLORS, EQUIPMENT_REAL_WORLD_SIZES, getDirectionLabel } from '../constants';
 import { isPointInPolygon, getPolygonCenter, getPVArrayDimensions, getEquipmentDimensions } from './geometry';
@@ -559,6 +560,8 @@ export interface RenderAllParams {
   alignEdge2?: AlignmentEdge | null;
   // Layer visibility
   layerVisibility?: LayerVisibility;
+  // Subgroup visibility for filtering walkways/cable trays by configId
+  subgroupVisibility?: SubgroupVisibility;
 }
 
 /**
@@ -568,7 +571,7 @@ export const renderAllMarkups = (
   ctx: CanvasRenderingContext2D,
   params: RenderAllParams
 ) => {
-  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, selectedItemIds, scaleLine, plantSetupConfig, placedWalkways, placedCableTrays, layerVisibility = defaultLayerVisibility } = params;
+  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, selectedItemIds, scaleLine, plantSetupConfig, placedWalkways, placedCableTrays, layerVisibility = defaultLayerVisibility, subgroupVisibility } = params;
 
   // Helper to check if an item is selected (supports both single and multi-selection)
   const isItemSelected = (id: string) => {
@@ -585,16 +588,24 @@ export const renderAllMarkups = (
     }
   }
 
-  // Draw walkways (below PV arrays)
+  // Draw walkways (below PV arrays) - filter by subgroup visibility
   if (layerVisibility.walkways && placedWalkways) {
-    for (const walkway of placedWalkways) {
+    const visibleWalkways = placedWalkways.filter(w => {
+      const configId = w.configId || 'default';
+      return subgroupVisibility?.walkwaySubgroups?.[configId] !== false;
+    });
+    for (const walkway of visibleWalkways) {
       drawWalkway(ctx, walkway, isItemSelected(walkway.id), false, zoom, scaleInfo);
     }
   }
 
-  // Draw cable trays (below PV arrays)
+  // Draw cable trays (below PV arrays) - filter by subgroup visibility
   if (layerVisibility.cableTrays && placedCableTrays) {
-    for (const tray of placedCableTrays) {
+    const visibleTrays = placedCableTrays.filter(t => {
+      const configId = t.configId || 'default';
+      return subgroupVisibility?.cableTraySubgroups?.[configId] !== false;
+    });
+    for (const tray of visibleTrays) {
       drawCableTray(ctx, tray, isItemSelected(tray.id), false, zoom, scaleInfo);
     }
   }

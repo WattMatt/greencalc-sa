@@ -257,6 +257,17 @@ export const defaultPlantSetupConfig: PlantSetupConfig = {
   cableTrays: [],
 };
 
+// Subgroup visibility for walkways and cable trays by configId
+export interface SubgroupVisibility {
+  walkwaySubgroups: Record<string, boolean>;
+  cableTraySubgroups: Record<string, boolean>;
+}
+
+export const defaultSubgroupVisibility: SubgroupVisibility = {
+  walkwaySubgroups: {},
+  cableTraySubgroups: {},
+};
+
 // Layer visibility state for canvas rendering
 export interface LayerVisibility {
   roofMasks: boolean;

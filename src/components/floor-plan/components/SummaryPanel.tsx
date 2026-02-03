@@ -48,6 +48,11 @@ interface SummaryPanelProps {
   simulationSelector?: React.ReactNode;
   layerVisibility?: LayerVisibility;
   onToggleLayerVisibility?: (layer: keyof LayerVisibility) => void;
+  // Subgroup visibility (from parent)
+  walkwaySubgroupVisibility?: Record<string, boolean>;
+  cableTraySubgroupVisibility?: Record<string, boolean>;
+  onToggleWalkwaySubgroupVisibility?: (configId: string) => void;
+  onToggleCableTraySubgroupVisibility?: (configId: string) => void;
 }
 
 // Reusable collapsible section component with visibility toggle
@@ -318,6 +323,10 @@ export function SummaryPanel({
   simulationSelector,
   layerVisibility,
   onToggleLayerVisibility,
+  walkwaySubgroupVisibility,
+  cableTraySubgroupVisibility,
+  onToggleWalkwaySubgroupVisibility,
+  onToggleCableTraySubgroupVisibility,
 }: SummaryPanelProps) {
   const { panelCount, capacityKwp } = pvPanelConfig
     ? calculateTotalPVCapacity(pvArrays, pvPanelConfig)
@@ -336,10 +345,11 @@ export function SummaryPanel({
     .reduce((sum, l) => sum + calculateLineLength(l.points, scaleInfo.ratio), 0);
 
   // Placed item quantities (from DesignState, not plant setup config)
-  const totalWalkwayLength = placedWalkways.reduce((sum, w) => sum + w.length, 0);
-  const totalCableTrayLength = placedCableTrays.reduce((sum, c) => sum + c.length, 0);
+  // Use Math.max(width, length) to get actual length regardless of orientation swap
+  const totalWalkwayLength = placedWalkways.reduce((sum, w) => sum + Math.max(w.width, w.length), 0);
+  const totalCableTrayLength = placedCableTrays.reduce((sum, c) => sum + Math.max(c.width, c.length), 0);
   
-  // Group walkways by configId
+  // Group walkways by configId - use Math.max for correct length
   const groupedWalkways = useMemo(() => {
     const groups: Record<string, GroupedMaterial<PlacedWalkway>> = {};
     placedWalkways.forEach(item => {
@@ -348,12 +358,12 @@ export function SummaryPanel({
         groups[key] = { name: item.name, items: [], totalLength: 0 };
       }
       groups[key].items.push(item);
-      groups[key].totalLength += item.length;
+      groups[key].totalLength += Math.max(item.width, item.length);
     });
     return groups;
   }, [placedWalkways]);
   
-  // Group cable trays by configId
+  // Group cable trays by configId - use Math.max for correct length
   const groupedCableTrays = useMemo(() => {
     const groups: Record<string, GroupedMaterial<PlacedCableTray>> = {};
     placedCableTrays.forEach(item => {
@@ -362,28 +372,12 @@ export function SummaryPanel({
         groups[key] = { name: item.name, items: [], totalLength: 0 };
       }
       groups[key].items.push(item);
-      groups[key].totalLength += item.length;
+      groups[key].totalLength += Math.max(item.width, item.length);
     });
     return groups;
   }, [placedCableTrays]);
   
-  // Subgroup visibility state (per configId)
-  const [walkwaySubgroupVisibility, setWalkwaySubgroupVisibility] = useState<Record<string, boolean>>({});
-  const [cableTraySubgroupVisibility, setCableTraySubgroupVisibility] = useState<Record<string, boolean>>({});
-  
-  const toggleWalkwaySubgroupVisibility = (configId: string) => {
-    setWalkwaySubgroupVisibility(prev => ({
-      ...prev,
-      [configId]: prev[configId] === false ? true : false
-    }));
-  };
-  
-  const toggleCableTraySubgroupVisibility = (configId: string) => {
-    setCableTraySubgroupVisibility(prev => ({
-      ...prev,
-      [configId]: prev[configId] === false ? true : false
-    }));
-  };
+  // Use visibility props from parent (if provided)
   
   // Simulation comparison values
   const simModuleCount = assignedSimulation?.results_json?.moduleCount ?? null;
@@ -722,7 +716,7 @@ export function SummaryPanel({
               isVisible={layerVisibility?.walkways}
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('walkways') : undefined}
               subgroupVisibility={walkwaySubgroupVisibility}
-              onToggleSubgroupVisibility={toggleWalkwaySubgroupVisibility}
+              onToggleSubgroupVisibility={onToggleWalkwaySubgroupVisibility}
             />
 
             <GroupedMaterialSection
@@ -735,7 +729,7 @@ export function SummaryPanel({
               isVisible={layerVisibility?.cableTrays}
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('cableTrays') : undefined}
               subgroupVisibility={cableTraySubgroupVisibility}
-              onToggleSubgroupVisibility={toggleCableTraySubgroupVisibility}
+              onToggleSubgroupVisibility={onToggleCableTraySubgroupVisibility}
             />
 
             {/* Cabling - DC/AC cables */}

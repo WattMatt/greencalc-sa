@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem, LayerVisibility, defaultLayerVisibility } from './types';
+import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem, LayerVisibility, defaultLayerVisibility, SubgroupVisibility, defaultSubgroupVisibility } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
@@ -65,10 +65,33 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   // Layer visibility for canvas rendering
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>(defaultLayerVisibility);
   
+  // Subgroup visibility for walkways/cable trays (per configId)
+  const [subgroupVisibility, setSubgroupVisibility] = useState<SubgroupVisibility>(defaultSubgroupVisibility);
+  
   const handleToggleLayerVisibility = useCallback((layer: keyof LayerVisibility) => {
     setLayerVisibility(prev => ({
       ...prev,
       [layer]: !prev[layer],
+    }));
+  }, []);
+  
+  const handleToggleWalkwaySubgroupVisibility = useCallback((configId: string) => {
+    setSubgroupVisibility(prev => ({
+      ...prev,
+      walkwaySubgroups: {
+        ...prev.walkwaySubgroups,
+        [configId]: prev.walkwaySubgroups[configId] === false ? true : false,
+      },
+    }));
+  }, []);
+  
+  const handleToggleCableTraySubgroupVisibility = useCallback((configId: string) => {
+    setSubgroupVisibility(prev => ({
+      ...prev,
+      cableTraySubgroups: {
+        ...prev.cableTraySubgroups,
+        [configId]: prev.cableTraySubgroups[configId] === false ? true : false,
+      },
     }));
   }, []);
   
@@ -2095,6 +2118,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         alignEdge1={alignEdge1}
         alignEdge2={alignEdge2}
         layerVisibility={layerVisibility}
+        subgroupVisibility={subgroupVisibility}
       />
 
       <SummaryPanel
@@ -2126,6 +2150,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         }
         layerVisibility={layerVisibility}
         onToggleLayerVisibility={handleToggleLayerVisibility}
+        walkwaySubgroupVisibility={subgroupVisibility.walkwaySubgroups}
+        cableTraySubgroupVisibility={subgroupVisibility.cableTraySubgroups}
+        onToggleWalkwaySubgroupVisibility={handleToggleWalkwaySubgroupVisibility}
+        onToggleCableTraySubgroupVisibility={handleToggleCableTraySubgroupVisibility}
       />
 
       {!readOnly && (
