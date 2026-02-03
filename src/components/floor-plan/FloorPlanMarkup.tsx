@@ -77,12 +77,14 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [historyIndex, setHistoryIndex] = useState(0);
   const historyIndexRef = useRef(0);
   
-  const currentDesign = history[historyIndex];
+  // Safely get current design with fallback to prevent undefined destructuring
+  const currentDesign = history[historyIndex] ?? initialDesignState;
   const { equipment, lines, roofMasks, pvArrays, placedWalkways, placedCableTrays } = currentDesign;
   
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
 
+  // Keep ref in sync with state (runs after render)
   useEffect(() => {
     historyIndexRef.current = historyIndex;
   }, [historyIndex]);
@@ -91,38 +93,41 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
    * Commit state updates safely even when multiple commits happen in the same tick.
    * This prevents multi-item operations (batch placement, group alignment, etc.) from
    * overwriting earlier commits due to stale closures.
+   * 
+   * Key: We update the ref synchronously INSIDE setHistory so subsequent calls in the
+   * same tick see the correct index, then sync the actual state index afterward.
    */
   const commitState = useCallback((updater: (prev: DesignState) => DesignState) => {
     if (readOnly) return;
 
     setHistory((prevHistory) => {
-      const idx = historyIndexRef.current;
+      // Use a bounded index to prevent out-of-range access
+      const idx = Math.min(historyIndexRef.current, prevHistory.length - 1);
       const base = prevHistory[idx] ?? initialDesignState;
       const nextState = updater(base);
       const nextHistory = prevHistory.slice(0, idx + 1);
       nextHistory.push(nextState);
+      // Update ref synchronously so next call in same tick uses correct index
+      historyIndexRef.current = nextHistory.length - 1;
       return nextHistory;
     });
 
-    setHistoryIndex(() => {
-      const nextIndex = historyIndexRef.current + 1;
-      historyIndexRef.current = nextIndex;
-      return nextIndex;
-    });
+    // Sync the React state with the ref
+    setHistoryIndex(() => historyIndexRef.current);
 
     setHasUnsavedChanges(true);
   }, [readOnly]);
 
-  const setEquipment = (updater: (prev: typeof equipment) => typeof equipment) =>
+  const setEquipment = (updater: (prev: EquipmentItem[]) => EquipmentItem[]) =>
     commitState((prev) => ({ ...prev, equipment: updater(prev.equipment) }));
 
   const setLines = (updater: (prev: typeof lines) => typeof lines) =>
     commitState((prev) => ({ ...prev, lines: updater(prev.lines) }));
 
-  const setRoofMasks = (updater: (prev: typeof roofMasks) => typeof roofMasks) =>
+  const setRoofMasks = (updater: (prev: RoofMask[]) => RoofMask[]) =>
     commitState((prev) => ({ ...prev, roofMasks: updater(prev.roofMasks) }));
 
-  const setPvArrays = (updater: (prev: typeof pvArrays) => typeof pvArrays) =>
+  const setPvArrays = (updater: (prev: PVArrayItem[]) => PVArrayItem[]) =>
     commitState((prev) => ({ ...prev, pvArrays: updater(prev.pvArrays) }));
 
   const setPlacedWalkways = (updater: (prev: PlacedWalkway[]) => PlacedWalkway[]) =>
@@ -134,21 +139,17 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const handleUndo = () => {
     if (readOnly) return;
     if (historyIndex <= 0) return;
-    setHistoryIndex((prev) => {
-      const next = Math.max(0, prev - 1);
-      historyIndexRef.current = next;
-      return next;
-    });
+    const newIndex = historyIndex - 1;
+    historyIndexRef.current = newIndex;
+    setHistoryIndex(newIndex);
   };
 
   const handleRedo = () => {
     if (readOnly) return;
     if (historyIndex >= history.length - 1) return;
-    setHistoryIndex((prev) => {
-      const next = Math.min(history.length - 1, prev + 1);
-      historyIndexRef.current = next;
-      return next;
-    });
+    const newIndex = historyIndex + 1;
+    historyIndexRef.current = newIndex;
+    setHistoryIndex(newIndex);
   };
 
   // Scale & Config
