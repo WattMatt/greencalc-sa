@@ -68,17 +68,40 @@ function parseCSVColumns(csvContent: string): {
   if (headerIndex >= lines.length) return { dateColumn: null, valueColumns: [] };
   
   // Detect separator
-  const headerLine = lines[headerIndex];
+  let headerLine = lines[headerIndex];
   let separator = ',';
   if (headerLine.includes('\t')) separator = '\t';
   else if (headerLine.includes(';') && !headerLine.includes(',')) separator = ';';
   
+  // Check if this line is a PnP SCADA/generic metadata line (not actual headers)
+  // Metadata lines typically contain URLs, meter IDs, or dates, but NOT header keywords
+  // Look for typical header keywords like "time", "date", "kwh", "kw", "p1", "rdate", etc.
+  const headerKeywords = ['time', 'date', 'rdate', 'kwh', 'kw', 'power', 'energy', 'value', 'p1', 'p14', 'active', 'timestamp'];
+  
+  const isValidHeaderRow = (line: string): boolean => {
+    const lowerLine = line.toLowerCase();
+    return headerKeywords.some(kw => lowerLine.includes(kw));
+  };
+  
+  // Skip metadata rows (like "pnpscada.com,36724794A" or "MeterName,2024-01-01,2024-12-31")
+  while (headerIndex < lines.length && !isValidHeaderRow(lines[headerIndex])) {
+    console.log('[ColumnSelectionDialog] Skipping metadata line:', lines[headerIndex]);
+    headerIndex++;
+  }
+  
+  if (headerIndex >= lines.length) {
+    console.warn('[ColumnSelectionDialog] No valid header row found');
+    return { dateColumn: null, valueColumns: [] };
+  }
+  
+  headerLine = lines[headerIndex];
   const headers = headerLine.split(separator).map(h => h.trim().replace(/['"]/g, ''));
   
   // DEBUG: Log all headers found
   console.log('[ColumnSelectionDialog] All headers found:', headers);
   console.log('[ColumnSelectionDialog] Separator detected:', separator);
   console.log('[ColumnSelectionDialog] Header line:', headerLine);
+  console.log('[ColumnSelectionDialog] Header index:', headerIndex);
   
   // Find date column
   let dateColumn: string | null = null;
