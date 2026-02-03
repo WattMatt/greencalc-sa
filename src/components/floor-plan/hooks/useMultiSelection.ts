@@ -200,6 +200,24 @@ export function useMultiSelection({
     }
   }, [selectedItemsInfo]);
 
+  // Handle box/marquee selection - select multiple items at once
+  const selectFromBox = useCallback((ids: string[], addToSelection: boolean) => {
+    if (ids.length === 0 && !addToSelection) {
+      setSelectedIds(new Set());
+      return;
+    }
+    
+    setSelectedIds(prev => {
+      if (addToSelection) {
+        const next = new Set(prev);
+        ids.forEach(id => next.add(id));
+        return next;
+      } else {
+        return new Set(ids);
+      }
+    });
+  }, []);
+
   return {
     selectedIds,
     setSelectedIds,
@@ -208,6 +226,7 @@ export function useMultiSelection({
     selectSingle,
     toggleSelection,
     addToSelection,
+    selectFromBox,
     isSelected,
     getItemInfo,
     selectedItemsInfo,
