@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem } from './types';
+import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
@@ -182,6 +182,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [pendingRoofMask, setPendingRoofMask] = useState<{ points: Point[]; area: number; pitch: number } | null>(null);
   const [pendingPvArrayConfig, setPendingPvArrayConfig] = useState<PVArrayConfig | null>(null);
   const [editingPvArrayId, setEditingPvArrayId] = useState<string | null>(null);
+  
+  // Batch placement config for multi-copy of mixed item types
+  const [pendingBatchPlacement, setPendingBatchPlacement] = useState<BatchPlacementConfig | null>(null);
   
   // Remember last used PV array settings for continuous placement
   const [lastPvArraySettings, setLastPvArraySettings] = useState<PVArrayConfig>({
@@ -843,79 +846,199 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     }
   }, [setPlacedWalkways, setPlacedCableTrays]);
 
-  // Copy selected item handler (for toolbar button)
+  // Copy selected item handler (for toolbar button) - supports multi-selection
   const handleCopySelected = useCallback(() => {
-    if (!selectedItemId) return;
+    const selectedCount = selectedItemIds.size;
     
-    // Check if selected item is a PV array
-    const selectedPvArray = pvArrays.find(a => a.id === selectedItemId);
-    if (selectedPvArray) {
-      const copyConfig: PVArrayConfig = {
-        rows: selectedPvArray.rows,
-        columns: selectedPvArray.columns,
-        orientation: selectedPvArray.orientation,
-        minSpacing: selectedPvArray.minSpacing ?? lastPvArraySettings?.minSpacing ?? 0.5,
-      };
-      setPendingPvArrayConfig(copyConfig);
-      setLastPvArraySettings(copyConfig);
-      setActiveTool(Tool.PV_ARRAY);
-      toast.info(`Copied PV Array. Click on a roof mask to place.`);
-      return;
-    }
+    if (selectedCount === 0) return;
     
-    // Check if selected item is a roof mask
-    const selectedRoofMask = roofMasks.find(m => m.id === selectedItemId);
-    if (selectedRoofMask) {
-      setPendingRoofMask({ points: [], area: 0, pitch: selectedRoofMask.pitch });
-      setActiveTool(Tool.ROOF_MASK);
-      toast.info(`Copied Roof Mask (pitch: ${selectedRoofMask.pitch}°). Draw a new mask.`);
-      return;
-    }
-    
-    // Check if selected item is equipment
-    const selectedEquipment = equipment.find(eq => eq.id === selectedItemId);
-    if (selectedEquipment) {
-      setPlacementRotation(selectedEquipment.rotation);
-      switch (selectedEquipment.type) {
-        case 'Inverter':
-          setActiveTool(Tool.PLACE_INVERTER);
-          break;
-        case 'DC Combiner Box':
-          setActiveTool(Tool.PLACE_DC_COMBINER);
-          break;
-        case 'AC Disconnect':
-          setActiveTool(Tool.PLACE_AC_DISCONNECT);
-          break;
-        case 'Main Board':
-          setActiveTool(Tool.PLACE_MAIN_BOARD);
-          break;
+    // Single selection - use legacy behavior for simplicity
+    if (selectedCount === 1) {
+      const singleId = Array.from(selectedItemIds)[0];
+      
+      // Check if selected item is a PV array
+      const selectedPvArray = pvArrays.find(a => a.id === singleId);
+      if (selectedPvArray) {
+        const copyConfig: PVArrayConfig = {
+          rows: selectedPvArray.rows,
+          columns: selectedPvArray.columns,
+          orientation: selectedPvArray.orientation,
+          minSpacing: selectedPvArray.minSpacing ?? lastPvArraySettings?.minSpacing ?? 0.5,
+        };
+        setPendingPvArrayConfig(copyConfig);
+        setLastPvArraySettings(copyConfig);
+        setActiveTool(Tool.PV_ARRAY);
+        toast.info(`Copied PV Array. Click on a roof mask to place.`);
+        return;
       }
-      toast.info(`Copied ${selectedEquipment.type}. Click to place.`);
+      
+      // Check if selected item is a roof mask
+      const selectedRoofMask = roofMasks.find(m => m.id === singleId);
+      if (selectedRoofMask) {
+        setPendingRoofMask({ points: [], area: 0, pitch: selectedRoofMask.pitch });
+        setActiveTool(Tool.ROOF_MASK);
+        toast.info(`Copied Roof Mask (pitch: ${selectedRoofMask.pitch}°). Draw a new mask.`);
+        return;
+      }
+      
+      // Check if selected item is equipment
+      const selectedEquipment = equipment.find(eq => eq.id === singleId);
+      if (selectedEquipment) {
+        setPlacementRotation(selectedEquipment.rotation);
+        switch (selectedEquipment.type) {
+          case 'Inverter':
+            setActiveTool(Tool.PLACE_INVERTER);
+            break;
+          case 'DC Combiner Box':
+            setActiveTool(Tool.PLACE_DC_COMBINER);
+            break;
+          case 'AC Disconnect':
+            setActiveTool(Tool.PLACE_AC_DISCONNECT);
+            break;
+          case 'Main Board':
+            setActiveTool(Tool.PLACE_MAIN_BOARD);
+            break;
+        }
+        toast.info(`Copied ${selectedEquipment.type}. Click to place.`);
+        return;
+      }
+      
+      // Check if selected item is a placed walkway
+      const selectedWalkway = placedWalkways.find(w => w.id === singleId);
+      if (selectedWalkway) {
+        setPlacementRotation(selectedWalkway.rotation);
+        setPlacementMinSpacing(selectedWalkway.minSpacing ?? 0.3);
+        setSelectedWalkwayId(selectedWalkway.configId);
+        setActiveTool(Tool.PLACE_WALKWAY);
+        toast.info(`Copied Walkway. Click to place.`);
+        return;
+      }
+      
+      // Check if selected item is a placed cable tray
+      const selectedCableTray = placedCableTrays.find(c => c.id === singleId);
+      if (selectedCableTray) {
+        setPlacementRotation(selectedCableTray.rotation);
+        setPlacementMinSpacing(selectedCableTray.minSpacing ?? 0.3);
+        setSelectedCableTrayId(selectedCableTray.configId);
+        setActiveTool(Tool.PLACE_CABLE_TRAY);
+        toast.info(`Copied Cable Tray. Click to place.`);
+        return;
+      }
       return;
     }
     
-    // Check if selected item is a placed walkway
-    const selectedWalkway = placedWalkways.find(w => w.id === selectedItemId);
-    if (selectedWalkway) {
-      setPlacementRotation(selectedWalkway.rotation);
-      setPlacementMinSpacing(selectedWalkway.minSpacing ?? 0.3);
-      setSelectedWalkwayId(selectedWalkway.configId);
-      setActiveTool(Tool.PLACE_WALKWAY);
-      toast.info(`Copied Walkway. Click to place.`);
+    // Multi-selection - create batch placement config
+    const batchItems: BatchPlacementItem[] = [];
+    const positions: Point[] = [];
+    
+    // Collect all selected items with their positions
+    selectedItemIds.forEach(id => {
+      // PV Arrays
+      const pvArray = pvArrays.find(a => a.id === id);
+      if (pvArray) {
+        positions.push(pvArray.position);
+        batchItems.push({
+          id: `batch-${id}`,
+          type: 'pvArray',
+          offset: { x: 0, y: 0 }, // Will be calculated after we know center
+          rotation: pvArray.rotation,
+          pvArrayConfig: {
+            rows: pvArray.rows,
+            columns: pvArray.columns,
+            orientation: pvArray.orientation,
+            minSpacing: pvArray.minSpacing ?? lastPvArraySettings?.minSpacing ?? 0.5,
+            roofMaskId: pvArray.roofMaskId,
+          },
+        });
+        return;
+      }
+      
+      // Equipment
+      const eq = equipment.find(e => e.id === id);
+      if (eq) {
+        positions.push(eq.position);
+        batchItems.push({
+          id: `batch-${id}`,
+          type: 'equipment',
+          offset: { x: 0, y: 0 },
+          rotation: eq.rotation,
+          equipmentConfig: {
+            equipmentType: eq.type,
+            name: eq.name,
+          },
+        });
+        return;
+      }
+      
+      // Walkways
+      const walkway = placedWalkways.find(w => w.id === id);
+      if (walkway) {
+        positions.push(walkway.position);
+        batchItems.push({
+          id: `batch-${id}`,
+          type: 'walkway',
+          offset: { x: 0, y: 0 },
+          rotation: walkway.rotation,
+          walkwayConfig: {
+            configId: walkway.configId,
+            name: walkway.name,
+            width: walkway.width,
+            length: walkway.length,
+            minSpacing: walkway.minSpacing,
+          },
+        });
+        return;
+      }
+      
+      // Cable Trays
+      const cableTray = placedCableTrays.find(c => c.id === id);
+      if (cableTray) {
+        positions.push(cableTray.position);
+        batchItems.push({
+          id: `batch-${id}`,
+          type: 'cableTray',
+          offset: { x: 0, y: 0 },
+          rotation: cableTray.rotation,
+          cableTrayConfig: {
+            configId: cableTray.configId,
+            name: cableTray.name,
+            width: cableTray.width,
+            length: cableTray.length,
+            minSpacing: cableTray.minSpacing,
+          },
+        });
+        return;
+      }
+    });
+    
+    if (batchItems.length === 0 || positions.length === 0) {
+      toast.error('No valid items to copy');
       return;
     }
     
-    // Check if selected item is a placed cable tray
-    const selectedCableTray = placedCableTrays.find(c => c.id === selectedItemId);
-    if (selectedCableTray) {
-      setPlacementRotation(selectedCableTray.rotation);
-      setPlacementMinSpacing(selectedCableTray.minSpacing ?? 0.3);
-      setSelectedCableTrayId(selectedCableTray.configId);
-      setActiveTool(Tool.PLACE_CABLE_TRAY);
-      toast.info(`Copied Cable Tray. Click to place.`);
-      return;
-    }
-  }, [selectedItemId, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays, lastPvArraySettings]);
+    // Calculate the center of all positions
+    const centerX = positions.reduce((sum, p) => sum + p.x, 0) / positions.length;
+    const centerY = positions.reduce((sum, p) => sum + p.y, 0) / positions.length;
+    const groupCenter: Point = { x: centerX, y: centerY };
+    
+    // Update offsets relative to center
+    let posIdx = 0;
+    batchItems.forEach(item => {
+      const pos = positions[posIdx++];
+      item.offset = {
+        x: pos.x - groupCenter.x,
+        y: pos.y - groupCenter.y,
+      };
+    });
+    
+    // Set batch placement mode
+    setPendingBatchPlacement({
+      items: batchItems,
+      groupCenter,
+    });
+    setActiveTool(Tool.PV_ARRAY); // Reuse PV_ARRAY tool for batch placement
+    toast.info(`Copied ${batchItems.length} items. Click to place group.`);
+  }, [selectedItemIds, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays, lastPvArraySettings]);
 
   // Get object position by ID (for dimension tool)
   const getObjectPosition = useCallback((id: string): Point | null => {
@@ -1296,6 +1419,14 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       }
       
       if (e.key === 'Escape') {
+        // Exit batch placement mode
+        if (pendingBatchPlacement) {
+          setPendingBatchPlacement(null);
+          setPlacementRotation(0);
+          setActiveTool(Tool.SELECT);
+          toast.info('Batch placement cancelled');
+          return;
+        }
         // Exit PV array placement mode
         if (pendingPvArrayConfig) {
           setPendingPvArrayConfig(null);
@@ -1355,7 +1486,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId, pendingPvArrayConfig, activeTool, selectedItemId, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays, lastPvArraySettings]);
+  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId, pendingPvArrayConfig, pendingBatchPlacement, activeTool, selectedItemId, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays, lastPvArraySettings]);
 
   // Scroll wheel rotation when R is held
   // - R + scroll = 5° increments
@@ -1716,6 +1847,12 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
             : null
         }
         placementMinSpacing={placementMinSpacing}
+        pendingBatchPlacement={pendingBatchPlacement}
+        onBatchPlaced={() => {
+          // Reset placement rotation but keep batch config for continuous placement
+          setPlacementRotation(0);
+          // Batch placement can be repeated - ESC to exit
+        }}
         onDimensionObjectClick={readOnly ? undefined : handleDimensionObjectClick}
         dimensionObject1Id={dimensionObject1Id}
         dimensionObject2Id={dimensionObject2Id}

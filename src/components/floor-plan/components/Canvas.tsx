@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
-import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig } from '../types';
+import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig, BatchPlacementConfig } from '../types';
 import { renderAllMarkups, drawPvArray, drawEquipmentIcon, drawWalkway, drawCableTray } from '../utils/drawing';
 import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing, getPVArrayDimensions, getEquipmentDimensions, detectClickedEdge } from '../utils/geometry';
 import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
@@ -46,6 +46,9 @@ interface CanvasProps {
   pendingWalkwayConfig?: WalkwayConfig | null;
   pendingCableTrayConfig?: CableTrayConfig | null;
   placementMinSpacing?: number;
+  // Batch placement for multi-copy
+  pendingBatchPlacement?: BatchPlacementConfig | null;
+  onBatchPlaced?: () => void;
   // Dimension tool
   onDimensionObjectClick?: (id: string) => void;
   dimensionObject1Id?: string | null;
@@ -71,6 +74,8 @@ export function Canvas({
   placedCableTrays, setPlacedCableTrays,
   pendingWalkwayConfig, pendingCableTrayConfig,
   placementMinSpacing = 0.3,
+  pendingBatchPlacement,
+  onBatchPlaced,
   onDimensionObjectClick,
   dimensionObject1Id,
   dimensionObject2Id,
@@ -473,6 +478,75 @@ export function Canvas({
       };
       drawCableTray(ctx, ghostTray, false, true, viewState.zoom, scaleInfo);
     }
+
+    // Draw ghost preview for batch placement (multi-copy)
+    if (activeTool === Tool.PV_ARRAY && pendingBatchPlacement && mouseWorldPos && scaleInfo.ratio) {
+      ctx.globalAlpha = 0.6;
+      
+      pendingBatchPlacement.items.forEach(item => {
+        const itemPos = {
+          x: mouseWorldPos.x + item.offset.x,
+          y: mouseWorldPos.y + item.offset.y,
+        };
+        
+        if (item.type === 'pvArray' && item.pvArrayConfig && pvPanelConfig) {
+          const onMask = roofMasks.find(m => isPointInPolygon(itemPos, m.points));
+          const ghostArray: PVArrayItem = {
+            id: `ghost-batch-${item.id}`,
+            position: itemPos,
+            rows: item.pvArrayConfig.rows,
+            columns: item.pvArrayConfig.columns,
+            orientation: item.pvArrayConfig.orientation,
+            rotation: item.rotation + placementRotation,
+            roofMaskId: onMask?.id,
+          };
+          drawPvArray(ctx, ghostArray, true, pvPanelConfig, scaleInfo, roofMasks, viewState.zoom, false);
+        }
+        
+        if (item.type === 'equipment' && item.equipmentConfig) {
+          drawEquipmentIcon(
+            ctx,
+            { 
+              type: item.equipmentConfig.equipmentType, 
+              position: itemPos, 
+              rotation: item.rotation + placementRotation 
+            },
+            false,
+            viewState.zoom,
+            scaleInfo,
+            plantSetupConfig
+          );
+        }
+        
+        if (item.type === 'walkway' && item.walkwayConfig) {
+          const ghostWalkway: PlacedWalkway = {
+            id: `ghost-batch-${item.id}`,
+            configId: item.walkwayConfig.configId,
+            name: item.walkwayConfig.name,
+            width: item.walkwayConfig.width,
+            length: item.walkwayConfig.length,
+            position: itemPos,
+            rotation: item.rotation + placementRotation,
+          };
+          drawWalkway(ctx, ghostWalkway, false, true, viewState.zoom, scaleInfo);
+        }
+        
+        if (item.type === 'cableTray' && item.cableTrayConfig) {
+          const ghostTray: PlacedCableTray = {
+            id: `ghost-batch-${item.id}`,
+            configId: item.cableTrayConfig.configId,
+            name: item.cableTrayConfig.name,
+            width: item.cableTrayConfig.width,
+            length: item.cableTrayConfig.length,
+            position: itemPos,
+            rotation: item.rotation + placementRotation,
+          };
+          drawCableTray(ctx, ghostTray, false, true, viewState.zoom, scaleInfo);
+        }
+      });
+      
+      ctx.globalAlpha = 1.0;
+    }
     
     ctx.restore();
   }, [
@@ -495,6 +569,7 @@ export function Canvas({
     directionLine,
     mouseWorldPos,
     pendingPvArrayConfig,
+    pendingBatchPlacement,
     placementRotation,
     placedWalkways,
     placedCableTrays,
@@ -858,6 +933,72 @@ export function Canvas({
         ? snapTo45Degrees(currentDrawing[currentDrawing.length - 1], worldPos)
         : worldPos;
       setCurrentDrawing([...currentDrawing, snappedPos]);
+    } else if (activeTool === Tool.PV_ARRAY && pendingBatchPlacement && scaleInfo.ratio) {
+      // Batch placement - place all items in the batch at once
+      const timestamp = Date.now();
+      
+      pendingBatchPlacement.items.forEach((item, idx) => {
+        const itemPos = {
+          x: worldPos.x + item.offset.x,
+          y: worldPos.y + item.offset.y,
+        };
+        const finalRotation = item.rotation + placementRotation;
+        
+        if (item.type === 'pvArray' && item.pvArrayConfig && pvPanelConfig) {
+          const onMask = roofMasks.find(m => isPointInPolygon(itemPos, m.points));
+          const newArray: PVArrayItem = {
+            id: `array-${timestamp}-${idx}`,
+            position: itemPos,
+            rows: item.pvArrayConfig.rows,
+            columns: item.pvArrayConfig.columns,
+            orientation: item.pvArrayConfig.orientation,
+            rotation: finalRotation,
+            roofMaskId: onMask?.id,
+            minSpacing: item.pvArrayConfig.minSpacing,
+          };
+          setPvArrays(prev => [...prev, newArray]);
+        }
+        
+        if (item.type === 'equipment' && item.equipmentConfig) {
+          setEquipment(prev => [...prev, {
+            id: `eq-${timestamp}-${idx}`,
+            type: item.equipmentConfig!.equipmentType,
+            position: itemPos,
+            rotation: finalRotation,
+            name: item.equipmentConfig!.name,
+          }]);
+        }
+        
+        if (item.type === 'walkway' && item.walkwayConfig && setPlacedWalkways) {
+          const newWalkway: PlacedWalkway = {
+            id: `walkway-${timestamp}-${idx}`,
+            configId: item.walkwayConfig.configId,
+            name: item.walkwayConfig.name,
+            width: item.walkwayConfig.width,
+            length: item.walkwayConfig.length,
+            position: itemPos,
+            rotation: finalRotation,
+            minSpacing: item.walkwayConfig.minSpacing,
+          };
+          setPlacedWalkways(prev => [...prev, newWalkway]);
+        }
+        
+        if (item.type === 'cableTray' && item.cableTrayConfig && setPlacedCableTrays) {
+          const newTray: PlacedCableTray = {
+            id: `tray-${timestamp}-${idx}`,
+            configId: item.cableTrayConfig.configId,
+            name: item.cableTrayConfig.name,
+            width: item.cableTrayConfig.width,
+            length: item.cableTrayConfig.length,
+            position: itemPos,
+            rotation: finalRotation,
+            minSpacing: item.cableTrayConfig.minSpacing,
+          };
+          setPlacedCableTrays(prev => [...prev, newTray]);
+        }
+      });
+      
+      onBatchPlaced?.();
     } else if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig && pvPanelConfig && scaleInfo.ratio) {
       // Check if clicking on a roof mask
       const onMask = roofMasks.find(m => isPointInPolygon(worldPos, m.points));
