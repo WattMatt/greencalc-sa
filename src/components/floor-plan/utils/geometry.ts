@@ -684,13 +684,31 @@ export const calculateNewPositionAtDistance = (
   const halfWidth2 = (edges2.right - edges2.left) / 2;
   const halfHeight2 = (edges2.bottom - edges2.top) / 2;
   
-  if (centerDist === 0) {
-    // Objects at same position, move along X axis
-    const edgeToEdgeOffset = halfWidth1 + halfWidth2 + (targetDistanceMeters / scaleRatio);
-    return {
-      x: object2Pos.x + edgeToEdgeOffset,
-      y: object2Pos.y,
-    };
+  // Use EPSILON for near-zero detection to avoid numerical instability
+  const EPSILON = 0.001; // 1/1000th of a pixel
+  
+  if (centerDist < EPSILON) {
+    // Objects at effectively same position
+    // Determine which direction to move based on current edge positions
+    const gapX = Math.max(edges1.left - edges2.right, edges2.left - edges1.right);
+    const gapY = Math.max(edges1.top - edges2.bottom, edges2.top - edges1.bottom);
+    
+    // Move along the axis with the larger gap, or default to X
+    if (Math.abs(gapY) > Math.abs(gapX)) {
+      const signY = gapY >= 0 ? 1 : -1;
+      const edgeToEdgeOffset = halfHeight1 + halfHeight2 + (targetDistanceMeters / scaleRatio);
+      return {
+        x: object2Pos.x,
+        y: object2Pos.y + signY * edgeToEdgeOffset,
+      };
+    } else {
+      const signX = gapX >= 0 ? 1 : -1;
+      const edgeToEdgeOffset = halfWidth1 + halfWidth2 + (targetDistanceMeters / scaleRatio);
+      return {
+        x: object2Pos.x + signX * edgeToEdgeOffset,
+        y: object2Pos.y,
+      };
+    }
   }
   
   // Normalize direction
