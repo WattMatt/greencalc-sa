@@ -125,8 +125,8 @@ function CollapsibleSection({
   );
 }
 
-// Grouped material section with nested collapsibles
-function GroupedMaterialSection<T extends { id: string; name: string; width: number; length: number }>({
+// Grouped material section with nested collapsibles and per-subgroup visibility
+function GroupedMaterialSection<T extends { id: string; name: string; width: number; length: number; configId?: string }>({
   icon,
   title,
   totalSummary,
@@ -135,6 +135,8 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
   onDeleteItem,
   isVisible,
   onToggleVisibility,
+  subgroupVisibility,
+  onToggleSubgroupVisibility,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -144,6 +146,8 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
   onDeleteItem?: (type: 'walkway' | 'cableTray', id: string) => void;
   isVisible?: boolean;
   onToggleVisibility?: () => void;
+  subgroupVisibility?: Record<string, boolean>;
+  onToggleSubgroupVisibility?: (configId: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
@@ -216,22 +220,53 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
             {groupKeys.map((key) => {
               const group = groupedItems[key];
               const isGroupOpen = openGroups.has(key);
+              const isSubgroupVisible = subgroupVisibility?.[key] !== false;
               return (
                 <Collapsible key={key} open={isGroupOpen} onOpenChange={() => toggleGroup(key)}>
-                  <CollapsibleTrigger asChild>
-                    <button className="flex items-center gap-2 w-full hover:bg-accent/50 rounded p-1 text-xs transition-colors">
-                      <span className="font-medium">{group.name}</span>
-                      <span className="text-muted-foreground ml-auto">
-                        {group.totalLength.toFixed(1)}m ({group.items.length})
-                      </span>
-                      {/* Chevron on far right for sub-groups */}
-                      <ChevronDown className={cn(
-                        "h-3 w-3 text-muted-foreground transition-transform shrink-0",
-                        isGroupOpen && "rotate-180"
-                      )} />
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-1 pl-4 space-y-1">
+                  <div className="flex items-center gap-1 w-full">
+                    {/* Subgroup visibility toggle - on left */}
+                    {onToggleSubgroupVisibility && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleSubgroupVisibility(key);
+                            }}
+                          >
+                            {isSubgroupVisible ? (
+                              <Eye className="h-3 w-3 text-muted-foreground" />
+                            ) : (
+                              <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="left">
+                          {isSubgroupVisible ? 'Hide on canvas' : 'Show on canvas'}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    <CollapsibleTrigger asChild>
+                      <button className={cn(
+                        "flex items-center gap-2 flex-1 hover:bg-accent/50 rounded p-1 text-xs transition-colors",
+                        !isSubgroupVisible && "opacity-50"
+                      )}>
+                        <span className="font-medium">{group.name}</span>
+                        <span className="text-muted-foreground ml-auto">
+                          {group.totalLength.toFixed(1)}m ({group.items.length})
+                        </span>
+                        {/* Chevron on far right for sub-groups */}
+                        <ChevronDown className={cn(
+                          "h-3 w-3 text-muted-foreground transition-transform shrink-0",
+                          isGroupOpen && "rotate-180"
+                        )} />
+                      </button>
+                    </CollapsibleTrigger>
+                  </div>
+                  <CollapsibleContent className="pt-1 pl-6 space-y-1">
                     {group.items.map((item, i) => (
                       <div key={item.id} className="flex items-center justify-between p-1.5 bg-muted rounded text-xs">
                         <span className="text-muted-foreground">{item.width.toFixed(3)}m × {item.length.toFixed(2)}m</span>
@@ -332,6 +367,24 @@ export function SummaryPanel({
     return groups;
   }, [placedCableTrays]);
   
+  // Subgroup visibility state (per configId)
+  const [walkwaySubgroupVisibility, setWalkwaySubgroupVisibility] = useState<Record<string, boolean>>({});
+  const [cableTraySubgroupVisibility, setCableTraySubgroupVisibility] = useState<Record<string, boolean>>({});
+  
+  const toggleWalkwaySubgroupVisibility = (configId: string) => {
+    setWalkwaySubgroupVisibility(prev => ({
+      ...prev,
+      [configId]: prev[configId] === false ? true : false
+    }));
+  };
+  
+  const toggleCableTraySubgroupVisibility = (configId: string) => {
+    setCableTraySubgroupVisibility(prev => ({
+      ...prev,
+      [configId]: prev[configId] === false ? true : false
+    }));
+  };
+  
   // Simulation comparison values
   const simModuleCount = assignedSimulation?.results_json?.moduleCount ?? null;
   const simInverterCount = assignedSimulation?.results_json?.inverterCount ?? null;
@@ -342,7 +395,6 @@ export function SummaryPanel({
   // Check if layout matches simulation
   const modulesMatch = simModuleCount === null || simModuleCount === panelCount;
   const invertersMatch = simInverterCount === null || simInverterCount === layoutInverterCount;
-
   // Collapsed state - thin strip with expand button
   if (isCollapsed) {
     return (
@@ -669,6 +721,8 @@ export function SummaryPanel({
               onDeleteItem={onDeletePlacedItem}
               isVisible={layerVisibility?.walkways}
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('walkways') : undefined}
+              subgroupVisibility={walkwaySubgroupVisibility}
+              onToggleSubgroupVisibility={toggleWalkwaySubgroupVisibility}
             />
 
             <GroupedMaterialSection
@@ -680,6 +734,8 @@ export function SummaryPanel({
               onDeleteItem={onDeletePlacedItem}
               isVisible={layerVisibility?.cableTrays}
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('cableTrays') : undefined}
+              subgroupVisibility={cableTraySubgroupVisibility}
+              onToggleSubgroupVisibility={toggleCableTraySubgroupVisibility}
             />
 
             {/* Cabling - DC/AC cables */}
