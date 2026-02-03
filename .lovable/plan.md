@@ -1,143 +1,116 @@
 
-# Fix: Set Distance Tool Not Moving Cable Tray
+# Fix: Snapping Triggers From Too Far Away
 
-## Problem Identified
+## Problem Analysis
 
-The "Set Distance Between Objects" tool fails to move the cable tray when reducing the distance (e.g., from 1.57m to 1.5m). The user sees no movement at all - the object stays in place.
+When placing walkways or cable trays, the snapping functionality is activating regardless of how far the mouse is from existing objects. The ghost preview immediately aligns to the horizontal or vertical axis of distant objects instead of only snapping when near them.
 
 ### Root Cause
 
-The `handleDimensionApply` function makes **four separate `commitState` calls** - one for each object type (PV arrays, equipment, walkways, cable trays). While the atomic state management system is designed to handle sequential commits, this pattern is inefficient and potentially fragile.
+The `snapMaterialToSpacing` function in `geometry.ts` uses `minSpacingPx` (the desired gap between objects) as the threshold for when snapping should activate:
 
-More critically, when moving a single cable tray, the first three commits (for PV arrays, equipment, walkways) create history entries with **no actual changes**. This clutters the undo history with no-op entries and may cause subtle timing issues.
+```typescript
+if (!forceAlign && minEdgeDistance >= minSpacingPx) {
+  continue;
+}
+```
 
-The fix is to consolidate all object movements into a **single atomic state update** that modifies all object types at once, consistent with the pattern used elsewhere in the codebase (e.g., deletion operations).
+This logic says: "Skip this item if the edge distance exceeds the minimum spacing."
+
+The problem is that `minSpacingPx` is the **spacing to enforce** (e.g., 30cm gap between objects), not the **proximity threshold** for when snapping should begin. These are two different concepts:
+
+1. **Proximity threshold**: How close you must be to an object before snapping activates (should be ~50-100 pixels in screen space, or a fixed real-world distance like 0.5-1m)
+2. **Minimum spacing**: The gap to maintain between objects once snapping is active
+
+Currently, if `minSpacingPx` is small (30cm = ~30 pixels), objects farther than 30 pixels away won't trigger snapping - which is correct. But if the scale ratio makes `minSpacingPx` larger (e.g., 300 pixels at fine scales), snapping will trigger from very far away.
+
+Additionally, when `forceAlign` is true (Shift held), there is NO distance check at all - every item on the canvas is considered for alignment.
 
 ---
 
 ## Solution
 
-### File: `src/components/floor-plan/FloorPlanMarkup.tsx`
+Introduce a dedicated **snap proximity threshold** that determines when snapping should begin, separate from the minimum spacing value.
 
-Replace the four separate state setter calls with a single `commitState` call that updates all object types atomically:
+### Changes to `src/components/floor-plan/utils/geometry.ts`
+
+**1. Add a proximity threshold constant or parameter:**
 
 ```typescript
-const handleDimensionApply = useCallback((newDistance: number) => {
-  if (!dimensionObject1Id || !dimensionObject2Id || !scaleInfo.ratio) return;
-  
-  const pos1 = getObjectPosition(dimensionObject1Id);
-  const pos2 = getObjectPosition(dimensionObject2Id);
-  const dims1 = getObjectDimensions(dimensionObject1Id);
-  const dims2 = getObjectDimensions(dimensionObject2Id);
-  
-  if (!pos1 || !pos2 || !dims1 || !dims2) return;
-  
-  const newPos = calculateNewPositionAtDistance(
-    pos1,
-    { width: dims1.width, height: dims1.height },
-    dims1.rotation,
-    pos2,
-    { width: dims2.width, height: dims2.height },
-    dims2.rotation,
-    newDistance,
-    scaleInfo.ratio
-  );
-  
-  // Calculate delta to apply to all selected items
-  const delta: Point = {
-    x: newPos.x - pos1.x,
-    y: newPos.y - pos1.y,
-  };
-  
-  console.log('[Set Distance] Applying:', {
-    object1Id: dimensionObject1Id,
-    oldPos: pos1,
-    newPos,
-    delta,
-    targetDistance: newDistance,
-  });
-  
-  // Skip if no movement needed (delta is effectively zero)
-  if (Math.abs(delta.x) < 0.001 && Math.abs(delta.y) < 0.001) {
-    console.warn('[Set Distance] Delta is zero - no movement');
-    toast.error('No movement needed - already at target distance');
-    return;
-  }
-  
-  // Determine which IDs to move
-  const idsToMove = selectedItemIds.size > 1 
-    ? new Set(Array.from(selectedItemIds).filter(id => id !== dimensionObject2Id))
-    : new Set([dimensionObject1Id]);
-  
-  // Apply movement to ALL object types in a SINGLE atomic commit
-  commitState((prev) => ({
-    ...prev,
-    pvArrays: prev.pvArrays.map(arr => 
-      idsToMove.has(arr.id) 
-        ? { ...arr, position: { x: arr.position.x + delta.x, y: arr.position.y + delta.y } }
-        : arr
-    ),
-    equipment: prev.equipment.map(eq => 
-      idsToMove.has(eq.id)
-        ? { ...eq, position: { x: eq.position.x + delta.x, y: eq.position.y + delta.y } }
-        : eq
-    ),
-    placedWalkways: prev.placedWalkways.map(w => 
-      idsToMove.has(w.id)
-        ? { ...w, position: { x: w.position.x + delta.x, y: w.position.y + delta.y } }
-        : w
-    ),
-    placedCableTrays: prev.placedCableTrays.map(c => 
-      idsToMove.has(c.id)
-        ? { ...c, position: { x: c.position.x + delta.x, y: c.position.y + delta.y } }
-        : c
-    ),
-  }));
-  
-  const movedCount = idsToMove.size;
-  
-  // Reset dimension tool state
-  setDimensionObject1Id(null);
-  setDimensionObject2Id(null);
-  setIsSetDistanceModalOpen(false);
-  setActiveTool(Tool.SELECT);
-  toast.success(`Distance set to ${newDistance.toFixed(2)}m${movedCount > 1 ? ` (${movedCount} items moved)` : ''}`);
-}, [dimensionObject1Id, dimensionObject2Id, scaleInfo.ratio, getObjectPosition, getObjectDimensions, selectedItemIds, commitState]);
+// Add near the top of the file
+const SNAP_PROXIMITY_THRESHOLD_METERS = 1.0; // Only snap when within 1 meter of an object
 ```
 
+**2. Modify `snapMaterialToSpacing` function:**
+
+```typescript
+export const snapMaterialToSpacing = (
+  mousePos: Point,
+  ghostConfig: { width: number; length: number; rotation: number },
+  existingItems: Array<{ id: string; width: number; length: number; position: Point; rotation: number }>,
+  scaleInfo: ScaleInfo,
+  minSpacingMeters: number,
+  forceAlign: boolean = false
+): { position: Point; rotation: number; snappedToId: string | null } => {
+  if (!scaleInfo.ratio || existingItems.length === 0) {
+    return { position: mousePos, rotation: ghostConfig.rotation, snappedToId: null };
+  }
+
+  // Proximity threshold: how close (edge-to-edge) before snapping activates
+  // Use a fixed real-world distance (1m) rather than the min spacing value
+  const proximityThresholdPx = SNAP_PROXIMITY_THRESHOLD_METERS / scaleInfo.ratio;
+  
+  // Minimum spacing to enforce when snapped
+  const effectiveMinSpacing = Math.max(0.01, minSpacingMeters);
+  const minSpacingPx = effectiveMinSpacing / scaleInfo.ratio;
+
+  // ... existing dimension calculations ...
+
+  for (const item of existingItems) {
+    // ... existing dimension calculations for item ...
+    
+    // Calculate edge-to-edge distance
+    const gapX = Math.max(0, edgeDistX);
+    const gapY = Math.max(0, edgeDistY);
+    const minEdgeDistance = Math.hypot(gapX, gapY);
+
+    // Skip items outside the proximity threshold
+    // For forceAlign (Shift), use a larger threshold but still limit range
+    const activeThreshold = forceAlign 
+      ? proximityThresholdPx * 3  // 3m range when Shift held
+      : proximityThresholdPx;     // 1m range for normal snapping
+    
+    if (minEdgeDistance > activeThreshold) {
+      continue;
+    }
+
+    // ... rest of existing snapping logic ...
+  }
+  // ...
+};
+```
+
+**3. Apply the same fix to `snapPVArrayToSpacing` and `snapEquipmentToSpacing`:**
+
+Both functions have the same issue with their proximity thresholds.
+
 ---
 
-## Key Changes
+## Files to Modify
 
-| Aspect | Before | After |
-|--------|--------|-------|
-| State updates | 4 separate `commitState` calls via wrappers | 1 single `commitState` call |
-| History entries | Creates 4 history entries per operation | Creates 1 history entry |
-| Undo behavior | 4 undos required to revert | 1 undo to revert |
-| Zero-delta handling | Silently does nothing | Shows warning toast |
-| Debug logging | Logged selection info | Logs actual positions and delta |
-
----
-
-## Benefits
-
-1. **Atomic operation**: All movements happen in a single state transaction
-2. **Cleaner undo history**: One entry per distance operation instead of four
-3. **Better debugging**: Console log shows actual delta values to diagnose issues
-4. **User feedback**: If delta is zero, user sees an error message instead of silent failure
-5. **Consistent pattern**: Matches the single-commit pattern used in other multi-object operations
+| File | Change |
+|------|--------|
+| `src/components/floor-plan/utils/geometry.ts` | Add proximity threshold constant; update `snapMaterialToSpacing`, `snapPVArrayToSpacing`, and `snapEquipmentToSpacing` to use proximity threshold instead of min spacing for activation |
 
 ---
 
 ## Testing Plan
 
-1. Open PV Layout editor
-2. Place a cable tray to the right of a PV array
-3. Use "Tools > Distance Between" - click cable tray (Object 1), then PV array (Object 2)
-4. In the modal, change distance from current value (e.g., 1.57m) to a smaller value (e.g., 1.5m)
-5. Click Apply
-6. **Verify**: Cable tray moves toward the PV array
-7. Check console for `[Set Distance] Applying:` log with non-zero delta
-8. Test undo - should revert in a single Ctrl+Z
-9. Repeat with cable tray to the LEFT of PV array
-10. Test group selection - select multiple objects, set distance between one of them and a reference
+1. Open the PV Layout editor
+2. Place a single walkway on the canvas
+3. Select the cable tray tool and move the mouse around the canvas
+4. **Verify**: The ghost preview should NOT snap to align with the walkway unless you're within approximately 1 meter of it
+5. Move the mouse close to the walkway (within 1m edge-to-edge)
+6. **Verify**: Snapping activates and aligns the cable tray
+7. Hold Shift and move the mouse - snapping should activate from a larger distance (3m) but still not from across the entire canvas
+8. Repeat with PV arrays and equipment to verify consistent behavior
