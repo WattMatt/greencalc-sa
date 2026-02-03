@@ -1217,6 +1217,15 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     
     if (!pos1 || !pos2 || !dims1 || !dims2) return;
     
+    console.log('[Set Distance] Input:', {
+      object1Id: dimensionObject1Id,
+      pos1, dims1,
+      object2Id: dimensionObject2Id,
+      pos2, dims2,
+      newDistance,
+      scaleRatio: scaleInfo.ratio,
+    });
+    
     const newPos = calculateNewPositionAtDistance(
       pos1,
       { width: dims1.width, height: dims1.height },
@@ -1227,6 +1236,12 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       newDistance,
       scaleInfo.ratio
     );
+    
+    console.log('[Set Distance] Result:', {
+      oldPos: pos1,
+      newPos,
+      delta: { x: newPos.x - pos1.x, y: newPos.y - pos1.y },
+    });
     
     // Update the position of object 1
     if (pvArrays.find(a => a.id === dimensionObject1Id)) {
