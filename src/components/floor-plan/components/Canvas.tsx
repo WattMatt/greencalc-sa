@@ -934,8 +934,14 @@ export function Canvas({
         : worldPos;
       setCurrentDrawing([...currentDrawing, snappedPos]);
     } else if (activeTool === Tool.PV_ARRAY && pendingBatchPlacement && scaleInfo.ratio) {
-      // Batch placement - place all items in the batch at once
+      // Batch placement - collect all items first, then batch update by type
       const timestamp = Date.now();
+      
+      // Collect items by type for batched updates
+      const newPvArrays: PVArrayItem[] = [];
+      const newEquipment: EquipmentItem[] = [];
+      const newWalkways: PlacedWalkway[] = [];
+      const newCableTrays: PlacedCableTray[] = [];
       
       pendingBatchPlacement.items.forEach((item, idx) => {
         const itemPos = {
@@ -946,7 +952,7 @@ export function Canvas({
         
         if (item.type === 'pvArray' && item.pvArrayConfig && pvPanelConfig) {
           const onMask = roofMasks.find(m => isPointInPolygon(itemPos, m.points));
-          const newArray: PVArrayItem = {
+          newPvArrays.push({
             id: `array-${timestamp}-${idx}`,
             position: itemPos,
             rows: item.pvArrayConfig.rows,
@@ -955,22 +961,21 @@ export function Canvas({
             rotation: finalRotation,
             roofMaskId: onMask?.id,
             minSpacing: item.pvArrayConfig.minSpacing,
-          };
-          setPvArrays(prev => [...prev, newArray]);
+          });
         }
         
         if (item.type === 'equipment' && item.equipmentConfig) {
-          setEquipment(prev => [...prev, {
+          newEquipment.push({
             id: `eq-${timestamp}-${idx}`,
-            type: item.equipmentConfig!.equipmentType,
+            type: item.equipmentConfig.equipmentType,
             position: itemPos,
             rotation: finalRotation,
-            name: item.equipmentConfig!.name,
-          }]);
+            name: item.equipmentConfig.name,
+          });
         }
         
-        if (item.type === 'walkway' && item.walkwayConfig && setPlacedWalkways) {
-          const newWalkway: PlacedWalkway = {
+        if (item.type === 'walkway' && item.walkwayConfig) {
+          newWalkways.push({
             id: `walkway-${timestamp}-${idx}`,
             configId: item.walkwayConfig.configId,
             name: item.walkwayConfig.name,
@@ -979,12 +984,11 @@ export function Canvas({
             position: itemPos,
             rotation: finalRotation,
             minSpacing: item.walkwayConfig.minSpacing,
-          };
-          setPlacedWalkways(prev => [...prev, newWalkway]);
+          });
         }
         
-        if (item.type === 'cableTray' && item.cableTrayConfig && setPlacedCableTrays) {
-          const newTray: PlacedCableTray = {
+        if (item.type === 'cableTray' && item.cableTrayConfig) {
+          newCableTrays.push({
             id: `tray-${timestamp}-${idx}`,
             configId: item.cableTrayConfig.configId,
             name: item.cableTrayConfig.name,
@@ -993,10 +997,23 @@ export function Canvas({
             position: itemPos,
             rotation: finalRotation,
             minSpacing: item.cableTrayConfig.minSpacing,
-          };
-          setPlacedCableTrays(prev => [...prev, newTray]);
+          });
         }
       });
+      
+      // Apply batched updates - one commit per type instead of one per item
+      if (newPvArrays.length > 0) {
+        setPvArrays(prev => [...prev, ...newPvArrays]);
+      }
+      if (newEquipment.length > 0) {
+        setEquipment(prev => [...prev, ...newEquipment]);
+      }
+      if (newWalkways.length > 0 && setPlacedWalkways) {
+        setPlacedWalkways(prev => [...prev, ...newWalkways]);
+      }
+      if (newCableTrays.length > 0 && setPlacedCableTrays) {
+        setPlacedCableTrays(prev => [...prev, ...newCableTrays]);
+      }
       
       onBatchPlaced?.();
     } else if (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig && pvPanelConfig && scaleInfo.ratio) {
