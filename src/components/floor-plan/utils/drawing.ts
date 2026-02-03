@@ -1,7 +1,7 @@
 import { 
   Point, PVArrayItem, PVPanelConfig, RoofMask, ScaleInfo, 
   EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig,
-  PlacedWalkway, PlacedCableTray
+  PlacedWalkway, PlacedCableTray, LayerVisibility, defaultLayerVisibility
 } from '../types';
 import { TOOL_COLORS, EQUIPMENT_REAL_WORLD_SIZES, getDirectionLabel } from '../constants';
 import { isPointInPolygon, getPolygonCenter, getPVArrayDimensions, getEquipmentDimensions } from './geometry';
@@ -557,6 +557,8 @@ export interface RenderAllParams {
   alignObject2Id?: string | null;
   alignEdge1?: AlignmentEdge | null;
   alignEdge2?: AlignmentEdge | null;
+  // Layer visibility
+  layerVisibility?: LayerVisibility;
 }
 
 /**
@@ -566,7 +568,7 @@ export const renderAllMarkups = (
   ctx: CanvasRenderingContext2D,
   params: RenderAllParams
 ) => {
-  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, selectedItemIds, scaleLine, plantSetupConfig, placedWalkways, placedCableTrays } = params;
+  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, selectedItemIds, scaleLine, plantSetupConfig, placedWalkways, placedCableTrays, layerVisibility = defaultLayerVisibility } = params;
 
   // Helper to check if an item is selected (supports both single and multi-selection)
   const isItemSelected = (id: string) => {
@@ -577,39 +579,45 @@ export const renderAllMarkups = (
   };
 
   // Draw roof masks first (background)
-  for (const mask of roofMasks) {
-    drawRoofMask(ctx, mask, zoom, isItemSelected(mask.id));
+  if (layerVisibility.roofMasks) {
+    for (const mask of roofMasks) {
+      drawRoofMask(ctx, mask, zoom, isItemSelected(mask.id));
+    }
   }
 
   // Draw walkways (below PV arrays)
-  if (placedWalkways) {
+  if (layerVisibility.walkways && placedWalkways) {
     for (const walkway of placedWalkways) {
       drawWalkway(ctx, walkway, isItemSelected(walkway.id), false, zoom, scaleInfo);
     }
   }
 
   // Draw cable trays (below PV arrays)
-  if (placedCableTrays) {
+  if (layerVisibility.cableTrays && placedCableTrays) {
     for (const tray of placedCableTrays) {
       drawCableTray(ctx, tray, isItemSelected(tray.id), false, zoom, scaleInfo);
     }
   }
 
   // Draw PV arrays
-  if (pvPanelConfig) {
+  if (layerVisibility.pvArrays && pvPanelConfig) {
     for (const array of pvArrays) {
       drawPvArray(ctx, array, false, pvPanelConfig, scaleInfo, roofMasks, zoom, isItemSelected(array.id));
     }
   }
 
-  // Draw supply lines
-  for (const line of lines) {
-    drawSupplyLine(ctx, line, zoom, isItemSelected(line.id));
+  // Draw supply lines (cables)
+  if (layerVisibility.cables) {
+    for (const line of lines) {
+      drawSupplyLine(ctx, line, zoom, isItemSelected(line.id));
+    }
   }
 
-  // Draw equipment
-  for (const item of equipment) {
-    drawEquipmentIcon(ctx, item, isItemSelected(item.id), zoom, scaleInfo, plantSetupConfig);
+  // Draw equipment (inverters etc.)
+  if (layerVisibility.equipment) {
+    for (const item of equipment) {
+      drawEquipmentIcon(ctx, item, isItemSelected(item.id), zoom, scaleInfo, plantSetupConfig);
+    }
   }
 
   // Draw scale indicator
