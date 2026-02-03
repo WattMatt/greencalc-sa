@@ -164,6 +164,49 @@ export interface BatchEquipmentConfig {
   }>;
 }
 
+// Item types in batch placement
+export type BatchPlacementItemType = 'pvArray' | 'equipment' | 'walkway' | 'cableTray';
+
+// Individual item in a mixed batch placement
+export interface BatchPlacementItem {
+  id: string; // Temporary ID for reference
+  type: BatchPlacementItemType;
+  offset: Point; // Relative to batch center
+  rotation: number;
+  // Type-specific data
+  pvArrayConfig?: {
+    rows: number;
+    columns: number;
+    orientation: PanelOrientation;
+    minSpacing?: number;
+    roofMaskId?: string;
+  };
+  equipmentConfig?: {
+    equipmentType: EquipmentType;
+    name?: string;
+  };
+  walkwayConfig?: {
+    configId: string;
+    name: string;
+    width: number;
+    length: number;
+    minSpacing?: number;
+  };
+  cableTrayConfig?: {
+    configId: string;
+    name: string;
+    width: number;
+    length: number;
+    minSpacing?: number;
+  };
+}
+
+// Unified batch placement configuration for multi-copy of mixed types
+export interface BatchPlacementConfig {
+  items: BatchPlacementItem[];
+  groupCenter: Point; // Original group center for reference
+}
+
 // Plant Setup Configuration Types
 export interface SolarModuleConfig {
   id: string;
