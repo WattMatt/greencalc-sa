@@ -1,82 +1,117 @@
 
-# Fix: Multi-Selection Not Working for Inverters, Walkways, Cable Trays, and Solar Modules
+
+# Fix: Distance Between Tool Not Moving Objects to Correct Position
 
 ## Problem Identified
 
-After investigating the `Canvas.tsx` hit-testing logic, I found the root cause:
+The "Set Distance Between Objects" tool works for some object types but fails for **cable trays and walkways**. The issue is a **double rotation bug** where dimensions are being rotated twice:
 
-**Equipment (inverters) is being checked AFTER roof masks in the selection order.**
+1. **First rotation**: `getMaterialDimensions()` applies rotation to calculate the effective bounding box dimensions
+2. **Second rotation**: `getObjectEdges()` applies rotation again when calculating edge positions
 
-Current order in `handleMouseDown`:
-1. PV Arrays (solar modules)
-2. Walkways
-3. Cable Trays
-4. **Roof Masks** ← Problem: checked before equipment
-5. **Equipment (inverters)** ← Too late in priority
+This causes incorrect edge calculations, resulting in `calculateNewPositionAtDistance()` producing wrong position values.
 
-Since roof masks are large polygons covering the entire roof area, clicking on an inverter positioned on or near a roof will select the roof mask instead of the equipment.
-
-## Solution
-
-Reorder the hit-testing in `Canvas.tsx` so equipment (inverters, DC combiners, AC disconnects, main boards) is checked **before** roof masks:
+### Evidence from Code
 
 ```text
-Current Order:                      Fixed Order:
-1. PV Arrays                        1. PV Arrays
-2. Walkways                         2. Walkways  
-3. Cable Trays                      3. Cable Trays
-4. Roof Masks  <-- wrong            4. Equipment  <-- moved up
-5. Equipment                        5. Roof Masks <-- moved down
+FloorPlanMarkup.tsx (getObjectDimensions - lines 1094-1105):
+─────────────────────────────────────────────────────────────
+const dims = getMaterialDimensions(walkway, scaleInfo);  // ← Already rotated!
+return { width: dims.width, height: dims.height, rotation: walkway.rotation };
+                                                         ↓
+getObjectEdges() applies rotation AGAIN → Wrong edges → Wrong position
 ```
 
-## Technical Changes
+**Compare with correct implementations:**
 
-### File: `src/components/floor-plan/components/Canvas.tsx`
+```text
+drawing.ts (findObjectForHighlight - lines 108-112):
+────────────────────────────────────────────────────
+dimensions: { 
+  width: walkway.width / params.scaleInfo.ratio,   // ← Raw dimensions
+  height: walkway.length / params.scaleInfo.ratio  // ← No rotation applied
+}
 
-**Lines ~620-650**: Move the equipment hit-testing block (currently at lines 627-649) to occur BEFORE the roof mask hit-testing (lines 620-625).
-
-The code block to move:
-```typescript
-// Select equipment (inverters, etc.) using bounding box hit-test
-const hitEquipment = [...equipment].reverse().find(item => {
-  const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
-  const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
-  const padding = 5 / viewState.zoom;
-  const halfSize = sizePx / 2 + padding;
-  
-  return Math.abs(worldPos.x - item.position.x) <= halfSize &&
-         Math.abs(worldPos.y - item.position.y) <= halfSize;
-});
-
-if (hitEquipment) {
-  handleItemSelection(hitEquipment.id, () => {
-    setDraggingEquipmentId(hitEquipment.id);
-    setEquipmentDragOffset({ 
-      x: worldPos.x - hitEquipment.position.x, 
-      y: worldPos.y - hitEquipment.position.y 
-    });
-  });
-  return;
+useMultiSelection.ts (getItemInfo - lines 119-125):
+────────────────────────────────────────────────────
+dimensions: { 
+  width: walkway.width / scaleInfo.ratio,   // ← Raw dimensions
+  height: walkway.length / scaleInfo.ratio  // ← No rotation applied
 }
 ```
 
-This block should be placed **after cable trays** (line 618) and **before roof masks** (line 620).
+---
+
+## Solution
+
+Modify `getObjectDimensions()` in `FloorPlanMarkup.tsx` to return **raw dimensions** for walkways and cable trays, matching the pattern used in `drawing.ts` and `useMultiSelection.ts`.
+
+### File: `src/components/floor-plan/FloorPlanMarkup.tsx`
+
+**Change 1**: Update walkway dimension calculation (lines ~1094-1098)
+
+```typescript
+// BEFORE (incorrect - double rotation):
+const walkway = placedWalkways.find(w => w.id === id);
+if (walkway && scaleInfo.ratio) {
+  const dims = getMaterialDimensions(walkway, scaleInfo);
+  return { width: dims.width, height: dims.height, rotation: walkway.rotation };
+}
+
+// AFTER (correct - raw dimensions):
+const walkway = placedWalkways.find(w => w.id === id);
+if (walkway && scaleInfo.ratio) {
+  return { 
+    width: walkway.width / scaleInfo.ratio, 
+    height: walkway.length / scaleInfo.ratio, 
+    rotation: walkway.rotation 
+  };
+}
+```
+
+**Change 2**: Update cable tray dimension calculation (lines ~1101-1105)
+
+```typescript
+// BEFORE (incorrect - double rotation):
+const cableTray = placedCableTrays.find(c => c.id === id);
+if (cableTray && scaleInfo.ratio) {
+  const dims = getMaterialDimensions(cableTray, scaleInfo);
+  return { width: dims.width, height: dims.height, rotation: cableTray.rotation };
+}
+
+// AFTER (correct - raw dimensions):
+const cableTray = placedCableTrays.find(c => c.id === id);
+if (cableTray && scaleInfo.ratio) {
+  return { 
+    width: cableTray.width / scaleInfo.ratio, 
+    height: cableTray.length / scaleInfo.ratio, 
+    rotation: cableTray.rotation 
+  };
+}
+```
+
+---
 
 ## Expected Behavior After Fix
 
-| Object Type | Shift+Click Multi-Select |
-|-------------|-------------------------|
-| PV Arrays (solar modules) | Works |
-| Walkways | Works |
-| Cable Trays | Works |
-| Inverters (equipment) | **Now works** |
-| Roof Masks | Works (lowest priority) |
+| Object Pair | Distance Tool | Align Edges Tool |
+|-------------|---------------|------------------|
+| Cable Tray ↔ Cable Tray | Works correctly | Works correctly |
+| Walkway ↔ Walkway | Works correctly | Works correctly |
+| Solar Module ↔ Solar Module | Works correctly | Works correctly |
+| Cable Tray ↔ Walkway | Works correctly | Works correctly |
+| Cable Tray ↔ Solar Module | Works correctly | Works correctly |
+| Walkway ↔ Solar Module | Works correctly | Works correctly |
+| Any ↔ Inverter/Equipment | Works correctly | Works correctly |
+
+---
 
 ## Testing Scenarios
 
-1. Place an inverter on the canvas
-2. Place another inverter nearby
-3. Shift+click on first inverter → selected
-4. Shift+click on second inverter → both selected with group bounding box
-5. Repeat with walkways and cable trays
-6. Verify mixed selection (e.g., inverter + walkway) shows warning on copy
+1. **Cable Tray to Cable Tray**: Place two cable trays, use Distance Between tool, set distance to 0.5m → verify actual distance is 0.5m
+2. **Walkway to Walkway**: Same test with walkways
+3. **Cross-type**: Set distance between cable tray and walkway → verify correct positioning
+4. **Solar Module to Cable Tray**: Ensure PV arrays work with materials
+5. **Rotated Objects**: Test with objects at 45°, 90° rotations to ensure rotation is applied correctly once
+6. **Align Edges**: Verify left/right/top/bottom edge alignment works for all object combinations
+
