@@ -75,6 +75,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   // History for undo/redo
   const [history, setHistory] = useState<DesignState[]>([initialDesignState]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  const historyIndexRef = useRef(0);
   
   const currentDesign = history[historyIndex];
   const { equipment, lines, roofMasks, pvArrays, placedWalkways, placedCableTrays } = currentDesign;
@@ -82,30 +83,73 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
 
-  const commitState = useCallback((newState: DesignState) => {
+  useEffect(() => {
+    historyIndexRef.current = historyIndex;
+  }, [historyIndex]);
+
+  /**
+   * Commit state updates safely even when multiple commits happen in the same tick.
+   * This prevents multi-item operations (batch placement, group alignment, etc.) from
+   * overwriting earlier commits due to stale closures.
+   */
+  const commitState = useCallback((updater: (prev: DesignState) => DesignState) => {
     if (readOnly) return;
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(newState);
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
+
+    setHistory((prevHistory) => {
+      const idx = historyIndexRef.current;
+      const base = prevHistory[idx] ?? initialDesignState;
+      const nextState = updater(base);
+      const nextHistory = prevHistory.slice(0, idx + 1);
+      nextHistory.push(nextState);
+      return nextHistory;
+    });
+
+    setHistoryIndex(() => {
+      const nextIndex = historyIndexRef.current + 1;
+      historyIndexRef.current = nextIndex;
+      return nextIndex;
+    });
+
     setHasUnsavedChanges(true);
-  }, [history, historyIndex, readOnly]);
+  }, [readOnly]);
 
-  const setEquipment = (updater: (prev: typeof equipment) => typeof equipment) => 
-    commitState({ ...currentDesign, equipment: updater(equipment) });
-  const setLines = (updater: (prev: typeof lines) => typeof lines) => 
-    commitState({ ...currentDesign, lines: updater(lines) });
-  const setRoofMasks = (updater: (prev: typeof roofMasks) => typeof roofMasks) => 
-    commitState({ ...currentDesign, roofMasks: updater(roofMasks) });
-  const setPvArrays = (updater: (prev: typeof pvArrays) => typeof pvArrays) => 
-    commitState({ ...currentDesign, pvArrays: updater(pvArrays) });
-  const setPlacedWalkways = (updater: (prev: PlacedWalkway[]) => PlacedWalkway[]) => 
-    commitState({ ...currentDesign, placedWalkways: updater(placedWalkways) });
-  const setPlacedCableTrays = (updater: (prev: PlacedCableTray[]) => PlacedCableTray[]) => 
-    commitState({ ...currentDesign, placedCableTrays: updater(placedCableTrays) });
+  const setEquipment = (updater: (prev: typeof equipment) => typeof equipment) =>
+    commitState((prev) => ({ ...prev, equipment: updater(prev.equipment) }));
 
-  const handleUndo = () => !readOnly && historyIndex > 0 && setHistoryIndex(historyIndex - 1);
-  const handleRedo = () => !readOnly && historyIndex < history.length - 1 && setHistoryIndex(historyIndex + 1);
+  const setLines = (updater: (prev: typeof lines) => typeof lines) =>
+    commitState((prev) => ({ ...prev, lines: updater(prev.lines) }));
+
+  const setRoofMasks = (updater: (prev: typeof roofMasks) => typeof roofMasks) =>
+    commitState((prev) => ({ ...prev, roofMasks: updater(prev.roofMasks) }));
+
+  const setPvArrays = (updater: (prev: typeof pvArrays) => typeof pvArrays) =>
+    commitState((prev) => ({ ...prev, pvArrays: updater(prev.pvArrays) }));
+
+  const setPlacedWalkways = (updater: (prev: PlacedWalkway[]) => PlacedWalkway[]) =>
+    commitState((prev) => ({ ...prev, placedWalkways: updater(prev.placedWalkways) }));
+
+  const setPlacedCableTrays = (updater: (prev: PlacedCableTray[]) => PlacedCableTray[]) =>
+    commitState((prev) => ({ ...prev, placedCableTrays: updater(prev.placedCableTrays) }));
+
+  const handleUndo = () => {
+    if (readOnly) return;
+    if (historyIndex <= 0) return;
+    setHistoryIndex((prev) => {
+      const next = Math.max(0, prev - 1);
+      historyIndexRef.current = next;
+      return next;
+    });
+  };
+
+  const handleRedo = () => {
+    if (readOnly) return;
+    if (historyIndex >= history.length - 1) return;
+    setHistoryIndex((prev) => {
+      const next = Math.min(history.length - 1, prev + 1);
+      historyIndexRef.current = next;
+      return next;
+    });
+  };
 
   // Scale & Config
   const [scaleInfo, setScaleInfo] = useState<ScaleInfo>({ pixelDistance: null, realDistance: null, ratio: null });
