@@ -75,7 +75,7 @@ function CollapsibleSection({
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div className="flex items-center gap-1 w-full">
-        {/* Visibility toggle button */}
+        {/* Visibility toggle button - on left */}
         {onToggleVisibility !== undefined && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -107,11 +107,12 @@ function CollapsibleSection({
           )}>
             {icon}
             <span className="text-sm font-medium">{title}</span>
-            <span className="text-xs text-muted-foreground ml-auto mr-1">
+            <span className="text-xs text-muted-foreground ml-auto">
               {summary}
             </span>
+            {/* Chevron on far right */}
             <ChevronDown className={cn(
-              "h-4 w-4 text-muted-foreground transition-transform",
+              "h-4 w-4 text-muted-foreground transition-transform shrink-0 ml-1",
               isOpen && "rotate-180"
             )} />
           </button>
@@ -164,6 +165,7 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div className="flex items-center gap-1 w-full">
+        {/* Visibility toggle button - on left */}
         {onToggleVisibility !== undefined && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -195,11 +197,12 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
           )}>
             {icon}
             <span className="text-sm font-medium">{title}</span>
-            <span className="text-xs text-muted-foreground ml-auto mr-1">
+            <span className="text-xs text-muted-foreground ml-auto">
               {totalSummary}
             </span>
+            {/* Chevron on far right */}
             <ChevronDown className={cn(
-              "h-4 w-4 text-muted-foreground transition-transform",
+              "h-4 w-4 text-muted-foreground transition-transform shrink-0 ml-1",
               isOpen && "rotate-180"
             )} />
           </button>
@@ -217,14 +220,15 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
                 <Collapsible key={key} open={isGroupOpen} onOpenChange={() => toggleGroup(key)}>
                   <CollapsibleTrigger asChild>
                     <button className="flex items-center gap-2 w-full hover:bg-accent/50 rounded p-1 text-xs transition-colors">
-                      <ChevronDown className={cn(
-                        "h-3 w-3 text-muted-foreground transition-transform",
-                        isGroupOpen && "rotate-180"
-                      )} />
                       <span className="font-medium">{group.name}</span>
                       <span className="text-muted-foreground ml-auto">
                         {group.totalLength.toFixed(1)}m ({group.items.length})
                       </span>
+                      {/* Chevron on far right for sub-groups */}
+                      <ChevronDown className={cn(
+                        "h-3 w-3 text-muted-foreground transition-transform shrink-0",
+                        isGroupOpen && "rotate-180"
+                      )} />
                     </button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pt-1 pl-4 space-y-1">
