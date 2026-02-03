@@ -2055,16 +2055,28 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         setPlacedCableTrays={readOnly ? undefined : setPlacedCableTrays}
         pendingWalkwayConfig={
           activeTool === Tool.PLACE_WALKWAY
-            ? (plantSetupConfig.walkways.find(w => w.id === selectedWalkwayId) 
-               || plantSetupConfig.walkways[0]
-               || { id: 'default-walkway', name: 'Walkway', width: 0.6, length: 2 })
+            ? (() => {
+                const base = plantSetupConfig.walkways.find(w => w.id === selectedWalkwayId) 
+                   || plantSetupConfig.walkways[0]
+                   || { id: 'default-walkway', name: 'Walkway', width: 0.6, length: 2 };
+                // Swap width/length based on orientation (portrait = default, landscape = swapped)
+                return placementOrientation === 'landscape'
+                  ? { ...base, width: base.length, length: base.width }
+                  : base;
+              })()
             : null
         }
         pendingCableTrayConfig={
           activeTool === Tool.PLACE_CABLE_TRAY
-            ? (plantSetupConfig.cableTrays.find(c => c.id === selectedCableTrayId) 
-               || plantSetupConfig.cableTrays[0]
-               || { id: 'default-tray', name: 'Cable Tray', width: 0.3, length: 2 })
+            ? (() => {
+                const base = plantSetupConfig.cableTrays.find(c => c.id === selectedCableTrayId) 
+                   || plantSetupConfig.cableTrays[0]
+                   || { id: 'default-tray', name: 'Cable Tray', width: 0.3, length: 2 };
+                // Swap width/length based on orientation (portrait = default, landscape = swapped)
+                return placementOrientation === 'landscape'
+                  ? { ...base, width: base.length, length: base.width }
+                  : base;
+              })()
             : null
         }
         placementMinSpacing={placementMinSpacing}
