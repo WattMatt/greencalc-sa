@@ -2001,6 +2001,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           setSelectedWalkwayId={setSelectedWalkwayId}
           selectedCableTrayId={selectedCableTrayId}
           setSelectedCableTrayId={setSelectedCableTrayId}
+          selectedModuleId={selectedModuleId}
+          setSelectedModuleId={setSelectedModuleId}
+          selectedInverterId={selectedInverterId}
+          setSelectedInverterId={setSelectedInverterId}
         />
       )}
       

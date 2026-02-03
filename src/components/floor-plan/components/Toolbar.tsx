@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, Copy, MoveHorizontal, AlignVerticalJustifyStart,
   Settings
 } from 'lucide-react';
-import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig, WalkwayConfig, CableTrayConfig } from '../types';
+import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig, WalkwayConfig, CableTrayConfig, SolarModuleConfig, InverterLayoutConfig } from '../types';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -80,14 +80,20 @@ const CollapsibleSection = ({ title, children, isOpen, onToggle }: CollapsibleSe
   </Collapsible>
 );
 
-// Material selector popover for walkways and cable trays
-function MaterialSelectorPopover({
+// Generic config selector popover for equipment and materials
+interface ConfigItem {
+  id: string;
+  name: string;
+  subtitle?: string;
+}
+
+function ConfigSelectorPopover({
   items,
   selectedId,
   onSelect,
   label,
 }: {
-  items: (WalkwayConfig | CableTrayConfig)[];
+  items: ConfigItem[];
   selectedId: string | null | undefined;
   onSelect: (id: string) => void;
   label: string;
@@ -101,18 +107,20 @@ function MaterialSelectorPopover({
           <Settings className="h-3 w-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-56" align="start">
+      <PopoverContent className="w-64" align="start">
         <div className="space-y-2">
           <p className="text-sm font-medium">{label}</p>
           <RadioGroup value={effectiveSelectedId} onValueChange={onSelect}>
             {items.map((item) => (
               <div key={item.id} className="flex items-center space-x-2">
-                <RadioGroupItem value={item.id} id={`material-${item.id}`} />
-                <Label htmlFor={`material-${item.id}`} className="flex-1 cursor-pointer text-sm">
+                <RadioGroupItem value={item.id} id={`config-${item.id}`} />
+                <Label htmlFor={`config-${item.id}`} className="flex-1 cursor-pointer text-sm">
                   <span>{item.name}</span>
-                  <span className="text-muted-foreground ml-2">
-                    {item.width.toFixed(3)}m
-                  </span>
+                  {item.subtitle && (
+                    <span className="text-muted-foreground ml-2 text-xs">
+                      {item.subtitle}
+                    </span>
+                  )}
                 </Label>
               </div>
             ))}
@@ -121,6 +129,22 @@ function MaterialSelectorPopover({
       </PopoverContent>
     </Popover>
   );
+}
+
+// Helper to convert configs to generic items
+function toConfigItems(items: (WalkwayConfig | CableTrayConfig | SolarModuleConfig | InverterLayoutConfig)[]): ConfigItem[] {
+  return items.map(item => {
+    if ('wattage' in item) {
+      // SolarModuleConfig
+      return { id: item.id, name: item.name, subtitle: `${item.wattage}W` };
+    } else if ('acCapacity' in item) {
+      // InverterLayoutConfig
+      return { id: item.id, name: item.name, subtitle: `${item.acCapacity}kW` };
+    } else {
+      // WalkwayConfig or CableTrayConfig
+      return { id: item.id, name: item.name, subtitle: `${item.width.toFixed(3)}m` };
+    }
+  });
 }
 
 // Helper to format relative time
@@ -180,6 +204,11 @@ interface ToolbarProps {
   setSelectedWalkwayId?: (id: string | null) => void;
   selectedCableTrayId?: string | null;
   setSelectedCableTrayId?: (id: string | null) => void;
+  // Equipment selection
+  selectedModuleId?: string | null;
+  setSelectedModuleId?: (id: string | null) => void;
+  selectedInverterId?: string | null;
+  setSelectedInverterId?: (id: string | null) => void;
 }
 
 export function Toolbar({
@@ -222,6 +251,10 @@ export function Toolbar({
   setSelectedWalkwayId,
   selectedCableTrayId,
   setSelectedCableTrayId,
+  selectedModuleId,
+  setSelectedModuleId,
+  selectedInverterId,
+  setSelectedInverterId,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -472,20 +505,56 @@ export function Toolbar({
           isOpen={openSections.equipment}
           onToggle={() => toggleSection('equipment')}
         >
-          <ToolButton
-            icon={Sun}
-            label="Solar Module"
-            isActive={activeTool === Tool.PV_ARRAY}
-            onClick={() => setActiveTool(Tool.PV_ARRAY)}
-            disabled={!scaleSet || !pvConfigured}
-          />
-          <ToolButton
-            icon={() => <span className="text-xs font-mono">~=</span>}
-            label="Inverter"
-            isActive={activeTool === Tool.PLACE_INVERTER}
-            onClick={() => setActiveTool(Tool.PLACE_INVERTER)}
-            disabled={!scaleSet}
-          />
+          {/* Solar Module with selector */}
+          <div className="flex items-center gap-1">
+            <ToolButton
+              icon={Sun}
+              label="Solar Module"
+              isActive={activeTool === Tool.PV_ARRAY}
+              onClick={() => setActiveTool(Tool.PV_ARRAY)}
+              disabled={!scaleSet || !pvConfigured}
+            />
+            {plantSetupConfig.solarModules.length > 1 && setSelectedModuleId && (
+              <ConfigSelectorPopover
+                items={toConfigItems(plantSetupConfig.solarModules)}
+                selectedId={selectedModuleId}
+                onSelect={setSelectedModuleId}
+                label="Select Solar Module"
+              />
+            )}
+          </div>
+          {/* Show currently selected module */}
+          {plantSetupConfig.solarModules.length > 0 && (
+            <p className="text-[10px] text-muted-foreground pl-6 -mt-1 truncate">
+              {(plantSetupConfig.solarModules.find(m => m.id === selectedModuleId) || plantSetupConfig.solarModules.find(m => m.isDefault) || plantSetupConfig.solarModules[0])?.name}
+            </p>
+          )}
+          
+          {/* Inverter with selector */}
+          <div className="flex items-center gap-1">
+            <ToolButton
+              icon={() => <span className="text-xs font-mono">~=</span>}
+              label="Inverter"
+              isActive={activeTool === Tool.PLACE_INVERTER}
+              onClick={() => setActiveTool(Tool.PLACE_INVERTER)}
+              disabled={!scaleSet || plantSetupConfig.inverters.length === 0}
+            />
+            {plantSetupConfig.inverters.length > 1 && setSelectedInverterId && (
+              <ConfigSelectorPopover
+                items={toConfigItems(plantSetupConfig.inverters)}
+                selectedId={selectedInverterId}
+                onSelect={setSelectedInverterId}
+                label="Select Inverter"
+              />
+            )}
+          </div>
+          {/* Show currently selected inverter */}
+          {plantSetupConfig.inverters.length > 0 && (
+            <p className="text-[10px] text-muted-foreground pl-6 -mt-1 truncate">
+              {(plantSetupConfig.inverters.find(i => i.id === selectedInverterId) || plantSetupConfig.inverters.find(i => i.isDefault) || plantSetupConfig.inverters[0])?.name}
+            </p>
+          )}
+          
           <ToolButton
             icon={() => <span className="text-xs font-mono">▮</span>}
             label="Main Board"
@@ -541,8 +610,8 @@ export function Toolbar({
               disabled={!scaleSet || plantSetupConfig.walkways.length === 0}
             />
             {plantSetupConfig.walkways.length > 1 && setSelectedWalkwayId && (
-              <MaterialSelectorPopover
-                items={plantSetupConfig.walkways}
+              <ConfigSelectorPopover
+                items={toConfigItems(plantSetupConfig.walkways)}
                 selectedId={selectedWalkwayId}
                 onSelect={setSelectedWalkwayId}
                 label="Select Walkway"
@@ -566,8 +635,8 @@ export function Toolbar({
               disabled={!scaleSet || plantSetupConfig.cableTrays.length === 0}
             />
             {plantSetupConfig.cableTrays.length > 1 && setSelectedCableTrayId && (
-              <MaterialSelectorPopover
-                items={plantSetupConfig.cableTrays}
+              <ConfigSelectorPopover
+                items={toConfigItems(plantSetupConfig.cableTrays)}
                 selectedId={selectedCableTrayId}
                 onSelect={setSelectedCableTrayId}
                 label="Select Cable Tray"
