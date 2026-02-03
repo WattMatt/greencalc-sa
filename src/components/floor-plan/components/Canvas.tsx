@@ -112,6 +112,11 @@ export function Canvas({
   // Marquee selection state
   const [marqueeStart, setMarqueeStart] = useState<Point | null>(null);
   const [marqueeEnd, setMarqueeEnd] = useState<Point | null>(null);
+  
+  // Group dragging state - for moving multiple selected items together
+  const [isGroupDragging, setIsGroupDragging] = useState(false);
+  const [groupDragStart, setGroupDragStart] = useState<Point | null>(null);
+  const [groupDragInitialPositions, setGroupDragInitialPositions] = useState<Map<string, Point>>(new Map());
 
   const SNAP_THRESHOLD = 15; // pixels in screen space
 
@@ -631,16 +636,60 @@ export function Canvas({
     if (activeTool === Tool.SELECT && e.button === 0) {
       const isMultiSelectModifier = e.shiftKey || e.ctrlKey || e.metaKey;
       
+      // Helper to start group dragging for all selected items
+      const startGroupDrag = () => {
+        if (!selectedItemIds || selectedItemIds.size <= 1) return;
+        
+        // Store initial positions of all selected items
+        const initialPositions = new Map<string, Point>();
+        
+        pvArrays.forEach(arr => {
+          if (selectedItemIds.has(arr.id)) {
+            initialPositions.set(arr.id, { ...arr.position });
+          }
+        });
+        equipment.forEach(eq => {
+          if (selectedItemIds.has(eq.id)) {
+            initialPositions.set(eq.id, { ...eq.position });
+          }
+        });
+        placedWalkways?.forEach(w => {
+          if (selectedItemIds.has(w.id)) {
+            initialPositions.set(w.id, { ...w.position });
+          }
+        });
+        placedCableTrays?.forEach(t => {
+          if (selectedItemIds.has(t.id)) {
+            initialPositions.set(t.id, { ...t.position });
+          }
+        });
+        roofMasks.forEach(m => {
+          if (selectedItemIds.has(m.id)) {
+            // For roof masks, store center as reference
+            const cx = m.points.reduce((s, p) => s + p.x, 0) / m.points.length;
+            const cy = m.points.reduce((s, p) => s + p.y, 0) / m.points.length;
+            initialPositions.set(m.id, { x: cx, y: cy });
+          }
+        });
+        
+        setIsGroupDragging(true);
+        setGroupDragStart(worldPos);
+        setGroupDragInitialPositions(initialPositions);
+      };
+      
       // Helper to handle selection based on modifier keys
-      const handleItemSelection = (id: string, startDrag: () => void) => {
+      const handleItemSelection = (id: string, startSingleDrag: () => void) => {
         if (isMultiSelectModifier && onToggleSelection) {
           // Shift/Ctrl+Click: toggle selection
           onToggleSelection(id);
           // Don't start drag when toggling
+        } else if (selectedItemIds && selectedItemIds.size > 1 && selectedItemIds.has(id)) {
+          // Clicking on already-selected item in multi-selection: start group drag
+          startGroupDrag();
         } else {
-          // Normal click: select single and start drag
+          // Normal click: select single and start single-item drag
           setSelectedItemId(id);
-          startDrag();
+          startSingleDrag();
         }
       };
       
@@ -1171,6 +1220,91 @@ export function Canvas({
       return;
     }
 
+    // Handle group dragging (multiple selected items)
+    if (isGroupDragging && groupDragStart && groupDragInitialPositions.size > 0) {
+      const deltaX = worldPos.x - groupDragStart.x;
+      const deltaY = worldPos.y - groupDragStart.y;
+      
+      // Move all PV arrays that are selected
+      const selectedArrayIds = pvArrays.filter(arr => groupDragInitialPositions.has(arr.id)).map(arr => arr.id);
+      if (selectedArrayIds.length > 0) {
+        setPvArrays(prev => prev.map(arr => {
+          const initialPos = groupDragInitialPositions.get(arr.id);
+          if (initialPos) {
+            return { ...arr, position: { x: initialPos.x + deltaX, y: initialPos.y + deltaY } };
+          }
+          return arr;
+        }));
+      }
+      
+      // Move all equipment that is selected
+      const selectedEquipmentIds = equipment.filter(eq => groupDragInitialPositions.has(eq.id)).map(eq => eq.id);
+      if (selectedEquipmentIds.length > 0) {
+        setEquipment(prev => prev.map(eq => {
+          const initialPos = groupDragInitialPositions.get(eq.id);
+          if (initialPos) {
+            return { ...eq, position: { x: initialPos.x + deltaX, y: initialPos.y + deltaY } };
+          }
+          return eq;
+        }));
+      }
+      
+      // Move all walkways that are selected
+      if (setPlacedWalkways && placedWalkways) {
+        const selectedWalkwayIds = placedWalkways.filter(w => groupDragInitialPositions.has(w.id)).map(w => w.id);
+        if (selectedWalkwayIds.length > 0) {
+          setPlacedWalkways(prev => prev.map(w => {
+            const initialPos = groupDragInitialPositions.get(w.id);
+            if (initialPos) {
+              return { ...w, position: { x: initialPos.x + deltaX, y: initialPos.y + deltaY } };
+            }
+            return w;
+          }));
+        }
+      }
+      
+      // Move all cable trays that are selected
+      if (setPlacedCableTrays && placedCableTrays) {
+        const selectedTrayIds = placedCableTrays.filter(t => groupDragInitialPositions.has(t.id)).map(t => t.id);
+        if (selectedTrayIds.length > 0) {
+          setPlacedCableTrays(prev => prev.map(t => {
+            const initialPos = groupDragInitialPositions.get(t.id);
+            if (initialPos) {
+              return { ...t, position: { x: initialPos.x + deltaX, y: initialPos.y + deltaY } };
+            }
+            return t;
+          }));
+        }
+      }
+      
+      // Move all roof masks that are selected (move all points by delta)
+      const selectedMaskIds = roofMasks.filter(m => groupDragInitialPositions.has(m.id)).map(m => m.id);
+      if (selectedMaskIds.length > 0) {
+        setRoofMasks(prev => prev.map(m => {
+          if (groupDragInitialPositions.has(m.id)) {
+            // We stored the center, but we need to move all points
+            // Calculate delta from initial center
+            const initialCenter = groupDragInitialPositions.get(m.id)!;
+            const currentCenter = {
+              x: m.points.reduce((s, p) => s + p.x, 0) / m.points.length,
+              y: m.points.reduce((s, p) => s + p.y, 0) / m.points.length,
+            };
+            // The target center should be at initialCenter + delta
+            const targetCenter = { x: initialCenter.x + deltaX, y: initialCenter.y + deltaY };
+            // Move all points by the difference
+            const moveDelta = { x: targetCenter.x - currentCenter.x, y: targetCenter.y - currentCenter.y };
+            return {
+              ...m,
+              points: m.points.map(p => ({ x: p.x + moveDelta.x, y: p.y + moveDelta.y })),
+            };
+          }
+          return m;
+        }));
+      }
+      
+      return;
+    }
+
     if (draggingPvArrayId && pvArrayDragOffset) {
       const basePos = { x: worldPos.x - pvArrayDragOffset.x, y: worldPos.y - pvArrayDragOffset.y };
       
@@ -1436,6 +1570,11 @@ export function Canvas({
     setMarqueeStart(null);
     setMarqueeEnd(null);
     
+    // Clear group drag state
+    setIsGroupDragging(false);
+    setGroupDragStart(null);
+    setGroupDragInitialPositions(new Map());
+    
     setIsPanning(false);
     setDraggingPvArrayId(null);
     setPvArrayDragOffset(null);
@@ -1514,6 +1653,9 @@ export function Canvas({
         // Clear all drag/selection states without triggering box selection
         setMarqueeStart(null);
         setMarqueeEnd(null);
+        setIsGroupDragging(false);
+        setGroupDragStart(null);
+        setGroupDragInitialPositions(new Map());
         setIsPanning(false);
         setDraggingPvArrayId(null);
         setPvArrayDragOffset(null);
