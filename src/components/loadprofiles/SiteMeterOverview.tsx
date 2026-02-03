@@ -21,6 +21,7 @@ interface ScadaImport {
   id: string;
   site_name: string;
   shop_name: string | null;
+  shop_number: string | null;
   meter_label: string | null;
   meter_color: string | null;
   data_points: number | null;
@@ -48,7 +49,7 @@ export function SiteMeterOverview({ siteId, siteName, onMeterPreview }: SiteMete
     queryFn: async () => {
       const { data, error } = await supabase
         .from("scada_imports")
-        .select("id, site_name, shop_name, meter_label, meter_color, data_points, date_range_start, date_range_end, load_profile_weekday, load_profile_weekend, raw_data")
+        .select("id, site_name, shop_name, shop_number, meter_label, meter_color, data_points, date_range_start, date_range_end, load_profile_weekday, load_profile_weekend, raw_data")
         .eq("site_id", siteId)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -150,6 +151,8 @@ export function SiteMeterOverview({ siteId, siteName, onMeterPreview }: SiteMete
         return {
           id: meter.id,
           name: getMeterDisplayName(meter),
+          shopName: meter.shop_name,
+          shopNumber: meter.shop_number,
           dailyKwh: Math.round(dailyKwh),
           color: getMeterColor(meter, meters.indexOf(meter)),
         };
@@ -371,7 +374,23 @@ export function SiteMeterOverview({ siteId, siteName, onMeterPreview }: SiteMete
                         <Badge variant="outline" className="w-6 h-6 flex items-center justify-center p-0">
                           {idx + 1}
                         </Badge>
-                        <span className="font-medium truncate max-w-[200px]">{consumer.name}</span>
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-2">
+                            {consumer.shopNumber && (
+                              <Badge variant="secondary" className="text-xs shrink-0">
+                                {consumer.shopNumber}
+                              </Badge>
+                            )}
+                            <span className="font-medium truncate max-w-[180px]">
+                              {consumer.shopName || consumer.name}
+                            </span>
+                          </div>
+                          {consumer.shopName && consumer.name !== consumer.shopName && (
+                            <span className="text-xs text-muted-foreground truncate">
+                              {consumer.name}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{consumer.dailyKwh.toLocaleString()} kWh/day</span>
