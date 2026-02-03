@@ -1090,18 +1090,24 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       return { width: dims.width, height: dims.height, rotation: eq.rotation };
     }
     
-    // Check walkways
+    // Check walkways - use raw dimensions (rotation is applied by getObjectEdges)
     const walkway = placedWalkways.find(w => w.id === id);
     if (walkway && scaleInfo.ratio) {
-      const dims = getMaterialDimensions(walkway, scaleInfo);
-      return { width: dims.width, height: dims.height, rotation: walkway.rotation };
+      return { 
+        width: walkway.width / scaleInfo.ratio, 
+        height: walkway.length / scaleInfo.ratio, 
+        rotation: walkway.rotation 
+      };
     }
     
-    // Check cable trays
+    // Check cable trays - use raw dimensions (rotation is applied by getObjectEdges)
     const cableTray = placedCableTrays.find(c => c.id === id);
     if (cableTray && scaleInfo.ratio) {
-      const dims = getMaterialDimensions(cableTray, scaleInfo);
-      return { width: dims.width, height: dims.height, rotation: cableTray.rotation };
+      return { 
+        width: cableTray.width / scaleInfo.ratio, 
+        height: cableTray.length / scaleInfo.ratio, 
+        rotation: cableTray.rotation 
+      };
     }
     
     return null;
