@@ -35,6 +35,7 @@ interface RawDataStats {
 interface ScadaImport {
   id: string;
   site_name: string;
+  site_id: string | null;
   shop_number: string | null;
   shop_name: string | null;
   area_sqm: number | null;
@@ -50,6 +51,11 @@ interface ScadaImport {
   weekend_days: number | null;
   processed_at: string | null;
   category_id: string | null;
+}
+
+interface Site {
+  id: string;
+  name: string;
 }
 
 interface MonthlyEstimate {
@@ -135,6 +141,19 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   const [showBulkImport, setShowBulkImport] = useState(false);
   
   const BATCH_SIZE = 20; // Process 20 meters at a time
+
+  // Fetch sites for filter dropdown
+  const { data: sites } = useQuery({
+    queryKey: ["sites-for-filter"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sites")
+        .select("id, name")
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return (data || []) as Site[];
+    },
+  });
 
   const { data: meters, isLoading } = useQuery({
     queryKey: ["meter-library", siteId],
@@ -1134,12 +1153,21 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     return null;
   };
 
-  // Get unique site names for filter
-  const uniqueSites = useMemo(() => {
-    if (!meters) return [];
-    const sites = meters.map(m => m.site_name).filter(Boolean);
-    return [...new Set(sites)].sort();
-  }, [meters]);
+  // Build a lookup map from site_id to site name
+  const siteNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    sites?.forEach(site => {
+      map[site.id] = site.name;
+    });
+    return map;
+  }, [sites]);
+
+  // Get sites that have meters assigned (for filter dropdown)
+  const sitesWithMeters = useMemo(() => {
+    if (!meters || !sites) return [];
+    const siteIdsWithMeters = new Set(meters.map(m => m.site_id).filter(Boolean));
+    return sites.filter(s => siteIdsWithMeters.has(s.id));
+  }, [meters, sites]);
 
   // Filter and sort meters
   const filteredMeters = useMemo(() => {
@@ -1147,16 +1175,18 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     
     // First filter
     const filtered = meters.filter(meter => {
-      // Search filter
+      // Search filter - also search against the actual site name from sites table
       const searchLower = searchQuery.toLowerCase();
+      const actualSiteName = meter.site_id ? siteNameMap[meter.site_id] : meter.site_name;
       const matchesSearch = !searchQuery || 
         meter.site_name?.toLowerCase().includes(searchLower) ||
+        actualSiteName?.toLowerCase().includes(searchLower) ||
         meter.shop_name?.toLowerCase().includes(searchLower) ||
         meter.shop_number?.toLowerCase().includes(searchLower) ||
         meter.meter_label?.toLowerCase().includes(searchLower);
       
-      // Site filter
-      const matchesSite = siteFilter === "all" || meter.site_name === siteFilter;
+      // Site filter - filter by site_id (not site_name)
+      const matchesSite = siteFilter === "all" || meter.site_id === siteFilter;
       
       return matchesSearch && matchesSite;
     });
@@ -1274,8 +1304,8 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Sites</SelectItem>
-                {uniqueSites.map(site => (
-                  <SelectItem key={site} value={site}>{site}</SelectItem>
+                {sitesWithMeters.map(site => (
+                  <SelectItem key={site.id} value={site.id}>{site.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
