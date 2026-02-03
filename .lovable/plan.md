@@ -1,126 +1,196 @@
 
-# Fix: Distance Between and Edge Align Selection Logic
+# Plan: Summary Panel Grouping and Material Selection for Placement
 
-## Problem Analysis
+## Overview
 
-The "Distance Between" and "Edge Align" tools are incorrectly moving objects from a previous selection instead of respecting the currently clicked objects.
+The user has requested two related improvements to the PV Layout editor:
 
-**Current Behavior (Buggy):**
-1. User selects multiple items (e.g., via marquee selection)
-2. User activates the Dimension tool
-3. User clicks on Object A (cable tray) as "object to move"
-4. User clicks on Object B (walkway) as "reference"
-5. **Bug:** ALL previously selected items move, even if Object A wasn't part of that selection
+1. **Summary Panel Grouping**: In the Project Summary, instead of listing all placed cable trays (or walkways) flat under one dropdown, group them by their configuration type (e.g., "Onlee 76x76", "Onlee 152x76"). Each sub-group would show the count and total length for that specific type.
 
-**Root Cause:**
-
-In `handleDimensionApply`, `performDirectEdgeAlign`, and `handleAlignEdgesApply`:
-
-```typescript
-const idsToMove = selectedItemIds.size > 1 
-  ? new Set(Array.from(selectedItemIds).filter(id => id !== dimensionObject2Id))
-  : new Set([dimensionObject1Id]);
-```
-
-This checks if there's a multi-selection (`size > 1`), but **doesn't verify** that the clicked object (`dimensionObject1Id` or `alignObject1Id`) is actually IN that selection. If the object isn't in the selection, only that single object should move.
-
-**Expected Behavior:**
-- If the clicked object is part of a multi-selection: move the entire selection (minus the reference)
-- If the clicked object is NOT part of the selection: move only that single clicked object
+2. **Material Selection Before Placement**: When clicking "Cable Tray" or "Walkway" in the Materials section of the Toolbar, the user needs the ability to choose WHICH cable tray/walkway template to place (from the Plant Setup configuration), rather than defaulting to the first one. The user suggests adding a small "configure" button next to the material buttons in the toolbar.
 
 ---
 
-## Solution
+## Solution Design
 
-Update the `idsToMove` logic in all three functions to check whether the primary object is actually in the current selection before deciding to batch-move:
+### Part 1: Summary Panel Grouping
 
-```typescript
-// Only use selection for batch movement if the primary object is IN the selection
-const primaryObject = dimensionObject1Id; // or alignObject1Id
-const isPrimaryInSelection = selectedItemIds.has(primaryObject);
+**Current Behavior:**
+- Cable Trays section shows all placed cable trays as a flat list
+- Each item shows: `{name} | {width}m x {length}m`
 
-const idsToMove = (isPrimaryInSelection && selectedItemIds.size > 1)
-  ? new Set(Array.from(selectedItemIds).filter(id => id !== referenceObjectId))
-  : new Set([primaryObject]);
+**Proposed Behavior:**
+- Cable Trays section shows a nested structure:
+  - Main dropdown: "Cable Trays" with total length summary
+  - Sub-groups by `configId` (template type): 
+    - "Onlee 76x76" (3 items, 9m total)
+    - "Onlee 152x76" (2 items, 6m total)
+  - Each sub-group expands to show individual items
+
+**Implementation:**
+- Create a helper function to group `placedCableTrays` by their `configId` (which references the template)
+- For each group, calculate the count and total length
+- Use a nested `Collapsible` component structure
+
+### Part 2: Material Type Selection in Toolbar
+
+**Current Behavior:**
+- Clicking "Cable Tray" or "Walkway" opens the `PlacementOptionsModal` (for orientation/spacing)
+- The modal uses the first available template from `plantSetupConfig.cableTrays[0]`
+- No way to select a specific template before placing
+
+**Proposed Behavior:**
+- Add a small "configure" icon button next to the "Cable Tray" and "Walkway" buttons in the Materials section
+- Clicking the configure button opens a quick selector dropdown/popover showing all available templates
+- The selected template is remembered (via `selectedCableTrayId` / `selectedWalkwayId` state)
+- The PlacementOptionsModal displays which template is being placed
+- When placing, the selected template is used instead of the first one
+
+**Implementation Approach:**
+- Add a small Settings/Cog icon button next to "Walkway" and "Cable Tray" tool buttons
+- This opens a Popover with a list of available templates from `plantSetupConfig`
+- Clicking a template sets `selectedWalkwayId` or `selectedCableTrayId` in the parent state
+- Update `PlacementOptionsModal` to receive and display the selected template
+- The placement workflow then uses the selected template
+
+---
+
+## Technical Implementation
+
+### File: `src/components/floor-plan/components/SummaryPanel.tsx`
+
+**Changes:**
+1. Add a new `NestedCollapsibleSection` component for grouped items
+2. Create a helper function to group placed items by their `configId`:
+   ```typescript
+   const groupedCableTrays = useMemo(() => {
+     const groups: Record<string, { name: string; items: PlacedCableTray[]; totalLength: number }> = {};
+     placedCableTrays.forEach(tray => {
+       const key = tray.configId || 'default';
+       if (!groups[key]) {
+         groups[key] = { name: tray.name, items: [], totalLength: 0 };
+       }
+       groups[key].items.push(tray);
+       groups[key].totalLength += tray.length;
+     });
+     return groups;
+   }, [placedCableTrays]);
+   ```
+3. Update the Cable Trays and Walkways sections to use nested collapsibles:
+   - Top level: "Cable Trays" - total length
+   - Second level: "Onlee 76x76" - count and subtotal
+   - Third level: Individual items with delete buttons
+
+### File: `src/components/floor-plan/components/Toolbar.tsx`
+
+**Changes:**
+1. Add new props to receive and update the selected template IDs:
+   - `selectedWalkwayId`, `setSelectedWalkwayId`
+   - `selectedCableTrayId`, `setSelectedCableTrayId`
+2. Modify the "Walkway" and "Cable Tray" tool buttons to include a small configure button:
+   ```tsx
+   <div className="flex items-center gap-1">
+     <ToolButton 
+       icon={...} 
+       label="Cable Tray" 
+       isActive={...} 
+       onClick={...} 
+     />
+     <Popover>
+       <PopoverTrigger asChild>
+         <Button variant="ghost" size="icon" className="h-6 w-6">
+           <Settings className="h-3 w-3" />
+         </Button>
+       </PopoverTrigger>
+       <PopoverContent>
+         {/* List of cable tray templates */}
+       </PopoverContent>
+     </Popover>
+   </div>
+   ```
+3. Add a `MaterialSelector` sub-component or inline Popover that lists all templates for the material type
+
+### File: `src/components/floor-plan/FloorPlanMarkup.tsx`
+
+**Changes:**
+1. Pass `selectedWalkwayId` and `selectedCableTrayId` to the Toolbar
+2. Pass setters for these state values to allow the Toolbar to update them
+3. Update `getPlacementItemName` and `getPlacementDimensions` to use the selected template ID instead of always using `[0]`
+
+### File: `src/components/floor-plan/components/PlacementOptionsModal.tsx`
+
+**Changes (Optional Enhancement):**
+1. Display the selected template name prominently in the modal
+2. Could add a dropdown to switch templates within the modal (future enhancement)
+
+---
+
+## UI Mockups
+
+### Summary Panel - Nested Cable Trays
+
+```
+Cable Trays                                414 m  v
+  ├─ Onlee 76×76                           9m (3) v
+  │   ├─ Onlee 76×76    0.076m × 3m        [🗑]
+  │   ├─ Onlee 76×76    0.076m × 3m        [🗑]
+  │   └─ Onlee 76×76    0.076m × 3m        [🗑]
+  └─ Onlee 152×76                          6m (2) v
+      ├─ Onlee 152×76   0.152m × 3m        [🗑]
+      └─ Onlee 152×76   0.152m × 3m        [🗑]
+```
+
+### Toolbar - Material Selection
+
+```
+Materials                                      v
+  ├─ DC Cable
+  ├─ AC Cable
+  ├─ DC Combiner
+  ├─ AC Disconnect
+  ├─ Walkway                              [⚙]
+  │   Currently: 600mm Walkway
+  └─ Cable Tray                           [⚙]
+      Currently: Onlee 76×76
+```
+
+Clicking [⚙] opens a popover:
+```
+┌─────────────────────────┐
+│ Select Cable Tray       │
+├─────────────────────────┤
+│ ○ Onlee 76×76    0.076m │
+│ ● Onlee 152×76   0.152m │  ← currently selected
+│ ○ Onlee 304×76   0.304m │
+│ ○ Cabstrut 300×76 0.3m  │
+└─────────────────────────┘
 ```
 
 ---
 
 ## Files to Modify
 
-| File | Function | Change |
-|------|----------|--------|
-| `src/components/floor-plan/FloorPlanMarkup.tsx` | `handleDimensionApply` | Add check that `dimensionObject1Id` is in `selectedItemIds` before batch moving |
-| `src/components/floor-plan/FloorPlanMarkup.tsx` | `performDirectEdgeAlign` | Add check that `alignObject1Id` is in `selectedItemIds` before batch moving |
-| `src/components/floor-plan/FloorPlanMarkup.tsx` | `handleAlignEdgesApply` | Add check that `alignObject1Id` is in `selectedItemIds` before batch moving |
+| File | Changes |
+|------|---------|
+| `src/components/floor-plan/components/SummaryPanel.tsx` | Add grouping logic and nested collapsibles for Cable Trays and Walkways |
+| `src/components/floor-plan/components/Toolbar.tsx` | Add material type selector popover next to Walkway and Cable Tray buttons |
+| `src/components/floor-plan/FloorPlanMarkup.tsx` | Pass selected template IDs and setters to Toolbar |
 
 ---
 
-## Technical Details
+## Testing Checklist
 
-### Change 1: `handleDimensionApply` (around line 1271-1274)
+1. **Summary Panel Grouping:**
+   - Place multiple cable trays of different types
+   - Verify they appear grouped by type in the summary
+   - Verify counts and totals are correct for each group
+   - Verify individual items can be deleted from within groups
+   - Repeat for walkways
 
-**Before:**
-```typescript
-const idsToMove = selectedItemIds.size > 1 
-  ? new Set(Array.from(selectedItemIds).filter(id => id !== dimensionObject2Id))
-  : new Set([dimensionObject1Id]);
-```
-
-**After:**
-```typescript
-// Only batch-move if the primary object is actually in the current selection
-const isPrimaryInSelection = selectedItemIds.has(dimensionObject1Id);
-const idsToMove = (isPrimaryInSelection && selectedItemIds.size > 1)
-  ? new Set(Array.from(selectedItemIds).filter(id => id !== dimensionObject2Id))
-  : new Set([dimensionObject1Id]);
-```
-
-### Change 2: `performDirectEdgeAlign` (around line 1348-1351)
-
-**Before:**
-```typescript
-const idsToMove = selectedItemIds.size > 1 
-  ? new Set(Array.from(selectedItemIds).filter(id => id !== object2Id))
-  : new Set([alignObject1Id]);
-```
-
-**After:**
-```typescript
-// Only batch-move if the primary object is actually in the current selection
-const isPrimaryInSelection = selectedItemIds.has(alignObject1Id);
-const idsToMove = (isPrimaryInSelection && selectedItemIds.size > 1)
-  ? new Set(Array.from(selectedItemIds).filter(id => id !== object2Id))
-  : new Set([alignObject1Id]);
-```
-
-### Change 3: `handleAlignEdgesApply` (around line 1451-1454)
-
-**Before:**
-```typescript
-const idsToMove = selectedItemIds.size > 1 
-  ? new Set(Array.from(selectedItemIds).filter(id => id !== alignObject2Id))
-  : new Set([alignObject1Id]);
-```
-
-**After:**
-```typescript
-// Only batch-move if the primary object is actually in the current selection
-const isPrimaryInSelection = selectedItemIds.has(alignObject1Id);
-const idsToMove = (isPrimaryInSelection && selectedItemIds.size > 1)
-  ? new Set(Array.from(selectedItemIds).filter(id => id !== alignObject2Id))
-  : new Set([alignObject1Id]);
-```
-
----
-
-## Testing Plan
-
-1. Place two cable trays and one walkway on the canvas
-2. Use marquee selection to select both cable trays
-3. Activate the "Distance Between" tool
-4. Click on the walkway (NOT in the selection) as object to move
-5. Click on one of the cable trays as the reference
-6. **Verify:** Only the walkway moves, not the previously selected cable trays
-7. Repeat test for Edge Align tool
-8. Also verify: when the clicked object IS in a selection, the whole selection still moves as expected
+2. **Material Selection:**
+   - Click the config button next to Cable Tray
+   - Verify all configured cable tray templates appear
+   - Select a specific template
+   - Click Cable Tray tool and verify the PlacementOptionsModal shows the selected template
+   - Place the item and verify it uses the correct template dimensions
+   - Repeat for walkways
