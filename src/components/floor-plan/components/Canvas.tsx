@@ -1291,11 +1291,11 @@ export function Canvas({
       setPreviewPoint(snappedPreview);
     }
     
-    // Track mouse position for ghost preview (PV array, equipment, walkways, cable trays)
+    // Track mouse position for ghost preview (PV array, equipment, walkways, cable trays, batch placement)
     const equipmentPlacementTools = [Tool.PLACE_INVERTER, Tool.PLACE_DC_COMBINER, Tool.PLACE_AC_DISCONNECT, Tool.PLACE_MAIN_BOARD];
     const materialPlacementTools = [Tool.PLACE_WALKWAY, Tool.PLACE_CABLE_TRAY];
     if (
-      (activeTool === Tool.PV_ARRAY && pendingPvArrayConfig) || 
+      (activeTool === Tool.PV_ARRAY && (pendingPvArrayConfig || pendingBatchPlacement)) || 
       equipmentPlacementTools.includes(activeTool) ||
       materialPlacementTools.includes(activeTool)
     ) {
