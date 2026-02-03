@@ -698,8 +698,8 @@ export function Canvas({
         }
       };
       
-      // Prefer selecting PV arrays first (topmost)
-      const hitArray = (pvPanelConfig && scaleInfo.ratio)
+      // Prefer selecting PV arrays first (topmost) - only if layer is visible
+      const hitArray = (pvPanelConfig && scaleInfo.ratio && layerVisibility.pvArrays)
         ? [...pvArrays].reverse().find(arr => {
             const corners = getPVArrayCorners(arr, pvPanelConfig, roofMasks, scaleInfo);
             return corners.length === 4 && isPointInPolygon(worldPos, corners);
@@ -714,8 +714,8 @@ export function Canvas({
         return;
       }
 
-      // Select walkways (higher priority than roof masks since they sit inside them)
-      if (placedWalkways && scaleInfo.ratio) {
+      // Select walkways (higher priority than roof masks since they sit inside them) - only if layer is visible
+      if (placedWalkways && scaleInfo.ratio && layerVisibility.walkways) {
         const hitWalkway = [...placedWalkways].reverse().find(walkway => {
           const widthPx = walkway.width / scaleInfo.ratio!;
           const lengthPx = walkway.length / scaleInfo.ratio!;
@@ -744,8 +744,8 @@ export function Canvas({
         }
       }
 
-      // Select cable trays (higher priority than roof masks)
-      if (placedCableTrays && scaleInfo.ratio) {
+      // Select cable trays (higher priority than roof masks) - only if layer is visible
+      if (placedCableTrays && scaleInfo.ratio && layerVisibility.cableTrays) {
         const hitTray = [...placedCableTrays].reverse().find(tray => {
           const widthPx = tray.width / scaleInfo.ratio!;
           const lengthPx = tray.length / scaleInfo.ratio!;
@@ -774,18 +774,20 @@ export function Canvas({
         }
       }
 
-      // Select equipment (inverters, etc.) - checked BEFORE roof masks
-      const hitEquipment = [...equipment].reverse().find(item => {
-        // Calculate size in pixels based on real-world size and scale
-        const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
-        // Convert real size to world units (pixels at zoom=1)
-        const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
-        const padding = 5 / viewState.zoom; // Small padding for easier selection
-        const halfSize = sizePx / 2 + padding;
-        
-        return Math.abs(worldPos.x - item.position.x) <= halfSize &&
-               Math.abs(worldPos.y - item.position.y) <= halfSize;
-      });
+      // Select equipment (inverters, etc.) - checked BEFORE roof masks - only if layer is visible
+      const hitEquipment = layerVisibility.equipment
+        ? [...equipment].reverse().find(item => {
+            // Calculate size in pixels based on real-world size and scale
+            const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
+            // Convert real size to world units (pixels at zoom=1)
+            const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
+            const padding = 5 / viewState.zoom; // Small padding for easier selection
+            const halfSize = sizePx / 2 + padding;
+            
+            return Math.abs(worldPos.x - item.position.x) <= halfSize &&
+                   Math.abs(worldPos.y - item.position.y) <= halfSize;
+          })
+        : undefined;
 
       if (hitEquipment) {
         handleItemSelection(hitEquipment.id, () => {
@@ -798,11 +800,13 @@ export function Canvas({
         return;
       }
 
-      // Fallback: select roof mask (lowest priority)
-      const hitMask = [...roofMasks].reverse().find(m => isPointInPolygon(worldPos, m.points));
-      if (hitMask) {
-        handleItemSelection(hitMask.id, () => {});
-        return;
+      // Fallback: select roof mask (lowest priority) - only if layer is visible
+      if (layerVisibility.roofMasks) {
+        const hitMask = [...roofMasks].reverse().find(m => isPointInPolygon(worldPos, m.points));
+        if (hitMask) {
+          handleItemSelection(hitMask.id, () => {});
+          return;
+        }
       }
 
       // Clicked empty space - start marquee selection
