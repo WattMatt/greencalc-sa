@@ -99,8 +99,14 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
   if (headerIdx >= lines.length) return [];
   
   const headers = lines[headerIdx].split(',').map(h => h.trim().toLowerCase());
-  const dateCol = headers.findIndex(h => h.includes('date') || h === 'timestamp');
-  const valueCol = headers.findIndex(h => h.includes('kwh') || h.includes('p14') || h.includes('value') || h.includes('active'));
+  // Look for date/time column - include 'time' as a valid column name
+  const dateCol = headers.findIndex(h => 
+    h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate')
+  );
+  // Look for kWh value column - prioritize "p1 (kwh)" or just "kwh" or first value after time
+  const valueCol = headers.findIndex(h => 
+    h.includes('kwh') || h.includes('p1') || h.includes('p14') || h.includes('value') || h.includes('active')
+  );
   
   if (dateCol === -1) return [];
   const valIdx = valueCol === -1 ? 1 : valueCol;
