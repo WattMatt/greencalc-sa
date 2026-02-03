@@ -617,14 +617,7 @@ export function Canvas({
         }
       }
 
-      // Fallback: select roof mask
-      const hitMask = [...roofMasks].reverse().find(m => isPointInPolygon(worldPos, m.points));
-      if (hitMask) {
-        handleItemSelection(hitMask.id, () => {});
-        return;
-      }
-
-      // Fallback: select equipment (inverters, etc.) using bounding box hit-test
+      // Select equipment (inverters, etc.) - checked BEFORE roof masks
       const hitEquipment = [...equipment].reverse().find(item => {
         // Calculate size in pixels based on real-world size and scale
         const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
@@ -645,6 +638,13 @@ export function Canvas({
             y: worldPos.y - hitEquipment.position.y 
           });
         });
+        return;
+      }
+
+      // Fallback: select roof mask (lowest priority)
+      const hitMask = [...roofMasks].reverse().find(m => isPointInPolygon(worldPos, m.points));
+      if (hitMask) {
+        handleItemSelection(hitMask.id, () => {});
         return;
       }
 
