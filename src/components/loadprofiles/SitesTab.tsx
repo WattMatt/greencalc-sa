@@ -77,6 +77,12 @@ export function SitesTab() {
   const [currentWizardFileName, setCurrentWizardFileName] = useState<string>("");
   const [isWizardProcessing, setIsWizardProcessing] = useState(false);
   const [wizardCompletedMeters, setWizardCompletedMeters] = useState<Array<{id: string; name: string; status: 'success' | 'skipped' | 'failed'; message: string}>>([]);
+  // Error state for wizard - show error UI when CSV extraction fails
+  const [wizardError, setWizardError] = useState<{
+    meterId: string;
+    meterName: string;
+    message: string;
+  } | null>(null);
   
   const [formData, setFormData] = useState({
     name: "",
@@ -1005,15 +1011,25 @@ export function SitesTab() {
       
       if (!csvContent) {
         console.warn("No CSV content for meter:", meterId, "raw_data:", rawData);
-        toast.error("No CSV data stored for this meter", {
-          description: "Use the upload button to import CSV data first"
+        const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
+        // Set error state and open wizard with error UI instead of just toast
+        setWizardError({
+          meterId,
+          meterName: displayName,
+          message: "No CSV data stored for this meter. Use the upload button to import CSV data first."
         });
+        setCurrentWizardMeterId(meterId);
+        setCurrentWizardFileName(displayName);
+        // Keep csvContent as null - this triggers the error UI in wizard
+        setCurrentWizardCsvContent(null);
         setProcessingQueue(prev => prev.filter(id => id !== meterId));
         return;
       }
       
       const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
       console.log('[loadMeterForWizard] Opening wizard for:', displayName);
+      // Clear any previous error when successfully loading CSV
+      setWizardError(null);
       setCurrentWizardMeterId(meterId);
       setCurrentWizardCsvContent(csvContent);
       setCurrentWizardFileName(displayName);
@@ -1023,8 +1039,17 @@ export function SitesTab() {
     }
   };
 
-  // Handle wizard close (skip current meter)
+  // Handle wizard close (skip current meter or close error dialog)
   const handleWizardClose = () => {
+    // Clear error state if present
+    if (wizardError) {
+      setWizardError(null);
+      setCurrentWizardMeterId(null);
+      setCurrentWizardCsvContent(null);
+      setCurrentWizardFileName("");
+      return;
+    }
+    
     if (currentWizardMeterId) {
       moveToNextMeterInQueue(currentWizardMeterId, 'skipped', 'User skipped');
     } else {
@@ -1820,6 +1845,7 @@ export function SitesTab() {
         fileName={currentWizardFileName}
         onProcess={handleWizardProcess}
         isProcessing={isWizardProcessing}
+        errorMessage={wizardError?.message}
       />
 
       {/* Processing queue indicator */}

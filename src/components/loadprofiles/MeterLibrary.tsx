@@ -125,6 +125,12 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
   const [currentWizardCsvContent, setCurrentWizardCsvContent] = useState<string | null>(null);
   const [currentWizardFileName, setCurrentWizardFileName] = useState<string>("");
   const [isWizardProcessing, setIsWizardProcessing] = useState(false);
+  // Error state for wizard - show error UI when CSV extraction fails
+  const [wizardError, setWizardError] = useState<{
+    meterId: string;
+    meterName: string;
+    message: string;
+  } | null>(null);
   
   // Previous processing config for reconfiguration
   const [previousProcessingConfig, setPreviousProcessingConfig] = useState<{
@@ -874,11 +880,24 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
       
       if (!csvContent) {
         console.warn("No CSV content for meter:", meterId);
-        moveToNextMeterInQueue(meterId, 'skipped', 'No CSV data stored');
+        const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
+        // Set error state and open wizard with error UI instead of just moving to next
+        setWizardError({
+          meterId,
+          meterName: displayName,
+          message: "No CSV data stored for this meter. The original CSV data was not preserved during import. Please re-upload the CSV file."
+        });
+        setCurrentWizardMeterId(meterId);
+        setCurrentWizardFileName(displayName);
+        // Keep csvContent as null - this triggers the error UI in wizard
+        setCurrentWizardCsvContent(null);
+        setPreviousProcessingConfig(null);
         return;
       }
       
       const displayName = meter.shop_name || meter.site_name || meterId.slice(0, 8);
+      // Clear any previous error when successfully loading CSV
+      setWizardError(null);
       setCurrentWizardMeterId(meterId);
       setCurrentWizardCsvContent(csvContent);
       setCurrentWizardFileName(displayName);
@@ -889,8 +908,18 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
     }
   };
 
-  // Handle wizard close (skip current meter)
+  // Handle wizard close (skip current meter or close error dialog)
   const handleWizardClose = () => {
+    // Clear error state if present
+    if (wizardError) {
+      setWizardError(null);
+      setCurrentWizardMeterId(null);
+      setCurrentWizardCsvContent(null);
+      setCurrentWizardFileName("");
+      setProcessingQueue([]);
+      return;
+    }
+    
     if (currentWizardMeterId) {
       moveToNextMeterInQueue(currentWizardMeterId, 'skipped', 'User skipped');
     } else {
@@ -1873,6 +1902,7 @@ export function MeterLibrary({ siteId }: MeterLibraryProps) {
         onProcess={handleWizardProcess}
         isProcessing={isWizardProcessing}
         previousConfig={previousProcessingConfig}
+        errorMessage={wizardError?.message}
       />
 
       {/* Processing queue indicator */}

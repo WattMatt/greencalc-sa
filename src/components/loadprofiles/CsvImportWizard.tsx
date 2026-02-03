@@ -22,7 +22,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, ChevronRight, Zap, TrendingUp, Activity, Clock, BarChart3 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Zap, TrendingUp, Activity, Clock, BarChart3, AlertCircle, Upload } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ColumnConfig, WizardParseConfig, ParsedData } from "./types/csvImportTypes";
 
 // Re-export types for convenience
@@ -42,6 +43,9 @@ interface CsvImportWizardProps {
     voltageV?: number;
     powerFactor?: number;
   } | null;
+  // Error state support - show error instead of wizard content
+  errorMessage?: string | null;
+  onRetry?: () => void;
 }
 
 const DEFAULT_CONFIG: WizardParseConfig = {
@@ -219,6 +223,8 @@ export function CsvImportWizard({
   onProcess,
   isProcessing,
   previousConfig,
+  errorMessage,
+  onRetry,
 }: CsvImportWizardProps) {
   const [step, setStep] = useState(1);
   const [config, setConfig] = useState<WizardParseConfig>(DEFAULT_CONFIG);
@@ -1215,6 +1221,54 @@ export function CsvImportWizard({
       )}
     </div>
   );
+
+  // Error state UI - show when errorMessage is set and no CSV content
+  if (errorMessage && !csvContent) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              Unable to Load CSV Data
+            </DialogTitle>
+            <DialogDescription>
+              The stored data for "{fileName || 'this meter'}" could not be extracted.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+
+            <div className="mt-4 space-y-2">
+              <p className="text-sm font-medium text-foreground">To fix this:</p>
+              <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
+                <li>Re-upload the original CSV file</li>
+                <li>Use the Import button to add new data</li>
+                <li>Check that the file format is supported</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            {onRetry && (
+              <Button variant="outline" onClick={onRetry}>
+                <Upload className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
+            )}
+            <Button onClick={onClose}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
