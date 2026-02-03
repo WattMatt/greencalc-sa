@@ -26,6 +26,8 @@ interface CanvasProps {
   setLines: (updater: (prev: SupplyLine[]) => SupplyLine[]) => void;
   selectedItemId: string | null;
   setSelectedItemId: (id: string | null) => void;
+  selectedItemIds?: Set<string>;
+  onToggleSelection?: (id: string) => void;
   placementRotation: number;
   pendingPvArrayConfig: PVArrayConfig | null;
   onRoofMaskComplete: (points: Point[], area: number) => void;
@@ -61,7 +63,7 @@ export function Canvas({
   scaleInfo, scaleLine, setScaleLine, onScaleComplete,
   pvPanelConfig, roofMasks, setRoofMasks, pvArrays, setPvArrays,
   equipment, setEquipment, lines, setLines,
-  selectedItemId, setSelectedItemId, placementRotation,
+  selectedItemId, setSelectedItemId, selectedItemIds, onToggleSelection, placementRotation,
   pendingPvArrayConfig, onRoofMaskComplete, onRoofDirectionComplete, onArrayPlaced,
   pendingRoofMaskPoints, onPVArrayDoubleClick, onCopyPvArray, onCopyRoofMask,
   plantSetupConfig,
@@ -259,7 +261,7 @@ export function Canvas({
     renderAllMarkups(ctx, {
       equipment, lines, roofMasks, pvArrays,
       scaleInfo, pvPanelConfig, zoom: viewState.zoom,
-      selectedItemId, scaleLine, plantSetupConfig,
+      selectedItemId, selectedItemIds, scaleLine, plantSetupConfig,
       placedWalkways, placedCableTrays,
       dimensionObject1Id, dimensionObject2Id,
       alignObject1Id, alignObject2Id,
@@ -524,6 +526,21 @@ export function Canvas({
 
     // Selection + dragging
     if (activeTool === Tool.SELECT && e.button === 0) {
+      const isMultiSelectModifier = e.shiftKey || e.ctrlKey || e.metaKey;
+      
+      // Helper to handle selection based on modifier keys
+      const handleItemSelection = (id: string, startDrag: () => void) => {
+        if (isMultiSelectModifier && onToggleSelection) {
+          // Shift/Ctrl+Click: toggle selection
+          onToggleSelection(id);
+          // Don't start drag when toggling
+        } else {
+          // Normal click: select single and start drag
+          setSelectedItemId(id);
+          startDrag();
+        }
+      };
+      
       // Prefer selecting PV arrays first (topmost)
       const hitArray = (pvPanelConfig && scaleInfo.ratio)
         ? [...pvArrays].reverse().find(arr => {
@@ -533,9 +550,10 @@ export function Canvas({
         : undefined;
 
       if (hitArray) {
-        setSelectedItemId(hitArray.id);
-        setDraggingPvArrayId(hitArray.id);
-        setPvArrayDragOffset({ x: worldPos.x - hitArray.position.x, y: worldPos.y - hitArray.position.y });
+        handleItemSelection(hitArray.id, () => {
+          setDraggingPvArrayId(hitArray.id);
+          setPvArrayDragOffset({ x: worldPos.x - hitArray.position.x, y: worldPos.y - hitArray.position.y });
+        });
         return;
       }
 
@@ -558,11 +576,12 @@ export function Canvas({
         });
 
         if (hitWalkway) {
-          setSelectedItemId(hitWalkway.id);
-          setDraggingWalkwayId(hitWalkway.id);
-          setWalkwayDragOffset({
-            x: worldPos.x - hitWalkway.position.x,
-            y: worldPos.y - hitWalkway.position.y,
+          handleItemSelection(hitWalkway.id, () => {
+            setDraggingWalkwayId(hitWalkway.id);
+            setWalkwayDragOffset({
+              x: worldPos.x - hitWalkway.position.x,
+              y: worldPos.y - hitWalkway.position.y,
+            });
           });
           return;
         }
@@ -587,11 +606,12 @@ export function Canvas({
         });
 
         if (hitTray) {
-          setSelectedItemId(hitTray.id);
-          setDraggingCableTrayId(hitTray.id);
-          setCableTrayDragOffset({
-            x: worldPos.x - hitTray.position.x,
-            y: worldPos.y - hitTray.position.y,
+          handleItemSelection(hitTray.id, () => {
+            setDraggingCableTrayId(hitTray.id);
+            setCableTrayDragOffset({
+              x: worldPos.x - hitTray.position.x,
+              y: worldPos.y - hitTray.position.y,
+            });
           });
           return;
         }
@@ -600,7 +620,7 @@ export function Canvas({
       // Fallback: select roof mask
       const hitMask = [...roofMasks].reverse().find(m => isPointInPolygon(worldPos, m.points));
       if (hitMask) {
-        setSelectedItemId(hitMask.id);
+        handleItemSelection(hitMask.id, () => {});
         return;
       }
 
@@ -618,17 +638,20 @@ export function Canvas({
       });
 
       if (hitEquipment) {
-        setSelectedItemId(hitEquipment.id);
-        setDraggingEquipmentId(hitEquipment.id);
-        setEquipmentDragOffset({ 
-          x: worldPos.x - hitEquipment.position.x, 
-          y: worldPos.y - hitEquipment.position.y 
+        handleItemSelection(hitEquipment.id, () => {
+          setDraggingEquipmentId(hitEquipment.id);
+          setEquipmentDragOffset({ 
+            x: worldPos.x - hitEquipment.position.x, 
+            y: worldPos.y - hitEquipment.position.y 
+          });
         });
         return;
       }
 
-      // Clicked empty space
-      setSelectedItemId(null);
+      // Clicked empty space - clear selection (only if not using modifier)
+      if (!isMultiSelectModifier) {
+        setSelectedItemId(null);
+      }
       return;
     }
 

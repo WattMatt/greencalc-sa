@@ -828,3 +828,45 @@ export const detectClickedEdge = (
   
   return null; // Interior click
 };
+
+/**
+ * Calculate the bounding box for a group of objects.
+ * Takes an array of object data with position, dimensions, and rotation.
+ * Returns the combined bounding box and center point.
+ */
+export const getGroupBoundingBox = (
+  items: Array<{ position: Point; dimensions: { width: number; height: number }; rotation: number }>
+): { left: number; right: number; top: number; bottom: number; center: Point } => {
+  if (items.length === 0) {
+    return { left: 0, right: 0, top: 0, bottom: 0, center: { x: 0, y: 0 } };
+  }
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  for (const item of items) {
+    const edges = getObjectEdges(item.position, item.dimensions, item.rotation);
+    minX = Math.min(minX, edges.left);
+    maxX = Math.max(maxX, edges.right);
+    minY = Math.min(minY, edges.top);
+    maxY = Math.max(maxY, edges.bottom);
+  }
+
+  return {
+    left: minX,
+    right: maxX,
+    top: minY,
+    bottom: maxY,
+    center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
+  };
+};
+
+/**
+ * Apply a delta offset to a position
+ */
+export const applyPositionDelta = (position: Point, delta: Point): Point => ({
+  x: position.x + delta.x,
+  y: position.y + delta.y,
+});

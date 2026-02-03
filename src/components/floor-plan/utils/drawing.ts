@@ -545,6 +545,7 @@ export interface RenderAllParams {
   pvPanelConfig: PVPanelConfig | null;
   zoom: number;
   selectedItemId: string | null;
+  selectedItemIds?: Set<string>; // Multi-selection support
   scaleLine: { start: Point; end: Point } | null;
   plantSetupConfig?: PlantSetupConfig;
   placedWalkways?: PlacedWalkway[];
@@ -565,46 +566,134 @@ export const renderAllMarkups = (
   ctx: CanvasRenderingContext2D,
   params: RenderAllParams
 ) => {
-  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, scaleLine, plantSetupConfig, placedWalkways, placedCableTrays } = params;
+  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, selectedItemIds, scaleLine, plantSetupConfig, placedWalkways, placedCableTrays } = params;
+
+  // Helper to check if an item is selected (supports both single and multi-selection)
+  const isItemSelected = (id: string) => {
+    if (selectedItemIds && selectedItemIds.size > 0) {
+      return selectedItemIds.has(id);
+    }
+    return selectedItemId === id;
+  };
 
   // Draw roof masks first (background)
   for (const mask of roofMasks) {
-    drawRoofMask(ctx, mask, zoom, selectedItemId === mask.id);
+    drawRoofMask(ctx, mask, zoom, isItemSelected(mask.id));
   }
 
   // Draw walkways (below PV arrays)
   if (placedWalkways) {
     for (const walkway of placedWalkways) {
-      drawWalkway(ctx, walkway, selectedItemId === walkway.id, false, zoom, scaleInfo);
+      drawWalkway(ctx, walkway, isItemSelected(walkway.id), false, zoom, scaleInfo);
     }
   }
 
   // Draw cable trays (below PV arrays)
   if (placedCableTrays) {
     for (const tray of placedCableTrays) {
-      drawCableTray(ctx, tray, selectedItemId === tray.id, false, zoom, scaleInfo);
+      drawCableTray(ctx, tray, isItemSelected(tray.id), false, zoom, scaleInfo);
     }
   }
 
   // Draw PV arrays
   if (pvPanelConfig) {
     for (const array of pvArrays) {
-      drawPvArray(ctx, array, false, pvPanelConfig, scaleInfo, roofMasks, zoom, selectedItemId === array.id);
+      drawPvArray(ctx, array, false, pvPanelConfig, scaleInfo, roofMasks, zoom, isItemSelected(array.id));
     }
   }
 
   // Draw supply lines
   for (const line of lines) {
-    drawSupplyLine(ctx, line, zoom, selectedItemId === line.id);
+    drawSupplyLine(ctx, line, zoom, isItemSelected(line.id));
   }
 
   // Draw equipment
   for (const item of equipment) {
-    drawEquipmentIcon(ctx, item, selectedItemId === item.id, zoom, scaleInfo, plantSetupConfig);
+    drawEquipmentIcon(ctx, item, isItemSelected(item.id), zoom, scaleInfo, plantSetupConfig);
   }
 
   // Draw scale indicator
   drawScaleIndicator(ctx, scaleLine, scaleInfo, zoom);
+
+  // Draw group bounding box for multi-selection
+  if (selectedItemIds && selectedItemIds.size > 1 && scaleInfo.ratio) {
+    const groupItems: Array<{ position: Point; dimensions: { width: number; height: number }; rotation: number }> = [];
+    
+    selectedItemIds.forEach(id => {
+      // Check PV arrays
+      const pvArray = pvArrays.find(a => a.id === id);
+      if (pvArray && pvPanelConfig) {
+        const dims = getPVArrayDimensions(pvArray, pvPanelConfig, roofMasks, scaleInfo, pvArray.position);
+        groupItems.push({ position: pvArray.position, dimensions: dims, rotation: pvArray.rotation });
+      }
+      
+      // Check equipment
+      const eq = equipment.find(e => e.id === id);
+      if (eq) {
+        const dims = getEquipmentDimensions(eq.type, scaleInfo, plantSetupConfig);
+        groupItems.push({ position: eq.position, dimensions: dims, rotation: eq.rotation });
+      }
+      
+      // Check walkways
+      const walkway = placedWalkways?.find(w => w.id === id);
+      if (walkway) {
+        groupItems.push({
+          position: walkway.position,
+          dimensions: { width: walkway.width / scaleInfo.ratio!, height: walkway.length / scaleInfo.ratio! },
+          rotation: walkway.rotation,
+        });
+      }
+      
+      // Check cable trays
+      const tray = placedCableTrays?.find(t => t.id === id);
+      if (tray) {
+        groupItems.push({
+          position: tray.position,
+          dimensions: { width: tray.width / scaleInfo.ratio!, height: tray.length / scaleInfo.ratio! },
+          rotation: tray.rotation,
+        });
+      }
+    });
+    
+    if (groupItems.length > 1) {
+      // Calculate group bounding box
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const item of groupItems) {
+        const angleRad = item.rotation * Math.PI / 180;
+        const cosA = Math.abs(Math.cos(angleRad));
+        const sinA = Math.abs(Math.sin(angleRad));
+        const effW = item.dimensions.width * cosA + item.dimensions.height * sinA;
+        const effH = item.dimensions.width * sinA + item.dimensions.height * cosA;
+        minX = Math.min(minX, item.position.x - effW / 2);
+        maxX = Math.max(maxX, item.position.x + effW / 2);
+        minY = Math.min(minY, item.position.y - effH / 2);
+        maxY = Math.max(maxY, item.position.y + effH / 2);
+      }
+      
+      // Draw group bounding box
+      ctx.save();
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2 / zoom;
+      ctx.setLineDash([8 / zoom, 4 / zoom]);
+      ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+      ctx.setLineDash([]);
+      
+      // Draw selection count badge
+      const badgeX = maxX;
+      const badgeY = minY;
+      const badgeRadius = 12 / zoom;
+      ctx.fillStyle = '#3b82f6';
+      ctx.beginPath();
+      ctx.arc(badgeX, badgeY, badgeRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${10 / zoom}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(selectedItemIds.size.toString(), badgeX, badgeY);
+      ctx.restore();
+    }
+  }
 
   // Draw dimension/align tool highlights at the end (on top of everything)
   const highlightIds: { id: string; num: 1 | 2; edge?: AlignmentEdge | null }[] = [];
