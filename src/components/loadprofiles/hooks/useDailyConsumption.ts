@@ -107,9 +107,14 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
     }
   }
   
-  if (headerIdx === -1 || headerIdx >= lines.length) return [];
+  if (headerIdx === -1 || headerIdx >= lines.length) {
+    console.warn('[useDailyConsumption] No header row found in CSV');
+    return [];
+  }
   
   const headers = lines[headerIdx].split(',').map(h => h.trim().toLowerCase());
+  console.log('[useDailyConsumption] Headers found:', headers);
+  
   // Look for date/time column - include 'time' as a valid column name
   const dateCol = headers.findIndex(h => 
     h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate')
@@ -119,7 +124,12 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
     h.includes('kwh') || h.includes('p1') || h.includes('p14') || h.includes('value') || h.includes('active')
   );
   
-  if (dateCol === -1) return [];
+  console.log('[useDailyConsumption] dateCol:', dateCol, 'valueCol:', valueCol, 'total lines:', lines.length);
+  
+  if (dateCol === -1) {
+    console.warn('[useDailyConsumption] No date column found');
+    return [];
+  }
   const valIdx = valueCol === -1 ? 1 : valueCol;
   
   const points: RawDataPoint[] = [];
@@ -136,6 +146,7 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
     }
   }
   
+  console.log('[useDailyConsumption] Parsed points:', points.length, 'Sample:', points[0]);
   return points;
 }
 
