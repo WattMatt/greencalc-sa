@@ -44,7 +44,9 @@ export function DimensionInput({ label, value, onChange, step, className }: Dime
 
   const handleValueChange = (inputValue: string) => {
     setDisplayValue(inputValue);
-    const numericValue = parseFloat(inputValue);
+    // Normalize locale decimal separators (comma → period)
+    const normalizedValue = inputValue.replace(',', '.');
+    const numericValue = parseFloat(normalizedValue);
     if (!isNaN(numericValue)) {
       const meters = displayToMeters(numericValue, unit);
       onChange(meters);
