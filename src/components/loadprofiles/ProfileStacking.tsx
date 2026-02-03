@@ -60,7 +60,11 @@ const DEFAULT_COLORS = [
   "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1"
 ];
 
-export function ProfileStacking() {
+interface ProfileStackingProps {
+  siteId?: string | null;
+}
+
+export function ProfileStacking({ siteId }: ProfileStackingProps = {}) {
   const queryClient = useQueryClient();
   const [selectedMeters, setSelectedMeters] = useState<Set<string>>(new Set());
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
@@ -79,12 +83,18 @@ export function ProfileStacking() {
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
 
   const { data: meters, isLoading } = useQuery({
-    queryKey: ["scada-imports-stacking"],
+    queryKey: ["scada-imports-stacking", siteId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("scada_imports")
         .select("id, site_name, shop_number, shop_name, meter_label, meter_color, date_range_start, date_range_end, data_points, raw_data")
         .order("created_at", { ascending: false });
+      
+      if (siteId) {
+        query = query.eq("site_id", siteId);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return (data as any[]).map(row => ({
         ...row,

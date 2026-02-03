@@ -10,7 +10,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock, Settings, Navigation, List, Map as MapIcon } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Building2, Plus, Edit2, Trash2, MapPin, Ruler, Upload, Database, ArrowLeft, FileText, Calendar, Loader2, CheckCircle2, FileSpreadsheet, RefreshCw, Clock, Settings, Navigation, List, Map as MapIcon, Layers, GitCompare, BarChart3, LayoutDashboard } from "lucide-react";
 import { toast } from "sonner";
 import { BulkMeterImport } from "@/components/loadprofiles/BulkMeterImport";
 import { BulkCsvDropzone } from "@/components/loadprofiles/BulkCsvDropzone";
@@ -21,6 +22,10 @@ import { CsvImportWizard, WizardParseConfig, ParsedData } from "@/components/loa
 import { processCSVToLoadProfile } from "./utils/csvToLoadProfile";
 import { SiteLocationMap } from "@/components/loadprofiles/SiteLocationMap";
 import { SitesMapView } from "@/components/loadprofiles/SitesMapView";
+import { MeterAnalysis } from "@/components/loadprofiles/MeterAnalysis";
+import { ProfileStacking } from "@/components/loadprofiles/ProfileStacking";
+import { MeterComparison } from "@/components/loadprofiles/MeterComparison";
+import { SiteMeterOverview } from "@/components/loadprofiles/SiteMeterOverview";
 
 interface Site {
   id: string;
@@ -56,6 +61,7 @@ export function SitesTab() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [sheetImportOpen, setSheetImportOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
+  const [siteDetailTab, setSiteDetailTab] = useState<string>("meters");
   const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [processingMeterId, setProcessingMeterId] = useState<string | null>(null);
   const [reprocessingMeterId, setReprocessingMeterId] = useState<string | null>(null);
@@ -1178,7 +1184,7 @@ export function SitesTab() {
         {/* Header with back button */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setSelectedSite(null)}>
+            <Button variant="ghost" size="icon" onClick={() => { setSelectedSite(null); setSiteDetailTab("meters"); }}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
@@ -1197,221 +1203,272 @@ export function SitesTab() {
           </Button>
         </div>
 
-        {/* Meters List */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5" />
-                  Uploaded Meters
-                </CardTitle>
-                <CardDescription>
-                  {siteMeters?.length || 0} meter{(siteMeters?.length || 0) !== 1 ? "s" : ""}
-                  {listedOnlyCount > 0 && (
-                    <span className="ml-2 text-amber-600">• {listedOnlyCount} listed only</span>
-                  )}
-                  {unprocessedCount > 0 && (
-                    <span className="ml-2 text-orange-600">• {unprocessedCount} with data need processing</span>
-                  )}
-                </CardDescription>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={deleteDuplicateMeters}
-                  disabled={isDeletingDuplicates || !siteMeters?.length}
-                >
-                  {isDeletingDuplicates ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4 mr-2" />
-                  )}
-                  Delete Duplicates
-                </Button>
-                {selectedMeterIds.size > 0 && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleBulkDelete}
-                    disabled={bulkDeleteMeters.isPending}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete Selected ({selectedMeterIds.size})
-                  </Button>
-                )}
-                {unprocessedCount > 0 && (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={handleProcessAllWithWizard}
-                    disabled={processingQueue.length > 0}
-                  >
-                    {processingQueue.length > 0 ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Settings className="h-4 w-4 mr-2" />
-                    )}
-                    Process All ({unprocessedCount})
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isLoadingMeters ? (
-              <div className="text-center py-8 text-muted-foreground">Loading meters...</div>
-            ) : !siteMeters?.length ? (
-              <div className="text-center py-8">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="text-muted-foreground mb-4">No meters uploaded yet</p>
-                <Button onClick={() => setUploadDialogOpen(true)}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Meters
-                </Button>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={siteMeters.length > 0 && selectedMeterIds.size === siteMeters.length}
-                        onCheckedChange={toggleAllMeters}
-                      />
-                    </TableHead>
-                    <TableHead>Meter Name</TableHead>
-                    <TableHead>File</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Interval</TableHead>
-                    <TableHead>Data Points</TableHead>
-                    <TableHead>Date Range</TableHead>
-                    <TableHead className="w-24"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {siteMeters.map((meter) => {
-                    const processed = isProcessed(meter);
-                    const isProcessing = processingMeterId === meter.id;
+        {/* Site Detail Tabs */}
+        <Tabs value={siteDetailTab} onValueChange={setSiteDetailTab}>
+          <TabsList>
+            <TabsTrigger value="meters" className="gap-2">
+              <Database className="h-4 w-4" />
+              Meters
+            </TabsTrigger>
+            <TabsTrigger value="overview" className="gap-2">
+              <LayoutDashboard className="h-4 w-4" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="analysis" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Analysis
+            </TabsTrigger>
+            <TabsTrigger value="stacking" className="gap-2">
+              <Layers className="h-4 w-4" />
+              Stacking
+            </TabsTrigger>
+            <TabsTrigger value="comparison" className="gap-2">
+              <GitCompare className="h-4 w-4" />
+              Comparison
+            </TabsTrigger>
+          </TabsList>
 
-                    return (
-                      <TableRow key={meter.id} className={selectedMeterIds.has(meter.id) ? "bg-muted/50" : ""}>
-                        <TableCell>
+          {/* Meters Tab */}
+          <TabsContent value="meters">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Database className="h-5 w-5" />
+                      Uploaded Meters
+                    </CardTitle>
+                    <CardDescription>
+                      {siteMeters?.length || 0} meter{(siteMeters?.length || 0) !== 1 ? "s" : ""}
+                      {listedOnlyCount > 0 && (
+                        <span className="ml-2 text-amber-600">• {listedOnlyCount} listed only</span>
+                      )}
+                      {unprocessedCount > 0 && (
+                        <span className="ml-2 text-orange-600">• {unprocessedCount} with data need processing</span>
+                      )}
+                    </CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={deleteDuplicateMeters}
+                      disabled={isDeletingDuplicates || !siteMeters?.length}
+                    >
+                      {isDeletingDuplicates ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 mr-2" />
+                      )}
+                      Delete Duplicates
+                    </Button>
+                    {selectedMeterIds.size > 0 && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleBulkDelete}
+                        disabled={bulkDeleteMeters.isPending}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Selected ({selectedMeterIds.size})
+                      </Button>
+                    )}
+                    {unprocessedCount > 0 && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleProcessAllWithWizard}
+                        disabled={processingQueue.length > 0}
+                      >
+                        {processingQueue.length > 0 ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Settings className="h-4 w-4 mr-2" />
+                        )}
+                        Process All ({unprocessedCount})
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {isLoadingMeters ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading meters...</div>
+                ) : !siteMeters?.length ? (
+                  <div className="text-center py-8">
+                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="text-muted-foreground mb-4">No meters uploaded yet</p>
+                    <Button onClick={() => setUploadDialogOpen(true)}>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload Meters
+                    </Button>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
                           <Checkbox
-                            checked={selectedMeterIds.has(meter.id)}
-                            onCheckedChange={() => toggleMeterSelection(meter.id)}
+                            checked={siteMeters.length > 0 && selectedMeterIds.size === siteMeters.length}
+                            onCheckedChange={toggleAllMeters}
                           />
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {meter.shop_name || meter.site_name}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {meter.file_name || "-"}
-                        </TableCell>
-                        <TableCell>
-                          {processed ? (
-                            <Badge variant="default" className="bg-green-600">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Processed
-                            </Badge>
-                          ) : (meter.data_points || 0) > 0 ? (
-                            <Badge variant="secondary">Pending</Badge>
-                          ) : (
-                            <Badge variant="outline" className="border-amber-500/50 text-amber-600">
-                              <FileText className="h-3 w-3 mr-1" />
-                              Listed Only
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {meter.detected_interval_minutes ? (
-                            <Badge variant="outline" className="text-xs">
-                              <Clock className="h-3 w-3 mr-1" />
-                              {meter.detected_interval_minutes}-min
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {meter.data_points?.toLocaleString() || 0}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <Calendar className="h-3 w-3" />
-                            {formatDate(meter.date_range_start)} — {formatDate(meter.date_range_end)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            {/* Configure button - for meters with CSV data */}
-                            {(meter.data_points || 0) > 0 ? (
-                              <>
-                                <Button
-                                  variant={!processed ? "default" : "ghost"}
-                                  size="icon"
-                                  onClick={() => handleConfigureSingleMeter(meter)}
-                                  disabled={processingQueue.includes(meter.id)}
-                                  title={processed ? "Reconfigure columns" : "Configure columns"}
-                                >
-                                  {processingQueue.includes(meter.id) ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Settings className="h-4 w-4" />
-                                  )}
-                                </Button>
-                                {/* Reprocess button - force reprocess with existing settings */}
-                                {processed && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleReprocessMeter(meter)}
-                                    disabled={reprocessingMeterId === meter.id}
-                                    title="Reprocess CSV data"
-                                  >
-                                    {reprocessingMeterId === meter.id ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <RefreshCw className="h-4 w-4" />
+                        </TableHead>
+                        <TableHead>Meter Name</TableHead>
+                        <TableHead>File</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Interval</TableHead>
+                        <TableHead>Data Points</TableHead>
+                        <TableHead>Date Range</TableHead>
+                        <TableHead className="w-24"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {siteMeters.map((meter) => {
+                        const processed = isProcessed(meter);
+                        const isProcessing = processingMeterId === meter.id;
+
+                        return (
+                          <TableRow key={meter.id} className={selectedMeterIds.has(meter.id) ? "bg-muted/50" : ""}>
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedMeterIds.has(meter.id)}
+                                onCheckedChange={() => toggleMeterSelection(meter.id)}
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              {meter.shop_name || meter.site_name}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {meter.file_name || "-"}
+                            </TableCell>
+                            <TableCell>
+                              {processed ? (
+                                <Badge variant="default" className="bg-green-600">
+                                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                                  Processed
+                                </Badge>
+                              ) : (meter.data_points || 0) > 0 ? (
+                                <Badge variant="secondary">Pending</Badge>
+                              ) : (
+                                <Badge variant="outline" className="border-amber-500/50 text-amber-600">
+                                  <FileText className="h-3 w-3 mr-1" />
+                                  Listed Only
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {meter.detected_interval_minutes ? (
+                                <Badge variant="outline" className="text-xs">
+                                  <Clock className="h-3 w-3 mr-1" />
+                                  {meter.detected_interval_minutes}-min
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">
+                                {meter.data_points?.toLocaleString() || 0}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <div className="flex items-center gap-1 text-muted-foreground">
+                                <Calendar className="h-3 w-3" />
+                                {formatDate(meter.date_range_start)} — {formatDate(meter.date_range_end)}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                {/* Configure button - for meters with CSV data */}
+                                {(meter.data_points || 0) > 0 ? (
+                                  <>
+                                    <Button
+                                      variant={!processed ? "default" : "ghost"}
+                                      size="icon"
+                                      onClick={() => handleConfigureSingleMeter(meter)}
+                                      disabled={processingQueue.includes(meter.id)}
+                                      title={processed ? "Reconfigure columns" : "Configure columns"}
+                                    >
+                                      {processingQueue.includes(meter.id) ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Settings className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                    {/* Reprocess button - force reprocess with existing settings */}
+                                    {processed && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleReprocessMeter(meter)}
+                                        disabled={reprocessingMeterId === meter.id}
+                                        title="Reprocess CSV data"
+                                      >
+                                        {reprocessingMeterId === meter.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <RefreshCw className="h-4 w-4" />
+                                        )}
+                                      </Button>
                                     )}
+                                  </>
+                                ) : (
+                                  /* Upload button - for listed-only meters without CSV data */
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => setReimportMeter(meter)}
+                                    title="Upload CSV data for this meter"
+                                  >
+                                    <Upload className="h-4 w-4" />
                                   </Button>
                                 )}
-                              </>
-                            ) : (
-                              /* Upload button - for listed-only meters without CSV data */
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => setReimportMeter(meter)}
-                                title="Upload CSV data for this meter"
-                              >
-                                <Upload className="h-4 w-4" />
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                if (confirm("Delete this meter?")) {
-                                  deleteMeter.mutate(meter.id);
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    if (confirm("Delete this meter?")) {
+                                      deleteMeter.mutate(meter.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Overview Tab */}
+          <TabsContent value="overview">
+            <SiteMeterOverview 
+              siteId={selectedSite.id}
+              siteName={selectedSite.name}
+            />
+          </TabsContent>
+
+          {/* Analysis Tab */}
+          <TabsContent value="analysis">
+            <MeterAnalysis siteId={selectedSite.id} />
+          </TabsContent>
+
+          {/* Stacking Tab */}
+          <TabsContent value="stacking">
+            <ProfileStacking siteId={selectedSite.id} />
+          </TabsContent>
+
+          {/* Comparison Tab */}
+          <TabsContent value="comparison">
+            <MeterComparison siteId={selectedSite.id} />
+          </TabsContent>
+        </Tabs>
 
         {/* Upload Dialog - with Bulk CSV Automation */}
         <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>

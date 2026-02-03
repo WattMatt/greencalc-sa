@@ -36,19 +36,29 @@ const DEFAULT_COLORS = {
   meterB: "#ef4444",
 };
 
-export function MeterComparison() {
+interface MeterComparisonProps {
+  siteId?: string | null;
+}
+
+export function MeterComparison({ siteId }: MeterComparisonProps = {}) {
   const [meterAId, setMeterAId] = useState<string>("");
   const [meterBId, setMeterBId] = useState<string>("");
   const [dayFilter, setDayFilter] = useState<DayFilter>("all");
   const [showComparison, setShowComparison] = useState(false);
 
   const { data: meters, isLoading } = useQuery({
-    queryKey: ["scada-imports-comparison"],
+    queryKey: ["scada-imports-comparison", siteId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("scada_imports")
         .select("id, site_name, shop_number, shop_name, meter_label, meter_color, raw_data")
         .order("created_at", { ascending: false });
+      
+      if (siteId) {
+        query = query.eq("site_id", siteId);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
       return (data as any[])
         .filter(row => row.raw_data && Array.isArray(row.raw_data) && row.raw_data.length > 0)
