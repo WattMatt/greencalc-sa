@@ -1583,6 +1583,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       }
       
       if (e.key === 'Escape') {
+        // ESC cancels ALL operations and selections
+        
         // Exit batch placement mode
         if (pendingBatchPlacement) {
           setPendingBatchPlacement(null);
@@ -1625,7 +1627,33 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           toast.info('Roof direction edit cancelled');
           return;
         }
-        // Default: clear selection and editing state
+        // Cancel dimension tool operation
+        if (dimensionObject1Id || dimensionObject2Id) {
+          setDimensionObject1Id(null);
+          setDimensionObject2Id(null);
+          setIsSetDistanceModalOpen(false);
+          setActiveTool(Tool.SELECT);
+          toast.info('Distance measurement cancelled');
+          return;
+        }
+        // Cancel align edges tool operation
+        if (alignObject1Id || alignObject2Id) {
+          setAlignObject1Id(null);
+          setAlignObject2Id(null);
+          setAlignEdge1(null);
+          setAlignEdge2(null);
+          setIsAlignEdgesModalOpen(false);
+          setActiveTool(Tool.SELECT);
+          toast.info('Edge alignment cancelled');
+          return;
+        }
+        // Clear any selections
+        if (selectedItemIds.size > 0) {
+          setSelectedItemIds(new Set());
+          toast.info('Selection cleared');
+          return;
+        }
+        // Default: reset to select tool and clear editing state
         setActiveTool(Tool.SELECT);
         setEditingPvArrayId(null);
       }
@@ -1650,7 +1678,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId, pendingPvArrayConfig, pendingBatchPlacement, activeTool, selectedItemId, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays, lastPvArraySettings]);
+  }, [historyIndex, history.length, handleSave, readOnly, pendingRoofMask, editingRoofDirectionId, pendingPvArrayConfig, pendingBatchPlacement, activeTool, selectedItemId, selectedItemIds, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays, lastPvArraySettings, dimensionObject1Id, dimensionObject2Id, alignObject1Id, alignObject2Id]);
 
   // Scroll wheel rotation when R is held
   // - R + scroll = 5° increments
