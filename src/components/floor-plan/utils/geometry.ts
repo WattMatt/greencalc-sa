@@ -682,7 +682,7 @@ export const getObjectCenterDistance = (
 
 /**
  * Calculate new position for object1 to achieve a target edge-to-edge distance from object2.
- * Object1 moves along the line connecting the two object centers.
+ * Object1 moves along a single axis (horizontal OR vertical) based on the dominant direction.
  * The distance is measured from the boundary of each object, not their centers.
  */
 export const calculateNewPositionAtDistance = (
@@ -697,7 +697,6 @@ export const calculateNewPositionAtDistance = (
 ): Point => {
   const dx = object1Pos.x - object2Pos.x;
   const dy = object1Pos.y - object2Pos.y;
-  const centerDist = Math.hypot(dx, dy);
   
   // Get the effective half-dimensions considering rotation
   const edges1 = getObjectEdges(object1Pos, object1Dims, object1Rotation);
@@ -708,68 +707,30 @@ export const calculateNewPositionAtDistance = (
   const halfWidth2 = (edges2.right - edges2.left) / 2;
   const halfHeight2 = (edges2.bottom - edges2.top) / 2;
   
-  // Use EPSILON for near-zero detection to avoid numerical instability
-  const EPSILON = 0.001; // 1/1000th of a pixel
+  const targetDistancePx = targetDistanceMeters / scaleRatio;
   
-  if (centerDist < EPSILON) {
-    // Objects at effectively same position
-    // Determine which direction to move based on current edge positions
-    const gapX = Math.max(edges1.left - edges2.right, edges2.left - edges1.right);
-    const gapY = Math.max(edges1.top - edges2.bottom, edges2.top - edges1.bottom);
-    
-    // Move along the axis with the larger gap, or default to X
-    if (Math.abs(gapY) > Math.abs(gapX)) {
-      const signY = gapY >= 0 ? 1 : -1;
-      const edgeToEdgeOffset = halfHeight1 + halfHeight2 + (targetDistanceMeters / scaleRatio);
-      return {
-        x: object2Pos.x,
-        y: object2Pos.y + signY * edgeToEdgeOffset,
-      };
-    } else {
-      const signX = gapX >= 0 ? 1 : -1;
-      const edgeToEdgeOffset = halfWidth1 + halfWidth2 + (targetDistanceMeters / scaleRatio);
-      return {
-        x: object2Pos.x + signX * edgeToEdgeOffset,
-        y: object2Pos.y,
-      };
-    }
+  // Determine dominant axis based on center displacement
+  // Move only along the axis with greater displacement
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+  
+  if (absDx >= absDy) {
+    // Move horizontally only - keep Y position unchanged
+    const signX = dx >= 0 ? 1 : -1;
+    const edgeToEdgeOffsetX = halfWidth1 + halfWidth2 + targetDistancePx;
+    return {
+      x: object2Pos.x + signX * edgeToEdgeOffsetX,
+      y: object1Pos.y, // Keep original Y
+    };
+  } else {
+    // Move vertically only - keep X position unchanged
+    const signY = dy >= 0 ? 1 : -1;
+    const edgeToEdgeOffsetY = halfHeight1 + halfHeight2 + targetDistancePx;
+    return {
+      x: object1Pos.x, // Keep original X
+      y: object2Pos.y + signY * edgeToEdgeOffsetY,
+    };
   }
-  
-  // Normalize direction
-  const unitX = dx / centerDist;
-  const unitY = dy / centerDist;
-  
-  // Calculate edge offset using ray-box intersection
-  // For each object, find where a ray from center in direction (unitX, unitY) intersects the AABB edge
-  const calcEdgeOffset = (halfW: number, halfH: number, ux: number, uy: number): number => {
-    const absUx = Math.abs(ux);
-    const absUy = Math.abs(uy);
-    
-    // Handle axis-aligned cases to avoid division by near-zero
-    if (absUx < EPSILON) {
-      return halfH; // Moving purely vertically
-    }
-    if (absUy < EPSILON) {
-      return halfW; // Moving purely horizontally
-    }
-    
-    // Ray-box intersection: find t where ray hits edge
-    // Ray: P + t * direction, check which edge is hit first
-    const tX = halfW / absUx; // t when ray hits left/right edge
-    const tY = halfH / absUy; // t when ray hits top/bottom edge
-    return Math.min(tX, tY); // Distance from center to edge along ray
-  };
-  
-  const edgeOffset1 = calcEdgeOffset(halfWidth1, halfHeight1, unitX, unitY);
-  const edgeOffset2 = calcEdgeOffset(halfWidth2, halfHeight2, unitX, unitY);
-  
-  // Target center-to-center distance = edge1 + gap + edge2
-  const targetCenterDist = edgeOffset1 + (targetDistanceMeters / scaleRatio) + edgeOffset2;
-  
-  return {
-    x: object2Pos.x + unitX * targetCenterDist,
-    y: object2Pos.y + unitY * targetCenterDist,
-  };
 };
 
 export type AlignmentEdge = 'left' | 'right' | 'top' | 'bottom';
