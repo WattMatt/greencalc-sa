@@ -1,106 +1,25 @@
 
-# Fix: Cable Tray Not Moving "Right to Left" in Set Distance Tool
+# Fix: Set Distance Tool Not Moving Cable Tray
 
-## Problem Analysis
+## Problem Identified
 
-After extensive analysis of the `calculateNewPositionAtDistance` geometry function, the algorithm appears mathematically correct for all directional cases. However, the user reports that moving objects "from right to left" fails while "left to right" works.
+The "Set Distance Between Objects" tool fails to move the cable tray when reducing the distance (e.g., from 1.57m to 1.5m). The user sees no movement at all - the object stays in place.
 
-### Potential Root Causes Identified
+### Root Cause
 
-1. **Numerical Precision Issues**: When objects are very close together, `centerDist` approaches zero, causing the direction vector to become unstable or the fallback (always move RIGHT) to trigger incorrectly.
+The `handleDimensionApply` function makes **four separate `commitState` calls** - one for each object type (PV arrays, equipment, walkways, cable trays). While the atomic state management system is designed to handle sequential commits, this pattern is inefficient and potentially fragile.
 
-2. **Edge Offset Calculation**: The weighted edge offset formula `halfWidth * absDx + halfHeight * absDy` may produce incorrect results when objects are nearly aligned on one axis.
+More critically, when moving a single cable tray, the first three commits (for PV arrays, equipment, walkways) create history entries with **no actual changes**. This clutters the undo history with no-op entries and may cause subtle timing issues.
 
-3. **Stale Closure in State Check**: The `placedCableTrays.find()` check in `handleDimensionApply` uses the closure value rather than checking inside the updater function.
+The fix is to consolidate all object movements into a **single atomic state update** that modifies all object types at once, consistent with the pattern used elsewhere in the codebase (e.g., deletion operations).
 
 ---
 
 ## Solution
 
-### Part 1: Add Numerical Stability to calculateNewPositionAtDistance
+### File: `src/components/floor-plan/FloorPlanMarkup.tsx`
 
-**File**: `src/components/floor-plan/utils/geometry.ts`
-
-The current code has a fallback for `centerDist === 0` that always moves Object1 to the RIGHT. This should be enhanced to handle near-zero distances and consider the current relative positions more carefully.
-
-```typescript
-export const calculateNewPositionAtDistance = (
-  object1Pos: Point,
-  object1Dims: { width: number; height: number },
-  object1Rotation: number,
-  object2Pos: Point,
-  object2Dims: { width: number; height: number },
-  object2Rotation: number,
-  targetDistanceMeters: number,
-  scaleRatio: number
-): Point => {
-  const dx = object1Pos.x - object2Pos.x;
-  const dy = object1Pos.y - object2Pos.y;
-  const centerDist = Math.hypot(dx, dy);
-  
-  // Get effective half-dimensions considering rotation
-  const edges1 = getObjectEdges(object1Pos, object1Dims, object1Rotation);
-  const edges2 = getObjectEdges(object2Pos, object2Dims, object2Rotation);
-  
-  const halfWidth1 = (edges1.right - edges1.left) / 2;
-  const halfHeight1 = (edges1.bottom - edges1.top) / 2;
-  const halfWidth2 = (edges2.right - edges2.left) / 2;
-  const halfHeight2 = (edges2.bottom - edges2.top) / 2;
-  
-  // NEW: Use a small epsilon for near-zero detection
-  const EPSILON = 0.001; // 1/1000th of a pixel
-  
-  if (centerDist < EPSILON) {
-    // Objects at effectively same position
-    // Determine which direction to move based on current edge positions
-    const gapX = Math.max(edges1.left - edges2.right, edges2.left - edges1.right);
-    const gapY = Math.max(edges1.top - edges2.bottom, edges2.top - edges1.bottom);
-    
-    // Move along the axis with the larger gap, or default to X
-    if (Math.abs(gapY) > Math.abs(gapX)) {
-      const signY = gapY >= 0 ? 1 : -1;
-      const edgeToEdgeOffset = halfHeight1 + halfHeight2 + (targetDistanceMeters / scaleRatio);
-      return {
-        x: object2Pos.x,
-        y: object2Pos.y + signY * edgeToEdgeOffset,
-      };
-    } else {
-      const signX = gapX >= 0 ? 1 : -1;
-      const edgeToEdgeOffset = halfWidth1 + halfWidth2 + (targetDistanceMeters / scaleRatio);
-      return {
-        x: object2Pos.x + signX * edgeToEdgeOffset,
-        y: object2Pos.y,
-      };
-    }
-  }
-  
-  // Normalize direction
-  const unitX = dx / centerDist;
-  const unitY = dy / centerDist;
-  
-  // Calculate edge offsets in direction of movement
-  const absDx = Math.abs(unitX);
-  const absDy = Math.abs(unitY);
-  
-  // Weighted average of half-dimensions based on direction
-  const edgeOffset1 = halfWidth1 * absDx + halfHeight1 * absDy;
-  const edgeOffset2 = halfWidth2 * absDx + halfHeight2 * absDy;
-  
-  // Target center-to-center distance = edge1 + gap + edge2
-  const targetCenterDist = edgeOffset1 + (targetDistanceMeters / scaleRatio) + edgeOffset2;
-  
-  return {
-    x: object2Pos.x + unitX * targetCenterDist,
-    y: object2Pos.y + unitY * targetCenterDist,
-  };
-};
-```
-
-### Part 2: Add Console Logging for Debugging
-
-**File**: `src/components/floor-plan/FloorPlanMarkup.tsx`
-
-Add temporary console logs to `handleDimensionApply` to trace the calculation:
+Replace the four separate state setter calls with a single `commitState` call that updates all object types atomically:
 
 ```typescript
 const handleDimensionApply = useCallback((newDistance: number) => {
@@ -113,15 +32,6 @@ const handleDimensionApply = useCallback((newDistance: number) => {
   
   if (!pos1 || !pos2 || !dims1 || !dims2) return;
   
-  console.log('[Set Distance] Input:', {
-    object1Id: dimensionObject1Id,
-    pos1, dims1,
-    object2Id: dimensionObject2Id,
-    pos2, dims2,
-    newDistance,
-    scaleRatio: scaleInfo.ratio,
-  });
-  
   const newPos = calculateNewPositionAtDistance(
     pos1,
     { width: dims1.width, height: dims1.height },
@@ -133,36 +43,101 @@ const handleDimensionApply = useCallback((newDistance: number) => {
     scaleInfo.ratio
   );
   
-  console.log('[Set Distance] Result:', {
+  // Calculate delta to apply to all selected items
+  const delta: Point = {
+    x: newPos.x - pos1.x,
+    y: newPos.y - pos1.y,
+  };
+  
+  console.log('[Set Distance] Applying:', {
+    object1Id: dimensionObject1Id,
     oldPos: pos1,
     newPos,
-    delta: { x: newPos.x - pos1.x, y: newPos.y - pos1.y },
+    delta,
+    targetDistance: newDistance,
   });
   
-  // ... rest of the function
-}, [...]);
+  // Skip if no movement needed (delta is effectively zero)
+  if (Math.abs(delta.x) < 0.001 && Math.abs(delta.y) < 0.001) {
+    console.warn('[Set Distance] Delta is zero - no movement');
+    toast.error('No movement needed - already at target distance');
+    return;
+  }
+  
+  // Determine which IDs to move
+  const idsToMove = selectedItemIds.size > 1 
+    ? new Set(Array.from(selectedItemIds).filter(id => id !== dimensionObject2Id))
+    : new Set([dimensionObject1Id]);
+  
+  // Apply movement to ALL object types in a SINGLE atomic commit
+  commitState((prev) => ({
+    ...prev,
+    pvArrays: prev.pvArrays.map(arr => 
+      idsToMove.has(arr.id) 
+        ? { ...arr, position: { x: arr.position.x + delta.x, y: arr.position.y + delta.y } }
+        : arr
+    ),
+    equipment: prev.equipment.map(eq => 
+      idsToMove.has(eq.id)
+        ? { ...eq, position: { x: eq.position.x + delta.x, y: eq.position.y + delta.y } }
+        : eq
+    ),
+    placedWalkways: prev.placedWalkways.map(w => 
+      idsToMove.has(w.id)
+        ? { ...w, position: { x: w.position.x + delta.x, y: w.position.y + delta.y } }
+        : w
+    ),
+    placedCableTrays: prev.placedCableTrays.map(c => 
+      idsToMove.has(c.id)
+        ? { ...c, position: { x: c.position.x + delta.x, y: c.position.y + delta.y } }
+        : c
+    ),
+  }));
+  
+  const movedCount = idsToMove.size;
+  
+  // Reset dimension tool state
+  setDimensionObject1Id(null);
+  setDimensionObject2Id(null);
+  setIsSetDistanceModalOpen(false);
+  setActiveTool(Tool.SELECT);
+  toast.success(`Distance set to ${newDistance.toFixed(2)}m${movedCount > 1 ? ` (${movedCount} items moved)` : ''}`);
+}, [dimensionObject1Id, dimensionObject2Id, scaleInfo.ratio, getObjectPosition, getObjectDimensions, selectedItemIds, commitState]);
 ```
+
+---
+
+## Key Changes
+
+| Aspect | Before | After |
+|--------|--------|-------|
+| State updates | 4 separate `commitState` calls via wrappers | 1 single `commitState` call |
+| History entries | Creates 4 history entries per operation | Creates 1 history entry |
+| Undo behavior | 4 undos required to revert | 1 undo to revert |
+| Zero-delta handling | Silently does nothing | Shows warning toast |
+| Debug logging | Logged selection info | Logs actual positions and delta |
+
+---
+
+## Benefits
+
+1. **Atomic operation**: All movements happen in a single state transaction
+2. **Cleaner undo history**: One entry per distance operation instead of four
+3. **Better debugging**: Console log shows actual delta values to diagnose issues
+4. **User feedback**: If delta is zero, user sees an error message instead of silent failure
+5. **Consistent pattern**: Matches the single-commit pattern used in other multi-object operations
 
 ---
 
 ## Testing Plan
 
-1. Open the PV Layout editor
-2. Place a cable tray to the RIGHT of a PV array
-3. Use the "Distance Between" tool to set a smaller distance (e.g., 50mm)
-4. Check console logs to verify:
-   - `pos1` and `pos2` have correct X values (Object1 should have higher X)
-   - `newPos.x` should be SMALLER than `pos1.x` (moving left)
-5. Verify the cable tray moves correctly
-6. Repeat with cable tray to the LEFT, setting distance to verify movement in both directions
-
----
-
-## Technical Summary
-
-| File | Change |
-|------|--------|
-| `src/components/floor-plan/utils/geometry.ts` | Add EPSILON check for near-zero center distance, improve fallback direction logic |
-| `src/components/floor-plan/FloorPlanMarkup.tsx` | Add debug logging to trace position calculations (can be removed after fix verification) |
-
-The primary fix addresses numerical edge cases where the center-to-center distance is extremely small, which could cause the direction vector to be undefined or the fallback to always push objects in the positive X direction.
+1. Open PV Layout editor
+2. Place a cable tray to the right of a PV array
+3. Use "Tools > Distance Between" - click cable tray (Object 1), then PV array (Object 2)
+4. In the modal, change distance from current value (e.g., 1.57m) to a smaller value (e.g., 1.5m)
+5. Click Apply
+6. **Verify**: Cable tray moves toward the PV array
+7. Check console for `[Set Distance] Applying:` log with non-zero delta
+8. Test undo - should revert in a single Ctrl+Z
+9. Repeat with cable tray to the LEFT of PV array
+10. Test group selection - select multiple objects, set distance between one of them and a reference
