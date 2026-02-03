@@ -1001,86 +1001,95 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     }
     
     // Multi-selection - create batch placement config
+    // Filter out items from hidden layers
     const batchItems: BatchPlacementItem[] = [];
     const positions: Point[] = [];
     
-    // Collect all selected items with their positions
+    // Collect all selected items with their positions (respecting layer visibility)
     selectedItemIds.forEach(id => {
-      // PV Arrays
-      const pvArray = pvArrays.find(a => a.id === id);
-      if (pvArray) {
-        positions.push(pvArray.position);
-        batchItems.push({
-          id: `batch-${id}`,
-          type: 'pvArray',
-          offset: { x: 0, y: 0 }, // Will be calculated after we know center
-          rotation: pvArray.rotation,
-          pvArrayConfig: {
-            rows: pvArray.rows,
-            columns: pvArray.columns,
-            orientation: pvArray.orientation,
-            minSpacing: pvArray.minSpacing ?? lastPvArraySettings?.minSpacing ?? 0.5,
-            roofMaskId: pvArray.roofMaskId,
-          },
-        });
-        return;
+      // PV Arrays (only if layer is visible)
+      if (layerVisibility.pvArrays) {
+        const pvArray = pvArrays.find(a => a.id === id);
+        if (pvArray) {
+          positions.push(pvArray.position);
+          batchItems.push({
+            id: `batch-${id}`,
+            type: 'pvArray',
+            offset: { x: 0, y: 0 }, // Will be calculated after we know center
+            rotation: pvArray.rotation,
+            pvArrayConfig: {
+              rows: pvArray.rows,
+              columns: pvArray.columns,
+              orientation: pvArray.orientation,
+              minSpacing: pvArray.minSpacing ?? lastPvArraySettings?.minSpacing ?? 0.5,
+              roofMaskId: pvArray.roofMaskId,
+            },
+          });
+          return;
+        }
       }
       
-      // Equipment
-      const eq = equipment.find(e => e.id === id);
-      if (eq) {
-        positions.push(eq.position);
-        batchItems.push({
-          id: `batch-${id}`,
-          type: 'equipment',
-          offset: { x: 0, y: 0 },
-          rotation: eq.rotation,
-          equipmentConfig: {
-            equipmentType: eq.type,
-            name: eq.name,
-          },
-        });
-        return;
+      // Equipment (only if layer is visible)
+      if (layerVisibility.equipment) {
+        const eq = equipment.find(e => e.id === id);
+        if (eq) {
+          positions.push(eq.position);
+          batchItems.push({
+            id: `batch-${id}`,
+            type: 'equipment',
+            offset: { x: 0, y: 0 },
+            rotation: eq.rotation,
+            equipmentConfig: {
+              equipmentType: eq.type,
+              name: eq.name,
+            },
+          });
+          return;
+        }
       }
       
-      // Walkways
-      const walkway = placedWalkways.find(w => w.id === id);
-      if (walkway) {
-        positions.push(walkway.position);
-        batchItems.push({
-          id: `batch-${id}`,
-          type: 'walkway',
-          offset: { x: 0, y: 0 },
-          rotation: walkway.rotation,
-          walkwayConfig: {
-            configId: walkway.configId,
-            name: walkway.name,
-            width: walkway.width,
-            length: walkway.length,
-            minSpacing: walkway.minSpacing,
-          },
-        });
-        return;
+      // Walkways (only if layer is visible)
+      if (layerVisibility.walkways) {
+        const walkway = placedWalkways.find(w => w.id === id);
+        if (walkway) {
+          positions.push(walkway.position);
+          batchItems.push({
+            id: `batch-${id}`,
+            type: 'walkway',
+            offset: { x: 0, y: 0 },
+            rotation: walkway.rotation,
+            walkwayConfig: {
+              configId: walkway.configId,
+              name: walkway.name,
+              width: walkway.width,
+              length: walkway.length,
+              minSpacing: walkway.minSpacing,
+            },
+          });
+          return;
+        }
       }
       
-      // Cable Trays
-      const cableTray = placedCableTrays.find(c => c.id === id);
-      if (cableTray) {
-        positions.push(cableTray.position);
-        batchItems.push({
-          id: `batch-${id}`,
-          type: 'cableTray',
-          offset: { x: 0, y: 0 },
-          rotation: cableTray.rotation,
-          cableTrayConfig: {
-            configId: cableTray.configId,
-            name: cableTray.name,
-            width: cableTray.width,
-            length: cableTray.length,
-            minSpacing: cableTray.minSpacing,
-          },
-        });
-        return;
+      // Cable Trays (only if layer is visible)
+      if (layerVisibility.cableTrays) {
+        const cableTray = placedCableTrays.find(c => c.id === id);
+        if (cableTray) {
+          positions.push(cableTray.position);
+          batchItems.push({
+            id: `batch-${id}`,
+            type: 'cableTray',
+            offset: { x: 0, y: 0 },
+            rotation: cableTray.rotation,
+            cableTrayConfig: {
+              configId: cableTray.configId,
+              name: cableTray.name,
+              width: cableTray.width,
+              length: cableTray.length,
+              minSpacing: cableTray.minSpacing,
+            },
+          });
+          return;
+        }
       }
     });
     
@@ -1111,7 +1120,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     });
     setActiveTool(Tool.PV_ARRAY); // Reuse PV_ARRAY tool for batch placement
     toast.info(`Copied ${batchItems.length} items. Click to place group.`);
-  }, [selectedItemIds, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays, lastPvArraySettings]);
+  }, [selectedItemIds, pvArrays, roofMasks, equipment, placedWalkways, placedCableTrays, lastPvArraySettings, layerVisibility]);
 
   // Get object position by ID (for dimension tool)
   const getObjectPosition = useCallback((id: string): Point | null => {

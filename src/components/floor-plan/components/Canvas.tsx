@@ -1516,8 +1516,8 @@ export function Canvas({
         const isPointInBox = (p: Point) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
         const isCenterInBox = (center: Point) => isPointInBox(center);
         
-        // Check PV arrays
-        if (pvPanelConfig && scaleInfo.ratio) {
+        // Check PV arrays (only if layer is visible)
+        if (pvPanelConfig && scaleInfo.ratio && layerVisibility.pvArrays) {
           pvArrays.forEach(arr => {
             const dims = getPVArrayDimensions(arr, pvPanelConfig, roofMasks, scaleInfo, arr.position);
             // Use center point for selection
@@ -1527,37 +1527,45 @@ export function Canvas({
           });
         }
         
-        // Check walkways
-        placedWalkways?.forEach(walkway => {
-          if (isCenterInBox(walkway.position)) {
-            selectedIds.push(walkway.id);
-          }
-        });
-        
-        // Check cable trays
-        placedCableTrays?.forEach(tray => {
-          if (isCenterInBox(tray.position)) {
-            selectedIds.push(tray.id);
-          }
-        });
-        
-        // Check equipment
-        equipment.forEach(eq => {
-          if (isCenterInBox(eq.position)) {
-            selectedIds.push(eq.id);
-          }
-        });
-        
-        // Check roof masks (by center)
-        roofMasks.forEach(mask => {
-          if (mask.points.length > 0) {
-            const cx = mask.points.reduce((s, p) => s + p.x, 0) / mask.points.length;
-            const cy = mask.points.reduce((s, p) => s + p.y, 0) / mask.points.length;
-            if (isCenterInBox({ x: cx, y: cy })) {
-              selectedIds.push(mask.id);
+        // Check walkways (only if layer is visible)
+        if (layerVisibility.walkways) {
+          placedWalkways?.forEach(walkway => {
+            if (isCenterInBox(walkway.position)) {
+              selectedIds.push(walkway.id);
             }
-          }
-        });
+          });
+        }
+        
+        // Check cable trays (only if layer is visible)
+        if (layerVisibility.cableTrays) {
+          placedCableTrays?.forEach(tray => {
+            if (isCenterInBox(tray.position)) {
+              selectedIds.push(tray.id);
+            }
+          });
+        }
+        
+        // Check equipment (only if layer is visible)
+        if (layerVisibility.equipment) {
+          equipment.forEach(eq => {
+            if (isCenterInBox(eq.position)) {
+              selectedIds.push(eq.id);
+            }
+          });
+        }
+        
+        // Check roof masks (by center) (only if layer is visible)
+        if (layerVisibility.roofMasks) {
+          roofMasks.forEach(mask => {
+            if (mask.points.length > 0) {
+              const cx = mask.points.reduce((s, p) => s + p.x, 0) / mask.points.length;
+              const cy = mask.points.reduce((s, p) => s + p.y, 0) / mask.points.length;
+              if (isCenterInBox({ x: cx, y: cy })) {
+                selectedIds.push(mask.id);
+              }
+            }
+          });
+        }
         
         // Determine if adding to selection (Shift held)
         const addToSelection = e.shiftKey || e.ctrlKey || e.metaKey;
