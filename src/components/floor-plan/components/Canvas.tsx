@@ -484,6 +484,7 @@ export function Canvas({
     scaleInfo,
     pvPanelConfig,
     selectedItemId,
+    selectedItemIds,
     scaleLine,
     currentDrawing,
     previewPoint,
