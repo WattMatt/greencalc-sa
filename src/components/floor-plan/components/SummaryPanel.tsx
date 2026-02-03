@@ -62,6 +62,8 @@ function CollapsibleSection({
   onToggleVisibility?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  // Default to visible if not specified
+  const visible = isVisible !== false;
   
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -79,7 +81,7 @@ function CollapsibleSection({
                   onToggleVisibility();
                 }}
               >
-                {isVisible ? (
+                {visible ? (
                   <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                 ) : (
                   <EyeOff className="h-3.5 w-3.5 text-muted-foreground/50" />
@@ -87,14 +89,14 @@ function CollapsibleSection({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="left">
-              {isVisible ? 'Hide on canvas' : 'Show on canvas'}
+              {visible ? 'Hide on canvas' : 'Show on canvas'}
             </TooltipContent>
           </Tooltip>
         )}
         <CollapsibleTrigger asChild>
           <button className={cn(
             "flex items-center gap-2 flex-1 hover:bg-accent/50 rounded p-1 transition-colors",
-            !isVisible && "opacity-50"
+            !visible && "opacity-50"
           )}>
             {icon}
             <span className="text-sm font-medium">{title}</span>
