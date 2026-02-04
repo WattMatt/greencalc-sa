@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig, BatchPlacementConfig, LayerVisibility, defaultLayerVisibility, SubgroupVisibility } from '../types';
 import { renderAllMarkups, drawPvArray, drawEquipmentIcon, drawWalkway, drawCableTray } from '../utils/drawing';
-import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing, getPVArrayDimensions, getEquipmentDimensions, detectClickedEdge, snapCablePointToTarget, CableType } from '../utils/geometry';
+import { calculatePolygonArea, calculateLineLength, distance, distanceToPolyline, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing, getPVArrayDimensions, getEquipmentDimensions, detectClickedEdge, snapCablePointToTarget, CableType } from '../utils/geometry';
 import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
 import { PVArrayConfig } from './PVArrayModal';
 import { AlignmentEdge } from './AlignEdgesModal';
@@ -851,6 +851,21 @@ export function Canvas({
           });
         });
         return;
+      }
+
+      // Select cables/lines (between equipment and roof masks) - only if layer is visible
+      if (lines && lines.length > 0 && layerVisibility.cables) {
+        const cableHitThreshold = 8 / viewState.zoom; // 8 pixels for easy clicking
+        const hitLine = [...lines].reverse().find(line => {
+          if (line.points.length < 2) return false;
+          const dist = distanceToPolyline(worldPos, line.points);
+          return dist <= cableHitThreshold;
+        });
+        
+        if (hitLine) {
+          handleItemSelection(hitLine.id, () => {});
+          return;
+        }
       }
 
       // Fallback: select roof mask (lowest priority) - only if layer is visible
