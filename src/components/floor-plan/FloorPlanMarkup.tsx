@@ -1667,7 +1667,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         case 'cableTray': {
           const t = placedCableTrays.find(t => t.id === objectIds[0]);
           if (t) {
-            currentProps = { length: t.length };
+            currentProps = { length: t.length, cableType: t.cableType };
             resolvedConfigId = resolvedConfigId || t.configId;
           }
           break;
@@ -1758,6 +1758,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
             }
           }
           if (properties?.length !== undefined) updates.length = properties.length;
+          if (properties?.cableType !== undefined) updates.cableType = properties.cableType;
           return { ...t, ...updates };
         }));
         toast.success(`Updated ${configModalObjectIds.length} cable tray(s)`);

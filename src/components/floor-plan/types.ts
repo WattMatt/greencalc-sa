@@ -105,6 +105,9 @@ export interface PlacedWalkway {
   minSpacing?: number; // Minimum spacing in meters
 }
 
+// Cable tray type designation (AC or DC)
+export type CableTrayType = 'ac' | 'dc';
+
 // Placed instance of a cable tray on the canvas/project
 export interface PlacedCableTray {
   id: string;
@@ -115,6 +118,7 @@ export interface PlacedCableTray {
   position: Point;   // Canvas position (required for placed items)
   rotation: number;  // Rotation in degrees
   minSpacing?: number; // Minimum spacing in meters
+  cableType?: CableTrayType; // Designates AC or DC cable tray for snapping
 }
 
 export interface DesignState {
