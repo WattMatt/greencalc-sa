@@ -1,4 +1,4 @@
-import { Point, PVArrayItem, PVPanelConfig, RoofMask, ScaleInfo, EquipmentType, EquipmentItem, PlantSetupConfig, PlacedCableTray, CableTrayType } from '../types';
+import { Point, PVArrayItem, PVPanelConfig, RoofMask, ScaleInfo, EquipmentType, EquipmentItem, PlantSetupConfig, PlacedCableTray, CableTrayType, SupplyLine } from '../types';
 
 /**
  * Proximity threshold in meters - determines when snapping activates.
@@ -945,10 +945,11 @@ export type CableType = 'dc' | 'ac';
 interface CableSnapTarget {
   id: string;
   position: Point;
-  type: 'equipment' | 'pvArray' | 'cableTray';
+  type: 'equipment' | 'pvArray' | 'cableTray' | 'cable';
   equipmentType?: EquipmentType;
   arrayId?: string; // Parent PV array ID for individual module snapping
   trayId?: string; // Cable tray ID for tray snapping
+  cableId?: string; // Source cable ID for cable-to-cable snapping
   _distanceToLine?: number; // Perpendicular distance to centerline (for cable trays)
 }
 
@@ -1111,8 +1112,8 @@ export const getClosestPointOnCableTray = (
 
 /**
  * Find the nearest valid snap target for a cable endpoint based on cable type.
- * DC cables snap to: Inverters, Solar Modules (PV Arrays), DC Cable Trays
- * AC cables snap to: Inverters, Main Boards, AC Cable Trays
+ * DC cables snap to: Inverters, Solar Modules (PV Arrays), DC Cable Trays, DC Cable nodes
+ * AC cables snap to: Inverters, Main Boards, AC Cable Trays, AC Cable nodes
  * 
  * @param mousePos - Current mouse position in world coordinates
  * @param cableType - 'dc' or 'ac'
@@ -1124,6 +1125,8 @@ export const getClosestPointOnCableTray = (
  * @param viewState - Current view state (for zoom consideration)
  * @param plantSetupConfig - Plant setup config for custom dimensions
  * @param placedCableTrays - Array of placed cable trays for tray snapping
+ * @param existingCables - Array of existing cables for cable-to-cable snapping
+ * @param currentCableId - ID of the cable currently being drawn (to exclude from snapping)
  * @returns Snapped position and target ID, or original position if no snap
  */
 export const snapCablePointToTarget = (
@@ -1136,8 +1139,10 @@ export const snapCablePointToTarget = (
   scaleInfo: ScaleInfo,
   viewState: { zoom: number },
   plantSetupConfig?: PlantSetupConfig,
-  placedCableTrays?: PlacedCableTray[]
-): { position: Point; snappedToId: string | null; snappedToType: 'equipment' | 'pvArray' | 'cableTray' | null; equipmentType?: EquipmentType } => {
+  placedCableTrays?: PlacedCableTray[],
+  existingCables?: SupplyLine[],
+  currentCableId?: string
+): { position: Point; snappedToId: string | null; snappedToType: 'equipment' | 'pvArray' | 'cableTray' | 'cable' | null; equipmentType?: EquipmentType } => {
   if (!scaleInfo.ratio) {
     return { position: mousePos, snappedToId: null, snappedToType: null };
   }
@@ -1197,6 +1202,26 @@ export const snapCablePointToTarget = (
             _distanceToLine: projection.distanceToLine,
           });
         }
+      }
+    }
+  }
+
+  // Existing cables of matching type - snap to their nodes/vertices
+  if (existingCables) {
+    for (const cable of existingCables) {
+      // Skip the cable currently being drawn
+      if (cable.id === currentCableId) continue;
+      // Only snap to cables of the same type (DC→DC, AC→AC)
+      if (cable.type !== cableType) continue;
+      
+      // Add all nodes/vertices of the cable as snap targets
+      for (let i = 0; i < cable.points.length; i++) {
+        targets.push({
+          id: `${cable.id}_node_${i}`,
+          position: cable.points[i],
+          type: 'cable',
+          cableId: cable.id,
+        });
       }
     }
   }

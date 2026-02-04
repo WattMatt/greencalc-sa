@@ -596,7 +596,8 @@ export function Canvas({
         scaleInfo,
         viewState,
         plantSetupConfig,
-        placedCableTrays
+        placedCableTrays,
+        lines // existing cables for cable-to-cable snapping
       );
       
       // Draw snap indicator if snapped to a target
@@ -1159,7 +1160,8 @@ export function Canvas({
           scaleInfo,
           viewState,
           plantSetupConfig,
-          placedCableTrays
+          placedCableTrays,
+          lines // existing cables for cable-to-cable snapping
         );
         finalPos = snapResult.position;
         
@@ -1705,7 +1707,8 @@ export function Canvas({
           scaleInfo,
           viewState,
           plantSetupConfig,
-          placedCableTrays
+          placedCableTrays,
+          lines // existing cables for cable-to-cable snapping
         );
         previewPos = snapResult.position;
       }
