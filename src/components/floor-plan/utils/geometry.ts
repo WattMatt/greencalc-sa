@@ -60,6 +60,47 @@ export const distance = (p1: Point, p2: Point): number =>
   Math.hypot(p1.x - p2.x, p1.y - p2.y);
 
 /**
+ * Calculate the minimum distance from a point to a line segment
+ */
+export const distanceToLineSegment = (point: Point, segStart: Point, segEnd: Point): number => {
+  const dx = segEnd.x - segStart.x;
+  const dy = segEnd.y - segStart.y;
+  const lengthSq = dx * dx + dy * dy;
+  
+  if (lengthSq === 0) {
+    // Segment is a point
+    return distance(point, segStart);
+  }
+  
+  // Calculate projection parameter (0-1 range means on segment)
+  const t = Math.max(0, Math.min(1, 
+    ((point.x - segStart.x) * dx + (point.y - segStart.y) * dy) / lengthSq
+  ));
+  
+  // Find closest point on segment
+  const closestX = segStart.x + t * dx;
+  const closestY = segStart.y + t * dy;
+  
+  return Math.hypot(point.x - closestX, point.y - closestY);
+};
+
+/**
+ * Calculate the minimum distance from a point to a polyline (multi-segment path)
+ */
+export const distanceToPolyline = (point: Point, polylinePoints: Point[]): number => {
+  if (polylinePoints.length < 2) return Infinity;
+  
+  let minDist = Infinity;
+  for (let i = 0; i < polylinePoints.length - 1; i++) {
+    const dist = distanceToLineSegment(point, polylinePoints[i], polylinePoints[i + 1]);
+    if (dist < minDist) {
+      minDist = dist;
+    }
+  }
+  return minDist;
+};
+
+/**
  * Calculate rotation angle for a PV array based on roof direction
  */
 export const calculateArrayRotationForRoof = (
