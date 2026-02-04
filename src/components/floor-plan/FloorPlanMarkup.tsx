@@ -95,6 +95,14 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     }));
   }, []);
   
+  // Force-show layer handlers for when selecting hidden items
+  const forceShowWalkways = useCallback(() => {
+    setLayerVisibility(prev => ({ ...prev, walkways: true }));
+  }, []);
+  
+  const forceShowCableTrays = useCallback(() => {
+    setLayerVisibility(prev => ({ ...prev, cableTrays: true }));
+  }, []);
   // Refs for auto-save
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isAutoSavingRef = useRef(false);
@@ -2154,6 +2162,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         cableTraySubgroupVisibility={subgroupVisibility.cableTraySubgroups}
         onToggleWalkwaySubgroupVisibility={handleToggleWalkwaySubgroupVisibility}
         onToggleCableTraySubgroupVisibility={handleToggleCableTraySubgroupVisibility}
+        onShowWalkwayLayer={forceShowWalkways}
+        onShowCableTrayLayer={forceShowCableTrays}
       />
 
       {!readOnly && (

@@ -53,6 +53,9 @@ interface SummaryPanelProps {
   cableTraySubgroupVisibility?: Record<string, boolean>;
   onToggleWalkwaySubgroupVisibility?: (configId: string) => void;
   onToggleCableTraySubgroupVisibility?: (configId: string) => void;
+  // Force-show layer handlers for when selecting hidden items
+  onShowWalkwayLayer?: () => void;
+  onShowCableTrayLayer?: () => void;
 }
 
 // Reusable collapsible section component with visibility toggle
@@ -142,6 +145,9 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
   onToggleVisibility,
   subgroupVisibility,
   onToggleSubgroupVisibility,
+  selectedItemId,
+  onSelectItem,
+  onShowLayer,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -153,6 +159,9 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
   onToggleVisibility?: () => void;
   subgroupVisibility?: Record<string, boolean>;
   onToggleSubgroupVisibility?: (configId: string) => void;
+  selectedItemId?: string | null;
+  onSelectItem?: (id: string) => void;
+  onShowLayer?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
@@ -169,6 +178,20 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
       }
       return next;
     });
+  };
+
+  // Handle item click - auto-show layer and subgroup if hidden
+  const handleItemClick = (item: T, groupKey: string) => {
+    // Auto-show layer if hidden
+    if (isVisible === false && onShowLayer) {
+      onShowLayer();
+    }
+    // Auto-show subgroup if hidden
+    if (subgroupVisibility?.[groupKey] === false && onToggleSubgroupVisibility) {
+      onToggleSubgroupVisibility(groupKey);
+    }
+    // Select the item
+    onSelectItem?.(item.id);
   };
 
   return (
@@ -272,25 +295,47 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
                     </CollapsibleTrigger>
                   </div>
                   <CollapsibleContent className="pt-1 pl-6 space-y-1">
-                    {group.items.map((item, i) => (
-                      <div key={item.id} className="flex items-center justify-between p-1.5 bg-muted rounded text-xs">
-                        <span className="text-muted-foreground">{item.width.toFixed(3)}m × {item.length.toFixed(2)}m</span>
-                        {onDeleteItem && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-5 w-5 shrink-0 text-destructive hover:text-destructive"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteItem(itemType, item.id);
-                            }}
-                            title={`Delete ${itemType === 'walkway' ? 'walkway' : 'cable tray'}`}
+                    {group.items.map((item) => {
+                      const isSelected = selectedItemId === item.id;
+                      return (
+                        <div 
+                          key={item.id} 
+                          className={cn(
+                            "flex items-center justify-between p-1.5 rounded text-xs transition-colors",
+                            isSelected 
+                              ? "bg-primary/10 border border-primary" 
+                              : "bg-muted hover:bg-accent"
+                          )}
+                        >
+                          <button
+                            type="button"
+                            className={cn(
+                              "flex-1 text-left",
+                              isSelected && "font-medium"
+                            )}
+                            onClick={() => handleItemClick(item, key)}
                           >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
+                            <span className="text-muted-foreground">
+                              {Math.min(item.width, item.length).toFixed(3)}m × {Math.max(item.width, item.length).toFixed(2)}m
+                            </span>
+                          </button>
+                          {onDeleteItem && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 shrink-0 text-destructive hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteItem(itemType, item.id);
+                              }}
+                              title={`Delete ${itemType === 'walkway' ? 'walkway' : 'cable tray'}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </CollapsibleContent>
                 </Collapsible>
               );
@@ -327,6 +372,8 @@ export function SummaryPanel({
   cableTraySubgroupVisibility,
   onToggleWalkwaySubgroupVisibility,
   onToggleCableTraySubgroupVisibility,
+  onShowWalkwayLayer,
+  onShowCableTrayLayer,
 }: SummaryPanelProps) {
   const { panelCount, capacityKwp } = pvPanelConfig
     ? calculateTotalPVCapacity(pvArrays, pvPanelConfig)
@@ -717,6 +764,9 @@ export function SummaryPanel({
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('walkways') : undefined}
               subgroupVisibility={walkwaySubgroupVisibility}
               onToggleSubgroupVisibility={onToggleWalkwaySubgroupVisibility}
+              selectedItemId={selectedItemId}
+              onSelectItem={onSelectItem}
+              onShowLayer={onShowWalkwayLayer}
             />
 
             <GroupedMaterialSection
@@ -730,6 +780,9 @@ export function SummaryPanel({
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('cableTrays') : undefined}
               subgroupVisibility={cableTraySubgroupVisibility}
               onToggleSubgroupVisibility={onToggleCableTraySubgroupVisibility}
+              selectedItemId={selectedItemId}
+              onSelectItem={onSelectItem}
+              onShowLayer={onShowCableTrayLayer}
             />
 
             {/* Cabling - DC/AC cables */}
