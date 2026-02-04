@@ -1233,10 +1233,32 @@ export const snapCablePointToTarget = (
   // Adjust snap threshold based on zoom (larger threshold when zoomed out)
   const adjustedThreshold = CABLE_SNAP_THRESHOLD_PX / viewState.zoom;
 
+  // Priority: cable-to-cable node snapping should win over tray centerline snapping.
+  // Reason: tray snapping uses distance-to-line (often ~0 along the tray), which can
+  // otherwise dominate even when the user is clearly aiming for an existing cable node.
+  let closestCableNode: CableSnapTarget | null = null;
+  let closestCableNodeDist = Infinity;
+  for (const target of targets) {
+    if (target.type !== 'cable') continue;
+    const dist = distance(mousePos, target.position);
+    if (dist < adjustedThreshold && dist < closestCableNodeDist) {
+      closestCableNodeDist = dist;
+      closestCableNode = target;
+    }
+  }
+  if (closestCableNode) {
+    return {
+      position: closestCableNode.position,
+      snappedToId: closestCableNode.id,
+      snappedToType: 'cable',
+    };
+  }
+
   let closestTarget: CableSnapTarget | null = null;
   let closestDist = Infinity;
 
   for (const target of targets) {
+    if (target.type === 'cable') continue; // handled above with priority
     // For cable trays, use perpendicular distance to centerline
     // For other targets, use distance to target position
     const dist = target.type === 'cableTray' && (target as any)._distanceToLine !== undefined
