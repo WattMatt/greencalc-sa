@@ -1702,6 +1702,68 @@ export function Canvas({
         // Check if rectangle is valid (more than just a point/line)
         const isPointInBox = (p: Point) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
         const isCenterInBox = (center: Point) => isPointInBox(center);
+
+        // Robust polyline selection: select if *any segment* crosses the marquee box,
+        // even when no vertices fall inside the rectangle.
+        const segmentsIntersect = (a: Point, b: Point, c: Point, d: Point) => {
+          // Standard orientation test
+          const cross = (p: Point, q: Point, r: Point) =>
+            (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+          const onSeg = (p: Point, q: Point, r: Point) =>
+            Math.min(p.x, r.x) <= q.x && q.x <= Math.max(p.x, r.x) &&
+            Math.min(p.y, r.y) <= q.y && q.y <= Math.max(p.y, r.y);
+
+          const o1 = cross(a, b, c);
+          const o2 = cross(a, b, d);
+          const o3 = cross(c, d, a);
+          const o4 = cross(c, d, b);
+
+          // General case
+          if ((o1 > 0) !== (o2 > 0) && (o3 > 0) !== (o4 > 0)) return true;
+
+          // Collinear cases
+          const eps = 1e-9;
+          if (Math.abs(o1) < eps && onSeg(a, c, b)) return true;
+          if (Math.abs(o2) < eps && onSeg(a, d, b)) return true;
+          if (Math.abs(o3) < eps && onSeg(c, a, d)) return true;
+          if (Math.abs(o4) < eps && onSeg(c, b, d)) return true;
+          return false;
+        };
+
+        const segmentIntersectsBox = (p1: Point, p2: Point) => {
+          // Quick reject via bounding boxes
+          const segMinX = Math.min(p1.x, p2.x);
+          const segMaxX = Math.max(p1.x, p2.x);
+          const segMinY = Math.min(p1.y, p2.y);
+          const segMaxY = Math.max(p1.y, p2.y);
+          if (segMaxX < minX || segMinX > maxX || segMaxY < minY || segMinY > maxY) return false;
+
+          // Endpoints inside
+          if (isPointInBox(p1) || isPointInBox(p2)) return true;
+
+          // Intersect any of the 4 edges
+          const topLeft: Point = { x: minX, y: minY };
+          const topRight: Point = { x: maxX, y: minY };
+          const bottomLeft: Point = { x: minX, y: maxY };
+          const bottomRight: Point = { x: maxX, y: maxY };
+
+          return (
+            segmentsIntersect(p1, p2, topLeft, topRight) ||
+            segmentsIntersect(p1, p2, topRight, bottomRight) ||
+            segmentsIntersect(p1, p2, bottomRight, bottomLeft) ||
+            segmentsIntersect(p1, p2, bottomLeft, topLeft)
+          );
+        };
+
+        const polylineIntersectsBox = (pts: Point[]) => {
+          if (pts.length < 2) return false;
+          // If any point inside, we already select, but keep for completeness
+          if (pts.some(isPointInBox)) return true;
+          for (let i = 0; i < pts.length - 1; i++) {
+            if (segmentIntersectsBox(pts[i], pts[i + 1])) return true;
+          }
+          return false;
+        };
         
         // Check PV arrays (only if layer is visible)
         if (pvPanelConfig && scaleInfo.ratio && layerVisibility.pvArrays) {
@@ -1748,9 +1810,8 @@ export function Canvas({
             const thickness = line.thickness || 6;
             if (line.type === 'dc' && subgroupVisibility?.dcCableThicknesses?.[thickness] === false) return;
             if (line.type === 'ac' && subgroupVisibility?.acCableThicknesses?.[thickness] === false) return;
-            // Check if any point of the cable is in the box, or if the cable intersects the box
-            const hasPointInBox = line.points.some(p => isPointInBox(p));
-            if (hasPointInBox) {
+            // Select cables when their *path* crosses the marquee box (not just endpoints)
+            if (polylineIntersectsBox(line.points)) {
               selectedIds.push(line.id);
             }
           });
