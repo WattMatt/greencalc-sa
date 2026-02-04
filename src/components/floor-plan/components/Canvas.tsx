@@ -729,6 +729,12 @@ export function Canvas({
             initialPositions.set(m.id, { x: cx, y: cy });
           }
         });
+        // Include cables/lines - use first point as reference position
+        lines.forEach(line => {
+          if (selectedItemIds.has(line.id) && line.points.length > 0) {
+            initialPositions.set(line.id, { ...line.points[0] });
+          }
+        });
         
         setIsGroupDragging(true);
         setGroupDragStart(worldPos);
@@ -1449,6 +1455,25 @@ export function Canvas({
             };
           }
           return m;
+        }));
+      }
+      
+      // Move all cables/lines that are selected (move all points by delta)
+      const selectedLineIds = lines.filter(l => groupDragInitialPositions.has(l.id)).map(l => l.id);
+      if (selectedLineIds.length > 0) {
+        setLines(prev => prev.map(line => {
+          const initialPos = groupDragInitialPositions.get(line.id);
+          if (initialPos && line.points.length > 0) {
+            // Calculate delta from initial first point to target first point
+            const targetFirstPoint = { x: initialPos.x + deltaX, y: initialPos.y + deltaY };
+            const currentFirstPoint = line.points[0];
+            const moveDelta = { x: targetFirstPoint.x - currentFirstPoint.x, y: targetFirstPoint.y - currentFirstPoint.y };
+            return {
+              ...line,
+              points: line.points.map(p => ({ x: p.x + moveDelta.x, y: p.y + moveDelta.y })),
+            };
+          }
+          return line;
         }));
       }
       
