@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig, BatchPlacementConfig, LayerVisibility, defaultLayerVisibility, SubgroupVisibility } from '../types';
 import { renderAllMarkups, drawPvArray, drawEquipmentIcon, drawWalkway, drawCableTray } from '../utils/drawing';
-import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing, getPVArrayDimensions, getEquipmentDimensions, detectClickedEdge } from '../utils/geometry';
+import { calculatePolygonArea, calculateLineLength, distance, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing, getPVArrayDimensions, getEquipmentDimensions, detectClickedEdge, snapCablePointToTarget, CableType } from '../utils/geometry';
 import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
 import { PVArrayConfig } from './PVArrayModal';
 import { AlignmentEdge } from './AlignEdgesModal';
@@ -1024,10 +1024,29 @@ export function Canvas({
         }
       }
       
+      // Apply cable snapping for LINE_DC and LINE_AC tools
+      let finalPos = worldPos;
+      
+      if (activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC) {
+        const cableType: CableType = activeTool === Tool.LINE_DC ? 'dc' : 'ac';
+        const snapResult = snapCablePointToTarget(
+          worldPos,
+          cableType,
+          equipment,
+          pvArrays,
+          pvPanelConfig,
+          roofMasks,
+          scaleInfo,
+          viewState,
+          plantSetupConfig
+        );
+        finalPos = snapResult.position;
+      }
+      
       // Apply 45-degree snapping if Shift is held and we have a previous point
       const snappedPos = (isShiftHeld && currentDrawing.length > 0)
-        ? snapTo45Degrees(currentDrawing[currentDrawing.length - 1], worldPos)
-        : worldPos;
+        ? snapTo45Degrees(currentDrawing[currentDrawing.length - 1], finalPos)
+        : finalPos;
       setCurrentDrawing([...currentDrawing, snappedPos]);
     } else if (activeTool === Tool.PV_ARRAY && pendingBatchPlacement && scaleInfo.ratio) {
       // Batch placement - collect all items first, then batch update by type
@@ -1489,9 +1508,28 @@ export function Canvas({
     }
 
     if (currentDrawing.length > 0) {
+      let previewPos = worldPos;
+      
+      // Apply cable snapping for LINE_DC and LINE_AC tools
+      if (activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC) {
+        const cableType: CableType = activeTool === Tool.LINE_DC ? 'dc' : 'ac';
+        const snapResult = snapCablePointToTarget(
+          worldPos,
+          cableType,
+          equipment,
+          pvArrays,
+          pvPanelConfig,
+          roofMasks,
+          scaleInfo,
+          viewState,
+          plantSetupConfig
+        );
+        previewPos = snapResult.position;
+      }
+      
       // Apply 45-degree snapping to preview line if Shift is held
       const anchor = currentDrawing[currentDrawing.length - 1];
-      const snappedPreview = isShiftHeld ? snapTo45Degrees(anchor, worldPos) : worldPos;
+      const snappedPreview = isShiftHeld ? snapTo45Degrees(anchor, previewPos) : previewPos;
       setPreviewPoint(snappedPreview);
     }
     
