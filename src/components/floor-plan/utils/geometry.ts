@@ -906,7 +906,57 @@ interface CableSnapTarget {
   position: Point;
   type: 'equipment' | 'pvArray';
   equipmentType?: EquipmentType;
+  arrayId?: string; // Parent PV array ID for individual module snapping
 }
+
+/**
+ * Get the center positions of all individual modules in a PV array.
+ * Returns an array of points representing each module's center.
+ */
+export const getIndividualModulePositions = (
+  array: PVArrayItem,
+  pvPanelConfig: PVPanelConfig,
+  roofMasks: RoofMask[],
+  scaleInfo: ScaleInfo
+): Point[] => {
+  if (!scaleInfo.ratio) return [];
+
+  const panelIsOnMask = roofMasks.find(mask => isPointInPolygon(array.position, mask.points));
+  const pitch = panelIsOnMask ? panelIsOnMask.pitch : 0;
+  const pitchRad = pitch * Math.PI / 180;
+
+  let panelW_px = pvPanelConfig.width / scaleInfo.ratio;
+  let panelL_px = pvPanelConfig.length / scaleInfo.ratio;
+  panelL_px *= Math.cos(pitchRad);
+
+  const arrayPanelW = array.orientation === 'portrait' ? panelW_px : panelL_px;
+  const arrayPanelL = array.orientation === 'portrait' ? panelL_px : panelW_px;
+
+  const totalWidth = array.columns * arrayPanelW;
+  const totalHeight = array.rows * arrayPanelL;
+
+  const angleRad = array.rotation * Math.PI / 180;
+  const cosA = Math.cos(angleRad);
+  const sinA = Math.sin(angleRad);
+
+  const positions: Point[] = [];
+
+  for (let row = 0; row < array.rows; row++) {
+    for (let col = 0; col < array.columns; col++) {
+      // Calculate local position (relative to array center)
+      const localX = -totalWidth / 2 + (col + 0.5) * arrayPanelW;
+      const localY = -totalHeight / 2 + (row + 0.5) * arrayPanelL;
+
+      // Apply rotation and translate to world coordinates
+      const worldX = (localX * cosA - localY * sinA) + array.position.x;
+      const worldY = (localX * sinA + localY * cosA) + array.position.y;
+
+      positions.push({ x: worldX, y: worldY });
+    }
+  }
+
+  return positions;
+};
 
 /**
  * Find the nearest valid snap target for a cable endpoint based on cable type.
@@ -959,14 +1009,19 @@ export const snapCablePointToTarget = (
     }
   }
 
-  // DC cables can also snap to PV Arrays (solar modules)
+  // DC cables can also snap to individual solar modules within PV Arrays
   if (cableType === 'dc' && pvPanelConfig) {
     for (const arr of pvArrays) {
-      targets.push({
-        id: arr.id,
-        position: arr.position,
-        type: 'pvArray',
-      });
+      const modulePositions = getIndividualModulePositions(arr, pvPanelConfig, roofMasks, scaleInfo);
+      
+      for (let i = 0; i < modulePositions.length; i++) {
+        targets.push({
+          id: `${arr.id}_module_${i}`,
+          position: modulePositions[i],
+          type: 'pvArray',
+          arrayId: arr.id, // Keep reference to parent array for auto-complete logic
+        });
+      }
     }
   }
 
