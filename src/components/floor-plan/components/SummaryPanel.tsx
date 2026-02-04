@@ -35,6 +35,7 @@ interface SummaryPanelProps {
   pvPanelConfig: PVPanelConfig | null;
   scaleInfo: ScaleInfo;
   selectedItemId: string | null;
+  selectedItemIds?: Set<string>;
   onSelectItem: (id: string | null) => void;
   onEditRoofMask?: (id: string) => void;
   onDeleteItem?: (id: string) => void;
@@ -145,7 +146,7 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
   onToggleVisibility,
   subgroupVisibility,
   onToggleSubgroupVisibility,
-  selectedItemId,
+  selectedItemIds,
   onSelectItem,
   onShowLayer,
 }: {
@@ -159,7 +160,7 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
   onToggleVisibility?: () => void;
   subgroupVisibility?: Record<string, boolean>;
   onToggleSubgroupVisibility?: (configId: string) => void;
-  selectedItemId?: string | null;
+  selectedItemIds?: Set<string>;
   onSelectItem?: (id: string) => void;
   onShowLayer?: () => void;
 }) {
@@ -296,7 +297,7 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
                   </div>
                   <CollapsibleContent className="pt-1 pl-6 space-y-1">
                     {group.items.map((item) => {
-                      const isSelected = selectedItemId === item.id;
+                      const isSelected = selectedItemIds?.has(item.id) ?? false;
                       return (
                         <div 
                           key={item.id} 
@@ -355,6 +356,7 @@ export function SummaryPanel({
   pvPanelConfig,
   scaleInfo,
   selectedItemId,
+  selectedItemIds,
   onSelectItem,
   onEditRoofMask,
   onDeleteItem,
@@ -594,7 +596,7 @@ export function SummaryPanel({
                     <div
                       key={mask.id}
                       className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
-                        selectedItemId === mask.id 
+                        selectedItemIds?.has(mask.id)
                           ? 'bg-primary/10 border border-primary' 
                           : 'bg-muted hover:bg-accent'
                       }`}
@@ -663,7 +665,7 @@ export function SummaryPanel({
                       <div
                         key={arr.id}
                         className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
-                          selectedItemId === arr.id 
+                          selectedItemIds?.has(arr.id)
                             ? 'bg-primary/10 border border-primary' 
                             : 'bg-muted hover:bg-accent'
                         }`}
@@ -716,7 +718,7 @@ export function SummaryPanel({
                       <div
                         key={inv.id}
                         className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
-                          selectedItemId === inv.id
+                          selectedItemIds?.has(inv.id)
                             ? 'bg-primary/10 border border-primary'
                             : 'bg-muted hover:bg-accent'
                         }`}
@@ -764,7 +766,7 @@ export function SummaryPanel({
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('walkways') : undefined}
               subgroupVisibility={walkwaySubgroupVisibility}
               onToggleSubgroupVisibility={onToggleWalkwaySubgroupVisibility}
-              selectedItemId={selectedItemId}
+              selectedItemIds={selectedItemIds}
               onSelectItem={onSelectItem}
               onShowLayer={onShowWalkwayLayer}
             />
@@ -780,7 +782,7 @@ export function SummaryPanel({
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('cableTrays') : undefined}
               subgroupVisibility={cableTraySubgroupVisibility}
               onToggleSubgroupVisibility={onToggleCableTraySubgroupVisibility}
-              selectedItemId={selectedItemId}
+              selectedItemIds={selectedItemIds}
               onSelectItem={onSelectItem}
               onShowLayer={onShowCableTrayLayer}
             />
