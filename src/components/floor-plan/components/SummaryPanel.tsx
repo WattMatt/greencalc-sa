@@ -797,20 +797,76 @@ export function SummaryPanel({
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('cables') : undefined}
             >
               <div className="space-y-1 text-xs">
-                <div className="flex justify-between p-2 bg-muted rounded">
-                  <span className="flex items-center gap-1">
-                    <div className="w-3 h-0.5 bg-orange-500 rounded" />
-                    DC Cable
-                  </span>
-                  <span>{dcCableLength.toFixed(1)} m</span>
-                </div>
-                <div className="flex justify-between p-2 bg-muted rounded">
-                  <span className="flex items-center gap-1">
-                    <div className="w-3 h-0.5 bg-blue-500 rounded" />
-                    AC Cable
-                  </span>
-                  <span>{acCableLength.toFixed(1)} m</span>
-                </div>
+                {/* DC Cables */}
+                {lines.filter(l => l.type === 'dc').length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-muted-foreground text-[10px] font-medium px-2 pt-1 flex items-center gap-1">
+                      <div className="w-2 h-0.5 bg-orange-500 rounded" />
+                      DC Cables ({dcCableLength.toFixed(1)} m)
+                    </div>
+                    {lines.filter(l => l.type === 'dc').map((cable, i) => {
+                      const isSelected = selectedItemId === cable.id || selectedItemIds?.has(cable.id);
+                      const cableLength = calculateLineLength(cable.points, scaleInfo.ratio);
+                      return (
+                        <button
+                          key={cable.id}
+                          className={cn(
+                            "flex justify-between items-center p-2 rounded w-full text-left transition-colors",
+                            isSelected 
+                              ? "bg-primary/20 border border-primary" 
+                              : "bg-muted hover:bg-muted/80"
+                          )}
+                          onClick={() => onSelectItem(cable.id)}
+                        >
+                          <span className="flex items-center gap-1">
+                            <div className="w-3 h-0.5 bg-orange-500 rounded" />
+                            DC Cable {i + 1}
+                          </span>
+                          <span>{cableLength.toFixed(1)} m</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                {/* AC Cables */}
+                {lines.filter(l => l.type === 'ac').length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-muted-foreground text-[10px] font-medium px-2 pt-1 flex items-center gap-1">
+                      <div className="w-2 h-0.5 bg-blue-500 rounded" />
+                      AC Cables ({acCableLength.toFixed(1)} m)
+                    </div>
+                    {lines.filter(l => l.type === 'ac').map((cable, i) => {
+                      const isSelected = selectedItemId === cable.id || selectedItemIds?.has(cable.id);
+                      const cableLength = calculateLineLength(cable.points, scaleInfo.ratio);
+                      return (
+                        <button
+                          key={cable.id}
+                          className={cn(
+                            "flex justify-between items-center p-2 rounded w-full text-left transition-colors",
+                            isSelected 
+                              ? "bg-primary/20 border border-primary" 
+                              : "bg-muted hover:bg-muted/80"
+                          )}
+                          onClick={() => onSelectItem(cable.id)}
+                        >
+                          <span className="flex items-center gap-1">
+                            <div className="w-3 h-0.5 bg-blue-500 rounded" />
+                            AC Cable {i + 1}
+                          </span>
+                          <span>{cableLength.toFixed(1)} m</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                {/* Empty state */}
+                {lines.length === 0 && (
+                  <div className="text-muted-foreground text-center py-2">
+                    No cables placed
+                  </div>
+                )}
               </div>
             </CollapsibleSection>
           </div>
