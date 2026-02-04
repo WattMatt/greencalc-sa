@@ -853,11 +853,15 @@ export function Canvas({
         return;
       }
 
-      // Select cables/lines (between equipment and roof masks) - only if layer is visible
+      // Select cables/lines (between equipment and roof masks) - only if layer is visible and thickness is visible
       if (lines && lines.length > 0 && layerVisibility.cables) {
         const cableHitThreshold = 8 / viewState.zoom; // 8 pixels for easy clicking
         const hitLine = [...lines].reverse().find(line => {
           if (line.points.length < 2) return false;
+          // Check thickness visibility
+          const thickness = line.thickness || 6;
+          if (line.type === 'dc' && subgroupVisibility?.dcCableThicknesses?.[thickness] === false) return false;
+          if (line.type === 'ac' && subgroupVisibility?.acCableThicknesses?.[thickness] === false) return false;
           const dist = distanceToPolyline(worldPos, line.points);
           return dist <= cableHitThreshold;
         });
@@ -1715,6 +1719,10 @@ export function Canvas({
         // Check cables/lines (only if layer is visible)
         if (layerVisibility.cables) {
           lines.forEach(line => {
+            // Check thickness visibility
+            const thickness = line.thickness || 6;
+            if (line.type === 'dc' && subgroupVisibility?.dcCableThicknesses?.[thickness] === false) return;
+            if (line.type === 'ac' && subgroupVisibility?.acCableThicknesses?.[thickness] === false) return;
             // Check if any point of the cable is in the box, or if the cable intersects the box
             const hasPointInBox = line.points.some(p => isPointInBox(p));
             if (hasPointInBox) {

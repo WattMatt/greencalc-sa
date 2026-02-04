@@ -51,6 +51,7 @@ export interface SupplyLine {
   length: number;
   from?: string;
   to?: string;
+  thickness?: number; // Cable thickness in mm (e.g., 6, 10, 16, 25)
 }
 
 export enum EquipmentType {
@@ -257,15 +258,19 @@ export const defaultPlantSetupConfig: PlantSetupConfig = {
   cableTrays: [],
 };
 
-// Subgroup visibility for walkways and cable trays by configId
+// Subgroup visibility for walkways, cable trays, and cables by configId/thickness
 export interface SubgroupVisibility {
   walkwaySubgroups: Record<string, boolean>;
   cableTraySubgroups: Record<string, boolean>;
+  dcCableThicknesses: Record<number, boolean>; // Visibility by thickness in mm
+  acCableThicknesses: Record<number, boolean>; // Visibility by thickness in mm
 }
 
 export const defaultSubgroupVisibility: SubgroupVisibility = {
   walkwaySubgroups: {},
   cableTraySubgroups: {},
+  dcCableThicknesses: {},
+  acCableThicknesses: {},
 };
 
 // Layer visibility state for canvas rendering

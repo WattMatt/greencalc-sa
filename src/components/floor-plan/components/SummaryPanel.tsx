@@ -54,9 +54,15 @@ interface SummaryPanelProps {
   cableTraySubgroupVisibility?: Record<string, boolean>;
   onToggleWalkwaySubgroupVisibility?: (configId: string) => void;
   onToggleCableTraySubgroupVisibility?: (configId: string) => void;
+  // Cable thickness visibility
+  dcCableThicknessVisibility?: Record<number, boolean>;
+  acCableThicknessVisibility?: Record<number, boolean>;
+  onToggleDcCableThicknessVisibility?: (thickness: number) => void;
+  onToggleAcCableThicknessVisibility?: (thickness: number) => void;
   // Force-show layer handlers for when selecting hidden items
   onShowWalkwayLayer?: () => void;
   onShowCableTrayLayer?: () => void;
+  onShowCablesLayer?: () => void;
 }
 
 // Reusable collapsible section component with visibility toggle
@@ -374,8 +380,13 @@ export function SummaryPanel({
   cableTraySubgroupVisibility,
   onToggleWalkwaySubgroupVisibility,
   onToggleCableTraySubgroupVisibility,
+  dcCableThicknessVisibility,
+  acCableThicknessVisibility,
+  onToggleDcCableThicknessVisibility,
+  onToggleAcCableThicknessVisibility,
   onShowWalkwayLayer,
   onShowCableTrayLayer,
+  onShowCablesLayer,
 }: SummaryPanelProps) {
   const { panelCount, capacityKwp } = pvPanelConfig
     ? calculateTotalPVCapacity(pvArrays, pvPanelConfig)
@@ -844,7 +855,7 @@ export function SummaryPanel({
               onShowLayer={onShowCableTrayLayer}
             />
 
-            {/* Cabling - DC/AC cables */}
+            {/* Cabling - DC/AC cables grouped by thickness */}
             <CollapsibleSection
               icon={<Cable className="h-4 w-4 text-orange-500" />}
               title="Cabling"
@@ -853,70 +864,296 @@ export function SummaryPanel({
               isVisible={layerVisibility?.cables}
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('cables') : undefined}
             >
-              <div className="space-y-1 text-xs">
-                {/* DC Cables */}
-                {lines.filter(l => l.type === 'dc').length > 0 && (
-                  <div className="space-y-1">
-                    <div className="text-muted-foreground text-[10px] font-medium px-2 pt-1 flex items-center gap-1">
-                      <div className="w-2 h-0.5 bg-orange-500 rounded" />
-                      DC Cables ({dcCableLength.toFixed(1)} m)
-                    </div>
-                    {lines.filter(l => l.type === 'dc').map((cable, i) => {
-                      const isSelected = selectedItemId === cable.id || selectedItemIds?.has(cable.id);
-                      const cableLength = calculateLineLength(cable.points, scaleInfo.ratio);
-                      return (
-                        <button
-                          key={cable.id}
-                          className={cn(
-                            "flex justify-between items-center p-2 rounded w-full text-left transition-colors",
-                            isSelected 
-                              ? "bg-primary/20 border border-primary" 
-                              : "bg-muted hover:bg-muted/80"
-                          )}
-                          onClick={() => onSelectItem(cable.id)}
-                        >
-                          <span className="flex items-center gap-1">
-                            <div className="w-3 h-0.5 bg-orange-500 rounded" />
-                            DC Cable {i + 1}
-                          </span>
-                          <span>{cableLength.toFixed(1)} m</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+              <div className="space-y-2 text-xs">
+                {/* DC Cables grouped by thickness */}
+                {(() => {
+                  const dcCables = lines.filter(l => l.type === 'dc');
+                  if (dcCables.length === 0) return null;
+                  
+                  // Group by thickness
+                  const dcByThickness = dcCables.reduce((acc, cable) => {
+                    const thickness = cable.thickness || 6; // Default 6mm
+                    if (!acc[thickness]) acc[thickness] = [];
+                    acc[thickness].push(cable);
+                    return acc;
+                  }, {} as Record<number, typeof dcCables>);
+                  
+                  const thicknesses = Object.keys(dcByThickness).map(Number).sort((a, b) => a - b);
+                  
+                  return (
+                    <Collapsible defaultOpen={true}>
+                      <div className="flex items-center gap-1">
+                        {/* Visibility toggle for all DC cables */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Toggle all DC thicknesses
+                                thicknesses.forEach(t => {
+                                  onToggleDcCableThicknessVisibility?.(t);
+                                });
+                              }}
+                            >
+                              {thicknesses.every(t => dcCableThicknessVisibility?.[t] !== false) ? (
+                                <Eye className="h-3 w-3" />
+                              ) : (
+                                <EyeOff className="h-3 w-3 text-muted-foreground" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Toggle all DC cables visibility</TooltipContent>
+                        </Tooltip>
+                        
+                        <CollapsibleTrigger asChild>
+                          <button className="flex-1 flex items-center gap-1 text-left text-muted-foreground text-[10px] font-medium py-1 hover:text-foreground">
+                            <div className="w-2 h-0.5 bg-orange-500 rounded" />
+                            DC Cables ({dcCableLength.toFixed(1)} m)
+                            <ChevronDown className="h-3 w-3 ml-auto transition-transform" />
+                          </button>
+                        </CollapsibleTrigger>
+                      </div>
+                      <CollapsibleContent className="space-y-1 pt-1">
+                        {thicknesses.map(thickness => {
+                          const cablesInGroup = dcByThickness[thickness];
+                          const groupLength = cablesInGroup.reduce((sum, c) => 
+                            sum + calculateLineLength(c.points, scaleInfo.ratio), 0);
+                          const isThicknessVisible = dcCableThicknessVisibility?.[thickness] !== false;
+                          
+                          return (
+                            <Collapsible key={thickness} defaultOpen={true}>
+                              <div className="flex items-center gap-1 pl-2">
+                                {/* Visibility toggle for this thickness */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-5 w-5 shrink-0"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onToggleDcCableThicknessVisibility?.(thickness);
+                                      }}
+                                    >
+                                      {isThicknessVisible ? (
+                                        <Eye className="h-3 w-3" />
+                                      ) : (
+                                        <EyeOff className="h-3 w-3 text-muted-foreground" />
+                                      )}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Toggle {thickness}mm DC cables visibility</TooltipContent>
+                                </Tooltip>
+                                
+                                <CollapsibleTrigger asChild>
+                                  <button className={cn(
+                                    "flex-1 flex items-center gap-1 text-left py-1 hover:text-foreground",
+                                    !isThicknessVisible && "opacity-50"
+                                  )}>
+                                    <div 
+                                      className="rounded bg-orange-500" 
+                                      style={{ width: `${Math.max(2, thickness / 4)}px`, height: `${Math.max(2, thickness / 4)}px` }} 
+                                    />
+                                    <span>{thickness}mm</span>
+                                    <span className="text-muted-foreground ml-auto">
+                                      {groupLength.toFixed(1)}m ({cablesInGroup.length})
+                                    </span>
+                                    <ChevronDown className="h-3 w-3 transition-transform shrink-0" />
+                                  </button>
+                                </CollapsibleTrigger>
+                              </div>
+                              <CollapsibleContent className="space-y-1 pt-1 pl-6">
+                                {cablesInGroup.map((cable, i) => {
+                                  const isSelected = selectedItemId === cable.id || selectedItemIds?.has(cable.id);
+                                  const cableLength = calculateLineLength(cable.points, scaleInfo.ratio);
+                                  const handleClick = () => {
+                                    // If hidden, show the layer first
+                                    if (!isThicknessVisible) {
+                                      onToggleDcCableThicknessVisibility?.(thickness);
+                                    }
+                                    if (!layerVisibility?.cables) {
+                                      onShowCablesLayer?.();
+                                    }
+                                    onSelectItem(cable.id);
+                                  };
+                                  return (
+                                    <button
+                                      key={cable.id}
+                                      className={cn(
+                                        "flex justify-between items-center p-2 rounded w-full text-left transition-colors",
+                                        isSelected 
+                                          ? "bg-primary/20 border border-primary" 
+                                          : "bg-muted hover:bg-muted/80",
+                                        !isThicknessVisible && "opacity-50"
+                                      )}
+                                      onClick={handleClick}
+                                    >
+                                      <span className="flex items-center gap-1">
+                                        <div 
+                                          className="rounded bg-orange-500" 
+                                          style={{ width: `${Math.max(3, thickness / 3)}px`, height: '2px' }} 
+                                        />
+                                        DC Cable {i + 1}
+                                      </span>
+                                      <span>{cableLength.toFixed(1)} m</span>
+                                    </button>
+                                  );
+                                })}
+                              </CollapsibleContent>
+                            </Collapsible>
+                          );
+                        })}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })()}
                 
-                {/* AC Cables */}
-                {lines.filter(l => l.type === 'ac').length > 0 && (
-                  <div className="space-y-1">
-                    <div className="text-muted-foreground text-[10px] font-medium px-2 pt-1 flex items-center gap-1">
-                      <div className="w-2 h-0.5 bg-blue-500 rounded" />
-                      AC Cables ({acCableLength.toFixed(1)} m)
-                    </div>
-                    {lines.filter(l => l.type === 'ac').map((cable, i) => {
-                      const isSelected = selectedItemId === cable.id || selectedItemIds?.has(cable.id);
-                      const cableLength = calculateLineLength(cable.points, scaleInfo.ratio);
-                      return (
-                        <button
-                          key={cable.id}
-                          className={cn(
-                            "flex justify-between items-center p-2 rounded w-full text-left transition-colors",
-                            isSelected 
-                              ? "bg-primary/20 border border-primary" 
-                              : "bg-muted hover:bg-muted/80"
-                          )}
-                          onClick={() => onSelectItem(cable.id)}
-                        >
-                          <span className="flex items-center gap-1">
-                            <div className="w-3 h-0.5 bg-blue-500 rounded" />
-                            AC Cable {i + 1}
-                          </span>
-                          <span>{cableLength.toFixed(1)} m</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                {/* AC Cables grouped by thickness */}
+                {(() => {
+                  const acCables = lines.filter(l => l.type === 'ac');
+                  if (acCables.length === 0) return null;
+                  
+                  // Group by thickness
+                  const acByThickness = acCables.reduce((acc, cable) => {
+                    const thickness = cable.thickness || 6;
+                    if (!acc[thickness]) acc[thickness] = [];
+                    acc[thickness].push(cable);
+                    return acc;
+                  }, {} as Record<number, typeof acCables>);
+                  
+                  const thicknesses = Object.keys(acByThickness).map(Number).sort((a, b) => a - b);
+                  
+                  return (
+                    <Collapsible defaultOpen={true}>
+                      <div className="flex items-center gap-1">
+                        {/* Visibility toggle for all AC cables */}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                thicknesses.forEach(t => {
+                                  onToggleAcCableThicknessVisibility?.(t);
+                                });
+                              }}
+                            >
+                              {thicknesses.every(t => acCableThicknessVisibility?.[t] !== false) ? (
+                                <Eye className="h-3 w-3" />
+                              ) : (
+                                <EyeOff className="h-3 w-3 text-muted-foreground" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Toggle all AC cables visibility</TooltipContent>
+                        </Tooltip>
+                        
+                        <CollapsibleTrigger asChild>
+                          <button className="flex-1 flex items-center gap-1 text-left text-muted-foreground text-[10px] font-medium py-1 hover:text-foreground">
+                            <div className="w-2 h-0.5 bg-blue-500 rounded" />
+                            AC Cables ({acCableLength.toFixed(1)} m)
+                            <ChevronDown className="h-3 w-3 ml-auto transition-transform" />
+                          </button>
+                        </CollapsibleTrigger>
+                      </div>
+                      <CollapsibleContent className="space-y-1 pt-1">
+                        {thicknesses.map(thickness => {
+                          const cablesInGroup = acByThickness[thickness];
+                          const groupLength = cablesInGroup.reduce((sum, c) => 
+                            sum + calculateLineLength(c.points, scaleInfo.ratio), 0);
+                          const isThicknessVisible = acCableThicknessVisibility?.[thickness] !== false;
+                          
+                          return (
+                            <Collapsible key={thickness} defaultOpen={true}>
+                              <div className="flex items-center gap-1 pl-2">
+                                {/* Visibility toggle for this thickness */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-5 w-5 shrink-0"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onToggleAcCableThicknessVisibility?.(thickness);
+                                      }}
+                                    >
+                                      {isThicknessVisible ? (
+                                        <Eye className="h-3 w-3" />
+                                      ) : (
+                                        <EyeOff className="h-3 w-3 text-muted-foreground" />
+                                      )}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Toggle {thickness}mm AC cables visibility</TooltipContent>
+                                </Tooltip>
+                                
+                                <CollapsibleTrigger asChild>
+                                  <button className={cn(
+                                    "flex-1 flex items-center gap-1 text-left py-1 hover:text-foreground",
+                                    !isThicknessVisible && "opacity-50"
+                                  )}>
+                                    <div 
+                                      className="rounded bg-blue-500" 
+                                      style={{ width: `${Math.max(2, thickness / 4)}px`, height: `${Math.max(2, thickness / 4)}px` }} 
+                                    />
+                                    <span>{thickness}mm</span>
+                                    <span className="text-muted-foreground ml-auto">
+                                      {groupLength.toFixed(1)}m ({cablesInGroup.length})
+                                    </span>
+                                    <ChevronDown className="h-3 w-3 transition-transform shrink-0" />
+                                  </button>
+                                </CollapsibleTrigger>
+                              </div>
+                              <CollapsibleContent className="space-y-1 pt-1 pl-6">
+                                {cablesInGroup.map((cable, i) => {
+                                  const isSelected = selectedItemId === cable.id || selectedItemIds?.has(cable.id);
+                                  const cableLength = calculateLineLength(cable.points, scaleInfo.ratio);
+                                  const handleClick = () => {
+                                    if (!isThicknessVisible) {
+                                      onToggleAcCableThicknessVisibility?.(thickness);
+                                    }
+                                    if (!layerVisibility?.cables) {
+                                      onShowCablesLayer?.();
+                                    }
+                                    onSelectItem(cable.id);
+                                  };
+                                  return (
+                                    <button
+                                      key={cable.id}
+                                      className={cn(
+                                        "flex justify-between items-center p-2 rounded w-full text-left transition-colors",
+                                        isSelected 
+                                          ? "bg-primary/20 border border-primary" 
+                                          : "bg-muted hover:bg-muted/80",
+                                        !isThicknessVisible && "opacity-50"
+                                      )}
+                                      onClick={handleClick}
+                                    >
+                                      <span className="flex items-center gap-1">
+                                        <div 
+                                          className="rounded bg-blue-500" 
+                                          style={{ width: `${Math.max(3, thickness / 3)}px`, height: '2px' }} 
+                                        />
+                                        AC Cable {i + 1}
+                                      </span>
+                                      <span>{cableLength.toFixed(1)} m</span>
+                                    </button>
+                                  );
+                                })}
+                              </CollapsibleContent>
+                            </Collapsible>
+                          );
+                        })}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  );
+                })()}
                 
                 {/* Empty state */}
                 {lines.length === 0 && (
