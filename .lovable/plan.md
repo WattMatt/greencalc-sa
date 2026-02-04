@@ -1,151 +1,138 @@
 
-# Plan: Snap DC Cables to Individual Solar Modules
+# Plan: Left-Align Eye Icons & Add Show/Hide to All Objects
 
-## Problem
-DC cable snapping for PV arrays currently snaps to the center of the entire array group. Users want to route cables from specific modules (e.g., the rightmost module) rather than the group center.
+## Summary
+This plan will standardize the eye icon alignment across all sections of the Project Summary panel and add per-item visibility controls for every object type. This allows users to show/hide individual items (inverters, main boards, arrays, cables) in addition to the existing category-level visibility controls.
 
-## Current Behavior
-- PV arrays are stored with a single `position` (center of the group)
-- The `snapCablePointToTarget` function adds this single position as the snap target
-- Result: All DC cables snap to the center of the array, regardless of where you click
+## Current Issues Identified
 
-## Solution
-Calculate the position of each individual solar module within the array and use each module's center as a separate snap target. This allows users to snap to any specific module in the array.
+1. **Inconsistent Eye Icon Placement**: Some eye icons are not left-aligned or have inconsistent margins
+2. **Missing Per-Item Visibility**: Individual objects (Main Board 1, Inverter 1, Array 1, DC Cable 1, etc.) cannot be individually hidden
+
+## Implementation Approach
+
+### Step 1: Extend Types for Per-Item Visibility
+
+Add new state types to track individual item visibility:
+
+**File: `src/components/floor-plan/types.ts`**
+- Add `itemVisibility` to track which individual items are hidden
+- Structure: `Record<string, boolean>` mapping item IDs to visibility state
+
+### Step 2: Update FloorPlanMarkup to Manage Per-Item Visibility State
+
+**File: `src/components/floor-plan/FloorPlanMarkup.tsx`**
+- Add new state: `itemVisibility: Record<string, boolean>`
+- Add handler: `onToggleItemVisibility(itemId: string)`
+- Pass these down to SummaryPanel and Canvas
+
+### Step 3: Redesign SummaryPanel Layout for Consistent Eye Icons
+
+**File: `src/components/floor-plan/components/SummaryPanel.tsx`**
+
+For every row in every section, apply this consistent structure:
+```
+[Eye Icon (left-aligned)] [Content] [Actions (right-aligned)] [Chevron if expandable]
+```
+
+Changes per section:
+
+#### A. Roof Areas - Add per-item eye icons
+- Each "Roof 1", "Roof 2" etc. gets its own eye icon
+
+#### B. Main Boards - Add per-item eye icons  
+- Each "Main Board 1" gets its own eye icon on the left
+
+#### C. Modules (PV Arrays) - Add per-item eye icons
+- Each "Array 1", "Array 2" gets its own eye icon
+
+#### D. Inverters - Add per-item eye icons
+- Each "Inverter 1", "Inverter 2" gets its own eye icon
+
+#### E. Walkways - Already has subgroup visibility, add per-item
+- Keep the template-level eye icons (e.g., "Onvlee")
+- Add eye icon to each individual walkway segment
+
+#### F. Cable Trays - Same as walkways
+- Keep thickness-level visibility
+- Add per-item eye icons
+
+#### G. Cabling (DC/AC) - Already has thickness visibility, add per-cable
+- Keep thickness-level toggles
+- Add eye icon to each individual cable
+
+### Step 4: Update Canvas Rendering to Respect Per-Item Visibility
+
+**File: `src/components/floor-plan/components/Canvas.tsx`**
+- Filter out hidden items based on `itemVisibility` state
+- Apply in: PV array rendering, equipment rendering, walkway rendering, cable tray rendering, cable rendering
+
+**File: `src/components/floor-plan/utils/drawing.ts`**  
+- Pass `itemVisibility` to all draw functions
+- Skip rendering items where `itemVisibility[id] === false`
+
+## UI Layout Specification
+
+Each expandable section header:
+```
+|[Eye]| [Icon] Title    Summary |[Chevron]|
+```
+
+Each item row:
+```
+|[Eye]| Item Label      Details |[Delete]|
+```
+
+Eye icons will have consistent sizing (`h-5 w-5` or `h-6 w-6`) and left margin (`ml-0` or `-ml-1`).
 
 ---
 
-## Technical Implementation
+## Technical Details
 
-### File: `src/components/floor-plan/utils/geometry.ts`
-
-**Add a new helper function** to calculate individual module positions within a PV array:
-
+### New Props for SummaryPanel
 ```typescript
-/**
- * Get the center positions of all individual modules in a PV array.
- * Returns an array of points representing each module's center.
- */
-export const getIndividualModulePositions = (
-  array: PVArrayItem,
-  pvPanelConfig: PVPanelConfig,
-  roofMasks: RoofMask[],
-  scaleInfo: ScaleInfo
-): Point[] => {
-  if (!scaleInfo.ratio) return [];
+interface SummaryPanelProps {
+  // ... existing props
+  itemVisibility?: Record<string, boolean>;
+  onToggleItemVisibility?: (itemId: string) => void;
+}
+```
 
-  const panelIsOnMask = roofMasks.find(mask => isPointInPolygon(array.position, mask.points));
-  const pitch = panelIsOnMask ? panelIsOnMask.pitch : 0;
-  const pitchRad = pitch * Math.PI / 180;
+### State Management in FloorPlanMarkup
+```typescript
+const [itemVisibility, setItemVisibility] = useState<Record<string, boolean>>({});
 
-  let panelW_px = pvPanelConfig.width / scaleInfo.ratio;
-  let panelL_px = pvPanelConfig.length / scaleInfo.ratio;
-  panelL_px *= Math.cos(pitchRad);
-
-  const arrayPanelW = array.orientation === 'portrait' ? panelW_px : panelL_px;
-  const arrayPanelL = array.orientation === 'portrait' ? panelL_px : panelW_px;
-
-  const totalWidth = array.columns * arrayPanelW;
-  const totalHeight = array.rows * arrayPanelL;
-
-  const angleRad = array.rotation * Math.PI / 180;
-  const cosA = Math.cos(angleRad);
-  const sinA = Math.sin(angleRad);
-
-  const positions: Point[] = [];
-
-  for (let row = 0; row < array.rows; row++) {
-    for (let col = 0; col < array.columns; col++) {
-      // Calculate local position (relative to array center)
-      const localX = -totalWidth / 2 + (col + 0.5) * arrayPanelW;
-      const localY = -totalHeight / 2 + (row + 0.5) * arrayPanelL;
-
-      // Apply rotation and translate to world coordinates
-      const worldX = (localX * cosA - localY * sinA) + array.position.x;
-      const worldY = (localX * sinA + localY * cosA) + array.position.y;
-
-      positions.push({ x: worldX, y: worldY });
-    }
-  }
-
-  return positions;
+const handleToggleItemVisibility = (itemId: string) => {
+  setItemVisibility(prev => ({
+    ...prev,
+    [itemId]: prev[itemId] === false ? true : false
+  }));
 };
 ```
 
-**Update `snapCablePointToTarget`** (lines 962-971) to use individual module positions instead of the array center:
-
+### Canvas Filtering Logic
 ```typescript
-// DC cables can also snap to individual solar modules within PV Arrays
-if (cableType === 'dc' && pvPanelConfig) {
-  for (const arr of pvArrays) {
-    const modulePositions = getIndividualModulePositions(arr, pvPanelConfig, roofMasks, scaleInfo);
-    
-    for (let i = 0; i < modulePositions.length; i++) {
-      targets.push({
-        id: `${arr.id}_module_${i}`,
-        position: modulePositions[i],
-        type: 'pvArray',
-        arrayId: arr.id, // Keep reference to parent array for auto-complete logic
-      });
-    }
-  }
-}
+// Before rendering each item type:
+if (itemVisibility[item.id] === false) return null;
 ```
-
-**Update the `CableSnapTarget` interface** to optionally include a parent array ID:
-
-```typescript
-interface CableSnapTarget {
-  id: string;
-  position: Point;
-  type: 'equipment' | 'pvArray';
-  equipmentType?: EquipmentType;
-  arrayId?: string; // Parent PV array ID for module snapping
-}
-```
-
-**Update return type** to include `arrayId` for auto-complete logic in Canvas.tsx:
-
-```typescript
-): { 
-  position: Point; 
-  snappedToId: string | null; 
-  snappedToType: 'equipment' | 'pvArray' | null; 
-  equipmentType?: EquipmentType;
-  arrayId?: string; // For individual module snapping
-}
-```
-
----
-
-### File: `src/components/floor-plan/components/Canvas.tsx`
-
-**Update auto-complete logic** to use `arrayId` for DC cables snapping to individual modules (since the `snappedToId` now includes module index):
-
-The auto-complete check for DC cables already checks `snappedToType === 'pvArray'`, so no changes needed to the logic itself. The snap will complete when clicking any individual module.
-
----
-
-## Expected Behavior After Change
-
-| Scenario | Before | After |
-|----------|--------|-------|
-| DC cable snap to 10-module array | Snaps to center of group | Snaps to nearest individual module |
-| Click near rightmost module | Snaps to center | Snaps to rightmost module center |
-| Click near any specific module | Snaps to center | Snaps to that module's center |
-
-## Visual Result
-- Green/red snap indicator will highlight the specific module closest to the cursor
-- Cable will connect to the exact module the user clicked, not the group center
-
----
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `geometry.ts` | Add `getIndividualModulePositions` helper; Update snap targets to use individual modules |
-| `Canvas.tsx` | No changes needed (existing auto-complete logic handles `pvArray` type) |
+| `src/components/floor-plan/types.ts` | Add itemVisibility type definitions |
+| `src/components/floor-plan/FloorPlanMarkup.tsx` | Add state + handlers for per-item visibility |
+| `src/components/floor-plan/components/SummaryPanel.tsx` | Add eye icons to all individual items, ensure left-alignment |
+| `src/components/floor-plan/components/Canvas.tsx` | Filter out hidden individual items from selection/rendering |
+| `src/components/floor-plan/utils/drawing.ts` | Skip drawing items marked as hidden |
 
-## Summary
+## Expected Behavior After Implementation
 
-This change enables DC cables to snap to individual solar modules within a PV array, giving users precise control over cable routing. Instead of always connecting to the center of the array group, cables can now connect to any specific module (corner, edge, or interior).
+1. **Every row has an eye icon** on the left - categories, sub-categories, and individual items
+2. **Toggling a category** hides all items in that category (existing behavior preserved)
+3. **Toggling an individual item** hides just that one item on the canvas
+4. **Hidden items** are skipped during:
+   - Canvas rendering
+   - Hit-testing (click selection)
+   - Marquee (box) selection
+5. **Selecting a hidden item** in the panel auto-shows it (existing pattern)
