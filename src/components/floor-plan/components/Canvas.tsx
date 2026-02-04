@@ -136,6 +136,10 @@ export function Canvas({
   const [groupDragStart, setGroupDragStart] = useState<Point | null>(null);
   const [groupDragInitialPositions, setGroupDragInitialPositions] = useState<Map<string, Point>>(new Map());
 
+  // Cable snap cycling state - Tab key cycles through overlapping snap targets
+  const [cableSnapCycleIndex, setCableSnapCycleIndex] = useState(0);
+  const [lastCableSnapTargetCount, setLastCableSnapTargetCount] = useState(0);
+
   const SNAP_THRESHOLD = 15; // pixels in screen space
 
   // Calculate azimuth from a direction line (from high to low point)
@@ -184,7 +188,7 @@ export function Canvas({
     setPreviewPoint(null);
   };
 
-  // Track Shift key state for 45-degree angle snapping + Enter/Escape for drawing completion
+  // Track Shift key state for 45-degree angle snapping + Enter/Escape for drawing completion + Tab for snap cycling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setIsShiftHeld(true);
@@ -195,6 +199,11 @@ export function Canvas({
       if (e.key === 'Escape' && currentDrawing.length > 0) {
         e.preventDefault();
         cancelDrawing();
+      }
+      // Tab key cycles through overlapping snap targets during cable drawing
+      if (e.key === 'Tab' && (activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC)) {
+        e.preventDefault();
+        setCableSnapCycleIndex(prev => prev + 1);
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -209,6 +218,11 @@ export function Canvas({
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [currentDrawing, activeTool, scaleInfo.ratio]);
+
+  // Reset snap cycle index when mouse moves significantly or tool changes
+  useEffect(() => {
+    setCableSnapCycleIndex(0);
+  }, [activeTool]);
 
   // ResizeObserver to detect container size changes (e.g., when Summary panel collapses)
   useEffect(() => {
@@ -597,23 +611,34 @@ export function Canvas({
         viewState,
         plantSetupConfig,
         placedCableTrays,
-        lines // existing cables for cable-to-cable snapping
+        lines, // existing cables for cable-to-cable snapping
+        undefined,
+        cableSnapCycleIndex
       );
       
       // Draw snap indicator if snapped to a target
-      if (snapResult.snappedToId) {
+      if (snapResult.current.snappedToId) {
         // Draw glowing ring around snap point
         ctx.beginPath();
-        ctx.arc(snapResult.position.x, snapResult.position.y, 12 / viewState.zoom, 0, Math.PI * 2);
+        ctx.arc(snapResult.current.position.x, snapResult.current.position.y, 12 / viewState.zoom, 0, Math.PI * 2);
         ctx.strokeStyle = cableType === 'dc' ? '#ef4444' : '#22c55e'; // Red for DC, Green for AC
         ctx.lineWidth = 3 / viewState.zoom;
         ctx.stroke();
         
         // Inner filled circle
         ctx.beginPath();
-        ctx.arc(snapResult.position.x, snapResult.position.y, 6 / viewState.zoom, 0, Math.PI * 2);
+        ctx.arc(snapResult.current.position.x, snapResult.current.position.y, 6 / viewState.zoom, 0, Math.PI * 2);
         ctx.fillStyle = cableType === 'dc' ? 'rgba(239, 68, 68, 0.6)' : 'rgba(34, 197, 94, 0.6)';
         ctx.fill();
+        
+        // Show Tab hint if multiple targets available
+        if (snapResult.allTargets.length > 1) {
+          ctx.font = `${10 / viewState.zoom}px sans-serif`;
+          ctx.fillStyle = cableType === 'dc' ? '#ef4444' : '#22c55e';
+          ctx.textAlign = 'center';
+          const labelY = snapResult.current.position.y - 18 / viewState.zoom;
+          ctx.fillText(`[Tab: ${snapResult.currentIndex + 1}/${snapResult.allTargets.length}]`, snapResult.current.position.x, labelY);
+        }
       } else {
         // Draw crosshair at current position when not snapping
         const crossSize = 8 / viewState.zoom;
@@ -1161,30 +1186,32 @@ export function Canvas({
           viewState,
           plantSetupConfig,
           placedCableTrays,
-          lines // existing cables for cable-to-cable snapping
+          lines, // existing cables for cable-to-cable snapping
+          undefined,
+          cableSnapCycleIndex
         );
-        finalPos = snapResult.position;
+        finalPos = snapResult.current.position;
         
         // Auto-complete when clicking a valid snapped endpoint (after the first point)
         // AC: Inverter or Main Board
         // DC: Inverter or PV Array
         const isValidEndpoint = (() => {
           if (currentDrawing.length === 0) return false; // Need at least one point first
-          if (!snapResult.snappedToId || !snapResult.snappedToType) return false;
+          if (!snapResult.current.snappedToId || !snapResult.current.snappedToType) return false;
 
           if (cableType === 'ac') {
             return (
-              snapResult.snappedToType === 'equipment' &&
-              (snapResult.equipmentType === EquipmentType.INVERTER ||
-                snapResult.equipmentType === EquipmentType.MAIN_BOARD)
+              snapResult.current.snappedToType === 'equipment' &&
+              (snapResult.current.equipmentType === EquipmentType.INVERTER ||
+                snapResult.current.equipmentType === EquipmentType.MAIN_BOARD)
             );
           }
 
           // dc
           return (
-            (snapResult.snappedToType === 'equipment' &&
-              snapResult.equipmentType === EquipmentType.INVERTER) ||
-            snapResult.snappedToType === 'pvArray'
+            (snapResult.current.snappedToType === 'equipment' &&
+              snapResult.current.equipmentType === EquipmentType.INVERTER) ||
+            snapResult.current.snappedToType === 'pvArray'
           );
         })();
         
@@ -1194,16 +1221,21 @@ export function Canvas({
             ? snapTo45Degrees(currentDrawing[currentDrawing.length - 1], finalPos)
             : finalPos;
           
+          const cableConfig = cableType === 'dc' ? selectedDcCableConfig : selectedAcCableConfig;
           const newLine: SupplyLine = {
             id: `line-${Date.now()}`,
-            name: `${cableType === 'dc' ? 'DC' : 'AC'} Cable`,
+            name: cableConfig?.name || `${cableType === 'dc' ? 'DC' : 'AC'} Cable`,
             type: cableType,
             points: [...currentDrawing, snappedPos],
             length: calculateLineLength([...currentDrawing, snappedPos], scaleInfo.ratio),
+            configId: cableConfig?.id,
+            thickness: cableConfig?.diameter,
+            material: cableConfig?.material,
           };
           setLines(prev => [...prev, newLine]);
           setCurrentDrawing([]);
           setPreviewPoint(null);
+          setCableSnapCycleIndex(0); // Reset cycle index
           return;
         }
       }
@@ -1708,9 +1740,16 @@ export function Canvas({
           viewState,
           plantSetupConfig,
           placedCableTrays,
-          lines // existing cables for cable-to-cable snapping
+          lines, // existing cables for cable-to-cable snapping
+          undefined,
+          cableSnapCycleIndex
         );
-        previewPos = snapResult.position;
+        previewPos = snapResult.current.position;
+        
+        // Update target count for reference (reset cycle when targets change significantly)
+        if (snapResult.allTargets.length !== lastCableSnapTargetCount) {
+          setLastCableSnapTargetCount(snapResult.allTargets.length);
+        }
       }
       
       // Apply 45-degree snapping to preview line if Shift is held

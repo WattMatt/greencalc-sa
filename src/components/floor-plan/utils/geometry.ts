@@ -1110,6 +1110,19 @@ export const getClosestPointOnCableTray = (
   return { point: projectedPoint, distanceToLine };
 };
 
+export interface CableSnapResult {
+  position: Point;
+  snappedToId: string | null;
+  snappedToType: 'equipment' | 'pvArray' | 'cableTray' | 'cable' | null;
+  equipmentType?: EquipmentType;
+}
+
+export interface AllCableSnapTargetsResult {
+  current: CableSnapResult;
+  allTargets: CableSnapResult[];
+  currentIndex: number;
+}
+
 /**
  * Find the nearest valid snap target for a cable endpoint based on cable type.
  * DC cables snap to: Inverters, Solar Modules (PV Arrays), DC Cable Trays, DC Cable nodes
@@ -1127,6 +1140,7 @@ export const getClosestPointOnCableTray = (
  * @param placedCableTrays - Array of placed cable trays for tray snapping
  * @param existingCables - Array of existing cables for cable-to-cable snapping
  * @param currentCableId - ID of the cable currently being drawn (to exclude from snapping)
+ * @param cycleIndex - Optional index for cycling through multiple overlapping targets (Tab key)
  * @returns Snapped position and target ID, or original position if no snap
  */
 export const snapCablePointToTarget = (
@@ -1141,10 +1155,17 @@ export const snapCablePointToTarget = (
   plantSetupConfig?: PlantSetupConfig,
   placedCableTrays?: PlacedCableTray[],
   existingCables?: SupplyLine[],
-  currentCableId?: string
-): { position: Point; snappedToId: string | null; snappedToType: 'equipment' | 'pvArray' | 'cableTray' | 'cable' | null; equipmentType?: EquipmentType } => {
+  currentCableId?: string,
+  cycleIndex: number = 0
+): AllCableSnapTargetsResult => {
+  const noSnap: AllCableSnapTargetsResult = { 
+    current: { position: mousePos, snappedToId: null, snappedToType: null },
+    allTargets: [],
+    currentIndex: 0
+  };
+  
   if (!scaleInfo.ratio) {
-    return { position: mousePos, snappedToId: null, snappedToType: null };
+    return noSnap;
   }
 
   // Collect valid snap targets based on cable type
@@ -1227,58 +1248,58 @@ export const snapCablePointToTarget = (
   }
 
   if (targets.length === 0) {
-    return { position: mousePos, snappedToId: null, snappedToType: null };
+    return noSnap;
   }
 
   // Adjust snap threshold based on zoom (larger threshold when zoomed out)
   const adjustedThreshold = CABLE_SNAP_THRESHOLD_PX / viewState.zoom;
 
-  // Priority: cable-to-cable node snapping should win over tray centerline snapping.
-  // Reason: tray snapping uses distance-to-line (often ~0 along the tray), which can
-  // otherwise dominate even when the user is clearly aiming for an existing cable node.
-  let closestCableNode: CableSnapTarget | null = null;
-  let closestCableNodeDist = Infinity;
+  // Collect ALL valid targets within range (for Tab cycling)
+  const validTargets: CableSnapResult[] = [];
+  
   for (const target of targets) {
-    if (target.type !== 'cable') continue;
-    const dist = distance(mousePos, target.position);
-    if (dist < adjustedThreshold && dist < closestCableNodeDist) {
-      closestCableNodeDist = dist;
-      closestCableNode = target;
-    }
-  }
-  if (closestCableNode) {
-    return {
-      position: closestCableNode.position,
-      snappedToId: closestCableNode.id,
-      snappedToType: 'cable',
-    };
-  }
-
-  let closestTarget: CableSnapTarget | null = null;
-  let closestDist = Infinity;
-
-  for (const target of targets) {
-    if (target.type === 'cable') continue; // handled above with priority
     // For cable trays, use perpendicular distance to centerline
     // For other targets, use distance to target position
     const dist = target.type === 'cableTray' && (target as any)._distanceToLine !== undefined
       ? (target as any)._distanceToLine
       : distance(mousePos, target.position);
     
-    if (dist < adjustedThreshold && dist < closestDist) {
-      closestDist = dist;
-      closestTarget = target;
+    if (dist < adjustedThreshold) {
+      validTargets.push({
+        position: target.position,
+        snappedToId: target.id,
+        snappedToType: target.type,
+        equipmentType: target.equipmentType,
+      });
     }
   }
 
-  if (closestTarget) {
-    return {
-      position: closestTarget.position,
-      snappedToId: closestTarget.id,
-      snappedToType: closestTarget.type,
-      equipmentType: closestTarget.equipmentType,
-    };
+  if (validTargets.length === 0) {
+    return noSnap;
   }
 
-  return { position: mousePos, snappedToId: null, snappedToType: null };
+  // Sort valid targets by priority: cable nodes first, then equipment, then PV arrays, then cable trays
+  // This ensures a logical ordering when cycling with Tab
+  const priorityOrder: Record<string, number> = {
+    'cable': 0,
+    'equipment': 1,
+    'pvArray': 2,
+    'cableTray': 3,
+  };
+  
+  validTargets.sort((a, b) => {
+    const prioA = priorityOrder[a.snappedToType || ''] ?? 99;
+    const prioB = priorityOrder[b.snappedToType || ''] ?? 99;
+    return prioA - prioB;
+  });
+
+  // Apply cycle index (wrap around)
+  const normalizedIndex = cycleIndex % validTargets.length;
+  const currentTarget = validTargets[normalizedIndex];
+
+  return {
+    current: currentTarget,
+    allTargets: validTargets,
+    currentIndex: normalizedIndex,
+  };
 };
