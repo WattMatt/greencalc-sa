@@ -949,6 +949,7 @@ interface CableSnapTarget {
   equipmentType?: EquipmentType;
   arrayId?: string; // Parent PV array ID for individual module snapping
   trayId?: string; // Cable tray ID for tray snapping
+  _distanceToLine?: number; // Perpendicular distance to centerline (for cable trays)
 }
 
 /**
@@ -1042,6 +1043,68 @@ export const getCableTraySnapPoints = (
 };
 
 /**
+ * Get the closest point on a cable tray's centerline to a given position.
+ * Uses perpendicular projection clamped to the tray's endpoints.
+ * This enables continuous snapping along the entire tray centerline.
+ */
+export const getClosestPointOnCableTray = (
+  mousePos: Point,
+  tray: PlacedCableTray,
+  scaleInfo: ScaleInfo
+): { point: Point; distanceToLine: number } | null => {
+  if (!scaleInfo.ratio) return null;
+  
+  // Get tray length in pixels
+  const lengthPx = tray.length / scaleInfo.ratio;
+  const halfLength = lengthPx / 2;
+  
+  // Apply rotation to get world positions of endpoints
+  const angleRad = tray.rotation * Math.PI / 180;
+  const cosA = Math.cos(angleRad);
+  const sinA = Math.sin(angleRad);
+  
+  // Calculate the two endpoints of the tray's centerline
+  const endpoint1: Point = {
+    x: tray.position.x - halfLength * cosA,
+    y: tray.position.y - halfLength * sinA,
+  };
+  
+  const endpoint2: Point = {
+    x: tray.position.x + halfLength * cosA,
+    y: tray.position.y + halfLength * sinA,
+  };
+  
+  // Vector from endpoint1 to endpoint2
+  const dx = endpoint2.x - endpoint1.x;
+  const dy = endpoint2.y - endpoint1.y;
+  const lengthSq = dx * dx + dy * dy;
+  
+  if (lengthSq === 0) {
+    // Degenerate case: tray is a point
+    return { 
+      point: tray.position, 
+      distanceToLine: distance(mousePos, tray.position) 
+    };
+  }
+  
+  // Calculate projection parameter t (clamped to 0-1 to stay on segment)
+  const t = Math.max(0, Math.min(1, 
+    ((mousePos.x - endpoint1.x) * dx + (mousePos.y - endpoint1.y) * dy) / lengthSq
+  ));
+  
+  // Calculate the projected point on the centerline
+  const projectedPoint: Point = {
+    x: endpoint1.x + t * dx,
+    y: endpoint1.y + t * dy,
+  };
+  
+  // Calculate perpendicular distance from mouse to the centerline
+  const distanceToLine = distance(mousePos, projectedPoint);
+  
+  return { point: projectedPoint, distanceToLine };
+};
+
+/**
  * Find the nearest valid snap target for a cable endpoint based on cable type.
  * DC cables snap to: Inverters, Solar Modules (PV Arrays), DC Cable Trays
  * AC cables snap to: Inverters, Main Boards, AC Cable Trays
@@ -1112,18 +1175,21 @@ export const snapCablePointToTarget = (
     }
   }
 
-  // Cable trays of matching type are valid snap targets
+  // Cable trays of matching type - use centerline projection for continuous snapping
   if (placedCableTrays) {
     for (const tray of placedCableTrays) {
       // Only snap if tray type matches cable type
       if (tray.cableType === cableType) {
-        const traySnapPoints = getCableTraySnapPoints(tray, scaleInfo);
-        for (let i = 0; i < traySnapPoints.length; i++) {
+        // Project mouse position onto the tray's centerline
+        const projection = getClosestPointOnCableTray(mousePos, tray, scaleInfo);
+        if (projection) {
           targets.push({
-            id: `${tray.id}_snap_${i}`,
-            position: traySnapPoints[i],
+            id: tray.id,
+            position: projection.point,
             type: 'cableTray',
             trayId: tray.id,
+            // Store perpendicular distance for threshold check
+            _distanceToLine: projection.distanceToLine,
           });
         }
       }
@@ -1141,7 +1207,11 @@ export const snapCablePointToTarget = (
   let closestDist = Infinity;
 
   for (const target of targets) {
-    const dist = distance(mousePos, target.position);
+    // For cable trays, use perpendicular distance to centerline
+    // For other targets, use distance to target position
+    const dist = target.type === 'cableTray' && (target as any)._distanceToLine !== undefined
+      ? (target as any)._distanceToLine
+      : distance(mousePos, target.position);
     
     if (dist < adjustedThreshold && dist < closestDist) {
       closestDist = dist;
