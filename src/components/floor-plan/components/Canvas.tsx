@@ -1712,6 +1712,17 @@ export function Canvas({
           });
         }
         
+        // Check cables/lines (only if layer is visible)
+        if (layerVisibility.cables) {
+          lines.forEach(line => {
+            // Check if any point of the cable is in the box, or if the cable intersects the box
+            const hasPointInBox = line.points.some(p => isPointInBox(p));
+            if (hasPointInBox) {
+              selectedIds.push(line.id);
+            }
+          });
+        }
+        
         // Check roof masks (by center) (only if layer is visible)
         if (layerVisibility.roofMasks) {
           roofMasks.forEach(mask => {
