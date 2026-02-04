@@ -1046,6 +1046,9 @@ export const getCableTraySnapPoints = (
  * Get the closest point on a cable tray's centerline to a given position.
  * Uses perpendicular projection clamped to the tray's endpoints.
  * This enables continuous snapping along the entire tray centerline.
+ * 
+ * Note: Cable trays are drawn with length along the LOCAL Y-axis (before rotation).
+ * So for rotation=0, the tray is vertical (length runs up/down).
  */
 export const getClosestPointOnCableTray = (
   mousePos: Point,
@@ -1059,19 +1062,21 @@ export const getClosestPointOnCableTray = (
   const halfLength = lengthPx / 2;
   
   // Apply rotation to get world positions of endpoints
-  const angleRad = tray.rotation * Math.PI / 180;
+  // Length runs along LOCAL Y-axis, so we use sin for X offset and cos for Y offset
+  const angleRad = (tray.rotation || 0) * Math.PI / 180;
   const cosA = Math.cos(angleRad);
   const sinA = Math.sin(angleRad);
   
   // Calculate the two endpoints of the tray's centerline
+  // Local Y direction rotated into world space: (-sin, cos) for positive Y
   const endpoint1: Point = {
-    x: tray.position.x - halfLength * cosA,
-    y: tray.position.y - halfLength * sinA,
+    x: tray.position.x - halfLength * (-sinA),  // -halfLength * local Y direction X component
+    y: tray.position.y - halfLength * cosA,      // -halfLength * local Y direction Y component
   };
   
   const endpoint2: Point = {
-    x: tray.position.x + halfLength * cosA,
-    y: tray.position.y + halfLength * sinA,
+    x: tray.position.x + halfLength * (-sinA),  // +halfLength * local Y direction X component
+    y: tray.position.y + halfLength * cosA,      // +halfLength * local Y direction Y component
   };
   
   // Vector from endpoint1 to endpoint2
