@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem, LayerVisibility, defaultLayerVisibility, SubgroupVisibility, defaultSubgroupVisibility, ItemVisibility } from './types';
+import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem, LayerVisibility, defaultLayerVisibility, SubgroupVisibility, defaultSubgroupVisibility, ItemVisibility, EquipmentType } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
@@ -16,6 +16,7 @@ import { SimulationSelector } from './components/SimulationSelector';
 import { PlacementOptionsModal, PlacementConfig, toolToPlacementType, PlacementItemType } from './components/PlacementOptionsModal';
 import { SetDistanceModal } from './components/SetDistanceModal';
 import { AlignEdgesModal, AlignmentEdge } from './components/AlignEdgesModal';
+import { ObjectConfigModal, ConfigurableObjectType } from './components/ObjectConfigModal';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
@@ -352,8 +353,13 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [selectedCableTrayId, setSelectedCableTrayId] = useState<string | null>(null);
   const [selectedDcCableId, setSelectedDcCableId] = useState<string | null>(null);
   const [selectedAcCableId, setSelectedAcCableId] = useState<string | null>(null);
+  
+  // Object configuration modal state (right-click to change type)
+  const [isObjectConfigModalOpen, setIsObjectConfigModalOpen] = useState(false);
+  const [configModalObjectType, setConfigModalObjectType] = useState<ConfigurableObjectType | null>(null);
+  const [configModalObjectIds, setConfigModalObjectIds] = useState<string[]>([]);
+  const [configModalCurrentConfigId, setConfigModalCurrentConfigId] = useState<string | null>(null);
 
-  // Tools that require the placement options modal
   const PLACEMENT_TOOLS = [
     Tool.PLACE_INVERTER,
     Tool.PLACE_WALKWAY,
@@ -1591,6 +1597,89 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     setActiveTool(Tool.SELECT);
     toast.success(`Edges aligned (${alignmentEdge})${movedCount > 1 ? ` - ${movedCount} items moved` : ''}`);
   }, [alignObject1Id, alignObject2Id, getObjectPosition, getObjectDimensions, selectedItemIds, commitState]);
+
+  // Handle context menu open (right-click on objects)
+  const handleContextMenuOpen = useCallback((objectType: ConfigurableObjectType, objectIds: string[], currentConfigId: string | null) => {
+    setConfigModalObjectType(objectType);
+    setConfigModalObjectIds(objectIds);
+    setConfigModalCurrentConfigId(currentConfigId);
+    setIsObjectConfigModalOpen(true);
+  }, []);
+
+  // Apply configuration change from context menu modal
+  const handleApplyConfig = useCallback((newConfigId: string) => {
+    if (!configModalObjectType || configModalObjectIds.length === 0) return;
+    
+    switch (configModalObjectType) {
+      case 'dcCable':
+      case 'acCable': {
+        const configs = configModalObjectType === 'dcCable' 
+          ? plantSetupConfig.dcCables 
+          : plantSetupConfig.acCables;
+        const config = configs?.find(c => c.id === newConfigId);
+        if (config) {
+          setLines(prev => prev.map(line => 
+            configModalObjectIds.includes(line.id)
+              ? { ...line, configId: newConfigId, thickness: config.diameter, material: config.material, name: config.name }
+              : line
+          ));
+          toast.success(`Updated ${configModalObjectIds.length} cable(s) to ${config.name}`);
+        }
+        break;
+      }
+      case 'walkway': {
+        const config = plantSetupConfig.walkways.find(w => w.id === newConfigId);
+        if (config) {
+          setPlacedWalkways(prev => prev.map(w =>
+            configModalObjectIds.includes(w.id)
+              ? { ...w, configId: newConfigId, name: config.name, width: config.width }
+              : w
+          ));
+          toast.success(`Updated ${configModalObjectIds.length} walkway(s) to ${config.name}`);
+        }
+        break;
+      }
+      case 'cableTray': {
+        const config = plantSetupConfig.cableTrays.find(t => t.id === newConfigId);
+        if (config) {
+          setPlacedCableTrays(prev => prev.map(t =>
+            configModalObjectIds.includes(t.id)
+              ? { ...t, configId: newConfigId, name: config.name, width: config.width }
+              : t
+          ));
+          toast.success(`Updated ${configModalObjectIds.length} cable tray(s) to ${config.name}`);
+        }
+        break;
+      }
+      case 'inverter': {
+        const config = plantSetupConfig.inverters.find(i => i.id === newConfigId);
+        if (config) {
+          setEquipment(prev => prev.map(eq =>
+            configModalObjectIds.includes(eq.id) && eq.type === EquipmentType.INVERTER
+              ? { ...eq, configId: newConfigId, name: config.name }
+              : eq
+          ));
+          toast.success(`Updated ${configModalObjectIds.length} inverter(s) to ${config.name}`);
+        }
+        break;
+      }
+      case 'pvArray': {
+        const config = plantSetupConfig.solarModules.find(m => m.id === newConfigId);
+        if (config) {
+          setPvArrays(prev => prev.map(arr =>
+            configModalObjectIds.includes(arr.id)
+              ? { ...arr, moduleConfigId: newConfigId }
+              : arr
+          ));
+          toast.success(`Updated ${configModalObjectIds.length} PV array(s) to use ${config.name}`);
+        }
+        break;
+      }
+    }
+    
+    setIsObjectConfigModalOpen(false);
+  }, [configModalObjectType, configModalObjectIds, plantSetupConfig, setLines, setPlacedWalkways, setPlacedCableTrays, setEquipment, setPvArrays]);
+
   useEffect(() => {
     if (readOnly) return;
     
@@ -2192,6 +2281,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         layerVisibility={layerVisibility}
         subgroupVisibility={subgroupVisibility}
         itemVisibility={itemVisibility}
+        onContextMenuOpen={readOnly ? undefined : handleContextMenuOpen}
+        selectedDcCableConfig={getSelectedDcCable()}
+        selectedAcCableConfig={getSelectedAcCable()}
       />
 
       <SummaryPanel
@@ -2411,6 +2503,18 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
             object2Label={alignObject2Id ? getObjectLabel(alignObject2Id) : 'Object 2'}
             onConfirm={handleAlignEdgesApply}
           />
+
+          {configModalObjectType && (
+            <ObjectConfigModal
+              isOpen={isObjectConfigModalOpen}
+              onClose={() => setIsObjectConfigModalOpen(false)}
+              objectType={configModalObjectType}
+              selectedCount={configModalObjectIds.length}
+              currentConfigId={configModalCurrentConfigId}
+              plantSetupConfig={plantSetupConfig}
+              onApply={handleApplyConfig}
+            />
+          )}
         </>
       )}
     </div>

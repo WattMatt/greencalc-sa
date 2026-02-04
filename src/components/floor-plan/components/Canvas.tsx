@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
-import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig, BatchPlacementConfig, LayerVisibility, defaultLayerVisibility, SubgroupVisibility } from '../types';
+import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig, BatchPlacementConfig, LayerVisibility, defaultLayerVisibility, SubgroupVisibility, DCCableConfig, ACCableConfig } from '../types';
+import { ConfigurableObjectType } from './ObjectConfigModal';
 import { renderAllMarkups, drawPvArray, drawEquipmentIcon, drawWalkway, drawCableTray } from '../utils/drawing';
 import { calculatePolygonArea, calculateLineLength, distance, distanceToPolyline, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing, getPVArrayDimensions, getEquipmentDimensions, detectClickedEdge, snapCablePointToTarget, CableType } from '../utils/geometry';
 import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
@@ -66,6 +67,11 @@ interface CanvasProps {
   subgroupVisibility?: SubgroupVisibility;
   // Per-item visibility - individual items can be hidden
   itemVisibility?: Record<string, boolean>;
+  // Context menu callback for right-click configuration changes
+  onContextMenuOpen?: (objectType: ConfigurableObjectType, objectIds: string[], currentConfigId: string | null) => void;
+  // Selected cable configs for cable creation
+  selectedDcCableConfig?: DCCableConfig | null;
+  selectedAcCableConfig?: ACCableConfig | null;
 }
 
 export function Canvas({
@@ -94,6 +100,9 @@ export function Canvas({
   layerVisibility = defaultLayerVisibility,
   subgroupVisibility,
   itemVisibility,
+  onContextMenuOpen,
+  selectedDcCableConfig,
+  selectedAcCableConfig,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -152,12 +161,16 @@ export function Canvas({
       setCurrentDrawing([]);
       setPreviewPoint(null);
     } else if (currentDrawing.length >= 2 && (activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC)) {
+      const cableConfig = activeTool === Tool.LINE_DC ? selectedDcCableConfig : selectedAcCableConfig;
       const newLine: SupplyLine = {
         id: `line-${Date.now()}`,
-        name: `${activeTool === Tool.LINE_DC ? 'DC' : 'AC'} Cable`,
+        name: cableConfig?.name || `${activeTool === Tool.LINE_DC ? 'DC' : 'AC'} Cable`,
         type: activeTool === Tool.LINE_DC ? 'dc' : 'ac',
         points: currentDrawing,
         length: calculateLineLength(currentDrawing, scaleInfo.ratio),
+        configId: cableConfig?.id,
+        thickness: cableConfig?.diameter,
+        material: cableConfig?.material,
       };
       setLines(prev => [...prev, newLine]);
       setCurrentDrawing([]);
@@ -1963,6 +1976,75 @@ export function Canvas({
     });
   };
 
+  // Handle right-click context menu for configuration changes
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (!onContextMenuOpen) return;
+    
+    e.preventDefault();
+    
+    const screenPos = getMousePos(e);
+    const worldPos = toWorld(screenPos);
+    
+    // Determine what object type we're dealing with based on selection
+    if (!selectedItemIds || selectedItemIds.size === 0) {
+      // No selection - try to detect what was right-clicked
+      return;
+    }
+    
+    // Get all selected object types
+    const selectedTypes = new Set<ConfigurableObjectType>();
+    const selectedIds = Array.from(selectedItemIds);
+    let currentConfigId: string | null = null;
+    
+    for (const id of selectedIds) {
+      // Check cables
+      const line = lines.find(l => l.id === id);
+      if (line) {
+        selectedTypes.add(line.type === 'dc' ? 'dcCable' : 'acCable');
+        if (selectedIds.length === 1) currentConfigId = line.configId || null;
+        continue;
+      }
+      
+      // Check walkways
+      const walkway = placedWalkways?.find(w => w.id === id);
+      if (walkway) {
+        selectedTypes.add('walkway');
+        if (selectedIds.length === 1) currentConfigId = walkway.configId;
+        continue;
+      }
+      
+      // Check cable trays
+      const tray = placedCableTrays?.find(t => t.id === id);
+      if (tray) {
+        selectedTypes.add('cableTray');
+        if (selectedIds.length === 1) currentConfigId = tray.configId;
+        continue;
+      }
+      
+      // Check equipment (only inverters are configurable)
+      const eq = equipment.find(e => e.id === id);
+      if (eq && eq.type === EquipmentType.INVERTER) {
+        selectedTypes.add('inverter');
+        if (selectedIds.length === 1) currentConfigId = eq.configId || null;
+        continue;
+      }
+      
+      // Check PV arrays
+      const arr = pvArrays.find(a => a.id === id);
+      if (arr) {
+        selectedTypes.add('pvArray');
+        if (selectedIds.length === 1) currentConfigId = arr.moduleConfigId || null;
+        continue;
+      }
+    }
+    
+    // Only show menu if all selected items are of the same type
+    if (selectedTypes.size === 1) {
+      const objectType = Array.from(selectedTypes)[0];
+      onContextMenuOpen(objectType, selectedIds, currentConfigId);
+    }
+  };
+
   return (
     <div 
       ref={containerRef}
@@ -1992,6 +2074,7 @@ export function Canvas({
       }}
       onDoubleClick={handleDoubleClick}
       onWheel={handleWheel}
+      onContextMenu={handleContextMenu}
     >
       {!backgroundImage ? (
         <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
