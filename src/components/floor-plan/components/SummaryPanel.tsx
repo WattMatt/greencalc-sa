@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check, Eye, EyeOff } from 'lucide-react';
+import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check, Eye, EyeOff, LayoutGrid } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig, PlacedWalkway, PlacedCableTray, EquipmentType, LayerVisibility } from '../types';
@@ -641,6 +641,63 @@ export function SummaryPanel({
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+            </CollapsibleSection>
+
+            {/* Main Boards */}
+            <CollapsibleSection
+              icon={<LayoutGrid className="h-4 w-4 text-purple-500" />}
+              title="Main Boards"
+              summary={`${equipment.filter(e => e.type === EquipmentType.MAIN_BOARD).length}`}
+              defaultOpen={false}
+              isVisible={layerVisibility?.equipment}
+              onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('equipment') : undefined}
+            >
+              {equipment.filter(e => e.type === EquipmentType.MAIN_BOARD).length === 0 ? (
+                <p className="text-xs text-muted-foreground">No main boards placed</p>
+              ) : (
+                <div className="space-y-1">
+                  {equipment
+                    .filter((e) => e.type === EquipmentType.MAIN_BOARD)
+                    .map((board, i) => (
+                      <div
+                        key={board.id}
+                        className={cn(
+                          "w-full flex items-center justify-between p-2 rounded text-xs transition-colors",
+                          selectedItemIds?.has(board.id)
+                            ? 'bg-primary/10 border border-primary'
+                            : 'bg-muted hover:bg-accent'
+                        )}
+                      >
+                        <button
+                          type="button"
+                          className="flex-1 text-left"
+                          onClick={() => onSelectItem(board.id)}
+                        >
+                          <span className="font-medium">Main Board {i + 1}</span>
+                          {board.name && (
+                            <span className="text-muted-foreground ml-2">{board.name}</span>
+                          )}
+                        </button>
+
+                        {onDeleteItem && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onDeleteItem(board.id);
+                            }}
+                            title="Delete main board"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
                 </div>
               )}
             </CollapsibleSection>
