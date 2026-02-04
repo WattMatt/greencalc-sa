@@ -2171,6 +2171,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         alignEdge2={alignEdge2}
         layerVisibility={layerVisibility}
         subgroupVisibility={subgroupVisibility}
+        itemVisibility={itemVisibility}
       />
 
       <SummaryPanel
