@@ -565,6 +565,55 @@ export function Canvas({
       
       ctx.globalAlpha = 1.0;
     }
+
+    // Draw ghost preview for cable placement (before first point is placed)
+    if ((activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC) && mouseWorldPos && currentDrawing.length === 0) {
+      const cableType: CableType = activeTool === Tool.LINE_DC ? 'dc' : 'ac';
+      const snapResult = snapCablePointToTarget(
+        mouseWorldPos,
+        cableType,
+        equipment,
+        pvArrays,
+        pvPanelConfig,
+        roofMasks,
+        scaleInfo,
+        viewState,
+        plantSetupConfig
+      );
+      
+      // Draw snap indicator if snapped to a target
+      if (snapResult.snappedToId) {
+        // Draw glowing ring around snap point
+        ctx.beginPath();
+        ctx.arc(snapResult.position.x, snapResult.position.y, 12 / viewState.zoom, 0, Math.PI * 2);
+        ctx.strokeStyle = cableType === 'dc' ? '#ef4444' : '#22c55e'; // Red for DC, Green for AC
+        ctx.lineWidth = 3 / viewState.zoom;
+        ctx.stroke();
+        
+        // Inner filled circle
+        ctx.beginPath();
+        ctx.arc(snapResult.position.x, snapResult.position.y, 6 / viewState.zoom, 0, Math.PI * 2);
+        ctx.fillStyle = cableType === 'dc' ? 'rgba(239, 68, 68, 0.6)' : 'rgba(34, 197, 94, 0.6)';
+        ctx.fill();
+      } else {
+        // Draw crosshair at current position when not snapping
+        const crossSize = 8 / viewState.zoom;
+        ctx.strokeStyle = cableType === 'dc' ? '#ef4444' : '#22c55e';
+        ctx.lineWidth = 1.5 / viewState.zoom;
+        
+        // Horizontal line
+        ctx.beginPath();
+        ctx.moveTo(mouseWorldPos.x - crossSize, mouseWorldPos.y);
+        ctx.lineTo(mouseWorldPos.x + crossSize, mouseWorldPos.y);
+        ctx.stroke();
+        
+        // Vertical line
+        ctx.beginPath();
+        ctx.moveTo(mouseWorldPos.x, mouseWorldPos.y - crossSize);
+        ctx.lineTo(mouseWorldPos.x, mouseWorldPos.y + crossSize);
+        ctx.stroke();
+      }
+    }
     
     // Draw marquee selection box
     if (marqueeStart && marqueeEnd) {
@@ -1533,13 +1582,15 @@ export function Canvas({
       setPreviewPoint(snappedPreview);
     }
     
-    // Track mouse position for ghost preview (PV array, equipment, walkways, cable trays, batch placement)
+    // Track mouse position for ghost preview (PV array, equipment, walkways, cable trays, cables, batch placement)
     const equipmentPlacementTools = [Tool.PLACE_INVERTER, Tool.PLACE_DC_COMBINER, Tool.PLACE_AC_DISCONNECT, Tool.PLACE_MAIN_BOARD];
     const materialPlacementTools = [Tool.PLACE_WALKWAY, Tool.PLACE_CABLE_TRAY];
+    const cableTools = [Tool.LINE_DC, Tool.LINE_AC];
     if (
       (activeTool === Tool.PV_ARRAY && (pendingPvArrayConfig || pendingBatchPlacement)) || 
       equipmentPlacementTools.includes(activeTool) ||
-      materialPlacementTools.includes(activeTool)
+      materialPlacementTools.includes(activeTool) ||
+      cableTools.includes(activeTool)
     ) {
       setMouseWorldPos(worldPos);
     } else {
