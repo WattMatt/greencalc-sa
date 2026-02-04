@@ -1,120 +1,105 @@
 
-# Plan: Add Ghost Preview for AC/DC Cable Placement
+# Plan: Auto-Complete Cable Placement on Valid Endpoint Snap
 
 ## Problem
-When using the AC or DC cable tools, there is no visual indicator (ghost) showing where the cable will be placed or what target it will snap to before clicking. This makes it difficult to confirm if the snapping functionality is working and where the first point will be placed.
+When drawing AC or DC cables, the cable placement does not automatically finish when clicking on the second valid target. Users expect:
+- **AC Cable**: Start on Inverter → End on Main Board (auto-complete)
+- **DC Cable**: Start on PV Array → End on Inverter (auto-complete)
 
-## Current Behavior
-- PV arrays, equipment, walkways, and cable trays all show a "ghost" preview that follows the cursor
-- Cable tools only show a preview line AFTER the first click has been made
-- No visual feedback about valid snap targets (Inverters, Main Boards, Solar Modules)
+Currently, clicks just keep adding points indefinitely, requiring a manual double-click or Enter key to complete.
 
-## Proposed Solution
-Add a ghost preview system for cable tools that shows:
-1. **Snap Indicator**: A glowing circle/highlight on valid snap targets when the cursor is within snap range
-2. **Cursor Indicator**: A small crosshair/dot at the current mouse position showing where the cable point will be placed
-3. **Target Highlighting**: Valid snap targets highlighted to show they are "active"
+## Solution
+Auto-complete the cable when the second (or subsequent) point snaps to a valid "endpoint" target:
+- **AC Cables**: Auto-complete when snapping to a Main Board
+- **DC Cables**: Auto-complete when snapping to an Inverter
+
+This creates a natural workflow where the cable automatically finishes when connecting to the appropriate destination.
 
 ---
 
 ## Technical Implementation
 
-### File 1: `src/components/floor-plan/components/Canvas.tsx`
+### File: `src/components/floor-plan/utils/geometry.ts`
 
-**A. Track mouse position for cable tools (handleMouseMove)**
-
-Update lines 1536-1548 to include LINE_DC and LINE_AC in the mouse tracking:
+Update `snapCablePointToTarget` return type to include `equipmentType` so we can determine if this is a valid endpoint:
 
 ```typescript
-const equipmentPlacementTools = [Tool.PLACE_INVERTER, Tool.PLACE_DC_COMBINER, Tool.PLACE_AC_DISCONNECT, Tool.PLACE_MAIN_BOARD];
-const materialPlacementTools = [Tool.PLACE_WALKWAY, Tool.PLACE_CABLE_TRAY];
-const cableTools = [Tool.LINE_DC, Tool.LINE_AC];
-
-if (
-  (activeTool === Tool.PV_ARRAY && (pendingPvArrayConfig || pendingBatchPlacement)) || 
-  equipmentPlacementTools.includes(activeTool) ||
-  materialPlacementTools.includes(activeTool) ||
-  cableTools.includes(activeTool)
-) {
-  setMouseWorldPos(worldPos);
-} else {
-  setMouseWorldPos(null);
-}
+export const snapCablePointToTarget = (
+  // ... existing params
+): { 
+  position: Point; 
+  snappedToId: string | null; 
+  snappedToType: 'equipment' | 'pvArray' | null;
+  equipmentType?: EquipmentType;  // NEW: Include equipment type for endpoint detection
+} => {
 ```
 
-**B. Add ghost preview rendering in the useEffect drawing code (around line 498)**
+Update the return statement when snapping to equipment to include the equipmentType.
 
-Add new ghost preview section for cable tools:
+---
+
+### File: `src/components/floor-plan/components/Canvas.tsx`
+
+**Update the click handler (around lines 1076-1099):**
+
+After snapping, check if this is a valid endpoint and auto-complete:
 
 ```typescript
-// Draw ghost preview for cable placement (before any points are placed)
-if ((activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC) && mouseWorldPos) {
+if (activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC) {
   const cableType: CableType = activeTool === Tool.LINE_DC ? 'dc' : 'ac';
-  const snapResult = snapCablePointToTarget(
-    mouseWorldPos,
-    cableType,
-    equipment,
-    pvArrays,
-    pvPanelConfig,
-    roofMasks,
-    scaleInfo,
-    viewState,
-    plantSetupConfig
-  );
+  const snapResult = snapCablePointToTarget(/* ... */);
+  finalPos = snapResult.position;
   
-  // Draw snap indicator if snapped to a target
-  if (snapResult.snappedToId) {
-    // Draw glowing ring around snap point
-    ctx.beginPath();
-    ctx.arc(snapResult.position.x, snapResult.position.y, 12 / viewState.zoom, 0, Math.PI * 2);
-    ctx.strokeStyle = cableType === 'dc' ? '#ef4444' : '#22c55e'; // Red for DC, Green for AC
-    ctx.lineWidth = 3 / viewState.zoom;
-    ctx.stroke();
+  // Check if this is a valid endpoint for auto-completion
+  const isValidEndpoint = (() => {
+    if (currentDrawing.length === 0) return false; // Need at least one point first
     
-    // Inner filled circle
-    ctx.beginPath();
-    ctx.arc(snapResult.position.x, snapResult.position.y, 6 / viewState.zoom, 0, Math.PI * 2);
-    ctx.fillStyle = cableType === 'dc' ? 'rgba(239, 68, 68, 0.6)' : 'rgba(34, 197, 94, 0.6)';
-    ctx.fill();
-  } else {
-    // Draw crosshair at current position when not snapping
-    const crossSize = 8 / viewState.zoom;
-    ctx.strokeStyle = cableType === 'dc' ? '#ef4444' : '#22c55e';
-    ctx.lineWidth = 1.5 / viewState.zoom;
+    if (cableType === 'ac' && snapResult.snappedToType === 'equipment') {
+      // AC cables auto-complete when snapping to Main Board
+      return snapResult.equipmentType === EquipmentType.MAIN_BOARD;
+    }
+    if (cableType === 'dc' && snapResult.snappedToType === 'equipment') {
+      // DC cables auto-complete when snapping to Inverter
+      return snapResult.equipmentType === EquipmentType.INVERTER;
+    }
+    return false;
+  })();
+  
+  if (isValidEndpoint) {
+    // Add the final point and complete
+    const snappedPos = (isShiftHeld && currentDrawing.length > 0)
+      ? snapTo45Degrees(currentDrawing[currentDrawing.length - 1], finalPos)
+      : finalPos;
     
-    // Horizontal line
-    ctx.beginPath();
-    ctx.moveTo(mouseWorldPos.x - crossSize, mouseWorldPos.y);
-    ctx.lineTo(mouseWorldPos.x + crossSize, mouseWorldPos.y);
-    ctx.stroke();
-    
-    // Vertical line
-    ctx.beginPath();
-    ctx.moveTo(mouseWorldPos.x, mouseWorldPos.y - crossSize);
-    ctx.lineTo(mouseWorldPos.x, mouseWorldPos.y + crossSize);
-    ctx.stroke();
+    // Complete the cable immediately
+    const newLine: SupplyLine = {
+      id: `line-${Date.now()}`,
+      name: `${cableType === 'dc' ? 'DC' : 'AC'} Cable`,
+      type: cableType,
+      points: [...currentDrawing, snappedPos],
+      length: calculateLineLength([...currentDrawing, snappedPos], scaleInfo.ratio),
+    };
+    setLines(prev => [...prev, newLine]);
+    setCurrentDrawing([]);
+    setPreviewPoint(null);
+    return; // Don't add another point
   }
 }
 ```
 
-**C. Update useEffect dependency array**
-
-Ensure the drawing effect re-runs when mouseWorldPos changes for cable tools by confirming mouseWorldPos is in the dependency array (it should already be there).
-
 ---
 
-## Visual Design
+## Expected Behavior After Change
 
-| State | Visual Feedback |
-|-------|-----------------|
-| DC Cable - Hovering near Inverter/PV Array | Red glowing ring + filled circle on snap target |
-| DC Cable - Not near valid target | Red crosshair at cursor position |
-| AC Cable - Hovering near Inverter/Main Board | Green glowing ring + filled circle on snap target |
-| AC Cable - Not near valid target | Green crosshair at cursor position |
+| Cable Type | Start Point | Waypoints | End Point | Behavior |
+|------------|-------------|-----------|-----------|----------|
+| AC Cable | Inverter | Any clicks | Main Board | Auto-completes on Main Board click |
+| DC Cable | PV Array | Any clicks | Inverter | Auto-completes on Inverter click |
 
-Color rationale:
-- **Red (DC)**: Matches typical DC cable color coding in electrical systems
-- **Green (AC)**: Matches typical AC cable color coding
+Users can still:
+- Add intermediate waypoints by clicking on empty areas (not snapping to endpoints)
+- Cancel with ESC key
+- Manually complete with Enter or double-click
 
 ---
 
@@ -122,13 +107,9 @@ Color rationale:
 
 | File | Changes |
 |------|---------|
-| `Canvas.tsx` | Add mouse tracking for cable tools; Add ghost preview rendering |
+| `geometry.ts` | Return `equipmentType` from `snapCablePointToTarget` |
+| `Canvas.tsx` | Add auto-completion logic when snapping to valid endpoint |
 
 ## Summary
 
-This change adds visual feedback for cable placement, showing:
-1. A colored crosshair at the cursor position when not snapping
-2. A glowing ring indicator when hovering over valid snap targets
-3. Clear color-coding (red for DC, green for AC) to differentiate cable types
-
-Users will now be able to see exactly where their cable points will be placed and confirm that snapping is working before clicking.
+This change adds intelligent auto-completion for cable placement: AC cables finish when reaching a Main Board, DC cables finish when reaching an Inverter. This creates a natural "connect the dots" workflow that matches user expectations for electrical cabling.
