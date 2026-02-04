@@ -117,21 +117,10 @@ export function ObjectConfigModal({
   }, [objectType, plantSetupConfig]);
 
   // Determine if properties are editable for this object type
+  // Properties = things set when placing on canvas (to be defined by user)
   const hasEditableProperties = useMemo(() => {
-    switch (objectType) {
-      case 'walkway':
-      case 'cableTray':
-        return true; // Can edit length
-      case 'inverter':
-        return true; // Can edit name
-      case 'pvArray':
-        return true; // Can edit rows, columns, orientation
-      case 'dcCable':
-      case 'acCable':
-        return false; // No editable properties (length is calculated)
-      default:
-        return false;
-    }
+    // For now, no properties are editable until user defines them
+    return false;
   }, [objectType]);
 
   // Get display label for object type
@@ -150,7 +139,7 @@ export function ObjectConfigModal({
   const handleApply = () => {
     const properties: ObjectProperties = {};
     
-    // Collect properties based on object type
+    // Collect configuration-related properties based on object type
     if (objectType === 'walkway' || objectType === 'cableTray') {
       if (length !== undefined) properties.length = length;
     } else if (objectType === 'inverter') {
@@ -166,19 +155,21 @@ export function ObjectConfigModal({
   };
 
   const renderPropertiesContent = () => {
-    if (!hasEditableProperties) {
-      return (
-        <div className="text-sm text-muted-foreground italic py-2">
-          No editable properties for this object type
-        </div>
-      );
-    }
+    // Properties section - for canvas placement properties (to be defined)
+    return (
+      <div className="text-sm text-muted-foreground italic py-2">
+        No editable properties for this object type
+      </div>
+    );
+  };
 
+  // Render configuration-specific inputs (length, name, rows/columns, etc.)
+  const renderConfigurationInputs = () => {
     switch (objectType) {
       case 'walkway':
       case 'cableTray':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3 mt-3">
             <div className="space-y-2">
               <Label htmlFor="length">Length (m)</Label>
               <Input
@@ -195,7 +186,7 @@ export function ObjectConfigModal({
         );
       case 'inverter':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3 mt-3">
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
               <Input
@@ -210,7 +201,7 @@ export function ObjectConfigModal({
         );
       case 'pvArray':
         return (
-          <div className="space-y-3">
+          <div className="space-y-3 mt-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="rows">Rows</Label>
@@ -323,26 +314,31 @@ export function ObjectConfigModal({
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-3 px-1">
-              <Select
-                value={selectedConfigId || ''}
-                onValueChange={setSelectedConfigId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select configuration..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableConfigs.map((config) => (
-                    <SelectItem key={config.id} value={config.id}>
-                      <div>
-                        <div className="font-medium">{config.name}</div>
-                        {config.subtitle && (
-                          <div className="text-xs text-muted-foreground">{config.subtitle}</div>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <Label>Template</Label>
+                <Select
+                  value={selectedConfigId || ''}
+                  onValueChange={setSelectedConfigId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select configuration..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableConfigs.map((config) => (
+                      <SelectItem key={config.id} value={config.id}>
+                        <div>
+                          <div className="font-medium">{config.name}</div>
+                          {config.subtitle && (
+                            <div className="text-xs text-muted-foreground">{config.subtitle}</div>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {/* Additional configuration inputs based on object type */}
+              {renderConfigurationInputs()}
             </CollapsibleContent>
           </Collapsible>
         </div>
