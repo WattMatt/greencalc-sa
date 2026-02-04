@@ -670,12 +670,21 @@ export const renderAllMarkups = (
     }
   }
 
-  // Draw equipment (inverters etc.) - filter by per-item visibility
-  if (layerVisibility.equipment) {
-    for (const item of equipment) {
-      if (!isItemVisible(item.id)) continue;
-      drawEquipmentIcon(ctx, item, isItemSelected(item.id), zoom, scaleInfo, plantSetupConfig);
+  // Draw equipment - filter by equipment type, layer visibility, and per-item visibility
+  for (const item of equipment) {
+    if (!isItemVisible(item.id)) continue;
+    
+    // Check specific layer visibility based on equipment type
+    if (item.type === EquipmentType.MAIN_BOARD) {
+      if (layerVisibility.mainBoards === false) continue;
+    } else if (item.type === EquipmentType.INVERTER) {
+      if (layerVisibility.inverters === false) continue;
+    } else {
+      // Other equipment (DC Combiner, AC Disconnect, Sub Board) use generic 'equipment' layer
+      if (!layerVisibility.equipment) continue;
     }
+    
+    drawEquipmentIcon(ctx, item, isItemSelected(item.id), zoom, scaleInfo, plantSetupConfig);
   }
 
   // Draw scale indicator
