@@ -888,3 +888,114 @@ export const applyPositionDelta = (position: Point, delta: Point): Point => ({
   x: position.x + delta.x,
   y: position.y + delta.y,
 });
+
+/**
+ * Cable snap threshold in pixels (screen space) for cable endpoint snapping
+ */
+const CABLE_SNAP_THRESHOLD_PX = 20;
+
+/**
+ * Valid snap target types for each cable type
+ * DC Cable: Inverters + Solar Modules (PV Arrays)
+ * AC Cable: Inverters + Main Boards
+ */
+export type CableType = 'dc' | 'ac';
+
+interface CableSnapTarget {
+  id: string;
+  position: Point;
+  type: 'equipment' | 'pvArray';
+  equipmentType?: EquipmentType;
+}
+
+/**
+ * Find the nearest valid snap target for a cable endpoint based on cable type.
+ * DC cables snap to: Inverters, Solar Modules (PV Arrays)
+ * AC cables snap to: Inverters, Main Boards
+ * 
+ * @param mousePos - Current mouse position in world coordinates
+ * @param cableType - 'dc' or 'ac'
+ * @param equipment - Array of equipment items
+ * @param pvArrays - Array of PV arrays
+ * @param scaleInfo - Scale info for dimension calculations
+ * @param viewState - Current view state (for zoom consideration)
+ * @param plantSetupConfig - Plant setup config for custom dimensions
+ * @returns Snapped position and target ID, or original position if no snap
+ */
+export const snapCablePointToTarget = (
+  mousePos: Point,
+  cableType: CableType,
+  equipment: EquipmentItem[],
+  pvArrays: PVArrayItem[],
+  pvPanelConfig: PVPanelConfig | null,
+  roofMasks: RoofMask[],
+  scaleInfo: ScaleInfo,
+  viewState: { zoom: number },
+  plantSetupConfig?: PlantSetupConfig
+): { position: Point; snappedToId: string | null; snappedToType: 'equipment' | 'pvArray' | null } => {
+  if (!scaleInfo.ratio) {
+    return { position: mousePos, snappedToId: null, snappedToType: null };
+  }
+
+  // Collect valid snap targets based on cable type
+  const targets: CableSnapTarget[] = [];
+
+  // For DC cables: Inverters + PV Arrays
+  // For AC cables: Inverters + Main Boards
+  for (const eq of equipment) {
+    const isValidDCTarget = cableType === 'dc' && eq.type === EquipmentType.INVERTER;
+    const isValidACTarget = cableType === 'ac' && (
+      eq.type === EquipmentType.INVERTER || 
+      eq.type === EquipmentType.MAIN_BOARD
+    );
+    
+    if (isValidDCTarget || isValidACTarget) {
+      targets.push({
+        id: eq.id,
+        position: eq.position,
+        type: 'equipment',
+        equipmentType: eq.type,
+      });
+    }
+  }
+
+  // DC cables can also snap to PV Arrays (solar modules)
+  if (cableType === 'dc' && pvPanelConfig) {
+    for (const arr of pvArrays) {
+      targets.push({
+        id: arr.id,
+        position: arr.position,
+        type: 'pvArray',
+      });
+    }
+  }
+
+  if (targets.length === 0) {
+    return { position: mousePos, snappedToId: null, snappedToType: null };
+  }
+
+  // Adjust snap threshold based on zoom (larger threshold when zoomed out)
+  const adjustedThreshold = CABLE_SNAP_THRESHOLD_PX / viewState.zoom;
+
+  let closestTarget: CableSnapTarget | null = null;
+  let closestDist = Infinity;
+
+  for (const target of targets) {
+    const dist = distance(mousePos, target.position);
+    
+    if (dist < adjustedThreshold && dist < closestDist) {
+      closestDist = dist;
+      closestTarget = target;
+    }
+  }
+
+  if (closestTarget) {
+    return {
+      position: closestTarget.position,
+      snappedToId: closestTarget.id,
+      snappedToType: closestTarget.type,
+    };
+  }
+
+  return { position: mousePos, snappedToId: null, snappedToType: null };
+};
