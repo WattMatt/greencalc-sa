@@ -1090,6 +1090,40 @@ export function Canvas({
           plantSetupConfig
         );
         finalPos = snapResult.position;
+        
+        // Check if this is a valid endpoint for auto-completion
+        // AC cables auto-complete when snapping to Main Board
+        // DC cables auto-complete when snapping to Inverter
+        const isValidEndpoint = (() => {
+          if (currentDrawing.length === 0) return false; // Need at least one point first
+          
+          if (cableType === 'ac' && snapResult.snappedToType === 'equipment') {
+            return snapResult.equipmentType === EquipmentType.MAIN_BOARD;
+          }
+          if (cableType === 'dc' && snapResult.snappedToType === 'equipment') {
+            return snapResult.equipmentType === EquipmentType.INVERTER;
+          }
+          return false;
+        })();
+        
+        if (isValidEndpoint) {
+          // Add the final point and complete the cable immediately
+          const snappedPos = (isShiftHeld && currentDrawing.length > 0)
+            ? snapTo45Degrees(currentDrawing[currentDrawing.length - 1], finalPos)
+            : finalPos;
+          
+          const newLine: SupplyLine = {
+            id: `line-${Date.now()}`,
+            name: `${cableType === 'dc' ? 'DC' : 'AC'} Cable`,
+            type: cableType,
+            points: [...currentDrawing, snappedPos],
+            length: calculateLineLength([...currentDrawing, snappedPos], scaleInfo.ratio),
+          };
+          setLines(prev => [...prev, newLine]);
+          setCurrentDrawing([]);
+          setPreviewPoint(null);
+          return;
+        }
       }
       
       // Apply 45-degree snapping if Shift is held and we have a previous point
