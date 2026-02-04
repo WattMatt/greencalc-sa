@@ -350,6 +350,8 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [selectedInverterId, setSelectedInverterId] = useState<string | null>(null);
   const [selectedWalkwayId, setSelectedWalkwayId] = useState<string | null>(null);
   const [selectedCableTrayId, setSelectedCableTrayId] = useState<string | null>(null);
+  const [selectedDcCableId, setSelectedDcCableId] = useState<string | null>(null);
+  const [selectedAcCableId, setSelectedAcCableId] = useState<string | null>(null);
 
   // Tools that require the placement options modal
   const PLACEMENT_TOOLS = [
@@ -369,6 +371,20 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   // Get the selected or default cable tray template  
   const getSelectedCableTray = () => {
     return plantSetupConfig.cableTrays.find(c => c.id === selectedCableTrayId) || plantSetupConfig.cableTrays[0];
+  };
+
+  // Get the selected or default DC cable template
+  const getSelectedDcCable = () => {
+    return plantSetupConfig.dcCables?.find(c => c.id === selectedDcCableId) 
+      || plantSetupConfig.dcCables?.find(c => c.isDefault) 
+      || plantSetupConfig.dcCables?.[0];
+  };
+
+  // Get the selected or default AC cable template
+  const getSelectedAcCable = () => {
+    return plantSetupConfig.acCables?.find(c => c.id === selectedAcCableId) 
+      || plantSetupConfig.acCables?.find(c => c.isDefault) 
+      || plantSetupConfig.acCables?.[0];
   };
 
   // Get placement item name based on pending tool
@@ -2080,6 +2096,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           setSelectedModuleId={setSelectedModuleId}
           selectedInverterId={selectedInverterId}
           setSelectedInverterId={setSelectedInverterId}
+          selectedDcCableId={selectedDcCableId}
+          setSelectedDcCableId={setSelectedDcCableId}
+          selectedAcCableId={selectedAcCableId}
+          setSelectedAcCableId={setSelectedAcCableId}
         />
       )}
       
