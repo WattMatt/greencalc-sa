@@ -1991,17 +1991,19 @@ export function Canvas({
       return;
     }
     
-    // Get all selected object types
+    // Get all selected object types and their config IDs
     const selectedTypes = new Set<ConfigurableObjectType>();
     const selectedIds = Array.from(selectedItemIds);
-    let currentConfigId: string | null = null;
+    const configIdsByType: Record<string, string[]> = {};
     
     for (const id of selectedIds) {
       // Check cables
       const line = lines.find(l => l.id === id);
       if (line) {
-        selectedTypes.add(line.type === 'dc' ? 'dcCable' : 'acCable');
-        if (selectedIds.length === 1) currentConfigId = line.configId || null;
+        const cableType = line.type === 'dc' ? 'dcCable' : 'acCable';
+        selectedTypes.add(cableType);
+        if (!configIdsByType[cableType]) configIdsByType[cableType] = [];
+        if (line.configId) configIdsByType[cableType].push(line.configId);
         continue;
       }
       
@@ -2009,7 +2011,8 @@ export function Canvas({
       const walkway = placedWalkways?.find(w => w.id === id);
       if (walkway) {
         selectedTypes.add('walkway');
-        if (selectedIds.length === 1) currentConfigId = walkway.configId;
+        if (!configIdsByType['walkway']) configIdsByType['walkway'] = [];
+        if (walkway.configId) configIdsByType['walkway'].push(walkway.configId);
         continue;
       }
       
@@ -2017,7 +2020,8 @@ export function Canvas({
       const tray = placedCableTrays?.find(t => t.id === id);
       if (tray) {
         selectedTypes.add('cableTray');
-        if (selectedIds.length === 1) currentConfigId = tray.configId;
+        if (!configIdsByType['cableTray']) configIdsByType['cableTray'] = [];
+        if (tray.configId) configIdsByType['cableTray'].push(tray.configId);
         continue;
       }
       
@@ -2025,7 +2029,8 @@ export function Canvas({
       const eq = equipment.find(e => e.id === id);
       if (eq && eq.type === EquipmentType.INVERTER) {
         selectedTypes.add('inverter');
-        if (selectedIds.length === 1) currentConfigId = eq.configId || null;
+        if (!configIdsByType['inverter']) configIdsByType['inverter'] = [];
+        if (eq.configId) configIdsByType['inverter'].push(eq.configId);
         continue;
       }
       
@@ -2033,14 +2038,24 @@ export function Canvas({
       const arr = pvArrays.find(a => a.id === id);
       if (arr) {
         selectedTypes.add('pvArray');
-        if (selectedIds.length === 1) currentConfigId = arr.moduleConfigId || null;
+        if (!configIdsByType['pvArray']) configIdsByType['pvArray'] = [];
+        if (arr.moduleConfigId) configIdsByType['pvArray'].push(arr.moduleConfigId);
         continue;
       }
     }
     
-    // Only show menu if all selected items are of the same type
-    if (selectedTypes.size === 1) {
+    // Show menu if we have configurable objects selected
+    if (selectedTypes.size >= 1) {
       const objectType = Array.from(selectedTypes)[0];
+      // For single type, determine if all have same config
+      let currentConfigId: string | null = null;
+      if (selectedTypes.size === 1 && configIdsByType[objectType]?.length > 0) {
+        const uniqueConfigs = [...new Set(configIdsByType[objectType])];
+        if (uniqueConfigs.length === 1) {
+          currentConfigId = uniqueConfigs[0];
+        }
+        // If mixed configs, leave as null (user will see placeholder)
+      }
       onContextMenuOpen(objectType, selectedIds, currentConfigId);
     }
   };

@@ -1604,10 +1604,56 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     setConfigModalObjectType(objectType);
     setConfigModalObjectIds(objectIds);
     
-    // Extract current properties and configId from first selected object (for single selection)
+    // Extract current properties from first selected object (for single selection)
     let currentProps: import('./components/ObjectConfigModal').ObjectProperties | undefined;
     let resolvedConfigId = passedConfigId;
     
+    // For multi-selection, check if all have the same configId
+    if (objectIds.length > 1 && !passedConfigId) {
+      const configIds: (string | undefined)[] = [];
+      
+      switch (objectType) {
+        case 'walkway':
+          objectIds.forEach(id => {
+            const w = placedWalkways.find(w => w.id === id);
+            if (w) configIds.push(w.configId);
+          });
+          break;
+        case 'cableTray':
+          objectIds.forEach(id => {
+            const t = placedCableTrays.find(t => t.id === id);
+            if (t) configIds.push(t.configId);
+          });
+          break;
+        case 'inverter':
+          objectIds.forEach(id => {
+            const eq = equipment.find(e => e.id === id);
+            if (eq) configIds.push(eq.configId);
+          });
+          break;
+        case 'pvArray':
+          objectIds.forEach(id => {
+            const arr = pvArrays.find(a => a.id === id);
+            if (arr) configIds.push(arr.moduleConfigId);
+          });
+          break;
+        case 'dcCable':
+        case 'acCable':
+          objectIds.forEach(id => {
+            const line = lines.find(l => l.id === id);
+            if (line) configIds.push(line.configId);
+          });
+          break;
+      }
+      
+      // If all have the same configId, use it
+      const uniqueConfigs = [...new Set(configIds.filter(c => c !== undefined))];
+      if (uniqueConfigs.length === 1) {
+        resolvedConfigId = uniqueConfigs[0] || null;
+      }
+    }
+    
+    // For single selection, extract properties
     if (objectIds.length === 1) {
       switch (objectType) {
         case 'walkway': {
