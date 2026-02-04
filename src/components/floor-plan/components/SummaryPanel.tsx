@@ -1217,6 +1217,21 @@ export function SummaryPanel({
                                         </span>
                                         <span>{cableLength.toFixed(1)} m</span>
                                       </button>
+                                      {onDeleteItem && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            onDeleteItem(cable.id);
+                                          }}
+                                          title="Delete DC cable"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -1395,6 +1410,21 @@ export function SummaryPanel({
                                         </span>
                                         <span>{cableLength.toFixed(1)} m</span>
                                       </button>
+                                      {onDeleteItem && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            onDeleteItem(cable.id);
+                                          }}
+                                          title="Delete AC cable"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      )}
                                     </div>
                                   );
                                 })}
