@@ -1,201 +1,124 @@
 
-
-# Plan: Fix Show/Hide Logic to Work Independently for Each Object Type
+# Plan: Vertically Align All Eye Icons Across All Hierarchy Levels
 
 ## Problem Summary
 
-The current visibility implementation has several issues:
+Looking at the screenshot, the eye icons are not vertically aligned:
+- **Category level** (Walkways): Eye icon is at position X
+- **Sub-group level** (Onvlee): Eye icon is indented by `pl-2`, pushing it right
+- **Individual item level** (Walkway 1, 2, 3...): Eye icon is further indented by `pl-6`, pushing it even more right
 
-1. **Main Boards and Inverters are tied together**: Both sections use `layerVisibility.equipment` - when you hide Main Boards, it affects Inverters (and vice versa) because they share the same layer visibility key.
+This creates a staggered appearance where eye icons don't line up in a single vertical column.
 
-2. **Per-item visibility missing for individual cables**: The Cabling section has per-thickness visibility and category-level visibility, but individual cables (DC Cable 1, DC Cable 2, etc.) don't have their own eye icons for per-item hiding.
+## Solution Approach
 
-3. **Inconsistent structure**: Some object types have proper per-item visibility, while others don't.
+Use a **fixed-width left column** for all eye icons by:
+1. Removing the indentation from where eye icons are placed
+2. Using a consistent left padding/margin structure
+3. Applying indentation only to the **content** after the eye icon, not the eye icon itself
 
-## Root Cause Analysis
-
-Looking at the code:
-
-**SummaryPanel.tsx lines 737-744 (Main Boards section)**:
-```typescript
-<CollapsibleSection
-  ...
-  isVisible={layerVisibility?.equipment}  // Uses 'equipment' layer
-  onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('equipment') : undefined}
+### Layout Structure (Before)
+```
+|pl-0 [Eye] [Icon] Category...
+|pl-2    [Eye] Sub-group...
+|pl-6       [Eye] Item...
 ```
 
-**SummaryPanel.tsx lines 914-920 (Inverters section)**:
-```typescript
-<CollapsibleSection
-  ...
-  isVisible={layerVisibility?.equipment}  // SAME 'equipment' layer - this is the bug!
-  onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('equipment') : undefined}
+### Layout Structure (After)
+```
+|[Eye] pl-0 [Icon] Category...
+|[Eye] pl-2    Sub-group...
+|[Eye] pl-4       Item...
 ```
 
-Both Main Boards AND Inverters toggle the exact same `equipment` layer visibility, causing them to be tied together.
+All eye icons will be in the same column (left-aligned), with progressive indentation applied to the content only.
 
-Additionally, individual cables in the Cabling section don't have per-item eye icons like other object types do.
+## Implementation Details
 
-## Solution
+### 1. Update `CollapsibleSection` Component (Category Headers)
 
-### Step 1: Add Separate Layer Visibility for Main Boards vs Inverters
+**File:** `src/components/floor-plan/components/SummaryPanel.tsx` (lines 94-144)
 
-**File: `src/components/floor-plan/types.ts`**
-
-Extend `LayerVisibility` interface to separate equipment types:
+Change the structure so the eye icon has no left margin offset, and content starts at a consistent position:
 ```typescript
-export interface LayerVisibility {
-  roofMasks: boolean;
-  pvArrays: boolean;
-  equipment: boolean;      // Keep for backward compatibility / DC Combiners / AC Disconnects
-  mainBoards: boolean;     // NEW: Separate visibility for main boards
-  inverters: boolean;      // NEW: Separate visibility for inverters
-  walkways: boolean;
-  cableTrays: boolean;
-  cables: boolean;
-}
-
-export const defaultLayerVisibility: LayerVisibility = {
-  roofMasks: true,
-  pvArrays: true,
-  equipment: true,
-  mainBoards: true,     // NEW
-  inverters: true,      // NEW
-  walkways: true,
-  cableTrays: true,
-  cables: true,
-};
-```
-
-### Step 2: Update FloorPlanMarkup State Handling
-
-**File: `src/components/floor-plan/FloorPlanMarkup.tsx`**
-
-The existing `handleToggleLayerVisibility` callback already works generically with any key of `LayerVisibility`, so no changes needed to the handler itself - it will automatically support the new keys.
-
-### Step 3: Update SummaryPanel to Use Separate Layer Keys
-
-**File: `src/components/floor-plan/components/SummaryPanel.tsx`**
-
-**Main Boards section** - Use `mainBoards` layer:
-```typescript
-<CollapsibleSection
-  icon={<LayoutGrid className="h-4 w-4 text-purple-500" />}
-  title="Main Boards"
-  summary={...}
-  isVisible={layerVisibility?.mainBoards}  // CHANGED from 'equipment'
-  onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('mainBoards') : undefined}
-```
-
-**Inverters section** - Use `inverters` layer:
-```typescript
-<CollapsibleSection
-  icon={<Zap className="h-4 w-4 text-green-500" />}
-  title="Inverters"
-  summary={...}
-  isVisible={layerVisibility?.inverters}  // CHANGED from 'equipment'
-  onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('inverters') : undefined}
-```
-
-### Step 4: Update Canvas Rendering to Respect Separate Equipment Layers
-
-**File: `src/components/floor-plan/utils/drawing.ts`**
-
-Update the equipment rendering logic to check the appropriate layer visibility based on equipment type:
-
-```typescript
-// Draw equipment - filter by equipment type and layer visibility
-for (const item of equipment) {
-  if (!isItemVisible(item.id)) continue;
-  
-  // Check specific layer visibility based on equipment type
-  if (item.type === EquipmentType.MAIN_BOARD) {
-    if (layerVisibility.mainBoards === false) continue;
-  } else if (item.type === EquipmentType.INVERTER) {
-    if (layerVisibility.inverters === false) continue;
-  } else {
-    // Other equipment (DC Combiner, AC Disconnect) use generic 'equipment' layer
-    if (!layerVisibility.equipment) continue;
-  }
-  
-  drawEquipmentIcon(ctx, item, isItemSelected(item.id), zoom, scaleInfo, plantSetupConfig);
-}
-```
-
-### Step 5: Update Canvas Hit-Testing for Separate Equipment Layers
-
-**File: `src/components/floor-plan/components/Canvas.tsx`**
-
-Update the hit-testing and marquee selection logic to respect the new separate layer visibility for Main Boards and Inverters:
-
-```typescript
-// In hit-testing:
-const isMainBoardVisible = layerVisibility?.mainBoards !== false;
-const isInverterVisible = layerVisibility?.inverters !== false;
-
-// When checking equipment hits:
-if (e.type === EquipmentType.MAIN_BOARD && !isMainBoardVisible) continue;
-if (e.type === EquipmentType.INVERTER && !isInverterVisible) continue;
-```
-
-### Step 6: Add Per-Item Eye Icons to Individual Cables
-
-**File: `src/components/floor-plan/components/SummaryPanel.tsx`**
-
-For each individual cable row (both DC and AC), add the eye icon:
-
-```typescript
-// Inside the cablesInGroup.map() for DC cables:
-<div className="flex items-center gap-1 p-2 rounded w-full text-left transition-colors ...">
-  {/* Per-item visibility toggle - NEW */}
-  {onToggleItemVisibility && (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-5 w-5 shrink-0 -ml-0.5"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleItemVisibility(cable.id);
-          }}
-        >
-          {itemVisibility?.[cable.id] !== false ? (
-            <Eye className="h-3 w-3 text-muted-foreground" />
-          ) : (
-            <EyeOff className="h-3 w-3 text-muted-foreground/50" />
-          )}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="left">
-        {itemVisibility?.[cable.id] !== false ? 'Hide' : 'Show'}
-      </TooltipContent>
-    </Tooltip>
+<div className="flex items-center w-full">
+  {/* Eye icon - fixed column, no offset */}
+  {onToggleVisibility !== undefined && (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-6 w-6 shrink-0"  // Remove -ml-1
+      ...
+    />
   )}
-  <button className="flex-1 text-left" onClick={handleClick}>
-    <span>DC Cable {i + 1}</span>
-  </button>
-  <span>{cableLength.toFixed(1)} m</span>
-</div>
+  {/* Content with icon, title, summary, chevron */}
+  <CollapsibleTrigger className="flex items-center gap-2 flex-1 ...">
 ```
 
-Same pattern applies to AC cables.
+### 2. Update `GroupedMaterialSection` Component (Category Headers for Walkways/Cable Trays)
+
+**File:** `src/components/floor-plan/components/SummaryPanel.tsx` (lines 218-263)
+
+Same pattern - remove `-ml-1` from eye button, keep content as-is.
+
+### 3. Update Sub-group Level (Within GroupedMaterialSection)
+
+**File:** `src/components/floor-plan/components/SummaryPanel.tsx` (lines 268-317)
+
+Currently the sub-group is wrapped in `pl-2`. Change structure:
+```typescript
+<div className="space-y-1"> {/* Remove pl-2 from here */}
+  {groupKeys.map((key) => {
+    return (
+      <Collapsible key={key}>
+        <div className="flex items-center gap-1 w-full">
+          {/* Eye icon at fixed position (same as parent) */}
+          <Button className="h-5 w-5 shrink-0" ... />
+          {/* Content wrapper with indentation */}
+          <CollapsibleTrigger className="flex items-center gap-2 flex-1 pl-2 ...">
+```
+
+### 4. Update Individual Item Level (Walkways, Cable Trays)
+
+**File:** `src/components/floor-plan/components/SummaryPanel.tsx` (lines 318-386)
+
+Currently items are wrapped in `CollapsibleContent className="pt-1 pl-6"`. Move indentation inside:
+```typescript
+<CollapsibleContent className="pt-1 space-y-1"> {/* Remove pl-6 */}
+  {group.items.map((item, itemIndex) => (
+    <div className="flex items-center gap-1 ...">
+      {/* Eye icon - same column position */}
+      <Button className="h-5 w-5 shrink-0" ... />
+      {/* Content with indentation */}
+      <button className="flex-1 text-left pl-4 ...">
+```
+
+### 5. Update Other Sections to Match
+
+Apply the same pattern to:
+- **Roof Areas** section (lines 646-733)
+- **Main Boards** section (lines 746-824)
+- **Modules (PV Arrays)** section (lines 839-911)
+- **Inverters** section (lines 925-998)
+- **Cabling DC/AC** section (lines 1050-1400+)
+
+### CSS Approach Summary
+
+| Level | Eye Icon Class | Content Padding |
+|-------|----------------|-----------------|
+| Category Header | `h-6 w-6 shrink-0` (no ml offset) | `pl-0` |
+| Sub-group | `h-5 w-5 shrink-0` | `pl-2` (on content, not wrapper) |
+| Individual Item | `h-5 w-5 shrink-0` | `pl-4` (on content, not wrapper) |
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/floor-plan/types.ts` | Add `mainBoards` and `inverters` to `LayerVisibility` interface and defaults |
-| `src/components/floor-plan/components/SummaryPanel.tsx` | 1. Update Main Boards section to use `mainBoards` layer<br>2. Update Inverters section to use `inverters` layer<br>3. Add per-item eye icons to individual DC/AC cables |
-| `src/components/floor-plan/utils/drawing.ts` | Update equipment rendering to check specific layer visibility per equipment type |
-| `src/components/floor-plan/components/Canvas.tsx` | Update hit-testing/selection to respect separate Main Board and Inverter layer visibility |
+| `src/components/floor-plan/components/SummaryPanel.tsx` | Restructure all collapsible sections to place eye icons in a fixed left column, with indentation applied only to content |
 
-## Expected Behavior After Implementation
+## Expected Result
 
-1. **Main Boards visibility** - Toggling the Main Boards section eye icon will only hide/show Main Boards, not Inverters
-2. **Inverters visibility** - Toggling the Inverters section eye icon will only hide/show Inverters, not Main Boards
-3. **Other equipment** (DC Combiner, AC Disconnect) - Continue using the generic `equipment` layer
-4. **Individual cables** - Each DC Cable and AC Cable will have its own eye icon to hide/show that specific cable
-5. **All per-item visibility** - Every object in every dropdown can be individually hidden using its own eye icon
-6. **Layer hierarchy preserved** - Category-level visibility still cascades to items, and per-item visibility works independently within visible categories
-
+After implementation:
+1. All eye icons (category, sub-group, item level) will be vertically aligned in a single left column
+2. Progressive indentation will still show hierarchy, but applied to the content text/icons only
+3. The overall visual structure remains familiar, just with cleaner alignment
