@@ -291,3 +291,7 @@ export const defaultLayerVisibility: LayerVisibility = {
   cableTrays: true,
   cables: true,
 };
+
+// Per-item visibility - tracks individual items that are hidden
+// When an item's ID maps to false, it's hidden; true or undefined means visible
+export type ItemVisibility = Record<string, boolean>;
