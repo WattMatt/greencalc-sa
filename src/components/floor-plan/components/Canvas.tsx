@@ -1091,19 +1091,27 @@ export function Canvas({
         );
         finalPos = snapResult.position;
         
-        // Check if this is a valid endpoint for auto-completion
-        // AC cables auto-complete when snapping to Main Board
-        // DC cables auto-complete when snapping to Inverter
+        // Auto-complete when clicking a valid snapped endpoint (after the first point)
+        // AC: Inverter or Main Board
+        // DC: Inverter or PV Array
         const isValidEndpoint = (() => {
           if (currentDrawing.length === 0) return false; // Need at least one point first
-          
-          if (cableType === 'ac' && snapResult.snappedToType === 'equipment') {
-            return snapResult.equipmentType === EquipmentType.MAIN_BOARD;
+          if (!snapResult.snappedToId || !snapResult.snappedToType) return false;
+
+          if (cableType === 'ac') {
+            return (
+              snapResult.snappedToType === 'equipment' &&
+              (snapResult.equipmentType === EquipmentType.INVERTER ||
+                snapResult.equipmentType === EquipmentType.MAIN_BOARD)
+            );
           }
-          if (cableType === 'dc' && snapResult.snappedToType === 'equipment') {
-            return snapResult.equipmentType === EquipmentType.INVERTER;
-          }
-          return false;
+
+          // dc
+          return (
+            (snapResult.snappedToType === 'equipment' &&
+              snapResult.equipmentType === EquipmentType.INVERTER) ||
+            snapResult.snappedToType === 'pvArray'
+          );
         })();
         
         if (isValidEndpoint) {
