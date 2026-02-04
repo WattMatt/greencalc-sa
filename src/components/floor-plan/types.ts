@@ -41,6 +41,7 @@ export interface PVArrayItem {
   rotation: number; // in degrees
   roofMaskId?: string;
   minSpacing?: number; // meters - spacing used when placing this array
+  moduleConfigId?: string; // Reference to SolarModuleConfig template
 }
 
 export interface SupplyLine {
@@ -52,6 +53,8 @@ export interface SupplyLine {
   from?: string;
   to?: string;
   thickness?: number; // Cable thickness in mm (e.g., 6, 10, 16, 25)
+  configId?: string; // Reference to DCCableConfig or ACCableConfig template
+  material?: CableMaterial; // Cable material (copper or aluminum)
 }
 
 export enum EquipmentType {
@@ -68,6 +71,7 @@ export interface EquipmentItem {
   position: Point;
   rotation: number;
   name?: string;
+  configId?: string; // Reference to InverterLayoutConfig (for Inverters)
 }
 
 export enum Tool {
