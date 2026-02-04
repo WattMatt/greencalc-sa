@@ -932,7 +932,7 @@ export const snapCablePointToTarget = (
   scaleInfo: ScaleInfo,
   viewState: { zoom: number },
   plantSetupConfig?: PlantSetupConfig
-): { position: Point; snappedToId: string | null; snappedToType: 'equipment' | 'pvArray' | null } => {
+): { position: Point; snappedToId: string | null; snappedToType: 'equipment' | 'pvArray' | null; equipmentType?: EquipmentType } => {
   if (!scaleInfo.ratio) {
     return { position: mousePos, snappedToId: null, snappedToType: null };
   }
@@ -994,6 +994,7 @@ export const snapCablePointToTarget = (
       position: closestTarget.position,
       snappedToId: closestTarget.id,
       snappedToType: closestTarget.type,
+      equipmentType: closestTarget.equipmentType,
     };
   }
 
