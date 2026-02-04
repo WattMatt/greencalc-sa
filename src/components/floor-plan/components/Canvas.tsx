@@ -595,7 +595,8 @@ export function Canvas({
         roofMasks,
         scaleInfo,
         viewState,
-        plantSetupConfig
+        plantSetupConfig,
+        placedCableTrays
       );
       
       // Draw snap indicator if snapped to a target
@@ -1157,7 +1158,8 @@ export function Canvas({
           roofMasks,
           scaleInfo,
           viewState,
-          plantSetupConfig
+          plantSetupConfig,
+          placedCableTrays
         );
         finalPos = snapResult.position;
         
@@ -1702,7 +1704,8 @@ export function Canvas({
           roofMasks,
           scaleInfo,
           viewState,
-          plantSetupConfig
+          plantSetupConfig,
+          placedCableTrays
         );
         previewPos = snapResult.position;
       }

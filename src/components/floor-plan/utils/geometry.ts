@@ -1,4 +1,4 @@
-import { Point, PVArrayItem, PVPanelConfig, RoofMask, ScaleInfo, EquipmentType, EquipmentItem, PlantSetupConfig } from '../types';
+import { Point, PVArrayItem, PVPanelConfig, RoofMask, ScaleInfo, EquipmentType, EquipmentItem, PlantSetupConfig, PlacedCableTray, CableTrayType } from '../types';
 
 /**
  * Proximity threshold in meters - determines when snapping activates.
@@ -945,9 +945,10 @@ export type CableType = 'dc' | 'ac';
 interface CableSnapTarget {
   id: string;
   position: Point;
-  type: 'equipment' | 'pvArray';
+  type: 'equipment' | 'pvArray' | 'cableTray';
   equipmentType?: EquipmentType;
   arrayId?: string; // Parent PV array ID for individual module snapping
+  trayId?: string; // Cable tray ID for tray snapping
 }
 
 /**
@@ -1000,17 +1001,61 @@ export const getIndividualModulePositions = (
 };
 
 /**
+ * Get snap points along a cable tray's centerline.
+ * Returns endpoints and center of the tray.
+ */
+export const getCableTraySnapPoints = (
+  tray: PlacedCableTray,
+  scaleInfo: ScaleInfo
+): Point[] => {
+  if (!scaleInfo.ratio) return [];
+  
+  // Get tray dimensions in pixels
+  const lengthPx = tray.length / scaleInfo.ratio;
+  
+  // Calculate half-length along the tray's orientation
+  const halfLength = lengthPx / 2;
+  
+  // Apply rotation to get world positions
+  const angleRad = tray.rotation * Math.PI / 180;
+  const cosA = Math.cos(angleRad);
+  const sinA = Math.sin(angleRad);
+  
+  // Tray runs along its local X-axis (length direction)
+  // Calculate the two endpoints and center
+  const endpoint1: Point = {
+    x: tray.position.x - halfLength * cosA,
+    y: tray.position.y - halfLength * sinA,
+  };
+  
+  const center: Point = {
+    x: tray.position.x,
+    y: tray.position.y,
+  };
+  
+  const endpoint2: Point = {
+    x: tray.position.x + halfLength * cosA,
+    y: tray.position.y + halfLength * sinA,
+  };
+  
+  return [endpoint1, center, endpoint2];
+};
+
+/**
  * Find the nearest valid snap target for a cable endpoint based on cable type.
- * DC cables snap to: Inverters, Solar Modules (PV Arrays)
- * AC cables snap to: Inverters, Main Boards
+ * DC cables snap to: Inverters, Solar Modules (PV Arrays), DC Cable Trays
+ * AC cables snap to: Inverters, Main Boards, AC Cable Trays
  * 
  * @param mousePos - Current mouse position in world coordinates
  * @param cableType - 'dc' or 'ac'
  * @param equipment - Array of equipment items
  * @param pvArrays - Array of PV arrays
+ * @param pvPanelConfig - PV panel configuration
+ * @param roofMasks - Array of roof masks
  * @param scaleInfo - Scale info for dimension calculations
  * @param viewState - Current view state (for zoom consideration)
  * @param plantSetupConfig - Plant setup config for custom dimensions
+ * @param placedCableTrays - Array of placed cable trays for tray snapping
  * @returns Snapped position and target ID, or original position if no snap
  */
 export const snapCablePointToTarget = (
@@ -1022,8 +1067,9 @@ export const snapCablePointToTarget = (
   roofMasks: RoofMask[],
   scaleInfo: ScaleInfo,
   viewState: { zoom: number },
-  plantSetupConfig?: PlantSetupConfig
-): { position: Point; snappedToId: string | null; snappedToType: 'equipment' | 'pvArray' | null; equipmentType?: EquipmentType } => {
+  plantSetupConfig?: PlantSetupConfig,
+  placedCableTrays?: PlacedCableTray[]
+): { position: Point; snappedToId: string | null; snappedToType: 'equipment' | 'pvArray' | 'cableTray' | null; equipmentType?: EquipmentType } => {
   if (!scaleInfo.ratio) {
     return { position: mousePos, snappedToId: null, snappedToType: null };
   }
@@ -1062,6 +1108,24 @@ export const snapCablePointToTarget = (
           type: 'pvArray',
           arrayId: arr.id, // Keep reference to parent array for auto-complete logic
         });
+      }
+    }
+  }
+
+  // Cable trays of matching type are valid snap targets
+  if (placedCableTrays) {
+    for (const tray of placedCableTrays) {
+      // Only snap if tray type matches cable type
+      if (tray.cableType === cableType) {
+        const traySnapPoints = getCableTraySnapPoints(tray, scaleInfo);
+        for (let i = 0; i < traySnapPoints.length; i++) {
+          targets.push({
+            id: `${tray.id}_snap_${i}`,
+            position: traySnapPoints[i],
+            type: 'cableTray',
+            trayId: tray.id,
+          });
+        }
       }
     }
   }

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useState, useMemo, useEffect } from 'react';
-import { PlantSetupConfig, DCCableConfig, ACCableConfig, WalkwayConfig, CableTrayConfig, InverterLayoutConfig, SolarModuleConfig, PanelOrientation } from '../types';
+import { PlantSetupConfig, DCCableConfig, ACCableConfig, WalkwayConfig, CableTrayConfig, InverterLayoutConfig, SolarModuleConfig, PanelOrientation, CableTrayType } from '../types';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 export type ConfigurableObjectType = 'dcCable' | 'acCable' | 'walkway' | 'cableTray' | 'inverter' | 'pvArray';
@@ -26,6 +26,8 @@ export interface ObjectProperties {
   rows?: number;
   columns?: number;
   orientation?: PanelOrientation;
+  // Cable Tray specific
+  cableType?: CableTrayType;
 }
 
 interface ObjectConfigModalProps {
@@ -59,6 +61,7 @@ export function ObjectConfigModal({
   const [rows, setRows] = useState<number | undefined>(currentProperties?.rows);
   const [columns, setColumns] = useState<number | undefined>(currentProperties?.columns);
   const [orientation, setOrientation] = useState<PanelOrientation | undefined>(currentProperties?.orientation);
+  const [cableType, setCableType] = useState<CableTrayType | undefined>(currentProperties?.cableType);
 
   // Reset state when modal opens with new config
   useEffect(() => {
@@ -69,6 +72,7 @@ export function ObjectConfigModal({
       setRows(currentProperties?.rows);
       setColumns(currentProperties?.columns);
       setOrientation(currentProperties?.orientation);
+      setCableType(currentProperties?.cableType);
     }
   }, [currentConfigId, currentProperties, isOpen]);
 
@@ -119,7 +123,8 @@ export function ObjectConfigModal({
   // Determine if properties are editable for this object type
   // Properties = things set when placing on canvas (to be defined by user)
   const hasEditableProperties = useMemo(() => {
-    // For now, no properties are editable until user defines them
+    // Cable trays have editable cableType property
+    if (objectType === 'cableTray') return true;
     return false;
   }, [objectType]);
 
@@ -140,8 +145,11 @@ export function ObjectConfigModal({
     const properties: ObjectProperties = {};
     
     // Collect configuration-related properties based on object type
-    if (objectType === 'walkway' || objectType === 'cableTray') {
+    if (objectType === 'walkway') {
       if (length !== undefined) properties.length = length;
+    } else if (objectType === 'cableTray') {
+      if (length !== undefined) properties.length = length;
+      if (cableType !== undefined) properties.cableType = cableType;
     } else if (objectType === 'inverter') {
       if (name !== undefined) properties.name = name;
     } else if (objectType === 'pvArray') {
@@ -155,7 +163,33 @@ export function ObjectConfigModal({
   };
 
   const renderPropertiesContent = () => {
-    // Properties section - for canvas placement properties (to be defined)
+    // Cable tray properties - AC/DC cable type selection
+    if (objectType === 'cableTray') {
+      return (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="cableType">Cable Type</Label>
+            <Select
+              value={cableType || ''}
+              onValueChange={(val) => setCableType(val as CableTrayType)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select cable type..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dc">DC Cable Tray</SelectItem>
+                <SelectItem value="ac">AC Cable Tray</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Cables of the matching type will snap to this tray during placement.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    
+    // Default message for other types
     return (
       <div className="text-sm text-muted-foreground italic py-2">
         No editable properties for this object type
