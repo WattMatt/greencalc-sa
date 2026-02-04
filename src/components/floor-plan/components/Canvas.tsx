@@ -676,6 +676,8 @@ export function Canvas({
     marqueeStart,
     marqueeEnd,
     layerVisibility,
+    subgroupVisibility,
+    itemVisibility,
   ]);
 
   const getMousePos = (e: React.MouseEvent): Point => {
