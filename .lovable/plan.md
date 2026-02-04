@@ -1,20 +1,16 @@
 
-# Plan: Right-Click Configuration Menu for Canvas Objects
+# Plan: Cable Tray Type Property (AC/DC) with Cable Snapping
 
 ## Overview
 
-Add a right-click context menu system to the PV Layout canvas that allows users to change the configuration/type of selected objects. When right-clicking on objects of the same type (single or multi-selected), a configuration popup will appear allowing the user to switch between configured templates.
+Add a new property to cable trays that designates them as either "AC Cable Tray" or "DC Cable Tray". This property will determine which type of cables (AC or DC) can be associated with and routed through that cable tray. Cables of the matching type will snap to their corresponding cable trays during placement.
 
-## Supported Object Types and Configuration Options
+## Current State Analysis
 
-| Object Type | Current Reference | Configuration Change Options |
-|-------------|-------------------|------------------------------|
-| DC Cables | `thickness` (number) | Switch between DC cable templates (diameter, material) |
-| AC Cables | `thickness` (number) | Switch between AC cable templates (diameter, material) |
-| Walkways | `configId` (string) | Switch between walkway templates |
-| Cable Trays | `configId` (string) | Switch between cable tray templates |
-| Inverters | None | Switch between inverter templates (adds `configId`) |
-| PV Arrays | None | Switch between solar module templates (adds `moduleConfigId`) |
+- **PlacedCableTray** interface (types.ts) currently has: `id`, `configId`, `name`, `width`, `length`, `position`, `rotation`, `minSpacing`
+- **ObjectConfigModal** has a "Properties" section that is currently grayed out with the message "No editable properties for this object type"
+- Cable snapping currently targets: Inverters, Main Boards (AC), and PV Arrays (DC)
+- Cable trays are not currently considered as snap targets for cables
 
 ## Implementation Steps
 
@@ -22,210 +18,210 @@ Add a right-click context menu system to the PV Layout canvas that allows users 
 
 **File: `src/components/floor-plan/types.ts`**
 
-1. Add `configId` to `SupplyLine` interface for cable template reference:
+1. Create a new type for cable tray designation:
 ```typescript
-export interface SupplyLine {
+export type CableTrayType = 'ac' | 'dc';
+```
+
+2. Add the `cableType` property to `PlacedCableTray`:
+```typescript
+export interface PlacedCableTray {
   id: string;
+  configId: string;
   name: string;
-  type: 'dc' | 'ac';
-  points: Point[];
+  width: number;
   length: number;
-  from?: string;
-  to?: string;
-  thickness?: number;
-  configId?: string;    // NEW: Reference to DCCableConfig or ACCableConfig
-  material?: CableMaterial; // NEW: Store material directly
-}
-```
-
-2. Add `configId` to `EquipmentItem` for inverter template reference:
-```typescript
-export interface EquipmentItem {
-  id: string;
-  type: EquipmentType;
   position: Point;
   rotation: number;
-  name?: string;
-  configId?: string;    // NEW: Reference to InverterLayoutConfig (for Inverters)
-}
-```
-
-3. Add `moduleConfigId` to `PVArrayItem` for module template reference:
-```typescript
-export interface PVArrayItem {
-  id: string;
-  position: Point;
-  rows: number;
-  columns: number;
-  orientation: PanelOrientation;
-  rotation: number;
-  roofMaskId?: string;
   minSpacing?: number;
-  moduleConfigId?: string; // NEW: Reference to SolarModuleConfig
+  cableType?: CableTrayType; // NEW: Designates AC or DC cable tray
 }
 ```
 
-### Phase 2: Create Context Menu Modal Component
+3. Optionally add `cableType` to `CableTrayConfig` template as well (for default value when placing).
 
-**New File: `src/components/floor-plan/components/ObjectConfigModal.tsx`**
+### Phase 2: Update ObjectConfigModal for Cable Tray Properties
 
-Create a reusable modal for changing object configurations:
+**File: `src/components/floor-plan/components/ObjectConfigModal.tsx`**
 
-```text
-+----------------------------------+
-|  Change Configuration            |
-+----------------------------------+
-|  Applying to: 3 DC Cables        |
-|                                  |
-|  Select Cable Type:              |
-|  +----------------------------+  |
-|  | (o) 6mm Copper             |  |
-|  | ( ) 10mm Copper            |  |
-|  | ( ) 16mm Aluminum          |  |
-|  +----------------------------+  |
-|                                  |
-|  [Cancel]              [Apply]   |
-+----------------------------------+
-```
-
-Props:
-- `isOpen`: boolean
-- `onClose`: callback
-- `objectType`: 'dcCable' | 'acCable' | 'walkway' | 'cableTray' | 'inverter' | 'pvArray'
-- `selectedCount`: number
-- `currentConfigId`: string | null (for single selection)
-- `availableConfigs`: array of config options
-- `onApply`: (newConfigId: string) => void
-
-### Phase 3: Add Context Menu Handler to Canvas
-
-**File: `src/components/floor-plan/components/Canvas.tsx`**
-
-1. Add `onContextMenu` event handler to the canvas
-2. On right-click:
-   - Check if click is on a selectable object (using existing hit-testing logic)
-   - If the clicked object is already selected (part of multi-selection), use entire selection
-   - If clicked object is not selected, select it and use as single selection
-   - Determine the object type(s) of the selection
-   - If all selected objects are the same type, trigger context menu callback
-
-3. Add new props to Canvas:
+1. Add `cableType` to the `ObjectProperties` interface:
 ```typescript
-onContextMenuOpen?: (
-  objectType: 'dcCable' | 'acCable' | 'walkway' | 'cableTray' | 'inverter' | 'pvArray',
-  objectIds: string[]
-) => void;
+export interface ObjectProperties {
+  length?: number;
+  name?: string;
+  rows?: number;
+  columns?: number;
+  orientation?: PanelOrientation;
+  cableType?: CableTrayType; // NEW
+}
 ```
 
-### Phase 4: Integrate in FloorPlanMarkup
+2. Update `hasEditableProperties` to return `true` for `cableTray` object type.
+
+3. Update `renderPropertiesContent()` to show a dropdown for cable trays:
+```
++----------------------------------+
+|  Properties                    V |
++----------------------------------+
+|  Cable Type                      |
+|  +----------------------------+  |
+|  | AC Cable Tray           V  |  |
+|  +----------------------------+  |
++----------------------------------+
+```
+
+Options will be:
+- AC Cable Tray
+- DC Cable Tray
+
+4. Add state for `cableType` and include it in `handleApply()`.
+
+### Phase 3: Update FloorPlanMarkup to Handle cableType
 
 **File: `src/components/floor-plan/FloorPlanMarkup.tsx`**
 
-1. Add state for the configuration modal:
+1. Update `handleContextMenuOpen` to extract `cableType` from the selected cable tray(s).
+
+2. Update `handleApplyConfig` to apply the `cableType` property when updating cable trays:
 ```typescript
-const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-const [configModalType, setConfigModalType] = useState<'dcCable' | 'acCable' | 'walkway' | 'cableTray' | 'inverter' | 'pvArray' | null>(null);
-const [configModalObjectIds, setConfigModalObjectIds] = useState<string[]>([]);
+case 'cableTray':
+  setPlacedCableTrays(prev => prev.map(t =>
+    configModalObjectIds.includes(t.id)
+      ? { 
+          ...t, 
+          configId: newConfigId || t.configId,
+          cableType: properties?.cableType // Apply cableType from properties
+        }
+      : t
+  ));
+  break;
 ```
 
-2. Add handler for context menu open:
+### Phase 4: Add Cable Snapping to Cable Trays
+
+**File: `src/components/floor-plan/utils/geometry.ts`**
+
+1. Update `snapCablePointToTarget` function signature to accept `placedCableTrays`:
 ```typescript
-const handleContextMenuOpen = (objectType, objectIds) => {
-  setConfigModalType(objectType);
-  setConfigModalObjectIds(objectIds);
-  setIsConfigModalOpen(true);
-};
+export const snapCablePointToTarget = (
+  mousePos: Point,
+  cableType: CableType,
+  equipment: EquipmentItem[],
+  pvArrays: PVArrayItem[],
+  pvPanelConfig: PVPanelConfig | null,
+  roofMasks: RoofMask[],
+  scaleInfo: ScaleInfo,
+  viewState: { zoom: number },
+  plantSetupConfig?: PlantSetupConfig,
+  placedCableTrays?: PlacedCableTray[] // NEW
+): ...
 ```
 
-3. Add handler for applying configuration changes:
+2. Add cable tray snap target logic:
 ```typescript
-const handleApplyConfig = (newConfigId: string) => {
-  switch (configModalType) {
-    case 'dcCable':
-    case 'acCable':
-      // Update lines with new configId, thickness, material
-      const cableConfig = configModalType === 'dcCable' 
-        ? plantSetupConfig.dcCables.find(c => c.id === newConfigId)
-        : plantSetupConfig.acCables.find(c => c.id === newConfigId);
-      setLines(prev => prev.map(line => 
-        configModalObjectIds.includes(line.id) 
-          ? { ...line, configId: newConfigId, thickness: cableConfig?.diameter, material: cableConfig?.material }
-          : line
-      ));
-      break;
-    case 'walkway':
-      // Update walkways with new configId, name, width
-      const walkwayConfig = plantSetupConfig.walkways.find(w => w.id === newConfigId);
-      setPlacedWalkways(prev => prev.map(w =>
-        configModalObjectIds.includes(w.id)
-          ? { ...w, configId: newConfigId, name: walkwayConfig?.name || w.name, width: walkwayConfig?.width || w.width }
-          : w
-      ));
-      break;
-    // ... similar for other types
+// Cable trays of matching type are valid snap targets
+if (placedCableTrays) {
+  for (const tray of placedCableTrays) {
+    // Only snap if tray type matches cable type
+    if (tray.cableType === cableType) {
+      // Calculate snap points along the tray (start, center, end)
+      const traySnapPoints = getCableTraySnapPoints(tray, scaleInfo);
+      for (const point of traySnapPoints) {
+        targets.push({
+          id: tray.id,
+          position: point,
+          type: 'cableTray',
+        });
+      }
+    }
   }
-  setIsConfigModalOpen(false);
-};
+}
 ```
 
-4. Pass the context menu handler to Canvas and render the modal.
+3. Create helper function `getCableTraySnapPoints()` to return snap positions along the cable tray (e.g., endpoints and center of the tray's centerline).
 
-### Phase 5: Update Cable Creation to Include configId
+4. Update `CableSnapTarget` interface:
+```typescript
+interface CableSnapTarget {
+  id: string;
+  position: Point;
+  type: 'equipment' | 'pvArray' | 'cableTray'; // Add 'cableTray'
+  equipmentType?: EquipmentType;
+  arrayId?: string;
+}
+```
+
+### Phase 5: Update Canvas to Pass Cable Trays for Snapping
 
 **File: `src/components/floor-plan/components/Canvas.tsx`**
 
-Update cable creation logic to include the selected cable template:
-
-1. Add new props for selected cable configs:
+1. Update all calls to `snapCablePointToTarget` to include `placedCableTrays`:
 ```typescript
-selectedDcCableConfig?: DCCableConfig | null;
-selectedAcCableConfig?: ACCableConfig | null;
+const snapResult = snapCablePointToTarget(
+  worldPos,
+  cableType,
+  equipment,
+  pvArrays,
+  pvPanelConfig,
+  roofMasks,
+  scaleInfo,
+  viewState,
+  plantSetupConfig,
+  placedCableTrays // NEW parameter
+);
 ```
 
-2. Update `newLine` creation to include config details:
-```typescript
-const newLine: SupplyLine = {
-  id: `line-${Date.now()}`,
-  name: selectedDcCableConfig?.name || 'DC Cable',
-  type: 'dc',
-  points: currentDrawing,
-  length: calculateLineLength(currentDrawing, scaleInfo.ratio),
-  configId: selectedDcCableConfig?.id,
-  thickness: selectedDcCableConfig?.diameter,
-  material: selectedDcCableConfig?.material,
-};
+### Phase 6: Visual Feedback for Cable Tray Type
+
+**File: `src/components/floor-plan/utils/drawing.ts`**
+
+Consider adding visual differentiation for AC vs DC cable trays:
+- Different color coding or pattern
+- Label overlay showing "AC" or "DC"
+
+This is optional but would improve usability.
+
+## Technical Flow
+
+```text
++----------------+     +------------------+     +-------------------+
+| User places    |     | Cable Tray has   |     | When drawing      |
+| Cable Tray     | --> | default type or  | --> | cables, snap to   |
+|                |     | user sets via    |     | matching tray     |
+|                |     | right-click menu |     | type only         |
++----------------+     +------------------+     +-------------------+
+                              |
+                              v
+                    +------------------+
+                    | Properties       |
+                    | dropdown shows   |
+                    | AC/DC selection  |
+                    +------------------+
 ```
 
-## Technical Considerations
+## Files to Modify
 
-1. **Selection Affinity Rule**: When right-clicking:
-   - If the clicked object is part of the current selection, operate on entire selection
-   - If clicked object is not selected, first select it, then operate on single item
+| File | Changes |
+|------|---------|
+| `src/components/floor-plan/types.ts` | Add `CableTrayType`, add `cableType` to `PlacedCableTray` |
+| `src/components/floor-plan/components/ObjectConfigModal.tsx` | Add cableType dropdown in Properties section for cable trays |
+| `src/components/floor-plan/FloorPlanMarkup.tsx` | Handle cableType in context menu handlers |
+| `src/components/floor-plan/utils/geometry.ts` | Update `snapCablePointToTarget` to include cable trays |
+| `src/components/floor-plan/components/Canvas.tsx` | Pass cable trays to snap function |
+| `src/components/floor-plan/utils/drawing.ts` | (Optional) Visual distinction for AC/DC trays |
 
-2. **Type Homogeneity Check**: Only show configuration menu if all selected objects are of the same type. If mixed types are selected, show a toast indicating "Please select objects of the same type to change configuration."
+## User Experience
 
-3. **Backward Compatibility**: Objects created before this feature will have `configId` as undefined. The system should handle this gracefully by allowing users to assign a configuration.
+1. User places a cable tray on the canvas
+2. User right-clicks on the cable tray
+3. The "Properties" dropdown is now enabled (no longer grayed out)
+4. User expands Properties and sees "Cable Type" dropdown
+5. User selects "DC Cable Tray" or "AC Cable Tray"
+6. When drawing DC cables, they will snap to DC cable trays
+7. When drawing AC cables, they will snap to AC cable trays
 
-4. **PV Array Module Changes**: When changing the solar module for PV arrays, the visual dimensions will change based on the new module's width/length. The system should update `pvPanelConfig` accordingly or store per-array module config.
+## Backward Compatibility
 
-## Files to Create/Modify
-
-| File | Action | Changes |
-|------|--------|---------|
-| `src/components/floor-plan/types.ts` | Modify | Add `configId`, `material` to SupplyLine; add `configId` to EquipmentItem; add `moduleConfigId` to PVArrayItem |
-| `src/components/floor-plan/components/ObjectConfigModal.tsx` | Create | New modal component for configuration selection |
-| `src/components/floor-plan/components/Canvas.tsx` | Modify | Add onContextMenu handler, pass selected cable configs for creation |
-| `src/components/floor-plan/FloorPlanMarkup.tsx` | Modify | Add config modal state/handlers, pass callbacks to Canvas, render ObjectConfigModal |
-
-## User Experience Flow
-
-1. User selects one or more objects on the canvas (e.g., 3 DC cables)
-2. User right-clicks on one of the selected objects
-3. A configuration modal appears showing:
-   - "Applying to: 3 DC Cables"
-   - Radio button list of available DC cable configurations
-   - Current configuration (if all selected have the same) is pre-selected
-4. User selects a different configuration
-5. User clicks "Apply"
-6. All selected cables are updated to use the new configuration (thickness, material, name)
-7. Canvas re-renders with updated visual styling (if applicable)
+- Existing cable trays without `cableType` will not participate in cable snapping until a type is assigned
+- The dropdown will show a placeholder ("Select cable type...") for trays without a type set
+- Both single and multi-selection will work for setting the cable type
