@@ -775,6 +775,7 @@ export function SummaryPanel({
                                   size="icon"
                                   className="h-5 w-5 shrink-0"
                                   onClick={(e) => {
+                                    e.preventDefault();
                                     e.stopPropagation();
                                     onToggleItemVisibility(board.id);
                                   }}
