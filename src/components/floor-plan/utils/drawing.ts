@@ -356,8 +356,8 @@ export const drawSupplyLine = (
 
   ctx.save();
   
-  // Use cyan highlight when selected (consistent with other objects)
-  const selectedColor = '#00FFFF'; // Cyan for selection
+  // Use green highlight when selected (consistent with other objects)
+  const selectedColor = '#34d399'; // Green for selection - matches modules, equipment, etc.
   const normalColor = line.type === 'dc' ? TOOL_COLORS.LINE_DC : TOOL_COLORS.LINE_AC;
   
   // Calculate line width based on thickness (default to 6mm if not specified)
