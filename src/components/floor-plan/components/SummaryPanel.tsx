@@ -93,15 +93,15 @@ function CollapsibleSection({
   
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="flex items-center gap-1 w-full">
-        {/* Visibility toggle button - on left */}
+      <div className="flex items-center w-full">
+        {/* Visibility toggle button - fixed left column */}
         {onToggleVisibility !== undefined && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 shrink-0 -ml-1"
+                className="h-6 w-6 shrink-0"
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleVisibility();
@@ -137,7 +137,7 @@ function CollapsibleSection({
           </button>
         </CollapsibleTrigger>
       </div>
-      <CollapsibleContent className="pt-2">
+      <CollapsibleContent className="pt-2 pl-6">
         {children}
       </CollapsibleContent>
     </Collapsible>
@@ -217,15 +217,15 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="flex items-center gap-1 w-full">
-        {/* Visibility toggle button - on left */}
+      <div className="flex items-center w-full">
+        {/* Visibility toggle button - fixed left column */}
         {onToggleVisibility !== undefined && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 shrink-0 -ml-1"
+                className="h-6 w-6 shrink-0"
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleVisibility();
@@ -261,19 +261,19 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
           </button>
         </CollapsibleTrigger>
       </div>
-      <CollapsibleContent className="pt-2">
+      <CollapsibleContent className="pt-2 pl-6">
         {groupKeys.length === 0 ? (
           <p className="text-xs text-muted-foreground">No {title.toLowerCase()} placed</p>
         ) : (
-          <div className="space-y-1 pl-2">
+          <div className="space-y-1">
             {groupKeys.map((key) => {
               const group = groupedItems[key];
               const isGroupOpen = openGroups.has(key);
               const isSubgroupVisible = subgroupVisibility?.[key] !== false;
               return (
                 <Collapsible key={key} open={isGroupOpen} onOpenChange={() => toggleGroup(key)}>
-                  <div className="flex items-center gap-1 w-full">
-                    {/* Subgroup visibility toggle - on left */}
+                  <div className="flex items-center w-full">
+                    {/* Subgroup visibility toggle - fixed left column */}
                     {onToggleSubgroupVisibility && (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -300,7 +300,7 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
                     )}
                     <CollapsibleTrigger asChild>
                       <button className={cn(
-                        "flex items-center gap-2 flex-1 hover:bg-accent/50 rounded p-1 text-xs transition-colors",
+                        "flex items-center gap-2 flex-1 hover:bg-accent/50 rounded p-1 text-xs transition-colors pl-2",
                         !isSubgroupVisible && "opacity-50"
                       )}>
                         <span className="font-medium">{group.name}</span>
@@ -330,14 +330,14 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
                             !isItemVisible && "opacity-50"
                           )}
                         >
-                          {/* Per-item visibility toggle */}
+                          {/* Per-item visibility toggle - fixed left column */}
                           {onToggleItemVisibility && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-5 w-5 shrink-0 -ml-0.5"
+                                  className="h-5 w-5 shrink-0"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     onToggleItemVisibility(item.id);
@@ -358,7 +358,7 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
                           <button
                             type="button"
                             className={cn(
-                              "flex-1 text-left",
+                              "flex-1 text-left pl-2",
                               isSelected && "font-medium"
                             )}
                             onClick={() => handleItemClick(item, key)}
@@ -664,14 +664,14 @@ export function SummaryPanel({
                           !isItemVisible && 'opacity-50'
                         )}
                       >
-                        {/* Per-item visibility toggle */}
+{/* Per-item visibility toggle - fixed left column */}
                         {onToggleItemVisibility && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-5 w-5 shrink-0 -ml-0.5"
+                                className="h-5 w-5 shrink-0"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onToggleItemVisibility(mask.id);
@@ -690,7 +690,7 @@ export function SummaryPanel({
                           </Tooltip>
                         )}
                         <button
-                          className="flex-1 text-left"
+                          className="flex-1 text-left pl-2"
                           onClick={handleClick}
                           onDoubleClick={() => onEditRoofMask?.(mask.id)}
                         >
@@ -766,14 +766,14 @@ export function SummaryPanel({
                             !isItemVisible && 'opacity-50'
                           )}
                         >
-                          {/* Per-item visibility toggle */}
+{/* Per-item visibility toggle - fixed left column */}
                           {onToggleItemVisibility && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-5 w-5 shrink-0 -ml-0.5"
+                                  className="h-5 w-5 shrink-0"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     onToggleItemVisibility(board.id);
@@ -793,7 +793,7 @@ export function SummaryPanel({
                           )}
                           <button
                             type="button"
-                            className="flex-1 text-left"
+                            className="flex-1 text-left pl-2"
                             onClick={handleClick}
                           >
                             <span className="font-medium">Main Board {i + 1}</span>
@@ -856,14 +856,14 @@ export function SummaryPanel({
                           !isItemVisible && 'opacity-50'
                         )}
                       >
-                        {/* Per-item visibility toggle */}
+{/* Per-item visibility toggle - fixed left column */}
                         {onToggleItemVisibility && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-5 w-5 shrink-0 -ml-0.5"
+                                className="h-5 w-5 shrink-0"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onToggleItemVisibility(arr.id);
@@ -882,7 +882,7 @@ export function SummaryPanel({
                           </Tooltip>
                         )}
                         <button
-                          className="flex-1 text-left"
+                          className="flex-1 text-left pl-2"
                           onClick={handleClick}
                         >
                           <span className="font-medium">Array {i + 1}</span>
@@ -942,14 +942,14 @@ export function SummaryPanel({
                             !isItemVisible && 'opacity-50'
                           )}
                         >
-                          {/* Per-item visibility toggle */}
+{/* Per-item visibility toggle - fixed left column */}
                           {onToggleItemVisibility && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-5 w-5 shrink-0 -ml-0.5"
+                                  className="h-5 w-5 shrink-0"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     onToggleItemVisibility(inv.id);
@@ -969,7 +969,7 @@ export function SummaryPanel({
                           )}
                           <button
                             type="button"
-                            className="flex-1 text-left"
+                            className="flex-1 text-left pl-2"
                             onClick={handleClick}
                           >
                             <span className="font-medium">Inverter {i + 1}</span>
@@ -1108,8 +1108,8 @@ export function SummaryPanel({
                           
                           return (
                             <Collapsible key={thickness} defaultOpen={true}>
-                              <div className="flex items-center gap-1 pl-2">
-                                {/* Visibility toggle for this thickness */}
+                              <div className="flex items-center w-full">
+                                {/* Visibility toggle for this thickness - fixed left column */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
@@ -1133,7 +1133,7 @@ export function SummaryPanel({
                                 
                                 <CollapsibleTrigger asChild>
                                   <button className={cn(
-                                    "flex-1 flex items-center gap-1 text-left py-1 hover:text-foreground",
+                                    "flex-1 flex items-center gap-1 text-left py-1 hover:text-foreground pl-2",
                                     !isThicknessVisible && "opacity-50"
                                   )}>
                                     <div 
@@ -1178,14 +1178,14 @@ export function SummaryPanel({
                                         (!isThicknessVisible || !isCableVisible) && "opacity-50"
                                       )}
                                     >
-                                      {/* Per-item visibility toggle */}
+{/* Per-item visibility toggle - fixed left column */}
                                       {onToggleItemVisibility && (
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <Button
                                               variant="ghost"
                                               size="icon"
-                                              className="h-5 w-5 shrink-0 -ml-0.5"
+                                              className="h-5 w-5 shrink-0"
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 onToggleItemVisibility(cable.id);
@@ -1204,7 +1204,7 @@ export function SummaryPanel({
                                         </Tooltip>
                                       )}
                                       <button
-                                        className="flex-1 flex justify-between items-center"
+                                        className="flex-1 flex justify-between items-center pl-2"
                                         onClick={handleClick}
                                       >
                                         <span className="flex items-center gap-1">
@@ -1287,8 +1287,8 @@ export function SummaryPanel({
                           
                           return (
                             <Collapsible key={thickness} defaultOpen={true}>
-                              <div className="flex items-center gap-1 pl-2">
-                                {/* Visibility toggle for this thickness */}
+                              <div className="flex items-center w-full">
+                                {/* Visibility toggle for this thickness - fixed left column */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
@@ -1312,7 +1312,7 @@ export function SummaryPanel({
                                 
                                 <CollapsibleTrigger asChild>
                                   <button className={cn(
-                                    "flex-1 flex items-center gap-1 text-left py-1 hover:text-foreground",
+                                    "flex-1 flex items-center gap-1 text-left py-1 hover:text-foreground pl-2",
                                     !isThicknessVisible && "opacity-50"
                                   )}>
                                     <div 
@@ -1356,14 +1356,14 @@ export function SummaryPanel({
                                         (!isThicknessVisible || !isCableVisible) && "opacity-50"
                                       )}
                                     >
-                                      {/* Per-item visibility toggle */}
+{/* Per-item visibility toggle - fixed left column */}
                                       {onToggleItemVisibility && (
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <Button
                                               variant="ghost"
                                               size="icon"
-                                              className="h-5 w-5 shrink-0 -ml-0.5"
+                                              className="h-5 w-5 shrink-0"
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 onToggleItemVisibility(cable.id);
@@ -1382,7 +1382,7 @@ export function SummaryPanel({
                                         </Tooltip>
                                       )}
                                       <button
-                                        className="flex-1 flex justify-between items-center"
+                                        className="flex-1 flex justify-between items-center pl-2"
                                         onClick={handleClick}
                                       >
                                         <span className="flex items-center gap-1">
