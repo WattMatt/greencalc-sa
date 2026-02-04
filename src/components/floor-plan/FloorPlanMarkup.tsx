@@ -359,6 +359,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [configModalObjectType, setConfigModalObjectType] = useState<ConfigurableObjectType | null>(null);
   const [configModalObjectIds, setConfigModalObjectIds] = useState<string[]>([]);
   const [configModalCurrentConfigId, setConfigModalCurrentConfigId] = useState<string | null>(null);
+  const [configModalCurrentProperties, setConfigModalCurrentProperties] = useState<import('./components/ObjectConfigModal').ObjectProperties | undefined>(undefined);
 
   const PLACEMENT_TOOLS = [
     Tool.PLACE_INVERTER,
@@ -1603,76 +1604,126 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     setConfigModalObjectType(objectType);
     setConfigModalObjectIds(objectIds);
     setConfigModalCurrentConfigId(currentConfigId);
+    
+    // Extract current properties from first selected object (for single selection)
+    let currentProps: import('./components/ObjectConfigModal').ObjectProperties | undefined;
+    if (objectIds.length === 1) {
+      switch (objectType) {
+        case 'walkway': {
+          const w = placedWalkways.find(w => w.id === objectIds[0]);
+          if (w) currentProps = { length: w.length };
+          break;
+        }
+        case 'cableTray': {
+          const t = placedCableTrays.find(t => t.id === objectIds[0]);
+          if (t) currentProps = { length: t.length };
+          break;
+        }
+        case 'inverter': {
+          const eq = equipment.find(e => e.id === objectIds[0]);
+          if (eq) currentProps = { name: eq.name };
+          break;
+        }
+        case 'pvArray': {
+          const arr = pvArrays.find(a => a.id === objectIds[0]);
+          if (arr) currentProps = { rows: arr.rows, columns: arr.columns, orientation: arr.orientation };
+          break;
+        }
+      }
+    }
+    setConfigModalCurrentProperties(currentProps);
     setIsObjectConfigModalOpen(true);
-  }, []);
+  }, [placedWalkways, placedCableTrays, equipment, pvArrays]);
 
   // Apply configuration change from context menu modal
-  const handleApplyConfig = useCallback((newConfigId: string) => {
+  const handleApplyConfig = useCallback((newConfigId: string | null, properties?: import('./components/ObjectConfigModal').ObjectProperties) => {
     if (!configModalObjectType || configModalObjectIds.length === 0) return;
     
     switch (configModalObjectType) {
       case 'dcCable':
       case 'acCable': {
-        const configs = configModalObjectType === 'dcCable' 
-          ? plantSetupConfig.dcCables 
-          : plantSetupConfig.acCables;
-        const config = configs?.find(c => c.id === newConfigId);
-        if (config) {
-          setLines(prev => prev.map(line => 
-            configModalObjectIds.includes(line.id)
-              ? { ...line, configId: newConfigId, thickness: config.diameter, material: config.material, name: config.name }
-              : line
-          ));
-          toast.success(`Updated ${configModalObjectIds.length} cable(s) to ${config.name}`);
+        if (newConfigId) {
+          const configs = configModalObjectType === 'dcCable' 
+            ? plantSetupConfig.dcCables 
+            : plantSetupConfig.acCables;
+          const config = configs?.find(c => c.id === newConfigId);
+          if (config) {
+            setLines(prev => prev.map(line => 
+              configModalObjectIds.includes(line.id)
+                ? { ...line, configId: newConfigId, thickness: config.diameter, material: config.material, name: config.name }
+                : line
+            ));
+            toast.success(`Updated ${configModalObjectIds.length} cable(s) to ${config.name}`);
+          }
         }
         break;
       }
       case 'walkway': {
-        const config = plantSetupConfig.walkways.find(w => w.id === newConfigId);
-        if (config) {
-          setPlacedWalkways(prev => prev.map(w =>
-            configModalObjectIds.includes(w.id)
-              ? { ...w, configId: newConfigId, name: config.name, width: config.width }
-              : w
-          ));
-          toast.success(`Updated ${configModalObjectIds.length} walkway(s) to ${config.name}`);
-        }
+        setPlacedWalkways(prev => prev.map(w => {
+          if (!configModalObjectIds.includes(w.id)) return w;
+          const updates: Partial<typeof w> = {};
+          if (newConfigId) {
+            const config = plantSetupConfig.walkways.find(wc => wc.id === newConfigId);
+            if (config) {
+              updates.configId = newConfigId;
+              updates.name = config.name;
+              updates.width = config.width;
+            }
+          }
+          if (properties?.length !== undefined) updates.length = properties.length;
+          return { ...w, ...updates };
+        }));
+        toast.success(`Updated ${configModalObjectIds.length} walkway(s)`);
         break;
       }
       case 'cableTray': {
-        const config = plantSetupConfig.cableTrays.find(t => t.id === newConfigId);
-        if (config) {
-          setPlacedCableTrays(prev => prev.map(t =>
-            configModalObjectIds.includes(t.id)
-              ? { ...t, configId: newConfigId, name: config.name, width: config.width }
-              : t
-          ));
-          toast.success(`Updated ${configModalObjectIds.length} cable tray(s) to ${config.name}`);
-        }
+        setPlacedCableTrays(prev => prev.map(t => {
+          if (!configModalObjectIds.includes(t.id)) return t;
+          const updates: Partial<typeof t> = {};
+          if (newConfigId) {
+            const config = plantSetupConfig.cableTrays.find(tc => tc.id === newConfigId);
+            if (config) {
+              updates.configId = newConfigId;
+              updates.name = config.name;
+              updates.width = config.width;
+            }
+          }
+          if (properties?.length !== undefined) updates.length = properties.length;
+          return { ...t, ...updates };
+        }));
+        toast.success(`Updated ${configModalObjectIds.length} cable tray(s)`);
         break;
       }
       case 'inverter': {
-        const config = plantSetupConfig.inverters.find(i => i.id === newConfigId);
-        if (config) {
-          setEquipment(prev => prev.map(eq =>
-            configModalObjectIds.includes(eq.id) && eq.type === EquipmentType.INVERTER
-              ? { ...eq, configId: newConfigId, name: config.name }
-              : eq
-          ));
-          toast.success(`Updated ${configModalObjectIds.length} inverter(s) to ${config.name}`);
-        }
+        setEquipment(prev => prev.map(eq => {
+          if (!configModalObjectIds.includes(eq.id) || eq.type !== EquipmentType.INVERTER) return eq;
+          const updates: Partial<typeof eq> = {};
+          if (newConfigId) {
+            const config = plantSetupConfig.inverters.find(i => i.id === newConfigId);
+            if (config) {
+              updates.configId = newConfigId;
+              updates.name = config.name;
+            }
+          }
+          if (properties?.name !== undefined) updates.name = properties.name;
+          return { ...eq, ...updates };
+        }));
+        toast.success(`Updated ${configModalObjectIds.length} inverter(s)`);
         break;
       }
       case 'pvArray': {
-        const config = plantSetupConfig.solarModules.find(m => m.id === newConfigId);
-        if (config) {
-          setPvArrays(prev => prev.map(arr =>
-            configModalObjectIds.includes(arr.id)
-              ? { ...arr, moduleConfigId: newConfigId }
-              : arr
-          ));
-          toast.success(`Updated ${configModalObjectIds.length} PV array(s) to use ${config.name}`);
-        }
+        setPvArrays(prev => prev.map(arr => {
+          if (!configModalObjectIds.includes(arr.id)) return arr;
+          const updates: Partial<typeof arr> = {};
+          if (newConfigId) {
+            updates.moduleConfigId = newConfigId;
+          }
+          if (properties?.rows !== undefined) updates.rows = properties.rows;
+          if (properties?.columns !== undefined) updates.columns = properties.columns;
+          if (properties?.orientation !== undefined) updates.orientation = properties.orientation;
+          return { ...arr, ...updates };
+        }));
+        toast.success(`Updated ${configModalObjectIds.length} PV array(s)`);
         break;
       }
     }
@@ -2511,6 +2562,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
               objectType={configModalObjectType}
               selectedCount={configModalObjectIds.length}
               currentConfigId={configModalCurrentConfigId}
+              currentProperties={configModalCurrentProperties}
               plantSetupConfig={plantSetupConfig}
               onApply={handleApplyConfig}
             />
