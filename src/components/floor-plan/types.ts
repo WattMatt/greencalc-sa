@@ -277,7 +277,9 @@ export const defaultSubgroupVisibility: SubgroupVisibility = {
 export interface LayerVisibility {
   roofMasks: boolean;
   pvArrays: boolean;
-  equipment: boolean;
+  equipment: boolean;      // Generic equipment (DC Combiner, AC Disconnect, Sub Board)
+  mainBoards: boolean;     // Separate visibility for Main Boards
+  inverters: boolean;      // Separate visibility for Inverters
   walkways: boolean;
   cableTrays: boolean;
   cables: boolean;
@@ -287,6 +289,8 @@ export const defaultLayerVisibility: LayerVisibility = {
   roofMasks: true,
   pvArrays: true,
   equipment: true,
+  mainBoards: true,
+  inverters: true,
   walkways: true,
   cableTrays: true,
   cables: true,

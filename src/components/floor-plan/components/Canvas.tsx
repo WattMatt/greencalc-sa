@@ -841,20 +841,26 @@ export function Canvas({
       }
 
       // Select equipment (inverters, etc.) - checked BEFORE roof masks - only if layer and item visible
-      const hitEquipment = layerVisibility.equipment
-        ? [...equipment].reverse().find(item => {
-            if (itemVisibility?.[item.id] === false) return false;
-            // Calculate size in pixels based on real-world size and scale
-            const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
-            // Convert real size to world units (pixels at zoom=1)
-            const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
-            const padding = 5 / viewState.zoom; // Small padding for easier selection
-            const halfSize = sizePx / 2 + padding;
-            
-            return Math.abs(worldPos.x - item.position.x) <= halfSize &&
-                   Math.abs(worldPos.y - item.position.y) <= halfSize;
-          })
-        : undefined;
+      // Check layer visibility based on equipment type
+      const isEquipmentLayerVisible = (type: EquipmentType) => {
+        if (type === EquipmentType.MAIN_BOARD) return layerVisibility.mainBoards !== false;
+        if (type === EquipmentType.INVERTER) return layerVisibility.inverters !== false;
+        return layerVisibility.equipment !== false;
+      };
+      
+      const hitEquipment = [...equipment].reverse().find(item => {
+        if (!isEquipmentLayerVisible(item.type)) return false;
+        if (itemVisibility?.[item.id] === false) return false;
+        // Calculate size in pixels based on real-world size and scale
+        const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
+        // Convert real size to world units (pixels at zoom=1)
+        const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
+        const padding = 5 / viewState.zoom; // Small padding for easier selection
+        const halfSize = sizePx / 2 + padding;
+        
+        return Math.abs(worldPos.x - item.position.x) <= halfSize &&
+               Math.abs(worldPos.y - item.position.y) <= halfSize;
+      });
 
       if (hitEquipment) {
         handleItemSelection(hitEquipment.id, () => {
@@ -961,9 +967,15 @@ export function Canvas({
         }
       }
 
-      // Check equipment (only if layer is visible)
-      if (layerVisibility.equipment) {
+      // Check equipment (only if appropriate layer is visible based on equipment type)
+      {
+        const isEqLayerVisible = (type: EquipmentType) => {
+          if (type === EquipmentType.MAIN_BOARD) return layerVisibility.mainBoards !== false;
+          if (type === EquipmentType.INVERTER) return layerVisibility.inverters !== false;
+          return layerVisibility.equipment !== false;
+        };
         const hitEquipment = [...equipment].reverse().find(item => {
+          if (!isEqLayerVisible(item.type)) return false;
           const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
           const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
           const halfSize = sizePx / 2;
@@ -1060,9 +1072,15 @@ export function Canvas({
         }
       }
 
-      // Check equipment (only if layer is visible)
-      if (layerVisibility.equipment) {
+      // Check equipment (only if appropriate layer is visible based on equipment type)
+      {
+        const isEqLayerVisible = (type: EquipmentType) => {
+          if (type === EquipmentType.MAIN_BOARD) return layerVisibility.mainBoards !== false;
+          if (type === EquipmentType.INVERTER) return layerVisibility.inverters !== false;
+          return layerVisibility.equipment !== false;
+        };
         const hitEquipment = [...equipment].reverse().find(item => {
+          if (!isEqLayerVisible(item.type)) return false;
           const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
           const sizePx = scaleInfo.ratio ? realSize / scaleInfo.ratio : 20;
           const halfSize = sizePx / 2;
@@ -1809,9 +1827,15 @@ export function Canvas({
           });
         }
         
-        // Check equipment (only if layer and item is visible)
-        if (layerVisibility.equipment) {
+        // Check equipment (only if appropriate layer and item is visible based on equipment type)
+        {
+          const isEqLayerVisible = (type: EquipmentType) => {
+            if (type === EquipmentType.MAIN_BOARD) return layerVisibility.mainBoards !== false;
+            if (type === EquipmentType.INVERTER) return layerVisibility.inverters !== false;
+            return layerVisibility.equipment !== false;
+          };
           equipment.forEach(eq => {
+            if (!isEqLayerVisible(eq.type)) return;
             if (itemVisibility?.[eq.id] === false) return;
             if (isCenterInBox(eq.position)) {
               selectedIds.push(eq.id);

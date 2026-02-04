@@ -740,8 +740,8 @@ export function SummaryPanel({
               title="Main Boards"
               summary={`${equipment.filter(e => e.type === EquipmentType.MAIN_BOARD).length}`}
               defaultOpen={false}
-              isVisible={layerVisibility?.equipment}
-              onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('equipment') : undefined}
+              isVisible={layerVisibility?.mainBoards}
+              onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('mainBoards') : undefined}
             >
               {equipment.filter(e => e.type === EquipmentType.MAIN_BOARD).length === 0 ? (
                 <p className="text-xs text-muted-foreground">No main boards placed</p>
@@ -916,8 +916,8 @@ export function SummaryPanel({
               title="Inverters"
               summary={`${layoutInverterCount}`}
               defaultOpen={false}
-              isVisible={layerVisibility?.equipment}
-              onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('equipment') : undefined}
+              isVisible={layerVisibility?.inverters}
+              onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('inverters') : undefined}
             >
               {layoutInverterCount === 0 ? (
                 <p className="text-xs text-muted-foreground">No inverters placed</p>
@@ -1152,6 +1152,7 @@ export function SummaryPanel({
                                 {cablesInGroup.map((cable, i) => {
                                   const isSelected = selectedItemId === cable.id || selectedItemIds?.has(cable.id);
                                   const cableLength = calculateLineLength(cable.points, scaleInfo.ratio);
+                                  const isCableVisible = itemVisibility?.[cable.id] !== false;
                                   const handleClick = () => {
                                     // If hidden, show the layer first
                                     if (!isThicknessVisible) {
@@ -1160,29 +1161,62 @@ export function SummaryPanel({
                                     if (!layerVisibility?.cables) {
                                       onShowCablesLayer?.();
                                     }
+                                    // Force-show item if hidden
+                                    if (!isCableVisible && onForceShowItem) {
+                                      onForceShowItem(cable.id);
+                                    }
                                     onSelectItem(cable.id);
                                   };
                                   return (
-                                    <button
+                                    <div
                                       key={cable.id}
                                       className={cn(
-                                        "flex justify-between items-center p-2 rounded w-full text-left transition-colors",
+                                        "flex items-center gap-1 p-2 rounded w-full text-left transition-colors",
                                         isSelected 
                                           ? "bg-primary/20 border border-primary" 
                                           : "bg-muted hover:bg-muted/80",
-                                        !isThicknessVisible && "opacity-50"
+                                        (!isThicknessVisible || !isCableVisible) && "opacity-50"
                                       )}
-                                      onClick={handleClick}
                                     >
-                                      <span className="flex items-center gap-1">
-                                        <div 
-                                          className="rounded bg-orange-500" 
-                                          style={{ width: `${Math.max(3, thickness / 3)}px`, height: '2px' }} 
-                                        />
-                                        DC Cable {i + 1}
-                                      </span>
-                                      <span>{cableLength.toFixed(1)} m</span>
-                                    </button>
+                                      {/* Per-item visibility toggle */}
+                                      {onToggleItemVisibility && (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-5 w-5 shrink-0 -ml-0.5"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                onToggleItemVisibility(cable.id);
+                                              }}
+                                            >
+                                              {isCableVisible ? (
+                                                <Eye className="h-3 w-3 text-muted-foreground" />
+                                              ) : (
+                                                <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+                                              )}
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="left">
+                                            {isCableVisible ? 'Hide' : 'Show'}
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )}
+                                      <button
+                                        className="flex-1 flex justify-between items-center"
+                                        onClick={handleClick}
+                                      >
+                                        <span className="flex items-center gap-1">
+                                          <div 
+                                            className="rounded bg-orange-500" 
+                                            style={{ width: `${Math.max(3, thickness / 3)}px`, height: '2px' }} 
+                                          />
+                                          DC Cable {i + 1}
+                                        </span>
+                                        <span>{cableLength.toFixed(1)} m</span>
+                                      </button>
+                                    </div>
                                   );
                                 })}
                               </CollapsibleContent>
@@ -1297,6 +1331,7 @@ export function SummaryPanel({
                                 {cablesInGroup.map((cable, i) => {
                                   const isSelected = selectedItemId === cable.id || selectedItemIds?.has(cable.id);
                                   const cableLength = calculateLineLength(cable.points, scaleInfo.ratio);
+                                  const isCableVisible = itemVisibility?.[cable.id] !== false;
                                   const handleClick = () => {
                                     if (!isThicknessVisible) {
                                       onToggleAcCableThicknessVisibility?.(thickness);
@@ -1304,29 +1339,62 @@ export function SummaryPanel({
                                     if (!layerVisibility?.cables) {
                                       onShowCablesLayer?.();
                                     }
+                                    // Force-show item if hidden
+                                    if (!isCableVisible && onForceShowItem) {
+                                      onForceShowItem(cable.id);
+                                    }
                                     onSelectItem(cable.id);
                                   };
                                   return (
-                                    <button
+                                    <div
                                       key={cable.id}
                                       className={cn(
-                                        "flex justify-between items-center p-2 rounded w-full text-left transition-colors",
+                                        "flex items-center gap-1 p-2 rounded w-full text-left transition-colors",
                                         isSelected 
                                           ? "bg-primary/20 border border-primary" 
                                           : "bg-muted hover:bg-muted/80",
-                                        !isThicknessVisible && "opacity-50"
+                                        (!isThicknessVisible || !isCableVisible) && "opacity-50"
                                       )}
-                                      onClick={handleClick}
                                     >
-                                      <span className="flex items-center gap-1">
-                                        <div 
-                                          className="rounded bg-blue-500" 
-                                          style={{ width: `${Math.max(3, thickness / 3)}px`, height: '2px' }} 
-                                        />
-                                        AC Cable {i + 1}
-                                      </span>
-                                      <span>{cableLength.toFixed(1)} m</span>
-                                    </button>
+                                      {/* Per-item visibility toggle */}
+                                      {onToggleItemVisibility && (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-5 w-5 shrink-0 -ml-0.5"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                onToggleItemVisibility(cable.id);
+                                              }}
+                                            >
+                                              {isCableVisible ? (
+                                                <Eye className="h-3 w-3 text-muted-foreground" />
+                                              ) : (
+                                                <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+                                              )}
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="left">
+                                            {isCableVisible ? 'Hide' : 'Show'}
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )}
+                                      <button
+                                        className="flex-1 flex justify-between items-center"
+                                        onClick={handleClick}
+                                      >
+                                        <span className="flex items-center gap-1">
+                                          <div 
+                                            className="rounded bg-blue-500" 
+                                            style={{ width: `${Math.max(3, thickness / 3)}px`, height: '2px' }} 
+                                          />
+                                          AC Cable {i + 1}
+                                        </span>
+                                        <span>{cableLength.toFixed(1)} m</span>
+                                      </button>
+                                    </div>
                                   );
                                 })}
                               </CollapsibleContent>
