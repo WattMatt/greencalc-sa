@@ -1600,40 +1600,63 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   }, [alignObject1Id, alignObject2Id, getObjectPosition, getObjectDimensions, selectedItemIds, commitState]);
 
   // Handle context menu open (right-click on objects)
-  const handleContextMenuOpen = useCallback((objectType: ConfigurableObjectType, objectIds: string[], currentConfigId: string | null) => {
+  const handleContextMenuOpen = useCallback((objectType: ConfigurableObjectType, objectIds: string[], passedConfigId: string | null) => {
     setConfigModalObjectType(objectType);
     setConfigModalObjectIds(objectIds);
-    setConfigModalCurrentConfigId(currentConfigId);
     
-    // Extract current properties from first selected object (for single selection)
+    // Extract current properties and configId from first selected object (for single selection)
     let currentProps: import('./components/ObjectConfigModal').ObjectProperties | undefined;
+    let resolvedConfigId = passedConfigId;
+    
     if (objectIds.length === 1) {
       switch (objectType) {
         case 'walkway': {
           const w = placedWalkways.find(w => w.id === objectIds[0]);
-          if (w) currentProps = { length: w.length };
+          if (w) {
+            currentProps = { length: w.length };
+            resolvedConfigId = resolvedConfigId || w.configId;
+          }
           break;
         }
         case 'cableTray': {
           const t = placedCableTrays.find(t => t.id === objectIds[0]);
-          if (t) currentProps = { length: t.length };
+          if (t) {
+            currentProps = { length: t.length };
+            resolvedConfigId = resolvedConfigId || t.configId;
+          }
           break;
         }
         case 'inverter': {
           const eq = equipment.find(e => e.id === objectIds[0]);
-          if (eq) currentProps = { name: eq.name };
+          if (eq) {
+            currentProps = { name: eq.name };
+            resolvedConfigId = resolvedConfigId || eq.configId || null;
+          }
           break;
         }
         case 'pvArray': {
           const arr = pvArrays.find(a => a.id === objectIds[0]);
-          if (arr) currentProps = { rows: arr.rows, columns: arr.columns, orientation: arr.orientation };
+          if (arr) {
+            currentProps = { rows: arr.rows, columns: arr.columns, orientation: arr.orientation };
+            resolvedConfigId = resolvedConfigId || arr.moduleConfigId || null;
+          }
+          break;
+        }
+        case 'dcCable':
+        case 'acCable': {
+          const line = lines.find(l => l.id === objectIds[0]);
+          if (line) {
+            resolvedConfigId = resolvedConfigId || line.configId || null;
+          }
           break;
         }
       }
     }
+    
+    setConfigModalCurrentConfigId(resolvedConfigId);
     setConfigModalCurrentProperties(currentProps);
     setIsObjectConfigModalOpen(true);
-  }, [placedWalkways, placedCableTrays, equipment, pvArrays]);
+  }, [placedWalkways, placedCableTrays, equipment, pvArrays, lines]);
 
   // Apply configuration change from context menu modal
   const handleApplyConfig = useCallback((newConfigId: string | null, properties?: import('./components/ObjectConfigModal').ObjectProperties) => {
