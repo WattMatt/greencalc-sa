@@ -5,14 +5,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { Plus, Pencil, Trash2, RefreshCw, Sun, Zap, Route, Cable, Star } from 'lucide-react';
+import { Plus, Pencil, Trash2, RefreshCw, Sun, Zap, Route, Cable, Star, CircleDot } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { 
   PlantSetupConfig, 
   SolarModuleConfig, 
   InverterLayoutConfig, 
   WalkwayConfig, 
-  CableTrayConfig 
+  CableTrayConfig,
+  DCCableConfig,
+  ACCableConfig,
+  CableMaterial
 } from '../types';
 import { DimensionInput } from './DimensionInput';
 
@@ -26,8 +30,8 @@ interface PlantSetupModalProps {
 }
 
 type EditingItem = {
-  type: 'module' | 'inverter' | 'walkway' | 'cableTray';
-  item: SolarModuleConfig | InverterLayoutConfig | WalkwayConfig | CableTrayConfig | null;
+  type: 'module' | 'inverter' | 'walkway' | 'cableTray' | 'dcCable' | 'acCable';
+  item: SolarModuleConfig | InverterLayoutConfig | WalkwayConfig | CableTrayConfig | DCCableConfig | ACCableConfig | null;
   isNew: boolean;
 };
 
@@ -224,6 +228,100 @@ export function PlantSetupModal({
 
   const deleteCableTray = (id: string) => {
     setLocalConfig(prev => ({ ...prev, cableTrays: prev.cableTrays.filter(t => t.id !== id) }));
+  };
+
+  // DC Cable editing
+  const [dcCableForm, setDcCableForm] = useState<DCCableConfig>({ 
+    id: '', name: '', diameter: 6, material: 'copper' 
+  });
+
+  const startEditDcCable = (cable: DCCableConfig | null) => {
+    if (cable) {
+      setDcCableForm(cable);
+    } else {
+      setDcCableForm({ id: `dc-${Date.now()}`, name: '', diameter: 6, material: 'copper' });
+    }
+    setEditing({ type: 'dcCable', item: cable, isNew: !cable });
+  };
+
+  const saveDcCable = () => {
+    if (!dcCableForm.name.trim()) {
+      toast.error('DC cable name is required');
+      return;
+    }
+    setLocalConfig(prev => {
+      const existing = prev.dcCables?.find(c => c.id === dcCableForm.id);
+      if (existing) {
+        return { ...prev, dcCables: prev.dcCables.map(c => c.id === dcCableForm.id ? { ...dcCableForm, isDefault: c.isDefault } : c) };
+      }
+      const isFirst = !prev.dcCables || prev.dcCables.length === 0;
+      return { ...prev, dcCables: [...(prev.dcCables || []), { ...dcCableForm, isDefault: isFirst }] };
+    });
+    setEditing(null);
+  };
+
+  const deleteDcCable = (id: string) => {
+    setLocalConfig(prev => {
+      const filtered = (prev.dcCables || []).filter(c => c.id !== id);
+      if (filtered.length > 0 && !filtered.some(c => c.isDefault)) {
+        filtered[0].isDefault = true;
+      }
+      return { ...prev, dcCables: filtered };
+    });
+  };
+
+  const setDefaultDcCable = (id: string) => {
+    setLocalConfig(prev => ({
+      ...prev,
+      dcCables: (prev.dcCables || []).map(c => ({ ...c, isDefault: c.id === id }))
+    }));
+  };
+
+  // AC Cable editing
+  const [acCableForm, setAcCableForm] = useState<ACCableConfig>({ 
+    id: '', name: '', diameter: 25, material: 'copper' 
+  });
+
+  const startEditAcCable = (cable: ACCableConfig | null) => {
+    if (cable) {
+      setAcCableForm(cable);
+    } else {
+      setAcCableForm({ id: `ac-${Date.now()}`, name: '', diameter: 25, material: 'copper' });
+    }
+    setEditing({ type: 'acCable', item: cable, isNew: !cable });
+  };
+
+  const saveAcCable = () => {
+    if (!acCableForm.name.trim()) {
+      toast.error('AC cable name is required');
+      return;
+    }
+    setLocalConfig(prev => {
+      const existing = prev.acCables?.find(c => c.id === acCableForm.id);
+      if (existing) {
+        return { ...prev, acCables: prev.acCables.map(c => c.id === acCableForm.id ? { ...acCableForm, isDefault: c.isDefault } : c) };
+      }
+      const isFirst = !prev.acCables || prev.acCables.length === 0;
+      return { ...prev, acCables: [...(prev.acCables || []), { ...acCableForm, isDefault: isFirst }] };
+    });
+    setEditing(null);
+  };
+
+  const deleteAcCable = (id: string) => {
+    setLocalConfig(prev => {
+      const filtered = (prev.acCables || []).filter(c => c.id !== id);
+      if (filtered.length > 0 && !filtered.some(c => c.isDefault)) {
+        filtered[0].isDefault = true;
+      }
+      return { ...prev, acCables: filtered };
+    });
+  };
+
+  const setDefaultAcCable = (id: string) => {
+    setLocalConfig(prev => ({
+      ...prev,
+      acCables: (prev.acCables || []).map(c => ({ ...c, isDefault: c.id === id }))
+    }));
   };
 
   const renderModulesTab = () => (
@@ -521,12 +619,202 @@ export function PlantSetupModal({
     </div>
   );
 
+  const renderDcCablesTab = () => (
+    <div className="space-y-3">
+      {editing?.type === 'dcCable' ? (
+        <Card className="p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Label className="text-xs">Cable Name</Label>
+              <Input 
+                value={dcCableForm.name} 
+                onChange={e => setDcCableForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g. 6mm² DC String"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Diameter (mm²)</Label>
+              <Select 
+                value={dcCableForm.diameter.toString()} 
+                onValueChange={(v) => setDcCableForm(prev => ({ ...prev, diameter: parseFloat(v) }))}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="4">4 mm²</SelectItem>
+                  <SelectItem value="6">6 mm²</SelectItem>
+                  <SelectItem value="10">10 mm²</SelectItem>
+                  <SelectItem value="16">16 mm²</SelectItem>
+                  <SelectItem value="25">25 mm²</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Material</Label>
+              <Select 
+                value={dcCableForm.material} 
+                onValueChange={(v) => setDcCableForm(prev => ({ ...prev, material: v as CableMaterial }))}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="copper">Copper</SelectItem>
+                  <SelectItem value="aluminum">Aluminum</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button size="sm" onClick={saveDcCable}>Save</Button>
+          </div>
+        </Card>
+      ) : (
+        <>
+          {(localConfig.dcCables || []).map(cable => (
+            <Card key={cable.id} className="p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-0.5 bg-orange-500 rounded" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{cable.name}</span>
+                    {cable.isDefault && <Badge variant="secondary" className="text-[10px]">Default</Badge>}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {cable.diameter} mm² | {cable.material}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                {!cable.isDefault && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDefaultDcCable(cable.id)} title="Set as default">
+                    <Star className="h-3 w-3" />
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEditDcCable(cable)}>
+                  <Pencil className="h-3 w-3" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDcCable(cable.id)}>
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+          <Button variant="outline" size="sm" className="w-full" onClick={() => startEditDcCable(null)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add DC Cable
+          </Button>
+        </>
+      )}
+    </div>
+  );
+
+  const renderAcCablesTab = () => (
+    <div className="space-y-3">
+      {editing?.type === 'acCable' ? (
+        <Card className="p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Label className="text-xs">Cable Name</Label>
+              <Input 
+                value={acCableForm.name} 
+                onChange={e => setAcCableForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g. 25mm² AC Main"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Diameter (mm²)</Label>
+              <Select 
+                value={acCableForm.diameter.toString()} 
+                onValueChange={(v) => setAcCableForm(prev => ({ ...prev, diameter: parseFloat(v) }))}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="16">16 mm²</SelectItem>
+                  <SelectItem value="25">25 mm²</SelectItem>
+                  <SelectItem value="35">35 mm²</SelectItem>
+                  <SelectItem value="50">50 mm²</SelectItem>
+                  <SelectItem value="70">70 mm²</SelectItem>
+                  <SelectItem value="95">95 mm²</SelectItem>
+                  <SelectItem value="120">120 mm²</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Material</Label>
+              <Select 
+                value={acCableForm.material} 
+                onValueChange={(v) => setAcCableForm(prev => ({ ...prev, material: v as CableMaterial }))}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="copper">Copper</SelectItem>
+                  <SelectItem value="aluminum">Aluminum</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button size="sm" onClick={saveAcCable}>Save</Button>
+          </div>
+        </Card>
+      ) : (
+        <>
+          {(localConfig.acCables || []).map(cable => (
+            <Card key={cable.id} className="p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-0.5 bg-blue-500 rounded" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{cable.name}</span>
+                    {cable.isDefault && <Badge variant="secondary" className="text-[10px]">Default</Badge>}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {cable.diameter} mm² | {cable.material}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                {!cable.isDefault && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDefaultAcCable(cable.id)} title="Set as default">
+                    <Star className="h-3 w-3" />
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEditAcCable(cable)}>
+                  <Pencil className="h-3 w-3" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteAcCable(cable.id)}>
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+          <Button variant="outline" size="sm" className="w-full" onClick={() => startEditAcCable(null)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add AC Cable
+          </Button>
+        </>
+      )}
+    </div>
+  );
+
   const getTitle = () => {
     switch (activeTab) {
       case 'modules': return 'Solar Modules';
       case 'inverters': return 'Inverters';
       case 'walkways': return 'Walkways';
       case 'cableTrays': return 'Cable Trays';
+      case 'dcCables': return 'DC Cables';
+      case 'acCables': return 'AC Cables';
       default: return 'Plant Setup';
     }
   };
@@ -537,6 +825,8 @@ export function PlantSetupModal({
       case 'inverters': return <Zap className="h-5 w-5 text-blue-500" />;
       case 'walkways': return <Route className="h-5 w-5 text-green-500" />;
       case 'cableTrays': return <Cable className="h-5 w-5 text-orange-500" />;
+      case 'dcCables': return <div className="w-5 h-0.5 bg-orange-500 rounded" />;
+      case 'acCables': return <div className="w-5 h-0.5 bg-blue-500 rounded" />;
       default: return null;
     }
   };
@@ -564,6 +854,8 @@ export function PlantSetupModal({
           {activeTab === 'inverters' && renderInvertersTab()}
           {activeTab === 'walkways' && renderWalkwaysTab()}
           {activeTab === 'cableTrays' && renderCableTraysTab()}
+          {activeTab === 'dcCables' && renderDcCablesTab()}
+          {activeTab === 'acCables' && renderAcCablesTab()}
         </div>
 
         <DialogFooter>

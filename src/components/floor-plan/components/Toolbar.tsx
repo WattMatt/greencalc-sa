@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, ChevronDown, Copy, MoveHorizontal, AlignVerticalJustifyStart,
   Settings
 } from 'lucide-react';
-import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig, WalkwayConfig, CableTrayConfig, SolarModuleConfig, InverterLayoutConfig } from '../types';
+import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig, WalkwayConfig, CableTrayConfig, SolarModuleConfig, InverterLayoutConfig, DCCableConfig, ACCableConfig } from '../types';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -132,7 +132,7 @@ function ConfigSelectorPopover({
 }
 
 // Helper to convert configs to generic items
-function toConfigItems(items: (WalkwayConfig | CableTrayConfig | SolarModuleConfig | InverterLayoutConfig)[]): ConfigItem[] {
+function toConfigItems(items: (WalkwayConfig | CableTrayConfig | SolarModuleConfig | InverterLayoutConfig | DCCableConfig | ACCableConfig)[]): ConfigItem[] {
   return items.map(item => {
     if ('wattage' in item) {
       // SolarModuleConfig
@@ -140,6 +140,9 @@ function toConfigItems(items: (WalkwayConfig | CableTrayConfig | SolarModuleConf
     } else if ('acCapacity' in item) {
       // InverterLayoutConfig
       return { id: item.id, name: item.name, subtitle: `${item.acCapacity}kW` };
+    } else if ('diameter' in item) {
+      // DCCableConfig or ACCableConfig
+      return { id: item.id, name: item.name, subtitle: `${item.diameter}mm² ${item.material}` };
     } else {
       // WalkwayConfig or CableTrayConfig
       return { id: item.id, name: item.name, subtitle: `${item.width.toFixed(3)}m` };
@@ -209,6 +212,11 @@ interface ToolbarProps {
   setSelectedModuleId?: (id: string | null) => void;
   selectedInverterId?: string | null;
   setSelectedInverterId?: (id: string | null) => void;
+  // Cable selection
+  selectedDcCableId?: string | null;
+  setSelectedDcCableId?: (id: string | null) => void;
+  selectedAcCableId?: string | null;
+  setSelectedAcCableId?: (id: string | null) => void;
 }
 
 export function Toolbar({
@@ -255,6 +263,10 @@ export function Toolbar({
   setSelectedModuleId,
   selectedInverterId,
   setSelectedInverterId,
+  selectedDcCableId,
+  setSelectedDcCableId,
+  selectedAcCableId,
+  setSelectedAcCableId,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -478,6 +490,30 @@ export function Toolbar({
               {plantSetupConfig.cableTrays.length}
             </Badge>
           </Button>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-between h-8"
+            onClick={() => onOpenPlantSetup('dcCables')}
+          >
+            <span className="text-xs">DC Cable</span>
+            <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+              {plantSetupConfig.dcCables?.length || 0}
+            </Badge>
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-between h-8"
+            onClick={() => onOpenPlantSetup('acCables')}
+          >
+            <span className="text-xs">AC Cable</span>
+            <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+              {plantSetupConfig.acCables?.length || 0}
+            </Badge>
+          </Button>
         </CollapsibleSection>
 
         <Separator className="my-2" />
@@ -572,20 +608,55 @@ export function Toolbar({
           isOpen={openSections.materials}
           onToggle={() => toggleSection('materials')}
         >
-          <ToolButton
-            icon={() => <div className="w-4 h-0.5 bg-orange-500 rounded" />}
-            label="DC Cable"
-            isActive={activeTool === Tool.LINE_DC}
-            onClick={() => setActiveTool(Tool.LINE_DC)}
-            disabled={!scaleSet}
-          />
-          <ToolButton
-            icon={() => <div className="w-4 h-0.5 bg-blue-500 rounded" />}
-            label="AC Cable"
-            isActive={activeTool === Tool.LINE_AC}
-            onClick={() => setActiveTool(Tool.LINE_AC)}
-            disabled={!scaleSet}
-          />
+          {/* DC Cable with selector */}
+          <div className="flex items-center gap-1">
+            <ToolButton
+              icon={() => <div className="w-4 h-0.5 bg-orange-500 rounded" />}
+              label="DC Cable"
+              isActive={activeTool === Tool.LINE_DC}
+              onClick={() => setActiveTool(Tool.LINE_DC)}
+              disabled={!scaleSet}
+            />
+            {(plantSetupConfig.dcCables?.length || 0) > 1 && setSelectedDcCableId && (
+              <ConfigSelectorPopover
+                items={toConfigItems(plantSetupConfig.dcCables || [])}
+                selectedId={selectedDcCableId}
+                onSelect={setSelectedDcCableId}
+                label="Select DC Cable"
+              />
+            )}
+          </div>
+          {/* Show currently selected DC cable */}
+          {(plantSetupConfig.dcCables?.length || 0) > 0 && (
+            <p className="text-[10px] text-muted-foreground pl-6 -mt-1 truncate">
+              {(plantSetupConfig.dcCables?.find(c => c.id === selectedDcCableId) || plantSetupConfig.dcCables?.find(c => c.isDefault) || plantSetupConfig.dcCables?.[0])?.name}
+            </p>
+          )}
+          
+          {/* AC Cable with selector */}
+          <div className="flex items-center gap-1">
+            <ToolButton
+              icon={() => <div className="w-4 h-0.5 bg-blue-500 rounded" />}
+              label="AC Cable"
+              isActive={activeTool === Tool.LINE_AC}
+              onClick={() => setActiveTool(Tool.LINE_AC)}
+              disabled={!scaleSet}
+            />
+            {(plantSetupConfig.acCables?.length || 0) > 1 && setSelectedAcCableId && (
+              <ConfigSelectorPopover
+                items={toConfigItems(plantSetupConfig.acCables || [])}
+                selectedId={selectedAcCableId}
+                onSelect={setSelectedAcCableId}
+                label="Select AC Cable"
+              />
+            )}
+          </div>
+          {/* Show currently selected AC cable */}
+          {(plantSetupConfig.acCables?.length || 0) > 0 && (
+            <p className="text-[10px] text-muted-foreground pl-6 -mt-1 truncate">
+              {(plantSetupConfig.acCables?.find(c => c.id === selectedAcCableId) || plantSetupConfig.acCables?.find(c => c.isDefault) || plantSetupConfig.acCables?.[0])?.name}
+            </p>
+          )}
           <ToolButton
             icon={() => <span className="text-xs font-mono">+</span>}
             label="DC Combiner"

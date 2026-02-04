@@ -242,11 +242,32 @@ export interface CableTrayConfig {
   length: number;     // meters
 }
 
+// Cable material options
+export type CableMaterial = 'copper' | 'aluminum';
+
+export interface DCCableConfig {
+  id: string;
+  name: string;
+  diameter: number;   // mm (e.g., 4, 6, 10, 16)
+  material: CableMaterial;
+  isDefault?: boolean;
+}
+
+export interface ACCableConfig {
+  id: string;
+  name: string;
+  diameter: number;   // mm (e.g., 16, 25, 35, 50, 70, 95)
+  material: CableMaterial;
+  isDefault?: boolean;
+}
+
 export interface PlantSetupConfig {
   solarModules: SolarModuleConfig[];
   inverters: InverterLayoutConfig[];
   walkways: WalkwayConfig[];           // Templates
   cableTrays: CableTrayConfig[];       // Templates
+  dcCables: DCCableConfig[];           // DC cable templates
+  acCables: ACCableConfig[];           // AC cable templates
   placedWalkways?: PlacedWalkway[];    // Actual placed instances
   placedCableTrays?: PlacedCableTray[]; // Actual placed instances
 }
@@ -256,6 +277,8 @@ export const defaultPlantSetupConfig: PlantSetupConfig = {
   inverters: [],
   walkways: [],
   cableTrays: [],
+  dcCables: [],
+  acCables: [],
 };
 
 // Subgroup visibility for walkways, cable trays, and cables by configId/thickness
