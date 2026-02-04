@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check, Eye, EyeOff, LayoutGrid } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig, PlacedWalkway, PlacedCableTray, EquipmentType, LayerVisibility } from '../types';
+import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig, PlacedWalkway, PlacedCableTray, EquipmentType, LayerVisibility, ItemVisibility } from '../types';
 import { calculateTotalPVCapacity, calculatePolygonArea, calculateLineLength } from '../utils/geometry';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
@@ -63,6 +63,10 @@ interface SummaryPanelProps {
   onShowWalkwayLayer?: () => void;
   onShowCableTrayLayer?: () => void;
   onShowCablesLayer?: () => void;
+  // Per-item visibility
+  itemVisibility?: ItemVisibility;
+  onToggleItemVisibility?: (itemId: string) => void;
+  onForceShowItem?: (itemId: string) => void;
 }
 
 // Reusable collapsible section component with visibility toggle
@@ -155,6 +159,9 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
   selectedItemIds,
   onSelectItem,
   onShowLayer,
+  itemVisibility,
+  onToggleItemVisibility,
+  onForceShowItem,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -169,6 +176,9 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
   selectedItemIds?: Set<string>;
   onSelectItem?: (id: string) => void;
   onShowLayer?: () => void;
+  itemVisibility?: ItemVisibility;
+  onToggleItemVisibility?: (itemId: string) => void;
+  onForceShowItem?: (itemId: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
@@ -187,7 +197,7 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
     });
   };
 
-  // Handle item click - auto-show layer and subgroup if hidden
+  // Handle item click - auto-show layer, subgroup, and item if hidden
   const handleItemClick = (item: T, groupKey: string) => {
     // Auto-show layer if hidden
     if (isVisible === false && onShowLayer) {
@@ -196,6 +206,10 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
     // Auto-show subgroup if hidden
     if (subgroupVisibility?.[groupKey] === false && onToggleSubgroupVisibility) {
       onToggleSubgroupVisibility(groupKey);
+    }
+    // Auto-show item if hidden
+    if (itemVisibility?.[item.id] === false && onForceShowItem) {
+      onForceShowItem(item.id);
     }
     // Select the item
     onSelectItem?.(item.id);
@@ -302,18 +316,45 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
                     </CollapsibleTrigger>
                   </div>
                   <CollapsibleContent className="pt-1 pl-6 space-y-1">
-                    {group.items.map((item) => {
+                    {group.items.map((item, itemIndex) => {
                       const isSelected = selectedItemIds?.has(item.id) ?? false;
+                      const isItemVisible = itemVisibility?.[item.id] !== false;
                       return (
                         <div 
                           key={item.id} 
                           className={cn(
-                            "flex items-center justify-between p-1.5 rounded text-xs transition-colors",
+                            "flex items-center gap-1 p-1.5 rounded text-xs transition-colors",
                             isSelected 
                               ? "bg-primary/10 border border-primary" 
-                              : "bg-muted hover:bg-accent"
+                              : "bg-muted hover:bg-accent",
+                            !isItemVisible && "opacity-50"
                           )}
                         >
+                          {/* Per-item visibility toggle */}
+                          {onToggleItemVisibility && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-5 w-5 shrink-0 -ml-0.5"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onToggleItemVisibility(item.id);
+                                  }}
+                                >
+                                  {isItemVisible ? (
+                                    <Eye className="h-3 w-3 text-muted-foreground" />
+                                  ) : (
+                                    <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="left">
+                                {isItemVisible ? 'Hide' : 'Show'}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                           <button
                             type="button"
                             className={cn(
@@ -323,7 +364,7 @@ function GroupedMaterialSection<T extends { id: string; name: string; width: num
                             onClick={() => handleItemClick(item, key)}
                           >
                             <span className="text-muted-foreground">
-                              {Math.min(item.width, item.length).toFixed(3)}m × {Math.max(item.width, item.length).toFixed(2)}m
+                              {itemType === 'walkway' ? 'Walkway' : 'Tray'} {itemIndex + 1}: {Math.min(item.width, item.length).toFixed(2)}m × {Math.max(item.width, item.length).toFixed(1)}m
                             </span>
                           </button>
                           {onDeleteItem && (
@@ -387,6 +428,9 @@ export function SummaryPanel({
   onShowWalkwayLayer,
   onShowCableTrayLayer,
   onShowCablesLayer,
+  itemVisibility,
+  onToggleItemVisibility,
+  onForceShowItem,
 }: SummaryPanelProps) {
   const { panelCount, capacityKwp } = pvPanelConfig
     ? calculateTotalPVCapacity(pvArrays, pvPanelConfig)
@@ -603,55 +647,89 @@ export function SummaryPanel({
                 <p className="text-xs text-muted-foreground">No roof masks defined</p>
               ) : (
                 <div className="space-y-1">
-                  {roofMasks.map((mask, i) => (
-                    <div
-                      key={mask.id}
-                      className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
-                        selectedItemIds?.has(mask.id)
-                          ? 'bg-primary/10 border border-primary' 
-                          : 'bg-muted hover:bg-accent'
-                      }`}
-                    >
-                      <button
-                        className="flex-1 text-left"
-                        onClick={() => onSelectItem(mask.id)}
-                        onDoubleClick={() => onEditRoofMask?.(mask.id)}
+                  {roofMasks.map((mask, i) => {
+                    const isItemVisible = itemVisibility?.[mask.id] !== false;
+                    const handleClick = () => {
+                      if (!isItemVisible && onForceShowItem) onForceShowItem(mask.id);
+                      onSelectItem(mask.id);
+                    };
+                    return (
+                      <div
+                        key={mask.id}
+                        className={cn(
+                          "w-full flex items-center gap-1 p-2 rounded text-xs transition-colors",
+                          selectedItemIds?.has(mask.id)
+                            ? 'bg-primary/10 border border-primary' 
+                            : 'bg-muted hover:bg-accent',
+                          !isItemVisible && 'opacity-50'
+                        )}
                       >
-                        <span className="font-medium">Roof {i + 1}</span>
-                        <span className="text-muted-foreground ml-2">
-                           {calculatePolygonArea(mask.points, scaleInfo.ratio).toFixed(0)} m² • {mask.pitch}° • {mask.direction}°
-                        </span>
-                      </button>
-                      {onEditRoofMask && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEditRoofMask(mask.id);
-                          }}
-                          title="Edit roof configuration"
+                        {/* Per-item visibility toggle */}
+                        {onToggleItemVisibility && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 shrink-0 -ml-0.5"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggleItemVisibility(mask.id);
+                                }}
+                              >
+                                {isItemVisible ? (
+                                  <Eye className="h-3 w-3 text-muted-foreground" />
+                                ) : (
+                                  <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">
+                              {isItemVisible ? 'Hide' : 'Show'}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                        <button
+                          className="flex-1 text-left"
+                          onClick={handleClick}
+                          onDoubleClick={() => onEditRoofMask?.(mask.id)}
                         >
-                          <Pencil className="h-3 w-3" />
-                        </Button>
-                      )}
-                      {onDeleteItem && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteItem(mask.id);
-                          }}
-                          title="Delete roof mask"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+                          <span className="font-medium">Roof {i + 1}</span>
+                          <span className="text-muted-foreground ml-2">
+                             {calculatePolygonArea(mask.points, scaleInfo.ratio).toFixed(0)} m² • {mask.pitch}° • {mask.direction}°
+                          </span>
+                        </button>
+                        {onEditRoofMask && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditRoofMask(mask.id);
+                            }}
+                            title="Edit roof configuration"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {onDeleteItem && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteItem(mask.id);
+                            }}
+                            title="Delete roof mask"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </CollapsibleSection>
@@ -671,44 +749,77 @@ export function SummaryPanel({
                 <div className="space-y-1">
                   {equipment
                     .filter((e) => e.type === EquipmentType.MAIN_BOARD)
-                    .map((board, i) => (
-                      <div
-                        key={board.id}
-                        className={cn(
-                          "w-full flex items-center justify-between p-2 rounded text-xs transition-colors",
-                          selectedItemIds?.has(board.id)
-                            ? 'bg-primary/10 border border-primary'
-                            : 'bg-muted hover:bg-accent'
-                        )}
-                      >
-                        <button
-                          type="button"
-                          className="flex-1 text-left"
-                          onClick={() => onSelectItem(board.id)}
-                        >
-                          <span className="font-medium">Main Board {i + 1}</span>
-                          {board.name && (
-                            <span className="text-muted-foreground ml-2">{board.name}</span>
+                    .map((board, i) => {
+                      const isItemVisible = itemVisibility?.[board.id] !== false;
+                      const handleClick = () => {
+                        if (!isItemVisible && onForceShowItem) onForceShowItem(board.id);
+                        onSelectItem(board.id);
+                      };
+                      return (
+                        <div
+                          key={board.id}
+                          className={cn(
+                            "w-full flex items-center gap-1 p-2 rounded text-xs transition-colors",
+                            selectedItemIds?.has(board.id)
+                              ? 'bg-primary/10 border border-primary'
+                              : 'bg-muted hover:bg-accent',
+                            !isItemVisible && 'opacity-50'
                           )}
-                        </button>
-
-                        {onDeleteItem && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              onDeleteItem(board.id);
-                            }}
-                            title="Delete main board"
+                        >
+                          {/* Per-item visibility toggle */}
+                          {onToggleItemVisibility && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-5 w-5 shrink-0 -ml-0.5"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onToggleItemVisibility(board.id);
+                                  }}
+                                >
+                                  {isItemVisible ? (
+                                    <Eye className="h-3 w-3 text-muted-foreground" />
+                                  ) : (
+                                    <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="left">
+                                {isItemVisible ? 'Hide' : 'Show'}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          <button
+                            type="button"
+                            className="flex-1 text-left"
+                            onClick={handleClick}
                           >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
+                            <span className="font-medium">Main Board {i + 1}</span>
+                            {board.name && (
+                              <span className="text-muted-foreground ml-2">{board.name}</span>
+                            )}
+                          </button>
+
+                          {onDeleteItem && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onDeleteItem(board.id);
+                              }}
+                              title="Delete main board"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               )}
             </CollapsibleSection>
@@ -729,18 +840,50 @@ export function SummaryPanel({
                   {pvArrays.map((arr, i) => {
                     const panels = arr.rows * arr.columns;
                     const kWp = pvPanelConfig ? (panels * pvPanelConfig.wattage) / 1000 : 0;
+                    const isItemVisible = itemVisibility?.[arr.id] !== false;
+                    const handleClick = () => {
+                      if (!isItemVisible && onForceShowItem) onForceShowItem(arr.id);
+                      onSelectItem(arr.id);
+                    };
                     return (
                       <div
                         key={arr.id}
-                        className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
+                        className={cn(
+                          "w-full flex items-center gap-1 p-2 rounded text-xs transition-colors",
                           selectedItemIds?.has(arr.id)
                             ? 'bg-primary/10 border border-primary' 
-                            : 'bg-muted hover:bg-accent'
-                        }`}
+                            : 'bg-muted hover:bg-accent',
+                          !isItemVisible && 'opacity-50'
+                        )}
                       >
+                        {/* Per-item visibility toggle */}
+                        {onToggleItemVisibility && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 shrink-0 -ml-0.5"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggleItemVisibility(arr.id);
+                                }}
+                              >
+                                {isItemVisible ? (
+                                  <Eye className="h-3 w-3 text-muted-foreground" />
+                                ) : (
+                                  <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">
+                              {isItemVisible ? 'Hide' : 'Show'}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
                         <button
                           className="flex-1 text-left"
-                          onClick={() => onSelectItem(arr.id)}
+                          onClick={handleClick}
                         >
                           <span className="font-medium">Array {i + 1}</span>
                           <span className="text-muted-foreground ml-2">
@@ -782,43 +925,77 @@ export function SummaryPanel({
                 <div className="space-y-1">
                   {equipment
                     .filter((e) => e.type === EquipmentType.INVERTER)
-                    .map((inv, i) => (
-                      <div
-                        key={inv.id}
-                        className={`w-full flex items-center justify-between p-2 rounded text-xs transition-colors ${
-                          selectedItemIds?.has(inv.id)
-                            ? 'bg-primary/10 border border-primary'
-                            : 'bg-muted hover:bg-accent'
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          className="flex-1 text-left"
-                          onClick={() => onSelectItem(inv.id)}
-                        >
-                          <span className="font-medium">Inverter {i + 1}</span>
-                          {inv.name && (
-                            <span className="text-muted-foreground ml-2">{inv.name}</span>
+                    .map((inv, i) => {
+                      const isItemVisible = itemVisibility?.[inv.id] !== false;
+                      const handleClick = () => {
+                        if (!isItemVisible && onForceShowItem) onForceShowItem(inv.id);
+                        onSelectItem(inv.id);
+                      };
+                      return (
+                        <div
+                          key={inv.id}
+                          className={cn(
+                            "w-full flex items-center gap-1 p-2 rounded text-xs transition-colors",
+                            selectedItemIds?.has(inv.id)
+                              ? 'bg-primary/10 border border-primary'
+                              : 'bg-muted hover:bg-accent',
+                            !isItemVisible && 'opacity-50'
                           )}
-                        </button>
-
-                        {onDeleteItem && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              onDeleteItem(inv.id);
-                            }}
-                            title="Delete inverter"
+                        >
+                          {/* Per-item visibility toggle */}
+                          {onToggleItemVisibility && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-5 w-5 shrink-0 -ml-0.5"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onToggleItemVisibility(inv.id);
+                                  }}
+                                >
+                                  {isItemVisible ? (
+                                    <Eye className="h-3 w-3 text-muted-foreground" />
+                                  ) : (
+                                    <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="left">
+                                {isItemVisible ? 'Hide' : 'Show'}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          <button
+                            type="button"
+                            className="flex-1 text-left"
+                            onClick={handleClick}
                           >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
+                            <span className="font-medium">Inverter {i + 1}</span>
+                            {inv.name && (
+                              <span className="text-muted-foreground ml-2">{inv.name}</span>
+                            )}
+                          </button>
+
+                          {onDeleteItem && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onDeleteItem(inv.id);
+                              }}
+                              title="Delete inverter"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               )}
             </CollapsibleSection>
@@ -837,6 +1014,9 @@ export function SummaryPanel({
               selectedItemIds={selectedItemIds}
               onSelectItem={onSelectItem}
               onShowLayer={onShowWalkwayLayer}
+              itemVisibility={itemVisibility}
+              onToggleItemVisibility={onToggleItemVisibility}
+              onForceShowItem={onForceShowItem}
             />
 
             <GroupedMaterialSection
@@ -853,6 +1033,9 @@ export function SummaryPanel({
               selectedItemIds={selectedItemIds}
               onSelectItem={onSelectItem}
               onShowLayer={onShowCableTrayLayer}
+              itemVisibility={itemVisibility}
+              onToggleItemVisibility={onToggleItemVisibility}
+              onForceShowItem={onForceShowItem}
             />
 
             {/* Cabling - DC/AC cables grouped by thickness */}

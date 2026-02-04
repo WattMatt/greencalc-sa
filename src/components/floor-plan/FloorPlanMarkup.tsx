@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem, LayerVisibility, defaultLayerVisibility, SubgroupVisibility, defaultSubgroupVisibility } from './types';
+import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem, LayerVisibility, defaultLayerVisibility, SubgroupVisibility, defaultSubgroupVisibility, ItemVisibility } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
@@ -128,6 +128,25 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
       },
     }));
   }, []);
+  
+  // Per-item visibility (individual items can be hidden independently of layer/subgroup)
+  const [itemVisibility, setItemVisibility] = useState<ItemVisibility>({});
+  
+  const handleToggleItemVisibility = useCallback((itemId: string) => {
+    setItemVisibility(prev => ({
+      ...prev,
+      [itemId]: prev[itemId] === false ? true : false,
+    }));
+  }, []);
+  
+  // Force-show individual item
+  const forceShowItem = useCallback((itemId: string) => {
+    setItemVisibility(prev => ({
+      ...prev,
+      [itemId]: true,
+    }));
+  }, []);
+  
   // Refs for auto-save
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isAutoSavingRef = useRef(false);
@@ -2195,6 +2214,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         onShowWalkwayLayer={forceShowWalkways}
         onShowCableTrayLayer={forceShowCableTrays}
         onShowCablesLayer={forceShowCables}
+        itemVisibility={itemVisibility}
+        onToggleItemVisibility={handleToggleItemVisibility}
+        onForceShowItem={forceShowItem}
       />
 
       {!readOnly && (
