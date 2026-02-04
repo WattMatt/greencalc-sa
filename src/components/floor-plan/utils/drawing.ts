@@ -588,6 +588,8 @@ export interface RenderAllParams {
   layerVisibility?: LayerVisibility;
   // Subgroup visibility for filtering walkways/cable trays by configId
   subgroupVisibility?: SubgroupVisibility;
+  // Per-item visibility - individual items can be hidden
+  itemVisibility?: Record<string, boolean>;
 }
 
 /**
@@ -597,7 +599,7 @@ export const renderAllMarkups = (
   ctx: CanvasRenderingContext2D,
   params: RenderAllParams
 ) => {
-  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, selectedItemIds, scaleLine, plantSetupConfig, placedWalkways, placedCableTrays, layerVisibility = defaultLayerVisibility, subgroupVisibility } = params;
+  const { equipment, lines, roofMasks, pvArrays, scaleInfo, pvPanelConfig, zoom, selectedItemId, selectedItemIds, scaleLine, plantSetupConfig, placedWalkways, placedCableTrays, layerVisibility = defaultLayerVisibility, subgroupVisibility, itemVisibility } = params;
 
   // Helper to check if an item is selected (supports both single and multi-selection)
   const isItemSelected = (id: string) => {
@@ -607,16 +609,23 @@ export const renderAllMarkups = (
     return selectedItemId === id;
   };
 
+  // Helper to check if an individual item is visible (per-item visibility)
+  const isItemVisible = (id: string) => {
+    return itemVisibility?.[id] !== false;
+  };
+
   // Draw roof masks first (background)
   if (layerVisibility.roofMasks) {
     for (const mask of roofMasks) {
+      if (!isItemVisible(mask.id)) continue;
       drawRoofMask(ctx, mask, zoom, isItemSelected(mask.id));
     }
   }
 
-  // Draw walkways (below PV arrays) - filter by subgroup visibility
+  // Draw walkways (below PV arrays) - filter by subgroup visibility AND per-item visibility
   if (layerVisibility.walkways && placedWalkways) {
     const visibleWalkways = placedWalkways.filter(w => {
+      if (!isItemVisible(w.id)) return false;
       const configId = w.configId || 'default';
       return subgroupVisibility?.walkwaySubgroups?.[configId] !== false;
     });
@@ -625,9 +634,10 @@ export const renderAllMarkups = (
     }
   }
 
-  // Draw cable trays (below PV arrays) - filter by subgroup visibility
+  // Draw cable trays (below PV arrays) - filter by subgroup visibility AND per-item visibility
   if (layerVisibility.cableTrays && placedCableTrays) {
     const visibleTrays = placedCableTrays.filter(t => {
+      if (!isItemVisible(t.id)) return false;
       const configId = t.configId || 'default';
       return subgroupVisibility?.cableTraySubgroups?.[configId] !== false;
     });
@@ -636,16 +646,18 @@ export const renderAllMarkups = (
     }
   }
 
-  // Draw PV arrays
+  // Draw PV arrays - filter by per-item visibility
   if (layerVisibility.pvArrays && pvPanelConfig) {
     for (const array of pvArrays) {
+      if (!isItemVisible(array.id)) continue;
       drawPvArray(ctx, array, false, pvPanelConfig, scaleInfo, roofMasks, zoom, isItemSelected(array.id));
     }
   }
 
-  // Draw supply lines (cables) - filter by thickness visibility
+  // Draw supply lines (cables) - filter by thickness visibility AND per-item visibility
   if (layerVisibility.cables) {
     const visibleLines = lines.filter(line => {
+      if (!isItemVisible(line.id)) return false;
       const thickness = line.thickness || 6; // Default 6mm
       if (line.type === 'dc') {
         return subgroupVisibility?.dcCableThicknesses?.[thickness] !== false;
@@ -658,9 +670,10 @@ export const renderAllMarkups = (
     }
   }
 
-  // Draw equipment (inverters etc.)
+  // Draw equipment (inverters etc.) - filter by per-item visibility
   if (layerVisibility.equipment) {
     for (const item of equipment) {
+      if (!isItemVisible(item.id)) continue;
       drawEquipmentIcon(ctx, item, isItemSelected(item.id), zoom, scaleInfo, plantSetupConfig);
     }
   }

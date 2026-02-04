@@ -64,6 +64,8 @@ interface CanvasProps {
   layerVisibility?: LayerVisibility;
   // Subgroup visibility for filtering walkways/cable trays by configId
   subgroupVisibility?: SubgroupVisibility;
+  // Per-item visibility - individual items can be hidden
+  itemVisibility?: Record<string, boolean>;
 }
 
 export function Canvas({
@@ -91,6 +93,7 @@ export function Canvas({
   alignEdge2,
   layerVisibility = defaultLayerVisibility,
   subgroupVisibility,
+  itemVisibility,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -289,6 +292,7 @@ export function Canvas({
       alignEdge1, alignEdge2,
       layerVisibility,
       subgroupVisibility,
+      itemVisibility,
     });
     
     // Draw current drawing in progress
@@ -757,9 +761,10 @@ export function Canvas({
         }
       };
       
-      // Prefer selecting PV arrays first (topmost) - only if layer is visible
+      // Prefer selecting PV arrays first (topmost) - only if layer is visible AND item is visible
       const hitArray = (pvPanelConfig && scaleInfo.ratio && layerVisibility.pvArrays)
         ? [...pvArrays].reverse().find(arr => {
+            if (itemVisibility?.[arr.id] === false) return false;
             const corners = getPVArrayCorners(arr, pvPanelConfig, roofMasks, scaleInfo);
             return corners.length === 4 && isPointInPolygon(worldPos, corners);
           })
@@ -773,9 +778,10 @@ export function Canvas({
         return;
       }
 
-      // Select walkways (higher priority than roof masks since they sit inside them) - only if layer is visible
+      // Select walkways (higher priority than roof masks since they sit inside them) - only if layer and item visible
       if (placedWalkways && scaleInfo.ratio && layerVisibility.walkways) {
         const hitWalkway = [...placedWalkways].reverse().find(walkway => {
+          if (itemVisibility?.[walkway.id] === false) return false;
           const widthPx = walkway.width / scaleInfo.ratio!;
           const lengthPx = walkway.length / scaleInfo.ratio!;
           const halfW = widthPx / 2;
@@ -803,9 +809,10 @@ export function Canvas({
         }
       }
 
-      // Select cable trays (higher priority than roof masks) - only if layer is visible
+      // Select cable trays (higher priority than roof masks) - only if layer and item visible
       if (placedCableTrays && scaleInfo.ratio && layerVisibility.cableTrays) {
         const hitTray = [...placedCableTrays].reverse().find(tray => {
+          if (itemVisibility?.[tray.id] === false) return false;
           const widthPx = tray.width / scaleInfo.ratio!;
           const lengthPx = tray.length / scaleInfo.ratio!;
           const halfW = widthPx / 2;
@@ -833,9 +840,10 @@ export function Canvas({
         }
       }
 
-      // Select equipment (inverters, etc.) - checked BEFORE roof masks - only if layer is visible
+      // Select equipment (inverters, etc.) - checked BEFORE roof masks - only if layer and item visible
       const hitEquipment = layerVisibility.equipment
         ? [...equipment].reverse().find(item => {
+            if (itemVisibility?.[item.id] === false) return false;
             // Calculate size in pixels based on real-world size and scale
             const realSize = EQUIPMENT_REAL_WORLD_SIZES[item.type] || 0.5;
             // Convert real size to world units (pixels at zoom=1)
@@ -859,11 +867,12 @@ export function Canvas({
         return;
       }
 
-      // Select cables/lines (between equipment and roof masks) - only if layer is visible and thickness is visible
+      // Select cables/lines (between equipment and roof masks) - only if layer, thickness, and item visible
       if (lines && lines.length > 0 && layerVisibility.cables) {
         const cableHitThreshold = 8 / viewState.zoom; // 8 pixels for easy clicking
         const hitLine = [...lines].reverse().find(line => {
           if (line.points.length < 2) return false;
+          if (itemVisibility?.[line.id] === false) return false;
           // Check thickness visibility
           const thickness = line.thickness || 6;
           if (line.type === 'dc' && subgroupVisibility?.dcCableThicknesses?.[thickness] === false) return false;
@@ -878,9 +887,12 @@ export function Canvas({
         }
       }
 
-      // Fallback: select roof mask (lowest priority) - only if layer is visible
+      // Fallback: select roof mask (lowest priority) - only if layer and item visible
       if (layerVisibility.roofMasks) {
-        const hitMask = [...roofMasks].reverse().find(m => isPointInPolygon(worldPos, m.points));
+        const hitMask = [...roofMasks].reverse().find(m => {
+          if (itemVisibility?.[m.id] === false) return false;
+          return isPointInPolygon(worldPos, m.points);
+        });
         if (hitMask) {
           handleItemSelection(hitMask.id, () => {});
           return;
@@ -1765,9 +1777,10 @@ export function Canvas({
           return false;
         };
         
-        // Check PV arrays (only if layer is visible)
+        // Check PV arrays (only if layer and item is visible)
         if (pvPanelConfig && scaleInfo.ratio && layerVisibility.pvArrays) {
           pvArrays.forEach(arr => {
+            if (itemVisibility?.[arr.id] === false) return;
             const dims = getPVArrayDimensions(arr, pvPanelConfig, roofMasks, scaleInfo, arr.position);
             // Use center point for selection
             if (isCenterInBox(arr.position)) {
@@ -1776,36 +1789,40 @@ export function Canvas({
           });
         }
         
-        // Check walkways (only if layer is visible)
+        // Check walkways (only if layer and item is visible)
         if (layerVisibility.walkways) {
           placedWalkways?.forEach(walkway => {
+            if (itemVisibility?.[walkway.id] === false) return;
             if (isCenterInBox(walkway.position)) {
               selectedIds.push(walkway.id);
             }
           });
         }
         
-        // Check cable trays (only if layer is visible)
+        // Check cable trays (only if layer and item is visible)
         if (layerVisibility.cableTrays) {
           placedCableTrays?.forEach(tray => {
+            if (itemVisibility?.[tray.id] === false) return;
             if (isCenterInBox(tray.position)) {
               selectedIds.push(tray.id);
             }
           });
         }
         
-        // Check equipment (only if layer is visible)
+        // Check equipment (only if layer and item is visible)
         if (layerVisibility.equipment) {
           equipment.forEach(eq => {
+            if (itemVisibility?.[eq.id] === false) return;
             if (isCenterInBox(eq.position)) {
               selectedIds.push(eq.id);
             }
           });
         }
         
-        // Check cables/lines (only if layer is visible)
+        // Check cables/lines (only if layer, thickness, and item is visible)
         if (layerVisibility.cables) {
           lines.forEach(line => {
+            if (itemVisibility?.[line.id] === false) return;
             // Check thickness visibility
             const thickness = line.thickness || 6;
             if (line.type === 'dc' && subgroupVisibility?.dcCableThicknesses?.[thickness] === false) return;
@@ -1817,9 +1834,10 @@ export function Canvas({
           });
         }
         
-        // Check roof masks (by center) (only if layer is visible)
+        // Check roof masks (by center) (only if layer and item is visible)
         if (layerVisibility.roofMasks) {
           roofMasks.forEach(mask => {
+            if (itemVisibility?.[mask.id] === false) return;
             if (mask.points.length > 0) {
               const cx = mask.points.reduce((s, p) => s + p.x, 0) / mask.points.length;
               const cy = mask.points.reduce((s, p) => s + p.y, 0) / mask.points.length;
