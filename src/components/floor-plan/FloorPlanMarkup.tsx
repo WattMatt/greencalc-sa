@@ -103,6 +103,31 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const forceShowCableTrays = useCallback(() => {
     setLayerVisibility(prev => ({ ...prev, cableTrays: true }));
   }, []);
+  
+  const forceShowCables = useCallback(() => {
+    setLayerVisibility(prev => ({ ...prev, cables: true }));
+  }, []);
+  
+  // Cable thickness visibility handlers
+  const handleToggleDcCableThicknessVisibility = useCallback((thickness: number) => {
+    setSubgroupVisibility(prev => ({
+      ...prev,
+      dcCableThicknesses: {
+        ...prev.dcCableThicknesses,
+        [thickness]: prev.dcCableThicknesses[thickness] === false ? true : false,
+      },
+    }));
+  }, []);
+  
+  const handleToggleAcCableThicknessVisibility = useCallback((thickness: number) => {
+    setSubgroupVisibility(prev => ({
+      ...prev,
+      acCableThicknesses: {
+        ...prev.acCableThicknesses,
+        [thickness]: prev.acCableThicknesses[thickness] === false ? true : false,
+      },
+    }));
+  }, []);
   // Refs for auto-save
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isAutoSavingRef = useRef(false);
@@ -2163,8 +2188,13 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         cableTraySubgroupVisibility={subgroupVisibility.cableTraySubgroups}
         onToggleWalkwaySubgroupVisibility={handleToggleWalkwaySubgroupVisibility}
         onToggleCableTraySubgroupVisibility={handleToggleCableTraySubgroupVisibility}
+        dcCableThicknessVisibility={subgroupVisibility.dcCableThicknesses}
+        acCableThicknessVisibility={subgroupVisibility.acCableThicknesses}
+        onToggleDcCableThicknessVisibility={handleToggleDcCableThicknessVisibility}
+        onToggleAcCableThicknessVisibility={handleToggleAcCableThicknessVisibility}
         onShowWalkwayLayer={forceShowWalkways}
         onShowCableTrayLayer={forceShowCableTrays}
+        onShowCablesLayer={forceShowCables}
       />
 
       {!readOnly && (

@@ -356,8 +356,34 @@ export const drawSupplyLine = (
 
   ctx.save();
   
-  ctx.strokeStyle = line.type === 'dc' ? TOOL_COLORS.LINE_DC : TOOL_COLORS.LINE_AC;
-  ctx.lineWidth = (isSelected ? 4 : 2.5) / zoom;
+  // Use cyan highlight when selected (consistent with other objects)
+  const selectedColor = '#00FFFF'; // Cyan for selection
+  const normalColor = line.type === 'dc' ? TOOL_COLORS.LINE_DC : TOOL_COLORS.LINE_AC;
+  
+  // Calculate line width based on thickness (default to 6mm if not specified)
+  const thicknessMm = line.thickness || 6;
+  const baseWidth = 2 + (thicknessMm / 10); // Scale: 6mm = 2.6px, 25mm = 4.5px base
+  
+  // If selected, draw a glow/highlight behind the cable
+  if (isSelected) {
+    ctx.strokeStyle = selectedColor;
+    ctx.lineWidth = (baseWidth + 4) / zoom;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = 0.5;
+    
+    ctx.beginPath();
+    ctx.moveTo(line.points[0].x, line.points[0].y);
+    for (let i = 1; i < line.points.length; i++) {
+      ctx.lineTo(line.points[i].x, line.points[i].y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  
+  // Draw the main cable line
+  ctx.strokeStyle = isSelected ? selectedColor : normalColor;
+  ctx.lineWidth = (isSelected ? baseWidth + 1.5 : baseWidth) / zoom;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
@@ -368,9 +394,9 @@ export const drawSupplyLine = (
   }
   ctx.stroke();
 
-  // Draw vertices
-  const vertexRadius = 4 / zoom;
-  ctx.fillStyle = line.type === 'dc' ? TOOL_COLORS.LINE_DC : TOOL_COLORS.LINE_AC;
+  // Draw vertices with selection highlight
+  const vertexRadius = (isSelected ? 5 : 4) / zoom;
+  ctx.fillStyle = isSelected ? selectedColor : normalColor;
   for (const point of line.points) {
     ctx.beginPath();
     ctx.arc(point.x, point.y, vertexRadius, 0, Math.PI * 2);
@@ -617,9 +643,17 @@ export const renderAllMarkups = (
     }
   }
 
-  // Draw supply lines (cables)
+  // Draw supply lines (cables) - filter by thickness visibility
   if (layerVisibility.cables) {
-    for (const line of lines) {
+    const visibleLines = lines.filter(line => {
+      const thickness = line.thickness || 6; // Default 6mm
+      if (line.type === 'dc') {
+        return subgroupVisibility?.dcCableThicknesses?.[thickness] !== false;
+      } else {
+        return subgroupVisibility?.acCableThicknesses?.[thickness] !== false;
+      }
+    });
+    for (const line of visibleLines) {
       drawSupplyLine(ctx, line, zoom, isItemSelected(line.id));
     }
   }
