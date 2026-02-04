@@ -1,138 +1,201 @@
 
-# Plan: Left-Align Eye Icons & Add Show/Hide to All Objects
 
-## Summary
-This plan will standardize the eye icon alignment across all sections of the Project Summary panel and add per-item visibility controls for every object type. This allows users to show/hide individual items (inverters, main boards, arrays, cables) in addition to the existing category-level visibility controls.
+# Plan: Fix Show/Hide Logic to Work Independently for Each Object Type
 
-## Current Issues Identified
+## Problem Summary
 
-1. **Inconsistent Eye Icon Placement**: Some eye icons are not left-aligned or have inconsistent margins
-2. **Missing Per-Item Visibility**: Individual objects (Main Board 1, Inverter 1, Array 1, DC Cable 1, etc.) cannot be individually hidden
+The current visibility implementation has several issues:
 
-## Implementation Approach
+1. **Main Boards and Inverters are tied together**: Both sections use `layerVisibility.equipment` - when you hide Main Boards, it affects Inverters (and vice versa) because they share the same layer visibility key.
 
-### Step 1: Extend Types for Per-Item Visibility
+2. **Per-item visibility missing for individual cables**: The Cabling section has per-thickness visibility and category-level visibility, but individual cables (DC Cable 1, DC Cable 2, etc.) don't have their own eye icons for per-item hiding.
 
-Add new state types to track individual item visibility:
+3. **Inconsistent structure**: Some object types have proper per-item visibility, while others don't.
+
+## Root Cause Analysis
+
+Looking at the code:
+
+**SummaryPanel.tsx lines 737-744 (Main Boards section)**:
+```typescript
+<CollapsibleSection
+  ...
+  isVisible={layerVisibility?.equipment}  // Uses 'equipment' layer
+  onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('equipment') : undefined}
+```
+
+**SummaryPanel.tsx lines 914-920 (Inverters section)**:
+```typescript
+<CollapsibleSection
+  ...
+  isVisible={layerVisibility?.equipment}  // SAME 'equipment' layer - this is the bug!
+  onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('equipment') : undefined}
+```
+
+Both Main Boards AND Inverters toggle the exact same `equipment` layer visibility, causing them to be tied together.
+
+Additionally, individual cables in the Cabling section don't have per-item eye icons like other object types do.
+
+## Solution
+
+### Step 1: Add Separate Layer Visibility for Main Boards vs Inverters
 
 **File: `src/components/floor-plan/types.ts`**
-- Add `itemVisibility` to track which individual items are hidden
-- Structure: `Record<string, boolean>` mapping item IDs to visibility state
 
-### Step 2: Update FloorPlanMarkup to Manage Per-Item Visibility State
-
-**File: `src/components/floor-plan/FloorPlanMarkup.tsx`**
-- Add new state: `itemVisibility: Record<string, boolean>`
-- Add handler: `onToggleItemVisibility(itemId: string)`
-- Pass these down to SummaryPanel and Canvas
-
-### Step 3: Redesign SummaryPanel Layout for Consistent Eye Icons
-
-**File: `src/components/floor-plan/components/SummaryPanel.tsx`**
-
-For every row in every section, apply this consistent structure:
-```
-[Eye Icon (left-aligned)] [Content] [Actions (right-aligned)] [Chevron if expandable]
-```
-
-Changes per section:
-
-#### A. Roof Areas - Add per-item eye icons
-- Each "Roof 1", "Roof 2" etc. gets its own eye icon
-
-#### B. Main Boards - Add per-item eye icons  
-- Each "Main Board 1" gets its own eye icon on the left
-
-#### C. Modules (PV Arrays) - Add per-item eye icons
-- Each "Array 1", "Array 2" gets its own eye icon
-
-#### D. Inverters - Add per-item eye icons
-- Each "Inverter 1", "Inverter 2" gets its own eye icon
-
-#### E. Walkways - Already has subgroup visibility, add per-item
-- Keep the template-level eye icons (e.g., "Onvlee")
-- Add eye icon to each individual walkway segment
-
-#### F. Cable Trays - Same as walkways
-- Keep thickness-level visibility
-- Add per-item eye icons
-
-#### G. Cabling (DC/AC) - Already has thickness visibility, add per-cable
-- Keep thickness-level toggles
-- Add eye icon to each individual cable
-
-### Step 4: Update Canvas Rendering to Respect Per-Item Visibility
-
-**File: `src/components/floor-plan/components/Canvas.tsx`**
-- Filter out hidden items based on `itemVisibility` state
-- Apply in: PV array rendering, equipment rendering, walkway rendering, cable tray rendering, cable rendering
-
-**File: `src/components/floor-plan/utils/drawing.ts`**  
-- Pass `itemVisibility` to all draw functions
-- Skip rendering items where `itemVisibility[id] === false`
-
-## UI Layout Specification
-
-Each expandable section header:
-```
-|[Eye]| [Icon] Title    Summary |[Chevron]|
-```
-
-Each item row:
-```
-|[Eye]| Item Label      Details |[Delete]|
-```
-
-Eye icons will have consistent sizing (`h-5 w-5` or `h-6 w-6`) and left margin (`ml-0` or `-ml-1`).
-
----
-
-## Technical Details
-
-### New Props for SummaryPanel
+Extend `LayerVisibility` interface to separate equipment types:
 ```typescript
-interface SummaryPanelProps {
-  // ... existing props
-  itemVisibility?: Record<string, boolean>;
-  onToggleItemVisibility?: (itemId: string) => void;
+export interface LayerVisibility {
+  roofMasks: boolean;
+  pvArrays: boolean;
+  equipment: boolean;      // Keep for backward compatibility / DC Combiners / AC Disconnects
+  mainBoards: boolean;     // NEW: Separate visibility for main boards
+  inverters: boolean;      // NEW: Separate visibility for inverters
+  walkways: boolean;
+  cableTrays: boolean;
+  cables: boolean;
 }
-```
 
-### State Management in FloorPlanMarkup
-```typescript
-const [itemVisibility, setItemVisibility] = useState<Record<string, boolean>>({});
-
-const handleToggleItemVisibility = (itemId: string) => {
-  setItemVisibility(prev => ({
-    ...prev,
-    [itemId]: prev[itemId] === false ? true : false
-  }));
+export const defaultLayerVisibility: LayerVisibility = {
+  roofMasks: true,
+  pvArrays: true,
+  equipment: true,
+  mainBoards: true,     // NEW
+  inverters: true,      // NEW
+  walkways: true,
+  cableTrays: true,
+  cables: true,
 };
 ```
 
-### Canvas Filtering Logic
+### Step 2: Update FloorPlanMarkup State Handling
+
+**File: `src/components/floor-plan/FloorPlanMarkup.tsx`**
+
+The existing `handleToggleLayerVisibility` callback already works generically with any key of `LayerVisibility`, so no changes needed to the handler itself - it will automatically support the new keys.
+
+### Step 3: Update SummaryPanel to Use Separate Layer Keys
+
+**File: `src/components/floor-plan/components/SummaryPanel.tsx`**
+
+**Main Boards section** - Use `mainBoards` layer:
 ```typescript
-// Before rendering each item type:
-if (itemVisibility[item.id] === false) return null;
+<CollapsibleSection
+  icon={<LayoutGrid className="h-4 w-4 text-purple-500" />}
+  title="Main Boards"
+  summary={...}
+  isVisible={layerVisibility?.mainBoards}  // CHANGED from 'equipment'
+  onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('mainBoards') : undefined}
 ```
+
+**Inverters section** - Use `inverters` layer:
+```typescript
+<CollapsibleSection
+  icon={<Zap className="h-4 w-4 text-green-500" />}
+  title="Inverters"
+  summary={...}
+  isVisible={layerVisibility?.inverters}  // CHANGED from 'equipment'
+  onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('inverters') : undefined}
+```
+
+### Step 4: Update Canvas Rendering to Respect Separate Equipment Layers
+
+**File: `src/components/floor-plan/utils/drawing.ts`**
+
+Update the equipment rendering logic to check the appropriate layer visibility based on equipment type:
+
+```typescript
+// Draw equipment - filter by equipment type and layer visibility
+for (const item of equipment) {
+  if (!isItemVisible(item.id)) continue;
+  
+  // Check specific layer visibility based on equipment type
+  if (item.type === EquipmentType.MAIN_BOARD) {
+    if (layerVisibility.mainBoards === false) continue;
+  } else if (item.type === EquipmentType.INVERTER) {
+    if (layerVisibility.inverters === false) continue;
+  } else {
+    // Other equipment (DC Combiner, AC Disconnect) use generic 'equipment' layer
+    if (!layerVisibility.equipment) continue;
+  }
+  
+  drawEquipmentIcon(ctx, item, isItemSelected(item.id), zoom, scaleInfo, plantSetupConfig);
+}
+```
+
+### Step 5: Update Canvas Hit-Testing for Separate Equipment Layers
+
+**File: `src/components/floor-plan/components/Canvas.tsx`**
+
+Update the hit-testing and marquee selection logic to respect the new separate layer visibility for Main Boards and Inverters:
+
+```typescript
+// In hit-testing:
+const isMainBoardVisible = layerVisibility?.mainBoards !== false;
+const isInverterVisible = layerVisibility?.inverters !== false;
+
+// When checking equipment hits:
+if (e.type === EquipmentType.MAIN_BOARD && !isMainBoardVisible) continue;
+if (e.type === EquipmentType.INVERTER && !isInverterVisible) continue;
+```
+
+### Step 6: Add Per-Item Eye Icons to Individual Cables
+
+**File: `src/components/floor-plan/components/SummaryPanel.tsx`**
+
+For each individual cable row (both DC and AC), add the eye icon:
+
+```typescript
+// Inside the cablesInGroup.map() for DC cables:
+<div className="flex items-center gap-1 p-2 rounded w-full text-left transition-colors ...">
+  {/* Per-item visibility toggle - NEW */}
+  {onToggleItemVisibility && (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-5 w-5 shrink-0 -ml-0.5"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleItemVisibility(cable.id);
+          }}
+        >
+          {itemVisibility?.[cable.id] !== false ? (
+            <Eye className="h-3 w-3 text-muted-foreground" />
+          ) : (
+            <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+          )}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="left">
+        {itemVisibility?.[cable.id] !== false ? 'Hide' : 'Show'}
+      </TooltipContent>
+    </Tooltip>
+  )}
+  <button className="flex-1 text-left" onClick={handleClick}>
+    <span>DC Cable {i + 1}</span>
+  </button>
+  <span>{cableLength.toFixed(1)} m</span>
+</div>
+```
+
+Same pattern applies to AC cables.
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/floor-plan/types.ts` | Add itemVisibility type definitions |
-| `src/components/floor-plan/FloorPlanMarkup.tsx` | Add state + handlers for per-item visibility |
-| `src/components/floor-plan/components/SummaryPanel.tsx` | Add eye icons to all individual items, ensure left-alignment |
-| `src/components/floor-plan/components/Canvas.tsx` | Filter out hidden individual items from selection/rendering |
-| `src/components/floor-plan/utils/drawing.ts` | Skip drawing items marked as hidden |
+| `src/components/floor-plan/types.ts` | Add `mainBoards` and `inverters` to `LayerVisibility` interface and defaults |
+| `src/components/floor-plan/components/SummaryPanel.tsx` | 1. Update Main Boards section to use `mainBoards` layer<br>2. Update Inverters section to use `inverters` layer<br>3. Add per-item eye icons to individual DC/AC cables |
+| `src/components/floor-plan/utils/drawing.ts` | Update equipment rendering to check specific layer visibility per equipment type |
+| `src/components/floor-plan/components/Canvas.tsx` | Update hit-testing/selection to respect separate Main Board and Inverter layer visibility |
 
 ## Expected Behavior After Implementation
 
-1. **Every row has an eye icon** on the left - categories, sub-categories, and individual items
-2. **Toggling a category** hides all items in that category (existing behavior preserved)
-3. **Toggling an individual item** hides just that one item on the canvas
-4. **Hidden items** are skipped during:
-   - Canvas rendering
-   - Hit-testing (click selection)
-   - Marquee (box) selection
-5. **Selecting a hidden item** in the panel auto-shows it (existing pattern)
+1. **Main Boards visibility** - Toggling the Main Boards section eye icon will only hide/show Main Boards, not Inverters
+2. **Inverters visibility** - Toggling the Inverters section eye icon will only hide/show Inverters, not Main Boards
+3. **Other equipment** (DC Combiner, AC Disconnect) - Continue using the generic `equipment` layer
+4. **Individual cables** - Each DC Cable and AC Cable will have its own eye icon to hide/show that specific cable
+5. **All per-item visibility** - Every object in every dropdown can be individually hidden using its own eye icon
+6. **Layer hierarchy preserved** - Category-level visibility still cascades to items, and per-item visibility works independently within visible categories
+
