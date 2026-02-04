@@ -566,8 +566,8 @@ export function Canvas({
       ctx.globalAlpha = 1.0;
     }
 
-    // Draw ghost preview for cable placement (before first point is placed)
-    if ((activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC) && mouseWorldPos && currentDrawing.length === 0) {
+    // Draw ghost preview for cable placement (before first point and during drawing)
+    if ((activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC) && mouseWorldPos) {
       const cableType: CableType = activeTool === Tool.LINE_DC ? 'dc' : 'ac';
       const snapResult = snapCablePointToTarget(
         mouseWorldPos,
