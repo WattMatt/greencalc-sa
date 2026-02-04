@@ -1207,7 +1207,7 @@ export const snapCablePointToTarget = (
   }
 
   // Existing cables of matching type - snap to their nodes/vertices
-  if (existingCables) {
+  if (existingCables && existingCables.length > 0) {
     for (const cable of existingCables) {
       // Skip the cable currently being drawn
       if (cable.id === currentCableId) continue;
