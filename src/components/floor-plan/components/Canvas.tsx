@@ -735,6 +735,7 @@ export function Canvas({
     layerVisibility,
     subgroupVisibility,
     itemVisibility,
+    cableSnapCycleIndex,
   ]);
 
   const getMousePos = (e: React.MouseEvent): Point => {
