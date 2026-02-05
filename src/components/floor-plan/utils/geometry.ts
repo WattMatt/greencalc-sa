@@ -1232,6 +1232,10 @@ export const snapCablePointToTarget = (
 
   // Existing cables of matching type - snap to their nodes/vertices
   if (existingCables && existingCables.length > 0) {
+    // Track positions we've already added to avoid duplicates at same location
+    const addedNodePositions: Point[] = [];
+    const NODE_DEDUPE_THRESHOLD = 0.01; // 1cm - nodes within this distance are considered the same
+    
     for (const cable of existingCables) {
       // Skip the cable currently being drawn
       if (cable.id === currentCableId) continue;
@@ -1240,10 +1244,20 @@ export const snapCablePointToTarget = (
       
       // Add all nodes/vertices of the cable as snap targets
       for (let i = 0; i < cable.points.length; i++) {
+        const nodePos = cable.points[i];
+        
+        // Check if we already have a node at this position (deduplicate junction nodes)
+        const isDuplicate = addedNodePositions.some(
+          existingPos => distance(existingPos, nodePos) < NODE_DEDUPE_THRESHOLD
+        );
+        
+        if (isDuplicate) continue;
+        
+        addedNodePositions.push(nodePos);
         targets.push({
           id: `${cable.id}_node_${i}`,
-          position: cable.points[i],
-          centerPosition: cable.points[i], // Node position is the "center"
+          position: nodePos,
+          centerPosition: nodePos, // Node position is the "center"
           type: 'cable',
           cableId: cable.id,
         });
