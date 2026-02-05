@@ -633,11 +633,24 @@ export function Canvas({
         
         // Show Tab hint if multiple targets available
         if (snapResult.allTargets.length > 1) {
+         // Get human-readable name for current target type
+         let targetName = '';
+         const currentTarget = snapResult.current;
+         if (currentTarget.snappedToType === 'equipment') {
+           targetName = currentTarget.equipmentType || 'Equipment';
+         } else if (currentTarget.snappedToType === 'pvArray') {
+           targetName = 'PV Module';
+         } else if (currentTarget.snappedToType === 'cableTray') {
+           targetName = 'Cable Tray';
+         } else if (currentTarget.snappedToType === 'cable') {
+           targetName = cableType === 'dc' ? 'DC Cable' : 'AC Cable';
+         }
+         
           ctx.font = `${10 / viewState.zoom}px sans-serif`;
           ctx.fillStyle = cableType === 'dc' ? '#ef4444' : '#22c55e';
           ctx.textAlign = 'center';
           const labelY = snapResult.current.position.y - 18 / viewState.zoom;
-          ctx.fillText(`[Tab: ${snapResult.currentIndex + 1}/${snapResult.allTargets.length}]`, snapResult.current.position.x, labelY);
+         ctx.fillText(`[Tab: ${snapResult.currentIndex + 1}/${snapResult.allTargets.length} - ${targetName}]`, snapResult.current.position.x, labelY);
         }
       } else {
         // Draw crosshair at current position when not snapping
