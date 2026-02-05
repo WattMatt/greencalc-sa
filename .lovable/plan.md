@@ -1,145 +1,148 @@
 
 
-## Enhance System Details: Remove Delete, Add Selectability & Main Board Hierarchy
+## Fix: Capture Cable Connections During Placement
 
-### Overview
-This plan modifies the **System Details** section in the `SummaryPanel.tsx` to:
-1. Remove the delete option for inverters (keeping only visibility toggle)
-2. Make inverters AND strings clickable to highlight them on the canvas
-3. Add a new top-level "Main Board" hierarchy grouping inverters underneath
+### Problem Analysis
+The current implementation calculates which PV array a string (DC cable) is connected to by using distance-based proximity matching in `SummaryPanel.tsx`. This is fragile and error-prone because:
 
----
+1. The `SupplyLine` interface already has `from` and `to` fields for storing connected object IDs
+2. During cable placement, the snap logic already knows exactly what the cable is connected to (`snapResult.current.snappedToId`)
+3. However, this connection information is **never stored** when the cable is created
 
-### Changes Summary
-
-| Change | Description |
-|--------|-------------|
-| Remove inverter delete button | Remove the `<Button>` with `<Trash2>` icon from System Details inverter rows |
-| Make strings selectable | Convert string rows from static `<div>` to clickable `<button>` that calls `onSelectItem(cable.id)` |
-| Add Main Board hierarchy | Create a new nested structure: Main Board → Inverter → String |
+### Solution
+Capture the `snappedToId` at both the start and end of cable drawing, then store these in the `from`/`to` fields when the cable is created.
 
 ---
 
-### Technical Details
+### Technical Changes
 
-**File: `src/components/floor-plan/components/SummaryPanel.tsx`**
+**File: `src/components/floor-plan/components/Canvas.tsx`**
 
-#### 1. Remove Delete Button for Inverters (lines 1698-1713)
-Remove the entire delete button block from the System Details inverter section:
+#### 1. Add State to Track Start Connection
+Add a ref or state to capture what the cable's first point snapped to:
 
 ```typescript
-// DELETE THIS BLOCK (lines 1698-1713)
-{onDeleteItem && (
-  <Button
-    variant="ghost"
-    size="icon"
-    className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
-    onClick={(e) => { ... onDeleteItem(inv.id) ... }}
-    title="Delete inverter"
-  >
-    <Trash2 className="h-3 w-3" />
-  </Button>
-)}
+// Track what the cable start point snapped to
+const [cableStartConnection, setCableStartConnection] = useState<{
+  id: string | null;
+  type: 'equipment' | 'pvArray' | 'cableTray' | 'cable' | null;
+} | null>(null);
 ```
 
-#### 2. Make Strings Selectable (lines 1729-1737)
-Transform the static string display into clickable elements:
+#### 2. Capture Start Connection on First Click
+When the first point of a cable is placed, capture the snap target:
 
 ```typescript
-// BEFORE - static div
-<div key={data.cable.id} className="flex items-center gap-2 text-xs py-1">
-  <div className="w-2 h-0.5 bg-orange-500 rounded" />
-  <span>String {strIdx + 1}</span>
-  ...
-</div>
-
-// AFTER - clickable button with highlight state
-<button
-  key={data.cable.id}
-  className={cn(
-    "flex items-center gap-2 text-xs py-1 px-2 w-full rounded hover:bg-accent transition-colors text-left",
-    (selectedItemId === data.cable.id || selectedItemIds?.has(data.cable.id))
-      && "bg-primary/10 border border-primary"
-  )}
-  onClick={() => onSelectItem(data.cable.id)}
->
-  <div className="w-2 h-0.5 bg-orange-500 rounded" />
-  <span>String {strIdx + 1}</span>
-  <span className="text-muted-foreground">-</span>
-  <span>{data.panelCount}p</span>
-  <span className="text-muted-foreground ml-auto">{data.powerKwp.toFixed(1)} kWp</span>
-</button>
+// When placing the first point of a cable
+if (currentDrawing.length === 0 && snapResult.current.snappedToId) {
+  setCableStartConnection({
+    id: snapResult.current.snappedToId,
+    type: snapResult.current.snappedToType
+  });
+}
 ```
 
-#### 3. Add Main Board Hierarchy (restructure lines 1599-1743)
-
-Create a new helper function to find inverters connected to main boards via AC cables:
+#### 3. Store Connections When Cable is Completed
+Update both cable creation locations (~line 170 and ~line 1243) to include `from` and `to`:
 
 ```typescript
-// New helper - find inverters connected to a main board via AC cables
-const getInvertersConnectedToMainBoard = (
-  mainBoardId: string,
-  mainBoardPosition: Point,
-  inverters: EquipmentItem[],
-  acCables: SupplyLine[],
-  scaleInfo: ScaleInfo
-): EquipmentItem[] => {
-  if (!scaleInfo.ratio) return [];
-  const thresholdPx = 1.0 / scaleInfo.ratio;
-  
-  // Find AC cables connected to this main board
-  const mbConnectedCables = acCables.filter(cable => {
-    if (cable.points.length === 0) return false;
-    const startDist = Math.hypot(cable.points[0].x - mainBoardPosition.x, cable.points[0].y - mainBoardPosition.y);
-    const endDist = Math.hypot(cable.points[cable.points.length - 1].x - mainBoardPosition.x, cable.points[cable.points.length - 1].y - mainBoardPosition.y);
-    return startDist < thresholdPx || endDist < thresholdPx;
-  });
-  
-  // Find inverters at the other end of these cables
-  return inverters.filter(inv => {
-    return mbConnectedCables.some(cable => {
-      if (cable.points.length === 0) return false;
-      const startDist = Math.hypot(cable.points[0].x - inv.position.x, cable.points[0].y - inv.position.y);
-      const endDist = Math.hypot(cable.points[cable.points.length - 1].x - inv.position.x, cable.points[cable.points.length - 1].y - inv.position.y);
-      return startDist < thresholdPx || endDist < thresholdPx;
-    });
-  });
+const newLine: SupplyLine = {
+  id: `line-${Date.now()}`,
+  name: cableConfig?.name || `${cableType === 'dc' ? 'DC' : 'AC'} Cable`,
+  type: cableType,
+  points: [...currentDrawing, snappedPos],
+  length: calculateLineLength([...currentDrawing, snappedPos], scaleInfo.ratio),
+  configId: cableConfig?.id,
+  thickness: cableConfig?.diameter,
+  material: cableConfig?.material,
+  from: cableStartConnection?.id || undefined,  // Start connection
+  to: snapResult.current.snappedToId || undefined,  // End connection
 };
 ```
 
-Restructure the System Details rendering to:
+#### 4. Reset Start Connection When Drawing Completes/Cancels
+Clear the start connection state:
 
-```text
-System Details
-├── Main Board 1
-│   ├── Inverter 1
-│   │   ├── String 1 - 14p  8.6 kWp
-│   │   └── String 2 - 14p  8.6 kWp
-│   └── Inverter 2
-│       └── String 1 - 14p  8.6 kWp
-├── Main Board 2
-│   └── Inverter 3
-│       └── ...
-└── Unassigned Inverters (if any not connected to a Main Board)
-    └── Inverter N
+```typescript
+setCableStartConnection(null);
+setCurrentDrawing([]);
 ```
 
 ---
 
-### Result
+**File: `src/components/floor-plan/components/SummaryPanel.tsx`**
 
-After these changes:
-- Inverters in System Details will **NOT** have a delete button (users must delete via canvas right-click or Summary Contents section)
-- Clicking an inverter OR a string row will select and highlight it on the canvas
-- System Details will be organized hierarchically: Main Board → Inverters → Strings
+#### 5. Simplify String-to-PV-Array Association
+Replace the complex `getPVArrayForString` distance calculation with a direct lookup:
+
+```typescript
+// BEFORE - complex distance calculation
+const getPVArrayForString = (...) => { /* 50+ lines of distance math */ };
+
+// AFTER - simple direct lookup
+const getPVArrayIdForString = (cable: SupplyLine): string | null => {
+  // DC cables have from/to storing the connected object IDs
+  // One end connects to inverter, other end connects to PV array
+  if (cable.from) {
+    const fromArray = pvArrays.find(a => a.id === cable.from);
+    if (fromArray) return cable.from;
+  }
+  if (cable.to) {
+    const toArray = pvArrays.find(a => a.id === cable.to);
+    if (toArray) return cable.to;
+  }
+  return null;
+};
+```
+
+#### 6. Update String Data Collection
+Simplify the string data collection to use the direct lookup:
+
+```typescript
+inverterStrings.forEach(cable => {
+  const pvArrayId = getPVArrayIdForString(cable);
+  if (pvArrayId) {
+    const pvArray = pvArrays.find(a => a.id === pvArrayId);
+    if (pvArray) {
+      const panels = pvArray.rows * pvArray.columns;
+      const powerKwp = (panels * (pvPanelConfig?.wattage || 0)) / 1000;
+      totalPanels += panels;
+      totalDcCapacityKw += powerKwp;
+      stringData.push({ cable, panelCount: panels, powerKwp, pvArrayId });
+    }
+  } else {
+    stringData.push({ cable, panelCount: 0, powerKwp: 0, pvArrayId: null });
+  }
+});
+```
+
+---
+
+### Migration for Existing Cables
+Existing cables without `from`/`to` fields will fall back to showing `pvArrayId: null` until they are re-drawn. Optionally, we could add a one-time migration helper that uses the old distance logic to populate missing connections, but this is not critical for new cables.
+
+---
+
+### Benefits
+
+| Aspect | Before | After |
+|--------|--------|-------|
+| Accuracy | Proximity-based (can match wrong array) | Exact connection stored at creation |
+| Performance | O(n) distance calculations per cable | O(1) direct lookup |
+| Reliability | Breaks if objects move | Connection persists regardless of movement |
+| Code complexity | 60+ lines of geometry | 10 lines of simple lookup |
 
 ---
 
 ### Files to Modify
 
-1. **`src/components/floor-plan/components/SummaryPanel.tsx`**
-   - Add new helper function `getInvertersConnectedToMainBoard`
-   - Restructure System Details section with Main Board hierarchy
-   - Remove delete button from inverters
-   - Make strings clickable with selection highlighting
+1. **`src/components/floor-plan/components/Canvas.tsx`**
+   - Add state to track cable start connection
+   - Capture start connection when first point is placed
+   - Store `from`/`to` when cable is completed
+   - Reset state on drawing complete/cancel
+
+2. **`src/components/floor-plan/components/SummaryPanel.tsx`**
+   - Replace `getPVArrayForString` with simple direct lookup using `cable.from`/`cable.to`
+   - Simplify string data collection logic
 
