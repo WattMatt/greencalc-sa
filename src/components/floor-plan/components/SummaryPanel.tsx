@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check, Eye, EyeOff, LayoutGrid } from 'lucide-react';
+ import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check, Eye, EyeOff, LayoutGrid, ListCollapse } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig, PlacedWalkway, PlacedCableTray, EquipmentType, LayerVisibility, ItemVisibility } from '../types';
@@ -493,6 +493,10 @@ export function SummaryPanel({
   // Check if layout matches simulation
   const modulesMatch = simModuleCount === null || simModuleCount === panelCount;
   const invertersMatch = simInverterCount === null || simInverterCount === layoutInverterCount;
+   
+   // State for collapsible "Summary Contents" section
+   const [summaryContentOpen, setSummaryContentOpen] = useState(true);
+   
   // Collapsed state - thin strip with expand button
   if (isCollapsed) {
     return (
@@ -524,15 +528,34 @@ export function SummaryPanel({
               </Button>
             )}
           </div>
-          {simulationSelector && (
-            <div className="pt-1">
-              {simulationSelector}
-            </div>
-          )}
         </div>
 
-        <ScrollArea className="flex-1">
-          <div className="p-3 space-y-3">
+         
+         {/* Summary Contents collapsible - wraps all content */}
+         <Collapsible open={summaryContentOpen} onOpenChange={setSummaryContentOpen} className="flex-1 flex flex-col min-h-0">
+           <div className="px-3 py-2 border-b">
+             <CollapsibleTrigger asChild>
+               <button className="flex items-center gap-2 w-full p-2 hover:bg-accent/50 rounded transition-colors">
+                 <ChevronDown className={cn(
+                   "h-4 w-4 text-muted-foreground transition-transform",
+                   !summaryContentOpen && "-rotate-90"
+                 )} />
+                 <ListCollapse className="h-4 w-4 text-muted-foreground" />
+                 <span className="text-sm font-medium">Summary Contents</span>
+               </button>
+             </CollapsibleTrigger>
+           </div>
+           
+           <CollapsibleContent className="flex-1 min-h-0">
+             <ScrollArea className="h-full" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+               <div className="p-3 space-y-3">
+                 {/* Simulation Selector */}
+                 {simulationSelector && (
+                   <div className="pb-2">
+                     {simulationSelector}
+                   </div>
+                 )}
+                 
             {/* Static Metrics Grid - 2x2 */}
             <div className="grid grid-cols-2 gap-2 mb-3">
               {/* Modules - Top Left */}
@@ -1447,6 +1470,8 @@ export function SummaryPanel({
             </CollapsibleSection>
           </div>
         </ScrollArea>
+           </CollapsibleContent>
+         </Collapsible>
       </div>
     </TooltipProvider>
   );
