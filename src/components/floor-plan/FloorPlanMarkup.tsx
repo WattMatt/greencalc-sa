@@ -1738,9 +1738,9 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     let currentProps: import('./components/ObjectConfigModal').ObjectProperties | undefined;
     let resolvedConfigId = passedConfigId;
     
-    // For multi-selection, check if all have the same configId AND extract uniform properties
-    console.log('[DEBUG] Multi-select condition:', { length: objectIds.length, passedConfigId, willEnter: objectIds.length > 1 && !passedConfigId });
-    if (objectIds.length > 1 && !passedConfigId) {
+    // For multi-selection, extract uniform properties (always) and resolve configId if not passed
+    console.log('[DEBUG] Multi-select condition:', { length: objectIds.length, passedConfigId, willEnter: objectIds.length > 1 });
+    if (objectIds.length > 1) {
       const configIds: (string | undefined)[] = [];
       
       switch (objectType) {
