@@ -1730,6 +1730,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
 
   // Handle context menu open (right-click on objects)
   const handleContextMenuOpen = useCallback((objectType: ConfigurableObjectType, objectIds: string[], passedConfigId: string | null) => {
+    console.log('[DEBUG] handleContextMenuOpen:', { objectType, objectIds, passedConfigId, count: objectIds.length });
     setConfigModalObjectType(objectType);
     setConfigModalObjectIds(objectIds);
     
@@ -1738,6 +1739,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     let resolvedConfigId = passedConfigId;
     
     // For multi-selection, check if all have the same configId AND extract uniform properties
+    console.log('[DEBUG] Multi-select condition:', { length: objectIds.length, passedConfigId, willEnter: objectIds.length > 1 && !passedConfigId });
     if (objectIds.length > 1 && !passedConfigId) {
       const configIds: (string | undefined)[] = [];
       
