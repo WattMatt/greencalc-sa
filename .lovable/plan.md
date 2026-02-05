@@ -2,17 +2,18 @@
 
 ## Summary
 
-This plan adds a "Project Summary" collapsible dropdown to the right-hand SummaryPanel. When expanded, all current content (stat cards + layer sections) is visible. When collapsed, the content is hidden but the panel itself remains open/expanded on screen. This provides a cleaner interface when users want to keep the panel open but minimize visual clutter.
+This plan adds a new "System Details" collapsible dropdown to the right-hand SummaryPanel, positioned below the existing "Summary Contents" dropdown. When expanded, this section will display all placed inverters individually in a list format.
 
 ---
 
 ## Current State
 
-The SummaryPanel has:
+The SummaryPanel currently has:
 1. A fixed header with "Project Summary" title + collapse chevron (to collapse the entire panel)
-2. A simulation selector dropdown ("Tendered REV001")
-3. A 2x2 grid of stat cards (Modules, Inverters, Walkways, Cable Trays)
-4. Multiple collapsible sections (Roof Areas, Main Boards, Modules, Inverters, Walkways, Cable Trays, Cabling)
+2. A "Summary Contents" collapsible dropdown containing:
+   - Simulation selector dropdown
+   - 2x2 grid of stat cards (Modules, Inverters, Walkways, Cable Trays)
+   - Multiple collapsible sections (Roof Areas, Main Boards, Modules, Inverters, Walkways, Cable Trays, Cabling)
 
 ---
 
@@ -21,32 +22,30 @@ The SummaryPanel has:
 ```text
 +--------------------------------------------+
 |  Project Summary        [collapse panel >] |
-|  [v] Summary Contents   <-- NEW DROPDOWN   |
 +--------------------------------------------+
-|  [ Simulation Selector Dropdown ]          |
-|                                            |
-|  +------------------+  +----------------+  |
-|  | Modules    1195  |  | Inverters   4  |  |
-|  +------------------+  +----------------+  |
-|  +------------------+  +----------------+  |
-|  | Walkways  411 m  |  | Cable Trays    |  |
-|  +------------------+  +----------------+  |
-|                                            |
-|  [v] Roof Areas          9659 m^2          |
-|  [v] Main Boards         1                 |
-|  [v] Modules             1195              |
-|  ... etc                                   |
+|  [v] Summary Contents   <-- EXISTING       |
 +--------------------------------------------+
+|  [>] System Details     <-- NEW DROPDOWN   |
++--------------------------------------------+
+   (empty space when both are collapsed)
 ```
 
-When the "Summary Contents" dropdown is collapsed:
+When "System Details" is expanded:
 
 ```text
 +--------------------------------------------+
 |  Project Summary        [collapse panel >] |
-|  [>] Summary Contents   <-- COLLAPSED      |
 +--------------------------------------------+
-                          ^-- Empty content area
+|  [>] Summary Contents                      |
++--------------------------------------------+
+|  [v] System Details                        |
+|  +--------------------------------------+  |
+|  |  [Eye] Inverter 1  Sungrow 125kW    |  |
+|  |  [Eye] Inverter 2  Sungrow 125kW    |  |
+|  |  [Eye] Inverter 3  Sungrow 125kW    |  |
+|  |  [Eye] Inverter 4  Sungrow 125kW    |  |
+|  +--------------------------------------+  |
++--------------------------------------------+
 ```
 
 ---
@@ -55,41 +54,69 @@ When the "Summary Contents" dropdown is collapsed:
 
 **File: `src/components/floor-plan/components/SummaryPanel.tsx`**
 
-1. Add a new state variable to control the "Summary Contents" collapsible:
-   - `const [summaryContentOpen, setSummaryContentOpen] = useState(true);`
+1. Add a new state variable to control the "System Details" collapsible:
+   - `const [systemDetailsOpen, setSystemDetailsOpen] = useState(true);`
 
-2. Restructure the panel content:
-   - Keep the header ("Project Summary" + panel collapse button) as-is
-   - Add a new `Collapsible` wrapper around the simulation selector, stat grid, and all layer sections
-   - The trigger will be a button labeled "Summary Contents" with a chevron indicator
+2. Add a new Collapsible section AFTER the "Summary Contents" collapsible but within the main panel layout. This section will be independent of the Summary Contents collapse state:
 
-3. The Collapsible structure:
+3. The System Details Collapsible structure:
    ```tsx
-   <Collapsible open={summaryContentOpen} onOpenChange={setSummaryContentOpen}>
-     <CollapsibleTrigger asChild>
-       <button className="flex items-center gap-2 w-full p-2 hover:bg-accent/50 rounded">
-         <ChevronDown className={cn("h-4 w-4 transition-transform", 
-           summaryContentOpen && "rotate-180")} />
-         <span className="text-sm font-medium">Summary Contents</span>
-       </button>
-     </CollapsibleTrigger>
+   <Collapsible open={systemDetailsOpen} onOpenChange={setSystemDetailsOpen}>
+     <div className="px-3 py-2 border-b">
+       <CollapsibleTrigger asChild>
+         <button className="flex items-center gap-2 w-full p-2 hover:bg-accent/50 rounded transition-colors">
+           <ChevronDown className={cn(
+             "h-4 w-4 text-muted-foreground transition-transform",
+             !systemDetailsOpen && "-rotate-90"
+           )} />
+           <Settings className="h-4 w-4 text-muted-foreground" />
+           <span className="text-sm font-medium">System Details</span>
+         </button>
+       </CollapsibleTrigger>
+     </div>
+     
      <CollapsibleContent>
-       {/* All existing content: simulationSelector, stat cards, sections */}
+       <ScrollArea style={{ maxHeight: 'calc(100vh - 200px)' }}>
+         <div className="p-3 space-y-1">
+           {/* List all inverters individually */}
+           {equipment.filter(e => e.type === EquipmentType.INVERTER).length === 0 ? (
+             <p className="text-xs text-muted-foreground">No inverters placed</p>
+           ) : (
+             equipment
+               .filter(e => e.type === EquipmentType.INVERTER)
+               .map((inv, i) => (
+                 <div key={inv.id} className="flex items-center gap-1 p-2 rounded text-xs ...">
+                   {/* Visibility toggle */}
+                   <button>Inverter {i + 1}</button>
+                   {inv.name && <span>{inv.name}</span>}
+                   {/* Delete button */}
+                 </div>
+               ))
+           )}
+         </div>
+       </ScrollArea>
      </CollapsibleContent>
    </Collapsible>
    ```
 
-4. Move the following content inside the `CollapsibleContent`:
-   - Simulation selector (`simulationSelector` prop render)
-   - 2x2 stat cards grid
-   - All `CollapsibleSection` components (Roof Areas, Main Boards, Modules, Inverters, Walkways, Cable Trays, Cabling)
+4. Import the `Settings` icon from lucide-react (or use `Zap` to match the inverter theme)
+
+5. Each inverter item will include:
+   - Eye icon for visibility toggle (using existing `onToggleItemVisibility`)
+   - Inverter label with index number
+   - Inverter name (if set)
+   - Selection highlighting when clicked (using existing `onSelectItem`)
+   - Delete button (using existing `onDeleteItem`)
 
 ---
 
 ## Technical Notes
 
-- Uses the existing `Collapsible`, `CollapsibleTrigger`, and `CollapsibleContent` components from `@/components/ui/collapsible`
-- The panel collapse functionality (ChevronRight button in header) remains unchanged and independent
-- The new dropdown state is internal to the component and not persisted across navigation
-- ChevronDown icon rotates 180 degrees when expanded (consistent with existing section behavior)
+- Uses the same component patterns already established for item lists in the Summary Contents section
+- The System Details dropdown is independent from Summary Contents - they can both be open, both closed, or one of each
+- Both collapsibles share the same styling for visual consistency
+- Clicking an inverter in System Details will select it on the canvas (same behavior as clicking in the existing Inverters section)
+- Per-item visibility toggles work the same way as in Summary Contents
+- The new section appears between the panel header area and before the summary content area
+- Does not affect the panel collapse (ChevronRight) functionality - that still collapses the entire panel
 
