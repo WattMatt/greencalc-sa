@@ -665,72 +665,58 @@ export function SummaryPanel({
             {/* Static Metrics Grid - 2x2 */}
             <div className="grid grid-cols-2 gap-2 mb-3">
               {/* Modules - Top Left */}
-              <Card className={cn(!modulesMatch && "border-amber-500")}>
+              <Card className={cn(!modulesMatch && simModuleCount !== null && "border-amber-500")}>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2">
                     <Hash className="h-4 w-4 text-blue-500" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-muted-foreground">Modules</p>
-                      <div className="flex items-center gap-1">
-                        <p className="font-semibold text-sm">{panelCount}</p>
-                        {simModuleCount !== null && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className={cn(
-                                "text-[10px]",
-                                modulesMatch ? "text-green-600" : "text-amber-600"
-                              )}>
-                                {modulesMatch ? (
-                                  <Check className="h-3 w-3" />
-                                ) : (
-                                  <span>/{simModuleCount}</span>
-                                )}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {modulesMatch 
-                                ? "Matches simulation" 
-                                : `Simulation expects ${simModuleCount} modules`}
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <p className={cn(
+                            "font-semibold text-sm",
+                            simModuleCount !== null && (modulesMatch ? "text-green-600" : "text-amber-600")
+                          )}>
+                            {panelCount}{simModuleCount !== null && ` / ${simModuleCount}`}
+                          </p>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {simModuleCount === null 
+                            ? "No simulation linked"
+                            : modulesMatch 
+                              ? "Matches simulation target" 
+                              : `${panelCount} placed, ${simModuleCount} required`}
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
                 </CardContent>
               </Card>
               
               {/* Inverters - Top Right */}
-              <Card className={cn(!invertersMatch && "border-amber-500")}>
+              <Card className={cn(!invertersMatch && simInverterCount !== null && "border-amber-500")}>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2">
                     <Zap className="h-4 w-4 text-green-500" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-muted-foreground">Inverters</p>
-                      <div className="flex items-center gap-1">
-                        <p className="font-semibold text-sm">{layoutInverterCount}</p>
-                        {simInverterCount !== null && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className={cn(
-                                "text-[10px]",
-                                invertersMatch ? "text-green-600" : "text-amber-600"
-                              )}>
-                                {invertersMatch ? (
-                                  <Check className="h-3 w-3" />
-                                ) : (
-                                  <span>/{simInverterCount}</span>
-                                )}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {invertersMatch 
-                                ? "Matches simulation" 
-                                : `Simulation expects ${simInverterCount} inverters`}
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <p className={cn(
+                            "font-semibold text-sm",
+                            simInverterCount !== null && (invertersMatch ? "text-green-600" : "text-amber-600")
+                          )}>
+                            {layoutInverterCount}{simInverterCount !== null && ` / ${simInverterCount}`}
+                          </p>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {simInverterCount === null 
+                            ? "No simulation linked"
+                            : invertersMatch 
+                              ? "Matches simulation target" 
+                              : `${layoutInverterCount} placed, ${simInverterCount} required`}
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
                 </CardContent>
