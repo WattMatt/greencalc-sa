@@ -141,6 +141,12 @@ export function Canvas({
   const [cableSnapCycleIndex, setCableSnapCycleIndex] = useState(0);
   const [lastCableSnapTargetCount, setLastCableSnapTargetCount] = useState(0);
 
+  // Track what the cable start point snapped to for storing from/to connections
+  const [cableStartConnection, setCableStartConnection] = useState<{
+    id: string | null;
+    type: 'equipment' | 'pvArray' | 'cableTray' | 'cable' | null;
+  } | null>(null);
+
   const SNAP_THRESHOLD = 15; // pixels in screen space
 
   // Calculate azimuth from a direction line (from high to low point)
@@ -176,17 +182,22 @@ export function Canvas({
         configId: cableConfig?.id,
         thickness: cableConfig?.diameter,
         material: cableConfig?.material,
+        from: cableStartConnection?.id || undefined,
+        to: undefined, // Manual complete doesn't have endpoint snap info
       };
       setLines(prev => [...prev, newLine]);
       setCurrentDrawing([]);
       setPreviewPoint(null);
+      setCableStartConnection(null);
     }
   };
 
   // Cancel the current drawing
+  // Cancel the current drawing
   const cancelDrawing = () => {
     setCurrentDrawing([]);
     setPreviewPoint(null);
+    setCableStartConnection(null);
   };
 
   // Track Shift key state for 45-degree angle snapping + Enter/Escape for drawing completion + Tab for snap cycling
@@ -1249,12 +1260,23 @@ export function Canvas({
             configId: cableConfig?.id,
             thickness: cableConfig?.diameter,
             material: cableConfig?.material,
+            from: cableStartConnection?.id || undefined,
+            to: snapResult.current.snappedToId || undefined,
           };
           setLines(prev => [...prev, newLine]);
           setCurrentDrawing([]);
           setPreviewPoint(null);
           setCableSnapCycleIndex(0); // Reset cycle index
+          setCableStartConnection(null); // Reset start connection
           return;
+        }
+
+        // Capture start connection when placing the first point
+        if (currentDrawing.length === 0 && snapResult.current.snappedToId) {
+          setCableStartConnection({
+            id: snapResult.current.snappedToId,
+            type: snapResult.current.snappedToType,
+          });
         }
       }
       

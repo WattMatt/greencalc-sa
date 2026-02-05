@@ -457,7 +457,8 @@ const getInvertersConnectedToMainBoard = (
   });
 };
 
-// Helper to find the PV array connected to a DC cable
+// Helper to find the PV array connected to a DC cable using stored from/to IDs
+// Falls back to proximity matching for legacy cables without stored connections
 const getPVArrayForString = (
   cable: SupplyLine,
   inverterPosition: Point,
@@ -465,6 +466,17 @@ const getPVArrayForString = (
   pvPanelConfig: PVPanelConfig | null,
   scaleInfo: ScaleInfo
 ): PVArrayItem | null => {
+  // First, try direct lookup using stored from/to connection IDs
+  if (cable.from) {
+    const fromArray = pvArrays.find(a => a.id === cable.from);
+    if (fromArray) return fromArray;
+  }
+  if (cable.to) {
+    const toArray = pvArrays.find(a => a.id === cable.to);
+    if (toArray) return toArray;
+  }
+  
+  // Fallback for legacy cables without stored connections: use proximity matching
   if (!scaleInfo.ratio || !pvPanelConfig || cable.points.length === 0) return null;
   
   const thresholdMeters = 1.0;
