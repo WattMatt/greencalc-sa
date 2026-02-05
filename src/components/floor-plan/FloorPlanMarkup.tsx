@@ -2602,6 +2602,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         selectedItemId={selectedItemId}
         selectedItemIds={selectedItemIds}
         onSelectItem={handleSelectSingle}
+        onSelectMultiple={(ids) => handleBoxSelection(ids, false)}
         onEditRoofMask={readOnly ? undefined : handleEditRoofMask}
         onDeleteItem={readOnly ? undefined : handleDeleteItem}
         onDeletePlacedItem={readOnly ? undefined : handleDeletePlacedItem}
