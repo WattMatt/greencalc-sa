@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { getModulePresetById } from '@/components/projects/SolarModulePresets';
 
 // Type for grouped materials
 interface GroupedMaterial<T> {
@@ -571,7 +572,7 @@ export function SummaryPanel({
   // Use visibility props from parent (if provided)
   
   // Simulation comparison values
-  // Module count: calculate from capacity and module wattage if not stored directly
+  // Module count: calculate from capacity and module wattage
   const simModuleCount = useMemo(() => {
     if (!assignedSimulation) return null;
     const results = assignedSimulation.results_json;
@@ -579,7 +580,19 @@ export function SummaryPanel({
     if (results?.moduleCount !== undefined) return results.moduleCount;
     // Calculate from capacity and module wattage
     const capacityKwp = assignedSimulation.solar_capacity_kwp;
-    const moduleWp = results?.inverterConfig?.customModule?.power_wp;
+    const inverterConfig = results?.inverterConfig;
+    
+    if (!capacityKwp || !inverterConfig) return null;
+    
+    // Get module wattage from either custom module or preset
+    let moduleWp: number | undefined;
+    if (inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule) {
+      moduleWp = inverterConfig.customModule.power_wp;
+    } else if (inverterConfig.selectedModuleId) {
+      const preset = getModulePresetById(inverterConfig.selectedModuleId);
+      moduleWp = preset?.power_wp;
+    }
+    
     if (capacityKwp && moduleWp) {
       return Math.round((capacityKwp * 1000) / moduleWp);
     }
@@ -594,8 +607,37 @@ export function SummaryPanel({
   // Layout inverter count (placed on canvas) - use enum for reliable matching
   const layoutInverterCount = equipment.filter(e => e.type === EquipmentType.INVERTER).length;
   
-  // Check if layout matches simulation
-  const modulesMatch = simModuleCount === null || simModuleCount === panelCount;
+  // Calculate total modules connected to inverters (via DC cables)
+  // This matches the System Details calculation and represents "placed/connected" modules
+  const connectedModulesCount = useMemo(() => {
+    if (!scaleInfo.ratio || !pvPanelConfig) return 0;
+    
+    const inverters = equipment.filter(e => e.type === EquipmentType.INVERTER);
+    const dcCables = lines.filter(l => l.type === 'dc');
+    const countedArrayIds = new Set<string>();
+    let total = 0;
+    
+    inverters.forEach(inv => {
+      const connectedCables = getCablesConnectedToInverter(
+        inv.id, inv.position, dcCables, scaleInfo
+      );
+      
+      connectedCables.forEach(cable => {
+        const pvArray = getPVArrayForString(
+          cable, inv.position, pvArrays, pvPanelConfig, scaleInfo
+        );
+        if (pvArray && !countedArrayIds.has(pvArray.id)) {
+          countedArrayIds.add(pvArray.id);
+          total += pvArray.rows * pvArray.columns;
+        }
+      });
+    });
+    
+    return total;
+  }, [equipment, lines, pvArrays, pvPanelConfig, scaleInfo]);
+  
+  // Check if layout matches simulation (use connected modules count)
+  const modulesMatch = simModuleCount === null || simModuleCount === connectedModulesCount;
   const invertersMatch = simInverterCount === null || simInverterCount === layoutInverterCount;
    
    // State for collapsible "Summary Contents" section
@@ -694,15 +736,15 @@ export function SummaryPanel({
                             "font-semibold text-sm",
                             simModuleCount !== null && (modulesMatch ? "text-green-600" : "text-amber-600")
                           )}>
-                            {panelCount}{simModuleCount !== null && ` / ${simModuleCount}`}
+                            {connectedModulesCount}{simModuleCount !== null && ` / ${simModuleCount}`}
                           </p>
                         </TooltipTrigger>
                         <TooltipContent>
                           {simModuleCount === null 
-                            ? "No simulation linked"
+                            ? "Modules connected to inverters via cables"
                             : modulesMatch 
                               ? "Matches simulation target" 
-                              : `${panelCount} placed, ${simModuleCount} required`}
+                              : `${connectedModulesCount} connected, ${simModuleCount} required`}
                         </TooltipContent>
                       </Tooltip>
                     </div>
