@@ -479,7 +479,10 @@ const getPVArrayForString = (
     ? cable.points[0] 
     : cable.points[cable.points.length - 1];
   
-  // Find nearest PV array to this endpoint
+  // Find the CLOSEST PV array to this endpoint (not just the first match)
+  let closestArray: PVArrayItem | null = null;
+  let closestDistance = Infinity;
+  
   for (const arr of pvArrays) {
     const distToArray = Math.hypot(
       pvEndPoint.x - arr.position.x,
@@ -496,12 +499,14 @@ const getPVArrayForString = (
       (arr.rows * panelL) / 2
     ) / scaleInfo.ratio;
     
-    if (distToArray < (arrayRadius + thresholdPx)) {
-      return arr;
+    // Check if within threshold and closer than previous best match
+    if (distToArray < (arrayRadius + thresholdPx) && distToArray < closestDistance) {
+      closestArray = arr;
+      closestDistance = distToArray;
     }
   }
   
-  return null;
+  return closestArray;
 };
 
 // Get AC capacity from inverter config
