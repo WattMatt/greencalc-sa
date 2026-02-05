@@ -74,7 +74,7 @@ function CollapsibleSection({
   icon,
   title,
   summary,
-  defaultOpen = true,
+  defaultOpen = false,
   children,
   isVisible,
   onToggleVisibility,
@@ -543,8 +543,15 @@ export function SummaryPanel({
         </div>
 
          
-         {/* Summary Contents collapsible - wraps all content */}
-          <Collapsible open={summaryContentOpen} onOpenChange={handleSummaryContentChange} className="flex-1 flex flex-col min-h-0">
+          {/* Summary Contents collapsible - wraps all content */}
+           <Collapsible
+             open={summaryContentOpen}
+             onOpenChange={handleSummaryContentChange}
+             className={cn(
+               "flex flex-col",
+               summaryContentOpen && "flex-1 min-h-0",
+             )}
+           >
            <div className="px-3 py-2 border-b">
              <CollapsibleTrigger asChild>
                <button className="flex items-center gap-2 w-full p-2 hover:bg-accent/50 rounded transition-colors">
@@ -558,8 +565,8 @@ export function SummaryPanel({
              </CollapsibleTrigger>
            </div>
            
-           <CollapsibleContent className="flex-1 min-h-0">
-             <ScrollArea className="h-full" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+            <CollapsibleContent className="flex-1 min-h-0">
+              <ScrollArea className="h-full">
                <div className="p-3 space-y-3">
                  {/* Simulation Selector */}
                  {simulationSelector && (
@@ -1486,7 +1493,14 @@ export function SummaryPanel({
          </Collapsible>
 
           {/* System Details collapsible - individual inverters */}
-          <Collapsible open={systemDetailsOpen} onOpenChange={handleSystemDetailsChange} className="flex-shrink-0 border-t">
+          <Collapsible
+            open={systemDetailsOpen}
+            onOpenChange={handleSystemDetailsChange}
+            className={cn(
+              "flex flex-col border-t",
+              systemDetailsOpen && "flex-1 min-h-0",
+            )}
+          >
             <div className="px-3 py-2 border-b">
               <CollapsibleTrigger asChild>
                 <button className="flex items-center gap-2 w-full p-2 hover:bg-accent/50 rounded transition-colors">
@@ -1500,8 +1514,8 @@ export function SummaryPanel({
               </CollapsibleTrigger>
             </div>
             
-            <CollapsibleContent>
-              <ScrollArea style={{ maxHeight: 'calc(100vh - 200px)' }}>
+            <CollapsibleContent className="flex-1 min-h-0">
+              <ScrollArea className="h-full">
                 <div className="p-3 space-y-1">
                   {equipment.filter(e => e.type === EquipmentType.INVERTER).length === 0 ? (
                     <p className="text-xs text-muted-foreground">No inverters placed</p>
