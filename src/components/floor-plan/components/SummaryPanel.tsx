@@ -571,8 +571,25 @@ export function SummaryPanel({
   // Use visibility props from parent (if provided)
   
   // Simulation comparison values
-  const simModuleCount = assignedSimulation?.results_json?.moduleCount ?? null;
-  const simInverterCount = assignedSimulation?.results_json?.inverterCount ?? null;
+  // Module count: calculate from capacity and module wattage if not stored directly
+  const simModuleCount = useMemo(() => {
+    if (!assignedSimulation) return null;
+    const results = assignedSimulation.results_json;
+    // Check if directly stored
+    if (results?.moduleCount !== undefined) return results.moduleCount;
+    // Calculate from capacity and module wattage
+    const capacityKwp = assignedSimulation.solar_capacity_kwp;
+    const moduleWp = results?.inverterConfig?.customModule?.power_wp;
+    if (capacityKwp && moduleWp) {
+      return Math.round((capacityKwp * 1000) / moduleWp);
+    }
+    return null;
+  }, [assignedSimulation]);
+  
+  // Inverter count: check nested path in inverterConfig
+  const simInverterCount = assignedSimulation?.results_json?.inverterConfig?.inverterCount 
+    ?? assignedSimulation?.results_json?.inverterCount 
+    ?? null;
   
   // Layout inverter count (placed on canvas) - use enum for reliable matching
   const layoutInverterCount = equipment.filter(e => e.type === EquipmentType.INVERTER).length;
