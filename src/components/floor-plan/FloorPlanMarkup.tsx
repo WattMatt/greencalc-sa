@@ -498,6 +498,46 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           
           if (!simError && simData) {
             setAssignedSimulation(simData);
+            
+            // Sync pvPanelConfig and plantSetupConfig from loaded simulation
+            const resultsJson = simData.results_json as any;
+            const inverterConfig = resultsJson?.inverterConfig;
+            
+            if (inverterConfig) {
+              let module: SolarModulePreset;
+              if (inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule) {
+                module = inverterConfig.customModule;
+                setModuleName(inverterConfig.customModule.name || 'Custom Module');
+              } else {
+                module = getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
+                setModuleName(module.name);
+              }
+              
+              setPvPanelConfig({
+                width: module.width_m,
+                length: module.length_m,
+                wattage: module.power_wp,
+              });
+              
+              setPlantSetupConfig(prev => ({
+                ...prev,
+                solarModules: [{
+                  id: 'sim-module',
+                  name: module.name,
+                  width: module.width_m,
+                  length: module.length_m,
+                  wattage: module.power_wp,
+                  isDefault: true,
+                }],
+                inverters: inverterConfig.inverterSize ? [{
+                  id: 'sim-inverter',
+                  name: `${inverterConfig.inverterSize}kW Inverter`,
+                  acCapacity: inverterConfig.inverterSize,
+                  count: inverterConfig.inverterCount || 1,
+                  isDefault: true,
+                }] : prev.inverters,
+              }));
+            }
           } else {
             setAssignedSimulation(null);
           }
@@ -870,10 +910,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     };
   }, [hasUnsavedChanges, roofMasks, pvArrays, equipment, lines, backgroundImage, scaleInfo, plantSetupConfig, placedWalkways, placedCableTrays, readOnly, saveLayout, assignedSimulationId]);
 
-  // Handle simulation assignment change
+  // Handle simulation assignment change - also syncs pvPanelConfig and plantSetupConfig
   const handleSimulationChange = useCallback((simulationId: string | null, simulation: any) => {
     setAssignedSimulationId(simulationId);
-    // Map to full SimulationData type (some fields may be null)
+    
     if (simulation) {
       setAssignedSimulation({
         id: simulation.id,
@@ -885,6 +925,46 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         roi_percentage: null,
         results_json: simulation.results_json,
       });
+      
+      // Sync pvPanelConfig and plantSetupConfig from simulation
+      const resultsJson = simulation.results_json as any;
+      const inverterConfig = resultsJson?.inverterConfig;
+      
+      if (inverterConfig) {
+        let module: SolarModulePreset;
+        if (inverterConfig.selectedModuleId === "custom" && inverterConfig.customModule) {
+          module = inverterConfig.customModule;
+          setModuleName(inverterConfig.customModule.name || 'Custom Module');
+        } else {
+          module = getModulePresetById(inverterConfig.selectedModuleId) || getDefaultModulePreset();
+          setModuleName(module.name);
+        }
+        
+        setPvPanelConfig({
+          width: module.width_m,
+          length: module.length_m,
+          wattage: module.power_wp,
+        });
+        
+        setPlantSetupConfig(prev => ({
+          ...prev,
+          solarModules: [{
+            id: 'sim-module',
+            name: module.name,
+            width: module.width_m,
+            length: module.length_m,
+            wattage: module.power_wp,
+            isDefault: true,
+          }],
+          inverters: inverterConfig.inverterSize ? [{
+            id: 'sim-inverter',
+            name: `${inverterConfig.inverterSize}kW Inverter`,
+            acCapacity: inverterConfig.inverterSize,
+            count: inverterConfig.inverterCount || 1,
+            isDefault: true,
+          }] : prev.inverters,
+        }));
+      }
     } else {
       setAssignedSimulation(null);
     }
