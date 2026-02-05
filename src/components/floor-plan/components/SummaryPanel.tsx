@@ -497,6 +497,17 @@ export function SummaryPanel({
    // State for collapsible "Summary Contents" section
    const [summaryContentOpen, setSummaryContentOpen] = useState(true);
    const [systemDetailsOpen, setSystemDetailsOpen] = useState(true);
+
+   // Accordion behavior: when one opens, close the other
+   const handleSummaryContentChange = (open: boolean) => {
+     setSummaryContentOpen(open);
+     if (open) setSystemDetailsOpen(false);
+   };
+
+   const handleSystemDetailsChange = (open: boolean) => {
+     setSystemDetailsOpen(open);
+     if (open) setSummaryContentOpen(false);
+   };
    
   // Collapsed state - thin strip with expand button
   if (isCollapsed) {
@@ -533,7 +544,7 @@ export function SummaryPanel({
 
          
          {/* Summary Contents collapsible - wraps all content */}
-         <Collapsible open={summaryContentOpen} onOpenChange={setSummaryContentOpen} className="flex-1 flex flex-col min-h-0">
+          <Collapsible open={summaryContentOpen} onOpenChange={handleSummaryContentChange} className="flex-1 flex flex-col min-h-0">
            <div className="px-3 py-2 border-b">
              <CollapsibleTrigger asChild>
                <button className="flex items-center gap-2 w-full p-2 hover:bg-accent/50 rounded transition-colors">
@@ -1475,7 +1486,7 @@ export function SummaryPanel({
          </Collapsible>
 
           {/* System Details collapsible - individual inverters */}
-          <Collapsible open={systemDetailsOpen} onOpenChange={setSystemDetailsOpen} className="flex-shrink-0">
+          <Collapsible open={systemDetailsOpen} onOpenChange={handleSystemDetailsChange} className="flex-shrink-0 mt-auto border-t">
             <div className="px-3 py-2 border-b">
               <CollapsibleTrigger asChild>
                 <button className="flex items-center gap-2 w-full p-2 hover:bg-accent/50 rounded transition-colors">
