@@ -607,37 +607,8 @@ export function SummaryPanel({
   // Layout inverter count (placed on canvas) - use enum for reliable matching
   const layoutInverterCount = equipment.filter(e => e.type === EquipmentType.INVERTER).length;
   
-  // Calculate total modules connected to inverters (via DC cables)
-  // This matches the System Details calculation and represents "placed/connected" modules
-  const connectedModulesCount = useMemo(() => {
-    if (!scaleInfo.ratio || !pvPanelConfig) return 0;
-    
-    const inverters = equipment.filter(e => e.type === EquipmentType.INVERTER);
-    const dcCables = lines.filter(l => l.type === 'dc');
-    const countedArrayIds = new Set<string>();
-    let total = 0;
-    
-    inverters.forEach(inv => {
-      const connectedCables = getCablesConnectedToInverter(
-        inv.id, inv.position, dcCables, scaleInfo
-      );
-      
-      connectedCables.forEach(cable => {
-        const pvArray = getPVArrayForString(
-          cable, inv.position, pvArrays, pvPanelConfig, scaleInfo
-        );
-        if (pvArray && !countedArrayIds.has(pvArray.id)) {
-          countedArrayIds.add(pvArray.id);
-          total += pvArray.rows * pvArray.columns;
-        }
-      });
-    });
-    
-    return total;
-  }, [equipment, lines, pvArrays, pvPanelConfig, scaleInfo]);
-  
-  // Check if layout matches simulation (use connected modules count)
-  const modulesMatch = simModuleCount === null || simModuleCount === connectedModulesCount;
+  // Check if layout matches simulation (use panelCount = all placed modules)
+  const modulesMatch = simModuleCount === null || simModuleCount === panelCount;
   const invertersMatch = simInverterCount === null || simInverterCount === layoutInverterCount;
    
    // State for collapsible "Summary Contents" section
@@ -736,15 +707,15 @@ export function SummaryPanel({
                             "font-semibold text-sm",
                             simModuleCount !== null && (modulesMatch ? "text-green-600" : "text-amber-600")
                           )}>
-                            {connectedModulesCount}{simModuleCount !== null && ` / ${simModuleCount}`}
+                            {panelCount}{simModuleCount !== null && ` / ${simModuleCount}`}
                           </p>
                         </TooltipTrigger>
                         <TooltipContent>
                           {simModuleCount === null 
-                            ? "Modules connected to inverters via cables"
+                            ? "Total modules placed on layout"
                             : modulesMatch 
                               ? "Matches simulation target" 
-                              : `${connectedModulesCount} connected, ${simModuleCount} required`}
+                              : `${panelCount} placed, ${simModuleCount} required`}
                         </TooltipContent>
                       </Tooltip>
                     </div>
