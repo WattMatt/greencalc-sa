@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem, LayerVisibility, defaultLayerVisibility, SubgroupVisibility, defaultSubgroupVisibility, ItemVisibility, EquipmentType } from './types';
+import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem, LayerVisibility, defaultLayerVisibility, SubgroupVisibility, defaultSubgroupVisibility, ItemVisibility, EquipmentType, PanelOrientation } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
@@ -1737,35 +1737,91 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
     let currentProps: import('./components/ObjectConfigModal').ObjectProperties | undefined;
     let resolvedConfigId = passedConfigId;
     
-    // For multi-selection, check if all have the same configId
+    // For multi-selection, check if all have the same configId AND extract uniform properties
     if (objectIds.length > 1 && !passedConfigId) {
       const configIds: (string | undefined)[] = [];
       
       switch (objectType) {
-        case 'walkway':
+        case 'walkway': {
+          const lengths: number[] = [];
           objectIds.forEach(id => {
             const w = placedWalkways.find(w => w.id === id);
-            if (w) configIds.push(w.configId);
+            if (w) {
+              configIds.push(w.configId);
+              lengths.push(w.length);
+            }
           });
+          // If all lengths are the same, populate currentProps
+          const uniqueLengths = [...new Set(lengths)];
+          if (uniqueLengths.length === 1) {
+            currentProps = { length: uniqueLengths[0] };
+          }
           break;
-        case 'cableTray':
+        }
+        case 'cableTray': {
+          const lengths: number[] = [];
+          const cableTypes: (string | undefined)[] = [];
           objectIds.forEach(id => {
             const t = placedCableTrays.find(t => t.id === id);
-            if (t) configIds.push(t.configId);
+            if (t) {
+              configIds.push(t.configId);
+              lengths.push(t.length);
+              cableTypes.push(t.cableType);
+            }
           });
+          // If all properties are uniform, populate currentProps
+          const uniqueLengths = [...new Set(lengths)];
+          const uniqueCableTypes = [...new Set(cableTypes)];
+          if (uniqueLengths.length === 1 || uniqueCableTypes.length === 1) {
+            currentProps = {
+              ...(uniqueLengths.length === 1 ? { length: uniqueLengths[0] } : {}),
+              ...(uniqueCableTypes.length === 1 ? { cableType: uniqueCableTypes[0] as 'ac' | 'dc' } : {}),
+            };
+          }
           break;
-        case 'inverter':
+        }
+        case 'inverter': {
+          const names: (string | undefined)[] = [];
           objectIds.forEach(id => {
             const eq = equipment.find(e => e.id === id);
-            if (eq) configIds.push(eq.configId);
+            if (eq) {
+              configIds.push(eq.configId);
+              names.push(eq.name);
+            }
           });
+          // If all names are the same, populate currentProps
+          const uniqueNames = [...new Set(names)];
+          if (uniqueNames.length === 1 && uniqueNames[0]) {
+            currentProps = { name: uniqueNames[0] };
+          }
           break;
-        case 'pvArray':
+        }
+        case 'pvArray': {
+          const rows: number[] = [];
+          const columns: number[] = [];
+          const orientations: string[] = [];
           objectIds.forEach(id => {
             const arr = pvArrays.find(a => a.id === id);
-            if (arr) configIds.push(arr.moduleConfigId);
+            if (arr) {
+              configIds.push(arr.moduleConfigId);
+              rows.push(arr.rows);
+              columns.push(arr.columns);
+              orientations.push(arr.orientation);
+            }
           });
+          // If all properties are uniform, populate currentProps
+          const uniqueRows = [...new Set(rows)];
+          const uniqueCols = [...new Set(columns)];
+          const uniqueOrients = [...new Set(orientations)];
+          if (uniqueRows.length === 1 && uniqueCols.length === 1 && uniqueOrients.length === 1) {
+            currentProps = {
+              rows: uniqueRows[0],
+              columns: uniqueCols[0],
+              orientation: uniqueOrients[0] as PanelOrientation,
+            };
+          }
           break;
+        }
         case 'dcCable':
         case 'acCable':
           objectIds.forEach(id => {
