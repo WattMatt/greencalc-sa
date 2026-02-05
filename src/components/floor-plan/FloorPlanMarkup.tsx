@@ -1797,28 +1797,31 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           break;
         }
         case 'pvArray': {
-          const rows: number[] = [];
-          const columns: number[] = [];
-          const orientations: string[] = [];
+          const rowValues: number[] = [];
+          const colValues: number[] = [];
+          const orientValues: string[] = [];
           objectIds.forEach(id => {
             const arr = pvArrays.find(a => a.id === id);
             if (arr) {
               configIds.push(arr.moduleConfigId);
-              rows.push(arr.rows);
-              columns.push(arr.columns);
-              orientations.push(arr.orientation);
+              rowValues.push(arr.rows);
+              colValues.push(arr.columns);
+              orientValues.push(arr.orientation);
             }
           });
-          // If all properties are uniform, populate currentProps
-          const uniqueRows = [...new Set(rows)];
-          const uniqueCols = [...new Set(columns)];
-          const uniqueOrients = [...new Set(orientations)];
-          if (uniqueRows.length === 1 && uniqueCols.length === 1 && uniqueOrients.length === 1) {
-            currentProps = {
-              rows: uniqueRows[0],
-              columns: uniqueCols[0],
-              orientation: uniqueOrients[0] as PanelOrientation,
-            };
+          console.log('[DEBUG] pvArray multi-select:', { objectIds, rowValues, colValues, orientValues });
+          // Populate each property independently if uniform
+          const uniqueRows = [...new Set(rowValues)];
+          const uniqueCols = [...new Set(colValues)];
+          const uniqueOrients = [...new Set(orientValues)];
+          console.log('[DEBUG] Unique values:', { uniqueRows, uniqueCols, uniqueOrients });
+          const props: import('./components/ObjectConfigModal').ObjectProperties = {};
+          if (uniqueRows.length === 1) props.rows = uniqueRows[0];
+          if (uniqueCols.length === 1) props.columns = uniqueCols[0];
+          if (uniqueOrients.length === 1) props.orientation = uniqueOrients[0] as PanelOrientation;
+          console.log('[DEBUG] Resulting props:', props);
+          if (Object.keys(props).length > 0) {
+            currentProps = props;
           }
           break;
         }
