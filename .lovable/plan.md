@@ -1,101 +1,145 @@
 
 
-## Fix: Show Configuration Parameters for Multi-Selected Objects with Same Values
+## Enhance System Details: Remove Delete, Add Selectability & Main Board Hierarchy
 
-### Problem
-When right-clicking on a single PV array, the configuration modal correctly shows the Rows, Columns, and Orientation values. However, when selecting multiple PV arrays that all have the **same** configuration values, the modal shows empty placeholders instead of pre-populating the shared values.
+### Overview
+This plan modifies the **System Details** section in the `SummaryPanel.tsx` to:
+1. Remove the delete option for inverters (keeping only visibility toggle)
+2. Make inverters AND strings clickable to highlight them on the canvas
+3. Add a new top-level "Main Board" hierarchy grouping inverters underneath
 
-### Root Cause
-In `FloorPlanMarkup.tsx`, the `handleContextMenuOpen` function (lines 1731-1834) only extracts properties when exactly one object is selected:
+---
+
+### Changes Summary
+
+| Change | Description |
+|--------|-------------|
+| Remove inverter delete button | Remove the `<Button>` with `<Trash2>` icon from System Details inverter rows |
+| Make strings selectable | Convert string rows from static `<div>` to clickable `<button>` that calls `onSelectItem(cable.id)` |
+| Add Main Board hierarchy | Create a new nested structure: Main Board → Inverter → String |
+
+---
+
+### Technical Details
+
+**File: `src/components/floor-plan/components/SummaryPanel.tsx`**
+
+#### 1. Remove Delete Button for Inverters (lines 1698-1713)
+Remove the entire delete button block from the System Details inverter section:
 
 ```typescript
-// Line 1785-1786: Only extracts properties for single selection
-if (objectIds.length === 1) {
-  switch (objectType) {
-    case 'pvArray': {
-      const arr = pvArrays.find(a => a.id === objectIds[0]);
-      if (arr) {
-        currentProps = { rows: arr.rows, columns: arr.columns, orientation: arr.orientation };
-        // ...
-      }
-      break;
-    }
-    // ... other cases
-  }
-}
+// DELETE THIS BLOCK (lines 1698-1713)
+{onDeleteItem && (
+  <Button
+    variant="ghost"
+    size="icon"
+    className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+    onClick={(e) => { ... onDeleteItem(inv.id) ... }}
+    title="Delete inverter"
+  >
+    <Trash2 className="h-3 w-3" />
+  </Button>
+)}
 ```
 
-For multi-selections, it only checks if the `configId` is uniform, but ignores the actual property values (rows, columns, orientation).
-
----
-
-### Solution
-Extend the multi-selection logic to also extract and compare properties. If all selected objects of the same type share identical property values, pre-populate those values in the modal.
-
-**File: `src/components/floor-plan/FloorPlanMarkup.tsx`**
-
-Modify the `handleContextMenuOpen` function to:
-
-1. For multi-selected PV arrays, collect all rows, columns, and orientation values
-2. If all values are identical across the selection, populate `currentProps` with those values
-3. If values differ, leave them undefined (showing placeholders)
-
----
-
-### Technical Changes
-
-**Lines ~1763-1783** - Add property extraction for multi-selected PV arrays:
+#### 2. Make Strings Selectable (lines 1729-1737)
+Transform the static string display into clickable elements:
 
 ```typescript
-case 'pvArray':
-  const pvProps: { rows: number[]; columns: number[]; orientations: string[] } = {
-    rows: [], columns: [], orientations: []
-  };
-  objectIds.forEach(id => {
-    const arr = pvArrays.find(a => a.id === id);
-    if (arr) {
-      configIds.push(arr.moduleConfigId);
-      pvProps.rows.push(arr.rows);
-      pvProps.columns.push(arr.columns);
-      pvProps.orientations.push(arr.orientation);
-    }
+// BEFORE - static div
+<div key={data.cable.id} className="flex items-center gap-2 text-xs py-1">
+  <div className="w-2 h-0.5 bg-orange-500 rounded" />
+  <span>String {strIdx + 1}</span>
+  ...
+</div>
+
+// AFTER - clickable button with highlight state
+<button
+  key={data.cable.id}
+  className={cn(
+    "flex items-center gap-2 text-xs py-1 px-2 w-full rounded hover:bg-accent transition-colors text-left",
+    (selectedItemId === data.cable.id || selectedItemIds?.has(data.cable.id))
+      && "bg-primary/10 border border-primary"
+  )}
+  onClick={() => onSelectItem(data.cable.id)}
+>
+  <div className="w-2 h-0.5 bg-orange-500 rounded" />
+  <span>String {strIdx + 1}</span>
+  <span className="text-muted-foreground">-</span>
+  <span>{data.panelCount}p</span>
+  <span className="text-muted-foreground ml-auto">{data.powerKwp.toFixed(1)} kWp</span>
+</button>
+```
+
+#### 3. Add Main Board Hierarchy (restructure lines 1599-1743)
+
+Create a new helper function to find inverters connected to main boards via AC cables:
+
+```typescript
+// New helper - find inverters connected to a main board via AC cables
+const getInvertersConnectedToMainBoard = (
+  mainBoardId: string,
+  mainBoardPosition: Point,
+  inverters: EquipmentItem[],
+  acCables: SupplyLine[],
+  scaleInfo: ScaleInfo
+): EquipmentItem[] => {
+  if (!scaleInfo.ratio) return [];
+  const thresholdPx = 1.0 / scaleInfo.ratio;
+  
+  // Find AC cables connected to this main board
+  const mbConnectedCables = acCables.filter(cable => {
+    if (cable.points.length === 0) return false;
+    const startDist = Math.hypot(cable.points[0].x - mainBoardPosition.x, cable.points[0].y - mainBoardPosition.y);
+    const endDist = Math.hypot(cable.points[cable.points.length - 1].x - mainBoardPosition.x, cable.points[cable.points.length - 1].y - mainBoardPosition.y);
+    return startDist < thresholdPx || endDist < thresholdPx;
   });
-  // Check if all properties are uniform
-  const uniqueRows = [...new Set(pvProps.rows)];
-  const uniqueCols = [...new Set(pvProps.columns)];
-  const uniqueOrients = [...new Set(pvProps.orientations)];
-  if (uniqueRows.length === 1 && uniqueCols.length === 1 && uniqueOrients.length === 1) {
-    currentProps = {
-      rows: uniqueRows[0],
-      columns: uniqueCols[0],
-      orientation: uniqueOrients[0] as PanelOrientation
-    };
-  }
-  break;
+  
+  // Find inverters at the other end of these cables
+  return inverters.filter(inv => {
+    return mbConnectedCables.some(cable => {
+      if (cable.points.length === 0) return false;
+      const startDist = Math.hypot(cable.points[0].x - inv.position.x, cable.points[0].y - inv.position.y);
+      const endDist = Math.hypot(cable.points[cable.points.length - 1].x - inv.position.x, cable.points[cable.points.length - 1].y - inv.position.y);
+      return startDist < thresholdPx || endDist < thresholdPx;
+    });
+  });
+};
 ```
 
-Apply similar logic for other object types:
-- **Walkways**: Extract and compare `length` values
-- **Cable Trays**: Extract and compare `length` and `cableType` values
-- **Inverters**: Extract and compare `name` values
+Restructure the System Details rendering to:
+
+```text
+System Details
+├── Main Board 1
+│   ├── Inverter 1
+│   │   ├── String 1 - 14p  8.6 kWp
+│   │   └── String 2 - 14p  8.6 kWp
+│   └── Inverter 2
+│       └── String 1 - 14p  8.6 kWp
+├── Main Board 2
+│   └── Inverter 3
+│       └── ...
+└── Unassigned Inverters (if any not connected to a Main Board)
+    └── Inverter N
+```
 
 ---
 
-### Expected Result
+### Result
 
-| Scenario | Before | After |
-|----------|--------|-------|
-| 13 PV arrays with same rows/cols/orientation | Empty placeholders | Pre-populated with shared values |
-| 13 PV arrays with different rows/cols | Empty placeholders | Empty placeholders (correct) |
-| 1 PV array selected | Pre-populated values | Pre-populated values (unchanged) |
-
-The modal will show:
-- **Shared values**: Pre-populated in the inputs
-- **Mixed values**: Empty placeholders with the option to set a new value for all
+After these changes:
+- Inverters in System Details will **NOT** have a delete button (users must delete via canvas right-click or Summary Contents section)
+- Clicking an inverter OR a string row will select and highlight it on the canvas
+- System Details will be organized hierarchically: Main Board → Inverters → Strings
 
 ---
 
 ### Files to Modify
 
-1. **`src/components/floor-plan/FloorPlanMarkup.tsx`** - Extend `handleContextMenuOpen` to extract properties for multi-selections when values are uniform
+1. **`src/components/floor-plan/components/SummaryPanel.tsx`**
+   - Add new helper function `getInvertersConnectedToMainBoard`
+   - Restructure System Details section with Main Board hierarchy
+   - Remove delete button from inverters
+   - Make strings clickable with selection highlighting
 
