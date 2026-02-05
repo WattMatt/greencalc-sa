@@ -1,4 +1,5 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig, BatchPlacementConfig, LayerVisibility, defaultLayerVisibility, SubgroupVisibility, DCCableConfig, ACCableConfig } from '../types';
 import { ConfigurableObjectType } from './ObjectConfigModal';
 import { renderAllMarkups, drawPvArray, drawEquipmentIcon, drawWalkway, drawCableTray } from '../utils/drawing';
@@ -203,7 +204,10 @@ export function Canvas({
       // Tab key cycles through overlapping snap targets during cable drawing
       if (e.key === 'Tab' && (activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC)) {
         e.preventDefault();
-        setCableSnapCycleIndex(prev => prev + 1);
+        // Use flushSync for immediate responsiveness
+        flushSync(() => {
+          setCableSnapCycleIndex(prev => prev + 1);
+        });
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
