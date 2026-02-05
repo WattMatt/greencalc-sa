@@ -345,6 +345,31 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   
   // Plant Setup Config
   const [plantSetupConfig, setPlantSetupConfig] = useState<PlantSetupConfig>(defaultPlantSetupConfig);
+
+  const getDefaultInverterConfigId = useCallback((config?: PlantSetupConfig): string | undefined => {
+    const inverters = config?.inverters ?? [];
+    if (inverters.length === 0) return undefined;
+    const def = inverters.find((i) => i.isDefault);
+    return def?.id ?? inverters[0]?.id;
+  }, []);
+
+  const backfillInverterConfigIds = useCallback(
+    (items: EquipmentItem[], config?: PlantSetupConfig): EquipmentItem[] => {
+      const defaultId = getDefaultInverterConfigId(config);
+      if (!defaultId) return items;
+
+      let changed = false;
+      const next = items.map((eq) => {
+        if (eq.type !== EquipmentType.INVERTER) return eq;
+        if (eq.configId) return eq;
+        changed = true;
+        return { ...eq, configId: defaultId };
+      });
+
+      return changed ? next : items;
+    },
+    [getDefaultInverterConfigId]
+  );
   
   // Selected items for placement (which type of module/inverter/etc. to use)
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
@@ -488,6 +513,10 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         const simId = (data as any).simulation_id as string | null;
         setAssignedSimulationId(simId);
         
+        const basePlantSetup = (data.plant_setup as unknown as PlantSetupConfig) || defaultPlantSetupConfig;
+
+        let syncedPlantSetup: PlantSetupConfig = basePlantSetup;
+
         if (simId) {
           // Fetch the assigned simulation
           const { data: simData, error: simError } = await supabase
@@ -519,24 +548,30 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
                 wattage: module.power_wp,
               });
               
-              setPlantSetupConfig(prev => ({
-                ...prev,
-                solarModules: [{
-                  id: 'sim-module',
-                  name: module.name,
-                  width: module.width_m,
-                  length: module.length_m,
-                  wattage: module.power_wp,
-                  isDefault: true,
-                }],
-                inverters: inverterConfig.inverterSize ? [{
-                  id: 'sim-inverter',
-                  name: `${inverterConfig.inverterSize}kW Inverter`,
-                  acCapacity: inverterConfig.inverterSize,
-                  count: inverterConfig.inverterCount || 1,
-                  isDefault: true,
-                }] : prev.inverters,
-              }));
+              syncedPlantSetup = {
+                ...basePlantSetup,
+                solarModules: [
+                  {
+                    id: 'sim-module',
+                    name: module.name,
+                    width: module.width_m,
+                    length: module.length_m,
+                    wattage: module.power_wp,
+                    isDefault: true,
+                  },
+                ],
+                inverters: inverterConfig.inverterSize
+                  ? [
+                      {
+                        id: 'sim-inverter',
+                        name: `${inverterConfig.inverterSize}kW Inverter`,
+                        acCapacity: inverterConfig.inverterSize,
+                        count: inverterConfig.inverterCount || 1,
+                        isDefault: true,
+                      },
+                    ]
+                  : basePlantSetup.inverters,
+              };
             }
           } else {
             setAssignedSimulation(null);
@@ -557,11 +592,15 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         }
 
         // Restore design state
-        const plantSetup = data.plant_setup as unknown as PlantSetupConfig;
+        const plantSetup = syncedPlantSetup;
+
+        const rawEquipment = (((data.equipment as unknown as any[]) || []) as EquipmentItem[]);
+        const equipmentWithConfigIds = backfillInverterConfigIds(rawEquipment, plantSetup);
+        const didBackfillInverterConfigIds = equipmentWithConfigIds !== rawEquipment;
         const loadedState: DesignState = {
           roofMasks: (data.roof_masks as unknown as RoofMask[]) || [],
           pvArrays: (data.pv_arrays as unknown as any[]) || [],
-          equipment: (data.equipment as unknown as any[]) || [],
+          equipment: equipmentWithConfigIds,
           lines: (data.cables as unknown as any[]) || [],
           // Load actual placed instances, NOT templates
           placedWalkways: (plantSetup?.placedWalkways || []) as PlacedWalkway[],
@@ -577,18 +616,17 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           setBackgroundImage(null);
         }
         
-        // Restore plant setup config (walkways, cable trays, etc.)
-        if (data.plant_setup) {
-          setPlantSetupConfig(data.plant_setup as unknown as PlantSetupConfig);
-        }
+        // Restore plant setup config (always prefer the selected simulation's module/inverter templates when present)
+        setPlantSetupConfig(plantSetup);
         
-        setHasUnsavedChanges(false);
+        // If we had to backfill missing inverter config IDs, mark as dirty so autosave persists the fix.
+        setHasUnsavedChanges(didBackfillInverterConfigIds ? true : false);
       }
     } catch (error) {
       console.error('Error loading layout:', error);
       throw error;
     }
-  }, []);
+  }, [backfillInverterConfigIds]);
 
   // Create a new layout
   const createLayout = useCallback(async (name: string, copyFromId?: string) => {
@@ -946,30 +984,41 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           wattage: module.power_wp,
         });
         
-        setPlantSetupConfig(prev => ({
-          ...prev,
-          solarModules: [{
-            id: 'sim-module',
-            name: module.name,
-            width: module.width_m,
-            length: module.length_m,
-            wattage: module.power_wp,
-            isDefault: true,
-          }],
-          inverters: inverterConfig.inverterSize ? [{
-            id: 'sim-inverter',
-            name: `${inverterConfig.inverterSize}kW Inverter`,
-            acCapacity: inverterConfig.inverterSize,
-            count: inverterConfig.inverterCount || 1,
-            isDefault: true,
-          }] : prev.inverters,
-        }));
+        const nextPlantSetup = {
+          ...plantSetupConfig,
+          solarModules: [
+            {
+              id: 'sim-module',
+              name: module.name,
+              width: module.width_m,
+              length: module.length_m,
+              wattage: module.power_wp,
+              isDefault: true,
+            },
+          ],
+          inverters: inverterConfig.inverterSize
+            ? [
+                {
+                  id: 'sim-inverter',
+                  name: `${inverterConfig.inverterSize}kW Inverter`,
+                  acCapacity: inverterConfig.inverterSize,
+                  count: inverterConfig.inverterCount || 1,
+                  isDefault: true,
+                },
+              ]
+            : plantSetupConfig.inverters,
+        } satisfies PlantSetupConfig;
+
+        setPlantSetupConfig(nextPlantSetup);
+
+        // Backfill any existing inverters in the current layout that are missing configId
+        setEquipment((prev) => backfillInverterConfigIds(prev, nextPlantSetup));
       }
     } else {
       setAssignedSimulation(null);
     }
     setHasUnsavedChanges(true);
-  }, []);
+  }, [backfillInverterConfigIds, plantSetupConfig, setEquipment]);
 
   // Cleanup on unmount
   useEffect(() => {
