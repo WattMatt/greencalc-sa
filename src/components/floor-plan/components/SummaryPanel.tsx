@@ -666,7 +666,10 @@ export function SummaryPanel({
             {/* Static Metrics Grid - 2x2 */}
             <div className="grid grid-cols-2 gap-2 mb-3">
               {/* Modules - Top Left */}
-              <Card className={cn(!modulesMatch && simModuleCount !== null && "border-amber-500")}>
+              <Card className={cn(
+                simModuleCount !== null && panelCount > simModuleCount && "border-green-500",
+                simModuleCount !== null && panelCount < simModuleCount && "border-destructive"
+              )}>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-2">
                     <Hash className="h-4 w-4 text-blue-500" />
@@ -676,7 +679,8 @@ export function SummaryPanel({
                         <TooltipTrigger asChild>
                           <p className={cn(
                             "font-semibold text-sm",
-                            simModuleCount !== null && (modulesMatch ? "text-green-600" : "text-amber-600")
+                            simModuleCount !== null && panelCount > simModuleCount && "text-green-600",
+                            simModuleCount !== null && panelCount < simModuleCount && "text-destructive"
                           )}>
                             {panelCount}{simModuleCount !== null && ` / ${simModuleCount}`}
                           </p>
@@ -686,7 +690,9 @@ export function SummaryPanel({
                             ? "Total modules placed on layout"
                             : modulesMatch 
                               ? "Matches simulation target" 
-                              : `${panelCount} placed, ${simModuleCount} required`}
+                              : panelCount > simModuleCount
+                                ? `${panelCount - simModuleCount} more than required`
+                                : `${simModuleCount - panelCount} fewer than required`}
                         </TooltipContent>
                       </Tooltip>
                     </div>
