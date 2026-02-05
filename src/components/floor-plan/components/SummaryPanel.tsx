@@ -38,6 +38,7 @@ interface SummaryPanelProps {
   selectedItemId: string | null;
   selectedItemIds?: Set<string>;
   onSelectItem: (id: string | null) => void;
+  onSelectMultiple?: (ids: string[]) => void;
   onEditRoofMask?: (id: string) => void;
   onDeleteItem?: (id: string) => void;
   onDeletePlacedItem?: (type: 'walkway' | 'cableTray', id: string) => void;
@@ -523,6 +524,7 @@ export function SummaryPanel({
   selectedItemId,
   selectedItemIds,
   onSelectItem,
+  onSelectMultiple,
   onEditRoofMask,
   onDeleteItem,
   onDeletePlacedItem,
@@ -1660,6 +1662,7 @@ export function SummaryPanel({
                         cable: SupplyLine;
                         panelCount: number;
                         powerKwp: number;
+                        pvArrayId: string | null;
                       }> = [];
                       
                       connectedCables.forEach(cable => {
@@ -1671,9 +1674,9 @@ export function SummaryPanel({
                           const powerKwp = (panels * pvPanelConfig.wattage) / 1000;
                           totalPanels += panels;
                           totalDcCapacityKw += powerKwp;
-                          stringData.push({ cable, panelCount: panels, powerKwp });
+                          stringData.push({ cable, panelCount: panels, powerKwp, pvArrayId: pvArray.id });
                         } else {
-                          stringData.push({ cable, panelCount: 0, powerKwp: 0 });
+                          stringData.push({ cable, panelCount: 0, powerKwp: 0, pvArrayId: null });
                         }
                       });
                       
@@ -1746,7 +1749,22 @@ export function SummaryPanel({
                               <p className="text-xs text-muted-foreground py-1">No strings connected</p>
                             ) : (
                               stringData.map((data, strIdx) => {
-                                const isStringSelected = selectedItemId === data.cable.id || selectedItemIds?.has(data.cable.id);
+                                const isStringSelected = selectedItemId === data.cable.id || selectedItemIds?.has(data.cable.id) ||
+                                  (data.pvArrayId && (selectedItemId === data.pvArrayId || selectedItemIds?.has(data.pvArrayId)));
+                                
+                                const handleStringClick = () => {
+                                  // Select both the cable and the PV array
+                                  const idsToSelect: string[] = [data.cable.id];
+                                  if (data.pvArrayId) {
+                                    idsToSelect.push(data.pvArrayId);
+                                  }
+                                  if (onSelectMultiple && idsToSelect.length > 1) {
+                                    onSelectMultiple(idsToSelect);
+                                  } else {
+                                    onSelectItem(data.cable.id);
+                                  }
+                                };
+                                
                                 return (
                                   <button
                                     key={data.cable.id}
@@ -1754,7 +1772,7 @@ export function SummaryPanel({
                                       "flex items-center gap-2 text-xs py-1 px-2 w-full rounded hover:bg-accent transition-colors text-left",
                                       isStringSelected && "bg-primary/10 border border-primary"
                                     )}
-                                    onClick={() => onSelectItem(data.cable.id)}
+                                    onClick={handleStringClick}
                                   >
                                     <div className="w-2 h-0.5 bg-orange-500 rounded" />
                                     <span>String {strIdx + 1}</span>
