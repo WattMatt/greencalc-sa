@@ -496,7 +496,7 @@ export function SummaryPanel({
    
    // State for collapsible "Summary Contents" section
    const [summaryContentOpen, setSummaryContentOpen] = useState(true);
-   const [systemDetailsOpen, setSystemDetailsOpen] = useState(true);
+   const [systemDetailsOpen, setSystemDetailsOpen] = useState(false);
 
    // Accordion behavior: when one opens, close the other
    const handleSummaryContentChange = (open: boolean) => {
@@ -1486,7 +1486,7 @@ export function SummaryPanel({
          </Collapsible>
 
           {/* System Details collapsible - individual inverters */}
-          <Collapsible open={systemDetailsOpen} onOpenChange={handleSystemDetailsChange} className="flex-shrink-0 mt-auto border-t">
+          <Collapsible open={systemDetailsOpen} onOpenChange={handleSystemDetailsChange} className="flex-shrink-0 border-t">
             <div className="px-3 py-2 border-b">
               <CollapsibleTrigger asChild>
                 <button className="flex items-center gap-2 w-full p-2 hover:bg-accent/50 rounded transition-colors">
