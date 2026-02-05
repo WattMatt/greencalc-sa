@@ -1303,6 +1303,8 @@ export const snapCablePointToTarget = (
   const currentTarget = validTargets[normalizedIndex];
 
   // If user has explicitly cycled (cycleIndex > 0), snap to center of current target
+  // This works for circular cycling since cycleIndex keeps incrementing (2, 3, 4...)
+  // while normalizedIndex wraps around (0, 1, 0, 1...)
   if (cycleIndex > 0 && currentTarget.centerPosition) {
     return {
       current: {
