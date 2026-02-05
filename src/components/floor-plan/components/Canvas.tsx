@@ -1411,11 +1411,22 @@ export function Canvas({
           plantSetupConfig
         );
         
+        // Get default inverter configId for newly placed inverters
+        const getDefaultInverterConfigId = (config?: PlantSetupConfig): string | undefined => {
+          if (!config?.inverters?.length) return undefined;
+          const defaultInv = config.inverters.find(i => i.isDefault);
+          return defaultInv?.id || config.inverters[0]?.id;
+        };
+        
         setEquipment(prev => [...prev, {
           id: `eq-${Date.now()}`,
           type: eqType,
           position: snapResult.position,
           rotation: snapResult.snappedToId ? snapResult.rotation : placementRotation,
+          // Assign configId for inverters to enable DC/AC ratio calculation
+          ...(eqType === EquipmentType.INVERTER && {
+            configId: getDefaultInverterConfigId(plantSetupConfig),
+          }),
         }]);
       }
     } else if (activeTool === Tool.PLACE_WALKWAY && pendingWalkwayConfig && setPlacedWalkways && scaleInfo.ratio) {
