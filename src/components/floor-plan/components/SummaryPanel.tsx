@@ -1194,7 +1194,7 @@ export function SummaryPanel({
                   const thicknesses = Object.keys(dcByThickness).map(Number).sort((a, b) => a - b);
                   
                   return (
-                    <Collapsible defaultOpen={true}>
+                    <Collapsible defaultOpen={false}>
                       <div className="flex items-center gap-1">
                         {/* Visibility toggle for all DC cables */}
                         <Tooltip>
@@ -1237,7 +1237,7 @@ export function SummaryPanel({
                           const isThicknessVisible = dcCableThicknessVisibility?.[thickness] !== false;
                           
                           return (
-                            <Collapsible key={thickness} defaultOpen={true}>
+                            <Collapsible key={thickness} defaultOpen={false}>
                               <div className="flex items-center w-full">
                                 {/* Visibility toggle for this thickness - fixed left column */}
                                 <Tooltip>
@@ -1389,7 +1389,7 @@ export function SummaryPanel({
                   const thicknesses = Object.keys(acByThickness).map(Number).sort((a, b) => a - b);
                   
                   return (
-                    <Collapsible defaultOpen={true}>
+                    <Collapsible defaultOpen={false}>
                       <div className="flex items-center gap-1">
                         {/* Visibility toggle for all AC cables */}
                         <Tooltip>
@@ -1431,7 +1431,7 @@ export function SummaryPanel({
                           const isThicknessVisible = acCableThicknessVisibility?.[thickness] !== false;
                           
                           return (
-                            <Collapsible key={thickness} defaultOpen={true}>
+                            <Collapsible key={thickness} defaultOpen={false}>
                               <div className="flex items-center w-full">
                                 {/* Visibility toggle for this thickness - fixed left column */}
                                 <Tooltip>
