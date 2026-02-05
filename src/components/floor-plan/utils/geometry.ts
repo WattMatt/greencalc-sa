@@ -945,6 +945,7 @@ export type CableType = 'dc' | 'ac';
 interface CableSnapTarget {
   id: string;
   position: Point;
+  centerPosition?: Point; // For Tab cycling - snap to center of object
   type: 'equipment' | 'pvArray' | 'cableTray' | 'cable';
   equipmentType?: EquipmentType;
   arrayId?: string; // Parent PV array ID for individual module snapping
@@ -1112,6 +1113,7 @@ export const getClosestPointOnCableTray = (
 
 export interface CableSnapResult {
   position: Point;
+  centerPosition?: Point; // For Tab cycling - center of the object
   snappedToId: string | null;
   snappedToType: 'equipment' | 'pvArray' | 'cableTray' | 'cable' | null;
   equipmentType?: EquipmentType;
@@ -1217,6 +1219,7 @@ export const snapCablePointToTarget = (
           targets.push({
             id: tray.id,
             position: projection.point,
+            centerPosition: tray.position, // Center of cable tray for Tab cycling
             type: 'cableTray',
             trayId: tray.id,
             // Store perpendicular distance for threshold check
@@ -1240,6 +1243,7 @@ export const snapCablePointToTarget = (
         targets.push({
           id: `${cable.id}_node_${i}`,
           position: cable.points[i],
+          centerPosition: cable.points[i], // Node position is the "center"
           type: 'cable',
           cableId: cable.id,
         });
@@ -1267,6 +1271,7 @@ export const snapCablePointToTarget = (
     if (dist < adjustedThreshold) {
       validTargets.push({
         position: target.position,
+        centerPosition: target.centerPosition || target.position,
         snappedToId: target.id,
         snappedToType: target.type,
         equipmentType: target.equipmentType,
@@ -1296,6 +1301,18 @@ export const snapCablePointToTarget = (
   // Apply cycle index (wrap around)
   const normalizedIndex = cycleIndex % validTargets.length;
   const currentTarget = validTargets[normalizedIndex];
+
+  // If user has explicitly cycled (cycleIndex > 0), snap to center of current target
+  if (cycleIndex > 0 && currentTarget.centerPosition) {
+    return {
+      current: {
+        ...currentTarget,
+        position: currentTarget.centerPosition,
+      },
+      allTargets: validTargets,
+      currentIndex: normalizedIndex,
+    };
+  }
 
   return {
     current: currentTarget,
