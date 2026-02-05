@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
- import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check, Eye, EyeOff, LayoutGrid, ListCollapse } from 'lucide-react';
+ import { Sun, Layers, Cable, Zap, Hash, ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, Box, Footprints, Check, Eye, EyeOff, LayoutGrid, ListCollapse, Settings } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig, PlacedWalkway, PlacedCableTray, EquipmentType, LayerVisibility, ItemVisibility } from '../types';
@@ -496,6 +496,7 @@ export function SummaryPanel({
    
    // State for collapsible "Summary Contents" section
    const [summaryContentOpen, setSummaryContentOpen] = useState(true);
+   const [systemDetailsOpen, setSystemDetailsOpen] = useState(true);
    
   // Collapsed state - thin strip with expand button
   if (isCollapsed) {
@@ -1472,6 +1473,106 @@ export function SummaryPanel({
         </ScrollArea>
            </CollapsibleContent>
          </Collapsible>
+
+          {/* System Details collapsible - individual inverters */}
+          <Collapsible open={systemDetailsOpen} onOpenChange={setSystemDetailsOpen} className="flex-shrink-0">
+            <div className="px-3 py-2 border-b">
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-2 w-full p-2 hover:bg-accent/50 rounded transition-colors">
+                  <ChevronDown className={cn(
+                    "h-4 w-4 text-muted-foreground transition-transform",
+                    !systemDetailsOpen && "-rotate-90"
+                  )} />
+                  <Settings className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">System Details</span>
+                </button>
+              </CollapsibleTrigger>
+            </div>
+            
+            <CollapsibleContent>
+              <ScrollArea style={{ maxHeight: 'calc(100vh - 200px)' }}>
+                <div className="p-3 space-y-1">
+                  {equipment.filter(e => e.type === EquipmentType.INVERTER).length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No inverters placed</p>
+                  ) : (
+                    equipment
+                      .filter(e => e.type === EquipmentType.INVERTER)
+                      .map((inv, i) => {
+                        const isItemVisible = itemVisibility?.[inv.id] !== false;
+                        const handleClick = () => {
+                          if (!isItemVisible && onForceShowItem) onForceShowItem(inv.id);
+                          onSelectItem(inv.id);
+                        };
+                        return (
+                          <div
+                            key={inv.id}
+                            className={cn(
+                              "w-full flex items-center gap-1 p-2 rounded text-xs transition-colors",
+                              selectedItemIds?.has(inv.id)
+                                ? 'bg-primary/10 border border-primary'
+                                : 'bg-muted hover:bg-accent',
+                              !isItemVisible && 'opacity-50'
+                            )}
+                          >
+                            {/* Per-item visibility toggle */}
+                            {onToggleItemVisibility && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-5 w-5 shrink-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onToggleItemVisibility(inv.id);
+                                    }}
+                                  >
+                                    {isItemVisible ? (
+                                      <Eye className="h-3 w-3 text-muted-foreground" />
+                                    ) : (
+                                      <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left">
+                                  {isItemVisible ? 'Hide' : 'Show'}
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                            <button
+                              type="button"
+                              className="flex-1 text-left pl-2"
+                              onClick={handleClick}
+                            >
+                              <span className="font-medium">Inverter {i + 1}</span>
+                              {inv.name && (
+                                <span className="text-muted-foreground ml-2">{inv.name}</span>
+                              )}
+                            </button>
+
+                            {onDeleteItem && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  onDeleteItem(inv.id);
+                                }}
+                                title="Delete inverter"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+              </ScrollArea>
+            </CollapsibleContent>
+          </Collapsible>
       </div>
     </TooltipProvider>
   );
