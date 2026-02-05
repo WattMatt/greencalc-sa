@@ -426,6 +426,36 @@ const getCablesConnectedToInverter = (
   });
 };
 
+// Helper to find inverters connected to a main board via AC cables
+const getInvertersConnectedToMainBoard = (
+  mainBoardId: string,
+  mainBoardPosition: Point,
+  inverters: EquipmentItem[],
+  acCables: SupplyLine[],
+  scaleInfo: ScaleInfo
+): EquipmentItem[] => {
+  if (!scaleInfo.ratio) return [];
+  const thresholdPx = 1.0 / scaleInfo.ratio;
+  
+  // Find AC cables connected to this main board
+  const mbConnectedCables = acCables.filter(cable => {
+    if (cable.points.length === 0) return false;
+    const startDist = Math.hypot(cable.points[0].x - mainBoardPosition.x, cable.points[0].y - mainBoardPosition.y);
+    const endDist = Math.hypot(cable.points[cable.points.length - 1].x - mainBoardPosition.x, cable.points[cable.points.length - 1].y - mainBoardPosition.y);
+    return startDist < thresholdPx || endDist < thresholdPx;
+  });
+  
+  // Find inverters at the other end of these cables
+  return inverters.filter(inv => {
+    return mbConnectedCables.some(cable => {
+      if (cable.points.length === 0) return false;
+      const startDist = Math.hypot(cable.points[0].x - inv.position.x, cable.points[0].y - inv.position.y);
+      const endDist = Math.hypot(cable.points[cable.points.length - 1].x - inv.position.x, cable.points[cable.points.length - 1].y - inv.position.y);
+      return startDist < thresholdPx || endDist < thresholdPx;
+    });
+  });
+};
+
 // Helper to find the PV array connected to a DC cable
 const getPVArrayForString = (
   cable: SupplyLine,
@@ -1596,151 +1626,255 @@ export function SummaryPanel({
             
             <CollapsibleContent className="flex-1 min-h-0">
               <ScrollArea className="h-full">
-                <div className="p-3 space-y-1">
-                  {equipment.filter(e => e.type === EquipmentType.INVERTER).length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No inverters placed</p>
-                  ) : (
-                    equipment
-                      .filter(e => e.type === EquipmentType.INVERTER)
-                      .map((inv, i) => {
-                        const isItemVisible = itemVisibility?.[inv.id] !== false;
-                        
-                        // Find connected DC cables
-                        const dcCables = lines.filter(l => l.type === 'dc');
-                        const connectedCables = getCablesConnectedToInverter(
-                          inv.id, inv.position, dcCables, scaleInfo
+                <div className="p-3 space-y-2">
+                  {(() => {
+                    const inverters = equipment.filter(e => e.type === EquipmentType.INVERTER);
+                    const mainBoards = equipment.filter(e => e.type === EquipmentType.MAIN_BOARD);
+                    const acCables = lines.filter(l => l.type === 'ac');
+                    const dcCables = lines.filter(l => l.type === 'dc');
+                    
+                    // Find which inverters are connected to which main boards
+                    const assignedInverterIds = new Set<string>();
+                    const mainBoardData = mainBoards.map(mb => {
+                      const connectedInverters = getInvertersConnectedToMainBoard(
+                        mb.id, mb.position, inverters, acCables, scaleInfo
+                      );
+                      connectedInverters.forEach(inv => assignedInverterIds.add(inv.id));
+                      return { mainBoard: mb, inverters: connectedInverters };
+                    });
+                    
+                    // Find unassigned inverters
+                    const unassignedInverters = inverters.filter(inv => !assignedInverterIds.has(inv.id));
+                    
+                    // Render inverter content helper
+                    const renderInverterContent = (inv: EquipmentItem, invIndex: number) => {
+                      const isItemVisible = itemVisibility?.[inv.id] !== false;
+                      
+                      const connectedCables = getCablesConnectedToInverter(
+                        inv.id, inv.position, dcCables, scaleInfo
+                      );
+                      
+                      let totalPanels = 0;
+                      let totalDcCapacityKw = 0;
+                      const stringData: Array<{
+                        cable: SupplyLine;
+                        panelCount: number;
+                        powerKwp: number;
+                      }> = [];
+                      
+                      connectedCables.forEach(cable => {
+                        const pvArray = getPVArrayForString(
+                          cable, inv.position, pvArrays, pvPanelConfig, scaleInfo
                         );
-                        
-                        // Calculate totals for this inverter
-                        let totalPanels = 0;
-                        let totalDcCapacityKw = 0;
-                        const stringData: Array<{
-                          cable: SupplyLine;
-                          panelCount: number;
-                          powerKwp: number;
-                        }> = [];
-                        
-                        connectedCables.forEach(cable => {
-                          const pvArray = getPVArrayForString(
-                            cable, inv.position, pvArrays, pvPanelConfig, scaleInfo
-                          );
-                          if (pvArray && pvPanelConfig) {
-                            const panels = pvArray.rows * pvArray.columns;
-                            const powerKwp = (panels * pvPanelConfig.wattage) / 1000;
-                            totalPanels += panels;
-                            totalDcCapacityKw += powerKwp;
-                            stringData.push({ cable, panelCount: panels, powerKwp });
-                          } else {
-                            // Cable with no detected array - show as unknown
-                            stringData.push({ cable, panelCount: 0, powerKwp: 0 });
-                          }
-                        });
-                        
-                        const acCapacityKw = getInverterAcCapacity(inv, plantSetupConfig);
-                        const dcAcRatio = acCapacityKw > 0 
-                          ? (totalDcCapacityKw / acCapacityKw).toFixed(2) 
-                          : '0.00';
-                        
-                        const handleInverterClick = () => {
-                          if (!isItemVisible && onForceShowItem) onForceShowItem(inv.id);
-                          onSelectItem(inv.id);
-                        };
-                        
-                        return (
-                          <Collapsible key={inv.id} defaultOpen={false}>
-                            <div className={cn(
-                              "flex flex-col p-2 rounded text-xs transition-colors",
-                              selectedItemIds?.has(inv.id)
-                                ? 'bg-primary/10 border border-primary'
-                                : 'bg-muted hover:bg-accent',
-                              !isItemVisible && 'opacity-50'
-                            )}>
-                              {/* Header row with eye, trigger, and delete */}
-                              <div className="flex items-center gap-1">
-                                {/* Eye toggle */}
-                                {onToggleItemVisibility && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-5 w-5 shrink-0"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onToggleItemVisibility(inv.id);
-                                        }}
-                                      >
-                                        {isItemVisible ? (
-                                          <Eye className="h-3 w-3 text-muted-foreground" />
-                                        ) : (
-                                          <EyeOff className="h-3 w-3 text-muted-foreground/50" />
-                                        )}
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left">
-                                      {isItemVisible ? 'Hide' : 'Show'}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )}
-                                
-                                {/* Collapsible trigger - inverter name */}
-                                <CollapsibleTrigger asChild>
-                                  <button 
-                                    className="flex-1 flex items-center gap-2 text-left" 
-                                    onClick={handleInverterClick}
-                                  >
-                                    <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform [&[data-state=open]>svg]:rotate-180" />
-                                    <span className="font-medium">Inverter {i + 1}</span>
-                                    {inv.name && <span className="text-muted-foreground">{inv.name}</span>}
-                                  </button>
-                                </CollapsibleTrigger>
-                                
-                                {/* Delete button */}
-                                {onDeleteItem && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6 shrink-0 text-destructive hover:text-destructive"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      onDeleteItem(inv.id);
-                                    }}
-                                    title="Delete inverter"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                )}
-                              </div>
+                        if (pvArray && pvPanelConfig) {
+                          const panels = pvArray.rows * pvArray.columns;
+                          const powerKwp = (panels * pvPanelConfig.wattage) / 1000;
+                          totalPanels += panels;
+                          totalDcCapacityKw += powerKwp;
+                          stringData.push({ cable, panelCount: panels, powerKwp });
+                        } else {
+                          stringData.push({ cable, panelCount: 0, powerKwp: 0 });
+                        }
+                      });
+                      
+                      const acCapacityKw = getInverterAcCapacity(inv, plantSetupConfig);
+                      const dcAcRatio = acCapacityKw > 0 
+                        ? (totalDcCapacityKw / acCapacityKw).toFixed(2) 
+                        : '0.00';
+                      
+                      const handleInverterClick = () => {
+                        if (!isItemVisible && onForceShowItem) onForceShowItem(inv.id);
+                        onSelectItem(inv.id);
+                      };
+                      
+                      return (
+                        <Collapsible key={inv.id} defaultOpen={false}>
+                          <div className={cn(
+                            "flex flex-col p-2 rounded text-xs transition-colors",
+                            selectedItemIds?.has(inv.id)
+                              ? 'bg-primary/10 border border-primary'
+                              : 'bg-muted hover:bg-accent',
+                            !isItemVisible && 'opacity-50'
+                          )}>
+                            <div className="flex items-center gap-1">
+                              {onToggleItemVisibility && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-5 w-5 shrink-0"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onToggleItemVisibility(inv.id);
+                                      }}
+                                    >
+                                      {isItemVisible ? (
+                                        <Eye className="h-3 w-3 text-muted-foreground" />
+                                      ) : (
+                                        <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+                                      )}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left">
+                                    {isItemVisible ? 'Hide' : 'Show'}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                               
-                              {/* Summary row: total panels and DC/AC ratio */}
-                              <div className="flex items-center gap-2 pl-7 pt-1 text-muted-foreground text-[10px]">
-                                <span>{totalPanels} panels</span>
-                                <span>|</span>
-                                <span>DC/AC: {dcAcRatio}</span>
-                              </div>
+                              <CollapsibleTrigger asChild>
+                                <button 
+                                  className="flex-1 flex items-center gap-2 text-left" 
+                                  onClick={handleInverterClick}
+                                >
+                                  <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform [&[data-state=open]>svg]:rotate-180" />
+                                  <span className="font-medium">Inverter {invIndex + 1}</span>
+                                  {inv.name && <span className="text-muted-foreground">{inv.name}</span>}
+                                </button>
+                              </CollapsibleTrigger>
                             </div>
                             
-                            {/* Connected strings content */}
-                            <CollapsibleContent className="pl-8 pt-1 space-y-1">
-                              {stringData.length === 0 ? (
-                                <p className="text-xs text-muted-foreground py-1">No strings connected</p>
-                              ) : (
-                                stringData.map((data, strIdx) => (
-                                  <div key={data.cable.id} className="flex items-center gap-2 text-xs py-1">
+                            <div className="flex items-center gap-2 pl-7 pt-1 text-muted-foreground text-[10px]">
+                              <span>{totalPanels} panels</span>
+                              <span>|</span>
+                              <span>DC/AC: {dcAcRatio}</span>
+                            </div>
+                          </div>
+                          
+                          <CollapsibleContent className="pl-8 pt-1 space-y-1">
+                            {stringData.length === 0 ? (
+                              <p className="text-xs text-muted-foreground py-1">No strings connected</p>
+                            ) : (
+                              stringData.map((data, strIdx) => {
+                                const isStringSelected = selectedItemId === data.cable.id || selectedItemIds?.has(data.cable.id);
+                                return (
+                                  <button
+                                    key={data.cable.id}
+                                    className={cn(
+                                      "flex items-center gap-2 text-xs py-1 px-2 w-full rounded hover:bg-accent transition-colors text-left",
+                                      isStringSelected && "bg-primary/10 border border-primary"
+                                    )}
+                                    onClick={() => onSelectItem(data.cable.id)}
+                                  >
                                     <div className="w-2 h-0.5 bg-orange-500 rounded" />
                                     <span>String {strIdx + 1}</span>
                                     <span className="text-muted-foreground">-</span>
                                     <span>{data.panelCount}p</span>
                                     <span className="text-muted-foreground ml-auto">{data.powerKwp.toFixed(1)} kWp</span>
-                                  </div>
-                                ))
-                              )}
+                                  </button>
+                                );
+                              })
+                            )}
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    };
+                    
+                    if (mainBoards.length === 0 && inverters.length === 0) {
+                      return <p className="text-xs text-muted-foreground">No equipment placed</p>;
+                    }
+                    
+                    return (
+                      <>
+                        {/* Main Boards with nested inverters */}
+                        {mainBoardData.map((mbData, mbIdx) => {
+                          const isMbVisible = itemVisibility?.[mbData.mainBoard.id] !== false;
+                          const isMbSelected = selectedItemIds?.has(mbData.mainBoard.id);
+                          
+                          return (
+                            <Collapsible key={mbData.mainBoard.id} defaultOpen={false}>
+                              <div className={cn(
+                                "flex flex-col p-2 rounded text-xs transition-colors",
+                                isMbSelected
+                                  ? 'bg-primary/10 border border-primary'
+                                  : 'bg-muted/50 hover:bg-accent',
+                                !isMbVisible && 'opacity-50'
+                              )}>
+                                <div className="flex items-center gap-1">
+                                  {onToggleItemVisibility && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-5 w-5 shrink-0"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onToggleItemVisibility(mbData.mainBoard.id);
+                                          }}
+                                        >
+                                          {isMbVisible ? (
+                                            <Eye className="h-3 w-3 text-muted-foreground" />
+                                          ) : (
+                                            <EyeOff className="h-3 w-3 text-muted-foreground/50" />
+                                          )}
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="left">
+                                        {isMbVisible ? 'Hide' : 'Show'}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                  
+                                  <CollapsibleTrigger asChild>
+                                    <button 
+                                      className="flex-1 flex items-center gap-2 text-left"
+                                      onClick={() => {
+                                        if (!isMbVisible && onForceShowItem) onForceShowItem(mbData.mainBoard.id);
+                                        onSelectItem(mbData.mainBoard.id);
+                                      }}
+                                    >
+                                      <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform [&[data-state=open]>svg]:rotate-180" />
+                                      <Box className="h-3.5 w-3.5 text-blue-500" />
+                                      <span className="font-medium">Main Board {mbIdx + 1}</span>
+                                      {mbData.mainBoard.name && <span className="text-muted-foreground">{mbData.mainBoard.name}</span>}
+                                    </button>
+                                  </CollapsibleTrigger>
+                                </div>
+                                
+                                <div className="flex items-center gap-2 pl-7 pt-1 text-muted-foreground text-[10px]">
+                                  <span>{mbData.inverters.length} inverter{mbData.inverters.length !== 1 ? 's' : ''}</span>
+                                </div>
+                              </div>
+                              
+                              <CollapsibleContent className="pl-4 pt-1 space-y-1">
+                                {mbData.inverters.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground py-1 pl-4">No inverters connected</p>
+                                ) : (
+                                  mbData.inverters.map((inv, invIdx) => renderInverterContent(inv, invIdx))
+                                )}
+                              </CollapsibleContent>
+                            </Collapsible>
+                          );
+                        })}
+                        
+                        {/* Unassigned inverters */}
+                        {unassignedInverters.length > 0 && (
+                          <Collapsible defaultOpen={mainBoards.length === 0}>
+                            <div className="flex flex-col p-2 rounded text-xs bg-muted/30 hover:bg-accent/50 transition-colors">
+                              <div className="flex items-center gap-1">
+                                <div className="w-5" /> {/* Spacer for alignment */}
+                                <CollapsibleTrigger asChild>
+                                  <button className="flex-1 flex items-center gap-2 text-left">
+                                    <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform [&[data-state=open]>svg]:rotate-180" />
+                                    <span className="font-medium text-muted-foreground">Unassigned Inverters</span>
+                                  </button>
+                                </CollapsibleTrigger>
+                              </div>
+                              
+                              <div className="flex items-center gap-2 pl-7 pt-1 text-muted-foreground text-[10px]">
+                                <span>{unassignedInverters.length} inverter{unassignedInverters.length !== 1 ? 's' : ''}</span>
+                              </div>
+                            </div>
+                            
+                            <CollapsibleContent className="pl-4 pt-1 space-y-1">
+                              {unassignedInverters.map((inv, invIdx) => renderInverterContent(inv, invIdx))}
                             </CollapsibleContent>
                           </Collapsible>
-                        );
-                      })
-                  )}
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </ScrollArea>
             </CollapsibleContent>
