@@ -1704,7 +1704,17 @@ export function SummaryPanel({
                       
                       const handleInverterClick = () => {
                         if (!isItemVisible && onForceShowItem) onForceShowItem(inv.id);
-                        onSelectItem(inv.id);
+                        // Cascade select: inverter + all connected strings (cables + PV arrays)
+                        const idsToSelect: string[] = [inv.id];
+                        stringData.forEach(data => {
+                          idsToSelect.push(data.cable.id);
+                          if (data.pvArrayId) idsToSelect.push(data.pvArrayId);
+                        });
+                        if (onSelectMultiple && idsToSelect.length > 1) {
+                          onSelectMultiple(idsToSelect);
+                        } else {
+                          onSelectItem(inv.id);
+                        }
                       };
                       
                       return (
@@ -1856,7 +1866,23 @@ export function SummaryPanel({
                                       className="flex-1 flex items-center gap-2 text-left"
                                       onClick={() => {
                                         if (!isMbVisible && onForceShowItem) onForceShowItem(mbData.mainBoard.id);
-                                        onSelectItem(mbData.mainBoard.id);
+                                        // Cascade select: main board + all connected inverters + their strings
+                                        const idsToSelect: string[] = [mbData.mainBoard.id];
+                                        mbData.inverters.forEach(inv => {
+                                          idsToSelect.push(inv.id);
+                                          // Get strings for this inverter
+                                          const connectedCables = getCablesConnectedToInverter(inv.id, inv.position, dcCables, scaleInfo);
+                                          connectedCables.forEach(cable => {
+                                            idsToSelect.push(cable.id);
+                                            const pvArray = getPVArrayForString(cable, inv.position, pvArrays, pvPanelConfig, scaleInfo);
+                                            if (pvArray) idsToSelect.push(pvArray.id);
+                                          });
+                                        });
+                                        if (onSelectMultiple && idsToSelect.length > 1) {
+                                          onSelectMultiple(idsToSelect);
+                                        } else {
+                                          onSelectItem(mbData.mainBoard.id);
+                                        }
                                       }}
                                     >
                                       <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform [&[data-state=open]>svg]:rotate-180" />
