@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem, EquipmentItem, SupplyLine, EquipmentType, PlantSetupConfig, PlacedWalkway, PlacedCableTray, WalkwayConfig, CableTrayConfig, BatchPlacementConfig, LayerVisibility, defaultLayerVisibility, SubgroupVisibility, DCCableConfig, ACCableConfig } from '../types';
 import { ConfigurableObjectType } from './ObjectConfigModal';
 import { renderAllMarkups, drawPvArray, drawEquipmentIcon, drawWalkway, drawCableTray } from '../utils/drawing';
-import { calculatePolygonArea, calculateLineLength, distance, distanceToPolyline, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing, getPVArrayDimensions, getEquipmentDimensions, detectClickedEdge, snapCablePointToTarget, CableType } from '../utils/geometry';
+import { calculatePolygonArea, calculateLineLength, distance, distanceToPolyline, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing, getPVArrayDimensions, getEquipmentDimensions, detectClickedEdge, snapCablePointToTarget, CableType, CableSnapResult } from '../utils/geometry';
 import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
 import { PVArrayConfig } from './PVArrayModal';
 import { AlignmentEdge } from './AlignEdgesModal';
@@ -147,15 +147,19 @@ export function Canvas({
     type: 'equipment' | 'pvArray' | 'cableTray' | 'cable' | null;
   } | null>(null);
 
-  // Cable endpoint dragging state - for visually editing cable connections
-  const [draggingCableEndpoint, setDraggingCableEndpoint] = useState<{
+  // Cable endpoint editing state - two-stage: selected -> editing (click-based workflow)
+  const [selectedCableEndpoint, setSelectedCableEndpoint] = useState<{
     cableId: string;
     endpoint: 'start' | 'end';
+    originalPoints: Point[]; // Store original for cancel/restore
   } | null>(null);
-  const [cableEndpointDragPos, setCableEndpointDragPos] = useState<Point | null>(null);
+  const [isEditingCableEndpoint, setIsEditingCableEndpoint] = useState(false);
+  const [cableEndpointEditPos, setCableEndpointEditPos] = useState<Point | null>(null);
   const [cableEndpointSnapResult, setCableEndpointSnapResult] = useState<{
     snappedToId: string | null;
     snappedToType: 'equipment' | 'pvArray' | 'cableTray' | 'cable' | null;
+    allTargets?: CableSnapResult[];
+    currentIndex?: number;
   } | null>(null);
 
   const SNAP_THRESHOLD = 15; // pixels in screen space
@@ -224,8 +228,24 @@ export function Canvas({
         e.preventDefault();
         cancelDrawing();
       }
-      // Tab key cycles through overlapping snap targets during cable drawing
-      if (e.key === 'Tab' && (activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC)) {
+      // Cancel cable endpoint editing with ESC
+      if (e.key === 'Escape' && selectedCableEndpoint) {
+        e.preventDefault();
+        if (isEditingCableEndpoint && selectedCableEndpoint.originalPoints) {
+          // Restore original cable points
+          setLines(prev => prev.map(line => 
+            line.id === selectedCableEndpoint.cableId 
+              ? { ...line, points: selectedCableEndpoint.originalPoints }
+              : line
+          ));
+        }
+        setSelectedCableEndpoint(null);
+        setIsEditingCableEndpoint(false);
+        setCableEndpointEditPos(null);
+        setCableEndpointSnapResult(null);
+      }
+      // Tab key cycles through overlapping snap targets during cable drawing OR endpoint editing
+      if (e.key === 'Tab' && (activeTool === Tool.LINE_DC || activeTool === Tool.LINE_AC || isEditingCableEndpoint)) {
         e.preventDefault();
         // Use flushSync for immediate responsiveness
         flushSync(() => {
@@ -244,7 +264,7 @@ export function Canvas({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [currentDrawing, activeTool, scaleInfo.ratio]);
+  }, [currentDrawing, activeTool, scaleInfo.ratio, selectedCableEndpoint, isEditingCableEndpoint]);
 
   // Reset snap cycle index when mouse moves significantly or tool changes
   useEffect(() => {
@@ -733,19 +753,38 @@ export function Canvas({
         const handleRadius = ENDPOINT_HANDLE_RADIUS / viewState.zoom;
         const cableColor = cable.type === 'dc' ? '#ef4444' : '#22c55e';
         
-        // Draw endpoint being dragged at its current drag position
-        const isStartDragging = draggingCableEndpoint?.cableId === cable.id && draggingCableEndpoint?.endpoint === 'start';
-        const isEndDragging = draggingCableEndpoint?.cableId === cable.id && draggingCableEndpoint?.endpoint === 'end';
+        // Check if this cable's endpoints are being edited
+        const isThisCableBeingEdited = selectedCableEndpoint?.cableId === cable.id;
+        const isStartSelected = isThisCableBeingEdited && selectedCableEndpoint?.endpoint === 'start';
+        const isEndSelected = isThisCableBeingEdited && selectedCableEndpoint?.endpoint === 'end';
         
-        // Draw start handle
-        const startHandlePos = isStartDragging && cableEndpointDragPos ? cableEndpointDragPos : startPoint;
-        ctx.beginPath();
-        ctx.arc(startHandlePos.x, startHandlePos.y, handleRadius, 0, Math.PI * 2);
-        ctx.fillStyle = isStartDragging ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)';
-        ctx.fill();
-        ctx.strokeStyle = cableColor;
-        ctx.lineWidth = 2 / viewState.zoom;
-        ctx.stroke();
+        // Draw start handle (at edit position if editing, otherwise at cable point)
+        const startHandlePos = (isStartSelected && isEditingCableEndpoint && cableEndpointEditPos) 
+          ? cableEndpointEditPos 
+          : startPoint;
+        
+        // Draw glow effect for selected endpoint
+        if (isStartSelected) {
+          ctx.save();
+          ctx.shadowBlur = 10 / viewState.zoom;
+          ctx.shadowColor = cableColor;
+          ctx.beginPath();
+          ctx.arc(startHandlePos.x, startHandlePos.y, handleRadius * 1.2, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+          ctx.fill();
+          ctx.strokeStyle = cableColor;
+          ctx.lineWidth = 3 / viewState.zoom;
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          ctx.beginPath();
+          ctx.arc(startHandlePos.x, startHandlePos.y, handleRadius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+          ctx.fill();
+          ctx.strokeStyle = cableColor;
+          ctx.lineWidth = 2 / viewState.zoom;
+          ctx.stroke();
+        }
         
         // Inner dot for start
         ctx.beginPath();
@@ -754,14 +793,32 @@ export function Canvas({
         ctx.fill();
         
         // Draw end handle
-        const endHandlePos = isEndDragging && cableEndpointDragPos ? cableEndpointDragPos : endPoint;
-        ctx.beginPath();
-        ctx.arc(endHandlePos.x, endHandlePos.y, handleRadius, 0, Math.PI * 2);
-        ctx.fillStyle = isEndDragging ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)';
-        ctx.fill();
-        ctx.strokeStyle = cableColor;
-        ctx.lineWidth = 2 / viewState.zoom;
-        ctx.stroke();
+        const endHandlePos = (isEndSelected && isEditingCableEndpoint && cableEndpointEditPos) 
+          ? cableEndpointEditPos 
+          : endPoint;
+        
+        // Draw glow effect for selected endpoint
+        if (isEndSelected) {
+          ctx.save();
+          ctx.shadowBlur = 10 / viewState.zoom;
+          ctx.shadowColor = cableColor;
+          ctx.beginPath();
+          ctx.arc(endHandlePos.x, endHandlePos.y, handleRadius * 1.2, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+          ctx.fill();
+          ctx.strokeStyle = cableColor;
+          ctx.lineWidth = 3 / viewState.zoom;
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          ctx.beginPath();
+          ctx.arc(endHandlePos.x, endHandlePos.y, handleRadius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+          ctx.fill();
+          ctx.strokeStyle = cableColor;
+          ctx.lineWidth = 2 / viewState.zoom;
+          ctx.stroke();
+        }
         
         // Inner dot for end
         ctx.beginPath();
@@ -769,39 +826,65 @@ export function Canvas({
         ctx.fillStyle = cableColor;
         ctx.fill();
         
-        // Draw preview line if dragging
-        if (isStartDragging && cableEndpointDragPos) {
+        // Draw ghost cable preview during editing mode
+        if (isThisCableBeingEdited && isEditingCableEndpoint && cableEndpointEditPos) {
           ctx.beginPath();
-          ctx.moveTo(cableEndpointDragPos.x, cableEndpointDragPos.y);
-          for (let i = 1; i < cable.points.length; i++) {
-            ctx.lineTo(cable.points[i].x, cable.points[i].y);
+          if (isStartSelected) {
+            ctx.moveTo(cableEndpointEditPos.x, cableEndpointEditPos.y);
+            for (let i = 1; i < cable.points.length; i++) {
+              ctx.lineTo(cable.points[i].x, cable.points[i].y);
+            }
+          } else if (isEndSelected) {
+            ctx.moveTo(cable.points[0].x, cable.points[0].y);
+            for (let i = 1; i < cable.points.length - 1; i++) {
+              ctx.lineTo(cable.points[i].x, cable.points[i].y);
+            }
+            ctx.lineTo(cableEndpointEditPos.x, cableEndpointEditPos.y);
           }
           ctx.strokeStyle = cableColor;
           ctx.lineWidth = (cable.thickness || 6) / (scaleInfo.ratio || 1) / 1000 / viewState.zoom;
           ctx.setLineDash([4 / viewState.zoom, 4 / viewState.zoom]);
           ctx.stroke();
           ctx.setLineDash([]);
-        } else if (isEndDragging && cableEndpointDragPos) {
-          ctx.beginPath();
-          for (let i = 0; i < cable.points.length - 1; i++) {
-            if (i === 0) ctx.moveTo(cable.points[i].x, cable.points[i].y);
-            else ctx.lineTo(cable.points[i].x, cable.points[i].y);
+          
+          // Draw snap indicator (bull's-eye) when snapped to a target
+          if (cableEndpointSnapResult?.snappedToId) {
+            ctx.beginPath();
+            ctx.arc(cableEndpointEditPos.x, cableEndpointEditPos.y, 12 / viewState.zoom, 0, Math.PI * 2);
+            ctx.strokeStyle = cableColor;
+            ctx.lineWidth = 3 / viewState.zoom;
+            ctx.stroke();
+            
+            // Show Tab hint if multiple targets available
+            if (cableEndpointSnapResult.allTargets && cableEndpointSnapResult.allTargets.length > 1) {
+              const currentIdx = (cableEndpointSnapResult.currentIndex ?? 0) + 1;
+              const total = cableEndpointSnapResult.allTargets.length;
+              const currentTarget = cableEndpointSnapResult.allTargets[cableEndpointSnapResult.currentIndex ?? 0];
+              // Build label from snappedToType since CableSnapResult doesn't have a name field
+              const targetLabel = currentTarget?.snappedToType || '';
+              const label = `[Tab: ${currentIdx}/${total}${targetLabel ? ` - ${targetLabel}` : ''}]`;
+              
+              ctx.save();
+              ctx.font = `${12 / viewState.zoom}px sans-serif`;
+              const textMetrics = ctx.measureText(label);
+              const textX = cableEndpointEditPos.x + 16 / viewState.zoom;
+              const textY = cableEndpointEditPos.y - 8 / viewState.zoom;
+              
+              // Background
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+              ctx.fillRect(
+                textX - 4 / viewState.zoom,
+                textY - 12 / viewState.zoom,
+                textMetrics.width + 8 / viewState.zoom,
+                16 / viewState.zoom
+              );
+              
+              // Text
+              ctx.fillStyle = '#ffffff';
+              ctx.fillText(label, textX, textY);
+              ctx.restore();
+            }
           }
-          ctx.lineTo(cableEndpointDragPos.x, cableEndpointDragPos.y);
-          ctx.strokeStyle = cableColor;
-          ctx.lineWidth = (cable.thickness || 6) / (scaleInfo.ratio || 1) / 1000 / viewState.zoom;
-          ctx.setLineDash([4 / viewState.zoom, 4 / viewState.zoom]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-        
-        // Draw snap indicator during drag
-        if ((isStartDragging || isEndDragging) && cableEndpointSnapResult?.snappedToId && cableEndpointDragPos) {
-          ctx.beginPath();
-          ctx.arc(cableEndpointDragPos.x, cableEndpointDragPos.y, handleRadius * 1.5, 0, Math.PI * 2);
-          ctx.strokeStyle = cableColor;
-          ctx.lineWidth = 3 / viewState.zoom;
-          ctx.stroke();
         }
       });
     }
@@ -846,8 +929,9 @@ export function Canvas({
     subgroupVisibility,
     itemVisibility,
     cableSnapCycleIndex,
-    draggingCableEndpoint,
-    cableEndpointDragPos,
+    selectedCableEndpoint,
+    isEditingCableEndpoint,
+    cableEndpointEditPos,
     cableEndpointSnapResult,
   ]);
 
@@ -1046,9 +1130,61 @@ export function Canvas({
         return;
       }
 
-      // Check for cable endpoint handles FIRST (higher priority than regular cable selection)
-      // This allows clicking on the handle to start dragging the endpoint
-      if (lines && lines.length > 0 && layerVisibility.cables) {
+      // Cable endpoint editing - three-stage click workflow
+      // Stage 3: Third click commits the new position (check first to handle commit)
+      if (isEditingCableEndpoint && selectedCableEndpoint && cableEndpointEditPos) {
+        const cable = lines.find(l => l.id === selectedCableEndpoint.cableId);
+        if (cable) {
+          const newPoints = [...cable.points];
+          const isStart = selectedCableEndpoint.endpoint === 'start';
+          
+          if (isStart) {
+            newPoints[0] = cableEndpointEditPos;
+          } else {
+            newPoints[newPoints.length - 1] = cableEndpointEditPos;
+          }
+          
+          // Update the cable with new points and connection IDs
+          setLines(prev => prev.map(line => {
+            if (line.id !== cable.id) return line;
+            
+            return {
+              ...line,
+              points: newPoints,
+              length: calculateLineLength(newPoints, scaleInfo.ratio),
+              // Update from/to based on which endpoint was edited
+              ...(isStart && cableEndpointSnapResult?.snappedToId && { from: cableEndpointSnapResult.snappedToId }),
+              ...(!isStart && cableEndpointSnapResult?.snappedToId && { to: cableEndpointSnapResult.snappedToId }),
+              // Clear the connection if dropped on empty space
+              ...(isStart && !cableEndpointSnapResult?.snappedToId && { from: undefined }),
+              ...(!isStart && !cableEndpointSnapResult?.snappedToId && { to: undefined }),
+            };
+          }));
+        }
+        
+        // Reset all endpoint editing states
+        setSelectedCableEndpoint(null);
+        setIsEditingCableEndpoint(false);
+        setCableEndpointEditPos(null);
+        setCableEndpointSnapResult(null);
+        setCableSnapCycleIndex(0);
+        return;
+      }
+      
+      // Stage 2: Second click starts the editing (attaches to cursor)
+      if (selectedCableEndpoint && !isEditingCableEndpoint) {
+        const cable = lines.find(l => l.id === selectedCableEndpoint.cableId);
+        if (cable) {
+          // Start ghost editing mode
+          setIsEditingCableEndpoint(true);
+          setCableEndpointEditPos(worldPos);
+          setCableSnapCycleIndex(0);
+          return;
+        }
+      }
+      
+      // Check for cable endpoint handles - Stage 1: First click selects the endpoint
+      if (lines && lines.length > 0 && layerVisibility.cables && !selectedCableEndpoint) {
         const endpointHitRadius = ENDPOINT_HANDLE_RADIUS / viewState.zoom;
         
         // Only check cables that are currently selected
@@ -1064,18 +1200,30 @@ export function Canvas({
           
           // Check start endpoint
           if (distance(worldPos, startPoint) <= endpointHitRadius) {
-            setDraggingCableEndpoint({ cableId: cable.id, endpoint: 'start' });
-            setCableEndpointDragPos(startPoint);
+            setSelectedCableEndpoint({
+              cableId: cable.id,
+              endpoint: 'start',
+              originalPoints: [...cable.points],
+            });
             return;
           }
           
           // Check end endpoint
           if (distance(worldPos, endPoint) <= endpointHitRadius) {
-            setDraggingCableEndpoint({ cableId: cable.id, endpoint: 'end' });
-            setCableEndpointDragPos(endPoint);
+            setSelectedCableEndpoint({
+              cableId: cable.id,
+              endpoint: 'end',
+              originalPoints: [...cable.points],
+            });
             return;
           }
         }
+      }
+      
+      // Clicking elsewhere while endpoint is selected but not editing - deselect
+      if (selectedCableEndpoint && !isEditingCableEndpoint) {
+        setSelectedCableEndpoint(null);
+        // Don't return - allow normal selection to proceed
       }
 
       // Select cables/lines (between equipment and roof masks) - only if layer, thickness, and item visible
@@ -1746,9 +1894,9 @@ export function Canvas({
       return;
     }
 
-    // Handle cable endpoint dragging with snapping
-    if (draggingCableEndpoint && cableEndpointDragPos) {
-      const cable = lines.find(l => l.id === draggingCableEndpoint.cableId);
+    // Handle cable endpoint editing with ghost preview (passive mouse tracking)
+    if (isEditingCableEndpoint && selectedCableEndpoint) {
+      const cable = lines.find(l => l.id === selectedCableEndpoint.cableId);
       if (cable) {
         const cableType: CableType = cable.type;
         const snapResult = snapCablePointToTarget(
@@ -1767,13 +1915,15 @@ export function Canvas({
           cableSnapCycleIndex
         );
         
-        setCableEndpointDragPos(snapResult.current.position);
+        setCableEndpointEditPos(snapResult.current.position);
         setCableEndpointSnapResult({
           snappedToId: snapResult.current.snappedToId || null,
           snappedToType: snapResult.current.snappedToType || null,
+          allTargets: snapResult.allTargets,
+          currentIndex: snapResult.currentIndex,
         });
       }
-      return;
+      // Don't return - allow mouse tracking to continue for other purposes
     }
 
     if (draggingPvArrayId && pvArrayDragOffset) {
@@ -1990,43 +2140,8 @@ export function Canvas({
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
-    // Complete cable endpoint dragging
-    if (draggingCableEndpoint && cableEndpointDragPos) {
-      const cable = lines.find(l => l.id === draggingCableEndpoint.cableId);
-      if (cable) {
-        const newPoints = [...cable.points];
-        const isStart = draggingCableEndpoint.endpoint === 'start';
-        
-        if (isStart) {
-          newPoints[0] = cableEndpointDragPos;
-        } else {
-          newPoints[newPoints.length - 1] = cableEndpointDragPos;
-        }
-        
-        // Update the cable with new points and connection IDs
-        setLines(prev => prev.map(line => {
-          if (line.id !== cable.id) return line;
-          
-          return {
-            ...line,
-            points: newPoints,
-            length: calculateLineLength(newPoints, scaleInfo.ratio),
-            // Update from/to based on which endpoint was dragged
-            ...(isStart && cableEndpointSnapResult?.snappedToId && { from: cableEndpointSnapResult.snappedToId }),
-            ...(!isStart && cableEndpointSnapResult?.snappedToId && { to: cableEndpointSnapResult.snappedToId }),
-            // Clear the connection if dropped on empty space
-            ...(isStart && !cableEndpointSnapResult?.snappedToId && { from: undefined }),
-            ...(!isStart && !cableEndpointSnapResult?.snappedToId && { to: undefined }),
-          };
-        }));
-      }
-      
-      // Reset endpoint drag state
-      setDraggingCableEndpoint(null);
-      setCableEndpointDragPos(null);
-      setCableEndpointSnapResult(null);
-      return;
-    }
+    // Note: Cable endpoint editing is now click-based (handled in handleMouseDown)
+    // No mouseUp handling needed for endpoint editing
     
     // Complete marquee selection
     if (marqueeStart && marqueeEnd && onBoxSelection) {
@@ -2219,10 +2334,6 @@ export function Canvas({
     setWalkwayDragOffset(null);
     setDraggingCableTrayId(null);
     setCableTrayDragOffset(null);
-    // Reset cable endpoint drag state
-    setDraggingCableEndpoint(null);
-    setCableEndpointDragPos(null);
-    setCableEndpointSnapResult(null);
     
     if (activeTool === Tool.SCALE && scaleLine) {
       const dist = distance(scaleLine.start, scaleLine.end);
