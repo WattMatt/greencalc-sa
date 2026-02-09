@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Grid, Text } from '@react-three/drei';
+import { OrbitControls, Grid } from '@react-three/drei';
 import * as THREE from 'three';
 import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlacedWalkway, PlacedCableTray, EquipmentType } from '../types';
 import { Button } from '@/components/ui/button';
