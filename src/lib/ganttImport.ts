@@ -39,11 +39,27 @@ const MONTH_MAP: Record<string, number> = {
 };
 
 /**
- * Parse month header like "August-25", "SEPTEMBER-25", "August", "Sep 2025"
+ * Parse month header like "August-25", "SEPTEMBER-25", or an Excel serial date.
+ * Excel may auto-interpret "August-25" as a date (Aug 25), so we handle numbers too.
  * Returns { month: 0-11, year: number | null }
  */
 function parseMonthHeader(value: any): { month: number; year: number | null } | null {
   if (value == null) return null;
+
+  // Handle Excel serial date number (e.g., "August-25" interpreted as Aug 25, 2025)
+  if (typeof value === 'number' && value > 1 && value < 100000) {
+    const excelEpoch = new Date(1899, 11, 30);
+    const date = new Date(excelEpoch.getTime() + value * 86400000);
+    if (!isNaN(date.getTime())) {
+      return { month: date.getMonth(), year: date.getFullYear() };
+    }
+  }
+
+  // Handle Date objects
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return { month: value.getMonth(), year: value.getFullYear() };
+  }
+
   const str = String(value).trim();
   if (!str) return null;
 
@@ -53,7 +69,7 @@ function parseMonthHeader(value: any): { month: number; year: number | null } | 
     const month = MONTH_MAP[dashMatch[1].toLowerCase()];
     if (month !== undefined) {
       let yr = parseInt(dashMatch[2], 10);
-      if (yr < 100) yr += 2000; // "25" -> 2025
+      if (yr < 100) yr += 2000;
       return { month, year: yr };
     }
   }
