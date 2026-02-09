@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, DragEvent } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,12 +32,10 @@ export function ImportScheduleDialog({
   const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
   const [fallbackDate, setFallbackDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [fileName, setFileName] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processFile = useCallback(async (file: File) => {
     setFileName(file.name);
     setIsParsing(true);
     setParseResult(null);
@@ -54,6 +52,42 @@ export function ImportScheduleDialog({
       setIsParsing(false);
     }
   }, [fallbackDate]);
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processFile(file);
+  }, [processFile]);
+
+  const handleDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['.xlsx', '.xls', '.xlsm'];
+    const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    if (!validTypes.includes(ext)) {
+      toast.error('Please upload an Excel file (.xlsx, .xls, .xlsm)');
+      return;
+    }
+
+    processFile(file);
+  }, [processFile]);
 
   const handleReparse = useCallback(async () => {
     if (!fileInputRef.current?.files?.[0]) return;
@@ -117,8 +151,13 @@ export function ImportScheduleDialog({
           {!parseResult && (
             <div className="space-y-4">
               <div
-                className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                  isDragging ? 'border-primary bg-primary/5' : 'hover:border-primary/50'
+                }`}
                 onClick={() => fileInputRef.current?.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
               >
                 {isParsing ? (
                   <div className="flex flex-col items-center gap-2">
@@ -128,8 +167,10 @@ export function ImportScheduleDialog({
                 ) : (
                   <div className="flex flex-col items-center gap-2">
                     <Upload className="h-8 w-8 text-muted-foreground" />
-                    <p className="text-sm font-medium">Click to upload Excel file</p>
-                    <p className="text-xs text-muted-foreground">.xlsx format</p>
+                    <p className="text-sm font-medium">
+                      {isDragging ? 'Drop your file here' : 'Drag & drop or click to upload'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">.xlsx, .xls, .xlsm</p>
                   </div>
                 )}
               </div>
