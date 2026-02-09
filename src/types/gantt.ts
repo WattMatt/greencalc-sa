@@ -3,7 +3,7 @@
 export type GanttTaskStatus = 'not_started' | 'in_progress' | 'completed';
 export type GanttDependencyType = 'finish_to_start' | 'start_to_start' | 'finish_to_finish' | 'start_to_finish';
 export type ViewMode = 'day' | 'week' | 'month';
-export type GroupByMode = 'none' | 'status' | 'owner' | 'color';
+export type GroupByMode = 'none' | 'status' | 'owner' | 'color' | 'category';
 export type ChartViewType = 'gantt' | 'workload' | 'calendar';
 
 export interface GanttTask {

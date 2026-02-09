@@ -171,6 +171,8 @@ export function GanttChart({
         groupKey = task.owner || '';
       } else if (config.groupBy === 'color') {
         groupKey = task.color || '';
+      } else if (config.groupBy === 'category') {
+        groupKey = task.description || '';
       }
       if (!groups[groupKey]) {
         groups[groupKey] = [];
@@ -336,7 +338,7 @@ export function GanttChart({
                     <div key={groupKey || 'ungrouped'}>
                       <TaskGroupHeader
                         groupKey={groupKey || 'No Value'}
-                        groupBy={config.groupBy as 'status' | 'owner' | 'color'}
+                        groupBy={config.groupBy as 'status' | 'owner' | 'color' | 'category'}
                         taskCount={groupTasks.length}
                         isExpanded={!collapsedGroups.has(groupKey)}
                         onToggle={() => toggleGroup(groupKey)}
