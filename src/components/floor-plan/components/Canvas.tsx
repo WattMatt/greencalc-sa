@@ -4,7 +4,7 @@ import { Tool, ViewState, Point, ScaleInfo, PVPanelConfig, RoofMask, PVArrayItem
 import { ConfigurableObjectType } from './ObjectConfigModal';
 import { renderAllMarkups, drawPvArray, drawEquipmentIcon, drawWalkway, drawCableTray } from '../utils/drawing';
 import { calculatePolygonArea, calculateLineLength, distance, distanceToPolyline, calculateArrayRotationForRoof, isPointInPolygon, snapTo45Degrees, getPVArrayCorners, snapPVArrayToSpacing, snapEquipmentToSpacing, snapMaterialToSpacing, getPVArrayDimensions, getEquipmentDimensions, detectClickedEdge, snapCablePointToTarget, CableType, CableSnapResult } from '../utils/geometry';
-import { EQUIPMENT_REAL_WORLD_SIZES } from '../constants';
+import { EQUIPMENT_REAL_WORLD_SIZES, TOOL_COLORS } from '../constants';
 import { PVArrayConfig } from './PVArrayModal';
 import { AlignmentEdge } from './AlignEdgesModal';
 
@@ -841,12 +841,9 @@ export function Canvas({
             }
             ctx.lineTo(cableEndpointEditPos.x, cableEndpointEditPos.y);
           }
-          ctx.strokeStyle = cableColor;
-          // Match the initial cable placement ghost line width (2px screen-space)
+          ctx.strokeStyle = cable.type === 'dc' ? TOOL_COLORS.LINE_DC : TOOL_COLORS.LINE_AC;
           ctx.lineWidth = 2 / viewState.zoom;
-          ctx.setLineDash([4 / viewState.zoom, 4 / viewState.zoom]);
           ctx.stroke();
-          ctx.setLineDash([]);
           
           // Draw snap indicator (bull's-eye) when snapped to a target
           if (cableEndpointSnapResult?.snappedToId) {
