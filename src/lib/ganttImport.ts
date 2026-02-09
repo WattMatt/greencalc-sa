@@ -240,26 +240,25 @@ export async function parseScheduleExcel(
       }
     }
 
-    // Find start date from daily columns — no fallback
+    // Find start and end dates from daily columns — no fallback
     let startDate: Date | null = null;
+    let endDate: Date | null = null;
     if (dateColumnsFound) {
       for (let c = DATA_START_COL; c < row.length; c++) {
-        if (row[c] != null && row[c] !== '' && row[c] !== 0) {
+        if (row[c] != null && row[c] !== '') {
           const d = dateByCol.get(c);
           if (d) {
-            startDate = d;
-            break;
+            if (!startDate) startDate = d;
+            endDate = d;
           }
         }
       }
     }
 
-    if (!startDate) {
+    if (!startDate || !endDate) {
       skippedCount++;
       continue; // skip task — no start date found
     }
-
-    const endDate = addDays(startDate, Math.max(daysScheduled - 1, 0));
 
     if (!zoneColorMap.has(currentZone)) {
       zonesSet.add(currentZone);
