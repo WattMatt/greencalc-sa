@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutDashboard, Building2, Database, FileSpreadsheet } from "lucide-react";
+import { LayoutDashboard, Building2, Database, FileSpreadsheet, GitCompare } from "lucide-react";
 
 import { LoadProfilesDashboard } from "@/components/loadprofiles/LoadProfilesDashboard";
 import { SitesTab } from "@/components/loadprofiles/SitesTab";
 import { MeterLibrary } from "@/components/loadprofiles/MeterLibrary";
 import { ExcelAuditReimport } from "@/components/loadprofiles/ExcelAuditReimport";
+import { CrossSiteComparison } from "@/components/loadprofiles/CrossSiteComparison";
 
 export default function LoadProfiles() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -33,6 +34,10 @@ export default function LoadProfiles() {
             <Database className="h-4 w-4" />
             Meter Library
           </TabsTrigger>
+          <TabsTrigger value="cross-site-comparison" className="gap-2">
+            <GitCompare className="h-4 w-4" />
+            Cross-Site Comparison
+          </TabsTrigger>
           <TabsTrigger value="excel-reimport" className="gap-2">
             <FileSpreadsheet className="h-4 w-4" />
             Excel Audit Reimport
@@ -52,6 +57,10 @@ export default function LoadProfiles() {
 
         <TabsContent value="meter-library">
           <MeterLibrary />
+        </TabsContent>
+
+        <TabsContent value="cross-site-comparison">
+          <CrossSiteComparison />
         </TabsContent>
 
         <TabsContent value="excel-reimport">
