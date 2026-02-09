@@ -102,15 +102,33 @@ export function SitesTab() {
         .order("name");
       if (error) throw error;
 
-      const { data: meters } = await supabase
+      // Fetch ALL meters - use range to bypass 1000 row limit
+      // First get count, then fetch in batches if needed
+      const { count: totalCount } = await supabase
         .from("scada_imports")
-        .select("site_id, data_points, load_profile_weekday");
+        .select("id", { count: "exact", head: true });
+      
+      // Fetch all meters with pagination to avoid 1000 row limit
+      let allMeters: { site_id: string | null; data_points: number | null }[] = [];
+      const pageSize = 1000;
+      const totalPages = Math.ceil((totalCount || 0) / pageSize);
+      
+      for (let page = 0; page < totalPages; page++) {
+        const { data: pageMeters } = await supabase
+          .from("scada_imports")
+          .select("site_id, data_points")
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        
+        if (pageMeters) {
+          allMeters = [...allMeters, ...pageMeters];
+        }
+      }
 
       // Track total meters and those with actual CSV data imported (data_points > 0)
       // Note: load_profile_weekday may contain estimated profiles for "listed only" meters
       const meterStats: Record<string, { total: number; withData: number }> = {};
       
-      (meters || []).forEach(m => {
+      allMeters.forEach(m => {
         if (m.site_id) {
           if (!meterStats[m.site_id]) {
             meterStats[m.site_id] = { total: 0, withData: 0 };
