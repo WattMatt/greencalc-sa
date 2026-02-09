@@ -391,7 +391,7 @@ export function GanttChart({
           </div>
 
           {/* Chart container */}
-          <div className="flex">
+          <div className="flex overflow-hidden">
             {/* Task list (left panel) */}
             <div className="w-64 flex-shrink-0 border-r">
               {/* Header */}
