@@ -842,7 +842,10 @@ export function Canvas({
             ctx.lineTo(cableEndpointEditPos.x, cableEndpointEditPos.y);
           }
           ctx.strokeStyle = cableColor;
-          ctx.lineWidth = (cable.thickness || 6) / (scaleInfo.ratio || 1) / 1000 / viewState.zoom;
+          // Use same width formula as normal cable rendering in drawing.ts
+          const ghostThicknessMm = cable.thickness || 6;
+          const ghostBaseWidth = 2 + (ghostThicknessMm / 10);
+          ctx.lineWidth = ghostBaseWidth / viewState.zoom;
           ctx.setLineDash([4 / viewState.zoom, 4 / viewState.zoom]);
           ctx.stroke();
           ctx.setLineDash([]);
