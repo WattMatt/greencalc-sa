@@ -1021,6 +1021,63 @@ export function Canvas({
         }
       };
       
+      // Cable endpoint editing - three-stage click workflow
+      // These checks MUST come before regular object hit-testing, because
+      // Stage 3 (commit) often targets equipment (inverters, main boards) which
+      // would otherwise intercept the click and start a drag instead.
+      
+      // Stage 3: Third click commits the new position
+      if (isEditingCableEndpoint && selectedCableEndpoint && cableEndpointEditPos) {
+        const cable = lines.find(l => l.id === selectedCableEndpoint.cableId);
+        if (cable) {
+          const newPoints = [...cable.points];
+          const isStart = selectedCableEndpoint.endpoint === 'start';
+          
+          if (isStart) {
+            newPoints[0] = cableEndpointEditPos;
+          } else {
+            newPoints[newPoints.length - 1] = cableEndpointEditPos;
+          }
+          
+          // Update the cable with new points and connection IDs
+          setLines(prev => prev.map(line => {
+            if (line.id !== cable.id) return line;
+            
+            return {
+              ...line,
+              points: newPoints,
+              length: calculateLineLength(newPoints, scaleInfo.ratio),
+              // Update from/to based on which endpoint was edited
+              ...(isStart && cableEndpointSnapResult?.snappedToId && { from: cableEndpointSnapResult.snappedToId }),
+              ...(!isStart && cableEndpointSnapResult?.snappedToId && { to: cableEndpointSnapResult.snappedToId }),
+              // Clear the connection if dropped on empty space
+              ...(isStart && !cableEndpointSnapResult?.snappedToId && { from: undefined }),
+              ...(!isStart && !cableEndpointSnapResult?.snappedToId && { to: undefined }),
+            };
+          }));
+        }
+        
+        // Reset all endpoint editing states
+        setSelectedCableEndpoint(null);
+        setIsEditingCableEndpoint(false);
+        setCableEndpointEditPos(null);
+        setCableEndpointSnapResult(null);
+        setCableSnapCycleIndex(0);
+        return;
+      }
+      
+      // Stage 2: Second click starts the editing (attaches to cursor)
+      if (selectedCableEndpoint && !isEditingCableEndpoint) {
+        const cable = lines.find(l => l.id === selectedCableEndpoint.cableId);
+        if (cable) {
+          // Start ghost editing mode
+          setIsEditingCableEndpoint(true);
+          setCableEndpointEditPos(worldPos);
+          setCableSnapCycleIndex(0);
+          return;
+        }
+      }
+
       // Prefer selecting PV arrays first (topmost) - only if layer is visible AND item is visible
       const hitArray = (pvPanelConfig && scaleInfo.ratio && layerVisibility.pvArrays)
         ? [...pvArrays].reverse().find(arr => {
@@ -1133,60 +1190,8 @@ export function Canvas({
         return;
       }
 
-      // Cable endpoint editing - three-stage click workflow
-      // Stage 3: Third click commits the new position (check first to handle commit)
-      if (isEditingCableEndpoint && selectedCableEndpoint && cableEndpointEditPos) {
-        const cable = lines.find(l => l.id === selectedCableEndpoint.cableId);
-        if (cable) {
-          const newPoints = [...cable.points];
-          const isStart = selectedCableEndpoint.endpoint === 'start';
-          
-          if (isStart) {
-            newPoints[0] = cableEndpointEditPos;
-          } else {
-            newPoints[newPoints.length - 1] = cableEndpointEditPos;
-          }
-          
-          // Update the cable with new points and connection IDs
-          setLines(prev => prev.map(line => {
-            if (line.id !== cable.id) return line;
-            
-            return {
-              ...line,
-              points: newPoints,
-              length: calculateLineLength(newPoints, scaleInfo.ratio),
-              // Update from/to based on which endpoint was edited
-              ...(isStart && cableEndpointSnapResult?.snappedToId && { from: cableEndpointSnapResult.snappedToId }),
-              ...(!isStart && cableEndpointSnapResult?.snappedToId && { to: cableEndpointSnapResult.snappedToId }),
-              // Clear the connection if dropped on empty space
-              ...(isStart && !cableEndpointSnapResult?.snappedToId && { from: undefined }),
-              ...(!isStart && !cableEndpointSnapResult?.snappedToId && { to: undefined }),
-            };
-          }));
-        }
-        
-        // Reset all endpoint editing states
-        setSelectedCableEndpoint(null);
-        setIsEditingCableEndpoint(false);
-        setCableEndpointEditPos(null);
-        setCableEndpointSnapResult(null);
-        setCableSnapCycleIndex(0);
-        return;
-      }
-      
-      // Stage 2: Second click starts the editing (attaches to cursor)
-      if (selectedCableEndpoint && !isEditingCableEndpoint) {
-        const cable = lines.find(l => l.id === selectedCableEndpoint.cableId);
-        if (cable) {
-          // Start ghost editing mode
-          setIsEditingCableEndpoint(true);
-          setCableEndpointEditPos(worldPos);
-          setCableSnapCycleIndex(0);
-          return;
-        }
-      }
-      
-      // Check for cable endpoint handles - Stage 1: First click selects the endpoint
+
+      // Stage 1: Check for cable endpoint handles - First click selects the endpoint
       if (lines && lines.length > 0 && layerVisibility.cables && !selectedCableEndpoint) {
         const endpointHitRadius = ENDPOINT_HANDLE_RADIUS / viewState.zoom;
         
