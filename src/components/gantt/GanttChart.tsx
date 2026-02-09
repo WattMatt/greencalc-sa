@@ -217,11 +217,19 @@ export function GanttChart({
       rows.push({ type: 'category-header', key: catKey, label: cat, taskCount: catTaskCount });
 
       if (!collapsedGroups.has(catKey)) {
+        const hasMultipleZones = zoneMap.size > 1;
         for (const [zone, zoneTasks] of zoneMap) {
-          const zoneKey = `zone::${cat}::${zone}`;
-          rows.push({ type: 'zone-header', key: zoneKey, label: zone, categoryKey: catKey, taskCount: zoneTasks.length });
+          if (hasMultipleZones) {
+            const zoneKey = `zone::${cat}::${zone}`;
+            rows.push({ type: 'zone-header', key: zoneKey, label: zone, categoryKey: catKey, taskCount: zoneTasks.length });
 
-          if (!collapsedGroups.has(zoneKey)) {
+            if (!collapsedGroups.has(zoneKey)) {
+              for (const task of zoneTasks) {
+                rows.push({ type: 'task', task });
+              }
+            }
+          } else {
+            // Single zone — skip zone header, show tasks directly under category
             for (const task of zoneTasks) {
               rows.push({ type: 'task', task });
             }
