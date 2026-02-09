@@ -141,9 +141,9 @@ export function GanttChart({
     const minDate = new Date(Math.min(...allDates.map((d) => d.getTime())));
     const maxDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
 
-    // Add padding
+    // Add padding — minimal trailing space so the chart ends near the last date
     const start = addDays(startOfWeek(minDate), -7);
-    const end = addDays(maxDate, 14);
+    const end = addDays(maxDate, 1);
 
     return {
       startDate: start,
