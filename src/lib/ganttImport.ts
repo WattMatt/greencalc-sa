@@ -103,9 +103,10 @@ function buildDateHeaders(
 
   for (let c = startCol; c < maxCol; c++) {
     // Update month from row 0 (forward-fill)
-    const parsed = parseMonthHeader(row0[c]);
+    const rawVal = row0[c];
+    const parsed = parseMonthHeader(rawVal);
+    console.log(`[ganttImport] Col ${c}: raw="${rawVal}" (type=${typeof rawVal}), parsed=`, parsed);
     if (parsed !== null) {
-      // Handle year rollover if no year in header
       if (currentMonth !== null && parsed.month < currentMonth && parsed.year === null) {
         year++;
       }
