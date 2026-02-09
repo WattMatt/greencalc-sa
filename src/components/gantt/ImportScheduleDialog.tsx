@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Switch } from '@/components/ui/switch';
 import { parseScheduleExcel, ParsedScheduleResult, ParsedScheduleTask } from '@/lib/ganttImport';
 import { Upload, FileSpreadsheet, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -32,6 +33,8 @@ export function ImportScheduleDialog({
   const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
   const [fallbackDate, setFallbackDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [referenceYear, setReferenceYear] = useState(new Date().getFullYear());
+  const [useReferenceYear, setUseReferenceYear] = useState(false);
+  const [useFallbackDate, setUseFallbackDate] = useState(false);
   const [fileName, setFileName] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -42,7 +45,11 @@ export function ImportScheduleDialog({
     setParseResult(null);
 
     try {
-      const result = await parseScheduleExcel(file, new Date(fallbackDate), referenceYear);
+      const result = await parseScheduleExcel(
+        file,
+        useFallbackDate ? new Date(fallbackDate) : undefined,
+        useReferenceYear ? referenceYear : undefined
+      );
       setParseResult(result);
       if (result.errors.length > 0) {
         result.errors.forEach(err => toast.warning(err));
@@ -52,7 +59,7 @@ export function ImportScheduleDialog({
     } finally {
       setIsParsing(false);
     }
-  }, [fallbackDate]);
+  }, [fallbackDate, referenceYear, useFallbackDate, useReferenceYear]);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -94,14 +101,18 @@ export function ImportScheduleDialog({
     if (!fileInputRef.current?.files?.[0]) return;
     setIsParsing(true);
     try {
-      const result = await parseScheduleExcel(fileInputRef.current.files[0], new Date(fallbackDate), referenceYear);
+      const result = await parseScheduleExcel(
+        fileInputRef.current.files[0],
+        useFallbackDate ? new Date(fallbackDate) : undefined,
+        useReferenceYear ? referenceYear : undefined
+      );
       setParseResult(result);
     } catch (err) {
       toast.error('Failed to re-parse file');
     } finally {
       setIsParsing(false);
     }
-  }, [fallbackDate]);
+  }, [fallbackDate, referenceYear, useFallbackDate, useReferenceYear]);
 
   const handleImport = useCallback(async () => {
     if (!parseResult || parseResult.tasks.length === 0) return;
@@ -183,9 +194,16 @@ export function ImportScheduleDialog({
                 onChange={handleFileSelect}
               />
 
-              <div className="flex gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs">Project Year (for date headers)</Label>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="use-ref-year"
+                      checked={useReferenceYear}
+                      onCheckedChange={setUseReferenceYear}
+                    />
+                    <Label htmlFor="use-ref-year" className="text-xs">Override year</Label>
+                  </div>
                   <Input
                     type="number"
                     value={referenceYear}
@@ -193,15 +211,24 @@ export function ImportScheduleDialog({
                     className="w-28"
                     min={2020}
                     max={2040}
+                    disabled={!useReferenceYear}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Fallback Start Date (if dates can't be detected)</Label>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="use-fallback"
+                      checked={useFallbackDate}
+                      onCheckedChange={setUseFallbackDate}
+                    />
+                    <Label htmlFor="use-fallback" className="text-xs">Override start date</Label>
+                  </div>
                   <Input
                     type="date"
                     value={fallbackDate}
                     onChange={(e) => setFallbackDate(e.target.value)}
                     className="w-48"
+                    disabled={!useFallbackDate}
                   />
                 </div>
               </div>
