@@ -183,7 +183,7 @@ export async function parseScheduleExcel(
   const categoriesSet = new Set<string>();
 
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: false });
 
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
@@ -201,6 +201,20 @@ export async function parseScheduleExcel(
   // Read Row 0 formatted strings directly from the worksheet to bypass xlsx date interpretation
   const maxCol = (rawData[0]?.length || 0);
   const row0Formatted = getRowFormattedValues(sheet, 0, DATA_START_COL, Math.max(maxCol, 200));
+  
+  // Debug: log first few formatted header values to diagnose year extraction
+  const debugHeaders = row0Formatted.slice(DATA_START_COL, DATA_START_COL + 10).filter(v => v != null);
+  console.log('[GanttImport] Row 0 formatted header samples:', debugHeaders);
+  
+  // Also log the raw cell objects for the first few date columns
+  for (let c = DATA_START_COL; c < DATA_START_COL + 5; c++) {
+    const addr = XLSX.utils.encode_cell({ r: 0, c });
+    const cell = sheet[addr];
+    if (cell) {
+      console.log(`[GanttImport] Cell ${addr}: w="${cell.w}", v=${cell.v}, t="${cell.t}"`);
+    }
+  }
+  
   const year = referenceYear ?? (fallbackStartDate?.getFullYear() ?? new Date().getFullYear());
   const dateHeaders = buildDateHeaders(rawData, DATA_START_COL, year, row0Formatted);
   const dateColumnsFound = dateHeaders.length > 0;
