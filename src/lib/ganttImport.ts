@@ -193,7 +193,7 @@ export async function parseScheduleExcel(
   }
 
   let currentCategory = 'General';
-  let currentZone = 'Zone 1';
+  let currentZone = '';
   let zoneIndex = 0;
   const zoneColorMap = new Map<string, string>();
   let skippedCount = 0;
@@ -206,6 +206,8 @@ export async function parseScheduleExcel(
     if (colA != null && String(colA).trim() !== '') {
       currentCategory = String(colA).trim();
       categoriesSet.add(currentCategory);
+      // Reset zone when a new category starts — zone only applies if Column B is set
+      currentZone = '';
     }
 
     const colB = row[1];
