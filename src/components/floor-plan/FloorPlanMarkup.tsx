@@ -1,9 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignState, Point, RoofMask, PlantSetupConfig, defaultPlantSetupConfig, PVArrayItem, PlacedWalkway, PlacedCableTray, EquipmentItem, BatchPlacementConfig, BatchPlacementItem, LayerVisibility, defaultLayerVisibility, SubgroupVisibility, defaultSubgroupVisibility, ItemVisibility, EquipmentType, PanelOrientation } from './types';
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
-import { ThreeDViewer } from './components/ThreeDViewer';
+const ThreeDViewer = lazy(() => import('./components/ThreeDViewer').then(m => ({ default: m.ThreeDViewer })));
 import { SummaryPanel } from './components/SummaryPanel';
 import { ScaleModal } from './components/ScaleModal';
 import { PVConfigModal } from './components/PVConfigModal';
@@ -2512,19 +2512,21 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         />
       )}
       
-      {is3DView ? (
-        <ThreeDViewer
-          pvArrays={pvArrays}
-          roofMasks={roofMasks}
-          lines={lines}
-          equipment={equipment}
-          pvPanelConfig={pvPanelConfig}
-          scaleInfo={scaleInfo}
-          placedWalkways={placedWalkways}
-          placedCableTrays={placedCableTrays}
-          selectedItemId={selectedItemId}
-          onSelectItem={handleSelectSingle}
-        />
+       {is3DView ? (
+        <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mr-2" />Loading 3D viewer…</div>}>
+          <ThreeDViewer
+            pvArrays={pvArrays}
+            roofMasks={roofMasks}
+            lines={lines}
+            equipment={equipment}
+            pvPanelConfig={pvPanelConfig}
+            scaleInfo={scaleInfo}
+            placedWalkways={placedWalkways}
+            placedCableTrays={placedCableTrays}
+            selectedItemId={selectedItemId}
+            onSelectItem={handleSelectSingle}
+          />
+        </Suspense>
       ) : (
       <Canvas
         backgroundImage={backgroundImage}
