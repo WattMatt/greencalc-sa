@@ -31,6 +31,7 @@ export function ImportScheduleDialog({
   const [isImporting, setIsImporting] = useState(false);
   const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
   const [fallbackDate, setFallbackDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [referenceYear, setReferenceYear] = useState(new Date().getFullYear());
   const [fileName, setFileName] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -41,7 +42,7 @@ export function ImportScheduleDialog({
     setParseResult(null);
 
     try {
-      const result = await parseScheduleExcel(file, new Date(fallbackDate));
+      const result = await parseScheduleExcel(file, new Date(fallbackDate), referenceYear);
       setParseResult(result);
       if (result.errors.length > 0) {
         result.errors.forEach(err => toast.warning(err));
@@ -93,7 +94,7 @@ export function ImportScheduleDialog({
     if (!fileInputRef.current?.files?.[0]) return;
     setIsParsing(true);
     try {
-      const result = await parseScheduleExcel(fileInputRef.current.files[0], new Date(fallbackDate));
+      const result = await parseScheduleExcel(fileInputRef.current.files[0], new Date(fallbackDate), referenceYear);
       setParseResult(result);
     } catch (err) {
       toast.error('Failed to re-parse file');
@@ -182,14 +183,27 @@ export function ImportScheduleDialog({
                 onChange={handleFileSelect}
               />
 
-              <div className="space-y-2">
-                <Label className="text-xs">Fallback Start Date (if dates can't be detected)</Label>
-                <Input
-                  type="date"
-                  value={fallbackDate}
-                  onChange={(e) => setFallbackDate(e.target.value)}
-                  className="w-48"
-                />
+              <div className="flex gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs">Project Year (for date headers)</Label>
+                  <Input
+                    type="number"
+                    value={referenceYear}
+                    onChange={(e) => setReferenceYear(Number(e.target.value) || new Date().getFullYear())}
+                    className="w-28"
+                    min={2020}
+                    max={2040}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Fallback Start Date (if dates can't be detected)</Label>
+                  <Input
+                    type="date"
+                    value={fallbackDate}
+                    onChange={(e) => setFallbackDate(e.target.value)}
+                    className="w-48"
+                  />
+                </div>
               </div>
             </div>
           )}
