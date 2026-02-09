@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/ui/context-menu';
-import { GanttTask, GanttTaskDependency, GanttMilestone, GanttChartConfig, GanttDependencyType, GanttBaselineTask, GroupByMode } from '@/types/gantt';
+import { GanttTask, GanttTaskDependency, GanttMilestone, GanttChartConfig, GanttDependencyType, GanttBaselineTask, GanttTaskSegment, GroupByMode } from '@/types/gantt';
 import { calculateCriticalPath } from '@/lib/criticalPath';
 import { format, parseISO, differenceInDays, addDays, startOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, isSameMonth, isWeekend, isToday } from 'date-fns';
 import { ChevronLeft, ChevronRight, Flag, Trash2, Edit2, Link, Unlink, GripVertical, ChevronDown } from 'lucide-react';
@@ -22,6 +22,7 @@ interface GanttChartProps {
   config: GanttChartConfig;
   selectedTasks: Set<string>;
   baselineTasks?: GanttBaselineTask[];
+  segmentsByTaskId?: Map<string, GanttTaskSegment[]>;
   onSelectTask: (taskId: string, selected: boolean) => void;
   onEditTask: (task: GanttTask) => void;
   onUpdateTask: (id: string, updates: Partial<GanttTask>) => void;
@@ -46,6 +47,7 @@ export function GanttChart({
   config,
   selectedTasks,
   baselineTasks = [],
+  segmentsByTaskId,
   onSelectTask,
   onEditTask,
   onUpdateTask,
@@ -324,7 +326,20 @@ export function GanttChart({
     return { left, width };
   }, [startDate, dayWidth]);
 
-  // Get milestone position
+  // Get segment positions for a task
+  const getSegmentPositions = useCallback((taskId: string) => {
+    const segs = segmentsByTaskId?.get(taskId);
+    if (!segs || segs.length === 0) return null;
+    return segs.map(seg => {
+      const segStart = parseISO(seg.start_date);
+      const segEnd = parseISO(seg.end_date);
+      const left = differenceInDays(segStart, startDate) * dayWidth;
+      const width = (differenceInDays(segEnd, segStart) + 1) * dayWidth;
+      return { left, width };
+    });
+  }, [segmentsByTaskId, startDate, dayWidth]);
+
+
   const getMilestonePosition = useCallback((milestone: GanttMilestone) => {
     const date = parseISO(milestone.date);
     return differenceInDays(date, startDate) * dayWidth;
@@ -610,6 +625,7 @@ export function GanttChart({
                       const { left, width } = getTaskPosition(task, dragPreview);
                       const isCritical = criticalPathIds.has(task.id);
                       const isBeingDragged = dragState?.taskId === task.id;
+                      const segPositions = getSegmentPositions(task.id);
 
                       return (
                         <TooltipProvider key={task.id}>
@@ -648,95 +664,142 @@ export function GanttChart({
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div
-                                      className={cn(
-                                        "absolute rounded cursor-pointer transition-all group",
-                                        !isBeingDragged && "hover:ring-2 hover:ring-primary/50",
-                                        isCritical ? "ring-1 ring-destructive" : "",
-                                        task.color ? "" : "bg-primary",
-                                        isBeingDragged && "ring-2 ring-primary shadow-lg opacity-90"
-                                      )}
-                                      style={{
-                                        left,
-                                        width: Math.max(width, 20),
-                                        top: (ROW_HEIGHT - TASK_BAR_HEIGHT) / 2,
-                                        height: TASK_BAR_HEIGHT,
-                                        backgroundColor: task.color || undefined,
-                                      }}
+                                      className="absolute inset-0"
+                                      style={{ height: ROW_HEIGHT }}
                                       onClick={() => !isDragging && onEditTask(task)}
-                                      onMouseDown={(e) => {
-                                        if (e.button === 0) {
-                                          const rect = e.currentTarget.getBoundingClientRect();
-                                          const offsetX = e.clientX - rect.left;
-                                          if (offsetX < DRAG_HANDLE_WIDTH) {
-                                            e.preventDefault();
-                                            startDrag(task, 'resize-start', e.clientX);
-                                          } else if (offsetX > rect.width - DRAG_HANDLE_WIDTH) {
-                                            e.preventDefault();
-                                            startDrag(task, 'resize-end', e.clientX);
-                                          } else {
-                                            e.preventDefault();
-                                            startDrag(task, 'move', e.clientX);
-                                          }
-                                        }
-                                      }}
                                     >
-                                      <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-background/30 rounded-l" />
-                                      <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-background/30 rounded-r" />
-                                      <div
-                                        className="absolute inset-0 rounded opacity-40 bg-background pointer-events-none"
-                                        style={{ width: `${100 - task.progress}%`, right: 0, left: 'auto' }}
-                                      />
-                                      {width > 60 && (
-                                        <span className="absolute inset-0 flex items-center px-3 text-xs text-primary-foreground truncate font-medium pointer-events-none">
-                                          {task.name}
-                                        </span>
+                                      {/* Render segments or single bar */}
+                                      {segPositions ? (
+                                        segPositions.map((seg, segIdx) => (
+                                          <div
+                                            key={segIdx}
+                                            className={cn(
+                                              "absolute rounded cursor-pointer transition-all group",
+                                              !isBeingDragged && "hover:ring-2 hover:ring-primary/50",
+                                              isCritical ? "ring-1 ring-destructive" : "",
+                                              task.color ? "" : "bg-primary",
+                                            )}
+                                            style={{
+                                              left: seg.left,
+                                              width: Math.max(seg.width, 8),
+                                              top: (ROW_HEIGHT - TASK_BAR_HEIGHT) / 2,
+                                              height: TASK_BAR_HEIGHT,
+                                              backgroundColor: task.color || undefined,
+                                            }}
+                                          >
+                                            <div
+                                              className="absolute inset-0 rounded opacity-40 bg-background pointer-events-none"
+                                              style={{ width: `${100 - task.progress}%`, right: 0, left: 'auto' }}
+                                            />
+                                            {segIdx === 0 && seg.width > 60 && (
+                                              <span className="absolute inset-0 flex items-center px-2 text-xs text-primary-foreground truncate font-medium pointer-events-none">
+                                                {task.name}
+                                              </span>
+                                            )}
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <div
+                                          className={cn(
+                                            "absolute rounded cursor-pointer transition-all group",
+                                            !isBeingDragged && "hover:ring-2 hover:ring-primary/50",
+                                            isCritical ? "ring-1 ring-destructive" : "",
+                                            task.color ? "" : "bg-primary",
+                                            isBeingDragged && "ring-2 ring-primary shadow-lg opacity-90"
+                                          )}
+                                          style={{
+                                            left,
+                                            width: Math.max(width, 20),
+                                            top: (ROW_HEIGHT - TASK_BAR_HEIGHT) / 2,
+                                            height: TASK_BAR_HEIGHT,
+                                            backgroundColor: task.color || undefined,
+                                          }}
+                                          onMouseDown={(e) => {
+                                            if (e.button === 0) {
+                                              const rect = e.currentTarget.getBoundingClientRect();
+                                              const offsetX = e.clientX - rect.left;
+                                              if (offsetX < DRAG_HANDLE_WIDTH) {
+                                                e.preventDefault();
+                                                startDrag(task, 'resize-start', e.clientX);
+                                              } else if (offsetX > rect.width - DRAG_HANDLE_WIDTH) {
+                                                e.preventDefault();
+                                                startDrag(task, 'resize-end', e.clientX);
+                                              } else {
+                                                e.preventDefault();
+                                                startDrag(task, 'move', e.clientX);
+                                              }
+                                            }
+                                          }}
+                                        >
+                                          <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-background/30 rounded-l" />
+                                          <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-background/30 rounded-r" />
+                                          <div
+                                            className="absolute inset-0 rounded opacity-40 bg-background pointer-events-none"
+                                            style={{ width: `${100 - task.progress}%`, right: 0, left: 'auto' }}
+                                          />
+                                          {width > 60 && (
+                                            <span className="absolute inset-0 flex items-center px-3 text-xs text-primary-foreground truncate font-medium pointer-events-none">
+                                              {task.name}
+                                            </span>
+                                          )}
+                                          <div 
+                                            className={cn(
+                                              "absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity z-20",
+                                              isDraggingDependency ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                            )}
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              e.preventDefault();
+                                              const startX = left;
+                                              const startY = rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+                                              startDependencyDrag(task.id, 'start', startX, startY);
+                                            }}
+                                            onMouseUp={(e) => {
+                                              if (isDraggingDependency && dependencyDragState) {
+                                                e.stopPropagation();
+                                                endDependencyDrag(task.id, 'start');
+                                              }
+                                            }}
+                                          />
+                                          <div 
+                                            className={cn(
+                                              "absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity z-20",
+                                              isDraggingDependency ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                            )}
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              e.preventDefault();
+                                              const startX = left + width;
+                                              const startY = rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+                                              startDependencyDrag(task.id, 'end', startX, startY);
+                                            }}
+                                            onMouseUp={(e) => {
+                                              if (isDraggingDependency && dependencyDragState) {
+                                                e.stopPropagation();
+                                                endDependencyDrag(task.id, 'end');
+                                              }
+                                            }}
+                                          />
+                                        </div>
                                       )}
-                                      <div 
-                                        className={cn(
-                                          "absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity z-20",
-                                          isDraggingDependency ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                                        )}
-                                        onMouseDown={(e) => {
-                                          e.stopPropagation();
-                                          e.preventDefault();
-                                          const startX = left;
-                                          const startY = rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
-                                          startDependencyDrag(task.id, 'start', startX, startY);
-                                        }}
-                                        onMouseUp={(e) => {
-                                          if (isDraggingDependency && dependencyDragState) {
-                                            e.stopPropagation();
-                                            endDependencyDrag(task.id, 'start');
-                                          }
-                                        }}
-                                      />
-                                      <div 
-                                        className={cn(
-                                          "absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity z-20",
-                                          isDraggingDependency ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                                        )}
-                                        onMouseDown={(e) => {
-                                          e.stopPropagation();
-                                          e.preventDefault();
-                                          const startX = left + width;
-                                          const startY = rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
-                                          startDependencyDrag(task.id, 'end', startX, startY);
-                                        }}
-                                        onMouseUp={(e) => {
-                                          if (isDraggingDependency && dependencyDragState) {
-                                            e.stopPropagation();
-                                            endDependencyDrag(task.id, 'end');
-                                          }
-                                        }}
-                                      />
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent side="top">
                                     <div className="text-sm">
                                       <p className="font-medium">{task.name}</p>
-                                      <p className="text-muted-foreground">
-                                        {format(parseISO(task.start_date), 'MMM d')} - {format(parseISO(task.end_date), 'MMM d, yyyy')}
-                                      </p>
+                                      {segPositions ? (
+                                        <div className="text-muted-foreground">
+                                          {segmentsByTaskId?.get(task.id)?.map((seg, i) => (
+                                            <p key={i}>
+                                              Segment {i + 1}: {format(parseISO(seg.start_date), 'MMM d')} - {format(parseISO(seg.end_date), 'MMM d')}
+                                            </p>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-muted-foreground">
+                                          {format(parseISO(task.start_date), 'MMM d')} - {format(parseISO(task.end_date), 'MMM d, yyyy')}
+                                        </p>
+                                      )}
                                       <p>Progress: {task.progress}%</p>
                                       {task.owner && <p>Zone: {task.owner}</p>}
                                       {isCritical && <p className="text-destructive">On Critical Path</p>}

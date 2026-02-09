@@ -237,6 +237,7 @@ export function ImportScheduleDialog({
                         <TableHead>Days</TableHead>
                         <TableHead>Start</TableHead>
                         <TableHead>End</TableHead>
+                        <TableHead>Segments</TableHead>
                         <TableHead>Progress</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -244,7 +245,7 @@ export function ImportScheduleDialog({
                       {Object.entries(tasksByZone).map(([zone, zoneTasks]) => (
                         <>
                           <TableRow key={`zone-${zone}`} className="bg-muted/50">
-                            <TableCell colSpan={7} className="py-2 font-semibold text-sm">
+                            <TableCell colSpan={8} className="py-2 font-semibold text-sm">
                               <div className="flex items-center gap-2">
                                 <div
                                   className="w-3 h-3 rounded-full"
@@ -267,6 +268,11 @@ export function ImportScheduleDialog({
                               <TableCell className="text-sm">{task.daysScheduled}</TableCell>
                               <TableCell className="text-xs">{task.startDate}</TableCell>
                               <TableCell className="text-xs">{task.endDate}</TableCell>
+                              <TableCell className="text-xs">
+                                {task.segments.length > 1 ? (
+                                  <Badge variant="outline" className="text-[10px]">{task.segments.length} split</Badge>
+                                ) : '1'}
+                              </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-2">
                                   <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">

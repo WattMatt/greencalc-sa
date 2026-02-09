@@ -6,6 +6,23 @@ export type ViewMode = 'day' | 'week' | 'month';
 export type GroupByMode = 'none' | 'status' | 'owner' | 'color' | 'category' | 'category_owner';
 export type ChartViewType = 'gantt' | 'workload' | 'calendar';
 
+export interface ParsedSegment {
+  startDate: string; // yyyy-MM-dd
+  endDate: string;   // yyyy-MM-dd
+}
+
+export interface ParsedScheduleTask {
+  zone: string;
+  category: string;
+  taskName: string;
+  daysScheduled: number;
+  progress: number;
+  startDate: string; // yyyy-MM-dd
+  endDate: string;   // yyyy-MM-dd
+  color: string;
+  segments: ParsedSegment[];
+}
+
 export interface GanttTask {
   id: string;
   project_id: string;
@@ -39,6 +56,14 @@ export interface GanttMilestone {
   color: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface GanttTaskSegment {
+  id: string;
+  task_id: string;
+  start_date: string;
+  end_date: string;
+  created_at: string;
 }
 
 export interface GanttBaseline {
