@@ -82,6 +82,34 @@ function parseMonthHeader(value: any): { month: number; year: number | null } | 
 }
 
 /**
+ * Read the formatted text (.w) directly from worksheet cells for a given row.
+ * This bypasses xlsx date interpretation, giving us the original string like "August-25".
+ */
+function getRowFormattedValues(
+  sheet: XLSX.WorkSheet,
+  row: number,
+  startCol: number,
+  maxCol: number
+): (string | null)[] {
+  const values: (string | null)[] = [];
+  for (let c = 0; c < maxCol; c++) {
+    if (c < startCol) {
+      values.push(null);
+      continue;
+    }
+    const cellAddress = XLSX.utils.encode_cell({ r: row, c });
+    const cell = sheet[cellAddress];
+    if (!cell) {
+      values.push(null);
+    } else {
+      // Prefer .w (formatted text) to get original string like "August-25"
+      values.push(cell.w != null ? String(cell.w) : (cell.v != null ? String(cell.v) : null));
+    }
+  }
+  return values;
+}
+
+/**
  * Build date headers from 3-row layout:
  * Row 0: Month names (forward-filled across columns)
  * Row 1: Week labels (ignored)
@@ -90,11 +118,11 @@ function parseMonthHeader(value: any): { month: number; year: number | null } | 
 function buildDateHeaders(
   rows: any[][],
   startCol: number,
-  referenceYear: number
+  referenceYear: number,
+  row0Formatted: (string | null)[]
 ): { colIndex: number; date: Date }[] {
-  const row0 = rows[0] || [];
   const row2 = rows[2] || [];
-  const maxCol = Math.max(row0.length, row2.length);
+  const maxCol = Math.max(row0Formatted.length, row2.length);
 
   let currentMonth: number | null = null;
   let prevDay = 0;
@@ -102,8 +130,8 @@ function buildDateHeaders(
   const headers: { colIndex: number; date: Date }[] = [];
 
   for (let c = startCol; c < maxCol; c++) {
-    // Update month from row 0 (forward-fill)
-    const rawVal = row0[c];
+    // Update month from formatted Row 0 strings (forward-fill)
+    const rawVal = row0Formatted[c];
     const parsed = parseMonthHeader(rawVal);
     if (parsed !== null) {
       if (currentMonth !== null && parsed.month < currentMonth && parsed.year === null) {
@@ -170,8 +198,11 @@ export async function parseScheduleExcel(
   }
 
   // Build date headers from rows 0-2, starting at column G (index 6)
+  // Read Row 0 formatted strings directly from the worksheet to bypass xlsx date interpretation
+  const maxCol = (rawData[0]?.length || 0);
+  const row0Formatted = getRowFormattedValues(sheet, 0, DATA_START_COL, Math.max(maxCol, 200));
   const year = referenceYear ?? (fallbackStartDate?.getFullYear() ?? new Date().getFullYear());
-  const dateHeaders = buildDateHeaders(rawData, DATA_START_COL, year);
+  const dateHeaders = buildDateHeaders(rawData, DATA_START_COL, year, row0Formatted);
   const dateColumnsFound = dateHeaders.length > 0;
 
   // Create a lookup map: colIndex -> Date
