@@ -1,11 +1,11 @@
 import { Badge } from '@/components/ui/badge';
-import { ChevronDown, ChevronRight, User, Palette, CheckCircle2, Clock, Circle } from 'lucide-react';
+import { ChevronDown, ChevronRight, User, Palette, CheckCircle2, Clock, Circle, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GanttTaskStatus, TASK_COLORS } from '@/types/gantt';
 
 interface TaskGroupHeaderProps {
   groupKey: string;
-  groupBy: 'status' | 'owner' | 'color';
+  groupBy: 'status' | 'owner' | 'color' | 'category';
   taskCount: number;
   isExpanded: boolean;
   onToggle: () => void;
@@ -44,6 +44,9 @@ export function TaskGroupHeader({
         />
       );
     }
+    if (groupBy === 'category') {
+      return <Layers className="h-4 w-4 text-muted-foreground" />;
+    }
     return null;
   };
 
@@ -57,6 +60,9 @@ export function TaskGroupHeader({
     if (groupBy === 'color') {
       const color = TASK_COLORS.find(c => c.value === groupKey);
       return color?.name || 'No Color';
+    }
+    if (groupBy === 'category') {
+      return groupKey || 'Uncategorized';
     }
     return groupKey;
   };
