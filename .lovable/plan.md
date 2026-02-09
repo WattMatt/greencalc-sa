@@ -1,108 +1,122 @@
 
 
-# 3D Elevation and Viewer for PV Layout
+# Import Excel Schedule into Gantt Chart
 
 ## Overview
 
-Add elevation (height) data to all layout objects and introduce a 3D viewer powered by React Three Fiber, enabling accurate vertical cable distance calculations and visual site verification.
+Build a dedicated parser for your solar PV project schedule Excel format. The parser will read the hierarchical structure (Category / Zone / Task Name), extract task durations and progress, calculate start/end dates from the daily progress columns, and import everything into the Gantt chart. Zones (1-20 per site) will be mapped to the task `owner` field so you can group by Zone.
 
-## Phase 1: Elevation Data Model
+## How It Will Work
 
-Add an `elevation` property (meters above ground) to every placeable object type, and update cable length calculations to account for vertical distance.
+1. Click **Import** button in the Gantt toolbar (next to Export)
+2. Select your Excel file (.xlsx)
+3. A preview dialog shows the parsed tasks organized by Zone
+4. Review, optionally adjust the project start date, then confirm
+5. Tasks are created in the Gantt chart, grouped by Zone
 
-### Type Changes (`src/components/floor-plan/types.ts`)
+## Excel Format Assumptions
 
-- Add `elevation?: number` (meters) to:
-  - `PVArrayItem` -- height of the array (e.g., rooftop at 6m)
-  - `EquipmentItem` -- height of inverters, boards, etc.
-  - `PlacedWalkway` -- elevation of walkway surface
-  - `PlacedCableTray` -- elevation of cable tray
-- Add `elevations?: number[]` to `SupplyLine` -- per-point elevation array matching the `points` array, enabling cables to change elevation along their route
+Based on your uploaded schedule:
 
-### Geometry Updates (`src/components/floor-plan/utils/geometry.ts`)
+- **Row structure**: Category (e.g., "Structural", "Electrical") as section headers, then Zone (e.g., "Zone 1", "Zone 2") as sub-headers, then individual task rows underneath
+- **Key columns**: Task Name, Days Scheduled, Progress (%)
+- **Date columns**: Daily columns (dates as headers) with cell values indicating progress on each day
+- **Start date**: Inferred from the first non-empty daily cell for each task
+- **End date**: Start date + Days Scheduled
+- **Zones**: 1-20 per site, mapped to the `owner` field for grouping
 
-- Update `calculateLineLength` to accept an optional `elevations` array
-- When elevations are provided, compute 3D segment lengths:
-  ```
-  sqrt(dx^2 + dy^2 + dz^2) * scaleRatio
-  ```
-  where `dz` is the elevation difference in world units (converted from meters back to pixel-space via scaleRatio)
-- Existing calls without elevations continue to work unchanged (backward compatible)
+## What Gets Imported
 
-### UI for Editing Elevation
+| Excel Field | Gantt Task Field | Notes |
+|---|---|---|
+| Task Name | `name` | Direct mapping |
+| Category | `description` | Stored as context (e.g., "Structural") |
+| Zone | `owner` | Enables "Group by Owner" = Group by Zone |
+| Days Scheduled | Used to calculate `end_date` | start + days |
+| Progress % | `progress` | Direct mapping |
+| First date column with data | `start_date` | Auto-detected |
+| Zone number | `color` | Each zone gets a distinct color (up to 20) |
 
-- Add an "Elevation (m)" field to `ObjectConfigModal` for equipment, walkways, cable trays
-- Add an "Elevation (m)" field to `PVArrayModal` for PV arrays
-- For cables: auto-inherit elevation from connected endpoints (from/to objects), or allow manual override per cable in its config dialog
+## Technical Details
 
-### Summary Panel Updates
+### New Files
 
-- Show "3D Length" alongside existing horizontal length for cables where elevation data exists
-- Show elevation value next to each object in the summary list
+1. **`src/lib/ganttImport.ts`** - Core parser
+   - `parseScheduleExcel(file: File)` - reads the XLSX file using the existing `xlsx` library
+   - Walks rows to detect category headers, zone headers, and task rows
+   - Scans date columns to find each task's actual start date
+   - Returns a structured array of `{ zone, category, taskName, daysScheduled, progress, startDate, endDate }`
+   - Zone detection: looks for rows matching "Zone N" pattern (N = 1-20)
+   - Category detection: rows where only the first column has a value (bold/section header rows)
 
-## Phase 2: 3D Viewer
+2. **`src/components/gantt/ImportScheduleDialog.tsx`** - Preview and confirm UI
+   - File upload dropzone
+   - Shows parsed tasks in a table grouped by Zone
+   - Lets user adjust the base start date if date columns can't be parsed
+   - "Import" button to create all tasks
+   - Warning if tasks already exist (option to append or replace)
 
-Add a toggleable 3D view using `@react-three/fiber` (v8) and `@react-three/drei` (v9) that renders the entire layout with elevation.
+### Modified Files
 
-### New Component: `ThreeDViewer`
+3. **`src/components/gantt/GanttToolbar.tsx`**
+   - Add "Import" button/menu item next to the Export dropdown
+   - Add Upload icon import from lucide-react
 
-Location: `src/components/floor-plan/components/ThreeDViewer.tsx`
+4. **`src/components/gantt/ProjectGantt.tsx`**
+   - Add state for import dialog open/close
+   - Add `onImportTasks` handler that calls `createTask` in a loop for each parsed task
+   - Pass import handler and dialog state to toolbar
 
-- Renders a Three.js canvas using `@react-three/fiber`
-- Receives the same design state props as the 2D canvas (pvArrays, equipment, lines, walkways, cableTrays, roofMasks)
-- Uses `@react-three/drei` for orbit controls, grid helper, and labels
+5. **`src/components/gantt/GettingStartedGuide.tsx`**
+   - Add "Import from Excel" as an alternative getting-started option
 
-### 3D Object Rendering
+### Zone-to-Color Mapping
 
-| Object | 3D Representation |
-|---|---|
-| Roof Masks | Flat planes at ground level, tilted by pitch angle |
-| PV Arrays | Thin boxes (panel dimensions) at their elevation, tilted to match roof pitch |
-| Equipment | Simple box meshes at their elevation, color-coded by type |
-| DC Cables | Orange tube geometry following point paths with elevation |
-| AC Cables | Blue tube geometry following point paths with elevation |
-| Walkways | Flat box meshes at their elevation |
-| Cable Trays | Narrow box meshes at their elevation |
+Each zone (up to 20) will be assigned a distinct color from an extended palette so they're visually distinguishable on the Gantt chart:
 
-### View Toggle
+```text
+Zone 1  -> #3b82f6 (Blue)
+Zone 2  -> #22c55e (Green)
+Zone 3  -> #eab308 (Yellow)
+Zone 4  -> #f97316 (Orange)
+Zone 5  -> #ef4444 (Red)
+Zone 6  -> #a855f7 (Purple)
+Zone 7  -> #ec4899 (Pink)
+Zone 8  -> #14b8a6 (Teal)
+Zone 9  -> #6366f1 (Indigo)
+Zone 10 -> #84cc16 (Lime)
+... up to Zone 20
+```
 
-- Add a "2D / 3D" toggle button to the Toolbar
-- 3D view replaces the Canvas component when active (not side-by-side, to keep it simple)
-- 3D view is read-only for visualization; all editing stays in 2D
-- Orbit controls (rotate, zoom, pan) for free camera movement
+### Parser Logic (Pseudocode)
 
-### Camera and Navigation
+```text
+1. Read workbook, get first sheet
+2. Find the header row (scan for "Task Name" or "Days Scheduled")
+3. Identify date columns (columns after the fixed columns with date-parseable headers)
+4. Walk each row below the header:
+   a. If row has value only in column A -> Category header
+   b. If row matches "Zone N" pattern -> Zone header
+   c. Otherwise -> Task row: extract name, days, progress
+   d. For task rows, scan date columns to find first non-empty cell -> start date
+   e. end_date = start_date + days_scheduled
+5. Return parsed tasks with zone and category metadata
+```
 
-- Default camera positioned to show the full site from an elevated angle
-- "Reset View" button to return to default camera position
-- Optional: click an object in 3D to highlight it in the summary panel
+### Import Flow
 
-## Phase 3: Cable Auto-Elevation
+```text
+User clicks "Import" -> File picker -> Parse Excel ->
+  Show preview dialog with tasks grouped by zone ->
+    User confirms -> Batch create tasks via existing createTask mutation ->
+      Tasks appear in Gantt chart, grouped by Zone (owner)
+```
 
-- When a cable's `from` connects to a PV array at elevation 6m and `to` connects to an inverter at elevation 1.5m, automatically populate the cable's elevation array
-- Intermediate waypoints default to linear interpolation unless manually overridden
+### Edge Cases Handled
 
-## Dependencies
-
-- `@react-three/fiber@^8.18` (compatible with React 18)
-- `@react-three/drei@^9.122.0`
-- `three@^0.133` (peer dependency)
-
-## Implementation Order
-
-1. Add elevation fields to types (backward compatible, all optional)
-2. Update `calculateLineLength` for 3D
-3. Add elevation inputs to existing config modals
-4. Update Summary Panel to show 3D lengths
-5. Install Three.js dependencies
-6. Build `ThreeDViewer` component with basic object rendering
-7. Add 2D/3D toggle to Toolbar
-8. Implement cable auto-elevation from connected objects
-
-## Technical Notes
-
-- All elevation values default to `0` (ground level) when not set, preserving full backward compatibility with existing layouts
-- The 3D viewer is purely for visualization -- no editing in 3D mode to keep complexity manageable
-- Saved layout JSON automatically includes elevation data with no schema migration needed (optional fields)
-- The 2D canvas remains unchanged; elevation is only visible via the config modals and 3D viewer
+- No date columns found: user manually sets a project start date, tasks are stacked sequentially
+- Merged cells in Excel: xlsx library unmerges automatically
+- Empty/blank rows: skipped
+- Duplicate task names across zones: allowed (different owner distinguishes them)
+- Existing tasks: dialog offers "Append" or "Replace all" options
 
