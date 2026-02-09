@@ -143,7 +143,7 @@ export function GanttChart({
 
     // Add padding — minimal trailing space so the chart ends near the last date
     const start = addDays(startOfWeek(minDate), -7);
-    const end = addDays(maxDate, 1);
+    const end = maxDate;
 
     return {
       startDate: start,
@@ -574,7 +574,7 @@ export function GanttChart({
 
             {/* Gantt timeline (right panel) */}
             <div className="flex-1 overflow-x-auto" ref={scrollRef}>
-              <div style={{ width: chartWidth }}>
+              <div style={{ minWidth: chartWidth }}>
                 {/* Time header */}
                 <div 
                   className="flex border-b bg-muted/30 sticky top-0"
