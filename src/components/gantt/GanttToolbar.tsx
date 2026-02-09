@@ -18,6 +18,7 @@ import {
   Calendar, 
   Filter, 
   Download, 
+  Upload,
   Image, 
   FileText, 
   FileSpreadsheet, 
@@ -58,6 +59,7 @@ interface GanttToolbarProps {
   onApplyFilterPreset?: (presetId: string) => void;
   onDeleteFilterPreset?: (presetId: string) => void;
   onOpenKeyboardShortcuts?: () => void;
+  onOpenImport?: () => void;
   searchInputRef?: React.RefObject<HTMLInputElement>;
 }
 
@@ -79,6 +81,7 @@ export function GanttToolbar({
   onApplyFilterPreset,
   onDeleteFilterPreset,
   onOpenKeyboardShortcuts,
+  onOpenImport,
   searchInputRef,
 }: GanttToolbarProps) {
   const [isBaselineDialogOpen, setIsBaselineDialogOpen] = useState(false);
@@ -490,6 +493,14 @@ export function GanttToolbar({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Import */}
+      {onOpenImport && (
+        <Button variant="outline" size="sm" className="h-8" onClick={onOpenImport}>
+          <Upload className="h-4 w-4 mr-1" />
+          Import
+        </Button>
+      )}
 
       {/* Export */}
       <DropdownMenu>
