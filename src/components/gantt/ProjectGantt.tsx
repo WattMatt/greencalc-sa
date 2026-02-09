@@ -23,6 +23,8 @@ import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import { OnboardingChecklist } from './OnboardingChecklist';
 import { ColorLegend } from './ColorLegend';
 import { DependencyTypeSelector } from './DependencyTypeSelector';
+import { ImportScheduleDialog } from './ImportScheduleDialog';
+import { ParsedScheduleTask } from '@/lib/ganttImport';
 import { toast } from 'sonner';
 import { 
   GanttChartConfig, 
@@ -64,6 +66,7 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
   const [showWorkloadView, setShowWorkloadView] = useState(false);
   const [pendingDependency, setPendingDependency] = useState<{ predecessorId: string; successorId: string } | null>(null);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -238,6 +241,34 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
     completeStep('use_filters');
   }, [createPreset, filters, completeStep]);
 
+  // Handle import from Excel
+  const handleImportTasks = useCallback(async (parsedTasks: ParsedScheduleTask[], mode: 'append' | 'replace') => {
+    if (mode === 'replace' && tasks.length > 0) {
+      await bulkDeleteTasks.mutateAsync(tasks.map(t => t.id));
+    }
+    
+    const maxOrder = mode === 'replace' ? 0 : tasks.reduce((max, t) => Math.max(max, t.sort_order), 0);
+    
+    for (let i = 0; i < parsedTasks.length; i++) {
+      const pt = parsedTasks[i];
+      const status = pt.progress >= 100 ? 'completed' as const : pt.progress > 0 ? 'in_progress' as const : 'not_started' as const;
+      
+      await createTask.mutateAsync({
+        name: pt.taskName,
+        description: pt.category,
+        start_date: new Date(pt.startDate),
+        end_date: new Date(pt.endDate),
+        status,
+        owner: pt.zone,
+        progress: pt.progress,
+        color: pt.color,
+      });
+    }
+    
+    completeStep('create_task');
+    completeStep('assign_owner');
+  }, [tasks, bulkDeleteTasks, createTask, completeStep]);
+
   // Used colors for color legend
   const usedColors = useMemo(() => {
     return Array.from(new Set(tasks.map(t => t.color).filter(Boolean) as string[]));
@@ -289,6 +320,7 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
       <GettingStartedGuide
         onCreateTask={() => setIsTaskFormOpen(true)}
         onCreateMilestone={() => setIsMilestoneFormOpen(true)}
+        onImportSchedule={() => setIsImportDialogOpen(true)}
         isTaskFormOpen={isTaskFormOpen}
         isMilestoneFormOpen={isMilestoneFormOpen}
       >
@@ -303,6 +335,12 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
           onOpenChange={setIsMilestoneFormOpen}
           onSubmit={handleCreateMilestone}
           isSubmitting={createMilestone.isPending}
+        />
+        <ImportScheduleDialog
+          open={isImportDialogOpen}
+          onOpenChange={setIsImportDialogOpen}
+          onImport={handleImportTasks}
+          existingTaskCount={tasks.length}
         />
       </GettingStartedGuide>
     );
@@ -353,6 +391,7 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
         onApplyFilterPreset={handleApplyFilterPreset}
         onDeleteFilterPreset={deletePreset}
         onOpenKeyboardShortcuts={() => setIsKeyboardShortcutsOpen(true)}
+        onOpenImport={() => setIsImportDialogOpen(true)}
         searchInputRef={searchInputRef}
       />
 
@@ -461,8 +500,16 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
             onRequestDependencyType={(predecessorId, successorId) => {
               setPendingDependency({ predecessorId, successorId });
             }}
-          />
-        </div>
+      />
+
+      {/* Import Schedule Dialog */}
+      <ImportScheduleDialog
+        open={isImportDialogOpen}
+        onOpenChange={setIsImportDialogOpen}
+        onImport={handleImportTasks}
+        existingTaskCount={tasks.length}
+      />
+    </div>
       </div>
 
       {/* Task Form Dialog */}

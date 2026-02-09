@@ -1,11 +1,12 @@
 import { ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CalendarDays, Plus, Flag, Lightbulb, ArrowRight } from 'lucide-react';
+import { CalendarDays, Plus, Flag, Lightbulb, ArrowRight, Upload } from 'lucide-react';
 
 interface GettingStartedGuideProps {
   onCreateTask: () => void;
   onCreateMilestone: () => void;
+  onImportSchedule?: () => void;
   children: ReactNode;
   isTaskFormOpen: boolean;
   isMilestoneFormOpen: boolean;
@@ -14,6 +15,7 @@ interface GettingStartedGuideProps {
 export function GettingStartedGuide({ 
   onCreateTask, 
   onCreateMilestone, 
+  onImportSchedule,
   children 
 }: GettingStartedGuideProps) {
   return (
@@ -40,6 +42,15 @@ export function GettingStartedGuide({
               <Flag className="h-4 w-4 mr-2" />
               Add a Milestone
             </Button>
+            {onImportSchedule && (
+              <>
+                <span className="text-muted-foreground">or</span>
+                <Button variant="outline" onClick={onImportSchedule}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import from Excel
+                </Button>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
