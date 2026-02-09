@@ -38,10 +38,31 @@ const MONTH_MAP: Record<string, number> = {
   jan: 0, feb: 1, mar: 2, apr: 3, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
 };
 
-function parseMonthName(value: any): number | null {
+/**
+ * Parse month header like "August-25", "SEPTEMBER-25", "August", "Sep 2025"
+ * Returns { month: 0-11, year: number | null }
+ */
+function parseMonthHeader(value: any): { month: number; year: number | null } | null {
   if (value == null) return null;
-  const key = String(value).trim().toLowerCase();
-  return MONTH_MAP[key] ?? null;
+  const str = String(value).trim();
+  if (!str) return null;
+
+  // Try "Month-YY" or "Month-YYYY" format (e.g., "August-25", "SEPTEMBER-2025")
+  const dashMatch = str.match(/^([a-zA-Z]+)\s*[-/]\s*(\d{2,4})$/);
+  if (dashMatch) {
+    const month = MONTH_MAP[dashMatch[1].toLowerCase()];
+    if (month !== undefined) {
+      let yr = parseInt(dashMatch[2], 10);
+      if (yr < 100) yr += 2000; // "25" -> 2025
+      return { month, year: yr };
+    }
+  }
+
+  // Try plain month name
+  const month = MONTH_MAP[str.toLowerCase()];
+  if (month !== undefined) return { month, year: null };
+
+  return null;
 }
 
 /**
@@ -66,14 +87,17 @@ function buildDateHeaders(
 
   for (let c = startCol; c < maxCol; c++) {
     // Update month from row 0 (forward-fill)
-    const monthParsed = parseMonthName(row0[c]);
-    if (monthParsed !== null) {
-      // Handle year rollover: if new month < previous month, bump year
-      if (currentMonth !== null && monthParsed < currentMonth) {
+    const parsed = parseMonthHeader(row0[c]);
+    if (parsed !== null) {
+      // Handle year rollover if no year in header
+      if (currentMonth !== null && parsed.month < currentMonth && parsed.year === null) {
         year++;
       }
-      currentMonth = monthParsed;
-      prevDay = 0; // reset day tracking for new month header
+      if (parsed.year !== null) {
+        year = parsed.year;
+      }
+      currentMonth = parsed.month;
+      prevDay = 0;
     }
 
     const dayVal = row2[c];
