@@ -35,6 +35,11 @@ export interface ComparisonDataPoint {
   [meterId: string]: number | string; // Dynamic keys for each meter's value
 }
 
+export interface BaselineComparisonDataPoint {
+  label: string;
+  [meterId: string]: number | string; // Percentage difference from baseline
+}
+
 export interface MeterStats {
   meterId: string;
   meterName: string;
@@ -43,6 +48,7 @@ export interface MeterStats {
   peakValue: number;
   totalKwh: number;
   vsGroupAvg: number; // Percentage difference from group average
+  vsBaseline: number | null; // Percentage difference from baseline meter
   energyIntensity: number | null; // kWh/m² if area available
 }
 
@@ -60,7 +66,8 @@ export function useCrossSiteComparison(
   aggregation: AggregationType,
   dayTypeFilter: DayTypeFilter,
   dateFrom?: Date,
-  dateTo?: Date
+  dateTo?: Date,
+  baselineMeterId?: string | null
 ) {
   // Fetch all meters metadata for selection UI (without raw_data)
   const { data: allMeters = [], isLoading: isLoadingMeters } = useQuery({
@@ -146,9 +153,9 @@ export function useCrossSiteComparison(
   });
 
   // Process and aggregate data
-  const { chartData, meterStats } = useMemo(() => {
+  const { chartData, baselineChartData, meterStats } = useMemo(() => {
     if (metersWithData.length === 0) {
-      return { chartData: [], meterStats: [] };
+      return { chartData: [], baselineChartData: [], meterStats: [] };
     }
 
     const processedMeters: Map<string, RawDataPoint[]> = new Map();
@@ -332,11 +339,21 @@ export function useCrossSiteComparison(
     const groupTotals = Array.from(meterStatsMap.values()).map(s => s.sum);
     const groupAvg = groupTotals.length > 0 ? groupTotals.reduce((a, b) => a + b, 0) / groupTotals.length : 0;
 
+    // Get baseline stats if a baseline meter is selected
+    const baselineStats = baselineMeterId ? meterStatsMap.get(baselineMeterId) : null;
+    const baselineTotal = baselineStats?.sum || 0;
+
     // Build final stats
     const meterStats: MeterStats[] = metersWithData.map(meter => {
       const stats = meterStatsMap.get(meter.id)!;
       const avgValue = stats.count > 0 ? stats.sum / stats.count : 0;
       const vsGroupAvg = groupAvg > 0 ? ((stats.sum - groupAvg) / groupAvg) * 100 : 0;
+      
+      // Calculate vs baseline (null if this IS the baseline or no baseline selected)
+      let vsBaseline: number | null = null;
+      if (baselineMeterId && meter.id !== baselineMeterId && baselineTotal > 0) {
+        vsBaseline = ((stats.sum - baselineTotal) / baselineTotal) * 100;
+      }
 
       return {
         meterId: meter.id,
@@ -346,12 +363,42 @@ export function useCrossSiteComparison(
         peakValue: stats.peak,
         totalKwh: stats.sum,
         vsGroupAvg,
+        vsBaseline,
         energyIntensity: meter.area_sqm ? stats.sum / meter.area_sqm : null,
       };
     });
 
-    return { chartData, meterStats };
-  }, [metersWithData, aggregation, dayTypeFilter, dateFrom, dateTo]);
+    // Calculate baseline comparison chart data (percentage differences)
+    let baselineChartData: BaselineComparisonDataPoint[] = [];
+    if (baselineMeterId && chartData.length > 0) {
+      baselineChartData = chartData.map(point => {
+        const baselineValue = point[baselineMeterId];
+        const baselineNum = typeof baselineValue === "number" ? baselineValue : 0;
+        
+        const newPoint: BaselineComparisonDataPoint = { label: point.label };
+        
+        metersWithData.forEach(meter => {
+          if (meter.id === baselineMeterId) {
+            // Baseline is always 0%
+            newPoint[meter.id] = 0;
+          } else {
+            const meterValue = point[meter.id];
+            const meterNum = typeof meterValue === "number" ? meterValue : 0;
+            
+            if (baselineNum > 0) {
+              newPoint[meter.id] = ((meterNum - baselineNum) / baselineNum) * 100;
+            } else {
+              newPoint[meter.id] = 0;
+            }
+          }
+        });
+        
+        return newPoint;
+      });
+    }
+
+    return { chartData, baselineChartData, meterStats };
+  }, [metersWithData, aggregation, dayTypeFilter, dateFrom, dateTo, baselineMeterId]);
 
   // Get unique sites and categories for filtering
   const sites = useMemo(() => {
@@ -385,6 +432,7 @@ export function useCrossSiteComparison(
     sites,
     categories,
     chartData,
+    baselineChartData,
     meterStats,
     getMeterColor,
     chartColors: CHART_COLORS,
