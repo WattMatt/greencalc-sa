@@ -439,6 +439,13 @@ export function GanttToolbar({
             <Layers className="h-4 w-4 mr-2" />
             By Category
           </DropdownMenuItem>
+          <DropdownMenuItem 
+            onClick={() => onConfigChange({ ...config, groupBy: 'category_owner' })}
+            className={config.groupBy === 'category_owner' ? 'bg-primary/10' : ''}
+          >
+            <Layers className="h-4 w-4 mr-2" />
+            By Category &amp; Zone
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

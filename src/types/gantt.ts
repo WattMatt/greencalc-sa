@@ -3,7 +3,7 @@
 export type GanttTaskStatus = 'not_started' | 'in_progress' | 'completed';
 export type GanttDependencyType = 'finish_to_start' | 'start_to_start' | 'finish_to_finish' | 'start_to_finish';
 export type ViewMode = 'day' | 'week' | 'month';
-export type GroupByMode = 'none' | 'status' | 'owner' | 'color' | 'category';
+export type GroupByMode = 'none' | 'status' | 'owner' | 'color' | 'category' | 'category_owner';
 export type ChartViewType = 'gantt' | 'workload' | 'calendar';
 
 export interface GanttTask {
@@ -130,7 +130,7 @@ export const TASK_COLORS = [
 // Default chart configuration
 export const DEFAULT_CHART_CONFIG: GanttChartConfig = {
   viewMode: 'week',
-  groupBy: 'none',
+  groupBy: 'category_owner',
   chartView: 'gantt',
   showDependencies: true,
   showMilestones: true,
