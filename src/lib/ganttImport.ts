@@ -1,16 +1,9 @@
 import * as XLSX from 'xlsx';
-import { addDays, format } from 'date-fns';
+import { addDays, format, differenceInDays } from 'date-fns';
+import { ParsedScheduleTask, ParsedSegment } from '@/types/gantt';
 
-export interface ParsedScheduleTask {
-  zone: string;
-  category: string;
-  taskName: string;
-  daysScheduled: number;
-  progress: number;
-  startDate: string; // yyyy-MM-dd
-  endDate: string;   // yyyy-MM-dd
-  color: string;
-}
+// Re-export for backward compatibility
+export type { ParsedScheduleTask, ParsedSegment } from '@/types/gantt';
 
 export interface ParsedScheduleResult {
   tasks: ParsedScheduleTask[];
@@ -240,25 +233,41 @@ export async function parseScheduleExcel(
       }
     }
 
-    // Find start and end dates from daily columns — no fallback
-    let startDate: Date | null = null;
-    let endDate: Date | null = null;
+    // Find segments: groups of consecutive active days
+    const segments: { start: Date; end: Date }[] = [];
+    let currentSeg: { start: Date; end: Date } | null = null;
+    let prevDate: Date | null = null;
+
     if (dateColumnsFound) {
       for (let c = DATA_START_COL; c < row.length; c++) {
         if (row[c] != null && row[c] !== '') {
           const d = dateByCol.get(c);
           if (d) {
-            if (!startDate) startDate = d;
-            endDate = d;
+            if (!currentSeg) {
+              currentSeg = { start: d, end: d };
+            } else if (prevDate) {
+              const gap = differenceInDays(d, prevDate);
+              if (gap <= 1) {
+                currentSeg.end = d;
+              } else {
+                segments.push(currentSeg);
+                currentSeg = { start: d, end: d };
+              }
+            }
+            prevDate = d;
           }
         }
       }
+      if (currentSeg) segments.push(currentSeg);
     }
 
-    if (!startDate || !endDate) {
+    if (segments.length === 0) {
       skippedCount++;
       continue; // skip task — no start date found
     }
+
+    const startDate = segments[0].start;
+    const endDate = segments[segments.length - 1].end;
 
     if (!zoneColorMap.has(currentZone)) {
       zonesSet.add(currentZone);
@@ -275,6 +284,10 @@ export async function parseScheduleExcel(
       startDate: format(startDate, 'yyyy-MM-dd'),
       endDate: format(endDate, 'yyyy-MM-dd'),
       color: zoneColorMap.get(currentZone) || ZONE_COLORS[0],
+      segments: segments.map(s => ({
+        startDate: format(s.start, 'yyyy-MM-dd'),
+        endDate: format(s.end, 'yyyy-MM-dd'),
+      })),
     });
   }
 

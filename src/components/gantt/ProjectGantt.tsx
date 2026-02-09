@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useGanttTasks } from '@/hooks/useGanttTasks';
+import { useGanttTaskSegments } from '@/hooks/useGanttTaskSegments';
 import { useGanttDependencies } from '@/hooks/useGanttDependencies';
 import { useGanttMilestones } from '@/hooks/useGanttMilestones';
 import { useGanttBaselines, useBaselineTasks } from '@/hooks/useGanttBaselines';
@@ -46,6 +47,8 @@ interface ProjectGanttProps {
 export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
   // Data hooks
   const { tasks, isLoading: isLoadingTasks, createTask, updateTask, deleteTask, bulkUpdateTasks, bulkDeleteTasks, reorderTasks } = useGanttTasks(projectId);
+  const taskIds = useMemo(() => tasks.map(t => t.id), [tasks]);
+  const { segmentsByTaskId, saveSegments, deleteSegmentsForTasks } = useGanttTaskSegments(projectId, taskIds);
   const { dependencies, isLoading: isLoadingDeps, createDependency, deleteDependency } = useGanttDependencies(projectId);
   const { milestones, isLoading: isLoadingMilestones, createMilestone, updateMilestone, deleteMilestone } = useGanttMilestones(projectId);
   const { baselines, createBaseline, deleteBaseline } = useGanttBaselines(projectId);
@@ -244,16 +247,19 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
   // Handle import from Excel
   const handleImportTasks = useCallback(async (parsedTasks: ParsedScheduleTask[], mode: 'append' | 'replace') => {
     if (mode === 'replace' && tasks.length > 0) {
+      // Delete segments first (cascade should handle, but be explicit)
+      await deleteSegmentsForTasks.mutateAsync(tasks.map(t => t.id));
       await bulkDeleteTasks.mutateAsync(tasks.map(t => t.id));
     }
     
     const maxOrder = mode === 'replace' ? 0 : tasks.reduce((max, t) => Math.max(max, t.sort_order), 0);
+    const allSegments: { task_id: string; start_date: string; end_date: string }[] = [];
     
     for (let i = 0; i < parsedTasks.length; i++) {
       const pt = parsedTasks[i];
       const status = pt.progress >= 100 ? 'completed' as const : pt.progress > 0 ? 'in_progress' as const : 'not_started' as const;
       
-      await createTask.mutateAsync({
+      const newTask = await createTask.mutateAsync({
         name: pt.taskName,
         description: pt.category,
         start_date: new Date(pt.startDate),
@@ -263,11 +269,27 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
         progress: pt.progress,
         color: pt.color,
       });
+      
+      // Save segments if more than one (single segment = use task dates)
+      if (pt.segments && pt.segments.length > 1) {
+        for (const seg of pt.segments) {
+          allSegments.push({
+            task_id: newTask.id,
+            start_date: seg.startDate,
+            end_date: seg.endDate,
+          });
+        }
+      }
+    }
+    
+    // Batch save all segments
+    if (allSegments.length > 0) {
+      await saveSegments.mutateAsync(allSegments);
     }
     
     completeStep('create_task');
     completeStep('assign_owner');
-  }, [tasks, bulkDeleteTasks, createTask, completeStep]);
+  }, [tasks, bulkDeleteTasks, createTask, completeStep, saveSegments, deleteSegmentsForTasks]);
 
   // Used colors for color legend
   const usedColors = useMemo(() => {
@@ -467,6 +489,7 @@ export function ProjectGantt({ projectId, projectName }: ProjectGanttProps) {
             config={config}
             selectedTasks={selectedTasks}
             baselineTasks={baselineTasks}
+            segmentsByTaskId={segmentsByTaskId}
             onSelectTask={handleSelectTask}
             onEditTask={handleEditTask}
             onUpdateTask={(id, updates) => {

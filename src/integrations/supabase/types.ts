@@ -277,6 +277,38 @@ export type Database = {
           },
         ]
       }
+      gantt_task_segments: {
+        Row: {
+          created_at: string
+          end_date: string
+          id: string
+          start_date: string
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          id?: string
+          start_date: string
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          id?: string
+          start_date?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gantt_task_segments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "gantt_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gantt_tasks: {
         Row: {
           color: string | null
