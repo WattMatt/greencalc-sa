@@ -1,51 +1,34 @@
 
 
-# Fix: Parser Ignores Year from Excel Headers
+# Fix: Parser Using UI Year Instead of Excel Header Year
 
 ## Problem
-The parser extracts dates as 2026 instead of 2025 because it's using the "Project Year" UI field (2026) as the year, instead of extracting it from the Excel headers like "August-25" (meaning August 2025).
+The parser still shows 2026 dates because Excel interprets "August-25" as "August 25th" (a date with day=25), NOT as "August 2025". With `cellDates: true`, the xlsx library converts this to a JS Date object where the "25" becomes the day, and the year defaults to the current year or some Excel default -- not 2025 as intended.
 
-The root cause is likely that when the xlsx library reads "August-25", it converts it to an Excel serial date number. The serial-date-to-Date conversion in `parseMonthHeader` may be producing the wrong result, OR the `referenceYear` fallback (2026) is overriding before the parser encounters a valid header.
+The regex branch in `parseMonthHeader` that correctly handles "Month-YY" format never gets reached because the value arrives as a Date object, not a string.
 
-## Fix
+## Solution
+Read the **formatted cell strings** directly from the worksheet object for Row 0 (the month header row), bypassing the date interpretation entirely. Each cell in an xlsx worksheet has a `.w` property containing the original formatted text (e.g., "August-25").
 
-### 1. `src/lib/ganttImport.ts` - Fix `buildDateHeaders`
+## Technical Changes
 
-The key change: **initialize `year` from the first successfully parsed header, not from `referenceYear`**. The `referenceYear` should only be a last-resort fallback if no header contains year info.
+### File: `src/lib/ganttImport.ts`
 
-- Change the initialization so `year` starts as `referenceYear` but gets overwritten by the FIRST header that contains a year
-- Make sure the serial date parsing in `parseMonthHeader` is correct (the Excel epoch calculation)
-- Remove `cellDates: false` from `XLSX.read` and try `cellDates: true` instead -- this will make xlsx return actual Date objects for date-formatted cells, which are much easier to parse correctly than serial numbers
+**1. Add a helper to extract formatted strings from Row 0**
 
-### 2. `src/lib/ganttImport.ts` - Switch to `cellDates: true`
+Create a function that reads the `.w` (formatted text) property directly from worksheet cells for Row 0. This gives us the original string "August-25" instead of a misinterpreted Date object.
 
-Change line 159:
-```typescript
-// Before
-const workbook = XLSX.read(buffer, { type: 'array', cellDates: false });
-
-// After  
-const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+```
+function getRow0FormattedValues(sheet, startCol, maxCol):
+  For each column from startCol to maxCol:
+    Read cell at row 0 (e.g., "G1", "H1", ...)
+    Return cell.w (formatted string) or cell.v (raw value) as fallback
 ```
 
-This makes xlsx return JS Date objects instead of serial numbers, so `parseMonthHeader` will hit the `instanceof Date` branch and extract the correct month and year directly.
+**2. Update `buildDateHeaders` to accept formatted Row 0 values**
 
-### 3. `src/lib/ganttImport.ts` - Ensure parsed year takes priority
+Pass the formatted strings for Row 0 instead of using `rawData[0]`, so `parseMonthHeader` receives "August-25" as a string and the regex correctly extracts month=August, year=2025.
 
-In `buildDateHeaders`, the logic already has `if (parsed.year !== null) { year = parsed.year; }` which should work. The problem is almost certainly that `cellDates: false` causes the header values to be serial numbers, and the serial-to-date math may have off-by-one issues.
+**3. Keep `cellDates: true`** for the rest of the data (daily columns, etc.) -- only Row 0 month headers need special handling.
 
-With `cellDates: true`, the Date objects will have the correct year baked in.
-
-### 4. Remove debug logging
-
-Clean up the `console.log` statement added in the previous edit.
-
-## Technical Summary
-
-| Change | File | What |
-|--------|------|------|
-| Switch to cellDates: true | ganttImport.ts line 159 | Makes xlsx return Date objects instead of serial numbers |
-| Remove debug console.log | ganttImport.ts line 108 | Clean up |
-| Keep existing parseMonthHeader | ganttImport.ts | The Date instance branch will now work correctly |
-
-This is a one-line fix (cellDates) plus cleanup. The year will be correctly extracted as 2025 from the Excel headers.
+This ensures the year is always extracted from the Excel headers, and the "Project Year" field only serves as a true fallback when headers contain no year info (e.g., just "August" without "-25").
