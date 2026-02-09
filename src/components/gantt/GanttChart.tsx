@@ -158,7 +158,7 @@ export function GanttChart({
 
   // Group tasks by specified field
   const groupedTasks = useMemo(() => {
-    if (config.groupBy === 'none') {
+    if (config.groupBy === 'none' || config.groupBy === 'category_owner') {
       return { '': tasks };
     }
 
@@ -181,6 +181,56 @@ export function GanttChart({
     }
     return groups;
   }, [tasks, config.groupBy]);
+
+  // Hierarchical grouping for category_owner mode
+  type VisibleRow = 
+    | { type: 'category-header'; key: string; label: string; taskCount: number }
+    | { type: 'zone-header'; key: string; label: string; categoryKey: string; taskCount: number }
+    | { type: 'task'; task: GanttTask };
+
+  const hierarchicalRows = useMemo<VisibleRow[]>(() => {
+    if (config.groupBy !== 'category_owner') return [];
+
+    // Build ordered structure preserving sort_order
+    const catMap = new Map<string, Map<string, GanttTask[]>>();
+    const catOrder: string[] = [];
+
+    for (const task of tasks) {
+      const cat = task.description || '';
+      const zone = task.owner || '';
+      if (!catMap.has(cat)) {
+        catMap.set(cat, new Map());
+        catOrder.push(cat);
+      }
+      const zoneMap = catMap.get(cat)!;
+      if (!zoneMap.has(zone)) {
+        zoneMap.set(zone, []);
+      }
+      zoneMap.get(zone)!.push(task);
+    }
+
+    const rows: VisibleRow[] = [];
+    for (const cat of catOrder) {
+      const zoneMap = catMap.get(cat)!;
+      const catTaskCount = Array.from(zoneMap.values()).reduce((sum, arr) => sum + arr.length, 0);
+      const catKey = `cat::${cat}`;
+      rows.push({ type: 'category-header', key: catKey, label: cat, taskCount: catTaskCount });
+
+      if (!collapsedGroups.has(catKey)) {
+        for (const [zone, zoneTasks] of zoneMap) {
+          const zoneKey = `zone::${cat}::${zone}`;
+          rows.push({ type: 'zone-header', key: zoneKey, label: zone, categoryKey: catKey, taskCount: zoneTasks.length });
+
+          if (!collapsedGroups.has(zoneKey)) {
+            for (const task of zoneTasks) {
+              rows.push({ type: 'task', task });
+            }
+          }
+        }
+      }
+    }
+    return rows;
+  }, [tasks, config.groupBy, collapsedGroups]);
 
   // Calculate baseline position for a task
   const getBaselinePosition = useCallback((taskId: string) => {
@@ -332,7 +382,62 @@ export function GanttChart({
               
               {/* Task rows - with grouping support */}
               <div className="divide-y">
-                {config.groupBy !== 'none' ? (
+                {config.groupBy === 'category_owner' ? (
+                  // Render hierarchical category_owner rows
+                  hierarchicalRows.map((row) => {
+                    if (row.type === 'category-header') {
+                      return (
+                        <TaskGroupHeader
+                          key={row.key}
+                          groupKey={row.label}
+                          groupBy="category_owner"
+                          taskCount={row.taskCount}
+                          isExpanded={!collapsedGroups.has(row.key)}
+                          onToggle={() => toggleGroup(row.key)}
+                          level={0}
+                        />
+                      );
+                    }
+                    if (row.type === 'zone-header') {
+                      return (
+                        <TaskGroupHeader
+                          key={row.key}
+                          groupKey={row.label}
+                          groupBy="category_owner"
+                          taskCount={row.taskCount}
+                          isExpanded={!collapsedGroups.has(row.key)}
+                          onToggle={() => toggleGroup(row.key)}
+                          level={1}
+                        />
+                      );
+                    }
+                    const task = row.task;
+                    return (
+                      <div
+                        key={task.id}
+                        className={cn(
+                          "flex items-center gap-2 hover:bg-muted/50 cursor-pointer group",
+                          selectedTasks.has(task.id) && "bg-primary/10",
+                          dragReorderTaskId === task.id && "opacity-50"
+                        )}
+                        style={{ height: ROW_HEIGHT, paddingLeft: 44, paddingRight: 8 }}
+                        onClick={() => onEditTask(task)}
+                      >
+                        <Checkbox
+                          checked={selectedTasks.has(task.id)}
+                          onCheckedChange={(checked) => onSelectTask(task.id, !!checked)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate">{task.name}</p>
+                        </div>
+                        <Badge variant="outline" className={cn("text-[10px] h-5", statusColors[task.status])}>
+                          {task.progress}%
+                        </Badge>
+                      </div>
+                    );
+                  })
+                ) : config.groupBy !== 'none' ? (
                   // Render grouped tasks
                   Object.entries(groupedTasks).map(([groupKey, groupTasks]) => (
                     <div key={groupKey || 'ungrouped'}>
@@ -479,13 +584,180 @@ export function GanttChart({
                       className="absolute top-0 bottom-0 w-0.5 bg-primary/50 z-10"
                       style={{ 
                         left: differenceInDays(new Date(), startDate) * dayWidth,
-                        height: tasks.length * ROW_HEIGHT + (milestones.length > 0 ? ROW_HEIGHT : 0),
+                        height: (config.groupBy === 'category_owner' ? hierarchicalRows.length : tasks.length) * ROW_HEIGHT + (milestones.length > 0 ? ROW_HEIGHT : 0),
                       }}
                     />
                   )}
 
-                  {/* Task rows */}
-                  {tasks.map((task, index) => {
+                  {/* Task rows - unified for category_owner, flat otherwise */}
+                  {config.groupBy === 'category_owner' ? (
+                    hierarchicalRows.map((row, rowIndex) => {
+                      if (row.type === 'category-header' || row.type === 'zone-header') {
+                        // Spacer row for headers
+                        return (
+                          <div key={row.key} className="relative border-b bg-muted/20" style={{ height: ROW_HEIGHT }} />
+                        );
+                      }
+                      const task = row.task;
+                      const dragPreview = getDragPreview(task.id);
+                      const { left, width } = getTaskPosition(task, dragPreview);
+                      const isCritical = criticalPathIds.has(task.id);
+                      const isBeingDragged = dragState?.taskId === task.id;
+
+                      return (
+                        <TooltipProvider key={task.id}>
+                          <div
+                            className={cn(
+                              "relative border-b",
+                              selectedTasks.has(task.id) && "bg-primary/5"
+                            )}
+                            style={{ height: ROW_HEIGHT }}
+                          >
+                            {config.showBaseline && (() => {
+                              const baselinePos = getBaselinePosition(task.id);
+                              if (!baselinePos) return null;
+                              return (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className="absolute rounded-sm border-2 border-dashed border-muted-foreground/50 bg-muted-foreground/10"
+                                      style={{
+                                        left: baselinePos.left,
+                                        width: Math.max(baselinePos.width, 10),
+                                        top: ROW_HEIGHT - BASELINE_BAR_HEIGHT - 4,
+                                        height: BASELINE_BAR_HEIGHT,
+                                      }}
+                                    />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" className="text-xs">
+                                    Baseline dates
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            })()}
+
+                            <ContextMenu>
+                              <ContextMenuTrigger asChild>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className={cn(
+                                        "absolute rounded cursor-pointer transition-all group",
+                                        !isBeingDragged && "hover:ring-2 hover:ring-primary/50",
+                                        isCritical ? "ring-1 ring-destructive" : "",
+                                        task.color ? "" : "bg-primary",
+                                        isBeingDragged && "ring-2 ring-primary shadow-lg opacity-90"
+                                      )}
+                                      style={{
+                                        left,
+                                        width: Math.max(width, 20),
+                                        top: (ROW_HEIGHT - TASK_BAR_HEIGHT) / 2,
+                                        height: TASK_BAR_HEIGHT,
+                                        backgroundColor: task.color || undefined,
+                                      }}
+                                      onClick={() => !isDragging && onEditTask(task)}
+                                      onMouseDown={(e) => {
+                                        if (e.button === 0) {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          const offsetX = e.clientX - rect.left;
+                                          if (offsetX < DRAG_HANDLE_WIDTH) {
+                                            e.preventDefault();
+                                            startDrag(task, 'resize-start', e.clientX);
+                                          } else if (offsetX > rect.width - DRAG_HANDLE_WIDTH) {
+                                            e.preventDefault();
+                                            startDrag(task, 'resize-end', e.clientX);
+                                          } else {
+                                            e.preventDefault();
+                                            startDrag(task, 'move', e.clientX);
+                                          }
+                                        }
+                                      }}
+                                    >
+                                      <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-background/30 rounded-l" />
+                                      <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-background/30 rounded-r" />
+                                      <div
+                                        className="absolute inset-0 rounded opacity-40 bg-background pointer-events-none"
+                                        style={{ width: `${100 - task.progress}%`, right: 0, left: 'auto' }}
+                                      />
+                                      {width > 60 && (
+                                        <span className="absolute inset-0 flex items-center px-3 text-xs text-primary-foreground truncate font-medium pointer-events-none">
+                                          {task.name}
+                                        </span>
+                                      )}
+                                      <div 
+                                        className={cn(
+                                          "absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity z-20",
+                                          isDraggingDependency ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                        )}
+                                        onMouseDown={(e) => {
+                                          e.stopPropagation();
+                                          e.preventDefault();
+                                          const startX = left;
+                                          const startY = rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+                                          startDependencyDrag(task.id, 'start', startX, startY);
+                                        }}
+                                        onMouseUp={(e) => {
+                                          if (isDraggingDependency && dependencyDragState) {
+                                            e.stopPropagation();
+                                            endDependencyDrag(task.id, 'start');
+                                          }
+                                        }}
+                                      />
+                                      <div 
+                                        className={cn(
+                                          "absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary border-2 border-background cursor-crosshair transition-opacity z-20",
+                                          isDraggingDependency ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                        )}
+                                        onMouseDown={(e) => {
+                                          e.stopPropagation();
+                                          e.preventDefault();
+                                          const startX = left + width;
+                                          const startY = rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+                                          startDependencyDrag(task.id, 'end', startX, startY);
+                                        }}
+                                        onMouseUp={(e) => {
+                                          if (isDraggingDependency && dependencyDragState) {
+                                            e.stopPropagation();
+                                            endDependencyDrag(task.id, 'end');
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">
+                                    <div className="text-sm">
+                                      <p className="font-medium">{task.name}</p>
+                                      <p className="text-muted-foreground">
+                                        {format(parseISO(task.start_date), 'MMM d')} - {format(parseISO(task.end_date), 'MMM d, yyyy')}
+                                      </p>
+                                      <p>Progress: {task.progress}%</p>
+                                      {task.owner && <p>Zone: {task.owner}</p>}
+                                      {isCritical && <p className="text-destructive">On Critical Path</p>}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </ContextMenuTrigger>
+                              <ContextMenuContent>
+                                <ContextMenuItem onClick={() => onEditTask(task)}>
+                                  <Edit2 className="h-4 w-4 mr-2" />
+                                  Edit Task
+                                </ContextMenuItem>
+                                <ContextMenuSeparator />
+                                <ContextMenuItem 
+                                  onClick={() => onDeleteTask(task.id)}
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Task
+                                </ContextMenuItem>
+                              </ContextMenuContent>
+                            </ContextMenu>
+                          </div>
+                        </TooltipProvider>
+                      );
+                    })
+                  ) : (
+                    tasks.map((task, index) => {
                     const dragPreview = getDragPreview(task.id);
                     const { left, width } = getTaskPosition(task, dragPreview);
                     const isCritical = criticalPathIds.has(task.id);
@@ -565,7 +837,6 @@ export function GanttChart({
                                     onClick={() => !isDragging && onEditTask(task)}
                                     onMouseDown={(e) => {
                                       if (e.button === 0) {
-                                        // Check if clicking on resize handles
                                         const rect = e.currentTarget.getBoundingClientRect();
                                         const offsetX = e.clientX - rect.left;
                                         if (offsetX < DRAG_HANDLE_WIDTH) {
@@ -613,7 +884,6 @@ export function GanttChart({
                                       onMouseDown={(e) => {
                                         e.stopPropagation();
                                         e.preventDefault();
-                                        // Calculate start position using task bar position
                                         const startX = left;
                                         const startY = index * ROW_HEIGHT + ROW_HEIGHT / 2;
                                         startDependencyDrag(task.id, 'start', startX, startY);
@@ -633,7 +903,6 @@ export function GanttChart({
                                       onMouseDown={(e) => {
                                         e.stopPropagation();
                                         e.preventDefault();
-                                        // Calculate start position using task bar position
                                         const startX = left + width;
                                         const startY = index * ROW_HEIGHT + ROW_HEIGHT / 2;
                                         startDependencyDrag(task.id, 'end', startX, startY);
@@ -678,7 +947,8 @@ export function GanttChart({
                         </div>
                       </TooltipProvider>
                     );
-                  })}
+                  })
+                  )}
 
                   {/* Milestones row */}
                   {milestones.length > 0 && (
@@ -723,15 +993,24 @@ export function GanttChart({
                   {config.showDependencies && (
                     <svg
                       className="absolute top-0 left-0 pointer-events-none"
-                      style={{ width: chartWidth, height: tasks.length * ROW_HEIGHT }}
+                      style={{ width: chartWidth, height: (config.groupBy === 'category_owner' ? hierarchicalRows.length : tasks.length) * ROW_HEIGHT }}
                     >
                       {dependencies.map((dep) => {
                         const predTask = tasks.find((t) => t.id === dep.predecessor_id);
                         const succTask = tasks.find((t) => t.id === dep.successor_id);
                         if (!predTask || !succTask) return null;
 
-                        const predIndex = tasks.indexOf(predTask);
-                        const succIndex = tasks.indexOf(succTask);
+                        // For category_owner, find indices in hierarchicalRows
+                        let predIndex: number, succIndex: number;
+                        if (config.groupBy === 'category_owner') {
+                          predIndex = hierarchicalRows.findIndex(r => r.type === 'task' && r.task.id === predTask.id);
+                          succIndex = hierarchicalRows.findIndex(r => r.type === 'task' && r.task.id === succTask.id);
+                        } else {
+                          predIndex = tasks.indexOf(predTask);
+                          succIndex = tasks.indexOf(succTask);
+                        }
+                        if (predIndex === -1 || succIndex === -1) return null;
+
                         const predPos = getTaskPosition(predTask);
                         const succPos = getTaskPosition(succTask);
 
