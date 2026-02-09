@@ -1,77 +1,51 @@
 
-# Fix Excel Parser for Actual Schedule Layout
+
+# Fix: Parser Ignores Year from Excel Headers
 
 ## Problem
+The parser extracts dates as 2026 instead of 2025 because it's using the "Project Year" UI field (2026) as the year, instead of extracting it from the Excel headers like "August-25" (meaning August 2025).
 
-The current parser assumes a generic layout with a single header row and auto-detected column positions. The actual Excel file has a specific 3-row date header and 3-column hierarchy structure that doesn't match.
+The root cause is likely that when the xlsx library reads "August-25", it converts it to an Excel serial date number. The serial-date-to-Date conversion in `parseMonthHeader` may be producing the wrong result, OR the `referenceYear` fallback (2026) is overriding before the parser encounters a valid header.
 
-## Actual Excel Layout (from screenshots)
+## Fix
 
-**Header rows (rows 1-3):**
-- Row 1: Month names spanning columns (e.g., "August", "SEPTEMBER")
-- Row 2: Week labels (e.g., "Week 0", "Week 1", "Week 2")
-- Row 3: Day numbers (25, 26, 27, ..., 1, 2, 3, ...)
+### 1. `src/lib/ganttImport.ts` - Fix `buildDateHeaders`
 
-**Data columns:**
-- Column A: Category (vertically merged, e.g., "Site Establishment", "Inverter Room")
-- Column B: Zone (vertically merged, e.g., "Zone 1")
-- Column C: Task name (e.g., "Site Hand over/Accomodation", "PV Panel Install")
-- Column D: Days Scheduled
-- Column E: On Track
-- Column F: Progress %
-- Columns G+: Daily progress cells (filled = work scheduled on that day)
+The key change: **initialize `year` from the first successfully parsed header, not from `referenceYear`**. The `referenceYear` should only be a last-resort fallback if no header contains year info.
 
-**Data rows start at row 4.**
+- Change the initialization so `year` starts as `referenceYear` but gets overwritten by the FIRST header that contains a year
+- Make sure the serial date parsing in `parseMonthHeader` is correct (the Excel epoch calculation)
+- Remove `cellDates: false` from `XLSX.read` and try `cellDates: true` instead -- this will make xlsx return actual Date objects for date-formatted cells, which are much easier to parse correctly than serial numbers
 
-## Changes
+### 2. `src/lib/ganttImport.ts` - Switch to `cellDates: true`
 
-### File: `src/lib/ganttImport.ts` (rewrite core logic)
+Change line 159:
+```typescript
+// Before
+const workbook = XLSX.read(buffer, { type: 'array', cellDates: false });
 
-1. **Date construction from 3 rows**: Scan row 1 for month names (forward-fill across columns), read day numbers from row 3, combine month + day + inferred year to build a date for each column G onward.
-
-2. **3-column hierarchy**: Instead of detecting categories/zones from single-column patterns:
-   - Column A (index 0): Read category; forward-fill down (merged cells appear as null in subsequent rows)
-   - Column B (index 1): Read zone; forward-fill down similarly
-   - Column C (index 2): Task name -- if empty, skip row
-
-3. **Fixed column indices**: Hardcode D=3 (Days Scheduled), E=4 (On Track), F=5 (Progress), G+=6 onward (daily data). No need for header detection since the layout is known.
-
-4. **Start date detection**: For each task row, scan columns G+ to find the first column with data, then look up that column's constructed date.
-
-5. **Year inference**: Since the Excel only has month + day, infer the year from context. Accept an optional `referenceYear` parameter (default to current year). Handle Dec-to-Jan rollover if months go backward.
-
-### File: `src/components/gantt/ImportScheduleDialog.tsx` (minor)
-
-- Add an optional year input field so the user can specify the project year if needed (since the Excel doesn't include years in date headers).
-
-## Technical Details
-
-### Date Construction Logic (rows 1-3)
-
-```text
-For each column from G (index 6) onward:
-  1. Read row 1 cell -> if non-empty, update currentMonth (parse "August" -> 8, "SEPTEMBER" -> 9)
-  2. Read row 3 cell -> dayNumber
-  3. If dayNumber < previous dayNumber and month hasn't changed -> month rolled over, increment month
-  4. Construct Date(year, month-1, dayNumber)
+// After  
+const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
 ```
 
-### Row Parsing Logic (rows 4+)
+This makes xlsx return JS Date objects instead of serial numbers, so `parseMonthHeader` will hit the `instanceof Date` branch and extract the correct month and year directly.
 
-```text
-For each row starting at index 3 (row 4 in Excel):
-  - colA = row[0] -> if non-empty, update currentCategory
-  - colB = row[1] -> if non-empty, update currentZone  
-  - colC = row[2] -> taskName; if empty, skip (it's a header-only row)
-  - colD = row[3] -> daysScheduled
-  - colF = row[5] -> progress %
-  - Scan cols 6+ for first non-empty cell -> map to date -> startDate
-  - endDate = startDate + daysScheduled - 1
-```
+### 3. `src/lib/ganttImport.ts` - Ensure parsed year takes priority
 
-### Edge Cases
+In `buildDateHeaders`, the logic already has `if (parsed.year !== null) { year = parsed.year; }` which should work. The problem is almost certainly that `cellDates: false` causes the header values to be serial numbers, and the serial-to-date math may have off-by-one issues.
 
-- Merged cells: xlsx unmerges them, so only the first cell of a merge has a value; subsequent cells are null -- handled by forward-filling currentCategory and currentZone
-- Month rollover (e.g., Aug 30, 31 then Sep 1, 2): detect when day number resets
-- Year rollover (Dec to Jan): increment year when month goes from 12 to 1
-- Missing progress or days: default to 0% and 1 day respectively
+With `cellDates: true`, the Date objects will have the correct year baked in.
+
+### 4. Remove debug logging
+
+Clean up the `console.log` statement added in the previous edit.
+
+## Technical Summary
+
+| Change | File | What |
+|--------|------|------|
+| Switch to cellDates: true | ganttImport.ts line 159 | Makes xlsx return Date objects instead of serial numbers |
+| Remove debug console.log | ganttImport.ts line 108 | Clean up |
+| Keep existing parseMonthHeader | ganttImport.ts | The Date instance branch will now work correctly |
+
+This is a one-line fix (cellDates) plus cleanup. The year will be correctly extracted as 2025 from the Excel headers.
