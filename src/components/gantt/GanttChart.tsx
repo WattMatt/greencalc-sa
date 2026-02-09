@@ -217,9 +217,9 @@ export function GanttChart({
       rows.push({ type: 'category-header', key: catKey, label: cat, taskCount: catTaskCount });
 
       if (!collapsedGroups.has(catKey)) {
-        const hasMultipleZones = zoneMap.size > 1;
+        const skipZoneHeader = zoneMap.size === 1 && !Array.from(zoneMap.keys())[0];
         for (const [zone, zoneTasks] of zoneMap) {
-          if (hasMultipleZones) {
+          if (!skipZoneHeader) {
             const zoneKey = `zone::${cat}::${zone}`;
             rows.push({ type: 'zone-header', key: zoneKey, label: zone, categoryKey: catKey, taskCount: zoneTasks.length });
 
@@ -229,7 +229,6 @@ export function GanttChart({
               }
             }
           } else {
-            // Single zone — skip zone header, show tasks directly under category
             for (const task of zoneTasks) {
               rows.push({ type: 'task', task });
             }
