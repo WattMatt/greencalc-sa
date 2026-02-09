@@ -1,122 +1,77 @@
 
+# Fix Excel Parser for Actual Schedule Layout
 
-# Import Excel Schedule into Gantt Chart
+## Problem
 
-## Overview
+The current parser assumes a generic layout with a single header row and auto-detected column positions. The actual Excel file has a specific 3-row date header and 3-column hierarchy structure that doesn't match.
 
-Build a dedicated parser for your solar PV project schedule Excel format. The parser will read the hierarchical structure (Category / Zone / Task Name), extract task durations and progress, calculate start/end dates from the daily progress columns, and import everything into the Gantt chart. Zones (1-20 per site) will be mapped to the task `owner` field so you can group by Zone.
+## Actual Excel Layout (from screenshots)
 
-## How It Will Work
+**Header rows (rows 1-3):**
+- Row 1: Month names spanning columns (e.g., "August", "SEPTEMBER")
+- Row 2: Week labels (e.g., "Week 0", "Week 1", "Week 2")
+- Row 3: Day numbers (25, 26, 27, ..., 1, 2, 3, ...)
 
-1. Click **Import** button in the Gantt toolbar (next to Export)
-2. Select your Excel file (.xlsx)
-3. A preview dialog shows the parsed tasks organized by Zone
-4. Review, optionally adjust the project start date, then confirm
-5. Tasks are created in the Gantt chart, grouped by Zone
+**Data columns:**
+- Column A: Category (vertically merged, e.g., "Site Establishment", "Inverter Room")
+- Column B: Zone (vertically merged, e.g., "Zone 1")
+- Column C: Task name (e.g., "Site Hand over/Accomodation", "PV Panel Install")
+- Column D: Days Scheduled
+- Column E: On Track
+- Column F: Progress %
+- Columns G+: Daily progress cells (filled = work scheduled on that day)
 
-## Excel Format Assumptions
+**Data rows start at row 4.**
 
-Based on your uploaded schedule:
+## Changes
 
-- **Row structure**: Category (e.g., "Structural", "Electrical") as section headers, then Zone (e.g., "Zone 1", "Zone 2") as sub-headers, then individual task rows underneath
-- **Key columns**: Task Name, Days Scheduled, Progress (%)
-- **Date columns**: Daily columns (dates as headers) with cell values indicating progress on each day
-- **Start date**: Inferred from the first non-empty daily cell for each task
-- **End date**: Start date + Days Scheduled
-- **Zones**: 1-20 per site, mapped to the `owner` field for grouping
+### File: `src/lib/ganttImport.ts` (rewrite core logic)
 
-## What Gets Imported
+1. **Date construction from 3 rows**: Scan row 1 for month names (forward-fill across columns), read day numbers from row 3, combine month + day + inferred year to build a date for each column G onward.
 
-| Excel Field | Gantt Task Field | Notes |
-|---|---|---|
-| Task Name | `name` | Direct mapping |
-| Category | `description` | Stored as context (e.g., "Structural") |
-| Zone | `owner` | Enables "Group by Owner" = Group by Zone |
-| Days Scheduled | Used to calculate `end_date` | start + days |
-| Progress % | `progress` | Direct mapping |
-| First date column with data | `start_date` | Auto-detected |
-| Zone number | `color` | Each zone gets a distinct color (up to 20) |
+2. **3-column hierarchy**: Instead of detecting categories/zones from single-column patterns:
+   - Column A (index 0): Read category; forward-fill down (merged cells appear as null in subsequent rows)
+   - Column B (index 1): Read zone; forward-fill down similarly
+   - Column C (index 2): Task name -- if empty, skip row
+
+3. **Fixed column indices**: Hardcode D=3 (Days Scheduled), E=4 (On Track), F=5 (Progress), G+=6 onward (daily data). No need for header detection since the layout is known.
+
+4. **Start date detection**: For each task row, scan columns G+ to find the first column with data, then look up that column's constructed date.
+
+5. **Year inference**: Since the Excel only has month + day, infer the year from context. Accept an optional `referenceYear` parameter (default to current year). Handle Dec-to-Jan rollover if months go backward.
+
+### File: `src/components/gantt/ImportScheduleDialog.tsx` (minor)
+
+- Add an optional year input field so the user can specify the project year if needed (since the Excel doesn't include years in date headers).
 
 ## Technical Details
 
-### New Files
-
-1. **`src/lib/ganttImport.ts`** - Core parser
-   - `parseScheduleExcel(file: File)` - reads the XLSX file using the existing `xlsx` library
-   - Walks rows to detect category headers, zone headers, and task rows
-   - Scans date columns to find each task's actual start date
-   - Returns a structured array of `{ zone, category, taskName, daysScheduled, progress, startDate, endDate }`
-   - Zone detection: looks for rows matching "Zone N" pattern (N = 1-20)
-   - Category detection: rows where only the first column has a value (bold/section header rows)
-
-2. **`src/components/gantt/ImportScheduleDialog.tsx`** - Preview and confirm UI
-   - File upload dropzone
-   - Shows parsed tasks in a table grouped by Zone
-   - Lets user adjust the base start date if date columns can't be parsed
-   - "Import" button to create all tasks
-   - Warning if tasks already exist (option to append or replace)
-
-### Modified Files
-
-3. **`src/components/gantt/GanttToolbar.tsx`**
-   - Add "Import" button/menu item next to the Export dropdown
-   - Add Upload icon import from lucide-react
-
-4. **`src/components/gantt/ProjectGantt.tsx`**
-   - Add state for import dialog open/close
-   - Add `onImportTasks` handler that calls `createTask` in a loop for each parsed task
-   - Pass import handler and dialog state to toolbar
-
-5. **`src/components/gantt/GettingStartedGuide.tsx`**
-   - Add "Import from Excel" as an alternative getting-started option
-
-### Zone-to-Color Mapping
-
-Each zone (up to 20) will be assigned a distinct color from an extended palette so they're visually distinguishable on the Gantt chart:
+### Date Construction Logic (rows 1-3)
 
 ```text
-Zone 1  -> #3b82f6 (Blue)
-Zone 2  -> #22c55e (Green)
-Zone 3  -> #eab308 (Yellow)
-Zone 4  -> #f97316 (Orange)
-Zone 5  -> #ef4444 (Red)
-Zone 6  -> #a855f7 (Purple)
-Zone 7  -> #ec4899 (Pink)
-Zone 8  -> #14b8a6 (Teal)
-Zone 9  -> #6366f1 (Indigo)
-Zone 10 -> #84cc16 (Lime)
-... up to Zone 20
+For each column from G (index 6) onward:
+  1. Read row 1 cell -> if non-empty, update currentMonth (parse "August" -> 8, "SEPTEMBER" -> 9)
+  2. Read row 3 cell -> dayNumber
+  3. If dayNumber < previous dayNumber and month hasn't changed -> month rolled over, increment month
+  4. Construct Date(year, month-1, dayNumber)
 ```
 
-### Parser Logic (Pseudocode)
+### Row Parsing Logic (rows 4+)
 
 ```text
-1. Read workbook, get first sheet
-2. Find the header row (scan for "Task Name" or "Days Scheduled")
-3. Identify date columns (columns after the fixed columns with date-parseable headers)
-4. Walk each row below the header:
-   a. If row has value only in column A -> Category header
-   b. If row matches "Zone N" pattern -> Zone header
-   c. Otherwise -> Task row: extract name, days, progress
-   d. For task rows, scan date columns to find first non-empty cell -> start date
-   e. end_date = start_date + days_scheduled
-5. Return parsed tasks with zone and category metadata
+For each row starting at index 3 (row 4 in Excel):
+  - colA = row[0] -> if non-empty, update currentCategory
+  - colB = row[1] -> if non-empty, update currentZone  
+  - colC = row[2] -> taskName; if empty, skip (it's a header-only row)
+  - colD = row[3] -> daysScheduled
+  - colF = row[5] -> progress %
+  - Scan cols 6+ for first non-empty cell -> map to date -> startDate
+  - endDate = startDate + daysScheduled - 1
 ```
 
-### Import Flow
+### Edge Cases
 
-```text
-User clicks "Import" -> File picker -> Parse Excel ->
-  Show preview dialog with tasks grouped by zone ->
-    User confirms -> Batch create tasks via existing createTask mutation ->
-      Tasks appear in Gantt chart, grouped by Zone (owner)
-```
-
-### Edge Cases Handled
-
-- No date columns found: user manually sets a project start date, tasks are stacked sequentially
-- Merged cells in Excel: xlsx library unmerges automatically
-- Empty/blank rows: skipped
-- Duplicate task names across zones: allowed (different owner distinguishes them)
-- Existing tasks: dialog offers "Append" or "Replace all" options
-
+- Merged cells: xlsx unmerges them, so only the first cell of a merge has a value; subsequent cells are null -- handled by forward-filling currentCategory and currentZone
+- Month rollover (e.g., Aug 30, 31 then Sep 1, 2): detect when day number resets
+- Year rollover (Dec to Jan): increment year when month goes from 12 to 1
+- Missing progress or days: default to 0% and 1 day respectively
