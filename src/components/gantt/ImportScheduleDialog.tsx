@@ -1,18 +1,15 @@
 import { useState, useCallback, useRef, DragEvent } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Switch } from '@/components/ui/switch';
 import { parseScheduleExcel, ParsedScheduleResult, ParsedScheduleTask } from '@/lib/ganttImport';
 import { Upload, FileSpreadsheet, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
 
 interface ImportScheduleDialogProps {
   open: boolean;
@@ -31,10 +28,6 @@ export function ImportScheduleDialog({
   const [isParsing, setIsParsing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
-  const [fallbackDate, setFallbackDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [referenceYear, setReferenceYear] = useState(new Date().getFullYear());
-  const [useReferenceYear, setUseReferenceYear] = useState(false);
-  const [useFallbackDate, setUseFallbackDate] = useState(false);
   const [fileName, setFileName] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,11 +38,7 @@ export function ImportScheduleDialog({
     setParseResult(null);
 
     try {
-      const result = await parseScheduleExcel(
-        file,
-        useFallbackDate ? new Date(fallbackDate) : undefined,
-        useReferenceYear ? referenceYear : undefined
-      );
+      const result = await parseScheduleExcel(file);
       setParseResult(result);
       if (result.errors.length > 0) {
         result.errors.forEach(err => toast.warning(err));
@@ -59,7 +48,7 @@ export function ImportScheduleDialog({
     } finally {
       setIsParsing(false);
     }
-  }, [fallbackDate, referenceYear, useFallbackDate, useReferenceYear]);
+  }, []);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -97,23 +86,6 @@ export function ImportScheduleDialog({
     processFile(file);
   }, [processFile]);
 
-  const handleReparse = useCallback(async () => {
-    if (!fileInputRef.current?.files?.[0]) return;
-    setIsParsing(true);
-    try {
-      const result = await parseScheduleExcel(
-        fileInputRef.current.files[0],
-        useFallbackDate ? new Date(fallbackDate) : undefined,
-        useReferenceYear ? referenceYear : undefined
-      );
-      setParseResult(result);
-    } catch (err) {
-      toast.error('Failed to re-parse file');
-    } finally {
-      setIsParsing(false);
-    }
-  }, [fallbackDate, referenceYear, useFallbackDate, useReferenceYear]);
-
   const handleImport = useCallback(async () => {
     if (!parseResult || parseResult.tasks.length === 0) return;
     setIsImporting(true);
@@ -138,7 +110,6 @@ export function ImportScheduleDialog({
     onOpenChange(open);
   };
 
-  // Group tasks by zone for display
   const tasksByZone = parseResult?.tasks.reduce((acc, task) => {
     if (!acc[task.zone]) acc[task.zone] = [];
     acc[task.zone].push(task);
@@ -193,45 +164,6 @@ export function ImportScheduleDialog({
                 className="hidden"
                 onChange={handleFileSelect}
               />
-
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="use-ref-year"
-                      checked={useReferenceYear}
-                      onCheckedChange={setUseReferenceYear}
-                    />
-                    <Label htmlFor="use-ref-year" className="text-xs">Override year</Label>
-                  </div>
-                  <Input
-                    type="number"
-                    value={referenceYear}
-                    onChange={(e) => setReferenceYear(Number(e.target.value) || new Date().getFullYear())}
-                    className="w-28"
-                    min={2020}
-                    max={2040}
-                    disabled={!useReferenceYear}
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="use-fallback"
-                      checked={useFallbackDate}
-                      onCheckedChange={setUseFallbackDate}
-                    />
-                    <Label htmlFor="use-fallback" className="text-xs">Override start date</Label>
-                  </div>
-                  <Input
-                    type="date"
-                    value={fallbackDate}
-                    onChange={(e) => setFallbackDate(e.target.value)}
-                    className="w-48"
-                    disabled={!useFallbackDate}
-                  />
-                </div>
-              </div>
             </div>
           )}
 
@@ -253,7 +185,7 @@ export function ImportScheduleDialog({
                   </Badge>
                 ) : (
                   <Badge variant="destructive" className="gap-1">
-                    <AlertTriangle className="h-3 w-3" /> Using fallback date
+                    <AlertTriangle className="h-3 w-3" /> No dates found
                   </Badge>
                 )}
               </div>
@@ -268,26 +200,8 @@ export function ImportScheduleDialog({
                 </Alert>
               )}
 
-              {/* Fallback date adjustment */}
-              {!parseResult.dateColumnsFound && (
-                <div className="flex items-end gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Project Start Date</Label>
-                    <Input
-                      type="date"
-                      value={fallbackDate}
-                      onChange={(e) => setFallbackDate(e.target.value)}
-                      className="w-48"
-                    />
-                  </div>
-                  <Button variant="outline" size="sm" onClick={handleReparse} disabled={isParsing}>
-                    {isParsing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Re-parse'}
-                  </Button>
-                </div>
-              )}
-
               {/* Import mode */}
-              {existingTaskCount > 0 && (
+              {existingTaskCount > 0 && parseResult.tasks.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-xs">Import Mode</Label>
                   <RadioGroup
@@ -312,64 +226,66 @@ export function ImportScheduleDialog({
               )}
 
               {/* Task preview table */}
-              <ScrollArea className="h-[300px] border rounded-md">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-8"></TableHead>
-                      <TableHead>Task Name</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Days</TableHead>
-                      <TableHead>Start</TableHead>
-                      <TableHead>End</TableHead>
-                      <TableHead>Progress</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {Object.entries(tasksByZone).map(([zone, zoneTasks]) => (
-                      <>
-                        <TableRow key={`zone-${zone}`} className="bg-muted/50">
-                          <TableCell colSpan={7} className="py-2 font-semibold text-sm">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="w-3 h-3 rounded-full"
-                                style={{ backgroundColor: zoneTasks[0]?.color }}
-                              />
-                              {zone} ({zoneTasks.length} tasks)
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                        {zoneTasks.map((task, i) => (
-                          <TableRow key={`${zone}-${i}`}>
-                            <TableCell>
-                              <div
-                                className="w-2 h-2 rounded-full"
-                                style={{ backgroundColor: task.color }}
-                              />
-                            </TableCell>
-                            <TableCell className="font-medium text-sm">{task.taskName}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{task.category}</TableCell>
-                            <TableCell className="text-sm">{task.daysScheduled}</TableCell>
-                            <TableCell className="text-xs">{task.startDate}</TableCell>
-                            <TableCell className="text-xs">{task.endDate}</TableCell>
-                            <TableCell>
+              {parseResult.tasks.length > 0 && (
+                <ScrollArea className="h-[300px] border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-8"></TableHead>
+                        <TableHead>Task Name</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Days</TableHead>
+                        <TableHead>Start</TableHead>
+                        <TableHead>End</TableHead>
+                        <TableHead>Progress</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(tasksByZone).map(([zone, zoneTasks]) => (
+                        <>
+                          <TableRow key={`zone-${zone}`} className="bg-muted/50">
+                            <TableCell colSpan={7} className="py-2 font-semibold text-sm">
                               <div className="flex items-center gap-2">
-                                <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-primary rounded-full"
-                                    style={{ width: `${task.progress}%` }}
-                                  />
-                                </div>
-                                <span className="text-xs">{task.progress}%</span>
+                                <div
+                                  className="w-3 h-3 rounded-full"
+                                  style={{ backgroundColor: zoneTasks[0]?.color }}
+                                />
+                                {zone} ({zoneTasks.length} tasks)
                               </div>
                             </TableCell>
                           </TableRow>
-                        ))}
-                      </>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
+                          {zoneTasks.map((task, i) => (
+                            <TableRow key={`${zone}-${i}`}>
+                              <TableCell>
+                                <div
+                                  className="w-2 h-2 rounded-full"
+                                  style={{ backgroundColor: task.color }}
+                                />
+                              </TableCell>
+                              <TableCell className="font-medium text-sm">{task.taskName}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{task.category}</TableCell>
+                              <TableCell className="text-sm">{task.daysScheduled}</TableCell>
+                              <TableCell className="text-xs">{task.startDate}</TableCell>
+                              <TableCell className="text-xs">{task.endDate}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-primary rounded-full"
+                                      style={{ width: `${task.progress}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-xs">{task.progress}%</span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              )}
 
               {/* Change file */}
               <Button
