@@ -28,6 +28,8 @@ export interface ObjectProperties {
   orientation?: PanelOrientation;
   // Cable Tray specific
   cableType?: CableTrayType;
+  // All object types
+  elevation?: number; // meters above ground level
 }
 
 interface ObjectConfigModalProps {
@@ -62,6 +64,7 @@ export function ObjectConfigModal({
   const [columns, setColumns] = useState<number | undefined>(currentProperties?.columns);
   const [orientation, setOrientation] = useState<PanelOrientation | undefined>(currentProperties?.orientation);
   const [cableType, setCableType] = useState<CableTrayType | undefined>(currentProperties?.cableType);
+  const [elevation, setElevation] = useState<number | undefined>(currentProperties?.elevation);
 
   // Reset state when modal opens with new config
   useEffect(() => {
@@ -73,6 +76,7 @@ export function ObjectConfigModal({
       setColumns(currentProperties?.columns);
       setOrientation(currentProperties?.orientation);
       setCableType(currentProperties?.cableType);
+      setElevation(currentProperties?.elevation);
     }
   }, [currentConfigId, currentProperties, isOpen]);
 
@@ -123,10 +127,9 @@ export function ObjectConfigModal({
   // Determine if properties are editable for this object type
   // Properties = things set when placing on canvas (to be defined by user)
   const hasEditableProperties = useMemo(() => {
-    // Cable trays have editable cableType property
-    if (objectType === 'cableTray') return true;
-    return false;
-  }, [objectType]);
+    // All object types now have elevation; cable trays also have cableType
+    return true;
+  }, []);
 
   // Get display label for object type
   const getObjectTypeLabel = (): string => {
@@ -158,15 +161,18 @@ export function ObjectConfigModal({
       if (orientation !== undefined) properties.orientation = orientation;
     }
     
+    // Elevation applies to all types
+    if (elevation !== undefined) properties.elevation = elevation;
+    
     onApply(selectedConfigId, Object.keys(properties).length > 0 ? properties : undefined);
     onClose();
   };
 
   const renderPropertiesContent = () => {
-    // Cable tray properties - AC/DC cable type selection
-    if (objectType === 'cableTray') {
-      return (
-        <div className="space-y-3">
+    return (
+      <div className="space-y-3">
+        {/* Cable tray specific: AC/DC cable type selection */}
+        {objectType === 'cableTray' && (
           <div className="space-y-2">
             <Label htmlFor="cableType">Cable Type</Label>
             <Select
@@ -185,14 +191,24 @@ export function ObjectConfigModal({
               Cables of the matching type will snap to this tray during placement.
             </p>
           </div>
+        )}
+
+        {/* Elevation - available for all object types */}
+        <div className="space-y-2">
+          <Label htmlFor="elevation">Elevation (m)</Label>
+          <Input
+            id="elevation"
+            type="number"
+            step="0.1"
+            min="0"
+            value={elevation ?? 0}
+            onChange={(e) => setElevation(e.target.value ? parseFloat(e.target.value) : 0)}
+            placeholder="0"
+          />
+          <p className="text-xs text-muted-foreground">
+            Height above ground level in meters.
+          </p>
         </div>
-      );
-    }
-    
-    // Default message for other types
-    return (
-      <div className="text-sm text-muted-foreground italic py-2">
-        No editable properties for this object type
       </div>
     );
   };

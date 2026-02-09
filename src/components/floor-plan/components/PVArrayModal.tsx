@@ -22,6 +22,7 @@ export interface PVArrayConfig {
   columns: number;
   orientation: PanelOrientation;
   minSpacing?: number; // Minimum distance between array groups in meters
+  elevation?: number; // meters above ground level
 }
 
 interface PVArrayModalProps {
@@ -38,6 +39,7 @@ export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm, initia
   const [columns, setColumns] = useState<string>('10');
   const [orientation, setOrientation] = useState<PanelOrientation>('portrait');
   const [minSpacing, setMinSpacing] = useState<number>(0.5);
+  const [elevation, setElevation] = useState<number>(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Reset form when modal opens, using initial values if editing
@@ -48,11 +50,13 @@ export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm, initia
         setColumns(String(initialConfig.columns));
         setOrientation(initialConfig.orientation);
         setMinSpacing(initialConfig.minSpacing ?? 0.5);
+        setElevation(initialConfig.elevation ?? 0);
       } else {
         setRows('2');
         setColumns('10');
         setOrientation('portrait');
         setMinSpacing(0.5);
+        setElevation(0);
       }
     }
   }, [isOpen, initialConfig]);
@@ -75,6 +79,7 @@ export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm, initia
       columns: colsNum,
       orientation,
       minSpacing: spacingNum,
+      elevation,
     });
   };
 
@@ -153,6 +158,20 @@ export function PVArrayModal({ isOpen, onClose, pvPanelConfig, onConfirm, initia
                 />
                 <p className="text-xs text-muted-foreground">
                   Minimum gap between array groups for walkways and maintenance access.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="elevation">Elevation (m)</Label>
+                <Input
+                  id="elevation"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={elevation}
+                  onChange={(e) => setElevation(parseFloat(e.target.value) || 0)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Height above ground level (e.g., 6m for rooftop arrays).
                 </p>
               </div>
             </CollapsibleContent>

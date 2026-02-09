@@ -3,7 +3,7 @@ import {
   MousePointer, Hand, Ruler, Sun, Layers, RotateCw, 
   Upload, Undo2, Redo2, Save, Loader2, ArrowLeft,
   ChevronLeft, ChevronRight, ChevronDown, Copy, MoveHorizontal, AlignVerticalJustifyStart,
-  Settings
+  Settings, Box
 } from 'lucide-react';
 import { Tool, ScaleInfo, PVPanelConfig, PlantSetupConfig, WalkwayConfig, CableTrayConfig, SolarModuleConfig, InverterLayoutConfig, DCCableConfig, ACCableConfig } from '../types';
 import { Button } from '@/components/ui/button';
@@ -217,6 +217,9 @@ interface ToolbarProps {
   setSelectedDcCableId?: (id: string | null) => void;
   selectedAcCableId?: string | null;
   setSelectedAcCableId?: (id: string | null) => void;
+  // 3D view toggle
+  is3DView?: boolean;
+  onToggle3DView?: () => void;
 }
 
 export function Toolbar({
@@ -267,6 +270,8 @@ export function Toolbar({
   setSelectedDcCableId,
   selectedAcCableId,
   setSelectedAcCableId,
+  is3DView,
+  onToggle3DView,
 }: ToolbarProps) {
   const scaleSet = scaleInfo.ratio !== null;
   const pvConfigured = pvPanelConfig !== null;
@@ -433,6 +438,15 @@ export function Toolbar({
             disabled={!layoutLoaded}
             badge={scaleSet ? '✓' : undefined}
           />
+          {onToggle3DView && (
+            <ToolButton
+              icon={Box}
+              label={is3DView ? '2D View' : '3D View'}
+              isActive={!!is3DView}
+              onClick={onToggle3DView}
+              disabled={!scaleSet}
+            />
+          )}
         </CollapsibleSection>
 
         <Separator className="my-2" />
