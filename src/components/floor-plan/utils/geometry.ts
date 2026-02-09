@@ -40,7 +40,8 @@ export const calculatePolygonArea = (vertices: Point[], scaleRatio: number | nul
 };
 
 /**
- * Calculate line length in meters
+ * Calculate line length in meters (2D horizontal distance).
+ * Use calculateLineLength3D for 3D distance that accounts for elevation changes.
  */
 export const calculateLineLength = (points: Point[], scaleRatio: number | null): number => {
   if (!scaleRatio || points.length < 2) return 0;
@@ -51,6 +52,33 @@ export const calculateLineLength = (points: Point[], scaleRatio: number | null):
     length += Math.sqrt(dx * dx + dy * dy);
   }
   return length * scaleRatio;
+};
+
+/**
+ * Calculate line length in meters accounting for elevation (3D distance).
+ * Falls back to 2D calculation when elevations are not provided.
+ * @param points - Array of 2D points along the cable path
+ * @param scaleRatio - meters per pixel
+ * @param elevations - Optional per-point elevation array (meters above ground)
+ */
+export const calculateLineLength3D = (
+  points: Point[],
+  scaleRatio: number | null,
+  elevations?: number[]
+): number => {
+  if (!scaleRatio || points.length < 2) return 0;
+  // Fall back to 2D if no elevations or mismatched length
+  if (!elevations || elevations.length !== points.length) {
+    return calculateLineLength(points, scaleRatio);
+  }
+  let length = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const dx = (points[i + 1].x - points[i].x) * scaleRatio; // horizontal distance in meters
+    const dy = (points[i + 1].y - points[i].y) * scaleRatio;
+    const dz = elevations[i + 1] - elevations[i]; // vertical distance already in meters
+    length += Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+  return length;
 };
 
 /**

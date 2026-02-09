@@ -3,6 +3,7 @@ import { Tool, ViewState, ScaleInfo, PVPanelConfig, DesignState, initialDesignSt
 import { DEFAULT_PV_PANEL_CONFIG } from './constants';
 import { Toolbar } from './components/Toolbar';
 import { Canvas } from './components/Canvas';
+import { ThreeDViewer } from './components/ThreeDViewer';
 import { SummaryPanel } from './components/SummaryPanel';
 import { ScaleModal } from './components/ScaleModal';
 import { PVConfigModal } from './components/PVConfigModal';
@@ -22,6 +23,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
 import { getModulePresetById, getDefaultModulePreset, SolarModulePreset } from '../projects/SolarModulePresets';
 import { getObjectEdgeDistance, calculateNewPositionAtDistance, calculateAlignedPosition, getPVArrayDimensions, getEquipmentDimensions, getMaterialDimensions } from './utils/geometry';
+import { autopopulateCableElevations } from './utils/elevation';
 
 type ViewMode = 'browser' | 'editor';
 
@@ -51,6 +53,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false);
   const [isSummaryCollapsed, setIsSummaryCollapsed] = useState(false);
   const [activeTool, setActiveTool] = useState<Tool>(Tool.SELECT);
+  const [is3DView, setIs3DView] = useState(false);
   const [viewState, setViewState] = useState<ViewState>({ zoom: 1, offset: { x: 0, y: 0 } });
   const [layoutId, setLayoutId] = useState<string | null>(null);
   const [currentLayoutName, setCurrentLayoutName] = useState<string>('Default Layout');
@@ -874,7 +877,11 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         roof_masks: roofMasks,
         pv_arrays: pvArrays,
         equipment: equipment,
-        cables: lines,
+        // Auto-populate cable elevations from connected endpoints
+        cables: lines.map(cable => {
+          const autoElevations = autopopulateCableElevations(cable, pvArrays, equipment, placedWalkways, placedCableTrays);
+          return autoElevations ? { ...cable, elevations: autoElevations } : cable;
+        }),
         pdf_data: backgroundImage,
         // Include placed instances in plant_setup alongside templates
         plant_setup: {
@@ -2500,9 +2507,25 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
           setSelectedDcCableId={setSelectedDcCableId}
           selectedAcCableId={selectedAcCableId}
           setSelectedAcCableId={setSelectedAcCableId}
+          is3DView={is3DView}
+          onToggle3DView={() => setIs3DView(v => !v)}
         />
       )}
       
+      {is3DView ? (
+        <ThreeDViewer
+          pvArrays={pvArrays}
+          roofMasks={roofMasks}
+          lines={lines}
+          equipment={equipment}
+          pvPanelConfig={pvPanelConfig}
+          scaleInfo={scaleInfo}
+          placedWalkways={placedWalkways}
+          placedCableTrays={placedCableTrays}
+          selectedItemId={selectedItemId}
+          onSelectItem={handleSelectSingle}
+        />
+      ) : (
       <Canvas
         backgroundImage={backgroundImage}
         activeTool={readOnly ? Tool.PAN : activeTool}
@@ -2596,6 +2619,7 @@ export function FloorPlanMarkup({ projectId, readOnly = false, latestSimulation 
         selectedDcCableConfig={getSelectedDcCable()}
         selectedAcCableConfig={getSelectedAcCable()}
       />
+      )}
 
       <SummaryPanel
         pvArrays={pvArrays}

@@ -42,6 +42,7 @@ export interface PVArrayItem {
   roofMaskId?: string;
   minSpacing?: number; // meters - spacing used when placing this array
   moduleConfigId?: string; // Reference to SolarModuleConfig template
+  elevation?: number; // meters above ground level
 }
 
 export interface SupplyLine {
@@ -55,6 +56,7 @@ export interface SupplyLine {
   thickness?: number; // Cable thickness in mm (e.g., 6, 10, 16, 25)
   configId?: string; // Reference to DCCableConfig or ACCableConfig template
   material?: CableMaterial; // Cable material (copper or aluminum)
+  elevations?: number[]; // Per-point elevation array (meters above ground), matching points array
 }
 
 export enum EquipmentType {
@@ -72,6 +74,7 @@ export interface EquipmentItem {
   rotation: number;
   name?: string;
   configId?: string; // Reference to InverterLayoutConfig (for Inverters)
+  elevation?: number; // meters above ground level
 }
 
 export enum Tool {
@@ -103,6 +106,7 @@ export interface PlacedWalkway {
   position: Point;   // Canvas position (required for placed items)
   rotation: number;  // Rotation in degrees
   minSpacing?: number; // Minimum spacing in meters
+  elevation?: number; // meters above ground level
 }
 
 // Cable tray type designation (AC or DC)
@@ -119,6 +123,7 @@ export interface PlacedCableTray {
   rotation: number;  // Rotation in degrees
   minSpacing?: number; // Minimum spacing in meters
   cableType?: CableTrayType; // Designates AC or DC cable tray for snapping
+  elevation?: number; // meters above ground level
 }
 
 export interface DesignState {

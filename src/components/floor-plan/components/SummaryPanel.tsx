@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PVArrayItem, RoofMask, SupplyLine, EquipmentItem, PVPanelConfig, ScaleInfo, PlantSetupConfig, PlacedWalkway, PlacedCableTray, EquipmentType, LayerVisibility, ItemVisibility, Point } from '../types';
-import { calculateTotalPVCapacity, calculatePolygonArea, calculateLineLength } from '../utils/geometry';
+import { calculateTotalPVCapacity, calculatePolygonArea, calculateLineLength, calculateLineLength3D } from '../utils/geometry';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -577,13 +577,24 @@ export function SummaryPanel({
     sum + calculatePolygonArea(mask.points, scaleInfo.ratio), 0
   );
 
-  const dcCableLength = lines
-    .filter(l => l.type === 'dc')
+  const dcCables = lines.filter(l => l.type === 'dc');
+  const acCables = lines.filter(l => l.type === 'ac');
+
+  const dcCableLength = dcCables
     .reduce((sum, l) => sum + calculateLineLength(l.points, scaleInfo.ratio), 0);
 
-  const acCableLength = lines
-    .filter(l => l.type === 'ac')
+  const acCableLength = acCables
     .reduce((sum, l) => sum + calculateLineLength(l.points, scaleInfo.ratio), 0);
+
+  // 3D cable lengths (accounts for elevation changes)
+  const dcCableLength3D = dcCables
+    .reduce((sum, l) => sum + calculateLineLength3D(l.points, scaleInfo.ratio, l.elevations), 0);
+
+  const acCableLength3D = acCables
+    .reduce((sum, l) => sum + calculateLineLength3D(l.points, scaleInfo.ratio, l.elevations), 0);
+
+  // Check if any cables have elevation data
+  const hasElevationData = lines.some(l => l.elevations && l.elevations.length > 0);
 
   // Placed item quantities (from DesignState, not plant setup config)
   // Use Math.max(width, length) to get actual length regardless of orientation swap
@@ -1214,7 +1225,7 @@ export function SummaryPanel({
             <CollapsibleSection
               icon={<Cable className="h-4 w-4 text-orange-500" />}
               title="Cabling"
-              summary={`${(dcCableLength + acCableLength).toFixed(0)} m`}
+              summary={`${(dcCableLength + acCableLength).toFixed(0)} m${hasElevationData ? ` (3D: ${(dcCableLength3D + acCableLength3D).toFixed(0)} m)` : ''}`}
               defaultOpen={false}
               isVisible={layerVisibility?.cables}
               onToggleVisibility={onToggleLayerVisibility ? () => onToggleLayerVisibility('cables') : undefined}
@@ -1266,7 +1277,7 @@ export function SummaryPanel({
                         <CollapsibleTrigger asChild>
                           <button className="flex-1 flex items-center gap-1 text-left text-muted-foreground text-[10px] font-medium py-1 hover:text-foreground">
                             <div className="w-2 h-0.5 bg-orange-500 rounded" />
-                            DC Cables ({dcCableLength.toFixed(1)} m)
+                            DC Cables ({dcCableLength.toFixed(1)} m{hasElevationData && dcCableLength3D !== dcCableLength ? ` · 3D: ${dcCableLength3D.toFixed(1)} m` : ''})
                             <ChevronDown className="h-3 w-3 ml-auto transition-transform" />
                           </button>
                         </CollapsibleTrigger>
@@ -1460,7 +1471,7 @@ export function SummaryPanel({
                         <CollapsibleTrigger asChild>
                           <button className="flex-1 flex items-center gap-1 text-left text-muted-foreground text-[10px] font-medium py-1 hover:text-foreground">
                             <div className="w-2 h-0.5 bg-blue-500 rounded" />
-                            AC Cables ({acCableLength.toFixed(1)} m)
+                            AC Cables ({acCableLength.toFixed(1)} m{hasElevationData && acCableLength3D !== acCableLength ? ` · 3D: ${acCableLength3D.toFixed(1)} m` : ''})
                             <ChevronDown className="h-3 w-3 ml-auto transition-transform" />
                           </button>
                         </CollapsibleTrigger>
