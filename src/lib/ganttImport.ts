@@ -105,7 +105,6 @@ function buildDateHeaders(
     // Update month from row 0 (forward-fill)
     const rawVal = row0[c];
     const parsed = parseMonthHeader(rawVal);
-    console.log(`[ganttImport] Col ${c}: raw="${rawVal}" (type=${typeof rawVal}), parsed=`, parsed);
     if (parsed !== null) {
       if (currentMonth !== null && parsed.month < currentMonth && parsed.year === null) {
         year++;
@@ -156,7 +155,7 @@ export async function parseScheduleExcel(
   const categoriesSet = new Set<string>();
 
   const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: false });
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
 
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
