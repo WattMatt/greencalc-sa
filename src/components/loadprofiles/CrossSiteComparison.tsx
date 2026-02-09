@@ -40,6 +40,7 @@ import {
   Building2,
   Tag,
   Loader2,
+  Target,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -61,12 +62,15 @@ export function CrossSiteComparison() {
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [meterSelectorOpen, setMeterSelectorOpen] = useState(false);
+  const [baselineMeterId, setBaselineMeterId] = useState<string | null>(null);
+  const [showPercentageView, setShowPercentageView] = useState(false);
 
   const {
     allMeters,
     sites,
     categories,
     chartData,
+    baselineChartData,
     meterStats,
     getMeterColor,
     isLoading,
@@ -75,7 +79,8 @@ export function CrossSiteComparison() {
     aggregation,
     dayTypeFilter,
     dateFrom,
-    dateTo
+    dateTo,
+    baselineMeterId
   );
 
   // Filter meters for selection dropdown
@@ -103,6 +108,21 @@ export function CrossSiteComparison() {
 
   const handleRemoveMeter = (meterId: string) => {
     setSelectedMeterIds(selectedMeterIds.filter(id => id !== meterId));
+    // Clear baseline if removing the baseline meter
+    if (meterId === baselineMeterId) {
+      setBaselineMeterId(null);
+      setShowPercentageView(false);
+    }
+  };
+
+  const handleSetBaseline = (meterId: string) => {
+    if (baselineMeterId === meterId) {
+      // Clicking the same meter clears baseline
+      setBaselineMeterId(null);
+      setShowPercentageView(false);
+    } else {
+      setBaselineMeterId(meterId);
+    }
   };
 
   const handleExportCSV = () => {
@@ -128,6 +148,9 @@ export function CrossSiteComparison() {
   };
 
   const getYAxisLabel = () => {
+    if (showPercentageView && baselineMeterId) {
+      return "% vs Baseline";
+    }
     switch (aggregation) {
       case "daily":
         return "Average kW";
@@ -139,6 +162,10 @@ export function CrossSiteComparison() {
         return "kWh";
     }
   };
+
+  // Determine which chart data to use
+  const displayChartData = showPercentageView && baselineMeterId ? baselineChartData : chartData;
+  const baselineMeter = selectedMeters.find(m => m.id === baselineMeterId);
 
   return (
     <div className="space-y-6">
@@ -330,20 +357,36 @@ export function CrossSiteComparison() {
                 <Badge
                   key={meter.id}
                   variant="secondary"
-                  className="pl-2 pr-1 py-1.5 gap-2"
+                  className={cn(
+                    "pl-2 pr-1 py-1.5 gap-2 cursor-pointer transition-all",
+                    baselineMeterId === meter.id && "ring-2 ring-primary ring-offset-1"
+                  )}
                   style={{ borderLeftColor: getMeterColor(meter.id), borderLeftWidth: 3 }}
+                  onClick={() => handleSetBaseline(meter.id)}
+                  title={baselineMeterId === meter.id ? "Click to remove as baseline" : "Click to set as baseline"}
                 >
                   <div className="flex flex-col">
-                    <span className="font-medium">
-                      {meter.shop_name || meter.shop_number || "Unknown"}
+                    <div className="flex items-center gap-1">
+                      {baselineMeterId === meter.id && (
+                        <Target className="h-3 w-3 text-primary" />
+                      )}
+                      <span className="font-medium">
+                        {meter.shop_name || meter.shop_number || "Unknown"}
+                      </span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {meter.siteName}
+                      {baselineMeterId === meter.id && " (Baseline)"}
                     </span>
-                    <span className="text-xs text-muted-foreground">{meter.siteName}</span>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-5 w-5 p-0 hover:bg-destructive/10"
-                    onClick={() => handleRemoveMeter(meter.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveMeter(meter.id);
+                    }}
                   >
                     <X className="h-3 w-3" />
                   </Button>
@@ -389,6 +432,29 @@ export function CrossSiteComparison() {
                 ))}
               </div>
             </div>
+
+            {/* Percentage View Toggle - only show when baseline is selected */}
+            {baselineMeterId && (
+              <div className="flex items-center gap-4 border-l pl-4 ml-2">
+                <span className="text-sm font-medium">View:</span>
+                <div className="flex gap-2">
+                  <Button
+                    variant={!showPercentageView ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowPercentageView(false)}
+                  >
+                    Absolute
+                  </Button>
+                  <Button
+                    variant={showPercentageView ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowPercentageView(true)}
+                  >
+                    % vs Baseline
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -396,21 +462,29 @@ export function CrossSiteComparison() {
       {/* Chart */}
       {selectedMeterIds.length > 0 && (
         <Card>
-          <CardHeader>
+        <CardHeader>
+          <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium">Comparison Chart</CardTitle>
-          </CardHeader>
+            {baselineMeter && (
+              <Badge variant="outline" className="gap-1">
+                <Target className="h-3 w-3" />
+                Baseline: {baselineMeter.shop_name || baselineMeter.shop_number} ({baselineMeter.siteName})
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="h-[400px] flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : chartData.length === 0 ? (
+            ) : displayChartData.length === 0 ? (
               <div className="h-[400px] flex items-center justify-center text-muted-foreground">
                 No data available for the selected meters and filters
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                <LineChart data={displayChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis
                     dataKey="label"
@@ -426,7 +500,15 @@ export function CrossSiteComparison() {
                       position: "insideLeft",
                       style: { textAnchor: "middle" },
                     }}
+                    tickFormatter={showPercentageView ? (v) => `${v.toFixed(0)}%` : undefined}
                   />
+                  {showPercentageView && (
+                    <CartesianGrid 
+                      strokeDasharray="3 3" 
+                      horizontalPoints={[0]}
+                      className="stroke-primary/30"
+                    />
+                  )}
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "hsl(var(--popover))",
@@ -439,15 +521,21 @@ export function CrossSiteComparison() {
                       const meterName = meter
                         ? `${meter.shop_name || meter.shop_number} (${meter.siteName})`
                         : name;
+                      if (showPercentageView) {
+                        const prefix = value > 0 ? "+" : "";
+                        return [`${prefix}${value.toFixed(1)}%`, meterName];
+                      }
                       return [value.toFixed(2), meterName];
                     }}
                   />
                   <Legend
                     formatter={(value: string) => {
                       const meter = selectedMeters.find(m => m.id === value);
-                      return meter
+                      const isBaseline = value === baselineMeterId;
+                      const name = meter
                         ? `${meter.shop_name || meter.shop_number} (${meter.siteName})`
                         : value;
+                      return isBaseline ? `${name} [Baseline]` : name;
                     }}
                   />
                   {selectedMeters.map(meter => (
@@ -456,7 +544,8 @@ export function CrossSiteComparison() {
                       type="monotone"
                       dataKey={meter.id}
                       stroke={getMeterColor(meter.id)}
-                      strokeWidth={2}
+                      strokeWidth={meter.id === baselineMeterId ? 3 : 2}
+                      strokeDasharray={meter.id === baselineMeterId ? "5 5" : undefined}
                       dot={false}
                       activeDot={{ r: 4 }}
                     />
@@ -471,60 +560,90 @@ export function CrossSiteComparison() {
       {/* Statistics Table */}
       {meterStats.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Summary Statistics</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Meter</TableHead>
-                  <TableHead>Site</TableHead>
-                  <TableHead className="text-right">Avg {getYAxisLabel()}</TableHead>
-                  <TableHead className="text-right">Peak</TableHead>
-                  <TableHead className="text-right">Total kWh</TableHead>
-                  <TableHead className="text-right">vs Group Avg</TableHead>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Summary Statistics</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Meter</TableHead>
+                <TableHead>Site</TableHead>
+                <TableHead className="text-right">Avg {aggregation === "daily" ? "kW" : "kWh"}</TableHead>
+                <TableHead className="text-right">Peak</TableHead>
+                <TableHead className="text-right">Total kWh</TableHead>
+                <TableHead className="text-right">vs Group Avg</TableHead>
+                {baselineMeterId && (
+                  <TableHead className="text-right">vs Baseline</TableHead>
+                )}
+                {meterStats.some(s => s.energyIntensity !== null) && (
+                  <TableHead className="text-right">kWh/m²</TableHead>
+                )}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {meterStats.map(stat => (
+                <TableRow 
+                  key={stat.meterId}
+                  className={stat.meterId === baselineMeterId ? "bg-muted/50" : undefined}
+                >
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: getMeterColor(stat.meterId) }}
+                      />
+                      {stat.meterName}
+                      {stat.meterId === baselineMeterId && (
+                        <Badge variant="outline" className="text-xs py-0 px-1">
+                          <Target className="h-2.5 w-2.5 mr-0.5" />
+                          Baseline
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>{stat.siteName}</TableCell>
+                  <TableCell className="text-right">{stat.avgValue.toFixed(1)}</TableCell>
+                  <TableCell className="text-right">{stat.peakValue.toFixed(1)}</TableCell>
+                  <TableCell className="text-right">{stat.totalKwh.toFixed(0)}</TableCell>
+                  <TableCell className="text-right">
+                    <span
+                      className={cn(
+                        stat.vsGroupAvg > 0 ? "text-destructive" : "text-primary"
+                      )}
+                    >
+                      {stat.vsGroupAvg > 0 ? "+" : ""}
+                      {stat.vsGroupAvg.toFixed(1)}%
+                    </span>
+                  </TableCell>
+                  {baselineMeterId && (
+                    <TableCell className="text-right">
+                      {stat.meterId === baselineMeterId ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : stat.vsBaseline !== null ? (
+                        <span
+                          className={cn(
+                            stat.vsBaseline > 0 ? "text-destructive" : "text-primary"
+                          )}
+                        >
+                          {stat.vsBaseline > 0 ? "+" : ""}
+                          {stat.vsBaseline.toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  )}
                   {meterStats.some(s => s.energyIntensity !== null) && (
-                    <TableHead className="text-right">kWh/m²</TableHead>
+                    <TableCell className="text-right">
+                      {stat.energyIntensity !== null ? stat.energyIntensity.toFixed(1) : "-"}
+                    </TableCell>
                   )}
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {meterStats.map(stat => (
-                  <TableRow key={stat.meterId}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: getMeterColor(stat.meterId) }}
-                        />
-                        {stat.meterName}
-                      </div>
-                    </TableCell>
-                    <TableCell>{stat.siteName}</TableCell>
-                    <TableCell className="text-right">{stat.avgValue.toFixed(1)}</TableCell>
-                    <TableCell className="text-right">{stat.peakValue.toFixed(1)}</TableCell>
-                    <TableCell className="text-right">{stat.totalKwh.toFixed(0)}</TableCell>
-                    <TableCell className="text-right">
-                      <span
-                        className={cn(
-                          stat.vsGroupAvg > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"
-                        )}
-                      >
-                        {stat.vsGroupAvg > 0 ? "+" : ""}
-                        {stat.vsGroupAvg.toFixed(1)}%
-                      </span>
-                    </TableCell>
-                    {meterStats.some(s => s.energyIntensity !== null) && (
-                      <TableCell className="text-right">
-                        {stat.energyIntensity !== null ? stat.energyIntensity.toFixed(1) : "-"}
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
         </Card>
       )}
     </div>
