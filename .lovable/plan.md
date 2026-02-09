@@ -1,34 +1,67 @@
 
 
-# Fix: Parser Using UI Year Instead of Excel Header Year
+# Remove Fallback Chain -- Require Dates from Excel
 
 ## Problem
-The parser still shows 2026 dates because Excel interprets "August-25" as "August 25th" (a date with day=25), NOT as "August 2025". With `cellDates: true`, the xlsx library converts this to a JS Date object where the "25" becomes the day, and the year defaults to the current year or some Excel default -- not 2025 as intended.
-
-The regex branch in `parseMonthHeader` that correctly handles "Month-YY" format never gets reached because the value arrives as a Date object, not a string.
+The parser currently has a fallback chain (reference year, fallback start date, filename, current year) that silently fills in missing date information. This causes incorrect dates without the user knowing why.
 
 ## Solution
-Read the **formatted cell strings** directly from the worksheet object for Row 0 (the month header row), bypassing the date interpretation entirely. Each cell in an xlsx worksheet has a `.w` property containing the original formatted text (e.g., "August-25").
+Remove all fallback logic. If the parser cannot determine the year, month, or day from the Excel headers, it should report a clear error and produce no tasks.
 
 ## Technical Changes
 
 ### File: `src/lib/ganttImport.ts`
 
-**1. Add a helper to extract formatted strings from Row 0**
+**1. Remove `extractYearFromFilename` helper** (if present)
 
-Create a function that reads the `.w` (formatted text) property directly from worksheet cells for Row 0. This gives us the original string "August-25" instead of a misinterpreted Date object.
+**2. Remove `fallbackStartDate` and `referenceYear` parameters from `parseScheduleExcel`**
 
-```
-function getRow0FormattedValues(sheet, startCol, maxCol):
-  For each column from startCol to maxCol:
-    Read cell at row 0 (e.g., "G1", "H1", ...)
-    Return cell.w (formatted string) or cell.v (raw value) as fallback
+The function signature becomes:
+```text
+parseScheduleExcel(file: File): Promise<ParsedScheduleResult>
 ```
 
-**2. Update `buildDateHeaders` to accept formatted Row 0 values**
+**3. Update `buildDateHeaders` -- error on missing year**
 
-Pass the formatted strings for Row 0 instead of using `rawData[0]`, so `parseMonthHeader` receives "August-25" as a string and the regex correctly extracts month=August, year=2025.
+- Remove the `referenceYear` parameter
+- Initialize `year` as `null`
+- When a month header is parsed with `year: null` and no year has been set yet, push an error: `"Month header '[value]' has no year. Expected format like 'August-25'."`
+- Return empty headers if year is never determined
 
-**3. Keep `cellDates: true`** for the rest of the data (daily columns, etc.) -- only Row 0 month headers need special handling.
+**4. Update date assignment for tasks -- error on missing start date**
 
-This ensures the year is always extracted from the Excel headers, and the "Project Year" field only serves as a true fallback when headers contain no year info (e.g., just "August" without "-25").
+Currently if no start date is found in daily columns, it falls back to `fallbackStartDate` or `new Date()`. Change this to:
+- If no start date found for a task, push an error: `"Task '[name]' has no start date in the schedule columns."`
+- Skip the task (don't add it to the results)
+
+**5. Remove the `fallbackStartDate` usage for task end date calculation**
+
+End date is calculated from start date + days scheduled. If start date is missing, the task is skipped (per above).
+
+### File: `src/components/gantt/ImportScheduleDialog.tsx`
+
+**6. Remove the "Override year" toggle, year input, "Override start date" toggle, and date picker**
+
+These UI elements are no longer needed since there are no fallbacks.
+
+**7. Simplify the `parseScheduleExcel` call**
+
+```text
+Before: parseScheduleExcel(file, fallbackDate, referenceYear, file.name)
+After:  parseScheduleExcel(file)
+```
+
+**8. Display parsing errors prominently**
+
+The `errors` array from the result should be shown to the user so they know exactly what's missing in their Excel file.
+
+## Summary
+
+| Change | File | What |
+|--------|------|------|
+| Remove fallback params | ganttImport.ts | Remove `fallbackStartDate`, `referenceYear`, `fileName` params |
+| Error on missing year | ganttImport.ts | Push error if month header has no year info |
+| Error on missing task date | ganttImport.ts | Push error and skip task if no start date found |
+| Remove override UI | ImportScheduleDialog.tsx | Remove year/date toggle controls |
+| Simplify call | ImportScheduleDialog.tsx | Call with just `file` argument |
+
