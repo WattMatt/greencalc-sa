@@ -1,76 +1,58 @@
 
 
-# Multi-CSV Upload with Summation for Actual Generation and Building Load
+# Update CSV Parser for PnP SCADA Format
 
-## Overview
+## What Changes
 
-Update the CSV upload on both the Actual Generation and Building Load cards to support **multiple file selection**. When multiple files are uploaded, their kWh values are **summed per month** before saving. Each upload **adds to** the existing stored value (additive mode), with a "Reset" button to clear accumulated data.
+The CSV parser needs to understand the PnP SCADA file format, where:
+- Row 1 is metadata (contains "pnpscada.com" and a meter number) -- skip it
+- Row 2 is the header row with columns like "P (per kW)", "DATE", "TIME", "STATUS"
+- Row 3 onward contains half-hourly power readings in kW (not kWh)
 
-No combined CSV detection is needed -- each card only ever receives its own data type.
+The parser currently expects a simple "month" + "kWh" format, which won't work with these files.
 
-## Changes
+## How It Will Work
 
-### New File: `src/components/projects/generation/csvUtils.ts`
+1. **Detect format**: Check if row 1 contains "pnpscada.com" -- if so, treat row 2 as headers and row 3+ as data
+2. **Find columns**: Locate the "DATE" column and the power value column (e.g., "P (per kW)") using the provided regex pattern
+3. **Convert kW to kWh**: Detect the time interval between readings (30 minutes = 0.5 hours) and multiply each kW value by 0.5 to get kWh
+4. **Group by month**: Extract the month from the DATE column (e.g., 2026-01-15 = month 1) and sum all kWh values per month
+5. **Fallback**: If the file doesn't match the SCADA format, fall back to the existing simple "month + kWh" parsing
 
-A shared utility for parsing one or more CSV files and summing values per month:
-
-- Accepts a `FileList` and a regex pattern for identifying the kWh column
-- Reads all files, identifies `month` and value columns in each
-- Returns a `Map<number, number>` of month-to-total-kWh across all files
-
-### Modify: `ActualGenerationCard.tsx`
-
-- Change file input to accept `multiple` files
-- Replace inline CSV parsing with the shared `csvUtils` helper
-- Make uploads **additive**: fetch the existing `actual_kwh` for each month, then upsert with `existingValue + newSum`
-- Update `source` field to indicate CSV count (e.g., `"csv:3"`)
-- Add a "Reset" button that sets `actual_kwh` to `null` for the selected month
-- Toast message: "Added X kWh from Y file(s)"
-
-### Modify: `BuildingLoadCard.tsx`
-
-- Same changes as above, but targeting `building_load_kwh`
-- File input accepts `multiple`
-- Additive upsert logic
-- Reset button to clear building load for the selected month
-
-### No changes to `GenerationTab.tsx`
-
-The combined CSV concept is removed. Each card handles its own uploads independently.
+The simple format (month column with direct kWh values) will continue to work as before.
 
 ## Technical Details
 
-### Shared CSV Parser (`csvUtils.ts`)
+### File: `src/components/projects/generation/csvUtils.ts`
 
+Rewrite `parseCSVFiles` to handle both formats:
+
+```text
+For each file:
+  1. Read lines
+  2. If line 0 contains "pnpscada" -> SCADA format:
+     a. Use line 1 as headers
+     b. Find DATE column and value column (matching provided regex or "p (per kw)")
+     c. Find TIME column to calculate interval (default 0.5 hours for 30-min data)
+     d. For each data row (line 2+):
+        - Parse DATE to get month (1-12)
+        - Multiply kW value by interval hours to get kWh
+        - Add to month total
+  3. Else -> simple format (existing logic):
+     a. Use line 0 as headers
+     b. Find "month" and value columns
+     c. Sum direct kWh values per month
 ```
-async function parseCSVFiles(
-  files: FileList,
-  valueColumnPattern: RegExp
-): Promise<Map<number, number>>
-```
 
-- Iterates each file, splits into lines, finds header columns
-- Month column: matches `/month/i`
-- Value column: matches the provided pattern (e.g., `/kwh|energy|generation|actual/i` for generation, `/kwh|energy|load|consumption|building/i` for load)
-- For each valid row, accumulates into a running sum per month across all files
-- Returns the summed map
+### File: `src/components/projects/generation/ActualGenerationCard.tsx`
 
-### Additive Upsert Flow
+Update the regex pattern passed to `parseCSVFiles` to also match SCADA power headers:
+- Pattern: `/kwh|energy|generation|actual|p \(per kw\)/i`
 
-For each month in the parsed results:
+### File: `src/components/projects/generation/BuildingLoadCard.tsx`
 
-1. Fetch the current record for that `(project_id, month, year)`
-2. Calculate `newTotal = (existing?.actual_kwh ?? 0) + parsedSum`
-3. Upsert with the new total
+Same regex update:
+- Pattern: `/kwh|energy|load|consumption|building|p \(per kw\)/i`
 
-### Reset Button
-
-Each card gets a small "Reset" link that:
-- Upserts the field to `null` for the current month/year
-- Clears local state
-- Triggers `onDataChanged` to refresh
-
-### Source Tracking
-
-The `source` field on `generation_records` will be updated to reflect the number of CSV files contributing to the total (e.g., `"csv:2"` or `"manual"` for hand-entered values).
+### No database changes required.
 
