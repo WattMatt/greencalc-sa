@@ -1,0 +1,1 @@
+export { GenerationTab } from "./GenerationTab";
