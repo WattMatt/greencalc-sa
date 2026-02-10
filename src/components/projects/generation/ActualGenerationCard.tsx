@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Upload, Save } from "lucide-react";
+import { Upload, Save, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { parseCSVFiles } from "./csvUtils";
 
 interface MonthData {
   month: number;
@@ -57,55 +58,55 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
   };
 
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     try {
-      const text = await file.text();
-      const lines = text.split("\n").filter((l) => l.trim());
-      if (lines.length < 2) {
-        toast.error("CSV must have a header row and data rows");
+      const totals = await parseCSVFiles(files, /kwh|energy|generation|actual/i);
+
+      if (totals.size === 0) {
+        toast.error("No valid month/kWh data found in CSV(s)");
         return;
       }
 
-      const header = lines[0].toLowerCase();
-      const monthCol = header.split(",").findIndex((h) => h.trim().match(/month/i));
-      const kwhCol = header.split(",").findIndex((h) => h.trim().match(/kwh|energy|generation|actual/i));
+      // Fetch existing records for all months in one query
+      const months = Array.from(totals.keys());
+      const { data: existing } = await supabase
+        .from("generation_records")
+        .select("month, actual_kwh, source")
+        .eq("project_id", projectId)
+        .eq("year", year)
+        .in("month", months);
 
-      if (monthCol === -1 || kwhCol === -1) {
-        toast.error("CSV must have 'month' and 'kwh' columns");
-        return;
-      }
+      const existingMap = new Map(
+        (existing ?? []).map((r) => [r.month, r])
+      );
 
-      const parsed: { month: number; kwh: number }[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(",");
-        const monthVal = parseInt(cols[monthCol]?.trim());
-        const kwhVal = parseFloat(cols[kwhCol]?.trim());
-        if (monthVal >= 1 && monthVal <= 12 && !isNaN(kwhVal)) {
-          parsed.push({ month: monthVal, kwh: kwhVal });
-        }
-      }
+      let totalAdded = 0;
 
-      if (parsed.length === 0) {
-        toast.error("No valid month/kWh data found in CSV");
-        return;
-      }
+      for (const [m, csvSum] of totals) {
+        const prev = existingMap.get(m);
+        const newTotal = (prev?.actual_kwh ?? 0) + csvSum;
+        totalAdded += csvSum;
 
-      for (const row of parsed) {
+        // Track CSV count in source field
+        const prevSource = prev?.source ?? "";
+        const prevCount = prevSource.startsWith("csv:") ? parseInt(prevSource.split(":")[1]) || 0 : prevSource === "csv" ? 1 : 0;
+        const newCount = prevCount + files.length;
+
         const { error } = await supabase
           .from("generation_records")
           .upsert({
             project_id: projectId,
-            month: row.month,
+            month: m,
             year,
-            actual_kwh: row.kwh,
-            source: "csv",
+            actual_kwh: newTotal,
+            source: `csv:${newCount}`,
           }, { onConflict: "project_id,month,year" });
         if (error) throw error;
       }
 
-      toast.success(`Imported ${parsed.length} months from CSV`);
+      toast.success(`Added ${totalAdded.toLocaleString()} kWh from ${files.length} file(s)`);
       setValue(null);
       onDataChanged();
     } catch (err: any) {
@@ -113,6 +114,26 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
     }
 
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleReset = async () => {
+    try {
+      const { error } = await supabase
+        .from("generation_records")
+        .upsert({
+          project_id: projectId,
+          month,
+          year,
+          actual_kwh: null,
+          source: null,
+        }, { onConflict: "project_id,month,year" });
+      if (error) throw error;
+      toast.success(`Reset actual generation for ${monthData.fullName}`);
+      setValue(null);
+      onDataChanged();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reset");
+    }
   };
 
   const hasEdit = value !== null && value !== (monthData.actual_kwh?.toString() ?? "");
@@ -123,6 +144,16 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
         <CardTitle className="text-sm flex items-center justify-between">
           Actual Generation (kWh)
           <div className="flex gap-1">
+            {monthData.actual_kwh != null && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground"
+                onClick={handleReset}
+              >
+                <RotateCcw className="h-3 w-3 mr-1" /> Reset
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -135,6 +166,7 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
               ref={fileInputRef}
               type="file"
               accept=".csv"
+              multiple
               className="hidden"
               onChange={handleCSVUpload}
             />
