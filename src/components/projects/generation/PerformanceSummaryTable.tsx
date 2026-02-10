@@ -10,6 +10,7 @@ interface MonthData {
   actual_kwh: number | null;
   guaranteed_kwh: number | null;
   expected_kwh: number | null;
+  building_load_kwh: number | null;
 }
 
 interface PerformanceSummaryTableProps {
@@ -39,20 +40,22 @@ export function PerformanceSummaryTable({ monthData }: PerformanceSummaryTablePr
           </TableHeader>
           <TableBody>
             <TableRow>
-              <TableCell className="text-sm">Actual kWh</TableCell>
+              <TableCell className="text-sm">Actual Generation</TableCell>
               <TableCell className="text-right text-sm">
-                {monthData.actual_kwh != null ? monthData.actual_kwh.toLocaleString() : "—"}
+                {monthData.actual_kwh != null ? `${monthData.actual_kwh.toLocaleString()} kWh` : "—"}
               </TableCell>
             </TableRow>
             <TableRow>
-              <TableCell className="text-sm">Guaranteed kWh</TableCell>
+              <TableCell className="text-sm">Guaranteed Generation</TableCell>
               <TableCell className="text-right text-sm">
-                {monthData.guaranteed_kwh != null ? monthData.guaranteed_kwh.toLocaleString() : "—"}
+                {monthData.guaranteed_kwh != null ? `${monthData.guaranteed_kwh.toLocaleString()} kWh` : "—"}
               </TableCell>
             </TableRow>
             <TableRow>
-              <TableCell className="text-sm text-muted-foreground/50">Forecasted kWh</TableCell>
-              <TableCell className="text-right text-sm text-muted-foreground/40">—</TableCell>
+              <TableCell className="text-sm">Building Load</TableCell>
+              <TableCell className="text-right text-sm">
+                {monthData.building_load_kwh != null ? `${monthData.building_load_kwh.toLocaleString()} kWh` : "—"}
+              </TableCell>
             </TableRow>
             <TableRow>
               <TableCell className="text-sm font-medium">Actual vs Guaranteed</TableCell>

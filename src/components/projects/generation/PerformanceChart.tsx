@@ -9,6 +9,7 @@ interface MonthData {
   actual_kwh: number | null;
   guaranteed_kwh: number | null;
   expected_kwh: number | null;
+  building_load_kwh: number | null;
 }
 
 interface PerformanceChartProps {
@@ -16,12 +17,13 @@ interface PerformanceChartProps {
 }
 
 const chartConfig = {
-  actual: { label: "Actual kWh", color: "hsl(var(--primary))" },
-  guaranteed: { label: "Guaranteed kWh", color: "hsl(var(--destructive))" },
+  actual: { label: "Actual Generation", color: "hsl(var(--primary))" },
+  guaranteed: { label: "Guaranteed Generation", color: "hsl(var(--destructive))" },
+  building_load: { label: "Building Load", color: "hsl(var(--accent-foreground))" },
 };
 
 export function PerformanceChart({ monthData }: PerformanceChartProps) {
-  const hasData = monthData.actual_kwh || monthData.guaranteed_kwh;
+  const hasData = monthData.actual_kwh || monthData.guaranteed_kwh || monthData.building_load_kwh;
 
   if (!hasData) {
     return (
@@ -41,6 +43,7 @@ export function PerformanceChart({ monthData }: PerformanceChartProps) {
   const chartData = [
     { name: "Actual", value: monthData.actual_kwh ?? 0, fill: "var(--color-actual)" },
     { name: "Guaranteed", value: monthData.guaranteed_kwh ?? 0, fill: "var(--color-guaranteed)" },
+    { name: "Building Load", value: monthData.building_load_kwh ?? 0, fill: "var(--color-building_load)" },
   ];
 
   return (
