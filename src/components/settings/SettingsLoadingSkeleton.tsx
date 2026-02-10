@@ -16,7 +16,7 @@ export function SettingsLoadingSkeleton() {
       {/* Tabs skeleton */}
       <div className="space-y-6">
         <div className="flex gap-2 flex-wrap">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
+          {[1, 2, 3, 4, 5, 6, 7].map((i) => (
             <Skeleton key={i} className="h-9 w-24" />
           ))}
         </div>

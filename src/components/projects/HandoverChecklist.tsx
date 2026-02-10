@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Check, Link2Off, Plus, Trash2, FileText, GripVertical, File, Image, FileSpreadsheet, FileArchive, Download, Upload, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
@@ -11,9 +12,6 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -42,13 +40,6 @@ interface DocumentItem {
   file_size: number | null;
   mime_type: string | null;
   created_at: string;
-}
-
-interface TemplateItem {
-  id: string;
-  label: string;
-  category: string;
-  sort_order: number;
 }
 
 interface HandoverChecklistProps {
@@ -98,10 +89,7 @@ export function HandoverChecklist({
   // Delete requirement
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
 
-  // Manage template dialog
-  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
-  const [templates, setTemplates] = useState<TemplateItem[]>([]);
-  const [newTemplateLabel, setNewTemplateLabel] = useState('');
+  const navigate = useNavigate();
 
   // Drag state
   const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
@@ -259,47 +247,6 @@ export function HandoverChecklist({
     }
   };
 
-  // ---- Template management ----
-  const fetchTemplates = async () => {
-    const { data } = await supabase
-      .from('checklist_templates')
-      .select('id, label, category, sort_order')
-      .order('sort_order', { ascending: true });
-    setTemplates(data || []);
-  };
-
-  const handleAddTemplate = async () => {
-    if (!newTemplateLabel.trim()) return;
-    try {
-      const { error } = await supabase
-        .from('checklist_templates')
-        .insert({
-          label: newTemplateLabel.trim(),
-          category: 'Solar PV',
-          sort_order: templates.length,
-        });
-      if (error) throw error;
-      setNewTemplateLabel('');
-      await fetchTemplates();
-      toast.success('Template item added — will sync to all projects');
-    } catch {
-      toast.error('Failed to add template item');
-    }
-  };
-
-  const handleDeleteTemplate = async (templateId: string) => {
-    try {
-      const { error } = await supabase
-        .from('checklist_templates')
-        .delete()
-        .eq('id', templateId);
-      if (error) throw error;
-      await fetchTemplates();
-      toast.success('Template item removed');
-    } catch {
-      toast.error('Failed to remove template item');
-    }
-  };
 
   // ---- Drag & Drop ----
   const handleDragOver = (e: React.DragEvent, itemId: string) => {
@@ -356,7 +303,7 @@ export function HandoverChecklist({
                   variant="ghost"
                   size="sm"
                   className="h-7 text-xs"
-                  onClick={() => { setTemplateDialogOpen(true); fetchTemplates(); }}
+                  onClick={() => navigate('/settings?tab=templates')}
                 >
                   <Settings className="h-3 w-3 mr-1" /> Manage Template
                 </Button>
@@ -520,51 +467,6 @@ export function HandoverChecklist({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Manage Template dialog */}
-      <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Manage Global Template</DialogTitle>
-          </DialogHeader>
-          <p className="text-xs text-muted-foreground">
-            Changes here apply to all projects. New items sync automatically when a project is opened.
-          </p>
-          <ScrollArea className="max-h-[300px]">
-            <div className="space-y-1">
-              {templates.map(t => (
-                <div key={t.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 group">
-                  <span className="text-sm flex-1">{t.label}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-destructive/70 hover:text-destructive opacity-0 group-hover:opacity-100"
-                    onClick={() => handleDeleteTemplate(t.id)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-          <div className="flex items-center gap-2">
-            <Input
-              value={newTemplateLabel}
-              onChange={e => setNewTemplateLabel(e.target.value)}
-              placeholder="New template item..."
-              className="h-8 text-sm"
-              onKeyDown={e => e.key === 'Enter' && handleAddTemplate()}
-            />
-            <Button size="sm" onClick={handleAddTemplate} disabled={!newTemplateLabel.trim()} className="h-8">
-              Add
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setTemplateDialogOpen(false); fetchChecklist(); }}>
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

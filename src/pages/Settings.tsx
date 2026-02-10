@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Settings as SettingsIcon, Bell, Moon, Sun, Monitor, HelpCircle, RotateCcw, Zap, ExternalLink, Users, Building2, Calculator } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Moon, Sun, Monitor, HelpCircle, RotateCcw, Zap, ExternalLink, Users, Building2, Calculator, FileText } from "lucide-react";
 import { NotificationSettings } from "@/components/pwa/NotificationSettings";
 import { ContentEnhancerDemo } from "@/components/onboarding/ContentEnhancerDemo";
 import { APIIntegrationConfigPanel, APIIntegrationStatus } from "@/components/projects/simulation";
@@ -18,11 +18,14 @@ import { useOrganizationBranding } from "@/hooks/useOrganizationBranding";
 import { useTour } from "@/components/onboarding/TourContext";
 import { SettingsErrorBoundary } from "@/components/settings/SettingsErrorBoundary";
 import { SettingsLoadingSkeleton } from "@/components/settings/SettingsLoadingSkeleton";
+import { ChecklistTemplatesCard } from "@/components/settings/ChecklistTemplatesCard";
 
-const EXPECTED_TAB_COUNT = 8;
+const EXPECTED_TAB_COUNT = 9;
 
 function SettingsContent() {
   const { theme, setTheme } = useTheme();
+  const searchParams = new URLSearchParams(window.location.search);
+  const defaultTab = searchParams.get('tab') || 'general';
   const [includeVAT, setIncludeVAT] = useState(true);
   const [useAverageRates, setUseAverageRates] = useState(false);
   const { completedTours, resetAllTours } = useTour();
@@ -59,7 +62,7 @@ function SettingsContent() {
         </div>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
+      <Tabs defaultValue={defaultTab} className="space-y-6">
         <TabsList className="bg-muted/50 flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="general" className="flex items-center gap-2">
             <SettingsIcon className="h-4 w-4" />
@@ -88,6 +91,10 @@ function SettingsContent() {
           <TabsTrigger value="onboarding" className="flex items-center gap-2">
             <HelpCircle className="h-4 w-4" />
             Onboarding
+          </TabsTrigger>
+          <TabsTrigger value="templates" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Templates
           </TabsTrigger>
           <TabsTrigger value="integrations" className="flex items-center gap-2">
             <ExternalLink className="h-4 w-4" />
@@ -288,6 +295,10 @@ function SettingsContent() {
 
         <TabsContent value="onboarding" className="space-y-6">
           <ContentEnhancerDemo />
+        </TabsContent>
+
+        <TabsContent value="templates" className="space-y-6">
+          <ChecklistTemplatesCard />
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-6">
