@@ -37,7 +37,8 @@ import {
   FileType2,
   Layers,
   Users,
-  Palette
+  Palette,
+  SplitSquareHorizontal
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -386,6 +387,16 @@ export function GanttToolbar({
       >
         <Flag className="h-4 w-4 mr-1" />
         Milestones
+      </Button>
+
+      <Button
+        variant={config.splitView ? 'secondary' : 'ghost'}
+        size="sm"
+        className="h-8"
+        onClick={() => onConfigChange({ ...config, splitView: !config.splitView })}
+      >
+        <SplitSquareHorizontal className="h-4 w-4 mr-1" />
+        Split Bars
       </Button>
 
       <Separator orientation="vertical" className="h-8" />

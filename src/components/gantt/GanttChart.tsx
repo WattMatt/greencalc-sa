@@ -188,7 +188,19 @@ export function GanttChart({
   type VisibleRow = 
     | { type: 'category-header'; key: string; label: string; taskCount: number }
     | { type: 'zone-header'; key: string; label: string; categoryKey: string; taskCount: number }
-    | { type: 'task'; task: GanttTask };
+    | { type: 'task'; task: GanttTask; segmentOverride?: { start_date: string; end_date: string } };
+
+  // Helper to expand a task into cascade rows if splitView is off
+  const expandTaskRows = useCallback((task: GanttTask): VisibleRow[] => {
+    if (config.splitView) return [{ type: 'task', task }];
+    const segs = segmentsByTaskId?.get(task.id);
+    if (!segs || segs.length <= 1) return [{ type: 'task', task }];
+    return segs.map(seg => ({
+      type: 'task' as const,
+      task,
+      segmentOverride: { start_date: seg.start_date, end_date: seg.end_date },
+    }));
+  }, [config.splitView, segmentsByTaskId]);
 
   const hierarchicalRows = useMemo<VisibleRow[]>(() => {
     if (config.groupBy !== 'category_owner') return [];
@@ -227,19 +239,19 @@ export function GanttChart({
 
             if (!collapsedGroups.has(zoneKey)) {
               for (const task of zoneTasks) {
-                rows.push({ type: 'task', task });
+                rows.push(...expandTaskRows(task));
               }
             }
           } else {
             for (const task of zoneTasks) {
-              rows.push({ type: 'task', task });
+              rows.push(...expandTaskRows(task));
             }
           }
         }
       }
     }
     return rows;
-  }, [tasks, config.groupBy, collapsedGroups]);
+  }, [tasks, config.groupBy, config.splitView, collapsedGroups, expandTaskRows]);
 
   // Calculate baseline position for a task
   const getBaselinePosition = useCallback((taskId: string) => {
@@ -434,9 +446,10 @@ export function GanttChart({
                       );
                     }
                     const task = row.task;
+                    const taskRowKey = row.segmentOverride ? `${task.id}-${row.segmentOverride.start_date}` : task.id;
                     return (
                       <div
-                        key={task.id}
+                        key={taskRowKey}
                         className={cn(
                           "flex items-center gap-2 hover:bg-muted/50 cursor-pointer group",
                           selectedTasks.has(task.id) && "bg-primary/10",
@@ -621,14 +634,19 @@ export function GanttChart({
                         );
                       }
                       const task = row.task;
+                      const hasSegmentOverride = !!row.segmentOverride;
                       const dragPreview = getDragPreview(task.id);
-                      const { left, width } = getTaskPosition(task, dragPreview);
+                      const overrideTask = hasSegmentOverride
+                        ? { ...task, start_date: row.segmentOverride!.start_date, end_date: row.segmentOverride!.end_date }
+                        : task;
+                      const { left, width } = getTaskPosition(overrideTask, dragPreview);
                       const isCritical = criticalPathIds.has(task.id);
                       const isBeingDragged = dragState?.taskId === task.id;
-                      const segPositions = getSegmentPositions(task.id);
+                      const segPositions = hasSegmentOverride ? null : getSegmentPositions(task.id);
+                      const rowKey = hasSegmentOverride ? `${task.id}-${row.segmentOverride!.start_date}` : task.id;
 
                       return (
-                        <TooltipProvider key={task.id}>
+                        <TooltipProvider key={rowKey}>
                           <div
                             className={cn(
                               "relative border-b",
