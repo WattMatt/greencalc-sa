@@ -26,6 +26,7 @@ import { ProposalManager } from "@/components/projects/ProposalManager";
 import { SystemCostsManager, SystemCostsData } from "@/components/projects/SystemCostsManager";
 import { DEFAULT_SYSTEM_COSTS } from "@/components/projects/simulation/FinancialAnalysis";
 import { ProjectGantt } from "@/components/gantt";
+import { ProjectDocuments } from "@/components/projects/ProjectDocuments";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1273,17 +1274,7 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="documents" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FolderOpen className="h-5 w-5 text-primary" />
-                Project Documents
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">Document management coming soon.</p>
-            </CardContent>
-          </Card>
+          <ProjectDocuments projectId={id!} />
         </TabsContent>
       </Tabs>
     </div>
