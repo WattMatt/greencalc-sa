@@ -1,56 +1,26 @@
 
 
-# Add Split/Cascade Toggle for Gantt Chart
+# Fix Cascade View to Sort by Date (True Gantt Chart)
 
-## Overview
+## Problem
 
-Add a toggle button in the Gantt toolbar that switches between two display modes:
+When "Split Bars" is toggled off (cascade mode), each segment becomes its own row, but they remain grouped by task. This means segments from the same task appear together rather than being interleaved chronologically with segments from other tasks. A true Gantt cascade should sort ALL rows within a zone by their start date, so the bars staircase down the chart in chronological order.
 
-- **Split View** (current default): Tasks with multiple segments show as multiple bars on a single row.
-- **Cascade View**: Each segment of a split task becomes its own separate row, all sharing the same task name. This "explodes" multi-segment tasks into individual rows for a traditional cascading Gantt look.
+## Solution
 
-## What Changes
+In `src/components/gantt/GanttChart.tsx`, after expanding all tasks into cascade rows within a zone, sort those rows by their effective start date before pushing them into the final row list.
 
-### 1. New Config Property (`src/types/gantt.ts`)
+### Change Details
 
-Add a `splitView` boolean to `GanttChartConfig`. When `true` (default), segments render as multiple bars on one row. When `false`, segments are expanded into separate visual rows.
+**File: `src/components/gantt/GanttChart.tsx`**
 
-### 2. Toolbar Toggle (`src/components/gantt/GanttToolbar.tsx`)
+In the `hierarchicalRows` memo, after collecting all expanded task rows for a zone (both in the `!collapsedGroups.has(zoneKey)` branch and the `skipZoneHeader` branch), sort the collected task rows by start date before appending to the main `rows` array.
 
-Add a new toggle button in the toolbar area (near Dependencies/Milestones toggles) with a label like "Split Bars". It will use the existing button pattern -- `variant="secondary"` when active, `variant="ghost"` when inactive. Clicking it flips `config.splitView`.
+- Collect zone task rows into a temporary array
+- Sort that array by effective start date (`segmentOverride?.start_date` or `task.start_date`)
+- Then push sorted rows into the final list
 
-### 3. Chart Rendering Logic (`src/components/gantt/GanttChart.tsx`)
+This ensures that in cascade mode, all segments across all tasks within a zone are ordered chronologically, creating the classic staircase Gantt pattern shown in the reference image.
 
-When `splitView` is OFF (cascade mode):
-- In the hierarchical rows memo and the grouped tasks rendering, tasks with multiple segments will be expanded into multiple "virtual" rows.
-- Each virtual row represents one segment and displays the same task name, color, progress, and owner.
-- Each virtual row renders a single bar positioned according to that segment's start/end dates.
-
-When `splitView` is ON (current behavior):
-- No change -- multiple bars render on the same row as they do now.
-
-### 4. Toolbar Props Update
-
-Pass the new `splitView` config through the existing `config`/`onConfigChange` pattern already used by the toolbar. No new props needed.
-
-## Technical Details
-
-### Config change
-- Add `splitView: boolean` to `GanttChartConfig` interface
-- Set default to `true` in `DEFAULT_CHART_CONFIG`
-
-### Cascade row expansion
-In `GanttChart.tsx`, create an intermediate step before rendering rows. When `splitView` is `false`:
-- For each task, check `segmentsByTaskId` for segments
-- If a task has N segments (N > 1), produce N "virtual task entries" in the row list, each carrying a single segment's date range
-- The task list panel shows the same task name for each expanded row
-- The timeline panel renders a single bar per row using the segment's dates
-
-### Toolbar button
-A simple toggle button with a relevant icon (e.g., `SplitSquareHorizontal` or `Rows3` from lucide) placed after the Milestones toggle.
-
-### Files to modify
-- `src/types/gantt.ts` -- add `splitView` to config and default
-- `src/components/gantt/GanttToolbar.tsx` -- add toggle button
-- `src/components/gantt/GanttChart.tsx` -- cascade expansion logic when `splitView` is false
+When `splitView` is ON (split mode), the sort has no negative effect since each task produces only one row.
 
