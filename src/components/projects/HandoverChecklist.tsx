@@ -146,9 +146,20 @@ export function HandoverChecklist({
 
   // ---- Template sync ----
   const syncTemplates = async () => {
+    // Find the handover group (by convention, "Solar PV Handover")
+    const { data: groups } = await supabase
+      .from('checklist_template_groups')
+      .select('id')
+      .eq('name', 'Solar PV Handover')
+      .limit(1);
+
+    const handoverGroupId = groups?.[0]?.id;
+    if (!handoverGroupId) return;
+
     const { data: allTemplates } = await supabase
       .from('checklist_templates')
       .select('id, label, category, sort_order')
+      .eq('group_id', handoverGroupId)
       .order('sort_order', { ascending: true });
 
     const { data: existingItems } = await supabase

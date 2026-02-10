@@ -50,10 +50,32 @@ export type Database = {
           },
         ]
       }
+      checklist_template_groups: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       checklist_templates: {
         Row: {
           category: string
           created_at: string
+          group_id: string
           id: string
           label: string
           sort_order: number
@@ -61,6 +83,7 @@ export type Database = {
         Insert: {
           category?: string
           created_at?: string
+          group_id: string
           id?: string
           label: string
           sort_order?: number
@@ -68,11 +91,20 @@ export type Database = {
         Update: {
           category?: string
           created_at?: string
+          group_id?: string
           id?: string
           label?: string
           sort_order?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "checklist_templates_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_template_groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       eskom_batch_status: {
         Row: {
