@@ -1,58 +1,42 @@
 
 
-# Update CSV Parser for PnP SCADA Format
+# Fix CSV Parser for Quoted SCADA Files
 
-## What Changes
+## Root Cause
 
-The CSV parser needs to understand the PnP SCADA file format, where:
-- Row 1 is metadata (contains "pnpscada.com" and a meter number) -- skip it
-- Row 2 is the header row with columns like "P (per kW)", "DATE", "TIME", "STATUS"
-- Row 3 onward contains half-hourly power readings in kW (not kWh)
+The CSV file has all values wrapped in double quotes:
+- Row 1: `"pnpscada.com", "36506661"`
+- Row 2: `"P1 (per kW)", "Q1 (per kvar)", ..., "DATE", "TIME", "STATUS"`
 
-The parser currently expects a simple "month" + "kWh" format, which won't work with these files.
+The parser splits by comma and trims whitespace, but never removes the surrounding quotes. So:
+- `"pnpscada.com"` (with quotes) doesn't match `.includes("pnpscada")` -- actually it does since the quotes are part of the string. But `"DATE"` won't match `/^date$/i` because the string is `"date"` (with literal quote characters).
+- The column header `P1 (per kW)` has a `1` which the regex `/p\s*\(per\s*kw\)/i` doesn't account for.
 
-## How It Will Work
-
-1. **Detect format**: Check if row 1 contains "pnpscada.com" -- if so, treat row 2 as headers and row 3+ as data
-2. **Find columns**: Locate the "DATE" column and the power value column (e.g., "P (per kW)") using the provided regex pattern
-3. **Convert kW to kWh**: Detect the time interval between readings (30 minutes = 0.5 hours) and multiply each kW value by 0.5 to get kWh
-4. **Group by month**: Extract the month from the DATE column (e.g., 2026-01-15 = month 1) and sum all kWh values per month
-5. **Fallback**: If the file doesn't match the SCADA format, fall back to the existing simple "month + kWh" parsing
-
-The simple format (month column with direct kWh values) will continue to work as before.
-
-## Technical Details
+## Changes
 
 ### File: `src/components/projects/generation/csvUtils.ts`
 
-Rewrite `parseCSVFiles` to handle both formats:
+1. **Strip quotes from all parsed values**: After splitting each line by comma, strip surrounding double quotes from every cell (in addition to trimming whitespace). Apply this to headers, date values, time values, and numeric values.
 
-```text
-For each file:
-  1. Read lines
-  2. If line 0 contains "pnpscada" -> SCADA format:
-     a. Use line 1 as headers
-     b. Find DATE column and value column (matching provided regex or "p (per kw)")
-     c. Find TIME column to calculate interval (default 0.5 hours for 30-min data)
-     d. For each data row (line 2+):
-        - Parse DATE to get month (1-12)
-        - Multiply kW value by interval hours to get kWh
-        - Add to month total
-  3. Else -> simple format (existing logic):
-     a. Use line 0 as headers
-     b. Find "month" and value columns
-     c. Sum direct kWh values per month
-```
+2. **Update the SCADA value column regex** to also match headers like `P1 (per kW)`, `P2 (per kW)`, etc. Change the fallback pattern from:
+   - `/p\s*\(per\s*kw\)/i` 
+   - to `/p\d*\s*\(per\s*kw\)/i`
 
-### File: `src/components/projects/generation/ActualGenerationCard.tsx`
+   This allows an optional digit after "P".
 
-Update the regex pattern passed to `parseCSVFiles` to also match SCADA power headers:
-- Pattern: `/kwh|energy|generation|actual|p \(per kw\)/i`
+3. **Apply quote stripping universally** by adding a small helper:
+   ```
+   function stripQuotes(s: string): string {
+     return s.replace(/^"|"$/g, "").trim();
+   }
+   ```
+   Use it when processing header arrays and data cells.
 
-### File: `src/components/projects/generation/BuildingLoadCard.tsx`
+### Files: `ActualGenerationCard.tsx` and `BuildingLoadCard.tsx`
 
-Same regex update:
-- Pattern: `/kwh|energy|load|consumption|building|p \(per kw\)/i`
+Update the regex patterns passed to `parseCSVFiles` to include the `p1` variant:
+- ActualGenerationCard: `/kwh|energy|generation|actual|p\d*\s*\(per\s*kw\)/i`
+- BuildingLoadCard: `/kwh|energy|load|consumption|building|p\d*\s*\(per\s*kw\)/i`
 
-### No database changes required.
+### No database changes needed.
 
