@@ -305,7 +305,7 @@ export function HandoverChecklist({
       {/* Split view */}
       <ResizablePanelGroup direction="horizontal" className="min-h-[400px] rounded-lg border">
         {/* Left Panel — Requirements */}
-        <ResizablePanel defaultSize={55} minSize={35}>
+        <ResizablePanel defaultSize={35} minSize={20}>
           <div className="flex flex-col h-full">
             <div className="px-3 py-2 border-b bg-muted/30">
               <div className="flex items-center justify-between">
@@ -413,7 +413,7 @@ export function HandoverChecklist({
         <ResizableHandle withHandle />
 
         {/* Right Panel — Files */}
-        <ResizablePanel defaultSize={45} minSize={25}>
+        <ResizablePanel defaultSize={65} minSize={25}>
           <div className="flex flex-col h-full">
             <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Files</span>
