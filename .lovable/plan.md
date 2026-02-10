@@ -1,52 +1,70 @@
 
 
-# Fix Duplicate Checklist Items + Move Template Manager to Settings
+# Restructure Templates: Group-Based Checklist Templates
 
-## Problem
+## Overview
 
-1. **Duplicate requirements**: The old seeding logic (before templates existed) created checklist items without a `template_id`. The new sync logic then added the same items again with a `template_id`. Every requirement appears twice.
+Instead of one flat list of checklist items, the Templates tab will show **template groups** (e.g., "Solar PV Handover", "Battery Installation Checklist"). Clicking on a group opens its items. This allows creating different types of checklists beyond just handover documentation.
 
-2. **Template management UX**: The current "Manage Template" popup dialog is too small and cramped for managing a global list. It needs a proper full-page view.
+## Database Changes
 
-## Changes
+### New table: `checklist_template_groups`
 
-### 1. Database cleanup migration
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID, PK | |
+| name | text | e.g. "Solar PV Handover" |
+| description | text, nullable | Optional description |
+| created_at | timestamp | |
 
-Run a SQL migration to remove the orphaned rows (items with no `template_id` that have a matching label with a `template_id` version in the same project). This cleans up all affected projects in one shot.
+### Modify `checklist_templates`
 
-```sql
-DELETE FROM handover_checklist_items a
-WHERE a.template_id IS NULL
-AND EXISTS (
-  SELECT 1 FROM handover_checklist_items b
-  WHERE b.project_id = a.project_id
-  AND b.label = a.label
-  AND b.template_id IS NOT NULL
-);
-```
+Add a `group_id` column (UUID, FK to `checklist_template_groups`) to associate each item with a group.
 
-### 2. New Settings tab: "Templates"
+### Migration steps
 
-Add a 9th tab to the Settings page called "Templates" (with a FileText icon). This tab will contain a full-width card for managing the global checklist template -- the same functionality currently in the dialog but with proper spacing, a table layout, and room to grow.
+1. Create `checklist_template_groups` table with RLS policies.
+2. Insert one default group: "Solar PV Handover".
+3. Add `group_id` column to `checklist_templates`.
+4. Set all existing template items' `group_id` to the new "Solar PV Handover" group.
+5. Make `group_id` NOT NULL after backfill.
 
-The card will include:
-- A list of all template items with delete buttons
-- An input field to add new items
-- A note explaining that changes sync to all projects
+## UI Changes
 
-### 3. Update HandoverChecklist.tsx
+### Templates tab -- two-level view
 
-- Remove the Dialog-based template manager entirely
-- Change the "Manage Template" button to navigate to Settings (Templates tab) instead
-- Update `EXPECTED_TAB_COUNT` in Settings.tsx from 8 to 9
+**Level 1 -- Group list (default view):**
+- Title: "Checklist Templates"
+- Description: "Manage reusable checklist templates. Each template contains a set of requirements that sync to projects."
+- Cards/rows for each template group showing name, item count, and actions (edit, delete).
+- "Create Template" button to add a new group.
 
-## Files to modify
+**Level 2 -- Items within a group (when a group is clicked):**
+- Back button to return to the group list.
+- Title shows the group name (e.g., "Solar PV Handover").
+- The existing table of checklist items, filtered to that group.
+- Add item input scoped to this group.
+
+This is all handled with local state (a `selectedGroupId`) -- no routing needed.
+
+## Files to Create/Modify
 
 | File | Change |
 |------|--------|
-| SQL Migration | Delete duplicate checklist items |
-| `src/pages/Settings.tsx` | Add "Templates" tab, update tab count to 9 |
-| `src/components/settings/ChecklistTemplatesCard.tsx` | New component -- full template management UI |
-| `src/components/projects/HandoverChecklist.tsx` | Remove dialog, change button to navigate to Settings |
-| `src/components/settings/SettingsLoadingSkeleton.tsx` | Add one more skeleton tab |
+| SQL Migration | Create `checklist_template_groups`, add `group_id` to `checklist_templates`, backfill |
+| `src/components/settings/ChecklistTemplatesCard.tsx` | Rewrite to two-level view: group list + item list |
+| `src/components/projects/HandoverChecklist.tsx` | Update template sync to filter by group (use the "Solar PV Handover" group for handover folders) |
+
+## Technical Details
+
+### ChecklistTemplatesCard state machine
+
+```text
+selectedGroupId = null  -->  Show group list (cards with name, count, delete)
+selectedGroupId = "abc" -->  Show items for that group (existing table UI + back button)
+```
+
+### Template sync update
+
+The sync logic in `HandoverChecklist.tsx` currently fetches all `checklist_templates`. It will be updated to filter by the group associated with handover documentation (by name or a known convention), so only the relevant template items sync to handover checklists.
 
