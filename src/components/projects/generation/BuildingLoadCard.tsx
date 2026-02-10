@@ -101,16 +101,9 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
     try {
       const text = await files[0].text();
       const allLines = text.split("\n").filter((l) => l.trim());
-      const totals = await parseCSVFiles(files, /kwh|energy|load|consumption|building|p\d*\s*\(per\s*kw\)/i);
-
-      if (totals.size === 0) {
-        setCsvDialogLines(allLines);
-        setPendingFileCount(files.length);
-        setCsvDialogOpen(true);
-        return;
-      }
-
-      await saveCSVTotals(totals, files.length);
+      setCsvDialogLines(allLines);
+      setPendingFileCount(files.length);
+      setCsvDialogOpen(true);
     } catch (err: any) {
       toast.error(err.message || "CSV import failed");
     }
