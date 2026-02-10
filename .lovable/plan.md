@@ -1,84 +1,104 @@
 
 
-# Project Documents - File Manager with Folders
+# Handover Documentation Folder with Required Documents Checklist
 
 ## Overview
 
-Replace the placeholder "Project Documents" card with a full document management system. Users will be able to create folders, upload files, rename/delete/move files between folders, and download files. The UI pattern will mirror the existing PV Layout Browser's folder system.
+Each project will automatically get two default folders: "Uncategorized" and "Handover Documentation". The "Handover Documentation" folder will have a predefined checklist of required documents. Uploaded files within that folder can be mapped to checklist items, giving a clear view of which required documents are present and which are still missing.
 
-## What Gets Built
+## What Changes
 
-### Database
+### 1. Database: New table `handover_checklist_items`
 
-**New table: `project_documents`**
-- `id` (UUID, PK)
-- `project_id` (UUID, FK to projects)
-- `folder_id` (UUID, nullable, FK to project_document_folders)
-- `name` (text) -- display name
-- `file_path` (text) -- storage path in bucket
-- `file_size` (bigint, nullable)
-- `mime_type` (text, nullable)
-- `uploaded_by` (UUID, nullable)
-- `created_at`, `updated_at` (timestamps)
+A new table to store the predefined list of required handover documents per project, and track which uploaded document(s) satisfy each requirement.
 
-**New table: `project_document_folders`**
-- `id` (UUID, PK)
-- `project_id` (UUID, FK to projects)
-- `name` (text)
-- `color` (text, nullable)
-- `sort_order` (integer, default 0)
-- `created_at`, `updated_at` (timestamps)
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID, PK | |
+| `project_id` | UUID, FK | Link to project |
+| `label` | text | Name of the required document (e.g. "COC Certificate") |
+| `sort_order` | integer | Display ordering |
+| `document_id` | UUID, nullable, FK | Link to a `project_documents` row that fulfills this requirement |
+| `created_at` | timestamp | |
 
-Both tables get RLS policies matching the existing `pv_layout_folders` pattern (open access).
+RLS: same open-access pattern as other project tables.
 
-### Storage
+### 2. Auto-creation of default folders and checklist
 
-**New bucket: `project-documents`** (private) for actual file storage. Files stored under path `{project_id}/{document_id}/{filename}`.
+When `ProjectDocuments` mounts and finds zero folders for the project, it will automatically create:
+- "Uncategorized" folder (sort_order 0)
+- "Handover Documentation" folder (sort_order 1)
 
-### New Component: `ProjectDocuments.tsx`
+And seed the `handover_checklist_items` table with the predefined list of required documents (approximately 15-20 items such as "COC Certificate", "As-Built Drawings", "Commissioning Report", "O&M Manual", etc.).
 
-A new component at `src/components/projects/ProjectDocuments.tsx` that provides:
+### 3. UI changes to `ProjectDocuments.tsx`
 
-- **Toolbar** with buttons: "Upload Files", "New Folder", "Manage Folders"
-- **Folder sections** as collapsible accordions (same pattern as LayoutBrowser), each showing its documents
-- **Uncategorized section** for documents not in any folder
-- **Document rows** showing file name, size, upload date, with action menu (Rename, Move to Folder, Download, Delete)
-- **Drag and drop** between folders (reusing the same drag pattern from LayoutBrowser)
-- **File upload** via a hidden input triggered by the Upload button; files go to the `project-documents` storage bucket and metadata is saved to `project_documents` table
-- **Download** generates a signed URL from storage and opens it
+**Handover Documentation folder gets a special rendering:**
 
-### Integration
+Instead of just listing uploaded files, the Handover Documentation folder will show:
+- A **checklist table** with two columns: "Required Document" and "Uploaded File"
+- Each row shows the required document label on the left
+- On the right, either a linked document name (with download action) or an "Assign" button
+- A status summary at the top (e.g. "5 of 18 documents provided")
+- A progress bar showing completion percentage
 
-In `src/pages/ProjectDetail.tsx`, the Documents `TabsContent` will import and render `<ProjectDocuments projectId={id} />` instead of the placeholder card.
+**Assigning documents to checklist items:**
+- Users upload files into the Handover Documentation folder as normal
+- Each checklist row has an "Assign" dropdown that lists all documents currently in the Handover Documentation folder
+- Selecting a document links it to that checklist requirement
+- Multiple checklist items can reference the same document (if one file covers multiple requirements)
+- Documents can also be unassigned
+
+**The rest of the folders** (Uncategorized + any user-created folders) continue to work exactly as they do today.
+
+### 4. Predefined required documents list
+
+The initial checklist will include items like:
+- COC Certificate
+- As-Built Drawings
+- Commissioning Report
+- O&M Manual
+- Warranty Documentation
+- Grid Connection Agreement
+- Meter Installation Certificate
+- Performance Test Report
+- Structural Engineering Certificate
+- Electrical Single Line Diagram
+- Site Handover Certificate
+- Training Completion Certificate
+- Insurance Documentation
+- Environmental Compliance Certificate
+- Safety File
+
+This list is seeded once per project. Users will be able to add/remove items from the checklist.
 
 ## Files to Create/Modify
 
-1. **SQL Migration** -- create `project_document_folders` and `project_documents` tables, RLS policies, storage bucket
-2. **`src/components/projects/ProjectDocuments.tsx`** (new) -- the full document manager component
-3. **`src/pages/ProjectDetail.tsx`** -- replace placeholder with the new component
+1. **SQL Migration** -- create `handover_checklist_items` table with RLS
+2. **`src/components/projects/ProjectDocuments.tsx`** -- add auto-seeding logic, special Handover folder rendering with checklist UI
+3. Possibly extract a sub-component `HandoverChecklist.tsx` for clarity
 
 ## Technical Details
 
-### Storage bucket creation (in migration)
-```sql
-INSERT INTO storage.buckets (id, name, public) VALUES ('project-documents', 'project-documents', false);
+### Auto-seeding logic (in `fetchData`)
+```
+After fetching folders:
+  if (folders.length === 0) {
+    - Insert "Uncategorized" folder (sort_order 0)
+    - Insert "Handover Documentation" folder (sort_order 1)
+    - Insert default checklist items for the project
+    - Re-fetch data
+  }
 ```
 
-Storage RLS policies will allow authenticated users to upload, read, and delete files.
+### Handover folder detection
+The component identifies the Handover Documentation folder by name match. When rendering that folder section, it switches to the checklist view instead of the plain file list.
 
-### File upload flow
-1. User clicks "Upload Files" -> hidden `<input type="file" multiple>` opens
-2. For each selected file, insert a row into `project_documents` to get the document ID
-3. Upload the file to storage at path `{project_id}/{document_id}/{filename}`
-4. Update the document row with `file_path`, `file_size`, `mime_type`
+### Checklist item assignment
+```sql
+UPDATE handover_checklist_items SET document_id = '<doc_id>' WHERE id = '<item_id>';
+```
 
-### File download flow
-1. Call `supabase.storage.from('project-documents').createSignedUrl(path, 60)` for a 60-second signed URL
-2. Open the URL in a new tab
-
-### Move to folder
-Same pattern as LayoutBrowser: dropdown submenu listing all folders plus "Uncategorized", updating `folder_id` on the document row.
-
-### Component structure
-The component will be self-contained with its own state management (useState for folders, documents, dialogs) and CRUD operations, following the exact same patterns used in `LayoutBrowser.tsx`.
-
+### Adding/removing checklist items
+- An "Add Requirement" button at the bottom of the checklist
+- Each row has a delete action to remove custom requirements
