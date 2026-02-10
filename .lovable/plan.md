@@ -1,70 +1,56 @@
 
 
-# Restructure Templates: Group-Based Checklist Templates
+# Add "Generation" Tab After Documents
 
 ## Overview
 
-Instead of one flat list of checklist items, the Templates tab will show **template groups** (e.g., "Solar PV Handover", "Battery Installation Checklist"). Clicking on a group opens its items. This allows creating different types of checklists beyond just handover documentation.
+Add a "Generation" tab as the last tab (after Documents) in the project detail page. It will track monthly kWh data from two sources:
 
-## Database Changes
+1. **Actual kWh** -- from CSV upload or manual entry (real inverter/meter readings)
+2. **Guaranteed kWh** -- manually entered monthly contractual guarantee values
+3. **Forecasted kWh** -- placeholder only (coming later)
 
-### New table: `checklist_template_groups`
+A performance chart and summary table will compare actual vs guaranteed, with the forecasted column greyed out as "coming soon."
+
+## Database
+
+### New table: `generation_records`
+
+One row per project per month per year:
 
 | Column | Type | Notes |
 |--------|------|-------|
-| id | UUID, PK | |
-| name | text | e.g. "Solar PV Handover" |
-| description | text, nullable | Optional description |
-| created_at | timestamp | |
+| id | UUID PK | |
+| project_id | UUID FK | References projects, CASCADE delete |
+| month | INTEGER | 1-12 |
+| year | INTEGER | e.g. 2026 |
+| actual_kwh | NUMERIC, nullable | From CSV or manual |
+| guaranteed_kwh | NUMERIC, nullable | Contractual target |
+| expected_kwh | NUMERIC, nullable | Placeholder for future |
+| source | TEXT | 'csv' or 'manual' |
+| created_at / updated_at | TIMESTAMPTZ | |
 
-### Modify `checklist_templates`
+Unique constraint on (project_id, month, year). RLS for authenticated users.
 
-Add a `group_id` column (UUID, FK to `checklist_template_groups`) to associate each item with a group.
+## New Components
 
-### Migration steps
+All in `src/components/projects/generation/`:
 
-1. Create `checklist_template_groups` table with RLS policies.
-2. Insert one default group: "Solar PV Handover".
-3. Add `group_id` column to `checklist_templates`.
-4. Set all existing template items' `group_id` to the new "Solar PV Handover" group.
-5. Make `group_id` NOT NULL after backfill.
+- **GenerationTab.tsx** -- Main container with year selector, the three cards, chart, and table
+- **ActualGenerationCard.tsx** -- CSV upload + 12 monthly manual inputs for actual kWh
+- **GuaranteedGenerationCard.tsx** -- 12 monthly manual inputs for guaranteed kWh
+- **ExpectedGenerationCard.tsx** -- Placeholder card saying "Forecasted generation -- coming soon"
+- **PerformanceChart.tsx** -- Recharts bar/line chart comparing actual vs guaranteed (expected greyed out)
+- **PerformanceSummaryTable.tsx** -- Monthly table with actual, guaranteed, expected (greyed), and performance ratios
 
-## UI Changes
+## Changes to ProjectDetail.tsx
 
-### Templates tab -- two-level view
+- Add `generation` entry to `tabStatuses` (pending if no data, partial if some months, complete if all 12 months have actual data)
+- Add `TabWithStatus` for "Generation" with `TrendingUp` icon **after** the Documents tab
+- Add `TabsContent` for "generation" rendering `GenerationTab` with `projectId` prop
 
-**Level 1 -- Group list (default view):**
-- Title: "Checklist Templates"
-- Description: "Manage reusable checklist templates. Each template contains a set of requirements that sync to projects."
-- Cards/rows for each template group showing name, item count, and actions (edit, delete).
-- "Create Template" button to add a new group.
+## Tab Placement
 
-**Level 2 -- Items within a group (when a group is clicked):**
-- Back button to return to the group list.
-- Title shows the group name (e.g., "Solar PV Handover").
-- The existing table of checklist items, filtered to that group.
-- Add item input scoped to this group.
-
-This is all handled with local state (a `selectedGroupId`) -- no routing needed.
-
-## Files to Create/Modify
-
-| File | Change |
-|------|--------|
-| SQL Migration | Create `checklist_template_groups`, add `group_id` to `checklist_templates`, backfill |
-| `src/components/settings/ChecklistTemplatesCard.tsx` | Rewrite to two-level view: group list + item list |
-| `src/components/projects/HandoverChecklist.tsx` | Update template sync to filter by group (use the "Solar PV Handover" group for handover folders) |
-
-## Technical Details
-
-### ChecklistTemplatesCard state machine
-
-```text
-selectedGroupId = null  -->  Show group list (cards with name, count, delete)
-selectedGroupId = "abc" -->  Show items for that group (existing table UI + back button)
-```
-
-### Template sync update
-
-The sync logic in `HandoverChecklist.tsx` currently fetches all `checklist_templates`. It will be updated to filter by the group associated with handover documentation (by name or a known convention), so only the relevant template items sync to handover checklists.
+The tab order will be:
+Overview, Tenants, Load Profile, Costs, Tariff, Simulation, PV Layout, Solar Forecast, Proposals, Reports, Schedule, Documents, **Generation**
 
