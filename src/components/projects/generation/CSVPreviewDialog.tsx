@@ -1,5 +1,12 @@
 import { useState, useMemo } from "react";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -56,6 +63,7 @@ type ColumnRole = "date" | "value" | "time";
 export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPreviewDialogProps) {
   const [columnRoles, setColumnRoles] = useState<Map<number, ColumnRole>>(new Map());
   const [isKw, setIsKw] = useState(true);
+  const [previewCount, setPreviewCount] = useState(10);
 
   const { dataStartRow, headers, previewRows } = useMemo(() => {
     if (csvLines.length < 2) return { dataStartRow: 1, headers: [] as string[], previewRows: [] as string[][] };
@@ -66,7 +74,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
     const dStart = isScada ? 2 : 1;
 
     const hdrs = (csvLines[hRow] ?? "").split(",").map(strip);
-    const preview = csvLines.slice(dStart, dStart + 10).map((l) => l.split(",").map(strip));
+    const preview = csvLines.slice(dStart, dStart + previewCount).map((l) => l.split(",").map(strip));
 
     return { dataStartRow: dStart, headers: hdrs, previewRows: preview };
   }, [csvLines]);
@@ -210,7 +218,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
           </Table>
         </div>
 
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex items-center gap-4 text-sm flex-wrap">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -220,6 +228,19 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
             />
             Values are in kW (convert to kWh using time interval)
           </label>
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-muted-foreground">Rows:</span>
+            <Select value={String(previewCount)} onValueChange={(v) => setPreviewCount(Number(v))}>
+              <SelectTrigger className="w-20 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[5, 10, 25, 50, 100].map((n) => (
+                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <DialogFooter>
