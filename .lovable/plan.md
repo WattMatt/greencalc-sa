@@ -1,42 +1,90 @@
 
-
-# Fix CSV Parser for Quoted SCADA Files
+# Fix CSV Parser Bug + Add Manual Column Mapping Popup
 
 ## Root Cause
 
-The CSV file has all values wrapped in double quotes:
-- Row 1: `"pnpscada.com", "36506661"`
-- Row 2: `"P1 (per kW)", "Q1 (per kvar)", ..., "DATE", "TIME", "STATUS"`
+The `stripQuotes` function has a subtle bug. When splitting a CSV line like:
 
-The parser splits by comma and trims whitespace, but never removes the surrounding quotes. So:
-- `"pnpscada.com"` (with quotes) doesn't match `.includes("pnpscada")` -- actually it does since the quotes are part of the string. But `"DATE"` won't match `/^date$/i` because the string is `"date"` (with literal quote characters).
-- The column header `P1 (per kW)` has a `1` which the regex `/p\s*\(per\s*kw\)/i` doesn't account for.
+```text
+"P1 (per kW)", "DATE", "TIME", "STATUS"
+```
+
+by comma, values after the first have a **leading space**: `' "DATE"'`. The current code does:
+
+```text
+s.replace(/^"|"$/g, "").trim()
+```
+
+Since the string starts with a space (not a quote), `^"` doesn't match, leaving a stray `"` character. So `"DATE"` becomes `'"date'` after processing, which fails the `/^date$/i` regex match.
+
+**Fix**: Trim whitespace **before** stripping quotes:
+
+```text
+s.trim().replace(/^"|"$/g, "").trim()
+```
 
 ## Changes
 
-### File: `src/components/projects/generation/csvUtils.ts`
+### 1. Fix `stripQuotes` in `csvUtils.ts` (one-line fix)
 
-1. **Strip quotes from all parsed values**: After splitting each line by comma, strip surrounding double quotes from every cell (in addition to trimming whitespace). Apply this to headers, date values, time values, and numeric values.
+Change:
+```
+return s.replace(/^"|"$/g, "").trim();
+```
+To:
+```
+return s.trim().replace(/^"|"$/g, "").trim();
+```
 
-2. **Update the SCADA value column regex** to also match headers like `P1 (per kW)`, `P2 (per kW)`, etc. Change the fallback pattern from:
-   - `/p\s*\(per\s*kw\)/i` 
-   - to `/p\d*\s*\(per\s*kw\)/i`
+This fixes the core parsing issue for all SCADA CSV files.
 
-   This allows an optional digit after "P".
+### 2. Add CSV Preview Popup (fallback for unrecognized formats)
 
-3. **Apply quote stripping universally** by adding a small helper:
-   ```
-   function stripQuotes(s: string): string {
-     return s.replace(/^"|"$/g, "").trim();
-   }
-   ```
-   Use it when processing header arrays and data cells.
+When auto-parsing returns zero results, instead of just showing an error toast, show a dialog that displays the first few rows of the CSV and lets the user manually select which column is the **date/month** column and which is the **value** column.
 
-### Files: `ActualGenerationCard.tsx` and `BuildingLoadCard.tsx`
+#### New file: `src/components/projects/generation/CSVPreviewDialog.tsx`
 
-Update the regex patterns passed to `parseCSVFiles` to include the `p1` variant:
-- ActualGenerationCard: `/kwh|energy|generation|actual|p\d*\s*\(per\s*kw\)/i`
-- BuildingLoadCard: `/kwh|energy|load|consumption|building|p\d*\s*\(per\s*kw\)/i`
+A dialog component that:
+- Displays the first 10 rows of the CSV in a table
+- Lets the user click on column headers to assign them as "Date" or "Value"
+- Shows a "Parse" button that processes the data using the user-selected columns
+- Handles both SCADA format (kW with interval conversion) and simple format (direct kWh)
+- Returns the parsed `Map<number, number>` via a callback
 
-### No database changes needed.
+#### UI Flow:
+1. User uploads CSV
+2. Auto-parser runs first (with the bug fix, this should now work for SCADA files)
+3. If auto-parser returns 0 results, open the CSVPreviewDialog
+4. User sees a table preview and clicks columns to assign roles
+5. User clicks "Parse" and the data is processed with their column selections
+6. Results are saved to the database as before
 
+### 3. Update `ActualGenerationCard.tsx` and `BuildingLoadCard.tsx`
+
+- Import and render `CSVPreviewDialog`
+- Add state for dialog open/close and raw CSV lines
+- On CSV upload failure (totals.size === 0), open the dialog instead of showing an error toast
+- On successful manual parse from the dialog, proceed with the existing additive upsert logic
+
+## Technical Details
+
+### CSVPreviewDialog Props
+
+```text
+interface CSVPreviewDialogProps {
+  open: boolean;
+  onClose: () => void;
+  csvLines: string[];        // raw lines from the file
+  onParsed: (totals: Map<number, number>) => void;
+}
+```
+
+### Column Assignment UI
+
+- Table showing first 10 data rows with clickable column headers
+- Each header shows a dropdown or toggle: "Date", "Value", or unassigned
+- When both Date and Value are assigned, enable the "Parse" button
+- For SCADA files (detected by metadata row), auto-detect interval and convert kW to kWh
+- For simple files, treat values as direct kWh
+
+### No database changes required
