@@ -17,7 +17,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Hash } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { CalendarDays, Hash, Clock, ChevronDown } from "lucide-react";
 
 interface CSVPreviewDialogProps {
   open: boolean;
@@ -45,15 +51,14 @@ function timeDiffMinutes(t1: string, t2: string): number {
   return h2 * 60 + m2 - (h1 * 60 + m1);
 }
 
+type ColumnRole = "date" | "value" | "time";
+
 export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPreviewDialogProps) {
-  const [dateCol, setDateCol] = useState<number | null>(null);
-  const [valueCol, setValueCol] = useState<number | null>(null);
-  const [timeCol, setTimeCol] = useState<number | null>(null);
+  const [columnRoles, setColumnRoles] = useState<Map<number, ColumnRole>>(new Map());
   const [isKw, setIsKw] = useState(true);
 
-  // Detect if first line is metadata (SCADA) and find data start
-  const { headerRow, dataStartRow, headers, previewRows } = useMemo(() => {
-    if (csvLines.length < 2) return { headerRow: 0, dataStartRow: 1, headers: [] as string[], previewRows: [] as string[][] };
+  const { dataStartRow, headers, previewRows } = useMemo(() => {
+    if (csvLines.length < 2) return { dataStartRow: 1, headers: [] as string[], previewRows: [] as string[][] };
 
     const first = csvLines[0].toLowerCase();
     const isScada = first.includes("pnpscada") || first.includes("scada");
@@ -63,24 +68,42 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
     const hdrs = (csvLines[hRow] ?? "").split(",").map(strip);
     const preview = csvLines.slice(dStart, dStart + 10).map((l) => l.split(",").map(strip));
 
-    return { headerRow: hRow, dataStartRow: dStart, headers: hdrs, previewRows: preview };
+    return { dataStartRow: dStart, headers: hdrs, previewRows: preview };
   }, [csvLines]);
 
-  const handleColumnClick = (colIdx: number) => {
-    if (dateCol === colIdx) {
-      setDateCol(null);
-    } else if (valueCol === colIdx) {
-      setValueCol(null);
-    } else if (timeCol === colIdx) {
-      setTimeCol(null);
-    } else if (dateCol === null) {
-      setDateCol(colIdx);
-    } else if (valueCol === null) {
-      setValueCol(colIdx);
-    } else {
-      // Replace value col
-      setValueCol(colIdx);
-    }
+  const dateCol = useMemo(() => {
+    for (const [idx, role] of columnRoles) if (role === "date") return idx;
+    return null;
+  }, [columnRoles]);
+
+  const valueCol = useMemo(() => {
+    for (const [idx, role] of columnRoles) if (role === "value") return idx;
+    return null;
+  }, [columnRoles]);
+
+  const timeCol = useMemo(() => {
+    for (const [idx, role] of columnRoles) if (role === "time") return idx;
+    return null;
+  }, [columnRoles]);
+
+  const assignRole = (colIdx: number, role: ColumnRole) => {
+    setColumnRoles((prev) => {
+      const next = new Map(prev);
+      // Remove any other column with this role
+      for (const [k, v] of next) {
+        if (v === role) next.delete(k);
+      }
+      next.set(colIdx, role);
+      return next;
+    });
+  };
+
+  const clearRole = (colIdx: number) => {
+    setColumnRoles((prev) => {
+      const next = new Map(prev);
+      next.delete(colIdx);
+      return next;
+    });
   };
 
   const handleParse = () => {
@@ -89,7 +112,6 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
     const totals = new Map<number, number>();
     const dataLines = csvLines.slice(dataStartRow).filter((l) => l.trim());
 
-    // Detect interval for kW → kWh conversion
     let intervalHours = 0.5;
     if (isKw && timeCol !== null && dataLines.length >= 2) {
       const t1 = strip(dataLines[0].split(",")[timeCol] ?? "");
@@ -117,10 +139,11 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
     onClose();
   };
 
-  const getColBadge = (idx: number) => {
-    if (idx === dateCol) return <Badge variant="default" className="ml-1 text-[10px] px-1 py-0"><CalendarDays className="h-3 w-3 mr-0.5" />Date</Badge>;
-    if (idx === valueCol) return <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0"><Hash className="h-3 w-3 mr-0.5" />Value</Badge>;
-    if (idx === timeCol) return <Badge variant="outline" className="ml-1 text-[10px] px-1 py-0">Time</Badge>;
+  const getRoleBadge = (idx: number) => {
+    const role = columnRoles.get(idx);
+    if (role === "date") return <Badge variant="default" className="ml-1 text-[10px] px-1 py-0"><CalendarDays className="h-3 w-3 mr-0.5" />Date</Badge>;
+    if (role === "value") return <Badge variant="secondary" className="ml-1 text-[10px] px-1 py-0"><Hash className="h-3 w-3 mr-0.5" />Value</Badge>;
+    if (role === "time") return <Badge variant="outline" className="ml-1 text-[10px] px-1 py-0"><Clock className="h-3 w-3 mr-0.5" />Time</Badge>;
     return null;
   };
 
@@ -132,7 +155,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
         <DialogHeader>
           <DialogTitle>Map CSV Columns</DialogTitle>
           <DialogDescription>
-            Auto-detection failed. Click column headers to assign <strong>Date</strong> (1st click) and <strong>Value</strong> (2nd click).
+            Select a column, then choose what data it represents (Date, Value, or Time).
           </DialogDescription>
         </DialogHeader>
 
@@ -141,13 +164,31 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
             <TableHeader>
               <TableRow>
                 {headers.map((h, i) => (
-                  <TableHead
-                    key={i}
-                    className="cursor-pointer hover:bg-muted/80 whitespace-nowrap text-xs select-none"
-                    onClick={() => handleColumnClick(i)}
-                  >
-                    <span>{h}</span>
-                    {getColBadge(i)}
+                  <TableHead key={i} className="whitespace-nowrap text-xs p-0">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="flex items-center gap-1 w-full px-3 py-2 hover:bg-muted/80 text-left select-none">
+                          <span className="truncate">{h}</span>
+                          {getRoleBadge(i) || <ChevronDown className="h-3 w-3 ml-auto opacity-40" />}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => assignRole(i, "date")}>
+                          <CalendarDays className="h-4 w-4 mr-2" /> Date
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => assignRole(i, "value")}>
+                          <Hash className="h-4 w-4 mr-2" /> Value (kWh / kW)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => assignRole(i, "time")}>
+                          <Clock className="h-4 w-4 mr-2" /> Time
+                        </DropdownMenuItem>
+                        {columnRoles.has(i) && (
+                          <DropdownMenuItem onClick={() => clearRole(i)} className="text-destructive">
+                            Clear
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableHead>
                 ))}
               </TableRow>
@@ -158,7 +199,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
                   {row.map((cell, ci) => (
                     <TableCell
                       key={ci}
-                      className={`text-xs whitespace-nowrap ${ci === dateCol ? "bg-primary/10" : ci === valueCol ? "bg-secondary/20" : ""}`}
+                      className={`text-xs whitespace-nowrap ${ci === dateCol ? "bg-primary/10" : ci === valueCol ? "bg-secondary/20" : ci === timeCol ? "bg-muted/40" : ""}`}
                     >
                       {cell}
                     </TableCell>
