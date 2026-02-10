@@ -50,12 +50,7 @@ interface DocumentFolder {
   sort_order: number | null;
 }
 
-interface ChecklistItem {
-  id: string;
-  label: string;
-  sort_order: number;
-  document_id: string | null;
-}
+// ChecklistItem interface removed — now managed inside HandoverChecklist
 
 interface ProjectDocumentsProps {
   projectId: string;
@@ -63,23 +58,7 @@ interface ProjectDocumentsProps {
 
 const HANDOVER_FOLDER_NAME = 'Handover Documentation';
 
-const DEFAULT_CHECKLIST_ITEMS = [
-  'COC Certificate',
-  'As-Built Drawings',
-  'Commissioning Report',
-  'O&M Manual',
-  'Warranty Documentation',
-  'Grid Connection Agreement',
-  'Meter Installation Certificate',
-  'Performance Test Report',
-  'Structural Engineering Certificate',
-  'Electrical Single Line Diagram',
-  'Site Handover Certificate',
-  'Training Completion Certificate',
-  'Insurance Documentation',
-  'Environmental Compliance Certificate',
-  'Safety File',
-];
+// DEFAULT_CHECKLIST_ITEMS removed — now managed via checklist_templates table
 
 function formatFileSize(bytes: number | null): string {
   if (!bytes) return '—';
@@ -102,7 +81,6 @@ function getFileIcon(mimeType: string | null) {
 export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [folders, setFolders] = useState<DocumentFolder[]>([]);
-  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -152,30 +130,15 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
 
   const seedDefaultFolders = async () => {
     // Create default folders
-    const { data: uncatFolder } = await supabase
+    await supabase
       .from('project_document_folders')
-      .insert({ project_id: projectId, name: 'Uncategorized', sort_order: 0 })
-      .select('id')
-      .single();
+      .insert({ project_id: projectId, name: 'Uncategorized', sort_order: 0 });
 
-    const { data: handoverFolder } = await supabase
+    await supabase
       .from('project_document_folders')
-      .insert({ project_id: projectId, name: HANDOVER_FOLDER_NAME, sort_order: 1 })
-      .select('id')
-      .single();
+      .insert({ project_id: projectId, name: HANDOVER_FOLDER_NAME, sort_order: 1 });
 
-    // Seed checklist items
-    if (handoverFolder) {
-      await supabase
-        .from('handover_checklist_items')
-        .insert(
-          DEFAULT_CHECKLIST_ITEMS.map((label, i) => ({
-            project_id: projectId,
-            label,
-            sort_order: i,
-          }))
-        );
-    }
+    // Checklist items are now synced from checklist_templates by HandoverChecklist component
   };
 
   const fetchData = async () => {
@@ -222,13 +185,7 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
       setDocuments(currentDocs);
       setFolders(currentFolders);
 
-      // Fetch checklist items
-      const { data: checklistData } = await supabase
-        .from('handover_checklist_items')
-        .select('id, label, sort_order, document_id')
-        .eq('project_id', projectId)
-        .order('sort_order', { ascending: true });
-      setChecklistItems(checklistData || []);
+      // Checklist items are now fetched inside HandoverChecklist component
 
       // Auto-open all folders
       const ids = new Set(['uncategorized', ...currentFolders.map(f => f.id)]);
@@ -602,21 +559,16 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
         {isOpen && (
           <div>
             {isHandover ? (
-              <>
                 <HandoverChecklist
                   projectId={projectId}
-                  checklistItems={checklistItems}
                   folderDocuments={docs}
                   onRefresh={fetchData}
                   onDownload={handleDownload}
+                  onUpload={() => {
+                    setUploadTargetFolderId(folderObj!.id);
+                    fileInputRef.current?.click();
+                  }}
                 />
-                {docs.length > 0 && (
-                  <div className="border-t px-2 pb-2 pt-2">
-                    <p className="text-xs font-medium text-muted-foreground px-3 mb-1">Uploaded Files</p>
-                    {docs.map(renderDocRow)}
-                  </div>
-                )}
-              </>
             ) : (
               <div className="px-2 pb-2">
                 {docs.length === 0 ? (
