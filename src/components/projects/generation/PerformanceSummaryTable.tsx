@@ -6,110 +6,73 @@ import { cn } from "@/lib/utils";
 interface MonthData {
   month: number;
   name: string;
+  fullName: string;
   actual_kwh: number | null;
   guaranteed_kwh: number | null;
   expected_kwh: number | null;
 }
 
 interface PerformanceSummaryTableProps {
-  monthlyData: MonthData[];
+  monthData: MonthData;
 }
 
-export function PerformanceSummaryTable({ monthlyData }: PerformanceSummaryTableProps) {
-  const totals = monthlyData.reduce(
-    (acc, m) => ({
-      actual: acc.actual + (m.actual_kwh ?? 0),
-      guaranteed: acc.guaranteed + (m.guaranteed_kwh ?? 0),
-      expected: acc.expected + (m.expected_kwh ?? 0),
-    }),
-    { actual: 0, guaranteed: 0, expected: 0 }
-  );
-
+export function PerformanceSummaryTable({ monthData }: PerformanceSummaryTableProps) {
   const formatRatio = (actual: number | null, target: number | null) => {
     if (!actual || !target || target === 0) return null;
     return ((actual / target) * 100).toFixed(1);
   };
 
+  const vsGuaranteed = formatRatio(monthData.actual_kwh, monthData.guaranteed_kwh);
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">Monthly Performance Summary</CardTitle>
+        <CardTitle className="text-sm">Performance Summary — {monthData.fullName}</CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-16">Month</TableHead>
-              <TableHead className="text-right">Actual kWh</TableHead>
-              <TableHead className="text-right">Guaranteed kWh</TableHead>
-              <TableHead className="text-right text-muted-foreground/50">Forecasted kWh</TableHead>
-              <TableHead className="text-right">vs Guaranteed</TableHead>
-              <TableHead className="text-right text-muted-foreground/50">vs Forecasted</TableHead>
+              <TableHead>Metric</TableHead>
+              <TableHead className="text-right">Value</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {monthlyData.map((m) => {
-              const vsGuaranteed = formatRatio(m.actual_kwh, m.guaranteed_kwh);
-              const vsExpected = formatRatio(m.actual_kwh, m.expected_kwh);
-              return (
-                <TableRow key={m.month}>
-                  <TableCell className="font-medium text-xs">{m.name}</TableCell>
-                  <TableCell className="text-right text-xs">
-                    {m.actual_kwh != null ? m.actual_kwh.toLocaleString() : "—"}
-                  </TableCell>
-                  <TableCell className="text-right text-xs">
-                    {m.guaranteed_kwh != null ? m.guaranteed_kwh.toLocaleString() : "—"}
-                  </TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground/40">—</TableCell>
-                  <TableCell className="text-right">
-                    {vsGuaranteed ? (
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-xs",
-                          parseFloat(vsGuaranteed) >= 100
-                            ? "border-green-500/30 text-green-600"
-                            : "border-destructive/30 text-destructive"
-                        )}
-                      >
-                        {vsGuaranteed}%
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground/40">—</TableCell>
-                </TableRow>
-              );
-            })}
-            {/* Totals row */}
-            <TableRow className="font-medium border-t-2">
-              <TableCell className="text-xs">Total</TableCell>
-              <TableCell className="text-right text-xs">
-                {totals.actual > 0 ? totals.actual.toLocaleString() : "—"}
+            <TableRow>
+              <TableCell className="text-sm">Actual kWh</TableCell>
+              <TableCell className="text-right text-sm">
+                {monthData.actual_kwh != null ? monthData.actual_kwh.toLocaleString() : "—"}
               </TableCell>
-              <TableCell className="text-right text-xs">
-                {totals.guaranteed > 0 ? totals.guaranteed.toLocaleString() : "—"}
+            </TableRow>
+            <TableRow>
+              <TableCell className="text-sm">Guaranteed kWh</TableCell>
+              <TableCell className="text-right text-sm">
+                {monthData.guaranteed_kwh != null ? monthData.guaranteed_kwh.toLocaleString() : "—"}
               </TableCell>
-              <TableCell className="text-right text-xs text-muted-foreground/40">—</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="text-sm text-muted-foreground/50">Forecasted kWh</TableCell>
+              <TableCell className="text-right text-sm text-muted-foreground/40">—</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="text-sm font-medium">Actual vs Guaranteed</TableCell>
               <TableCell className="text-right">
-                {totals.actual > 0 && totals.guaranteed > 0 ? (
+                {vsGuaranteed ? (
                   <Badge
                     variant="outline"
                     className={cn(
                       "text-xs",
-                      (totals.actual / totals.guaranteed) * 100 >= 100
+                      parseFloat(vsGuaranteed) >= 100
                         ? "border-green-500/30 text-green-600"
                         : "border-destructive/30 text-destructive"
                     )}
                   >
-                    {((totals.actual / totals.guaranteed) * 100).toFixed(1)}%
+                    {vsGuaranteed}%
                   </Badge>
                 ) : (
                   <span className="text-xs text-muted-foreground">—</span>
                 )}
               </TableCell>
-              <TableCell className="text-right text-xs text-muted-foreground/40">—</TableCell>
             </TableRow>
           </TableBody>
         </Table>

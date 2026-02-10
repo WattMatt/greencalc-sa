@@ -24,52 +24,77 @@ interface GenerationTabProps {
 }
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_FULL_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function getPreviousMonth() {
+  const now = new Date();
+  let month = now.getMonth(); // 0-indexed, so this is already "previous month" (1-indexed)
+  let year = now.getFullYear();
+  if (month === 0) {
+    month = 12;
+    year -= 1;
+  }
+  return { month, year };
+}
 
 export function GenerationTab({ projectId }: GenerationTabProps) {
-  const currentYear = new Date().getFullYear();
-  const [selectedYear, setSelectedYear] = useState(currentYear.toString());
+  const prev = getPreviousMonth();
+  const [selectedMonth, setSelectedMonth] = useState(prev.month.toString());
+  const [selectedYear, setSelectedYear] = useState(prev.year.toString());
   const queryClient = useQueryClient();
 
+  const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 5 }, (_, i) => (currentYear - 2 + i).toString());
 
-  const { data: records = [], isLoading } = useQuery({
-    queryKey: ["generation-records", projectId, selectedYear],
+  const month = parseInt(selectedMonth);
+  const year = parseInt(selectedYear);
+
+  const { data: record, isLoading } = useQuery({
+    queryKey: ["generation-record", projectId, year, month],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("generation_records")
         .select("*")
         .eq("project_id", projectId)
-        .eq("year", parseInt(selectedYear))
-        .order("month");
+        .eq("year", year)
+        .eq("month", month)
+        .maybeSingle();
       if (error) throw error;
-      return (data || []) as GenerationRecord[];
+      return data as GenerationRecord | null;
     },
   });
 
-  // Build a 12-month array
-  const monthlyData = MONTH_NAMES.map((name, i) => {
-    const record = records.find((r) => r.month === i + 1);
-    return {
-      month: i + 1,
-      name,
-      actual_kwh: record?.actual_kwh ?? null,
-      guaranteed_kwh: record?.guaranteed_kwh ?? null,
-      expected_kwh: record?.expected_kwh ?? null,
-      source: record?.source ?? null,
-    };
-  });
+  const monthData = {
+    month,
+    name: MONTH_NAMES[month - 1],
+    fullName: MONTH_FULL_NAMES[month - 1],
+    actual_kwh: record?.actual_kwh ?? null,
+    guaranteed_kwh: record?.guaranteed_kwh ?? null,
+    expected_kwh: record?.expected_kwh ?? null,
+    source: record?.source ?? null,
+  };
 
   const refetch = () => {
-    queryClient.invalidateQueries({ queryKey: ["generation-records", projectId, selectedYear] });
+    queryClient.invalidateQueries({ queryKey: ["generation-record", projectId, year, month] });
   };
 
   return (
     <div className="space-y-6">
-      {/* Year selector */}
+      {/* Month/Year selector */}
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium text-muted-foreground">Year:</span>
+        <span className="text-sm font-medium text-muted-foreground">Month:</span>
+        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+          <SelectTrigger className="w-36 h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MONTH_FULL_NAMES.map((name, i) => (
+              <SelectItem key={i + 1} value={(i + 1).toString()}>{name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={selectedYear} onValueChange={setSelectedYear}>
-          <SelectTrigger className="w-28 h-8">
+          <SelectTrigger className="w-24 h-8">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -84,24 +109,26 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <ActualGenerationCard
           projectId={projectId}
-          year={parseInt(selectedYear)}
-          monthlyData={monthlyData}
+          month={month}
+          year={year}
+          monthData={monthData}
           onDataChanged={refetch}
         />
         <GuaranteedGenerationCard
           projectId={projectId}
-          year={parseInt(selectedYear)}
-          monthlyData={monthlyData}
+          month={month}
+          year={year}
+          monthData={monthData}
           onDataChanged={refetch}
         />
         <ExpectedGenerationCard />
       </div>
 
       {/* Chart */}
-      <PerformanceChart monthlyData={monthlyData} />
+      <PerformanceChart monthData={monthData} />
 
       {/* Summary table */}
-      <PerformanceSummaryTable monthlyData={monthlyData} />
+      <PerformanceSummaryTable monthData={monthData} />
     </div>
   );
 }

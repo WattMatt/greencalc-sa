@@ -10,6 +10,7 @@ import { toast } from "sonner";
 interface MonthData {
   month: number;
   name: string;
+  fullName: string;
   actual_kwh: number | null;
   guaranteed_kwh: number | null;
   expected_kwh: number | null;
@@ -18,53 +19,35 @@ interface MonthData {
 
 interface ActualGenerationCardProps {
   projectId: string;
+  month: number;
   year: number;
-  monthlyData: MonthData[];
+  monthData: MonthData;
   onDataChanged: () => void;
 }
 
-export function ActualGenerationCard({ projectId, year, monthlyData, onDataChanged }: ActualGenerationCardProps) {
-  const [values, setValues] = useState<Record<number, string>>({});
+export function ActualGenerationCard({ projectId, month, year, monthData, onDataChanged }: ActualGenerationCardProps) {
+  const [value, setValue] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const getValue = (month: number) => {
-    if (values[month] !== undefined) return values[month];
-    return monthlyData.find((m) => m.month === month)?.actual_kwh?.toString() ?? "";
-  };
-
-  const handleChange = (month: number, val: string) => {
-    setValues((prev) => ({ ...prev, [month]: val }));
-  };
+  const displayValue = value !== null ? value : (monthData.actual_kwh?.toString() ?? "");
 
   const handleSave = async () => {
+    if (value === null || value === "") return;
     setIsSaving(true);
     try {
-      const upserts = Object.entries(values)
-        .filter(([, val]) => val !== "")
-        .map(([month, val]) => ({
+      const { error } = await supabase
+        .from("generation_records")
+        .upsert({
           project_id: projectId,
-          month: parseInt(month),
+          month,
           year,
-          actual_kwh: parseFloat(val),
-          source: "manual" as const,
-        }));
-
-      if (upserts.length === 0) {
-        toast.info("No changes to save");
-        setIsSaving(false);
-        return;
-      }
-
-      for (const upsert of upserts) {
-        const { error } = await supabase
-          .from("generation_records")
-          .upsert(upsert, { onConflict: "project_id,month,year" });
-        if (error) throw error;
-      }
-
-      toast.success("Actual generation saved");
-      setValues({});
+          actual_kwh: parseFloat(value),
+          source: "manual",
+        }, { onConflict: "project_id,month,year" });
+      if (error) throw error;
+      toast.success(`Actual generation saved for ${monthData.fullName}`);
+      setValue(null);
       onDataChanged();
     } catch (err: any) {
       toast.error(err.message || "Failed to save");
@@ -90,7 +73,7 @@ export function ActualGenerationCard({ projectId, year, monthlyData, onDataChang
       const kwhCol = header.split(",").findIndex((h) => h.trim().match(/kwh|energy|generation|actual/i));
 
       if (monthCol === -1 || kwhCol === -1) {
-        toast.error("CSV must have 'month' and 'kwh' (or 'energy'/'generation'/'actual') columns");
+        toast.error("CSV must have 'month' and 'kwh' columns");
         return;
       }
 
@@ -123,7 +106,7 @@ export function ActualGenerationCard({ projectId, year, monthlyData, onDataChang
       }
 
       toast.success(`Imported ${parsed.length} months from CSV`);
-      setValues({});
+      setValue(null);
       onDataChanged();
     } catch (err: any) {
       toast.error(err.message || "CSV import failed");
@@ -132,8 +115,7 @@ export function ActualGenerationCard({ projectId, year, monthlyData, onDataChang
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const total = monthlyData.reduce((sum, m) => sum + (m.actual_kwh ?? 0), 0);
-  const hasEdits = Object.keys(values).length > 0;
+  const hasEdit = value !== null && value !== (monthData.actual_kwh?.toString() ?? "");
 
   return (
     <Card>
@@ -156,7 +138,7 @@ export function ActualGenerationCard({ projectId, year, monthlyData, onDataChang
               className="hidden"
               onChange={handleCSVUpload}
             />
-            {hasEdits && (
+            {hasEdit && (
               <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={isSaving}>
                 <Save className="h-3 w-3 mr-1" /> Save
               </Button>
@@ -164,25 +146,22 @@ export function ActualGenerationCard({ projectId, year, monthlyData, onDataChang
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          {monthlyData.map((m) => (
-            <div key={m.month} className="flex items-center gap-2">
-              <Label className="text-xs w-8 text-muted-foreground">{m.name}</Label>
-              <Input
-                type="number"
-                className="h-7 text-xs"
-                placeholder="0"
-                value={getValue(m.month)}
-                onChange={(e) => handleChange(m.month, e.target.value)}
-              />
-            </div>
-          ))}
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Label className="text-sm text-muted-foreground w-auto">{monthData.fullName} {year}</Label>
         </div>
-        <div className="pt-2 border-t text-xs text-muted-foreground flex justify-between">
-          <span>Annual Total</span>
-          <span className="font-medium text-foreground">{total.toLocaleString()} kWh</span>
-        </div>
+        <Input
+          type="number"
+          className="text-sm"
+          placeholder="Enter kWh"
+          value={displayValue}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        {monthData.source && (
+          <p className="text-xs text-muted-foreground">
+            Source: {monthData.source}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
