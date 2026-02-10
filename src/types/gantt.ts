@@ -93,6 +93,7 @@ export interface GanttChartConfig {
   showBaseline: string | null; // baseline id or null
   showWeekends: boolean;
   showToday: boolean;
+  splitView: boolean;
 }
 
 export interface GanttFilters {
@@ -162,6 +163,7 @@ export const DEFAULT_CHART_CONFIG: GanttChartConfig = {
   showBaseline: null,
   showWeekends: true,
   showToday: true,
+  splitView: true,
 };
 
 // Default filters
