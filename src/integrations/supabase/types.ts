@@ -457,6 +457,53 @@ export type Database = {
           },
         ]
       }
+      generation_records: {
+        Row: {
+          actual_kwh: number | null
+          created_at: string
+          expected_kwh: number | null
+          guaranteed_kwh: number | null
+          id: string
+          month: number
+          project_id: string
+          source: string | null
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          actual_kwh?: number | null
+          created_at?: string
+          expected_kwh?: number | null
+          guaranteed_kwh?: number | null
+          id?: string
+          month: number
+          project_id: string
+          source?: string | null
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          actual_kwh?: number | null
+          created_at?: string
+          expected_kwh?: number | null
+          guaranteed_kwh?: number | null
+          id?: string
+          month?: number
+          project_id?: string
+          source?: string | null
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_records_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       handover_checklist_items: {
         Row: {
           created_at: string

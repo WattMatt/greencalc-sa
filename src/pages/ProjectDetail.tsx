@@ -27,6 +27,7 @@ import { SystemCostsManager, SystemCostsData } from "@/components/projects/Syste
 import { DEFAULT_SYSTEM_COSTS } from "@/components/projects/simulation/FinancialAnalysis";
 import { ProjectGantt } from "@/components/gantt";
 import { ProjectDocuments } from "@/components/projects/ProjectDocuments";
+import { GenerationTab } from "@/components/projects/generation";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1074,6 +1075,10 @@ export default function ProjectDetail() {
     documents: {
       status: "pending" as TabStatus,
       tooltip: "Manage project documents"
+    },
+    generation: {
+      status: "pending" as TabStatus,
+      tooltip: "Track plant generation performance"
     }
   };
 
@@ -1159,6 +1164,10 @@ export default function ProjectDetail() {
             <TabWithStatus value="documents" status={tabStatuses.documents.status} tooltip={tabStatuses.documents.tooltip}>
               <FolderOpen className="h-4 w-4 mr-2" />
               Documents
+            </TabWithStatus>
+            <TabWithStatus value="generation" status={tabStatuses.generation.status} tooltip={tabStatuses.generation.tooltip}>
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Generation
             </TabWithStatus>
           </TabsList>
         </TooltipProvider>
@@ -1275,6 +1284,10 @@ export default function ProjectDetail() {
 
         <TabsContent value="documents" className="mt-6">
           <ProjectDocuments projectId={id!} />
+        </TabsContent>
+
+        <TabsContent value="generation" className="mt-6">
+          <GenerationTab projectId={id!} />
         </TabsContent>
       </Tabs>
     </div>
