@@ -365,6 +365,48 @@ export type Database = {
           },
         ]
       }
+      handover_checklist_items: {
+        Row: {
+          created_at: string
+          document_id: string | null
+          id: string
+          label: string
+          project_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          document_id?: string | null
+          id?: string
+          label: string
+          project_id: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          document_id?: string | null
+          id?: string
+          label?: string
+          project_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "handover_checklist_items_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "project_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "handover_checklist_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       municipalities: {
         Row: {
           ai_confidence: number | null

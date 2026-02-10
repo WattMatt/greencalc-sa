@@ -7,7 +7,6 @@ import {
   FileArchive, Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub,
@@ -27,10 +26,11 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { HandoverChecklist } from './HandoverChecklist';
 
 interface DocumentItem {
   id: string;
@@ -50,9 +50,36 @@ interface DocumentFolder {
   sort_order: number | null;
 }
 
+interface ChecklistItem {
+  id: string;
+  label: string;
+  sort_order: number;
+  document_id: string | null;
+}
+
 interface ProjectDocumentsProps {
   projectId: string;
 }
+
+const HANDOVER_FOLDER_NAME = 'Handover Documentation';
+
+const DEFAULT_CHECKLIST_ITEMS = [
+  'COC Certificate',
+  'As-Built Drawings',
+  'Commissioning Report',
+  'O&M Manual',
+  'Warranty Documentation',
+  'Grid Connection Agreement',
+  'Meter Installation Certificate',
+  'Performance Test Report',
+  'Structural Engineering Certificate',
+  'Electrical Single Line Diagram',
+  'Site Handover Certificate',
+  'Training Completion Certificate',
+  'Insurance Documentation',
+  'Environmental Compliance Certificate',
+  'Safety File',
+];
 
 function formatFileSize(bytes: number | null): string {
   if (!bytes) return '—';
@@ -75,9 +102,11 @@ function getFileIcon(mimeType: string | null) {
 export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [folders, setFolders] = useState<DocumentFolder[]>([]);
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadTargetFolderId, setUploadTargetFolderId] = useState<string | null>(null);
 
   // Multi-select
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
@@ -121,6 +150,34 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
     fetchData();
   }, [projectId]);
 
+  const seedDefaultFolders = async () => {
+    // Create default folders
+    const { data: uncatFolder } = await supabase
+      .from('project_document_folders')
+      .insert({ project_id: projectId, name: 'Uncategorized', sort_order: 0 })
+      .select('id')
+      .single();
+
+    const { data: handoverFolder } = await supabase
+      .from('project_document_folders')
+      .insert({ project_id: projectId, name: HANDOVER_FOLDER_NAME, sort_order: 1 })
+      .select('id')
+      .single();
+
+    // Seed checklist items
+    if (handoverFolder) {
+      await supabase
+        .from('handover_checklist_items')
+        .insert(
+          DEFAULT_CHECKLIST_ITEMS.map((label, i) => ({
+            project_id: projectId,
+            label,
+            sort_order: i,
+          }))
+        );
+    }
+  };
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -138,10 +195,43 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
       ]);
       if (docsRes.error) throw docsRes.error;
       if (foldersRes.error) throw foldersRes.error;
-      setDocuments(docsRes.data || []);
-      setFolders(foldersRes.data || []);
+
+      let currentFolders = foldersRes.data || [];
+      let currentDocs = docsRes.data || [];
+
+      // Auto-seed default folders if none exist
+      if (currentFolders.length === 0) {
+        await seedDefaultFolders();
+        // Re-fetch after seeding
+        const [docsRes2, foldersRes2] = await Promise.all([
+          supabase
+            .from('project_documents')
+            .select('id, name, file_path, file_size, mime_type, folder_id, created_at, updated_at')
+            .eq('project_id', projectId)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('project_document_folders')
+            .select('id, name, color, sort_order')
+            .eq('project_id', projectId)
+            .order('sort_order', { ascending: true })
+        ]);
+        currentFolders = foldersRes2.data || [];
+        currentDocs = docsRes2.data || [];
+      }
+
+      setDocuments(currentDocs);
+      setFolders(currentFolders);
+
+      // Fetch checklist items
+      const { data: checklistData } = await supabase
+        .from('handover_checklist_items')
+        .select('id, label, sort_order, document_id')
+        .eq('project_id', projectId)
+        .order('sort_order', { ascending: true });
+      setChecklistItems(checklistData || []);
+
       // Auto-open all folders
-      const ids = new Set(['uncategorized', ...(foldersRes.data || []).map(f => f.id)]);
+      const ids = new Set(['uncategorized', ...currentFolders.map(f => f.id)]);
       setOpenFolders(ids);
     } catch (error) {
       console.error('Error fetching documents:', error);
@@ -157,22 +247,19 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
     setIsUploading(true);
     try {
       for (const file of Array.from(files)) {
-        // 1. Insert metadata row
         const { data: doc, error: insertErr } = await supabase
           .from('project_documents')
-          .insert({ project_id: projectId, name: file.name })
+          .insert({ project_id: projectId, name: file.name, folder_id: uploadTargetFolderId })
           .select('id')
           .single();
         if (insertErr || !doc) throw insertErr;
 
-        // 2. Upload to storage
         const storagePath = `${projectId}/${doc.id}/${file.name}`;
         const { error: uploadErr } = await supabase.storage
           .from('project-documents')
           .upload(storagePath, file);
         if (uploadErr) throw uploadErr;
 
-        // 3. Update metadata with file info
         await supabase
           .from('project_documents')
           .update({
@@ -189,12 +276,13 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
       toast.error('Failed to upload files');
     } finally {
       setIsUploading(false);
+      setUploadTargetFolderId(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   // ---- Download ----
-  const handleDownload = async (doc: DocumentItem) => {
+  const handleDownload = async (doc: { id: string; name: string; file_path: string | null }) => {
     if (!doc.file_path) return;
     try {
       const { data, error } = await supabase.storage
@@ -282,7 +370,6 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
     if (!deleteDocId) return;
     const doc = documents.find(d => d.id === deleteDocId);
     try {
-      // Delete from storage first
       if (doc?.file_path) {
         await supabase.storage.from('project-documents').remove([doc.file_path]);
       }
@@ -357,6 +444,10 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
     next.has(id) ? next.delete(id) : next.add(id);
     setOpenFolders(next);
   };
+
+  // Check if a folder is the Handover Documentation folder
+  const isHandoverFolder = (folder: DocumentFolder) =>
+    folder.name === HANDOVER_FOLDER_NAME;
 
   // Group documents
   const uncategorized = documents.filter(d => !d.folder_id);
@@ -448,6 +539,7 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
   const renderFolderSection = (folderId: string, folderName: string, folderColor: string | null, docs: DocumentItem[], folderObj?: DocumentFolder) => {
     const isOpen = openFolders.has(folderId);
     const isDragTarget = dragOverFolderId === folderId;
+    const isHandover = folderObj && isHandoverFolder(folderObj);
 
     return (
       <div
@@ -468,6 +560,19 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
           <Folder className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-sm flex-1">{folderName}</span>
           <Badge variant="secondary" className="text-xs">{docs.length}</Badge>
+          {isHandover && (
+            <Button
+              variant="ghost" size="icon" className="h-7 w-7"
+              onClick={(e) => {
+                e.stopPropagation();
+                setUploadTargetFolderId(folderObj!.id);
+                fileInputRef.current?.click();
+              }}
+              title="Upload to Handover Documentation"
+            >
+              <FileUp className="h-3.5 w-3.5" />
+            </Button>
+          )}
           {isManageFoldersMode && folderObj && (
             <span className="flex gap-1">
               <Button
@@ -495,11 +600,31 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
           )}
         </button>
         {isOpen && (
-          <div className="px-2 pb-2">
-            {docs.length === 0 ? (
-              <p className="text-xs text-muted-foreground px-3 py-2">No documents in this folder</p>
+          <div>
+            {isHandover ? (
+              <>
+                <HandoverChecklist
+                  projectId={projectId}
+                  checklistItems={checklistItems}
+                  folderDocuments={docs}
+                  onRefresh={fetchData}
+                  onDownload={handleDownload}
+                />
+                {docs.length > 0 && (
+                  <div className="border-t px-2 pb-2 pt-2">
+                    <p className="text-xs font-medium text-muted-foreground px-3 mb-1">Uploaded Files</p>
+                    {docs.map(renderDocRow)}
+                  </div>
+                )}
+              </>
             ) : (
-              docs.map(renderDocRow)
+              <div className="px-2 pb-2">
+                {docs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground px-3 py-2">No documents in this folder</p>
+                ) : (
+                  docs.map(renderDocRow)
+                )}
+              </div>
             )}
           </div>
         )}
@@ -545,7 +670,7 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
           </>
         ) : (
           <>
-            <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+            <Button size="sm" onClick={() => { setUploadTargetFolderId(null); fileInputRef.current?.click(); }} disabled={isUploading}>
               {isUploading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileUp className="h-4 w-4 mr-1" />}
               Upload Files
             </Button>
@@ -572,7 +697,10 @@ export function ProjectDocuments({ projectId }: ProjectDocumentsProps) {
         {folderGroups.map(({ folder, docs }) =>
           renderFolderSection(folder.id, folder.name, folder.color, docs, folder)
         )}
-        {renderFolderSection('uncategorized', 'Uncategorized', null, uncategorized)}
+        {/* Only show uncategorized section if there's no "Uncategorized" folder */}
+        {!folders.some(f => f.name === 'Uncategorized') && uncategorized.length > 0 &&
+          renderFolderSection('uncategorized', 'Uncategorized', null, uncategorized)
+        }
       </div>
 
       {documents.length === 0 && folders.length === 0 && (
