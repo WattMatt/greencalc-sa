@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Upload, Save, Building2 } from "lucide-react";
+import { Upload, Save, Building2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
+import { parseCSVFiles } from "./csvUtils";
 
 interface MonthData {
   month: number;
@@ -57,55 +58,48 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
   };
 
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     try {
-      const text = await file.text();
-      const lines = text.split("\n").filter((l) => l.trim());
-      if (lines.length < 2) {
-        toast.error("CSV must have a header row and data rows");
+      const totals = await parseCSVFiles(files, /kwh|energy|load|consumption|building/i);
+
+      if (totals.size === 0) {
+        toast.error("No valid month/kWh data found in CSV(s)");
         return;
       }
 
-      const header = lines[0].toLowerCase();
-      const cols = header.split(",").map((h) => h.trim());
-      const monthCol = cols.findIndex((h) => /month/i.test(h));
-      const kwhCol = cols.findIndex((h) => /kwh|energy|load|consumption|building/i.test(h));
+      const months = Array.from(totals.keys());
+      const { data: existing } = await supabase
+        .from("generation_records")
+        .select("month, building_load_kwh")
+        .eq("project_id", projectId)
+        .eq("year", year)
+        .in("month", months);
 
-      if (monthCol === -1 || kwhCol === -1) {
-        toast.error("CSV must have 'month' and 'kwh' (or 'load'/'consumption'/'building') columns");
-        return;
-      }
+      const existingMap = new Map(
+        (existing ?? []).map((r) => [r.month, r])
+      );
 
-      const parsed: { month: number; kwh: number }[] = [];
-      for (let i = 1; i < lines.length; i++) {
-        const row = lines[i].split(",");
-        const monthVal = parseInt(row[monthCol]?.trim());
-        const kwhVal = parseFloat(row[kwhCol]?.trim());
-        if (monthVal >= 1 && monthVal <= 12 && !isNaN(kwhVal)) {
-          parsed.push({ month: monthVal, kwh: kwhVal });
-        }
-      }
+      let totalAdded = 0;
 
-      if (parsed.length === 0) {
-        toast.error("No valid month/kWh data found in CSV");
-        return;
-      }
+      for (const [m, csvSum] of totals) {
+        const prev = existingMap.get(m);
+        const newTotal = (prev?.building_load_kwh ?? 0) + csvSum;
+        totalAdded += csvSum;
 
-      for (const row of parsed) {
         const { error } = await supabase
           .from("generation_records")
           .upsert({
             project_id: projectId,
-            month: row.month,
+            month: m,
             year,
-            building_load_kwh: row.kwh,
+            building_load_kwh: newTotal,
           }, { onConflict: "project_id,month,year" });
         if (error) throw error;
       }
 
-      toast.success(`Imported building load for ${parsed.length} months from CSV`);
+      toast.success(`Added ${totalAdded.toLocaleString()} kWh from ${files.length} file(s)`);
       setValue(null);
       onDataChanged();
     } catch (err: any) {
@@ -113,6 +107,25 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
     }
 
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleReset = async () => {
+    try {
+      const { error } = await supabase
+        .from("generation_records")
+        .upsert({
+          project_id: projectId,
+          month,
+          year,
+          building_load_kwh: null,
+        }, { onConflict: "project_id,month,year" });
+      if (error) throw error;
+      toast.success(`Reset building load for ${monthData.fullName}`);
+      setValue(null);
+      onDataChanged();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reset");
+    }
   };
 
   const hasEdit = value !== null && value !== (monthData.building_load_kwh?.toString() ?? "");
@@ -126,6 +139,16 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
             Building Load (kWh)
           </span>
           <div className="flex gap-1">
+            {monthData.building_load_kwh != null && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground"
+                onClick={handleReset}
+              >
+                <RotateCcw className="h-3 w-3 mr-1" /> Reset
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -138,6 +161,7 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
               ref={fileInputRef}
               type="file"
               accept=".csv"
+              multiple
               className="hidden"
               onChange={handleCSVUpload}
             />
