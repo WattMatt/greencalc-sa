@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      checklist_document_links: {
+        Row: {
+          checklist_item_id: string
+          created_at: string
+          document_id: string
+          id: string
+        }
+        Insert: {
+          checklist_item_id: string
+          created_at?: string
+          document_id: string
+          id?: string
+        }
+        Update: {
+          checklist_item_id?: string
+          created_at?: string
+          document_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_document_links_checklist_item_id_fkey"
+            columns: ["checklist_item_id"]
+            isOneToOne: false
+            referencedRelation: "handover_checklist_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_document_links_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "project_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checklist_templates: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          label: string
+          sort_order: number
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          id?: string
+          label: string
+          sort_order?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          label?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       eskom_batch_status: {
         Row: {
           batch_index: number
@@ -368,41 +428,41 @@ export type Database = {
       handover_checklist_items: {
         Row: {
           created_at: string
-          document_id: string | null
           id: string
           label: string
           project_id: string
           sort_order: number
+          template_id: string | null
         }
         Insert: {
           created_at?: string
-          document_id?: string | null
           id?: string
           label: string
           project_id: string
           sort_order?: number
+          template_id?: string | null
         }
         Update: {
           created_at?: string
-          document_id?: string | null
           id?: string
           label?: string
           project_id?: string
           sort_order?: number
+          template_id?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "handover_checklist_items_document_id_fkey"
-            columns: ["document_id"]
-            isOneToOne: false
-            referencedRelation: "project_documents"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "handover_checklist_items_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "handover_checklist_items_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_templates"
             referencedColumns: ["id"]
           },
         ]
