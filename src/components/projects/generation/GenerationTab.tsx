@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ActualGenerationCard } from "./ActualGenerationCard";
 import { GuaranteedGenerationCard } from "./GuaranteedGenerationCard";
-import { ExpectedGenerationCard } from "./ExpectedGenerationCard";
+import { BuildingLoadCard } from "./BuildingLoadCard";
 import { PerformanceChart } from "./PerformanceChart";
 import { PerformanceSummaryTable } from "./PerformanceSummaryTable";
 
@@ -16,6 +16,7 @@ export interface GenerationRecord {
   actual_kwh: number | null;
   guaranteed_kwh: number | null;
   expected_kwh: number | null;
+  building_load_kwh: number | null;
   source: string | null;
 }
 
@@ -28,7 +29,7 @@ const MONTH_FULL_NAMES = ["January", "February", "March", "April", "May", "June"
 
 function getPreviousMonth() {
   const now = new Date();
-  let month = now.getMonth(); // 0-indexed, so this is already "previous month" (1-indexed)
+  let month = now.getMonth();
   let year = now.getFullYear();
   if (month === 0) {
     month = 12;
@@ -49,7 +50,7 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
   const month = parseInt(selectedMonth);
   const year = parseInt(selectedYear);
 
-  const { data: record, isLoading } = useQuery({
+  const { data: record } = useQuery({
     queryKey: ["generation-record", projectId, year, month],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -71,6 +72,7 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
     actual_kwh: record?.actual_kwh ?? null,
     guaranteed_kwh: record?.guaranteed_kwh ?? null,
     expected_kwh: record?.expected_kwh ?? null,
+    building_load_kwh: record?.building_load_kwh ?? null,
     source: record?.source ?? null,
   };
 
@@ -80,7 +82,6 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Month/Year selector */}
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium text-muted-foreground">Month:</span>
         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
@@ -105,7 +106,6 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
         </Select>
       </div>
 
-      {/* Data input cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <ActualGenerationCard
           projectId={projectId}
@@ -121,13 +121,16 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
           monthData={monthData}
           onDataChanged={refetch}
         />
-        <ExpectedGenerationCard />
+        <BuildingLoadCard
+          projectId={projectId}
+          month={month}
+          year={year}
+          monthData={monthData}
+          onDataChanged={refetch}
+        />
       </div>
 
-      {/* Chart */}
       <PerformanceChart monthData={monthData} />
-
-      {/* Summary table */}
       <PerformanceSummaryTable monthData={monthData} />
     </div>
   );

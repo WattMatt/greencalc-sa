@@ -460,6 +460,7 @@ export type Database = {
       generation_records: {
         Row: {
           actual_kwh: number | null
+          building_load_kwh: number | null
           created_at: string
           expected_kwh: number | null
           guaranteed_kwh: number | null
@@ -472,6 +473,7 @@ export type Database = {
         }
         Insert: {
           actual_kwh?: number | null
+          building_load_kwh?: number | null
           created_at?: string
           expected_kwh?: number | null
           guaranteed_kwh?: number | null
@@ -484,6 +486,7 @@ export type Database = {
         }
         Update: {
           actual_kwh?: number | null
+          building_load_kwh?: number | null
           created_at?: string
           expected_kwh?: number | null
           guaranteed_kwh?: number | null

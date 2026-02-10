@@ -1,0 +1,1 @@
+ALTER TABLE public.generation_records ADD COLUMN building_load_kwh NUMERIC;
