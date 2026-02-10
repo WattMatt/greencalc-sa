@@ -1,56 +1,76 @@
 
 
-# Add "Generation" Tab After Documents
+# Multi-CSV Upload with Summation for Actual Generation and Building Load
 
 ## Overview
 
-Add a "Generation" tab as the last tab (after Documents) in the project detail page. It will track monthly kWh data from two sources:
+Update the CSV upload on both the Actual Generation and Building Load cards to support **multiple file selection**. When multiple files are uploaded, their kWh values are **summed per month** before saving. Each upload **adds to** the existing stored value (additive mode), with a "Reset" button to clear accumulated data.
 
-1. **Actual kWh** -- from CSV upload or manual entry (real inverter/meter readings)
-2. **Guaranteed kWh** -- manually entered monthly contractual guarantee values
-3. **Forecasted kWh** -- placeholder only (coming later)
+No combined CSV detection is needed -- each card only ever receives its own data type.
 
-A performance chart and summary table will compare actual vs guaranteed, with the forecasted column greyed out as "coming soon."
+## Changes
 
-## Database
+### New File: `src/components/projects/generation/csvUtils.ts`
 
-### New table: `generation_records`
+A shared utility for parsing one or more CSV files and summing values per month:
 
-One row per project per month per year:
+- Accepts a `FileList` and a regex pattern for identifying the kWh column
+- Reads all files, identifies `month` and value columns in each
+- Returns a `Map<number, number>` of month-to-total-kWh across all files
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | UUID PK | |
-| project_id | UUID FK | References projects, CASCADE delete |
-| month | INTEGER | 1-12 |
-| year | INTEGER | e.g. 2026 |
-| actual_kwh | NUMERIC, nullable | From CSV or manual |
-| guaranteed_kwh | NUMERIC, nullable | Contractual target |
-| expected_kwh | NUMERIC, nullable | Placeholder for future |
-| source | TEXT | 'csv' or 'manual' |
-| created_at / updated_at | TIMESTAMPTZ | |
+### Modify: `ActualGenerationCard.tsx`
 
-Unique constraint on (project_id, month, year). RLS for authenticated users.
+- Change file input to accept `multiple` files
+- Replace inline CSV parsing with the shared `csvUtils` helper
+- Make uploads **additive**: fetch the existing `actual_kwh` for each month, then upsert with `existingValue + newSum`
+- Update `source` field to indicate CSV count (e.g., `"csv:3"`)
+- Add a "Reset" button that sets `actual_kwh` to `null` for the selected month
+- Toast message: "Added X kWh from Y file(s)"
 
-## New Components
+### Modify: `BuildingLoadCard.tsx`
 
-All in `src/components/projects/generation/`:
+- Same changes as above, but targeting `building_load_kwh`
+- File input accepts `multiple`
+- Additive upsert logic
+- Reset button to clear building load for the selected month
 
-- **GenerationTab.tsx** -- Main container with year selector, the three cards, chart, and table
-- **ActualGenerationCard.tsx** -- CSV upload + 12 monthly manual inputs for actual kWh
-- **GuaranteedGenerationCard.tsx** -- 12 monthly manual inputs for guaranteed kWh
-- **ExpectedGenerationCard.tsx** -- Placeholder card saying "Forecasted generation -- coming soon"
-- **PerformanceChart.tsx** -- Recharts bar/line chart comparing actual vs guaranteed (expected greyed out)
-- **PerformanceSummaryTable.tsx** -- Monthly table with actual, guaranteed, expected (greyed), and performance ratios
+### No changes to `GenerationTab.tsx`
 
-## Changes to ProjectDetail.tsx
+The combined CSV concept is removed. Each card handles its own uploads independently.
 
-- Add `generation` entry to `tabStatuses` (pending if no data, partial if some months, complete if all 12 months have actual data)
-- Add `TabWithStatus` for "Generation" with `TrendingUp` icon **after** the Documents tab
-- Add `TabsContent` for "generation" rendering `GenerationTab` with `projectId` prop
+## Technical Details
 
-## Tab Placement
+### Shared CSV Parser (`csvUtils.ts`)
 
-The tab order will be:
-Overview, Tenants, Load Profile, Costs, Tariff, Simulation, PV Layout, Solar Forecast, Proposals, Reports, Schedule, Documents, **Generation**
+```
+async function parseCSVFiles(
+  files: FileList,
+  valueColumnPattern: RegExp
+): Promise<Map<number, number>>
+```
+
+- Iterates each file, splits into lines, finds header columns
+- Month column: matches `/month/i`
+- Value column: matches the provided pattern (e.g., `/kwh|energy|generation|actual/i` for generation, `/kwh|energy|load|consumption|building/i` for load)
+- For each valid row, accumulates into a running sum per month across all files
+- Returns the summed map
+
+### Additive Upsert Flow
+
+For each month in the parsed results:
+
+1. Fetch the current record for that `(project_id, month, year)`
+2. Calculate `newTotal = (existing?.actual_kwh ?? 0) + parsedSum`
+3. Upsert with the new total
+
+### Reset Button
+
+Each card gets a small "Reset" link that:
+- Upserts the field to `null` for the current month/year
+- Clears local state
+- Triggers `onDataChanged` to refresh
+
+### Source Tracking
+
+The `source` field on `generation_records` will be updated to reflect the number of CSV files contributing to the total (e.g., `"csv:2"` or `"manual"` for hand-entered values).
 
