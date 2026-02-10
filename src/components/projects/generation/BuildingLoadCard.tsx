@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Upload, Save, Building2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { parseCSVFiles } from "./csvUtils";
+import { CSVPreviewDialog } from "./CSVPreviewDialog";
 
 interface MonthData {
   month: number;
@@ -31,6 +32,9 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
   const [value, setValue] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [csvDialogOpen, setCsvDialogOpen] = useState(false);
+  const [csvDialogLines, setCsvDialogLines] = useState<string[]>([]);
+  const [pendingFileCount, setPendingFileCount] = useState(0);
 
   const displayValue = value !== null ? value : (monthData.building_load_kwh?.toString() ?? "");
 
@@ -57,55 +61,69 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
     }
   };
 
+  const saveCSVTotals = async (totals: Map<number, number>, fileCount: number) => {
+    const months = Array.from(totals.keys());
+    const { data: existing } = await supabase
+      .from("generation_records")
+      .select("month, building_load_kwh")
+      .eq("project_id", projectId)
+      .eq("year", year)
+      .in("month", months);
+
+    const existingMap = new Map((existing ?? []).map((r) => [r.month, r]));
+    let totalAdded = 0;
+
+    for (const [m, csvSum] of totals) {
+      const prev = existingMap.get(m);
+      const newTotal = (prev?.building_load_kwh ?? 0) + csvSum;
+      totalAdded += csvSum;
+
+      const { error } = await supabase
+        .from("generation_records")
+        .upsert({
+          project_id: projectId,
+          month: m,
+          year,
+          building_load_kwh: newTotal,
+        }, { onConflict: "project_id,month,year" });
+      if (error) throw error;
+    }
+
+    toast.success(`Added ${totalAdded.toLocaleString()} kWh from ${fileCount} file(s)`);
+    setValue(null);
+    onDataChanged();
+  };
+
   const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     try {
+      const text = await files[0].text();
+      const allLines = text.split("\n").filter((l) => l.trim());
       const totals = await parseCSVFiles(files, /kwh|energy|load|consumption|building|p\d*\s*\(per\s*kw\)/i);
 
       if (totals.size === 0) {
-        toast.error("No valid month/kWh data found in CSV(s)");
+        setCsvDialogLines(allLines);
+        setPendingFileCount(files.length);
+        setCsvDialogOpen(true);
         return;
       }
 
-      const months = Array.from(totals.keys());
-      const { data: existing } = await supabase
-        .from("generation_records")
-        .select("month, building_load_kwh")
-        .eq("project_id", projectId)
-        .eq("year", year)
-        .in("month", months);
-
-      const existingMap = new Map(
-        (existing ?? []).map((r) => [r.month, r])
-      );
-
-      let totalAdded = 0;
-
-      for (const [m, csvSum] of totals) {
-        const prev = existingMap.get(m);
-        const newTotal = (prev?.building_load_kwh ?? 0) + csvSum;
-        totalAdded += csvSum;
-
-        const { error } = await supabase
-          .from("generation_records")
-          .upsert({
-            project_id: projectId,
-            month: m,
-            year,
-            building_load_kwh: newTotal,
-          }, { onConflict: "project_id,month,year" });
-        if (error) throw error;
-      }
-
-      toast.success(`Added ${totalAdded.toLocaleString()} kWh from ${files.length} file(s)`);
-      setValue(null);
-      onDataChanged();
+      await saveCSVTotals(totals, files.length);
     } catch (err: any) {
       toast.error(err.message || "CSV import failed");
     }
 
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleManualParsed = async (totals: Map<number, number>) => {
+    try {
+      await saveCSVTotals(totals, pendingFileCount);
+    } catch (err: any) {
+      toast.error(err.message || "CSV import failed");
+    }
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -131,60 +149,68 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
   const hasEdit = value !== null && value !== (monthData.building_load_kwh?.toString() ?? "");
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            Building Load (kWh)
-          </span>
-          <div className="flex gap-1">
-            {monthData.building_load_kwh != null && (
+    <>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Building Load (kWh)
+            </span>
+            <div className="flex gap-1">
+              {monthData.building_load_kwh != null && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground"
+                  onClick={handleReset}
+                >
+                  <RotateCcw className="h-3 w-3 mr-1" /> Reset
+                </Button>
+              )}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="h-7 text-xs text-muted-foreground"
-                onClick={handleReset}
+                className="h-7 text-xs"
+                onClick={() => fileInputRef.current?.click()}
               >
-                <RotateCcw className="h-3 w-3 mr-1" /> Reset
+                <Upload className="h-3 w-3 mr-1" /> CSV
               </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="h-3 w-3 mr-1" /> CSV
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              multiple
-              className="hidden"
-              onChange={handleCSVUpload}
-            />
-            {hasEdit && (
-              <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={isSaving}>
-                <Save className="h-3 w-3 mr-1" /> Save
-              </Button>
-            )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                multiple
+                className="hidden"
+                onChange={handleCSVUpload}
+              />
+              {hasEdit && (
+                <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={isSaving}>
+                  <Save className="h-3 w-3 mr-1" /> Save
+                </Button>
+              )}
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3">
+            <Label className="text-sm text-muted-foreground w-auto">{monthData.fullName} {year}</Label>
           </div>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex items-center gap-3">
-          <Label className="text-sm text-muted-foreground w-auto">{monthData.fullName} {year}</Label>
-        </div>
-        <Input
-          type="number"
-          className="text-sm"
-          placeholder="Enter kWh"
-          value={displayValue}
-          onChange={(e) => setValue(e.target.value)}
-        />
-      </CardContent>
-    </Card>
+          <Input
+            type="number"
+            className="text-sm"
+            placeholder="Enter kWh"
+            value={displayValue}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </CardContent>
+      </Card>
+      <CSVPreviewDialog
+        open={csvDialogOpen}
+        onClose={() => setCsvDialogOpen(false)}
+        csvLines={csvDialogLines}
+        onParsed={handleManualParsed}
+      />
+    </>
   );
 }

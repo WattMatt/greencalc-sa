@@ -33,7 +33,7 @@ export async function parseCSVFiles(
 }
 
 function stripQuotes(s: string): string {
-  return s.replace(/^"|"$/g, "").trim();
+  return s.trim().replace(/^"|"$/g, "").trim();
 }
 
 function parseScadaFormat(
