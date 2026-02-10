@@ -32,6 +32,10 @@ export async function parseCSVFiles(
   return totals;
 }
 
+function stripQuotes(s: string): string {
+  return s.replace(/^"|"$/g, "").trim();
+}
+
 function parseScadaFormat(
   lines: string[],
   valueColumnPattern: RegExp,
@@ -39,12 +43,12 @@ function parseScadaFormat(
 ) {
   if (lines.length < 3) return;
 
-  const headers = lines[1].split(",").map((h) => h.trim().toLowerCase());
+  const headers = lines[1].split(",").map((h) => stripQuotes(h).toLowerCase());
   const dateCol = headers.findIndex((h) => /^date$/i.test(h));
   const timeCol = headers.findIndex((h) => /^time$/i.test(h));
   let valueCol = headers.findIndex((h) => valueColumnPattern.test(h));
   if (valueCol === -1) {
-    valueCol = headers.findIndex((h) => /p\s*\(per\s*kw\)/i.test(h) || /^p\s*\(kw\)$/i.test(h));
+    valueCol = headers.findIndex((h) => /p\d*\s*\(per\s*kw\)/i.test(h) || /^p\d*\s*\(kw\)$/i.test(h));
   }
 
   if (dateCol === -1 || valueCol === -1) return;
@@ -52,8 +56,8 @@ function parseScadaFormat(
   // Detect interval from first two data rows
   let intervalHours = 0.5; // default 30-min
   if (timeCol !== -1 && lines.length >= 4) {
-    const time1 = lines[2].split(",")[timeCol]?.trim();
-    const time2 = lines[3].split(",")[timeCol]?.trim();
+    const time1 = stripQuotes(lines[2].split(",")[timeCol] ?? "");
+    const time2 = stripQuotes(lines[3].split(",")[timeCol] ?? "");
     if (time1 && time2) {
       const mins = timeDiffMinutes(time1, time2);
       if (mins > 0) intervalHours = mins / 60;
@@ -61,9 +65,9 @@ function parseScadaFormat(
   }
 
   for (let i = 2; i < lines.length; i++) {
-    const cols = lines[i].split(",");
-    const dateStr = cols[dateCol]?.trim();
-    const kwVal = parseFloat(cols[valueCol]?.trim());
+    const cols = lines[i].split(",").map(stripQuotes);
+    const dateStr = cols[dateCol] ?? "";
+    const kwVal = parseFloat(cols[valueCol] ?? "");
 
     if (!dateStr || isNaN(kwVal)) continue;
 
@@ -80,16 +84,16 @@ function parseSimpleFormat(
   valueColumnPattern: RegExp,
   totals: Map<number, number>
 ) {
-  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+  const headers = lines[0].split(",").map((h) => stripQuotes(h).toLowerCase());
   const monthCol = headers.findIndex((h) => /month/i.test(h));
   const valueCol = headers.findIndex((h) => valueColumnPattern.test(h));
 
   if (monthCol === -1 || valueCol === -1) return;
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(",");
-    const monthVal = parseInt(cols[monthCol]?.trim());
-    const kwhVal = parseFloat(cols[valueCol]?.trim());
+    const cols = lines[i].split(",").map(stripQuotes);
+    const monthVal = parseInt(cols[monthCol] ?? "");
+    const kwhVal = parseFloat(cols[valueCol] ?? "");
     if (monthVal >= 1 && monthVal <= 12 && !isNaN(kwhVal)) {
       totals.set(monthVal, (totals.get(monthVal) ?? 0) + kwhVal);
     }
