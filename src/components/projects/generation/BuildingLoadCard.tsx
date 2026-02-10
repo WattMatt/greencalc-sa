@@ -62,7 +62,7 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
     if (!files || files.length === 0) return;
 
     try {
-      const totals = await parseCSVFiles(files, /kwh|energy|load|consumption|building|p\s*\(per\s*kw\)/i);
+      const totals = await parseCSVFiles(files, /kwh|energy|load|consumption|building|p\d*\s*\(per\s*kw\)/i);
 
       if (totals.size === 0) {
         toast.error("No valid month/kWh data found in CSV(s)");
