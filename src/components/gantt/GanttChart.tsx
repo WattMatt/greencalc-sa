@@ -238,14 +238,34 @@ export function GanttChart({
             rows.push({ type: 'zone-header', key: zoneKey, label: zone, categoryKey: catKey, taskCount: zoneTasks.length });
 
             if (!collapsedGroups.has(zoneKey)) {
+              const zoneTaskRows: VisibleRow[] = [];
               for (const task of zoneTasks) {
-                rows.push(...expandTaskRows(task));
+                zoneTaskRows.push(...expandTaskRows(task));
               }
+              if (!config.splitView) {
+                zoneTaskRows.sort((a, b) => {
+                  if (a.type !== 'task' || b.type !== 'task') return 0;
+                  const startA = new Date(a.segmentOverride?.start_date ?? a.task.start_date).getTime();
+                  const startB = new Date(b.segmentOverride?.start_date ?? b.task.start_date).getTime();
+                  return startA - startB;
+                });
+              }
+              rows.push(...zoneTaskRows);
             }
           } else {
+            const zoneTaskRows: VisibleRow[] = [];
             for (const task of zoneTasks) {
-              rows.push(...expandTaskRows(task));
+              zoneTaskRows.push(...expandTaskRows(task));
             }
+            if (!config.splitView) {
+              zoneTaskRows.sort((a, b) => {
+                if (a.type !== 'task' || b.type !== 'task') return 0;
+                const startA = new Date(a.segmentOverride?.start_date ?? a.task.start_date).getTime();
+                const startB = new Date(b.segmentOverride?.start_date ?? b.task.start_date).getTime();
+                return startA - startB;
+              });
+            }
+            rows.push(...zoneTaskRows);
           }
         }
       }
