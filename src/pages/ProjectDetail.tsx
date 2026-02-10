@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet, CheckCircle2, AlertCircle, Lock, Circle, CalendarIcon, Save, TrendingUp, Leaf, Battery, Building2, MapPin, CalendarDays } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet, CheckCircle2, AlertCircle, Lock, Circle, CalendarIcon, Save, TrendingUp, Leaf, Battery, Building2, MapPin, CalendarDays, FolderOpen } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { TenantManager } from "@/components/projects/TenantManager";
@@ -1069,6 +1069,10 @@ export default function ProjectDetail() {
       tooltip: ganttTaskCount > 0 
         ? `${ganttTaskCount} task${ganttTaskCount > 1 ? 's' : ''} scheduled`
         : "Create project schedule"
+    },
+    documents: {
+      status: "pending" as TabStatus,
+      tooltip: "Manage project documents"
     }
   };
 
@@ -1150,6 +1154,10 @@ export default function ProjectDetail() {
             <TabWithStatus value="schedule" status={tabStatuses.schedule.status} tooltip={tabStatuses.schedule.tooltip}>
               <CalendarDays className="h-4 w-4 mr-2" />
               Schedule
+            </TabWithStatus>
+            <TabWithStatus value="documents" status={tabStatuses.documents.status} tooltip={tabStatuses.documents.tooltip}>
+              <FolderOpen className="h-4 w-4 mr-2" />
+              Documents
             </TabWithStatus>
           </TabsList>
         </TooltipProvider>
@@ -1262,6 +1270,20 @@ export default function ProjectDetail() {
 
         <TabsContent value="schedule" className="mt-6">
           <ProjectGantt projectId={id!} projectName={project.name} />
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FolderOpen className="h-5 w-5 text-primary" />
+                Project Documents
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">Document management coming soon.</p>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
