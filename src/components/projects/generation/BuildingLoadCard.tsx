@@ -114,19 +114,34 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
       }
     }
 
-    // Save raw readings
+    // Save raw readings - add to existing values
     if (readings && readings.length > 0) {
       const batchSize = 500;
       for (let i = 0; i < readings.length; i += batchSize) {
-        const batch = readings.slice(i, i + batchSize).map((r) => ({
+        const batch = readings.slice(i, i + batchSize);
+        const timestamps = batch.map((r) => r.timestamp);
+
+        // Fetch existing readings for these timestamps
+        const { data: existingReadings } = await supabase
+          .from("generation_readings")
+          .select("timestamp, building_load_kwh")
+          .eq("project_id", projectId)
+          .in("timestamp", timestamps);
+
+        const existingMap = new Map(
+          (existingReadings ?? []).map((r) => [r.timestamp, r.building_load_kwh ?? 0])
+        );
+
+        const upsertBatch = batch.map((r) => ({
           project_id: projectId,
           timestamp: r.timestamp,
-          building_load_kwh: r.kwh,
+          building_load_kwh: (existingMap.get(r.timestamp) ?? 0) + r.kwh,
           source: "csv",
         }));
+
         const { error } = await supabase
           .from("generation_readings")
-          .upsert(batch, { onConflict: "project_id,timestamp" });
+          .upsert(upsertBatch, { onConflict: "project_id,timestamp" });
         if (error) throw error;
       }
     }
