@@ -79,6 +79,7 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
   const refetch = () => {
     queryClient.invalidateQueries({ queryKey: ["generation-record", projectId, year, month] });
     queryClient.invalidateQueries({ queryKey: ["generation-daily", projectId, year, month] });
+    queryClient.invalidateQueries({ queryKey: ["generation-readings", projectId, year, month] });
   };
 
   return (

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Upload, Save, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { parseCSVFiles } from "./csvUtils";
-import { CSVPreviewDialog } from "./CSVPreviewDialog";
+import { CSVPreviewDialog, type CSVReading } from "./CSVPreviewDialog";
 
 interface MonthData {
   month: number;
@@ -61,7 +61,7 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
     }
   };
 
-  const saveCSVTotals = async (totals: Map<number, number>, fileCount: number, dailyTotals?: Map<string, number>) => {
+  const saveCSVTotals = async (totals: Map<number, number>, fileCount: number, dailyTotals?: Map<string, number>, readings?: CSVReading[]) => {
     const months = Array.from(totals.keys());
     const { data: existing } = await supabase
       .from("generation_records")
@@ -120,6 +120,23 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
       }
     }
 
+    // Save raw readings
+    if (readings && readings.length > 0) {
+      const batchSize = 500;
+      for (let i = 0; i < readings.length; i += batchSize) {
+        const batch = readings.slice(i, i + batchSize).map((r) => ({
+          project_id: projectId,
+          timestamp: r.timestamp,
+          actual_kwh: r.kwh,
+          source: "csv",
+        }));
+        const { error } = await supabase
+          .from("generation_readings")
+          .upsert(batch, { onConflict: "project_id,timestamp" });
+        if (error) throw error;
+      }
+    }
+
     toast.success(`Added ${totalAdded.toLocaleString()} kWh from ${fileCount} file(s)`);
     setValue(null);
     onDataChanged();
@@ -142,9 +159,9 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleManualParsed = async (totals: Map<number, number>, dailyTotals: Map<string, number>) => {
+  const handleManualParsed = async (totals: Map<number, number>, dailyTotals: Map<string, number>, readings: CSVReading[]) => {
     try {
-      await saveCSVTotals(totals, pendingFileCount, dailyTotals);
+      await saveCSVTotals(totals, pendingFileCount, dailyTotals, readings);
     } catch (err: any) {
       toast.error(err.message || "CSV import failed");
     }
@@ -172,6 +189,17 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
         .eq("year", year)
         .eq("month", month);
       if (dailyError) throw dailyError;
+
+      // Clear raw readings for this month
+      const startDate = `${year}-${String(month).padStart(2, "0")}-01T00:00:00`;
+      const endDate = `${year}-${String(month).padStart(2, "0")}-${new Date(year, month, 0).getDate()}T23:59:59`;
+      const { error: readingsError } = await supabase
+        .from("generation_readings")
+        .update({ actual_kwh: null })
+        .eq("project_id", projectId)
+        .gte("timestamp", startDate)
+        .lte("timestamp", endDate);
+      if (readingsError) throw readingsError;
 
       toast.success(`Reset actual generation for ${monthData.fullName}`);
       setValue(null);
