@@ -163,6 +163,16 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
           source: null,
         }, { onConflict: "project_id,month,year" });
       if (error) throw error;
+
+      // Clear daily actual_kwh records for this month
+      const { error: dailyError } = await supabase
+        .from("generation_daily_records")
+        .update({ actual_kwh: null })
+        .eq("project_id", projectId)
+        .eq("year", year)
+        .eq("month", month);
+      if (dailyError) throw dailyError;
+
       toast.success(`Reset actual generation for ${monthData.fullName}`);
       setValue(null);
       onDataChanged();

@@ -156,6 +156,16 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
           building_load_kwh: null,
         }, { onConflict: "project_id,month,year" });
       if (error) throw error;
+
+      // Clear daily building_load_kwh records for this month
+      const { error: dailyError } = await supabase
+        .from("generation_daily_records")
+        .update({ building_load_kwh: null })
+        .eq("project_id", projectId)
+        .eq("year", year)
+        .eq("month", month);
+      if (dailyError) throw dailyError;
+
       toast.success(`Reset building load for ${monthData.fullName}`);
       setValue(null);
       onDataChanged();
