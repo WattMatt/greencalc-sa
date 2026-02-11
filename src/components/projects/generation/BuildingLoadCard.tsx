@@ -61,7 +61,7 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
     }
   };
 
-  const saveCSVTotals = async (totals: Map<number, number>, fileCount: number) => {
+  const saveCSVTotals = async (totals: Map<number, number>, fileCount: number, dailyTotals?: Map<string, number>) => {
     const months = Array.from(totals.keys());
     const { data: existing } = await supabase
       .from("generation_records")
@@ -89,6 +89,31 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
       if (error) throw error;
     }
 
+    // Save daily records
+    if (dailyTotals && dailyTotals.size > 0) {
+      for (const [dateKey, kwh] of dailyTotals) {
+        const [y, m] = dateKey.split("-").map(Number);
+        const { data: existingDaily } = await supabase
+          .from("generation_daily_records")
+          .select("building_load_kwh")
+          .eq("project_id", projectId)
+          .eq("date", dateKey)
+          .maybeSingle();
+
+        const newKwh = (existingDaily?.building_load_kwh ?? 0) + kwh;
+        const { error } = await supabase
+          .from("generation_daily_records")
+          .upsert({
+            project_id: projectId,
+            date: dateKey,
+            year: y,
+            month: m,
+            building_load_kwh: newKwh,
+          }, { onConflict: "project_id,date" });
+        if (error) throw error;
+      }
+    }
+
     toast.success(`Added ${totalAdded.toLocaleString()} kWh from ${fileCount} file(s)`);
     setValue(null);
     onDataChanged();
@@ -111,9 +136,9 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleManualParsed = async (totals: Map<number, number>) => {
+  const handleManualParsed = async (totals: Map<number, number>, dailyTotals: Map<string, number>) => {
     try {
-      await saveCSVTotals(totals, pendingFileCount);
+      await saveCSVTotals(totals, pendingFileCount, dailyTotals);
     } catch (err: any) {
       toast.error(err.message || "CSV import failed");
     }
