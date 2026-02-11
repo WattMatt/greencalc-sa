@@ -1,45 +1,40 @@
 
+# Fix: Council Demand Upload Creating Duplicate Timestamp Rows
 
-# Add Date Range Navigation Arrows with Auto-Inferred Step
+## Problem
+When uploading council demand CSV data after solar data, the timestamps end up duplicated in the database. Each solar reading gets its own row (with `actual_kwh` set, `building_load_kwh` null), and each council reading creates a **separate** row (with `building_load_kwh` set, `actual_kwh` null) at the same timestamp. This causes the chart to render double the expected data points, visually shifting everything.
 
-## Overview
-Add left/right arrow buttons to the right of the date range filter. The step size is automatically determined by the number of days between the "From" and "To" dates. Clicking an arrow shifts the entire window by that amount.
+## Root Cause
+In both `ActualGenerationCard.tsx` and `BuildingLoadCard.tsx`, the `normalizeTs` function uses `new Date(ts).toISOString()` to create lookup keys for existing readings. This converts timestamps to UTC, but the stored timestamps may have been interpreted differently by the database (which uses `timestamp with time zone`). The mismatch means the lookup fails to find existing rows, so the upsert creates new ones instead of merging.
 
-## Example
-- If From = Jan 5, To = Jan 10 (5-day span), clicking right shifts to From = Jan 10, To = Jan 15.
-- If From = Jan 1, To = Jan 7 (7-day span), clicking left is disabled (already at month start).
+## Solution
+Replace the `normalizeTs` function in both upload cards with a consistent normalization that strips timezone info and matches on the raw date/time string, ensuring lookups always find existing rows regardless of timezone interpretation differences.
 
 ## Changes
 
-**File: `src/components/projects/generation/PerformanceChart.tsx`**
+**File: `src/components/projects/generation/ActualGenerationCard.tsx`**
+- Replace `normalizeTs` (line ~125) to normalize timestamps by stripping timezone suffixes and trailing milliseconds, producing a consistent `YYYY-MM-DDTHH:MM:SS` key
+- This ensures the lookup map keys match what the database returns
 
-### 1. Add Navigation Arrows
-Place a left arrow (`ChevronLeft`) and right arrow (`ChevronRight`) button to the right of the "To" date input, in the same row.
+**File: `src/components/projects/generation/BuildingLoadCard.tsx`**  
+- Same change to `normalizeTs` (line ~119)
 
-### 2. Step Logic
-- Calculate the step as the difference in days between `dateEnd` and `dateStart` (plus 1 to include both endpoints, or just the raw difference -- using raw difference so the window slides by its own width).
-- **Step Left**: Subtract the step from both `dateStart` and `dateEnd`, clamping `dateStart` to the first of the month and adjusting `dateEnd` accordingly.
-- **Step Right**: Add the step to both dates, clamping `dateEnd` to the last day of the month and adjusting `dateStart` accordingly.
+### Updated normalizeTs logic:
+```text
+const normalizeTs = (ts: string): string => {
+  // Strip timezone suffix (+00, Z, +HH:MM) and milliseconds
+  // to get a consistent YYYY-MM-DDTHH:MM:SS key
+  return ts
+    .replace(/\.\d+/, '')           // remove milliseconds
+    .replace(/Z$/, '')              // remove Z
+    .replace(/[+-]\d{2}(:\d{2})?$/, '') // remove offset
+    .replace(' ', 'T');             // normalize space to T
+};
+```
 
-### 3. Boundary Behavior
-- Left arrow disabled when `dateStart` is already at the first of the month.
-- Right arrow disabled when `dateEnd` is already at the last day of the month.
-- When a step would exceed the boundary, the window is clamped so it butts up against the edge while preserving its width if possible.
+This ensures that whether the timestamp comes from the CSV (`2026-01-01T00:30:00`) or from the database (`2026-01-01 00:30:00+00`), the normalized key will be the same: `2026-01-01T00:30:00`.
 
-## Technical Details
-
-- Import `ChevronLeft`, `ChevronRight` from `lucide-react`
-- Import `Button` from `@/components/ui/button`
-- Compute step: `const stepDays = Math.round((new Date(dateEnd).getTime() - new Date(dateStart).getTime()) / 86400000) + 1`
-- Helper to shift a date string by N days:
-  ```text
-  function shiftDate(date: string, days: number): string {
-    const d = new Date(date);
-    d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
-  }
-  ```
-- On left click: compute new start/end, clamp to `startDate`/`endDate` (month boundaries)
-- On right click: same in the other direction
-- Buttons styled as `variant="outline" size="icon"` with `h-8 w-8` to match existing controls
-
+## Impact
+- Fixes the duplicate-row issue so solar and council data properly merge into the same row
+- Existing data with duplicates would need a re-upload (reset + re-import) to fix
+- No chart code changes needed -- once the data is stored correctly, the chart renders correctly
