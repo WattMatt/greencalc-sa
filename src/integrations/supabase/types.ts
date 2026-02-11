@@ -589,6 +589,47 @@ export type Database = {
           },
         ]
       }
+      generation_source_guarantees: {
+        Row: {
+          created_at: string
+          guaranteed_kwh: number
+          id: string
+          month: number
+          project_id: string
+          source_label: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          guaranteed_kwh?: number
+          id?: string
+          month: number
+          project_id: string
+          source_label: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          guaranteed_kwh?: number
+          id?: string
+          month?: number
+          project_id?: string
+          source_label?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_source_guarantees_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       handover_checklist_items: {
         Row: {
           created_at: string
