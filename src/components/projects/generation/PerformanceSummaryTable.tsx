@@ -100,11 +100,35 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       dayMap.set(d, { actual: 0, downtimeSlots: 0, downtimeEnergy: 0 });
     }
 
-    // Build a map of source_label -> guaranteed_kwh
+    // Build a map of reading source -> guaranteed_kwh
+    // Source guarantees may have different labels than readings, so we try:
+    // 1. Exact label match
+    // 2. If no exact matches found, distribute total guarantee equally across distinct reading sources
     const guaranteeMap = new Map<string, number>();
-    if (sourceGuarantees) {
+    const distinctReadingSources = new Set<string>();
+    if (readings) {
+      for (const r of readings) {
+        distinctReadingSources.add(r.source || "csv");
+      }
+    }
+    
+    if (sourceGuarantees && sourceGuarantees.length > 0) {
+      // Check if any guarantee labels match reading sources
+      let hasMatch = false;
       for (const sg of sourceGuarantees) {
-        guaranteeMap.set(sg.source_label, sg.guaranteed_kwh);
+        if (distinctReadingSources.has(sg.source_label)) {
+          guaranteeMap.set(sg.source_label, sg.guaranteed_kwh);
+          hasMatch = true;
+        }
+      }
+      
+      // No exact matches — distribute total guarantee equally across reading sources
+      if (!hasMatch && distinctReadingSources.size > 0) {
+        const totalSourceGuarantee = sourceGuarantees.reduce((sum, sg) => sum + sg.guaranteed_kwh, 0);
+        const perSource = totalSourceGuarantee / distinctReadingSources.size;
+        for (const src of distinctReadingSources) {
+          guaranteeMap.set(src, perSource);
+        }
       }
     }
 
