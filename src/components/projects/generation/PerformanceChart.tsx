@@ -195,13 +195,11 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   const hoursPerDay = hoursFilter === "sun" ? 11.5 : 24;
 
   const guaranteeValue = timeframe === "monthly"
-    ? (hoursFilter === "sun" && monthData.guaranteed_kwh != null
-        ? monthData.guaranteed_kwh * (sunHourIntervals / allHourIntervals)
-        : monthData.guaranteed_kwh)
+    ? monthData.guaranteed_kwh
     : timeframe === "daily"
-      ? (dailyGuarantee != null ? dailyGuarantee * (intervalsPerDay / allHourIntervals) : null)
+      ? dailyGuarantee
       : timeframe === "hourly"
-        ? (dailyGuarantee ? dailyGuarantee / hoursPerDay : null) // NOT scaled further since hourly already accounts for fewer hours
+        ? (dailyGuarantee ? dailyGuarantee / hoursPerDay : null)
         : (dailyGuarantee ? dailyGuarantee / intervalsPerDay : null);
 
   // Add guarantee field to each data point
