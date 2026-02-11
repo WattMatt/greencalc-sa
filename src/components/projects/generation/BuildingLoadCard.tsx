@@ -116,7 +116,8 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
 
     // Save raw readings - add to existing values
     if (readings && readings.length > 0) {
-      const normalizeTs = (ts: string) => new Date(ts).toISOString();
+      const normalizeTs = (ts: string): string =>
+        ts.replace(/\.\d+/, '').replace(/Z$/, '').replace(/[+-]\d{2}(:\d{2})?$/, '').replace(' ', 'T');
       const batchSize = 500;
       for (let i = 0; i < readings.length; i += batchSize) {
         const batch = readings.slice(i, i + batchSize);
