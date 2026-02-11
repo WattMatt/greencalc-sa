@@ -42,6 +42,13 @@ function daysInMonth(month: number, year: number): number {
   return new Date(year, month, 0).getDate();
 }
 
+/** Parse timestamp as local time, stripping any timezone suffix */
+function parseLocal(ts: string): Date {
+  // Remove trailing Z or +HH:MM / -HH:MM so Date treats it as local
+  const stripped = ts.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+  return new Date(stripped);
+}
+
 function formatTimeLabel(date: Date, timeframe: Timeframe, month: number): string {
   if (timeframe === "30min" || timeframe === "hourly") {
     const d = date.getDate();
@@ -97,7 +104,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   const dailyGuarantee = monthData.guaranteed_kwh ? monthData.guaranteed_kwh / days : null;
 
   function isSunHour(timestamp: string): boolean {
-    const d = new Date(timestamp);
+    const d = parseLocal(timestamp);
     const timeInMinutes = d.getHours() * 60 + d.getMinutes();
     return timeInMinutes >= 360 && timeInMinutes <= 1050;
   }
@@ -128,7 +135,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
 
     if (timeframe === "30min") {
       return dateFilteredReadings.map((r) => {
-        const d = new Date(r.timestamp);
+        const d = parseLocal(r.timestamp);
         return {
           name: formatTimeLabel(d, "30min", month),
           actual: r.actual_kwh ?? 0,
@@ -140,7 +147,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     if (timeframe === "hourly") {
       const hourlyMap = new Map<string, { actual: number; building_load: number }>();
       for (const r of dateFilteredReadings) {
-        const d = new Date(r.timestamp);
+        const d = parseLocal(r.timestamp);
         const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
         const existing = hourlyMap.get(key) ?? { actual: 0, building_load: 0 };
         existing.actual += r.actual_kwh ?? 0;
@@ -157,7 +164,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     // daily - aggregate readings by day
     const dailyMap = new Map<number, { actual: number; building_load: number }>();
     for (const r of dateFilteredReadings) {
-      const d = new Date(r.timestamp);
+      const d = parseLocal(r.timestamp);
       const day = d.getDate();
       const existing = dailyMap.get(day) ?? { actual: 0, building_load: 0 };
       existing.actual += r.actual_kwh ?? 0;
