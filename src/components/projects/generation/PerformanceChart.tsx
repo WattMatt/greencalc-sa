@@ -49,11 +49,12 @@ function parseLocal(ts: string): Date {
   return new Date(stripped);
 }
 
-function formatTimeLabel(date: Date, timeframe: Timeframe, month: number): string {
+function formatTimeLabel(date: Date, timeframe: Timeframe, month: number, singleDay?: boolean): string {
   if (timeframe === "30min" || timeframe === "hourly") {
-    const d = date.getDate();
     const h = date.getHours().toString().padStart(2, "0");
     const m = date.getMinutes().toString().padStart(2, "0");
+    if (singleDay) return `${h}:${m}`;
+    const d = date.getDate();
     return `${d}-${MONTH_SHORT[month - 1]} ${h}:${m}`;
   }
   if (timeframe === "daily") {
@@ -61,6 +62,8 @@ function formatTimeLabel(date: Date, timeframe: Timeframe, month: number): strin
   }
   return MONTH_SHORT[month - 1];
 }
+
+const MONTH_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 export function PerformanceChart({ projectId, month, year, monthData }: PerformanceChartProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>("daily");
@@ -141,6 +144,8 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     });
   }, [filteredReadings, dateStart, dateEnd]);
 
+  const isSingleDay = dateStart === dateEnd;
+
   const chartData = (() => {
     if (timeframe === "monthly") {
       return [{
@@ -156,7 +161,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       return dateFilteredReadings.map((r) => {
         const d = parseLocal(r.timestamp);
         return {
-          name: formatTimeLabel(d, "30min", month),
+          name: formatTimeLabel(d, "30min", month, isSingleDay),
           actual: r.actual_kwh ?? 0,
           building_load: r.building_load_kwh ?? 0,
         };
@@ -176,7 +181,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       return Array.from(hourlyMap.entries()).map(([key, val]) => {
         const parts = key.split("-").map(Number);
         const d = new Date(parts[0], parts[1], parts[2], parts[3]);
-        return { name: formatTimeLabel(d, "hourly", month), ...val };
+        return { name: formatTimeLabel(d, "hourly", month, isSingleDay), ...val };
       });
     }
 
@@ -205,6 +210,11 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       };
     });
   })();
+
+  // Single day label for display between x-axis and legend
+  const singleDayLabel = isSingleDay
+    ? `${new Date(dateStart).getDate()} ${MONTH_FULL[month - 1]}`
+    : null;
 
   // Sun hours (06:00–17:30) = 11.5 hours = 23 half-hour intervals
   const sunHourIntervals = 23;
@@ -354,45 +364,57 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
             Upload CSV data to see the performance chart
           </div>
         ) : (
-          <ChartContainer config={chartConfig} className="h-[300px] w-full">
-            <ComposedChart data={enrichedData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={60} interval={labelInterval} />
-              <YAxis fontSize={12} label={{ value: displayUnit, angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: "pointer" }} />
-              <Bar
-                dataKey="actual"
-                name="Solar Generation"
-                fill="var(--color-actual)"
-                stroke="#d9d9d9"
-                strokeWidth={1}
-                radius={stackBars ? undefined : [2, 2, 0, 0]}
-                hide={hiddenSeries.has("actual")}
-                stackId={stackBars ? "building" : undefined}
-              />
-              <Bar
-                dataKey="building_load"
-                name="Council Demand"
-                fill="var(--color-building_load)"
-                stroke="#d9d9d9"
-                strokeWidth={1}
-                radius={stackBars ? [2, 2, 0, 0] : undefined}
-                hide={hiddenSeries.has("building_load")}
-                stackId={stackBars ? "building" : undefined}
-              />
-              {guaranteeValue != null && (
-                <Line
-                  dataKey="guarantee"
-                  name="Guaranteed Generation"
-                  stroke="var(--color-guarantee)"
-                  strokeWidth={2}
-                  dot={false}
-                  hide={hiddenSeries.has("guarantee")}
+          <div>
+            <ChartContainer config={chartConfig} className="h-[300px] w-full">
+              <ComposedChart data={enrichedData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={isSingleDay ? 40 : 60} interval={labelInterval} />
+                <YAxis fontSize={12} label={{ value: displayUnit, angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                {!singleDayLabel && <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: "pointer" }} />}
+                <Bar
+                  dataKey="actual"
+                  name="Solar Generation"
+                  fill="var(--color-actual)"
+                  stroke="#d9d9d9"
+                  strokeWidth={1}
+                  radius={stackBars ? undefined : [2, 2, 0, 0]}
+                  hide={hiddenSeries.has("actual")}
+                  stackId={stackBars ? "building" : undefined}
                 />
-              )}
-            </ComposedChart>
-          </ChartContainer>
+                <Bar
+                  dataKey="building_load"
+                  name="Council Demand"
+                  fill="var(--color-building_load)"
+                  stroke="#d9d9d9"
+                  strokeWidth={1}
+                  radius={stackBars ? [2, 2, 0, 0] : undefined}
+                  hide={hiddenSeries.has("building_load")}
+                  stackId={stackBars ? "building" : undefined}
+                />
+                {guaranteeValue != null && (
+                  <Line
+                    dataKey="guarantee"
+                    name="Guaranteed Generation"
+                    stroke="var(--color-guarantee)"
+                    strokeWidth={2}
+                    dot={false}
+                    hide={hiddenSeries.has("guarantee")}
+                  />
+                )}
+              </ComposedChart>
+            </ChartContainer>
+            {singleDayLabel && (
+              <div className="text-center space-y-1 -mt-1">
+                <p className="text-xs font-medium text-muted-foreground">{singleDayLabel}</p>
+                <div className="flex items-center justify-center gap-4 text-xs">
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#f0e442", border: "1px solid #d9d9d9" }} /> Solar Generation</span>
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#898989", border: "1px solid #d9d9d9" }} /> Council Demand</span>
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-1" style={{ background: "#00b0f0" }} /> Guaranteed Generation</span>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
