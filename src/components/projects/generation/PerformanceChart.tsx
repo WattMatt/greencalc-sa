@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface MonthData {
   month: number;
@@ -248,6 +250,44 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
             max={endDate}
             onChange={(e) => setDateEnd(e.target.value)}
           />
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            disabled={dateStart <= startDate}
+            onClick={() => {
+              const stepDays = Math.round((new Date(dateEnd).getTime() - new Date(dateStart).getTime()) / 86400000) + 1;
+              const shift = (d: string, n: number) => { const dt = new Date(d); dt.setDate(dt.getDate() + n); return dt.toISOString().slice(0, 10); };
+              let newStart = shift(dateStart, -stepDays);
+              let newEnd = shift(dateEnd, -stepDays);
+              if (newStart < startDate) { newStart = startDate; newEnd = shift(newStart, stepDays - 1); }
+              if (newEnd > endDate) newEnd = endDate;
+              setDateStart(newStart);
+              setDateEnd(newEnd);
+            }}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            disabled={dateEnd >= endDate}
+            onClick={() => {
+              const stepDays = Math.round((new Date(dateEnd).getTime() - new Date(dateStart).getTime()) / 86400000) + 1;
+              const shift = (d: string, n: number) => { const dt = new Date(d); dt.setDate(dt.getDate() + n); return dt.toISOString().slice(0, 10); };
+              let newStart = shift(dateStart, stepDays);
+              let newEnd = shift(dateEnd, stepDays);
+              if (newEnd > endDate) { newEnd = endDate; newStart = shift(newEnd, -(stepDays - 1)); }
+              if (newStart < startDate) newStart = startDate;
+              setDateStart(newStart);
+              setDateEnd(newEnd);
+            }}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       </div>
       <CardContent>
