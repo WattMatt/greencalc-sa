@@ -1,24 +1,65 @@
 
 
-# Update Down Time Column to Show Time Slot Count
+## Per-Source Downtime Calculation
 
-## What Changes
+### Problem
+Currently, all CSV uploads are additively merged into a single `actual_kwh` value per timestamp. Downtime is then evaluated on this combined total, which is incorrect -- a zero in the aggregate only occurs when ALL sources are simultaneously off. Individual source downtime is invisible.
 
-The **Down Time** column will display the number of time intervals (slots) during sun hours (06:00 inclusive to 18:00 exclusive) where there was zero or no PV production, instead of an energy (kWh) value.
+### Solution Overview
+Store generation readings per source (per uploaded CSV), then evaluate downtime independently for each source against its own guarantee value.
 
-For example, if there are 3 half-hour intervals with no generation, the column will show **3** instead of an energy estimate.
+### Database Changes
 
-## Theoretical Generation
+**1. Update unique index on `generation_readings`**
+- Drop the existing unique index `idx_generation_readings_project_ts` on `(project_id, timestamp)`
+- Create a new unique index on `(project_id, timestamp, source)` so each source gets its own row per timeslot
+- Default `source` to `'csv'` for backward compatibility
 
-Theoretical Generation will continue to work as an energy value. Internally, the code will still calculate an energy-based downtime estimate (using the daily guarantee spread across sun-hour readings) for the Theoretical Generation formula. Only the **displayed** Down Time column changes to a slot count.
+**2. No new tables needed** -- the existing `generation_source_guarantees` table already maps source labels to guarantee values.
 
-## Technical Details
+### Upload Logic Changes (ActualGenerationCard.tsx)
 
-**File:** `src/components/projects/generation/PerformanceSummaryTable.tsx`
+- Stop additively merging readings. Instead, store each CSV's readings with `source = sourceLabel` (the filename-derived label)
+- Upsert using the new unique constraint `(project_id, timestamp, source)` so re-uploading the same file overwrites rather than doubles
+- The monthly total in `generation_records.actual_kwh` remains the sum across all sources
 
-1. Update the `dayMap` to track two values: `downtime` (energy, used internally for Theoretical Gen) and `downtimeSlots` (count, displayed in the column).
-2. In the reading loop, increment `downtimeSlots` by 1 for each zero/null reading during sun hours.
-3. Add `downtimeSlots` to the `DailyRow` interface and pass it through.
-4. Update the Down Time table cells to display the slot count instead of the energy value.
-5. Update the totals row accordingly.
-6. Rename the column header to "Down Time Slots (06:00-18:00)" or similar for clarity.
+### Downtime Calculation Changes (PerformanceSummaryTable.tsx)
+
+- Fetch readings with the `source` column included
+- Fetch `generation_source_guarantees` for the month to get per-source guarantee values
+- For each source, independently:
+  - Calculate daily guarantee = source's `guaranteed_kwh / totalDays`
+  - Count downtime slots: sun-hour readings (06:00-18:00) where that source's `actual_kwh` is zero/null
+  - Calculate downtime energy = `(source daily guarantee / sun-hour readings) * downtime slots`
+- Aggregate across sources for the daily totals displayed in the table
+- The "Down Time Slots" column will show the total count across all sources
+- "Theoretical Generation" = Metered Generation + total downtime energy from all sources
+
+### Summary of File Changes
+
+| File | Change |
+|------|--------|
+| Database migration | Drop old unique index, create new one on `(project_id, timestamp, source)` |
+| `ActualGenerationCard.tsx` | Store readings with `source = sourceLabel` instead of merging additively |
+| `PerformanceSummaryTable.tsx` | Fetch source guarantees; calculate downtime per source independently; aggregate for display |
+
+### Technical Details
+
+**Reading storage (upload)**:
+```text
+Before: All CSVs merged -> one row per (project_id, timestamp) with summed actual_kwh
+After:  Each CSV stored separately -> one row per (project_id, timestamp, source) with that source's actual_kwh
+```
+
+**Downtime calculation**:
+```text
+For each source S with guarantee G_s:
+  daily_guarantee_s = G_s / days_in_month
+  For each 30-min slot in sun hours (06:00-18:00):
+    If S.actual_kwh == 0 or null -> downtime_slot
+    downtime_energy += daily_guarantee_s / 24  (24 slots in 12 sun hours at 30-min intervals)
+  
+Total downtime energy for the day = sum of all sources' downtime energy
+```
+
+**Monthly total sync**: The `generation_records.actual_kwh` will be recalculated as the sum of all per-source readings for the month, maintaining consistency with the existing summary cards.
