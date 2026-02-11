@@ -25,11 +25,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CalendarDays, Hash, Clock, ChevronDown } from "lucide-react";
 
+export interface CSVReading {
+  timestamp: string; // ISO string e.g. "2026-01-15T08:30:00"
+  kwh: number;
+}
+
 interface CSVPreviewDialogProps {
   open: boolean;
   onClose: () => void;
   csvLines: string[];
-  onParsed: (totals: Map<number, number>, dailyTotals: Map<string, number>) => void;
+  onParsed: (totals: Map<number, number>, dailyTotals: Map<string, number>, readings: CSVReading[]) => void;
 }
 
 function strip(s: string): string {
@@ -48,6 +53,17 @@ function extractDateInfo(dateStr: string): { month: number; dateKey: string } {
     return { month: parseInt(ddmm[2]), dateKey: `${y}-${m}-${d}` };
   }
   return { month: 0, dateKey: "" };
+}
+
+function extractTimestamp(dateStr: string, timeStr?: string): string {
+  const { dateKey } = extractDateInfo(dateStr);
+  if (!dateKey) return "";
+  // Extract time from dateStr or separate time column
+  const timeMatch = (timeStr || dateStr).match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  const h = timeMatch ? timeMatch[1].padStart(2, "0") : "00";
+  const m = timeMatch ? timeMatch[2] : "00";
+  const s = timeMatch?.[3] || "00";
+  return `${dateKey}T${h}:${m}:${s}`;
 }
 
 function timeDiffMinutes(t1: string, t2: string): number {
@@ -122,6 +138,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
 
     const totals = new Map<number, number>();
     const dailyTotals = new Map<string, number>();
+    const readings: CSVReading[] = [];
     const dataLines = csvLines.slice(dataStartRow).filter((l) => l.trim());
 
     let intervalHours = 0.5;
@@ -146,9 +163,15 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
       const kwh = isKw ? rawVal * intervalHours : rawVal;
       totals.set(month, (totals.get(month) ?? 0) + kwh);
       dailyTotals.set(dateKey, (dailyTotals.get(dateKey) ?? 0) + kwh);
+
+      const timeStr = timeCol !== null ? (cols[timeCol] ?? "") : "";
+      const ts = extractTimestamp(dateStr, timeStr);
+      if (ts) {
+        readings.push({ timestamp: ts, kwh });
+      }
     }
 
-    onParsed(totals, dailyTotals);
+    onParsed(totals, dailyTotals, readings);
     onClose();
   };
 

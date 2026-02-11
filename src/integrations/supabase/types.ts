@@ -501,6 +501,44 @@ export type Database = {
           },
         ]
       }
+      generation_readings: {
+        Row: {
+          actual_kwh: number | null
+          building_load_kwh: number | null
+          created_at: string
+          id: string
+          project_id: string
+          source: string | null
+          timestamp: string
+        }
+        Insert: {
+          actual_kwh?: number | null
+          building_load_kwh?: number | null
+          created_at?: string
+          id?: string
+          project_id: string
+          source?: string | null
+          timestamp: string
+        }
+        Update: {
+          actual_kwh?: number | null
+          building_load_kwh?: number | null
+          created_at?: string
+          id?: string
+          project_id?: string
+          source?: string | null
+          timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_readings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generation_records: {
         Row: {
           actual_kwh: number | null
