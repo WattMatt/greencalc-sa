@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { Bar, ComposedChart, XAxis, YAxis, CartesianGrid, ReferenceLine, Legend } from "recharts";
+import { Bar, Line, ComposedChart, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface MonthData {
@@ -28,8 +28,9 @@ type Timeframe = "30min" | "hourly" | "daily" | "monthly";
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const chartConfig = {
-  actual: { label: "Solar Generation", color: "hsl(var(--primary))" },
+  actual: { label: "Solar Generation", color: "#CCCC33" },
   building_load: { label: "Building Load", color: "hsl(var(--accent-foreground))" },
+  guarantee: { label: "Guaranteed Generation", color: "#3399CC" },
 };
 
 function daysInMonth(month: number, year: number): number {
@@ -51,6 +52,7 @@ function formatTimeLabel(date: Date, timeframe: Timeframe, month: number): strin
 
 export function PerformanceChart({ projectId, month, year, monthData }: PerformanceChartProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>("daily");
+  const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
 
   const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
   const days = daysInMonth(month, year);
@@ -155,7 +157,20 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
         ? (dailyGuarantee ? dailyGuarantee / 24 : null)
         : (dailyGuarantee ? dailyGuarantee / 48 : null);
 
-  const hasData = chartData.length > 0 && chartData.some((d) => d.actual > 0 || d.building_load > 0);
+  // Add guarantee field to each data point for the Line series
+  const enrichedData = chartData.map((d) => ({ ...d, guarantee: guaranteeValue ?? 0 }));
+
+  const hasData = enrichedData.length > 0 && enrichedData.some((d) => d.actual > 0 || d.building_load > 0);
+
+  const handleLegendClick = (e: any) => {
+    const key = e.dataKey;
+    if (!key) return;
+    setHiddenSeries((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
   // Calculate interval for X-axis labels based on data size
   const labelInterval = chartData.length > 50 ? Math.ceil(chartData.length / 30) : 0;
@@ -163,7 +178,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-sm">Daily Performance — {monthData.fullName} {year}</CardTitle>
+        <CardTitle className="text-sm">System Performance — {monthData.fullName} {year}</CardTitle>
         <Select value={timeframe} onValueChange={(v) => setTimeframe(v as Timeframe)}>
           <SelectTrigger className="w-32 h-8">
             <SelectValue />
@@ -183,21 +198,36 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
           </div>
         ) : (
           <ChartContainer config={chartConfig} className="h-[300px] w-full">
-            <ComposedChart data={chartData}>
+            <ComposedChart data={enrichedData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={60} interval={labelInterval} />
               <YAxis fontSize={12} label={{ value: "kWh", angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
               <ChartTooltip content={<ChartTooltipContent />} />
-              <Legend />
-              <Bar dataKey="actual" name="Solar Generation" fill="var(--color-actual)" radius={[2, 2, 0, 0]} />
-              <Bar dataKey="building_load" name="Building Load" fill="var(--color-building_load)" radius={[2, 2, 0, 0]} />
-              {guaranteeValue && (
-                <ReferenceLine
-                  y={guaranteeValue}
-                  stroke="hsl(var(--destructive))"
-                  strokeDasharray="5 5"
+              <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: "pointer" }} />
+              <Bar
+                dataKey="actual"
+                name="Solar Generation"
+                fill="var(--color-actual)"
+                stroke="#999999"
+                strokeWidth={1}
+                radius={[2, 2, 0, 0]}
+                hide={hiddenSeries.has("actual")}
+              />
+              <Bar
+                dataKey="building_load"
+                name="Building Load"
+                fill="var(--color-building_load)"
+                radius={[2, 2, 0, 0]}
+                hide={hiddenSeries.has("building_load")}
+              />
+              {guaranteeValue != null && (
+                <Line
+                  dataKey="guarantee"
+                  name="Guaranteed Generation"
+                  stroke="var(--color-guarantee)"
                   strokeWidth={2}
-                  label={{ value: `Guarantee (${guaranteeValue.toFixed(0)} kWh)`, position: "top", fontSize: 11, fill: "hsl(var(--destructive))" }}
+                  dot={false}
+                  hide={hiddenSeries.has("guarantee")}
                 />
               )}
             </ComposedChart>
