@@ -211,7 +211,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableHead className="text-xs py-2 px-2 w-12">Days</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Yield Guarantee</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Metered Generation</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Down Time Slots (06:00–18:00)</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right">Down Time kWh (06:00–18:00)</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Theoretical Generation</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Surplus / Deficit</TableHead>
                   </TableRow>
@@ -222,7 +222,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                       <TableCell className="text-xs py-1.5 px-2 font-medium">{row.day}</TableCell>
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.yieldGuarantee)}</TableCell>
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.meteredGeneration)}</TableCell>
-                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{row.downtimeSlots}</TableCell>
+                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.theoreticalGeneration - row.meteredGeneration)}</TableCell>
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.theoreticalGeneration)}</TableCell>
                       <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums font-medium", row.surplusDeficit < 0 ? "text-destructive" : "text-primary")}>
                         {formatNum(row.surplusDeficit)}
@@ -235,7 +235,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableCell className="text-xs py-2 px-2 font-bold">Total</TableCell>
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.yieldGuarantee)}</TableCell>
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.meteredGeneration)}</TableCell>
-                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{totals.downtimeSlots}</TableCell>
+                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.theoreticalGeneration - totals.meteredGeneration)}</TableCell>
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.theoreticalGeneration)}</TableCell>
                     <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold", totals.surplusDeficit < 0 ? "text-destructive" : "text-primary")}>
                       {formatNum(totals.surplusDeficit)}
