@@ -78,6 +78,7 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
 
   const refetch = () => {
     queryClient.invalidateQueries({ queryKey: ["generation-record", projectId, year, month] });
+    queryClient.invalidateQueries({ queryKey: ["generation-daily", projectId, year, month] });
   };
 
   return (
@@ -130,7 +131,7 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
         />
       </div>
 
-      <PerformanceChart monthData={monthData} />
+      <PerformanceChart projectId={projectId} month={month} year={year} monthData={monthData} />
       <PerformanceSummaryTable monthData={monthData} />
     </div>
   );

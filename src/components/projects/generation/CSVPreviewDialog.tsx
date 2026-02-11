@@ -29,19 +29,25 @@ interface CSVPreviewDialogProps {
   open: boolean;
   onClose: () => void;
   csvLines: string[];
-  onParsed: (totals: Map<number, number>) => void;
+  onParsed: (totals: Map<number, number>, dailyTotals: Map<string, number>) => void;
 }
 
 function strip(s: string): string {
   return s.trim().replace(/^"|"$/g, "").trim();
 }
 
-function extractMonth(dateStr: string): number {
+function extractDateInfo(dateStr: string): { month: number; dateKey: string } {
   const iso = dateStr.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-  if (iso) return parseInt(iso[2]);
+  if (iso) {
+    const y = iso[1], m = iso[2].padStart(2, "0"), d = iso[3].padStart(2, "0");
+    return { month: parseInt(iso[2]), dateKey: `${y}-${m}-${d}` };
+  }
   const ddmm = dateStr.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
-  if (ddmm) return parseInt(ddmm[2]);
-  return 0;
+  if (ddmm) {
+    const d = ddmm[1].padStart(2, "0"), m = ddmm[2].padStart(2, "0"), y = ddmm[3];
+    return { month: parseInt(ddmm[2]), dateKey: `${y}-${m}-${d}` };
+  }
+  return { month: 0, dateKey: "" };
 }
 
 function timeDiffMinutes(t1: string, t2: string): number {
@@ -115,6 +121,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
     if (dateCol === null || valueCol === null) return;
 
     const totals = new Map<number, number>();
+    const dailyTotals = new Map<string, number>();
     const dataLines = csvLines.slice(dataStartRow).filter((l) => l.trim());
 
     let intervalHours = 0.5;
@@ -133,14 +140,15 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
       const rawVal = parseFloat(cols[valueCol] ?? "");
       if (!dateStr || isNaN(rawVal)) continue;
 
-      const month = extractMonth(dateStr);
-      if (month < 1 || month > 12) continue;
+      const { month, dateKey } = extractDateInfo(dateStr);
+      if (month < 1 || month > 12 || !dateKey) continue;
 
       const kwh = isKw ? rawVal * intervalHours : rawVal;
       totals.set(month, (totals.get(month) ?? 0) + kwh);
+      dailyTotals.set(dateKey, (dailyTotals.get(dateKey) ?? 0) + kwh);
     }
 
-    onParsed(totals);
+    onParsed(totals, dailyTotals);
     onClose();
   };
 
