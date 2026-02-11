@@ -78,7 +78,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
 
   // Query raw readings for interval views - paginate to avoid 1000 row limit
   const { data: readings } = useQuery({
-    queryKey: ["generation-readings", projectId, year, month],
+    queryKey: ["generation-readings-chart", projectId, year, month],
     queryFn: async () => {
       const allReadings: { timestamp: string; actual_kwh: number | null; building_load_kwh: number | null }[] = [];
       const pageSize = 1000;
