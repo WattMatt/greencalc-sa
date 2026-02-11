@@ -1,32 +1,37 @@
 
 
-## Fix: Down Time kWh Calculation Off by One Slot
+## Add "Sources" Toggle Button to Performance Chart
 
-### Problem
+### Overview
+Add a new toggle button labeled "Sources" to the left of the existing "kWh" button. When active, the single yellow "Solar Generation" bar will split into stacked bars showing individual source contributions (e.g., "Parkdene Solar DB2.1", "Parkdene Solar DB3.1", etc.), each with a distinct color.
 
-The "Down Time kWh" values are too high -- when a source has zero production for the entire day, the downtime kWh exceeds the daily yield guarantee (7,777.16 vs 7,453.11).
+### Changes
 
-**Root cause**: There's an off-by-one error in the sun-hour slot count.
+**File: `src/components/projects/generation/PerformanceChart.tsx`**
 
-- The code counts readings from 06:00 to 17:30 inclusive at 30-minute intervals: 06:00, 06:30, 07:00, ..., 17:00, 17:30 = **24 data points**
-- But the divisor `sunHourSlots` is calculated as `11.5 / 0.5 = 23`
-- Each downtime slot adds `sourceDailyGuarantee / 23`, so when all 24 slots are down, total = `24/23 * dailyGuarantee` -- about 4.3% too high
+1. **New state**: Add `const [showSources, setShowSources] = useState(false);`
 
-### Fix
+2. **Fetch source column**: Update the query to also select the `source` field from `generation_readings`.
 
-Change the `sunHourSlots` formula to correctly count the number of measurement intervals in the sun-hour window:
+3. **Track distinct sources**: Extract unique source names from the readings data and assign each a color from a predefined palette (e.g., shades of yellow/gold/amber to stay in the solar color family).
 
-```
-sunHourSlots = ((1050 - 360) / (intervalHours * 60)) + 1
-```
+4. **Build chart data with per-source columns**: When `showSources` is true, skip the aggregation step. Instead, build data points where each source gets its own key (e.g., `source_0`, `source_1`, etc.) containing that source's `actual_kwh` value. When `showSources` is false, keep the existing aggregated `actual` field.
 
-For 30-min data: `(690 / 30) + 1 = 24`
+5. **Dynamic chart config**: Extend `chartConfig` with entries for each source when `showSources` is active.
 
-### File Changed
+6. **Render multiple Bar components**: When `showSources` is true, render one `<Bar>` per source (stacked via `stackId="solar"`), replacing the single "Solar Generation" bar. When false, render the existing single bar as before.
 
-- `src/components/projects/generation/PerformanceSummaryTable.tsx` -- Update line 144 to use the corrected slot count formula
+7. **New button in header**: Add the "Sources" toggle button to the left of the "kWh" button:
+   ```
+   [Sources] [kWh] [Building] [All Hours | Sun Hours] [30 Min v]
+   ```
 
-### Verification
+### Technical Details
 
-After the fix, when all sources are fully down for a day, Down Time kWh should equal the Yield Guarantee value (7,453.11). Theoretical Generation should also equal 7,453.11 (0 metered + 7,453.11 downtime), and Surplus/Deficit should be -7,453.11 (0 - 7,453.11).
+- Source colors will use a palette like: `["#f0e442", "#e6c619", "#d4a017", "#c2842a", "#b0683d", "#9e4c50"]` to differentiate sources while keeping a warm/solar tone.
+- The per-source data keys will be sanitized versions of source names (e.g., `source_0`, `source_1`) mapped via an index, with a lookup array for display names.
+- The stacked bars will all share `stackId="solar"` so they stack on top of each other, showing the total while revealing individual contributions.
+- The "Building" toggle and "Council Demand" bar remain independent and unaffected.
+- Unit conversion (kW/kWh) and sun-hour filtering apply to per-source values the same way as the aggregated value.
+- Legend entries will show individual source names when in sources mode.
 
