@@ -48,23 +48,22 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
   const [activeTab, setActiveTab] = useState<string>(TABS[0]);
 
   const totalDays = daysInMonth(month, year);
-  const dailyGuarantee = (monthData.guaranteed_kwh ?? 0) / totalDays;
 
-  // Fetch all generation_readings for this month
   const startDate = `${year}-${String(month).padStart(2, "0")}-01T00:00:00`;
   const endDate = `${year}-${String(month).padStart(2, "0")}-${String(totalDays).padStart(2, "0")}T23:59:59`;
 
+  // Fetch all generation_readings for this month (with source)
   const { data: readings } = useQuery({
     queryKey: ["generation-readings-daily", projectId, year, month],
     queryFn: async () => {
-      const allReadings: { timestamp: string; actual_kwh: number | null; building_load_kwh: number | null }[] = [];
+      const allReadings: { timestamp: string; actual_kwh: number | null; building_load_kwh: number | null; source: string | null }[] = [];
       const pageSize = 1000;
       let from = 0;
       let hasMore = true;
       while (hasMore) {
         const { data, error } = await supabase
           .from("generation_readings")
-          .select("timestamp, actual_kwh, building_load_kwh")
+          .select("timestamp, actual_kwh, building_load_kwh, source")
           .eq("project_id", projectId)
           .gte("timestamp", startDate)
           .lte("timestamp", endDate)
@@ -79,12 +78,34 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
     },
   });
 
-  const dailyRows: DailyRow[] = useMemo(() => {
-    const dayMap = new Map<number, { actual: number; downtime: number; downtimeSlots: number }>();
+  // Fetch per-source guarantees for this month
+  const { data: sourceGuarantees } = useQuery({
+    queryKey: ["source-guarantees", projectId, year, month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("generation_source_guarantees")
+        .select("source_label, guaranteed_kwh")
+        .eq("project_id", projectId)
+        .eq("month", month)
+        .eq("year", year);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
-    // Init all days
+  const dailyRows: DailyRow[] = useMemo(() => {
+    const dayMap = new Map<number, { actual: number; downtimeSlots: number; downtimeEnergy: number }>();
+
     for (let d = 1; d <= totalDays; d++) {
-      dayMap.set(d, { actual: 0, downtime: 0, downtimeSlots: 0 });
+      dayMap.set(d, { actual: 0, downtimeSlots: 0, downtimeEnergy: 0 });
+    }
+
+    // Build a map of source_label -> guaranteed_kwh
+    const guaranteeMap = new Map<string, number>();
+    if (sourceGuarantees) {
+      for (const sg of sourceGuarantees) {
+        guaranteeMap.set(sg.source_label, sg.guaranteed_kwh);
+      }
     }
 
     // Detect interval from data (default 30-min = 0.5h)
@@ -95,7 +116,11 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       const diffH = (t1 - t0) / (1000 * 60 * 60);
       if (diffH > 0 && diffH <= 2) intervalHours = diffH;
     }
-    const sunHourReadings = 12 / intervalHours; // e.g. 24 for 30-min data
+    const sunHourSlots = 12 / intervalHours; // e.g. 24 for 30-min data
+
+    // Total guarantee for yield guarantee column
+    const totalGuarantee = monthData.guaranteed_kwh ?? 0;
+    const dailyGuarantee = totalGuarantee / totalDays;
 
     if (readings) {
       for (const r of readings) {
@@ -108,10 +133,14 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
         const kwh = Number(r.actual_kwh) || 0;
         entry.actual += kwh;
 
-        // Downtime: during sun hours (06:00 inclusive – 18:00 exclusive)
+        // Downtime: during sun hours (06:00 inclusive – 18:00 exclusive), per source
         if (hour >= 6 && hour < 18 && (r.actual_kwh == null || Number(r.actual_kwh) === 0)) {
+          const sourceLabel = r.source || "csv";
+          const sourceGuarantee = guaranteeMap.get(sourceLabel) ?? 0;
+          const sourceDailyGuarantee = sourceGuarantee / totalDays;
+
           entry.downtimeSlots += 1;
-          entry.downtime += dailyGuarantee / sunHourReadings;
+          entry.downtimeEnergy += sourceDailyGuarantee / sunHourSlots;
         }
       }
     }
@@ -120,7 +149,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
     for (let d = 1; d <= totalDays; d++) {
       const entry = dayMap.get(d)!;
       const metered = entry.actual;
-      const theoretical = metered + entry.downtime;
+      const theoretical = metered + entry.downtimeEnergy;
       const surplus = metered - dailyGuarantee;
 
       rows.push({
@@ -134,7 +163,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       });
     }
     return rows;
-  }, [readings, totalDays, dailyGuarantee]);
+  }, [readings, totalDays, monthData.guaranteed_kwh, sourceGuarantees]);
 
   const totals = useMemo(() => {
     return dailyRows.reduce(
@@ -155,7 +184,6 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
         <CardTitle className="text-sm">System Summary — {monthData.fullName} {year}</CardTitle>
       </CardHeader>
 
-      {/* Worksheet-style tab bar */}
       <div className="px-6 flex items-end gap-0 border-b">
         {TABS.map((tab) => (
           <button
@@ -185,8 +213,6 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableHead className="text-xs py-2 px-2 text-right">Metered Generation</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Down Time Slots (06:00–18:00)</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Theoretical Generation</TableHead>
-                    
-                    
                     <TableHead className="text-xs py-2 px-2 text-right">Surplus / Deficit</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -198,8 +224,6 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.meteredGeneration)}</TableCell>
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{row.downtimeSlots}</TableCell>
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.theoreticalGeneration)}</TableCell>
-                      
-                      
                       <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums font-medium", row.surplusDeficit < 0 ? "text-destructive" : "text-primary")}>
                         {formatNum(row.surplusDeficit)}
                       </TableCell>
@@ -213,8 +237,6 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.meteredGeneration)}</TableCell>
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{totals.downtimeSlots}</TableCell>
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.theoreticalGeneration)}</TableCell>
-                    
-                    
                     <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold", totals.surplusDeficit < 0 ? "text-destructive" : "text-primary")}>
                       {formatNum(totals.surplusDeficit)}
                     </TableCell>
