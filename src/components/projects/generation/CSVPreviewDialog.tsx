@@ -92,6 +92,8 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
 
     const hdrs = (csvLines[hRow] ?? "").split(",").map(strip);
     const totalData = csvLines.length - dStart;
+
+    // startRow/stopRow only control preview visibility, not parsing
     const s = Math.max(0, startRow - 1);
     const effectiveStop = stopRow ?? totalData;
     const e = Math.min(totalData, effectiveStop);
