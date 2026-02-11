@@ -1,44 +1,45 @@
 
-# Add "All Hours" / "Sun Hours" Toggle to Performance Chart
+
+# Add Date Range Navigation Arrows with Auto-Inferred Step
 
 ## Overview
-Add a toggle switch to the left of the timeframe dropdown that filters chart data between "All Hours" (full 24-hour day) and "Sun Hours" (06:00 to 17:30 inclusive).
+Add left/right arrow buttons to the right of the date range filter. The step size is automatically determined by the number of days between the "From" and "To" dates. Clicking an arrow shifts the entire window by that amount.
+
+## Example
+- If From = Jan 5, To = Jan 10 (5-day span), clicking right shifts to From = Jan 10, To = Jan 15.
+- If From = Jan 1, To = Jan 7 (7-day span), clicking left is disabled (already at month start).
 
 ## Changes
 
 **File: `src/components/projects/generation/PerformanceChart.tsx`**
 
-### 1. Add Toggle State
-Add a new state variable: `hoursFilter` with values `"all"` or `"sun"`, defaulting to `"all"`.
+### 1. Add Navigation Arrows
+Place a left arrow (`ChevronLeft`) and right arrow (`ChevronRight`) button to the right of the "To" date input, in the same row.
 
-### 2. Add Toggle UI
-Place a toggle switch (using the existing `Toggle` or a simple button group) to the left of the timeframe `Select` in the `CardHeader`. Two small buttons labeled **"All Hours"** and **"Sun Hours"** styled as a segmented control, or use a `ToggleGroup` from Radix.
+### 2. Step Logic
+- Calculate the step as the difference in days between `dateEnd` and `dateStart` (plus 1 to include both endpoints, or just the raw difference -- using raw difference so the window slides by its own width).
+- **Step Left**: Subtract the step from both `dateStart` and `dateEnd`, clamping `dateStart` to the first of the month and adjusting `dateEnd` accordingly.
+- **Step Right**: Add the step to both dates, clamping `dateEnd` to the last day of the month and adjusting `dateStart` accordingly.
 
-### 3. Filter Logic
-When `hoursFilter === "sun"`, filter the raw `readings` array to only include timestamps where the time is between 06:00 and 17:30 (inclusive). The filtering happens before any aggregation (30min, hourly, daily).
-
-The filter function:
-```text
-function isSunHour(timestamp: string): boolean {
-  const d = new Date(timestamp);
-  const hours = d.getHours();
-  const minutes = d.getMinutes();
-  const timeInMinutes = hours * 60 + minutes;
-  return timeInMinutes >= 360 && timeInMinutes <= 1050;
-  // 06:00 = 360 min, 17:30 = 1050 min
-}
-```
-
-This filter applies to all timeframe views (30min, hourly, daily) except "monthly" which uses the pre-aggregated `monthData` values directly (no interval data to filter).
-
-### 4. Guarantee Line Adjustment
-When "Sun Hours" is active, the guarantee line value should scale proportionally. Sun hours span 11.5 hours out of 24, so the daily guarantee in sun-hours mode would be `dailyGuarantee * (11.5 / 24)` -- or alternatively keep the guarantee unchanged since it represents solar generation which inherently occurs during sun hours. The guarantee value will remain unchanged since guaranteed generation already represents solar output.
+### 3. Boundary Behavior
+- Left arrow disabled when `dateStart` is already at the first of the month.
+- Right arrow disabled when `dateEnd` is already at the last day of the month.
+- When a step would exceed the boundary, the window is clamped so it butts up against the edge while preserving its width if possible.
 
 ## Technical Details
 
-- Import `ToggleGroup` and `ToggleGroupItem` from `@/components/ui/toggle-group`
-- Add state: `const [hoursFilter, setHoursFilter] = useState<"all" | "sun">("all")`
-- Apply filter to readings before aggregation: `const filteredReadings = hoursFilter === "sun" ? readings.filter(r => isSunHour(r.timestamp)) : readings`
-- Use `filteredReadings` instead of `readings` in all the aggregation logic (30min, hourly, daily branches)
-- For "monthly" view, no filtering is possible (data is pre-aggregated), so the toggle has no effect there
-- The toggle sits in the `CardHeader` flex row, between the title and the dropdown
+- Import `ChevronLeft`, `ChevronRight` from `lucide-react`
+- Import `Button` from `@/components/ui/button`
+- Compute step: `const stepDays = Math.round((new Date(dateEnd).getTime() - new Date(dateStart).getTime()) / 86400000) + 1`
+- Helper to shift a date string by N days:
+  ```text
+  function shiftDate(date: string, days: number): string {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+  ```
+- On left click: compute new start/end, clamp to `startDate`/`endDate` (month boundaries)
+- On right click: same in the other direction
+- Buttons styled as `variant="outline" size="icon"` with `h-8 w-8` to match existing controls
+
