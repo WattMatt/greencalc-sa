@@ -65,12 +65,15 @@ function formatTimeLabel(date: Date, timeframe: Timeframe, month: number, single
 
 const MONTH_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+const SOURCE_COLORS = ["#f0e442", "#e6c619", "#d4a017", "#c2842a", "#b0683d", "#9e4c50", "#8b6914", "#c9a832"];
+
 export function PerformanceChart({ projectId, month, year, monthData }: PerformanceChartProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>("daily");
   const [hoursFilter, setHoursFilter] = useState<"all" | "sun">("all");
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
   const [stackBars, setStackBars] = useState(false);
   const [displayUnit, setDisplayUnit] = useState<"kWh" | "kW">("kWh");
+  const [showSources, setShowSources] = useState(false);
 
   const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
   const days = daysInMonth(month, year);
@@ -83,14 +86,14 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   const { data: readings } = useQuery({
     queryKey: ["generation-readings-chart", projectId, year, month],
     queryFn: async () => {
-      const allReadings: { timestamp: string; actual_kwh: number | null; building_load_kwh: number | null }[] = [];
+      const allReadings: { timestamp: string; actual_kwh: number | null; building_load_kwh: number | null; source: string | null }[] = [];
       const pageSize = 1000;
       let from = 0;
       let hasMore = true;
       while (hasMore) {
         const { data, error } = await supabase
           .from("generation_readings")
-          .select("timestamp, actual_kwh, building_load_kwh")
+          .select("timestamp, actual_kwh, building_load_kwh, source")
           .eq("project_id", projectId)
           .gte("timestamp", `${startDate}T00:00:00`)
           .lte("timestamp", `${endDate}T23:59:59`)
@@ -114,7 +117,15 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return timeInMinutes >= 360 && timeInMinutes <= 1050;
   }
 
-  // Aggregate readings across all sources by timestamp
+  // Extract unique source labels
+  const sourceLabels = useMemo(() => {
+    if (!readings) return [];
+    const set = new Set<string>();
+    for (const r of readings) if (r.source) set.add(r.source);
+    return Array.from(set).sort();
+  }, [readings]);
+
+  // Aggregate readings across all sources by timestamp (used when showSources is false)
   const aggregatedReadings = useMemo(() => {
     if (!readings) return null;
     const map = new Map<string, { timestamp: string; actual_kwh: number; building_load_kwh: number }>();
@@ -131,20 +142,47 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return Array.from(map.values());
   }, [readings]);
 
-  const filteredReadings = hoursFilter === "sun" && aggregatedReadings
-    ? aggregatedReadings.filter(r => isSunHour(r.timestamp))
-    : aggregatedReadings;
+  // Per-source readings keyed by timestamp (used when showSources is true)
+  const perSourceReadings = useMemo(() => {
+    if (!readings || !showSources) return null;
+    const map = new Map<string, { timestamp: string; building_load_kwh: number; [key: string]: any }>();
+    for (const r of readings) {
+      const key = r.timestamp;
+      const sourceIdx = r.source ? sourceLabels.indexOf(r.source) : -1;
+      const sourceKey = sourceIdx >= 0 ? `source_${sourceIdx}` : "actual";
+      const existing = map.get(key);
+      if (existing) {
+        existing[sourceKey] = (existing[sourceKey] ?? 0) + (r.actual_kwh ?? 0);
+        existing.building_load_kwh += r.building_load_kwh ?? 0;
+      } else {
+        const entry: any = { timestamp: key, building_load_kwh: r.building_load_kwh ?? 0 };
+        entry[sourceKey] = r.actual_kwh ?? 0;
+        map.set(key, entry);
+      }
+    }
+    return Array.from(map.values());
+  }, [readings, showSources, sourceLabels]);
+
+  // Choose aggregated or per-source readings based on toggle
+  const activeReadings = showSources ? perSourceReadings : aggregatedReadings;
+
+  const filteredReadings = hoursFilter === "sun" && activeReadings
+    ? activeReadings.filter((r: any) => isSunHour(r.timestamp))
+    : activeReadings;
 
   // Apply date range filter
   const dateFilteredReadings = useMemo(() => {
     if (!filteredReadings) return filteredReadings;
-    return filteredReadings.filter(r => {
+    return filteredReadings.filter((r: any) => {
       const d = r.timestamp.slice(0, 10);
       return d >= dateStart && d <= dateEnd;
     });
   }, [filteredReadings, dateStart, dateEnd]);
 
   const isSingleDay = dateStart === dateEnd;
+
+  // Source data keys for per-source mode
+  const sourceKeys = sourceLabels.map((_, i) => `source_${i}`);
 
   const chartData = (() => {
     if (timeframe === "monthly") {
@@ -158,23 +196,32 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     if (!dateFilteredReadings || dateFilteredReadings.length === 0) return [];
 
     if (timeframe === "30min") {
-      return dateFilteredReadings.map((r) => {
+      return dateFilteredReadings.map((r: any) => {
         const d = parseLocal(r.timestamp);
-        return {
+        const entry: any = {
           name: formatTimeLabel(d, "30min", month, isSingleDay),
-          actual: r.actual_kwh ?? 0,
           building_load: r.building_load_kwh ?? 0,
         };
+        if (showSources) {
+          for (const sk of sourceKeys) entry[sk] = r[sk] ?? 0;
+        } else {
+          entry.actual = r.actual_kwh ?? 0;
+        }
+        return entry;
       });
     }
 
     if (timeframe === "hourly") {
-      const hourlyMap = new Map<string, { actual: number; building_load: number }>();
-      for (const r of dateFilteredReadings) {
+      const hourlyMap = new Map<string, any>();
+      for (const r of dateFilteredReadings as any[]) {
         const d = parseLocal(r.timestamp);
         const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
-        const existing = hourlyMap.get(key) ?? { actual: 0, building_load: 0 };
-        existing.actual += r.actual_kwh ?? 0;
+        const existing = hourlyMap.get(key) ?? { building_load: 0 };
+        if (showSources) {
+          for (const sk of sourceKeys) existing[sk] = (existing[sk] ?? 0) + (r[sk] ?? 0);
+        } else {
+          existing.actual = (existing.actual ?? 0) + (r.actual_kwh ?? 0);
+        }
         existing.building_load += r.building_load_kwh ?? 0;
         hourlyMap.set(key, existing);
       }
@@ -185,29 +232,34 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       });
     }
 
-    // daily - aggregate readings by day
-    const dailyMap = new Map<number, { actual: number; building_load: number }>();
-    for (const r of dateFilteredReadings) {
+    // daily
+    const dailyMap = new Map<number, any>();
+    for (const r of dateFilteredReadings as any[]) {
       const d = parseLocal(r.timestamp);
       const day = d.getDate();
-      const existing = dailyMap.get(day) ?? { actual: 0, building_load: 0 };
-      existing.actual += r.actual_kwh ?? 0;
+      const existing = dailyMap.get(day) ?? { building_load: 0 };
+      if (showSources) {
+        for (const sk of sourceKeys) existing[sk] = (existing[sk] ?? 0) + (r[sk] ?? 0);
+      } else {
+        existing.actual = (existing.actual ?? 0) + (r.actual_kwh ?? 0);
+      }
       existing.building_load += r.building_load_kwh ?? 0;
       dailyMap.set(day, existing);
     }
 
-    // Only show days within the selected date range
     const rangeStartDay = dateStart >= startDate ? new Date(dateStart).getDate() : 1;
     const rangeEndDay = dateEnd <= endDate ? new Date(dateEnd).getDate() : days;
     const monthShort = MONTH_SHORT[month - 1];
     return Array.from({ length: rangeEndDay - rangeStartDay + 1 }, (_, i) => {
       const day = rangeStartDay + i;
-      const rec = dailyMap.get(day);
-      return {
-        name: `${day}-${monthShort}`,
-        actual: rec?.actual ?? 0,
-        building_load: rec?.building_load ?? 0,
-      };
+      const rec = dailyMap.get(day) ?? {};
+      const entry: any = { name: `${day}-${monthShort}`, building_load: rec.building_load ?? 0 };
+      if (showSources) {
+        for (const sk of sourceKeys) entry[sk] = rec[sk] ?? 0;
+      } else {
+        entry.actual = rec.actual ?? 0;
+      }
+      return entry;
     });
   })();
 
@@ -236,14 +288,33 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     : 1;
 
   // Add guarantee field to each data point, applying unit conversion
-  const enrichedData = chartData.map((d) => ({
-    ...d,
-    actual: d.actual / kwDivisor,
-    building_load: d.building_load / kwDivisor,
-    guarantee: (guaranteeValue ?? 0) / kwDivisor,
-  }));
+  const enrichedData = chartData.map((d: any) => {
+    const entry: any = { ...d, building_load: d.building_load / kwDivisor, guarantee: (guaranteeValue ?? 0) / kwDivisor };
+    if (showSources) {
+      for (const sk of sourceKeys) entry[sk] = (d[sk] ?? 0) / kwDivisor;
+    } else {
+      entry.actual = (d.actual ?? 0) / kwDivisor;
+    }
+    return entry;
+  });
 
-  const hasData = enrichedData.length > 0 && enrichedData.some((d) => d.actual > 0 || d.building_load > 0);
+  const hasData = enrichedData.length > 0 && enrichedData.some((d: any) => {
+    if (showSources) return sourceKeys.some(sk => (d[sk] ?? 0) > 0);
+    return d.actual > 0 || d.building_load > 0;
+  });
+
+  // Dynamic chart config for sources mode
+  const activeChartConfig = useMemo(() => {
+    if (!showSources) return chartConfig;
+    const cfg: Record<string, { label: string; color: string }> = {
+      building_load: chartConfig.building_load,
+      guarantee: chartConfig.guarantee,
+    };
+    sourceLabels.forEach((label, i) => {
+      cfg[`source_${i}`] = { label, color: SOURCE_COLORS[i % SOURCE_COLORS.length] };
+    });
+    return cfg;
+  }, [showSources, sourceLabels]);
 
   const handleLegendClick = (e: any) => {
     const key = e.dataKey;
@@ -263,6 +334,14 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-sm">System Performance — {monthData.fullName} {year}</CardTitle>
         <div className="flex items-center gap-2">
+          <Button
+            variant={showSources ? "default" : "outline"}
+            size="sm"
+            className="text-xs px-2 h-8"
+            onClick={() => setShowSources(!showSources)}
+          >
+            Sources
+          </Button>
           <Button
             variant={displayUnit === "kW" ? "default" : "outline"}
             size="sm"
@@ -365,23 +444,39 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
           </div>
         ) : (
           <div>
-            <ChartContainer config={chartConfig} className="h-[300px] w-full">
+            <ChartContainer config={activeChartConfig} className="h-[300px] w-full">
               <ComposedChart data={enrichedData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={isSingleDay ? 40 : 60} interval={labelInterval} />
                 <YAxis fontSize={12} label={{ value: displayUnit, angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 {!singleDayLabel && <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: "pointer" }} />}
-                <Bar
-                  dataKey="actual"
-                  name="Solar Generation"
-                  fill="var(--color-actual)"
-                  stroke="#d9d9d9"
-                  strokeWidth={1}
-                  radius={stackBars ? undefined : [2, 2, 0, 0]}
-                  hide={hiddenSeries.has("actual")}
-                  stackId={stackBars ? "building" : undefined}
-                />
+                {showSources ? (
+                  sourceLabels.map((label, i) => (
+                    <Bar
+                      key={`source_${i}`}
+                      dataKey={`source_${i}`}
+                      name={label}
+                      fill={SOURCE_COLORS[i % SOURCE_COLORS.length]}
+                      stroke="#d9d9d9"
+                      strokeWidth={1}
+                      radius={i === sourceLabels.length - 1 && !stackBars ? [2, 2, 0, 0] : undefined}
+                      hide={hiddenSeries.has(`source_${i}`)}
+                      stackId="solar"
+                    />
+                  ))
+                ) : (
+                  <Bar
+                    dataKey="actual"
+                    name="Solar Generation"
+                    fill="var(--color-actual)"
+                    stroke="#d9d9d9"
+                    strokeWidth={1}
+                    radius={stackBars ? undefined : [2, 2, 0, 0]}
+                    hide={hiddenSeries.has("actual")}
+                    stackId={stackBars ? "building" : undefined}
+                  />
+                )}
                 <Bar
                   dataKey="building_load"
                   name="Council Demand"
@@ -390,7 +485,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                   strokeWidth={1}
                   radius={stackBars ? [2, 2, 0, 0] : undefined}
                   hide={hiddenSeries.has("building_load")}
-                  stackId={stackBars ? "building" : undefined}
+                  stackId={stackBars ? "building" : (showSources ? "solar" : undefined)}
                 />
                 {guaranteeValue != null && (
                   <Line
@@ -407,8 +502,17 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
             {singleDayLabel && (
               <div className="text-center space-y-1 -mt-1">
                 <p className="text-xs font-medium text-muted-foreground">{singleDayLabel}</p>
-                <div className="flex items-center justify-center gap-4 text-xs">
-                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#f0e442", border: "1px solid #d9d9d9" }} /> Solar Generation</span>
+                <div className="flex items-center justify-center gap-4 text-xs flex-wrap">
+                  {showSources ? (
+                    sourceLabels.map((label, i) => (
+                      <span key={i} className="flex items-center gap-1.5">
+                        <span className="inline-block w-3 h-3 rounded-sm" style={{ background: SOURCE_COLORS[i % SOURCE_COLORS.length], border: "1px solid #d9d9d9" }} />
+                        {label}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#f0e442", border: "1px solid #d9d9d9" }} /> Solar Generation</span>
+                  )}
                   <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#898989", border: "1px solid #d9d9d9" }} /> Council Demand</span>
                   <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-1" style={{ background: "#00b0f0" }} /> Guaranteed Generation</span>
                 </div>
