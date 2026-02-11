@@ -1,12 +1,5 @@
 import { useState, useMemo } from "react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -63,10 +56,11 @@ type ColumnRole = "date" | "value" | "time";
 export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPreviewDialogProps) {
   const [columnRoles, setColumnRoles] = useState<Map<number, ColumnRole>>(new Map());
   const [isKw, setIsKw] = useState(true);
-  const [previewCount, setPreviewCount] = useState(10);
+  const [startRow, setStartRow] = useState(1);
+  const [stopRow, setStopRow] = useState(50);
 
-  const { dataStartRow, headers, previewRows } = useMemo(() => {
-    if (csvLines.length < 2) return { dataStartRow: 1, headers: [] as string[], previewRows: [] as string[][] };
+  const { dataStartRow, headers, previewRows, totalDataRows } = useMemo(() => {
+    if (csvLines.length < 2) return { dataStartRow: 1, headers: [] as string[], previewRows: [] as string[][], totalDataRows: 0 };
 
     const first = csvLines[0].toLowerCase();
     const isScada = first.includes("pnpscada") || first.includes("scada");
@@ -74,10 +68,13 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
     const dStart = isScada ? 2 : 1;
 
     const hdrs = (csvLines[hRow] ?? "").split(",").map(strip);
-    const preview = csvLines.slice(dStart, dStart + previewCount).map((l) => l.split(",").map(strip));
+    const totalData = csvLines.length - dStart;
+    const s = Math.max(0, startRow - 1);
+    const e = Math.min(totalData, stopRow);
+    const preview = csvLines.slice(dStart + s, dStart + e).map((l) => l.split(",").map(strip));
 
-    return { dataStartRow: dStart, headers: hdrs, previewRows: preview };
-  }, [csvLines]);
+    return { dataStartRow: dStart, headers: hdrs, previewRows: preview, totalDataRows: totalData };
+  }, [csvLines, startRow, stopRow]);
 
   const dateCol = useMemo(() => {
     for (const [idx, role] of columnRoles) if (role === "date") return idx;
@@ -229,17 +226,31 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
             Values are in kW (convert to kWh using time interval)
           </label>
           <div className="flex items-center gap-2 ml-auto">
-            <span className="text-muted-foreground">Rows:</span>
-            <Select value={String(previewCount)} onValueChange={(v) => setPreviewCount(Number(v))}>
-              <SelectTrigger className="w-20 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[5, 10, 25, 50, 100].map((n) => (
-                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <span className="text-muted-foreground text-xs">Rows</span>
+            <input
+              type="number"
+              min={1}
+              max={totalDataRows}
+              value={startRow}
+              onChange={(e) => {
+                const v = Math.max(1, Math.min(Number(e.target.value) || 1, stopRow));
+                setStartRow(v);
+              }}
+              className="w-16 h-8 text-xs border rounded-md px-2 bg-background text-foreground"
+            />
+            <span className="text-muted-foreground text-xs">to</span>
+            <input
+              type="number"
+              min={1}
+              max={totalDataRows}
+              value={stopRow}
+              onChange={(e) => {
+                const v = Math.max(startRow, Math.min(Number(e.target.value) || 1, totalDataRows));
+                setStopRow(v);
+              }}
+              className="w-16 h-8 text-xs border rounded-md px-2 bg-background text-foreground"
+            />
+            <span className="text-muted-foreground text-xs">of {totalDataRows}</span>
           </div>
         </div>
 
