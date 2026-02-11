@@ -140,7 +140,8 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       const diffH = (t1 - t0) / (1000 * 60 * 60);
       if (diffH > 0 && diffH <= 2) intervalHours = diffH;
     }
-    const sunHourSlots = 12 / intervalHours; // e.g. 24 for 30-min data
+    // Sun hours: 06:00 to 17:30 inclusive = 11.5 hours = 23 slots at 30-min
+    const sunHourSlots = 11.5 / intervalHours; // e.g. 23 for 30-min data
 
     // Total guarantee for yield guarantee column
     const totalGuarantee = monthData.guaranteed_kwh ?? 0;
@@ -157,8 +158,9 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
         const kwh = Number(r.actual_kwh) || 0;
         entry.actual += kwh;
 
-        // Downtime: during sun hours (06:00 inclusive – 18:00 exclusive), per source
-        if (hour >= 6 && hour < 18 && (r.actual_kwh == null || Number(r.actual_kwh) === 0)) {
+        // Downtime: during sun hours (06:00 inclusive – 17:30 inclusive), per source
+        const minutes = hour * 60 + ts.getMinutes();
+        if (minutes >= 360 && minutes <= 1050 && (r.actual_kwh == null || Number(r.actual_kwh) === 0)) {
           const sourceLabel = r.source || "csv";
           const sourceGuarantee = guaranteeMap.get(sourceLabel) ?? 0;
           const sourceDailyGuarantee = sourceGuarantee / totalDays;
@@ -235,7 +237,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableHead className="text-xs py-2 px-2 w-12">Days</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Yield Guarantee</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Metered Generation</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Down Time kWh (06:00–18:00)</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right">Down Time kWh (06:00–17:30)</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Theoretical Generation</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Surplus / Deficit</TableHead>
                   </TableRow>
