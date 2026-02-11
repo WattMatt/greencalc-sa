@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,6 +6,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { Bar, Line, ComposedChart, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface MonthData {
   month: number;
@@ -60,6 +62,9 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   const days = daysInMonth(month, year);
   const endDate = `${year}-${String(month).padStart(2, "0")}-${days}`;
 
+  const [dateStart, setDateStart] = useState<string>(startDate);
+  const [dateEnd, setDateEnd] = useState<string>(endDate);
+
   // Query raw readings for interval views - paginate to avoid 1000 row limit
   const { data: readings } = useQuery({
     queryKey: ["generation-readings", projectId, year, month],
@@ -99,6 +104,15 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     ? readings.filter(r => isSunHour(r.timestamp))
     : readings;
 
+  // Apply date range filter
+  const dateFilteredReadings = useMemo(() => {
+    if (!filteredReadings) return filteredReadings;
+    return filteredReadings.filter(r => {
+      const d = r.timestamp.slice(0, 10);
+      return d >= dateStart && d <= dateEnd;
+    });
+  }, [filteredReadings, dateStart, dateEnd]);
+
   const chartData = (() => {
     if (timeframe === "monthly") {
       return [{
@@ -108,10 +122,10 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       }];
     }
 
-    if (!filteredReadings || filteredReadings.length === 0) return [];
+    if (!dateFilteredReadings || dateFilteredReadings.length === 0) return [];
 
     if (timeframe === "30min") {
-      return filteredReadings.map((r) => {
+      return dateFilteredReadings.map((r) => {
         const d = new Date(r.timestamp);
         return {
           name: formatTimeLabel(d, "30min", month),
@@ -123,7 +137,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
 
     if (timeframe === "hourly") {
       const hourlyMap = new Map<string, { actual: number; building_load: number }>();
-      for (const r of filteredReadings) {
+      for (const r of dateFilteredReadings) {
         const d = new Date(r.timestamp);
         const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
         const existing = hourlyMap.get(key) ?? { actual: 0, building_load: 0 };
@@ -140,7 +154,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
 
     // daily - aggregate readings by day
     const dailyMap = new Map<number, { actual: number; building_load: number }>();
-    for (const r of filteredReadings) {
+    for (const r of dateFilteredReadings) {
       const d = new Date(r.timestamp);
       const day = d.getDate();
       const existing = dailyMap.get(day) ?? { actual: 0, building_load: 0 };
@@ -149,9 +163,12 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       dailyMap.set(day, existing);
     }
 
+    // Only show days within the selected date range
+    const rangeStartDay = dateStart >= startDate ? new Date(dateStart).getDate() : 1;
+    const rangeEndDay = dateEnd <= endDate ? new Date(dateEnd).getDate() : days;
     const monthShort = MONTH_SHORT[month - 1];
-    return Array.from({ length: days }, (_, i) => {
-      const day = i + 1;
+    return Array.from({ length: rangeEndDay - rangeStartDay + 1 }, (_, i) => {
+      const day = rangeStartDay + i;
       const rec = dailyMap.get(day);
       return {
         name: `${day}-${monthShort}`,
@@ -209,6 +226,30 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
           </Select>
         </div>
       </CardHeader>
+      <div className="px-6 pb-2 flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
+          <Input
+            type="date"
+            className="h-8 w-36 text-xs"
+            value={dateStart}
+            min={startDate}
+            max={dateEnd}
+            onChange={(e) => setDateStart(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
+          <Input
+            type="date"
+            className="h-8 w-36 text-xs"
+            value={dateEnd}
+            min={dateStart}
+            max={endDate}
+            onChange={(e) => setDateEnd(e.target.value)}
+          />
+        </div>
+      </div>
       <CardContent>
         {!hasData ? (
           <div className="flex items-center justify-center h-48 text-sm text-muted-foreground">
