@@ -298,6 +298,69 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return entry;
   });
 
+  // Compute global Y-axis max from full month data (not date-filtered)
+  const yAxisMax = useMemo(() => {
+    if (timeframe === "monthly") {
+      const vals: number[] = [];
+      if (!hiddenSeries.has("actual") && !showSources) vals.push((monthData.actual_kwh ?? 0) / kwDivisor);
+      if (showSources) vals.push((monthData.actual_kwh ?? 0) / kwDivisor); // approx
+      if (!hiddenSeries.has("building_load") && stackBars) {
+        // stacked: add building on top
+        const top = ((monthData.actual_kwh ?? 0) + (monthData.building_load_kwh ?? 0)) / kwDivisor;
+        vals.push(top);
+      } else if (!hiddenSeries.has("building_load")) {
+        vals.push((monthData.building_load_kwh ?? 0) / kwDivisor);
+      }
+      if (guaranteeValue != null && !hiddenSeries.has("guarantee")) vals.push(guaranteeValue / kwDivisor);
+      return Math.ceil((Math.max(0, ...vals) * 1.05) || 1);
+    }
+
+    if (!filteredReadings || filteredReadings.length === 0) return undefined;
+
+    // Aggregate full month readings at current timeframe granularity
+    const bucketMap = new Map<string, any>();
+    for (const r of filteredReadings as any[]) {
+      const d = parseLocal(r.timestamp);
+      let key: string;
+      if (timeframe === "30min") key = r.timestamp;
+      else if (timeframe === "hourly") key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
+      else key = `${d.getDate()}`;
+
+      const existing = bucketMap.get(key) ?? { building_load: 0 };
+      if (showSources) {
+        for (const sk of sourceKeys) existing[sk] = (existing[sk] ?? 0) + ((r as any)[sk] ?? 0);
+      } else {
+        existing.actual = (existing.actual ?? 0) + ((r as any).actual_kwh ?? (r as any).actual ?? 0);
+      }
+      existing.building_load += (r as any).building_load_kwh ?? (r as any).building_load ?? 0;
+      bucketMap.set(key, existing);
+    }
+
+    let globalMax = 0;
+    for (const val of bucketMap.values()) {
+      let barHeight = 0;
+      if (showSources) {
+        for (const sk of sourceKeys) {
+          if (!hiddenSeries.has(sk)) barHeight += ((val[sk] ?? 0) / kwDivisor);
+        }
+      } else {
+        if (!hiddenSeries.has("actual")) barHeight += ((val.actual ?? 0) / kwDivisor);
+      }
+      if (stackBars && !hiddenSeries.has("building_load")) {
+        barHeight += ((val.building_load ?? 0) / kwDivisor);
+      }
+      // Also check building_load alone (unstacked)
+      if (!stackBars && !hiddenSeries.has("building_load")) {
+        globalMax = Math.max(globalMax, (val.building_load ?? 0) / kwDivisor);
+      }
+      globalMax = Math.max(globalMax, barHeight);
+    }
+    if (guaranteeValue != null && !hiddenSeries.has("guarantee")) {
+      globalMax = Math.max(globalMax, guaranteeValue / kwDivisor);
+    }
+    return Math.ceil(globalMax * 1.05) || undefined;
+  }, [filteredReadings, timeframe, kwDivisor, hiddenSeries, showSources, sourceKeys, stackBars, guaranteeValue, monthData]);
+
   const hasData = enrichedData.length > 0 && enrichedData.some((d: any) => {
     if (showSources) return sourceKeys.some(sk => (d[sk] ?? 0) > 0);
     return d.actual > 0 || d.building_load > 0;
@@ -448,7 +511,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
               <ComposedChart data={enrichedData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={isSingleDay ? 40 : 60} interval={labelInterval} />
-                <YAxis fontSize={12} label={{ value: displayUnit, angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
+                <YAxis fontSize={12} domain={yAxisMax ? [0, yAxisMax] : undefined} allowDataOverflow label={{ value: displayUnit, angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 {!singleDayLabel && <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: "pointer" }} />}
                 {showSources ? (
