@@ -103,7 +103,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
     for (let d = 1; d <= totalDays; d++) {
       const entry = dayMap.get(d)!;
       const metered = entry.actual;
-      const theoretical = dailyGuarantee;
+      const theoretical = metered + entry.downtime;
       const overProd = Math.max(0, metered - theoretical);
       const surplus = metered - dailyGuarantee;
 
