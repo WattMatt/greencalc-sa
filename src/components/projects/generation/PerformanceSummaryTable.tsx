@@ -55,17 +55,27 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
   const endDate = `${year}-${String(month).padStart(2, "0")}-${String(totalDays).padStart(2, "0")}T23:59:59`;
 
   const { data: readings } = useQuery({
-    queryKey: ["generation-readings", projectId, year, month],
+    queryKey: ["generation-readings-daily", projectId, year, month],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("generation_readings")
-        .select("timestamp, actual_kwh, building_load_kwh")
-        .eq("project_id", projectId)
-        .gte("timestamp", startDate)
-        .lte("timestamp", endDate)
-        .order("timestamp", { ascending: true });
-      if (error) throw error;
-      return data;
+      const allReadings: { timestamp: string; actual_kwh: number | null; building_load_kwh: number | null }[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("generation_readings")
+          .select("timestamp, actual_kwh, building_load_kwh")
+          .eq("project_id", projectId)
+          .gte("timestamp", startDate)
+          .lte("timestamp", endDate)
+          .order("timestamp", { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        allReadings.push(...(data ?? []));
+        hasMore = (data?.length ?? 0) === pageSize;
+        from += pageSize;
+      }
+      return allReadings;
     },
   });
 
