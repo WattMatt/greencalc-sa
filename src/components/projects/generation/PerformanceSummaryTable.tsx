@@ -39,10 +39,8 @@ interface DailyRow {
   date: string;
   yieldGuarantee: number;
   meteredGeneration: number;
-  downTime: number;
+  downtimeSlots: number;
   theoreticalGeneration: number;
-  overProduction: number;
-  realisedConsumption: number;
   surplusDeficit: number;
 }
 
@@ -72,11 +70,11 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
   });
 
   const dailyRows: DailyRow[] = useMemo(() => {
-    const dayMap = new Map<number, { actual: number; downtime: number }>();
+    const dayMap = new Map<number, { actual: number; downtime: number; downtimeSlots: number }>();
 
     // Init all days
     for (let d = 1; d <= totalDays; d++) {
-      dayMap.set(d, { actual: 0, downtime: 0 });
+      dayMap.set(d, { actual: 0, downtime: 0, downtimeSlots: 0 });
     }
 
     // Detect interval from data (default 30-min = 0.5h)
@@ -102,6 +100,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
 
         // Downtime: during sun hours (06:00 inclusive – 18:00 exclusive)
         if (hour >= 6 && hour < 18 && (r.actual_kwh == null || Number(r.actual_kwh) === 0)) {
+          entry.downtimeSlots += 1;
           entry.downtime += dailyGuarantee / sunHourReadings;
         }
       }
@@ -112,7 +111,6 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       const entry = dayMap.get(d)!;
       const metered = entry.actual;
       const theoretical = metered + entry.downtime;
-      const overProd = Math.max(0, metered - theoretical);
       const surplus = metered - dailyGuarantee;
 
       rows.push({
@@ -120,10 +118,8 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
         date: `${d}`,
         yieldGuarantee: dailyGuarantee,
         meteredGeneration: metered,
-        downTime: entry.downtime,
+        downtimeSlots: entry.downtimeSlots,
         theoreticalGeneration: theoretical,
-        overProduction: overProd,
-        realisedConsumption: metered,
         surplusDeficit: surplus,
       });
     }
@@ -135,13 +131,11 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       (acc, r) => ({
         yieldGuarantee: acc.yieldGuarantee + r.yieldGuarantee,
         meteredGeneration: acc.meteredGeneration + r.meteredGeneration,
-        downTime: acc.downTime + r.downTime,
+        downtimeSlots: acc.downtimeSlots + r.downtimeSlots,
         theoreticalGeneration: acc.theoreticalGeneration + r.theoreticalGeneration,
-        overProduction: acc.overProduction + r.overProduction,
-        realisedConsumption: acc.realisedConsumption + r.realisedConsumption,
         surplusDeficit: acc.surplusDeficit + r.surplusDeficit,
       }),
-      { yieldGuarantee: 0, meteredGeneration: 0, downTime: 0, theoreticalGeneration: 0, overProduction: 0, realisedConsumption: 0, surplusDeficit: 0 }
+      { yieldGuarantee: 0, meteredGeneration: 0, downtimeSlots: 0, theoreticalGeneration: 0, surplusDeficit: 0 }
     );
   }, [dailyRows]);
 
@@ -179,7 +173,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableHead className="text-xs py-2 px-2 w-12">Days</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Yield Guarantee</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Metered Generation</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Down Time (06:00–18:00)</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right">Down Time Slots (06:00–18:00)</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Theoretical Generation</TableHead>
                     
                     
@@ -192,7 +186,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                       <TableCell className="text-xs py-1.5 px-2 font-medium">{row.day}</TableCell>
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.yieldGuarantee)}</TableCell>
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.meteredGeneration)}</TableCell>
-                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.downTime)}</TableCell>
+                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{row.downtimeSlots}</TableCell>
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.theoreticalGeneration)}</TableCell>
                       
                       
@@ -207,7 +201,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableCell className="text-xs py-2 px-2 font-bold">Total</TableCell>
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.yieldGuarantee)}</TableCell>
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.meteredGeneration)}</TableCell>
-                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.downTime)}</TableCell>
+                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{totals.downtimeSlots}</TableCell>
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.theoreticalGeneration)}</TableCell>
                     
                     
