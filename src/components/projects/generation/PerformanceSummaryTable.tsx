@@ -79,6 +79,16 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       dayMap.set(d, { actual: 0, downtime: 0 });
     }
 
+    // Detect interval from data (default 30-min = 0.5h)
+    let intervalHours = 0.5;
+    if (readings && readings.length >= 2) {
+      const t0 = new Date(readings[0].timestamp).getTime();
+      const t1 = new Date(readings[1].timestamp).getTime();
+      const diffH = (t1 - t0) / (1000 * 60 * 60);
+      if (diffH > 0 && diffH <= 2) intervalHours = diffH;
+    }
+    const sunHourReadings = 12 / intervalHours; // e.g. 24 for 30-min data
+
     if (readings) {
       for (const r of readings) {
         const ts = new Date(r.timestamp);
@@ -90,11 +100,9 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
         const kwh = Number(r.actual_kwh) || 0;
         entry.actual += kwh;
 
-        // Downtime: during sun hours (6-18), if actual is 0 or null, count theoretical share
+        // Downtime: during sun hours (06:00 inclusive – 18:00 exclusive)
         if (hour >= 6 && hour < 18 && (r.actual_kwh == null || Number(r.actual_kwh) === 0)) {
-          // Approximate: daily guarantee spread over 12 sun hours
-          // We don't know interval so count per-reading
-          entry.downtime += dailyGuarantee / 12;
+          entry.downtime += dailyGuarantee / sunHourReadings;
         }
       }
     }
