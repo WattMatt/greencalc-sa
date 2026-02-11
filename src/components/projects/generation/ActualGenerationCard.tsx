@@ -34,6 +34,7 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
   const [csvDialogOpen, setCsvDialogOpen] = useState(false);
   const [csvDialogLines, setCsvDialogLines] = useState<string[]>([]);
   const [pendingFileCount, setPendingFileCount] = useState(0);
+  const [pendingFileName, setPendingFileName] = useState("");
 
   const displayValue = value !== null ? value : (monthData.actual_kwh?.toString() ?? "");
 
@@ -158,6 +159,34 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
       }
     }
 
+    // Auto-create source guarantee entry for this CSV file
+    const sourceLabel = pendingFileName.replace(/\.csv$/i, "").trim();
+    if (sourceLabel) {
+      const affectedMonths = Array.from(totals.keys());
+      for (const m of affectedMonths) {
+        const { data: existing } = await supabase
+          .from("generation_source_guarantees")
+          .select("id")
+          .eq("project_id", projectId)
+          .eq("month", m)
+          .eq("year", year)
+          .eq("source_label", sourceLabel)
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase
+            .from("generation_source_guarantees")
+            .insert({
+              project_id: projectId,
+              month: m,
+              year,
+              source_label: sourceLabel,
+              guaranteed_kwh: 0,
+            });
+        }
+      }
+    }
+
     toast.success(`Added ${totalAdded.toLocaleString()} kWh from ${fileCount} file(s)`);
     setValue(null);
     onDataChanged();
@@ -172,6 +201,7 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
       const allLines = text.split("\n").filter((l) => l.trim());
       setCsvDialogLines(allLines);
       setPendingFileCount(files.length);
+      setPendingFileName(files[0].name);
       setCsvDialogOpen(true);
     } catch (err: any) {
       toast.error(err.message || "CSV import failed");
