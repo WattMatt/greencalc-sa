@@ -141,7 +141,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       if (diffH > 0 && diffH <= 2) intervalHours = diffH;
     }
     // Sun hours: 06:00 to 17:30 inclusive = 11.5 hours = 23 slots at 30-min
-    const sunHourSlots = 11.5 / intervalHours; // e.g. 23 for 30-min data
+    const sunHourSlots = ((1050 - 360) / (intervalHours * 60)) + 1; // e.g. 24 for 30-min data
 
     // Total guarantee for yield guarantee column
     const totalGuarantee = monthData.guaranteed_kwh ?? 0;
