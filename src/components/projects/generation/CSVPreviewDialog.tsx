@@ -156,7 +156,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
+      <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Map CSV Columns</DialogTitle>
           <DialogDescription>
@@ -164,7 +164,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
           </DialogDescription>
         </DialogHeader>
 
-        <div className="overflow-x-auto border rounded-md">
+        <div className="overflow-auto border rounded-md flex-1 min-h-0">
           <Table>
             <TableHeader>
               <TableRow>
@@ -215,7 +215,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
           </Table>
         </div>
 
-        <div className="flex items-center gap-4 text-sm flex-wrap">
+        <div className="flex items-center gap-4 text-sm flex-wrap shrink-0">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -254,7 +254,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleParse} disabled={!canParse}>
             Parse {canParse ? "→" : "(select columns)"}
