@@ -35,7 +35,6 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 const chartConfig = {
   actual: { label: "Solar Generation", color: "#f0e442" },
   building_load: { label: "Council Demand", color: "#898989" },
-  total_building_load: { label: "Building Load", color: "#4a90d9" },
   guarantee: { label: "Guaranteed Generation", color: "#00b0f0" },
 };
 
@@ -67,6 +66,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   const [timeframe, setTimeframe] = useState<Timeframe>("daily");
   const [hoursFilter, setHoursFilter] = useState<"all" | "sun">("all");
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
+  const [stackBars, setStackBars] = useState(false);
 
   const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
   const days = daysInMonth(month, year);
@@ -196,12 +196,8 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
         ? (dailyGuarantee ? dailyGuarantee / 24 : null)
         : (dailyGuarantee ? dailyGuarantee / 48 : null);
 
-  // Add guarantee and computed building load (solar + council) to each data point
-  const enrichedData = chartData.map((d) => ({
-    ...d,
-    total_building_load: (d.actual ?? 0) + (d.building_load ?? 0),
-    guarantee: guaranteeValue ?? 0,
-  }));
+  // Add guarantee field to each data point
+  const enrichedData = chartData.map((d) => ({ ...d, guarantee: guaranteeValue ?? 0 }));
 
   const hasData = enrichedData.length > 0 && enrichedData.some((d) => d.actual > 0 || d.building_load > 0);
 
@@ -223,6 +219,14 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-sm">System Performance — {monthData.fullName} {year}</CardTitle>
         <div className="flex items-center gap-2">
+          <Button
+            variant={stackBars ? "default" : "outline"}
+            size="sm"
+            className="text-xs px-2 h-8"
+            onClick={() => setStackBars(!stackBars)}
+          >
+            Building
+          </Button>
           <ToggleGroup type="single" value={hoursFilter} onValueChange={(v) => v && setHoursFilter(v as "all" | "sun")} size="sm" variant="outline">
             <ToggleGroupItem value="all" className="text-xs px-2 h-8">All Hours</ToggleGroupItem>
             <ToggleGroupItem value="sun" className="text-xs px-2 h-8">Sun Hours</ToggleGroupItem>
@@ -321,8 +325,9 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                 fill="var(--color-actual)"
                 stroke="#d9d9d9"
                 strokeWidth={1}
-                radius={[2, 2, 0, 0]}
+                radius={stackBars ? undefined : [2, 2, 0, 0]}
                 hide={hiddenSeries.has("actual")}
+                stackId={stackBars ? "building" : undefined}
               />
               <Bar
                 dataKey="building_load"
@@ -330,16 +335,9 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                 fill="var(--color-building_load)"
                 stroke="#d9d9d9"
                 strokeWidth={1}
+                radius={stackBars ? [2, 2, 0, 0] : undefined}
                 hide={hiddenSeries.has("building_load")}
-              />
-              <Bar
-                dataKey="total_building_load"
-                name="Building Load"
-                fill="var(--color-total_building_load)"
-                stroke="#d9d9d9"
-                strokeWidth={1}
-                radius={[2, 2, 0, 0]}
-                hide={hiddenSeries.has("total_building_load")}
+                stackId={stackBars ? "building" : undefined}
               />
               {guaranteeValue != null && (
                 <Line
