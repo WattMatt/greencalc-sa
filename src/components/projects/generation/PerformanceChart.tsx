@@ -67,6 +67,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   const [hoursFilter, setHoursFilter] = useState<"all" | "sun">("all");
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
   const [stackBars, setStackBars] = useState(false);
+  const [displayUnit, setDisplayUnit] = useState<"kWh" | "kW">("kWh");
 
   const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
   const days = daysInMonth(month, year);
@@ -202,8 +203,18 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
         ? (dailyGuarantee ? dailyGuarantee / hoursPerDay : null)
         : (dailyGuarantee ? dailyGuarantee / intervalsPerDay : null);
 
-  // Add guarantee field to each data point
-  const enrichedData = chartData.map((d) => ({ ...d, guarantee: guaranteeValue ?? 0 }));
+  // Divisor to convert kWh → kW based on timeframe interval duration
+  const kwDivisor = displayUnit === "kW"
+    ? (timeframe === "30min" ? 0.5 : timeframe === "hourly" ? 1 : timeframe === "daily" ? 24 : days * 24)
+    : 1;
+
+  // Add guarantee field to each data point, applying unit conversion
+  const enrichedData = chartData.map((d) => ({
+    ...d,
+    actual: d.actual / kwDivisor,
+    building_load: d.building_load / kwDivisor,
+    guarantee: (guaranteeValue ?? 0) / kwDivisor,
+  }));
 
   const hasData = enrichedData.length > 0 && enrichedData.some((d) => d.actual > 0 || d.building_load > 0);
 
@@ -225,6 +236,14 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-sm">System Performance — {monthData.fullName} {year}</CardTitle>
         <div className="flex items-center gap-2">
+          <Button
+            variant={displayUnit === "kW" ? "default" : "outline"}
+            size="sm"
+            className="text-xs px-2 h-8"
+            onClick={() => setDisplayUnit(displayUnit === "kWh" ? "kW" : "kWh")}
+          >
+            {displayUnit === "kW" ? "kW" : "kWh"}
+          </Button>
           <Button
             variant={stackBars ? "default" : "outline"}
             size="sm"
@@ -322,7 +341,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
             <ComposedChart data={enrichedData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={60} interval={labelInterval} />
-              <YAxis fontSize={12} label={{ value: "kWh", angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
+              <YAxis fontSize={12} label={{ value: displayUnit, angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: "pointer" }} />
               <Bar
