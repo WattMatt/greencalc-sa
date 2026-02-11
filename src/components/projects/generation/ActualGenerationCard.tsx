@@ -122,28 +122,33 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
 
     // Save raw readings - add to existing values
     if (readings && readings.length > 0) {
+      const normalizeTs = (ts: string) => new Date(ts).toISOString();
       const batchSize = 500;
       for (let i = 0; i < readings.length; i += batchSize) {
         const batch = readings.slice(i, i + batchSize);
         const timestamps = batch.map((r) => r.timestamp);
 
-        // Fetch existing readings for these timestamps
+        // Fetch existing readings for these timestamps - fetch both columns to preserve
         const { data: existingReadings } = await supabase
           .from("generation_readings")
-          .select("timestamp, actual_kwh")
+          .select("timestamp, actual_kwh, building_load_kwh")
           .eq("project_id", projectId)
           .in("timestamp", timestamps);
 
         const existingMap = new Map(
-          (existingReadings ?? []).map((r) => [r.timestamp, r.actual_kwh ?? 0])
+          (existingReadings ?? []).map((r) => [normalizeTs(r.timestamp), r])
         );
 
-        const upsertBatch = batch.map((r) => ({
-          project_id: projectId,
-          timestamp: r.timestamp,
-          actual_kwh: (existingMap.get(r.timestamp) ?? 0) + r.kwh,
-          source: "csv",
-        }));
+        const upsertBatch = batch.map((r) => {
+          const existing = existingMap.get(normalizeTs(r.timestamp));
+          return {
+            project_id: projectId,
+            timestamp: r.timestamp,
+            actual_kwh: (existing?.actual_kwh ?? 0) + r.kwh,
+            building_load_kwh: existing?.building_load_kwh ?? null,
+            source: "csv",
+          };
+        });
 
         const { error } = await supabase
           .from("generation_readings")
