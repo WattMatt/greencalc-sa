@@ -111,9 +111,26 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return timeInMinutes >= 360 && timeInMinutes <= 1050;
   }
 
-  const filteredReadings = hoursFilter === "sun" && readings
-    ? readings.filter(r => isSunHour(r.timestamp))
-    : readings;
+  // Aggregate readings across all sources by timestamp
+  const aggregatedReadings = useMemo(() => {
+    if (!readings) return null;
+    const map = new Map<string, { timestamp: string; actual_kwh: number; building_load_kwh: number }>();
+    for (const r of readings) {
+      const key = r.timestamp;
+      const existing = map.get(key);
+      if (existing) {
+        existing.actual_kwh += r.actual_kwh ?? 0;
+        existing.building_load_kwh += r.building_load_kwh ?? 0;
+      } else {
+        map.set(key, { timestamp: key, actual_kwh: r.actual_kwh ?? 0, building_load_kwh: r.building_load_kwh ?? 0 });
+      }
+    }
+    return Array.from(map.values());
+  }, [readings]);
+
+  const filteredReadings = hoursFilter === "sun" && aggregatedReadings
+    ? aggregatedReadings.filter(r => isSunHour(r.timestamp))
+    : aggregatedReadings;
 
   // Apply date range filter
   const dateFilteredReadings = useMemo(() => {
