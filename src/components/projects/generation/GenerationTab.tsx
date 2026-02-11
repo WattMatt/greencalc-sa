@@ -133,7 +133,7 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
       </div>
 
       <PerformanceChart projectId={projectId} month={month} year={year} monthData={monthData} />
-      <PerformanceSummaryTable monthData={monthData} />
+      <PerformanceSummaryTable projectId={projectId} month={month} year={year} monthData={monthData} />
     </div>
   );
 }
