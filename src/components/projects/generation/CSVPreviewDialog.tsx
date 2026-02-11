@@ -34,7 +34,7 @@ interface CSVPreviewDialogProps {
   open: boolean;
   onClose: () => void;
   csvLines: string[];
-  onParsed: (totals: Map<number, number>, dailyTotals: Map<string, number>, readings: CSVReading[]) => void;
+  onParsed: (totals: Map<number, number>, dailyTotals: Map<string, number>, readings: CSVReading[]) => void | Promise<void>;
 }
 
 function strip(s: string): string {
@@ -79,7 +79,8 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
   const [columnRoles, setColumnRoles] = useState<Map<number, ColumnRole>>(new Map());
   const [isKw, setIsKw] = useState(true);
   const [startRow, setStartRow] = useState(1);
-  const [stopRow, setStopRow] = useState(50);
+  const [stopRow, setStopRow] = useState<number | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
 
   const { dataStartRow, headers, previewRows, totalDataRows } = useMemo(() => {
     if (csvLines.length < 2) return { dataStartRow: 1, headers: [] as string[], previewRows: [] as string[][], totalDataRows: 0 };
@@ -92,8 +93,9 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
     const hdrs = (csvLines[hRow] ?? "").split(",").map(strip);
     const totalData = csvLines.length - dStart;
     const s = Math.max(0, startRow - 1);
-    const e = Math.min(totalData, stopRow);
-    const preview = csvLines.slice(dStart + s, dStart + e).map((l) => l.split(",").map(strip));
+    const effectiveStop = stopRow ?? totalData;
+    const e = Math.min(totalData, effectiveStop);
+    const preview = csvLines.slice(dStart + s, dStart + Math.min(e, s + 100)).map((l) => l.split(",").map(strip));
 
     return { dataStartRow: dStart, headers: hdrs, previewRows: preview, totalDataRows: totalData };
   }, [csvLines, startRow, stopRow]);
@@ -133,8 +135,9 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
     });
   };
 
-  const handleParse = () => {
+  const handleParse = async () => {
     if (dateCol === null || valueCol === null) return;
+    setIsParsing(true);
 
     const totals = new Map<number, number>();
     const dailyTotals = new Map<string, number>();
@@ -171,8 +174,12 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
       }
     }
 
-    onParsed(totals, dailyTotals, readings);
-    onClose();
+    try {
+      await onParsed(totals, dailyTotals, readings);
+    } finally {
+      setIsParsing(false);
+      onClose();
+    }
   };
 
   const getRoleBadge = (idx: number) => {
@@ -274,7 +281,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
               type="number"
               min={1}
               max={totalDataRows}
-              value={stopRow}
+              value={stopRow ?? totalDataRows}
               onChange={(e) => {
                 const v = Math.max(startRow, Math.min(Number(e.target.value) || 1, totalDataRows));
                 setStopRow(v);
@@ -287,8 +294,8 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
 
         <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleParse} disabled={!canParse}>
-            Parse {canParse ? "→" : "(select columns)"}
+          <Button onClick={handleParse} disabled={!canParse || isParsing}>
+            {isParsing ? "Saving..." : canParse ? "Parse →" : "Parse (select columns)"}
           </Button>
         </DialogFooter>
       </DialogContent>
