@@ -182,7 +182,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableHead className="text-xs py-2 px-2 text-right">Down Time (06:00–18:00)</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Theoretical Generation</TableHead>
                     
-                    <TableHead className="text-xs py-2 px-2 text-right">Realised Consumption</TableHead>
+                    
                     <TableHead className="text-xs py-2 px-2 text-right">Surplus / Deficit</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -195,7 +195,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.downTime)}</TableCell>
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.theoreticalGeneration)}</TableCell>
                       
-                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.realisedConsumption)}</TableCell>
+                      
                       <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums font-medium", row.surplusDeficit < 0 ? "text-destructive" : "text-primary")}>
                         {formatNum(row.surplusDeficit)}
                       </TableCell>
@@ -210,7 +210,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.downTime)}</TableCell>
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.theoreticalGeneration)}</TableCell>
                     
-                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.realisedConsumption)}</TableCell>
+                    
                     <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold", totals.surplusDeficit < 0 ? "text-destructive" : "text-primary")}>
                       {formatNum(totals.surplusDeficit)}
                     </TableCell>
