@@ -29,9 +29,9 @@ type Timeframe = "30min" | "hourly" | "daily" | "monthly";
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 const chartConfig = {
-  actual: { label: "Solar Generation", color: "#CCCC33" },
-  building_load: { label: "Building Load", color: "hsl(var(--accent-foreground))" },
-  guarantee: { label: "Guaranteed Generation", color: "#3399CC" },
+  actual: { label: "Solar Generation", color: "#f0e442" },
+  building_load: { label: "Building Load", color: "#898989" },
+  guarantee: { label: "Guaranteed Generation", color: "#00b0f0" },
 };
 
 function daysInMonth(month: number, year: number): number {
@@ -226,7 +226,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                 dataKey="actual"
                 name="Solar Generation"
                 fill="var(--color-actual)"
-                stroke="#999999"
+                stroke="#d9d9d9"
                 strokeWidth={1}
                 radius={[2, 2, 0, 0]}
                 hide={hiddenSeries.has("actual")}
@@ -235,7 +235,8 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                 dataKey="building_load"
                 name="Building Load"
                 fill="var(--color-building_load)"
-                radius={[2, 2, 0, 0]}
+                stroke="#d9d9d9"
+                strokeWidth={1}
                 hide={hiddenSeries.has("building_load")}
               />
               {guaranteeValue != null && (
