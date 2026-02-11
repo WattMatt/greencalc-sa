@@ -271,7 +271,7 @@ export function CSVPreviewDialog({ open, onClose, csvLines, onParsed }: CSVPrevi
               max={totalDataRows}
               value={startRow}
               onChange={(e) => {
-                const v = Math.max(1, Math.min(Number(e.target.value) || 1, stopRow));
+                const v = Math.max(1, Math.min(Number(e.target.value) || 1, stopRow ?? totalDataRows));
                 setStartRow(v);
               }}
               className="w-16 h-8 text-xs border rounded-md px-2 bg-background text-foreground"
