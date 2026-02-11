@@ -1,40 +1,41 @@
 
-# Fix: Council Demand Upload Creating Duplicate Timestamp Rows
+
+# Fix: Guaranteed Generation Scaling Logic
 
 ## Problem
-When uploading council demand CSV data after solar data, the timestamps end up duplicated in the database. Each solar reading gets its own row (with `actual_kwh` set, `building_load_kwh` null), and each council reading creates a **separate** row (with `building_load_kwh` set, `actual_kwh` null) at the same timestamp. This causes the chart to render double the expected data points, visually shifting everything.
+The current code incorrectly scales **down** the guarantee for monthly and daily views when "Sun Hours" is selected. The monthly guarantee is multiplied by `23/48`, reducing it -- but the full monthly guarantee should always be shown at monthly level, and the full daily share at daily level. The scaling should only affect the per-hour or per-30min value, where fewer intervals means each interval carries a **higher** share of the guarantee.
 
-## Root Cause
-In both `ActualGenerationCard.tsx` and `BuildingLoadCard.tsx`, the `normalizeTs` function uses `new Date(ts).toISOString()` to create lookup keys for existing readings. This converts timestamps to UTC, but the stored timestamps may have been interpreted differently by the database (which uses `timestamp with time zone`). The mismatch means the lookup fails to find existing rows, so the upsert creates new ones instead of merging.
+## Correct Logic
 
-## Solution
-Replace the `normalizeTs` function in both upload cards with a consistent normalization that strips timezone info and matches on the raw date/time string, ensuring lookups always find existing rows regardless of timezone interpretation differences.
+| Timeframe | All Hours | Sun Hours |
+|-----------|-----------|-----------|
+| Monthly | `guaranteed_kwh` (no change) | `guaranteed_kwh` (no change) |
+| Daily | `guaranteed_kwh / days` (no change) | `guaranteed_kwh / days` (no change) |
+| Hourly | `daily / 24` | `daily / 11.5` (higher per hour) |
+| 30 min | `daily / 48` | `daily / 23` (higher per interval) |
 
-## Changes
+The monthly total and daily share are fixed regardless of the hours filter. Only hourly and 30-min views redistribute across fewer intervals when sun hours is selected, resulting in a higher per-interval value.
 
-**File: `src/components/projects/generation/ActualGenerationCard.tsx`**
-- Replace `normalizeTs` (line ~125) to normalize timestamps by stripping timezone suffixes and trailing milliseconds, producing a consistent `YYYY-MM-DDTHH:MM:SS` key
-- This ensures the lookup map keys match what the database returns
+## Change
 
-**File: `src/components/projects/generation/BuildingLoadCard.tsx`**  
-- Same change to `normalizeTs` (line ~119)
+**File: `src/components/projects/generation/PerformanceChart.tsx`** (lines ~190-203)
 
-### Updated normalizeTs logic:
-```text
-const normalizeTs = (ts: string): string => {
-  // Strip timezone suffix (+00, Z, +HH:MM) and milliseconds
-  // to get a consistent YYYY-MM-DDTHH:MM:SS key
-  return ts
-    .replace(/\.\d+/, '')           // remove milliseconds
-    .replace(/Z$/, '')              // remove Z
-    .replace(/[+-]\d{2}(:\d{2})?$/, '') // remove offset
-    .replace(' ', 'T');             // normalize space to T
-};
+Replace the `guaranteeValue` calculation:
+
+```
+const guaranteeValue = timeframe === "monthly"
+  ? monthData.guaranteed_kwh
+  : timeframe === "daily"
+    ? dailyGuarantee
+    : timeframe === "hourly"
+      ? (dailyGuarantee ? dailyGuarantee / hoursPerDay : null)
+      : (dailyGuarantee ? dailyGuarantee / intervalsPerDay : null);
 ```
 
-This ensures that whether the timestamp comes from the CSV (`2026-01-01T00:30:00`) or from the database (`2026-01-01 00:30:00+00`), the normalized key will be the same: `2026-01-01T00:30:00`.
+- Monthly: always full value
+- Daily: always `monthly / days`
+- Hourly: `daily / hoursPerDay` (24 or 11.5)
+- 30 min: `daily / intervalsPerDay` (48 or 23)
 
-## Impact
-- Fixes the duplicate-row issue so solar and council data properly merge into the same row
-- Existing data with duplicates would need a re-upload (reset + re-import) to fix
-- No chart code changes needed -- once the data is stored correctly, the chart renders correctly
+This keeps the `hoursPerDay` and `intervalsPerDay` variables (which already adjust based on the sun hours filter) for the sub-daily views only.
+
