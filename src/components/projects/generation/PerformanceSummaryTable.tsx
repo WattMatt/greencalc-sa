@@ -52,7 +52,7 @@ export function PerformanceSummaryTable({ monthData }: PerformanceSummaryTablePr
               </TableCell>
             </TableRow>
             <TableRow>
-              <TableCell className="text-sm">Building Load</TableCell>
+              <TableCell className="text-sm">Council Demand</TableCell>
               <TableCell className="text-right text-sm">
                 {monthData.building_load_kwh != null ? `${monthData.building_load_kwh.toLocaleString()} kWh` : "—"}
               </TableCell>

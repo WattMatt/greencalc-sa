@@ -231,7 +231,7 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
           <CardTitle className="text-sm flex items-center justify-between">
             <span className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
-              Building Load (kWh)
+              Council Demand (kWh)
             </span>
             <div className="flex gap-1">
               {monthData.building_load_kwh != null && (

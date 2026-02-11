@@ -34,7 +34,8 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 
 const chartConfig = {
   actual: { label: "Solar Generation", color: "#f0e442" },
-  building_load: { label: "Building Load", color: "#898989" },
+  building_load: { label: "Council Demand", color: "#898989" },
+  total_building_load: { label: "Building Load", color: "#4a90d9" },
   guarantee: { label: "Guaranteed Generation", color: "#00b0f0" },
 };
 
@@ -195,8 +196,12 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
         ? (dailyGuarantee ? dailyGuarantee / 24 : null)
         : (dailyGuarantee ? dailyGuarantee / 48 : null);
 
-  // Add guarantee field to each data point for the Line series
-  const enrichedData = chartData.map((d) => ({ ...d, guarantee: guaranteeValue ?? 0 }));
+  // Add guarantee and computed building load (solar + council) to each data point
+  const enrichedData = chartData.map((d) => ({
+    ...d,
+    total_building_load: (d.actual ?? 0) + (d.building_load ?? 0),
+    guarantee: guaranteeValue ?? 0,
+  }));
 
   const hasData = enrichedData.length > 0 && enrichedData.some((d) => d.actual > 0 || d.building_load > 0);
 
@@ -321,11 +326,20 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
               />
               <Bar
                 dataKey="building_load"
-                name="Building Load"
+                name="Council Demand"
                 fill="var(--color-building_load)"
                 stroke="#d9d9d9"
                 strokeWidth={1}
                 hide={hiddenSeries.has("building_load")}
+              />
+              <Bar
+                dataKey="total_building_load"
+                name="Building Load"
+                fill="var(--color-total_building_load)"
+                stroke="#d9d9d9"
+                strokeWidth={1}
+                radius={[2, 2, 0, 0]}
+                hide={hiddenSeries.has("total_building_load")}
               />
               {guaranteeValue != null && (
                 <Line
