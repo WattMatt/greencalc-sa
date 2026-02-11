@@ -188,13 +188,21 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     });
   })();
 
+  // Sun hours (06:00–17:30) = 11.5 hours = 23 half-hour intervals
+  const sunHourIntervals = 23;
+  const allHourIntervals = 48;
+  const intervalsPerDay = hoursFilter === "sun" ? sunHourIntervals : allHourIntervals;
+  const hoursPerDay = hoursFilter === "sun" ? 11.5 : 24;
+
   const guaranteeValue = timeframe === "monthly"
-    ? monthData.guaranteed_kwh
+    ? (hoursFilter === "sun" && monthData.guaranteed_kwh != null
+        ? monthData.guaranteed_kwh * (sunHourIntervals / allHourIntervals)
+        : monthData.guaranteed_kwh)
     : timeframe === "daily"
-      ? dailyGuarantee
+      ? (dailyGuarantee != null ? dailyGuarantee * (intervalsPerDay / allHourIntervals) : null)
       : timeframe === "hourly"
-        ? (dailyGuarantee ? dailyGuarantee / 24 : null)
-        : (dailyGuarantee ? dailyGuarantee / 48 : null);
+        ? (dailyGuarantee ? dailyGuarantee / hoursPerDay : null) // NOT scaled further since hourly already accounts for fewer hours
+        : (dailyGuarantee ? dailyGuarantee / intervalsPerDay : null);
 
   // Add guarantee field to each data point
   const enrichedData = chartData.map((d) => ({ ...d, guarantee: guaranteeValue ?? 0 }));
