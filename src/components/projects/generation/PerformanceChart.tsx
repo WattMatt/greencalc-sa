@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Bar, Line, ComposedChart, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 interface MonthData {
   month: number;
@@ -52,6 +53,7 @@ function formatTimeLabel(date: Date, timeframe: Timeframe, month: number): strin
 
 export function PerformanceChart({ projectId, month, year, monthData }: PerformanceChartProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>("daily");
+  const [hoursFilter, setHoursFilter] = useState<"all" | "sun">("all");
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
 
   const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
@@ -87,6 +89,16 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
 
   const dailyGuarantee = monthData.guaranteed_kwh ? monthData.guaranteed_kwh / days : null;
 
+  function isSunHour(timestamp: string): boolean {
+    const d = new Date(timestamp);
+    const timeInMinutes = d.getHours() * 60 + d.getMinutes();
+    return timeInMinutes >= 360 && timeInMinutes <= 1050;
+  }
+
+  const filteredReadings = hoursFilter === "sun" && readings
+    ? readings.filter(r => isSunHour(r.timestamp))
+    : readings;
+
   const chartData = (() => {
     if (timeframe === "monthly") {
       return [{
@@ -96,10 +108,10 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       }];
     }
 
-    if (!readings || readings.length === 0) return [];
+    if (!filteredReadings || filteredReadings.length === 0) return [];
 
     if (timeframe === "30min") {
-      return readings.map((r) => {
+      return filteredReadings.map((r) => {
         const d = new Date(r.timestamp);
         return {
           name: formatTimeLabel(d, "30min", month),
@@ -111,7 +123,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
 
     if (timeframe === "hourly") {
       const hourlyMap = new Map<string, { actual: number; building_load: number }>();
-      for (const r of readings) {
+      for (const r of filteredReadings) {
         const d = new Date(r.timestamp);
         const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
         const existing = hourlyMap.get(key) ?? { actual: 0, building_load: 0 };
@@ -128,7 +140,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
 
     // daily - aggregate readings by day
     const dailyMap = new Map<number, { actual: number; building_load: number }>();
-    for (const r of readings) {
+    for (const r of filteredReadings) {
       const d = new Date(r.timestamp);
       const day = d.getDate();
       const existing = dailyMap.get(day) ?? { actual: 0, building_load: 0 };
@@ -179,17 +191,23 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-sm">System Performance — {monthData.fullName} {year}</CardTitle>
-        <Select value={timeframe} onValueChange={(v) => setTimeframe(v as Timeframe)}>
-          <SelectTrigger className="w-32 h-8">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="30min">30 Min</SelectItem>
-            <SelectItem value="hourly">Hourly</SelectItem>
-            <SelectItem value="daily">Daily</SelectItem>
-            <SelectItem value="monthly">Monthly</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <ToggleGroup type="single" value={hoursFilter} onValueChange={(v) => v && setHoursFilter(v as "all" | "sun")} size="sm" variant="outline">
+            <ToggleGroupItem value="all" className="text-xs px-2 h-8">All Hours</ToggleGroupItem>
+            <ToggleGroupItem value="sun" className="text-xs px-2 h-8">Sun Hours</ToggleGroupItem>
+          </ToggleGroup>
+          <Select value={timeframe} onValueChange={(v) => setTimeframe(v as Timeframe)}>
+            <SelectTrigger className="w-32 h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="30min">30 Min</SelectItem>
+              <SelectItem value="hourly">Hourly</SelectItem>
+              <SelectItem value="daily">Daily</SelectItem>
+              <SelectItem value="monthly">Monthly</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
       <CardContent>
         {!hasData ? (
