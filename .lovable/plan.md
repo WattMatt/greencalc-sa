@@ -1,18 +1,24 @@
 
 
-# Fix Downtime Calculation: Account for Actual Data Interval
+# Update Down Time Column to Show Time Slot Count
 
-## Problem
-The downtime calculation assumes 1-hour intervals (12 readings between 06:00-18:00), but the data uses 30-minute intervals (24 readings). This causes downtime to be double-counted, exceeding the yield guarantee on days with significant downtime.
+## What Changes
 
-## Solution
-Detect the actual reading interval from the data and use the correct divisor.
+The **Down Time** column will display the number of time intervals (slots) during sun hours (06:00 inclusive to 18:00 exclusive) where there was zero or no PV production, instead of an energy (kWh) value.
 
-### File: `src/components/projects/generation/PerformanceSummaryTable.tsx`
+For example, if there are 3 half-hour intervals with no generation, the column will show **3** instead of an energy estimate.
 
-1. **Detect interval**: After fetching readings, determine the interval between consecutive timestamps (e.g., 30 min = 0.5 hours).
-2. **Calculate correct divisor**: Sun hours (12) divided by interval in hours gives the number of expected readings. For 30-min data: `12 / 0.5 = 24`.
-3. **Update downtime formula**: Change `dailyGuarantee / 12` to `dailyGuarantee / sunHourReadingsCount` so each zero reading contributes its correct proportional share.
+## Theoretical Generation
 
-Fallback: If the interval cannot be detected (e.g., too few readings), default to 24 (30-min intervals) based on the known data architecture.
+Theoretical Generation will continue to work as an energy value. Internally, the code will still calculate an energy-based downtime estimate (using the daily guarantee spread across sun-hour readings) for the Theoretical Generation formula. Only the **displayed** Down Time column changes to a slot count.
 
+## Technical Details
+
+**File:** `src/components/projects/generation/PerformanceSummaryTable.tsx`
+
+1. Update the `dayMap` to track two values: `downtime` (energy, used internally for Theoretical Gen) and `downtimeSlots` (count, displayed in the column).
+2. In the reading loop, increment `downtimeSlots` by 1 for each zero/null reading during sun hours.
+3. Add `downtimeSlots` to the `DailyRow` interface and pass it through.
+4. Update the Down Time table cells to display the slot count instead of the energy value.
+5. Update the totals row accordingly.
+6. Rename the column header to "Down Time Slots (06:00-18:00)" or similar for clarity.
