@@ -1,54 +1,45 @@
 
 
-## Fix Chart Legends, "csv" Source, Column Separators, and Table Layout
+## Fix: Timezone Offset Bug in Downtime Calculation
 
-### 1. Chart Legend Labels: Use Guarantee Display Names + Tooltip with Original File Source
+### Root Cause
 
-**Problem:** The chart legend shows raw CSV source names like `31190 - Parkdene Solar Checkers` instead of the user-friendly guarantee labels (e.g., "Tie-In 1").
+Timestamps in `generation_readings` are stored as `timestamptz` with `+00` (e.g., `2026-01-01 06:00:00+00`). They represent local South African time but are flagged as UTC. When `new Date()` parses them, the browser applies its local timezone offset (UTC+2), shifting all readings by 2 hours.
 
-**Fix in `PerformanceChart.tsx`:**
-- Query `generation_source_guarantees` for the current project/month/year to build a `displayNameMap` (same logic as `PerformanceSummaryTable.tsx`)
-- In `activeChartConfig`, use the mapped display name as the label and store the original CSV source for tooltip
-- In the custom single-day legend and the Recharts `Legend`, wrap each source label in a Tooltip component showing "Source: 31190 - Parkdene Solar Checkers" on hover while displaying "Tie-In 1" as the visible text
+This means the `readingLookup` map keys are offset from the downtime loop keys:
+- Downtime loop checks key `1-360-source` (06:00 local)
+- But the reading for 06:00 local was stored at key `1-480-source` (because `new Date('...06:00:00+00').getHours()` returns 8 in UTC+2)
 
-### 2. The "csv" Legend Label — Explanation and Fix
+Result: the first 3 sun-hour slots (06:00, 06:30, 07:00) always look up nighttime readings (0 kWh), producing false downtime on every day.
 
-**Cause:** Some `generation_readings` rows have `source = 'csv'`. This happens when data was uploaded before per-source tracking was implemented — the upload code defaults to `"csv"` when no source label exists. This creates a 4th bar in the chart with a "csv" legend entry.
+### Fix
 
-**Fix:** Two options:
-- **Data fix (recommended):** Update the stale rows: `UPDATE generation_readings SET source = NULL WHERE source = 'csv' AND project_id = '...'` — or reassign them to the correct source. This can be surfaced to the user.
-- **Code fix:** In `PerformanceChart.tsx`, filter out or merge readings where `source === 'csv'` into the aggregated total, so they don't appear as a separate bar in Sources mode. The chart's `sourceLabels` extraction (line 121-126) will skip `'csv'` entries, and their kWh values will be summed into the non-source aggregated view instead.
+**File:** `src/components/projects/generation/PerformanceSummaryTable.tsx`, lines 249-254
 
-I will implement the code fix: skip `'csv'` from per-source breakdown and aggregate it into the total. Additionally, inform the user about the stale data.
+Change the readingLookup key construction to parse hours/minutes directly from the timestamp string, bypassing `new Date()` timezone conversion:
 
-### 3. Column Separator Lines on All Tables
+```typescript
+// Current (broken):
+const ts = new Date(r.timestamp);
+const day = ts.getDate();
+const minutes = ts.getHours() * 60 + ts.getMinutes();
 
-**Problem:** Only the Down Time tab has `border-l` separators. The Production, Revenue, and Performance tabs lack visual column separators.
+// Fixed — parse from string to avoid timezone shift:
+const tsStr = String(r.timestamp);
+const match = tsStr.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+if (!match) continue;
+const day = parseInt(match[3], 10);
+const minutes = parseInt(match[4], 10) * 60 + parseInt(match[5], 10);
+```
 
-**Fix:** Add `border-l` to column groups in:
-- **Production tab** (lines 399-442): Add `border-l` between major column groups (Yield Guarantee, Metered Gen, Down Time kWh, Theoretical Gen, Surplus/Deficit)
-- **Revenue tab** (lines 514-567): Add `border-l` between each revenue column
-- **Performance tab** (lines 571-639): Add `border-l` to each source group header and sub-columns (same pattern as Down Time tab), plus alternating `bg-muted/20`
+This extracts day, hour, and minute directly from the stored string without any timezone conversion, ensuring the lookup keys align with the downtime loop's minute-based keys.
 
-### 4. Better Column Width Distribution Across All Tables
+### Scope of Impact
 
-**Fix:** Standardize column widths:
-- Days column: `w-12` across all tabs
-- Numeric columns: `min-w-[100px]` for single-value columns, `min-w-[90px]` for source sub-columns
-- Remove the overly wide `w-40` on the Days column in Revenue and Performance tabs
+This same `new Date()` timezone issue also affects:
+- The `actual` accumulation per day (lines 265-270) — readings may be assigned to the wrong day near midnight
+- The interval detection (lines 236-240) — but this only checks the *difference* between two timestamps so the offset cancels out
 
-### Technical Details
+The primary fix targets the readingLookup key construction. The day extraction should also use string parsing for consistency, though the impact is smaller (only affects readings near midnight boundaries).
 
-**Files to modify:**
-
-**`src/components/projects/generation/PerformanceChart.tsx`:**
-- Add query for `generation_source_guarantees` to get display name mappings
-- Update `activeChartConfig` (lines 370-380) to use display names as labels
-- Filter `'csv'` from `sourceLabels` (lines 121-126)
-- Add Tooltip wrapper around legend items in single-day legend (lines 569-585) showing original CSV source on hover
-- Import Tooltip components
-
-**`src/components/projects/generation/PerformanceSummaryTable.tsx`:**
-- **Production tab** (lines 399-442): Add `border-l` to columns after Days
-- **Revenue tab** (lines 514-567): Add `border-l` to columns after Days, fix `w-40` to `w-12`
-- **Performance tab** (lines 571-639): Add `border-l` and alternating `bg-muted/20` to source group headers and sub-columns, fix `w-40` to `w-12`
+### No other files need changes
