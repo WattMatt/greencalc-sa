@@ -166,6 +166,7 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
               year,
               source_label: sourceLabel,
               guaranteed_kwh: 0,
+              meter_type: 'solar',
             });
         }
       }

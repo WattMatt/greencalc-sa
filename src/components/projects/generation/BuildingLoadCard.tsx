@@ -152,6 +152,35 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
       }
     }
 
+    // Auto-create source guarantee entry flagged as council meter
+    if (readings && readings.length > 0) {
+      const sourceLabel = readings[0]?.timestamp ? "Council Supply" : "csv";
+      const affectedMonths = Array.from(totals.keys());
+      for (const m of affectedMonths) {
+        const { data: existing } = await supabase
+          .from("generation_source_guarantees")
+          .select("id")
+          .eq("project_id", projectId)
+          .eq("month", m)
+          .eq("year", year)
+          .eq("source_label", sourceLabel)
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase
+            .from("generation_source_guarantees")
+            .insert({
+              project_id: projectId,
+              month: m,
+              year,
+              source_label: sourceLabel,
+              guaranteed_kwh: 0,
+              meter_type: 'council',
+            });
+        }
+      }
+    }
+
     toast.success(`Added ${totalAdded.toLocaleString()} kWh from ${fileCount} file(s)`);
     setValue(null);
     onDataChanged();
