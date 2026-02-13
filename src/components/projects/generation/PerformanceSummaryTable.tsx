@@ -403,22 +403,22 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-xs py-2 px-2 w-12">Days</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Yield Guarantee</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Metered Generation</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Down Time kWh (06:00–17:30)</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Theoretical Generation</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Surplus / Deficit</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right border-l min-w-[100px]">Yield Guarantee</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right border-l min-w-[100px]">Metered Generation</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right border-l min-w-[100px]">Down Time kWh (06:00–17:30)</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right border-l min-w-[100px]">Theoretical Generation</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right border-l min-w-[100px]">Surplus / Deficit</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {dailyRows.map((row, i) => (
                     <TableRow key={row.day} className={cn(i % 2 === 0 ? "bg-muted/30" : "")}>
                       <TableCell className="text-xs py-1.5 px-2 font-medium">{row.day}</TableCell>
-                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.yieldGuarantee)}</TableCell>
-                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.meteredGeneration)}</TableCell>
-                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.downtimeEnergy)}</TableCell>
-                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.theoreticalGeneration)}</TableCell>
-                      <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums font-medium", row.surplusDeficit < 0 ? "text-destructive" : "text-primary")}>
+                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums border-l">{formatNum(row.yieldGuarantee)}</TableCell>
+                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums border-l">{formatNum(row.meteredGeneration)}</TableCell>
+                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums border-l">{formatNum(row.downtimeEnergy)}</TableCell>
+                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums border-l">{formatNum(row.theoreticalGeneration)}</TableCell>
+                      <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums font-medium border-l", row.surplusDeficit < 0 ? "text-destructive" : "text-primary")}>
                         {formatNum(row.surplusDeficit)}
                       </TableCell>
                     </TableRow>
@@ -427,11 +427,11 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                 <TableFooter>
                   <TableRow className="bg-primary/10 font-bold">
                     <TableCell className="text-xs py-2 px-2 font-bold">Total</TableCell>
-                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.yieldGuarantee)}</TableCell>
-                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.meteredGeneration)}</TableCell>
-                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.downtimeEnergy)}</TableCell>
-                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.theoreticalGeneration)}</TableCell>
-                    <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold", totals.surplusDeficit < 0 ? "text-destructive" : "text-primary")}>
+                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold border-l">{formatNum(totals.yieldGuarantee)}</TableCell>
+                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold border-l">{formatNum(totals.meteredGeneration)}</TableCell>
+                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold border-l">{formatNum(totals.downtimeEnergy)}</TableCell>
+                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold border-l">{formatNum(totals.theoreticalGeneration)}</TableCell>
+                    <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold border-l", totals.surplusDeficit < 0 ? "text-destructive" : "text-primary")}>
                       {formatNum(totals.surplusDeficit)}
                     </TableCell>
                   </TableRow>
@@ -517,12 +517,12 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-xs py-2 px-2 w-40">Days</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Yield Guarantee (R)</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Metered Generation (R)</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Down Time (R)</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Theoretical Gen (R)</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Guaranteed Gen Actual (R)</TableHead>
+                    <TableHead className="text-xs py-2 px-2 w-12">Days</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right border-l min-w-[100px]">Yield Guarantee (R)</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right border-l min-w-[100px]">Metered Generation (R)</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right border-l min-w-[100px]">Down Time (R)</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right border-l min-w-[100px]">Theoretical Gen (R)</TableHead>
+                    <TableHead className="text-xs py-2 px-2 text-right border-l min-w-[100px]">Guaranteed Gen Actual (R)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -532,11 +532,11 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     return (
                       <TableRow key={row.day} className={cn(i % 2 === 0 ? "bg-muted/30" : "")}>
                         <TableCell className="text-xs py-1.5 px-2 font-medium">{row.day}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.yieldGuarantee * rate)}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.meteredGeneration * rate)}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.downtimeEnergy * rate)}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.theoreticalGeneration * rate)}</TableCell>
-                        <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums font-medium", guaranteedActual < 0 ? "text-destructive" : "text-primary")}>
+                        <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums border-l">{formatRand(row.yieldGuarantee * rate)}</TableCell>
+                        <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums border-l">{formatRand(row.meteredGeneration * rate)}</TableCell>
+                        <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums border-l">{formatRand(row.downtimeEnergy * rate)}</TableCell>
+                        <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums border-l">{formatRand(row.theoreticalGeneration * rate)}</TableCell>
+                        <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums font-medium border-l", guaranteedActual < 0 ? "text-destructive" : "text-primary")}>
                           {formatRand(guaranteedActual * rate)}
                         </TableCell>
                       </TableRow>
@@ -550,11 +550,11 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     return (
                       <TableRow className="bg-primary/10 font-bold">
                         <TableCell className="text-xs py-2 px-2 font-bold">Total</TableCell>
-                        <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatRand(totals.yieldGuarantee * rate)}</TableCell>
-                        <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatRand(totals.meteredGeneration * rate)}</TableCell>
-                        <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatRand(totals.downtimeEnergy * rate)}</TableCell>
-                        <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatRand(totals.theoreticalGeneration * rate)}</TableCell>
-                        <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold", totalGuarActual < 0 ? "text-destructive" : "text-primary")}>
+                        <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold border-l">{formatRand(totals.yieldGuarantee * rate)}</TableCell>
+                        <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold border-l">{formatRand(totals.meteredGeneration * rate)}</TableCell>
+                        <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold border-l">{formatRand(totals.downtimeEnergy * rate)}</TableCell>
+                        <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold border-l">{formatRand(totals.theoreticalGeneration * rate)}</TableCell>
+                        <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold border-l", totalGuarActual < 0 ? "text-destructive" : "text-primary")}>
                           {formatRand(totalGuarActual * rate)}
                         </TableCell>
                       </TableRow>
@@ -574,20 +574,20 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-xs py-2 px-2 w-40">Days</TableHead>
-                    {distinctSources.map(src => (
-                      <TableHead key={src} className="text-xs py-2 px-2 text-center" colSpan={2}>
+                    <TableHead className="text-xs py-2 px-2 w-12">Days</TableHead>
+                    {distinctSources.map((src, idx) => (
+                      <TableHead key={src} className={cn("text-xs py-2 px-2 text-center border-l min-w-[180px]", idx % 2 === 1 && "bg-muted/20")} colSpan={2}>
                         {sourceDisplayNames.get(src) || src}
                       </TableHead>
                     ))}
                   </TableRow>
                   <TableRow>
                     <TableHead className="text-xs py-1 px-2"></TableHead>
-                    {distinctSources.map(src => (
-                      <>
-                        <TableHead key={`${src}-yg`} className="text-xs py-1 px-2 text-right">Yield Guarantee</TableHead>
-                        <TableHead key={`${src}-mg`} className="text-xs py-1 px-2 text-right">Metered Gen</TableHead>
-                      </>
+                    {distinctSources.map((src, idx) => (
+                      <React.Fragment key={`${src}-sub`}>
+                        <TableHead className={cn("text-xs py-1 px-2 text-right border-l min-w-[90px]", idx % 2 === 1 && "bg-muted/20")}>Yield Guarantee</TableHead>
+                        <TableHead className={cn("text-xs py-1 px-2 text-right min-w-[90px]", idx % 2 === 1 && "bg-muted/20")}>Metered Gen</TableHead>
+                      </React.Fragment>
                     ))}
                   </TableRow>
                 </TableHeader>
@@ -595,7 +595,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                   {dailyRows.map((row, i) => (
                     <TableRow key={row.day} className={cn(i % 2 === 0 ? "bg-muted/30" : "")}>
                       <TableCell className="text-xs py-1.5 px-2 font-medium">{row.day}</TableCell>
-                      {distinctSources.map(src => {
+                      {distinctSources.map((src, idx) => {
                         const sd = sourceDayMap.get(`${row.day}-${src}`);
                         const guarantee = sd?.guarantee ?? 0;
                         const actual = sd?.actual ?? 0;
@@ -608,12 +608,12 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                           else colorClass = "bg-muted text-muted-foreground";
                         }
                         return (
-                          <>
-                            <TableCell key={`${src}-yg-${row.day}`} className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(guarantee)}</TableCell>
-                            <TableCell key={`${src}-mg-${row.day}`} className={cn("text-xs py-1.5 px-2 text-right tabular-nums font-medium", colorClass)}>
+                          <React.Fragment key={`${src}-${row.day}`}>
+                            <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums border-l", idx % 2 === 1 && "bg-muted/20")}>{formatNum(guarantee)}</TableCell>
+                            <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums font-medium", colorClass, idx % 2 === 1 && !colorClass && "bg-muted/20")}>
                               {formatNum(actual)}
                             </TableCell>
-                          </>
+                          </React.Fragment>
                         );
                       })}
                     </TableRow>
@@ -622,13 +622,13 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                 <TableFooter>
                   <TableRow className="bg-primary/10 font-bold">
                     <TableCell className="text-xs py-2 px-2 font-bold">Total</TableCell>
-                    {distinctSources.map(src => {
+                    {distinctSources.map((src, idx) => {
                       const st = sourceTotals.get(src);
                       return (
-                        <>
-                          <TableCell key={`${src}-yg-total`} className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(st?.guarantee ?? 0)}</TableCell>
-                          <TableCell key={`${src}-mg-total`} className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(st?.actual ?? 0)}</TableCell>
-                        </>
+                        <React.Fragment key={`${src}-total`}>
+                          <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold border-l", idx % 2 === 1 && "bg-muted/20")}>{formatNum(st?.guarantee ?? 0)}</TableCell>
+                          <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold", idx % 2 === 1 && "bg-muted/20")}>{formatNum(st?.actual ?? 0)}</TableCell>
+                        </React.Fragment>
                       );
                     })}
                   </TableRow>
