@@ -1,74 +1,80 @@
 
 
-## Fix SCADA CSV Download -- Use Correct HTTP Flow
+## Fix: Load _Graph with Full Parameters Before CSV Download
 
-### Problem
-The current `fetch-pnpscada` edge function tries guessed CSV endpoints (`/profilecsv`, `/exportcsv`) which don't exist. Based on exploring the actual PNP SCADA website, we now know the exact sequence of HTTP requests needed to download CSV data.
+### Root Cause
+The `_DataDownload` endpoint returns 0 bytes because the server hasn't prepared any data. The `_Graph` page must be loaded with the **full set of parameters** (date range, meter serial, display toggles, TIMEMODE, etc.) before `_DataDownload` will work. Our current code only loads `_Graph?memh={memh}` -- missing all the context parameters.
 
-### The Correct HTTP Request Chain
+### What the Browser Does (Working Flow)
+1. Login -> overview -> select meter -> load `_Graph?memh=...` (initial load)
+2. User clicks "Choose Dates" -> sets date range -> clicks Submit
+3. Submit triggers `newDateRange()` -> `generatePressed()` which reloads `_Graph` with ALL parameters:
+   ```
+   /_Graph?hasTariffs=true&hasBills=false&hasCustomers=false
+     &memh={memh}&hasTOU=$hasTOU&doBill=1
+     &GSTARTH=0&GSTARTN=0&GENDH=0&GENDN=0
+     &TRIGHT0=False&TLEFT0=True&...
+     &GINCY=2026&GINCM=1&GINCD=1
+     &TIMEMODE=2
+     &selGNAME_UTILITY=31177$Electricity
+     &TGIDX=0
+   ```
+4. This prepares the data on the server. THEN `_DataDownload` works.
 
-For each meter, the backend function needs to:
+### The Fix
 
-1. **Login** -- POST to `/_Login` with credentials (already working)
-2. **Get overview** -- Follow redirects to get `memh` session token (already working)
-3. **Search for meter** -- POST to `/browseopen.jsp` with `searchStr=SERIAL&memh=...&clas=%` to find the meter
-4. **Select meter** -- Navigate to `/overview?PNPENTID=ENTITY_ID&PNPENTCLASID=CLASS_ID&memh=...` to load the meter into the session
-5. **Set date range** -- Submit date parameters via the overview page (the date range is embedded in URL parameters)
-6. **Download CSV** -- GET `/_DataDownload?CSV=Yes&TEMPPATH=../temp/&LOCALTEMPPATH=docroot/temp/&GSTARTH=0&GSTARTN=0&GENDH=0&GENDN=0&GSTARTD={day}&GSTARTY={year}&GSTARTM={month}&GENDD={day}&GENDY={year}&GENDM={month}&selGNAME_UTILITY={serial}$Electricity&TGIDX=0&memh=...`
+Update the `selectMeter` function to load `_Graph` with the full parameter set including the date range and meter serial. This means the `selectMeter` function needs to accept `serial`, `startDate`, and `endDate` parameters.
 
-The key insight from the HTML: the CSV download URL contains all date parameters inline (no separate form submit needed) and uses `selGNAME_UTILITY={serial}$Electricity` to identify the meter.
+### Changes to `supabase/functions/fetch-pnpscada/index.ts`
 
-### Changes
+**1. Update `selectMeter` signature and _Graph URL**
 
-**1. Rewrite `supabase/functions/fetch-pnpscada/index.ts`**
+Change `selectMeter` to accept date range and serial, then construct the full `_Graph` URL:
 
-Replace the `downloadMeterCSV` function with the correct flow:
-
-- Keep the existing login/session logic (it works)
-- For `list-meters`: Also use `browseopen.jsp` search to find meters, since the overview page parsing may miss some. Support a `searchStr` parameter to filter.
-- For `download-csv`: After login + getting `memh`:
-  - Load the meter into session: GET `/overview?PNPENTID={entityId}&PNPENTCLASID={classId}&memh={memh}`
-  - Extract the new `memh` from the response (it changes per page load)
-  - Construct the `_DataDownload` URL with date parameters parsed from `startDate`/`endDate` strings
-  - GET the CSV data directly
-- For `download-all`: Loop through meters, doing a fresh login per meter (since `memh` is invalidated when loading a new entity)
-
-**2. Update `list-meters` action**
-
-Add a `browseopen.jsp` search approach alongside the overview parsing:
-- POST to `/browseopen.jsp` with `memh`, `clas=%`, `searchStr=*` (or a specific search term)
-- Parse the `<option>` elements: `value="51990,107"` gives entityId and classId; the text contains serial, location, and name
-- Return structured meter list with entityId, classId, serial, and name
-
-**3. No UI changes needed**
-
-The `SyncScadaDialog.tsx` already has the correct structure -- it calls `list-meters`, shows checkboxes, and calls `download-all`. The only change is making the backend actually return real CSV data.
-
-### Technical Details
-
-**`_DataDownload` URL construction:**
-Given `startDate = "2026-01-01"` and `endDate = "2026-02-01"` and `serial = "31177"`:
+```typescript
+async function selectMeter(
+  jar: CookieJar, memh: string, 
+  entityId: string, classId: string, 
+  serial: string, startDate: string, endDate: string
+): Promise<{ memh: string; graphHtml: string }>
 ```
-/_DataDownload?CSV=Yes
-  &TEMPPATH=../temp/
-  &LOCALTEMPPATH=docroot/temp/
-  &GSTARTH=0&GSTARTN=0
-  &GENDH=0&GENDN=0
-  &GSTARTD=1&GSTARTY=2026&GSTARTM=1
-  &GENDD=1&GENDY=2026&GENDM=2
-  &selGNAME_UTILITY=31177$Electricity
+
+Step 2 (load graph page) changes from:
+```
+_Graph?memh={memh}
+```
+To the full URL matching what the browser sends:
+```
+_Graph?hasTariffs=true&hasBills=false&hasCustomers=false
+  &memh={memh}&hasTOU=$hasTOU&doBill=1
+  &GSTARTH=0&GSTARTN=0&GENDH=0&GENDN=0
+  &TRIGHT0=False&TLEFT0=True&TRIGHT1=False&TLEFT1=True
+  &TRIGHT2=False&TLEFT2=True&TRIGHT3=False&TLEFT3=True
+  &TRIGHT4=False&TLEFT4=True&TRIGHT5=False&TLEFT5=True
+  &TLEFT6=False&TRIGHT6=True
+  &GINCY={year}&GINCM={month}&GINCD=1
+  &TIMEMODE=2
+  &selGNAME_UTILITY={serial}$Electricity
   &TGIDX=0
-  &memh={memh}
 ```
 
-**Browse page option parsing:**
-```
-<option value="51990,107">Elster A1140: E0085 ; LT Room 1 ; Kuruman Mall ; Kuruman (98124008)</option>
-```
-Extract: entityId=51990, classId=107, full label for display.
+The date parameters `GINCY/GINCM/GINCD` represent the "Including" period (set to the start of the requested month). The actual From/To dates are set via `GSTARTD/GSTARTM/GSTARTY` and `GENDD/GENDM/GENDY` which appear in the `_DataDownload` URL.
 
-**Per-meter login:** Since each meter selection changes the session context, the safest approach is to login fresh for each meter download. This avoids session conflicts when downloading multiple meters sequentially.
+**2. Update `downloadMeterCSV` to pass serial and dates to `selectMeter`**
 
-**Files modified:**
-- `supabase/functions/fetch-pnpscada/index.ts` -- Rewrite `downloadMeterCSV` and update `list-meters` to use the correct endpoints
+Update the call from:
+```typescript
+selectMeter(session.jar, session.memh, entityId, classId)
+```
+To:
+```typescript
+selectMeter(session.jar, session.memh, entityId, classId, serial, startDate, endDate)
+```
+
+**3. Add a small delay after loading the graph**
+
+The user mentioned the graph "updates after five seconds" -- the server may need a moment to prepare data. Add a 2-3 second delay after loading the full `_Graph` page before hitting `_DataDownload`.
+
+### Files Modified
+- `supabase/functions/fetch-pnpscada/index.ts` -- Update `selectMeter` to build full `_Graph` URL with all parameters, update callers, add delay before download
 
