@@ -164,7 +164,21 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       }
     }
 
-    // Build guarantee map and display name map
+    // Step 1: Remove sources explicitly marked with zero guarantee (council/building meters)
+    if (sourceGuarantees && sourceGuarantees.length > 0) {
+      const zeroGuaranteeSources = new Set(
+        sourceGuarantees
+          .filter(sg => sg.guaranteed_kwh <= 0)
+          .map(sg => sg.source_label)
+      );
+      for (const src of distinctReadingSources) {
+        if (zeroGuaranteeSources.has(src)) {
+          distinctReadingSources.delete(src);
+        }
+      }
+    }
+
+    // Step 2: Build guarantee map and display name map
     const guaranteeMap = new Map<string, number>();
     const displayNameMap = new Map<string, string>();
     if (sourceGuarantees && sourceGuarantees.length > 0) {
