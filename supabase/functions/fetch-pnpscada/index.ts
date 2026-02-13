@@ -115,14 +115,42 @@ async function createSession(): Promise<{ jar: CookieJar; memh: string; overview
   const jar = new CookieJar();
   const rawHeaderLog: string[][] = [];
 
-  // POST login
+  // Step 0: GET the root page to establish a JSESSIONID before login (like a browser navigating to the site)
+  // NOTE: Do NOT GET /_Login — the server treats it as a failed login attempt and taints the session
+  console.log('Step 0 - Pre-establishing session by GETting root page...');
+  const preLoginResponse = await fetch(`${PNPSCADA_BASE_URL}/`, {
+    method: 'GET',
+    headers: { ...BROWSER_HEADERS },
+    redirect: 'manual',
+  });
+  jar.addFromResponse(preLoginResponse);
+  rawHeaderLog.push(CookieJar.rawHeaders(preLoginResponse));
+  console.log('Pre-login status:', preLoginResponse.status, '| cookies:', jar.names.join(', '));
+  // Follow one redirect if needed to get the session cookie
+  const preRedirect = preLoginResponse.headers.get('location');
+  if (preRedirect) {
+    const preRedirectUrl = preRedirect.startsWith('http') ? preRedirect : `${PNPSCADA_BASE_URL}${preRedirect}`;
+    console.log('Pre-login redirect to:', preRedirectUrl);
+    const preRedirectResp = await fetch(preRedirectUrl, {
+      headers: { ...BROWSER_HEADERS, 'Cookie': jar.toString() },
+      redirect: 'manual',
+    });
+    jar.addFromResponse(preRedirectResp);
+    rawHeaderLog.push(CookieJar.rawHeaders(preRedirectResp));
+    await preRedirectResp.text();
+    console.log('Pre-login after redirect cookies:', jar.names.join(', '));
+  } else {
+    await preLoginResponse.text();
+  }
+
+  // Step 1: POST login with credentials, sending the pre-established session cookies
   const formData = new URLSearchParams();
   formData.append('lusr', username);
   formData.append('lpwd', password);
 
   const loginResponse = await fetch(`${PNPSCADA_BASE_URL}/_Login`, {
     method: 'POST',
-    headers: { ...BROWSER_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { ...BROWSER_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': jar.toString() },
     body: formData.toString(),
     redirect: 'manual',
   });
