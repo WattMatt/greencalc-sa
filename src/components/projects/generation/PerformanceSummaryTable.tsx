@@ -147,26 +147,51 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
     const totalGuarantee = monthData.guaranteed_kwh ?? 0;
     const dailyGuarantee = totalGuarantee / totalDays;
 
+    // Build a lookup: key = "day-minuteOfDay-source" -> actual_kwh
+    const readingLookup = new Map<string, number | null>();
     if (readings) {
       for (const r of readings) {
         const ts = new Date(r.timestamp);
         const day = ts.getDate();
-        const hour = ts.getHours();
+        const minutes = ts.getHours() * 60 + ts.getMinutes();
+        const sourceLabel = r.source || "csv";
+        const key = `${day}-${minutes}-${sourceLabel}`;
+        const existing = readingLookup.get(key);
+        // Sum if multiple readings at same slot (shouldn't happen, but be safe)
+        if (existing !== undefined) {
+          readingLookup.set(key, (existing ?? 0) + (Number(r.actual_kwh) || 0));
+        } else {
+          readingLookup.set(key, r.actual_kwh != null ? Number(r.actual_kwh) : null);
+        }
+
+        // Accumulate actual generation per day
         const entry = dayMap.get(day);
-        if (!entry) continue;
+        if (entry) {
+          entry.actual += Number(r.actual_kwh) || 0;
+        }
+      }
+    }
 
-        const kwh = Number(r.actual_kwh) || 0;
-        entry.actual += kwh;
+    // Generate expected sun-hour slots and check for missing/zero data
+    const sunStartMin = 360; // 06:00
+    const sunEndMin = 1050;  // 17:30
+    const slotIntervalMin = intervalHours * 60;
 
-        // Downtime: during sun hours (06:00 inclusive – 17:30 inclusive), per source
-        const minutes = hour * 60 + ts.getMinutes();
-        if (minutes >= 360 && minutes <= 1050 && (r.actual_kwh == null || Number(r.actual_kwh) === 0)) {
-          const sourceLabel = r.source || "csv";
-          const sourceGuarantee = guaranteeMap.get(sourceLabel) ?? 0;
-          const sourceDailyGuarantee = sourceGuarantee / totalDays;
+    for (let d = 1; d <= totalDays; d++) {
+      const entry = dayMap.get(d)!;
+      for (const sourceLabel of distinctReadingSources) {
+        const sourceGuarantee = guaranteeMap.get(sourceLabel) ?? 0;
+        const sourceDailyGuarantee = sourceGuarantee / totalDays;
+        const perSlotEnergy = sourceDailyGuarantee / sunHourSlots;
 
-          entry.downtimeSlots += 1;
-          entry.downtimeEnergy += sourceDailyGuarantee / sunHourSlots;
+        for (let min = sunStartMin; min <= sunEndMin; min += slotIntervalMin) {
+          const key = `${d}-${min}-${sourceLabel}`;
+          const val = readingLookup.get(key);
+          // Missing slot OR zero/null -> downtime
+          if (val === undefined || val === null || val === 0) {
+            entry.downtimeSlots += 1;
+            entry.downtimeEnergy += perSlotEnergy;
+          }
         }
       }
     }
