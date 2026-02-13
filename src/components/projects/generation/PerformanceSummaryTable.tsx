@@ -555,9 +555,10 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                         const ratio = guarantee > 0 ? actual / guarantee : actual > 0 ? 1 : 0;
                         let colorClass = "";
                         if (guarantee > 0) {
-                          if (ratio >= 1) colorClass = "bg-green-500/20 text-green-700 dark:text-green-400";
-                          else if (ratio >= 0.5) colorClass = "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400";
-                          else colorClass = "bg-red-500/20 text-destructive";
+                          if (ratio > 1) colorClass = "bg-green-500/20 text-green-700 dark:text-green-400";
+                          else if (ratio > 0.95) colorClass = "bg-orange-500/20 text-orange-700 dark:text-orange-400";
+                          else if (ratio > 0.5) colorClass = "bg-red-500/20 text-destructive";
+                          else colorClass = "bg-muted text-muted-foreground";
                         }
                         return (
                           <>
