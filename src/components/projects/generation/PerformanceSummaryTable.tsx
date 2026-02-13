@@ -107,7 +107,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
     queryFn: async () => {
       const { data, error } = await supabase
         .from("generation_source_guarantees")
-        .select("source_label, guaranteed_kwh, meter_type")
+        .select("source_label, guaranteed_kwh, meter_type, reading_source")
         .eq("project_id", projectId)
         .eq("month", month)
         .eq("year", year);
@@ -166,11 +166,14 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
 
     // Step 1: Remove sources flagged as council/building meters
     if (sourceGuarantees && sourceGuarantees.length > 0) {
-      const councilSources = new Set(
-        sourceGuarantees
-          .filter(sg => sg.meter_type === 'council')
-          .map(sg => sg.source_label)
-      );
+      const councilSources = new Set<string>();
+      for (const sg of sourceGuarantees) {
+        if (sg.meter_type === 'council') {
+          // Remove by reading_source mapping if set, otherwise by source_label
+          if (sg.reading_source) councilSources.add(sg.reading_source);
+          councilSources.add(sg.source_label);
+        }
+      }
       for (const src of distinctReadingSources) {
         if (councilSources.has(src)) {
           distinctReadingSources.delete(src);
@@ -178,38 +181,46 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       }
     }
 
-    // Step 2: Build guarantee map and display name map
+    // Step 2: Build guarantee map and display name map using reading_source mapping
     const guaranteeMap = new Map<string, number>();
     const displayNameMap = new Map<string, string>();
     if (sourceGuarantees && sourceGuarantees.length > 0) {
-      let hasMatch = false;
+      // First pass: use explicit reading_source mappings
+      let mappedCount = 0;
       for (const sg of sourceGuarantees) {
-        if (distinctReadingSources.has(sg.source_label)) {
-          guaranteeMap.set(sg.source_label, sg.guaranteed_kwh);
-          displayNameMap.set(sg.source_label, sg.source_label);
-          hasMatch = true;
+        if (sg.meter_type === 'council') continue;
+        if (sg.reading_source && distinctReadingSources.has(sg.reading_source)) {
+          guaranteeMap.set(sg.reading_source, sg.guaranteed_kwh);
+          displayNameMap.set(sg.reading_source, sg.source_label);
+          mappedCount++;
         }
       }
-      if (!hasMatch && distinctReadingSources.size > 0) {
-        const totalSourceGuarantee = sourceGuarantees.reduce((sum, sg) => sum + sg.guaranteed_kwh, 0);
-        const perSource = totalSourceGuarantee / distinctReadingSources.size;
-        const readingSourceArr = Array.from(distinctReadingSources);
-        const guaranteeArr = sourceGuarantees.map(sg => sg.source_label);
-        for (let i = 0; i < readingSourceArr.length; i++) {
-          const src = readingSourceArr[i];
-          guaranteeMap.set(src, perSource);
-          // Map reading source to guarantee label by index if available
-          if (i < guaranteeArr.length) {
-            displayNameMap.set(src, guaranteeArr[i]);
+
+      // Second pass: if no explicit mappings, try direct source_label match
+      if (mappedCount === 0) {
+        for (const sg of sourceGuarantees) {
+          if (sg.meter_type === 'council') continue;
+          if (distinctReadingSources.has(sg.source_label)) {
+            guaranteeMap.set(sg.source_label, sg.guaranteed_kwh);
+            displayNameMap.set(sg.source_label, sg.source_label);
+            mappedCount++;
           }
         }
       }
-    }
 
-    // Remove sources that have no guarantee assigned (council/building meters)
-    for (const src of distinctReadingSources) {
-      if (!guaranteeMap.has(src) || (guaranteeMap.get(src) ?? 0) <= 0) {
-        distinctReadingSources.delete(src);
+      // Fallback: distribute solar guarantees evenly across reading sources
+      if (mappedCount === 0 && distinctReadingSources.size > 0) {
+        const solarGuarantees = sourceGuarantees.filter(sg => sg.meter_type !== 'council');
+        const totalSourceGuarantee = solarGuarantees.reduce((sum, sg) => sum + sg.guaranteed_kwh, 0);
+        const perSource = totalSourceGuarantee / distinctReadingSources.size;
+        const readingSourceArr = Array.from(distinctReadingSources);
+        for (let i = 0; i < readingSourceArr.length; i++) {
+          const src = readingSourceArr[i];
+          guaranteeMap.set(src, perSource);
+          if (i < solarGuarantees.length) {
+            displayNameMap.set(src, solarGuarantees[i].source_label);
+          }
+        }
       }
     }
 

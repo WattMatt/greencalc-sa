@@ -1,0 +1,1 @@
+ALTER TABLE public.generation_source_guarantees ADD COLUMN reading_source text;
