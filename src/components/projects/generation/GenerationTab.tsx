@@ -84,6 +84,8 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
     queryClient.invalidateQueries({ queryKey: ["generation-record", projectId, year, month] });
     queryClient.invalidateQueries({ queryKey: ["generation-daily", projectId, year, month] });
     queryClient.invalidateQueries({ queryKey: ["generation-readings", projectId, year, month] });
+    queryClient.invalidateQueries({ queryKey: ["generation-readings-chart", projectId, year, month] });
+    queryClient.invalidateQueries({ queryKey: ["generation-readings-daily", projectId, year, month] });
   };
 
   return (
