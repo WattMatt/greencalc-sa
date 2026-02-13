@@ -1,32 +1,42 @@
 
 
-# Fix: Building Toggle Stacking Behavior and Button Order
+# Filter Council Meters from Downtime and Performance Tabs
 
-## Summary
+## Problem
+The "31190 - Parkdene Solar Checkers" council meter source appears in the Down Time and Performance summary tables because it has `actual_kwh` values. The current filter only checks for `actual_kwh > 0`, which is insufficient to distinguish solar PV sources from council meters.
 
-Two changes:
-1. Swap the **kWh** and **Building** button positions so order becomes: Sources, Building, kWh
-2. Fix the stacking logic so when **Building is OFF**, the council demand bar appears as a standalone bar next to the solar bars (not stacked with them)
-
-## Stacking Behavior Matrix
-
-| Sources | Building | Solar Bars | Council Demand Bar |
-|---------|----------|------------|--------------------|
-| OFF | OFF | Standalone bar | Standalone bar (side by side) |
-| OFF | ON | stackId="building" | stackId="building" (stacked) |
-| ON | OFF | stackId="solar" (stacked sources) | Standalone bar (side by side) |
-| ON | ON | stackId="solar" | stackId="solar" (all stacked together) |
+## Solution
+After building the guarantee map, filter `distinctReadingSources` to only include sources that ended up with a non-zero guarantee. Sources without guarantees are not solar PV sources and should be excluded from the summary tables.
 
 ## Technical Details
 
-### File: `src/components/projects/generation/PerformanceChart.tsx`
+**File: `src/components/projects/generation/PerformanceSummaryTable.tsx`**
 
-**Change 1 — Swap buttons (lines 408-423):**
-Move the Building button block (lines 416-423) before the kWh button block (lines 408-415).
+After the guarantee mapping logic (around line 193), add a filtering step:
 
-**Change 2 — Fix building_load stackId (line 551):**
-Current: `stackId={stackBars ? "building" : (showSources ? "solar" : undefined)}`
-New: `stackId={stackBars ? (showSources ? "solar" : "building") : undefined}`
+```typescript
+// Remove sources that have no guarantee assigned (council/building meters)
+for (const src of distinctReadingSources) {
+  if (!guaranteeMap.has(src) || (guaranteeMap.get(src) ?? 0) <= 0) {
+    distinctReadingSources.delete(src);
+  }
+}
+```
 
-When Building toggle is OFF (`stackBars` is false), `stackId` becomes `undefined`, making it a standalone bar. When Building is ON and Sources is ON, it joins the `"solar"` stack. When Building is ON and Sources is OFF, it uses `"building"` stack shared with the solar bar.
+Additionally, in the reading processing loop (lines 217-237), skip readings from sources not in `distinctReadingSources` to avoid counting council meter data in the daily totals:
 
+```typescript
+if (readings) {
+  for (const r of readings) {
+    // ...existing lookup code...
+    const sourceLabel = r.source || "csv";
+    
+    // Skip sources not in our filtered solar PV set
+    if (!distinctReadingSources.has(sourceLabel)) continue;
+    
+    // ...rest of processing...
+  }
+}
+```
+
+This ensures the daily `actual` totals, downtime calculations, and all downstream tabs (Production, Down Time, Revenue, Performance) only reflect solar PV generation data backed by guarantees.
