@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -434,9 +434,9 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-xs py-2 px-2 w-12">Days</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Down Time (06:00–18:00)</TableHead>
-                    {distinctSources.map(src => (
-                      <TableHead key={src} className="text-xs py-2 px-2 text-right" colSpan={2}>
+                    <TableHead className="text-xs py-2 px-2 text-right min-w-[80px]">Down Time (06:00–18:00)</TableHead>
+                    {distinctSources.map((src, idx) => (
+                      <TableHead key={src} className={cn("text-xs py-2 px-2 text-center border-l min-w-[180px]", idx % 2 === 1 && "bg-muted/20")} colSpan={2}>
                         {sourceDisplayNames.get(src) || src}
                       </TableHead>
                     ))}
@@ -444,12 +444,12 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                   </TableRow>
                   <TableRow>
                     <TableHead className="text-xs py-1 px-2"></TableHead>
-                    <TableHead className="text-xs py-1 px-2 text-right">Slots</TableHead>
-                    {distinctSources.map(src => (
-                      <>
-                        <TableHead key={`${src}-prod`} className="text-xs py-1 px-2 text-right">Production (kWh)</TableHead>
-                        <TableHead key={`${src}-dt`} className="text-xs py-1 px-2 text-right">DT Slots</TableHead>
-                      </>
+                    <TableHead className="text-xs py-1 px-2 text-right">30-Min Intervals</TableHead>
+                    {distinctSources.map((src, idx) => (
+                      <React.Fragment key={`${src}-sub`}>
+                        <TableHead className={cn("text-xs py-1 px-2 text-right border-l min-w-[90px]", idx % 2 === 1 && "bg-muted/20")}>Lost Production (kWh)</TableHead>
+                        <TableHead className={cn("text-xs py-1 px-2 text-right min-w-[90px]", idx % 2 === 1 && "bg-muted/20")}>30-Min Intervals</TableHead>
+                      </React.Fragment>
                     ))}
                     <TableHead className="text-xs py-1 px-2"></TableHead>
                   </TableRow>
@@ -459,13 +459,13 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableRow key={row.day} className={cn(i % 2 === 0 ? "bg-muted/30" : "")}>
                       <TableCell className="text-xs py-1.5 px-2 font-medium">{row.day}</TableCell>
                       <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{row.downtimeSlots}</TableCell>
-                      {distinctSources.map(src => {
+                      {distinctSources.map((src, idx) => {
                         const sd = sourceDayMap.get(`${row.day}-${src}`);
                         return (
-                          <>
-                            <TableCell key={`${src}-prod-${row.day}`} className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(sd?.actual ?? 0)}</TableCell>
-                            <TableCell key={`${src}-dt-${row.day}`} className="text-xs py-1.5 px-2 text-right tabular-nums">{sd?.downtimeSlots ?? 0}</TableCell>
-                          </>
+                          <React.Fragment key={`${src}-${row.day}`}>
+                            <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums border-l", idx % 2 === 1 && "bg-muted/20")}>{formatNum(sd?.downtimeEnergy ?? 0)}</TableCell>
+                            <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums", idx % 2 === 1 && "bg-muted/20")}>{sd?.downtimeSlots ?? 0}</TableCell>
+                          </React.Fragment>
                         );
                       })}
                       <TableCell className="text-xs py-1.5 px-2 text-muted-foreground">—</TableCell>
@@ -476,13 +476,13 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                   <TableRow className="bg-primary/10 font-bold">
                     <TableCell className="text-xs py-2 px-2 font-bold">Total</TableCell>
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{totals.downtimeSlots}</TableCell>
-                    {distinctSources.map(src => {
+                    {distinctSources.map((src, idx) => {
                       const st = sourceTotals.get(src);
                       return (
-                        <>
-                          <TableCell key={`${src}-prod-total`} className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(st?.actual ?? 0)}</TableCell>
-                          <TableCell key={`${src}-dt-total`} className="text-xs py-2 px-2 text-right tabular-nums font-bold">{st?.downtimeSlots ?? 0}</TableCell>
-                        </>
+                        <React.Fragment key={`${src}-total`}>
+                          <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold border-l", idx % 2 === 1 && "bg-muted/20")}>{formatNum(st?.downtimeEnergy ?? 0)}</TableCell>
+                          <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold", idx % 2 === 1 && "bg-muted/20")}>{st?.downtimeSlots ?? 0}</TableCell>
+                        </React.Fragment>
                       );
                     })}
                     <TableCell className="text-xs py-2 px-2"></TableCell>
