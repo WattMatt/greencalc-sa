@@ -144,7 +144,7 @@ async function searchMeters(jar: CookieJar, memh: string, searchStr: string = '*
 }
 
 // Select a meter into the session, load its graph page, and get its memh
-async function selectMeter(jar: CookieJar, memh: string, entityId: string, classId: string): Promise<string> {
+async function selectMeter(jar: CookieJar, memh: string, entityId: string, classId: string): Promise<{ memh: string; graphHtml: string }> {
   // Step 1: Load the meter overview page to set session context
   const overviewUrl = `${PNPSCADA_BASE_URL}/overview?PNPENTID=${entityId}&PNPENTCLASID=${classId}&memh=${memh}`;
   console.log('Selecting meter (overview):', overviewUrl);
@@ -162,8 +162,18 @@ async function selectMeter(jar: CookieJar, memh: string, entityId: string, class
   const graphHtml = await graphResp.text();
   const graphMemhMatch = graphHtml.match(/memh=(-?\d+)/);
   const finalMemh = graphMemhMatch ? graphMemhMatch[1] : overviewMemh;
-  console.log('Meter ready, memh:', finalMemh, '| graph page:', graphHtml.length, 'bytes');
-  return finalMemh;
+  console.log('Meter ready, memh:', finalMemh, '| graph page:', graphHtml.length, 'bytes', '| cookies:', jar.count);
+
+  // Log all links and data endpoints found on graph page
+  const dataLinks: string[] = [];
+  const linkPattern = /href=['"]([^'"]*(?:DataDownload|csv|download|data|profile|nrs)[^'"]*)['"]/gi;
+  let match;
+  while ((match = linkPattern.exec(graphHtml)) !== null) {
+    dataLinks.push(match[1]);
+  }
+  console.log('Graph page data links:', JSON.stringify(dataLinks.slice(0, 10)));
+
+  return { memh: finalMemh, graphHtml };
 }
 
 // Build _DataDownload URL and fetch CSV
@@ -174,18 +184,52 @@ async function downloadCSV(jar: CookieJar, memh: string, serial: string, startDa
   const csvUrl = `${PNPSCADA_BASE_URL}/_DataDownload?CSV=Yes&TEMPPATH=../temp/&LOCALTEMPPATH=docroot/temp/&GSTARTH=0&GSTARTN=0&GENDH=0&GENDN=0&GSTARTD=${start.getUTCDate()}&GSTARTY=${start.getUTCFullYear()}&GSTARTM=${start.getUTCMonth() + 1}&GENDD=${end.getUTCDate()}&GENDY=${end.getUTCFullYear()}&GENDM=${end.getUTCMonth() + 1}&selGNAME_UTILITY=${serial}$Electricity&TGIDX=0&memh=${memh}`;
   console.log('Downloading CSV:', csvUrl);
 
+  // Use Deno.HttpClient or raw TCP to avoid content-length:0 issue
+  // First try: read body as stream to bypass content-length
   const response = await fetch(csvUrl, {
     headers: {
       'Cookie': jar.toString(),
       'Referer': `${PNPSCADA_BASE_URL}/_Graph?memh=${memh}`,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept-Encoding': 'identity',
+      'Connection': 'keep-alive',
     },
   });
   jar.addFromResponse(response);
-  const text = await response.text();
-  console.log(`CSV response: status=${response.status}, length=${text.length}, content-type=${response.headers.get('content-type')}, snippet: ${text.slice(0, 200)}`);
-  return text;
+
+  const headers = Object.fromEntries(response.headers.entries());
+  console.log(`CSV response headers:`, JSON.stringify(headers));
+
+  // Try stream reading to get all data
+  if (response.body) {
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        totalBytes += value.length;
+      }
+    }
+    
+    console.log(`Stream read: ${totalBytes} bytes in ${chunks.length} chunks`);
+    
+    if (totalBytes > 0) {
+      const merged = new Uint8Array(totalBytes);
+      let offset = 0;
+      for (const chunk of chunks) {
+        merged.set(chunk, offset);
+        offset += chunk.length;
+      }
+      return new TextDecoder().decode(merged);
+    }
+  }
+
+  console.log('Stream empty, content-length was:', response.headers.get('content-length'));
+  return '';
 }
 
 // Full per-meter download: fresh login -> select meter -> download CSV
@@ -195,20 +239,46 @@ async function downloadMeterCSV(entityId: string, classId: string, serial: strin
     return JSON.stringify({ error: 'Authentication failed for meter ' + serial });
   }
 
-  // Select the meter into the session
-  const meterMemh = await selectMeter(session.jar, session.memh, entityId, classId);
+  const { memh: meterMemh, graphHtml } = await selectMeter(session.jar, session.memh, entityId, classId);
 
-  // Download the CSV
-  const csvData = await downloadCSV(session.jar, meterMemh, serial, startDate, endDate);
+  // Extract any _DataDownload link from graph page HTML
+  const downloadLinkMatch = graphHtml.match(/href="([^"]*_DataDownload[^"]*)"/i);
+  if (downloadLinkMatch) {
+    const downloadLink = downloadLinkMatch[1].replace(/&amp;/g, '&');
+    const fullUrl = downloadLink.startsWith('http') ? downloadLink : `${PNPSCADA_BASE_URL}/${downloadLink.replace(/^\//, '')}`;
+    console.log('Found _DataDownload link:', fullUrl);
 
-  // Validate we got actual CSV data
-  if (csvData.includes('<HTML') || csvData.includes('<html') || csvData.includes('authenticate')) {
-    return JSON.stringify({
-      error: 'Got HTML instead of CSV - session may have expired',
-      htmlSnippet: csvData.slice(0, 2000),
+    // Modify with our date range
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    let modifiedUrl = fullUrl
+      .replace(/GSTARTD=\d+/, `GSTARTD=${start.getUTCDate()}`)
+      .replace(/GSTARTY=\d+/, `GSTARTY=${start.getUTCFullYear()}`)
+      .replace(/GSTARTM=\d+/, `GSTARTM=${start.getUTCMonth() + 1}`)
+      .replace(/GENDD=\d+/, `GENDD=${end.getUTCDate()}`)
+      .replace(/GENDY=\d+/, `GENDY=${end.getUTCFullYear()}`)
+      .replace(/GENDM=\d+/, `GENDM=${end.getUTCMonth() + 1}`);
+    
+    console.log('Modified URL:', modifiedUrl);
+    const resp = await fetch(modifiedUrl, {
+      headers: { 'Cookie': session.jar.toString(), 'User-Agent': 'Mozilla/5.0', 'Accept-Encoding': 'identity' },
     });
+    session.jar.addFromResponse(resp);
+    const text = await resp.text();
+    console.log('Graph link download:', text.length, 'bytes, status:', resp.status);
+    if (text.length > 0 && !text.includes('<HTML') && !text.includes('authenticate')) {
+      return text;
+    }
   }
 
+  // Fallback: constructed URL
+  const csvData = await downloadCSV(session.jar, meterMemh, serial, startDate, endDate);
+  if (csvData.includes('<HTML') || csvData.includes('<html') || csvData.includes('authenticate')) {
+    return JSON.stringify({
+      error: 'Got HTML instead of CSV',
+      graphHtmlSnippet: graphHtml.slice(0, 5000),
+    });
+  }
   return csvData;
 }
 
