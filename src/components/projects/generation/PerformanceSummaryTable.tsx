@@ -462,7 +462,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                   </TableRow>
                   <TableRow>
                     <TableHead className="text-xs py-1 px-2"></TableHead>
-                    <TableHead className="text-xs py-1 px-2 text-right">30-Min Intervals</TableHead>
+                    <TableHead className="text-xs py-1 px-2 text-right">Lost Production (kWh)</TableHead>
                     {distinctSources.map((src, idx) => (
                       <React.Fragment key={`${src}-sub`}>
                         <TableHead className={cn("text-xs py-1 px-2 text-right border-l min-w-[90px]", idx % 2 === 1 && "bg-muted/20")}>Lost Production (kWh)</TableHead>
@@ -476,7 +476,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                   {dailyRows.map((row, i) => (
                     <TableRow key={row.day} className={cn(i % 2 === 0 ? "bg-muted/30" : "")}>
                       <TableCell className="text-xs py-1.5 px-2 font-medium">{row.day}</TableCell>
-                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{row.downtimeSlots}</TableCell>
+                      <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatNum(row.downtimeEnergy)}</TableCell>
                       {distinctSources.map((src, idx) => {
                         const sd = sourceDayMap.get(`${row.day}-${src}`);
                         return (
@@ -493,7 +493,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                 <TableFooter>
                   <TableRow className="bg-primary/10 font-bold">
                     <TableCell className="text-xs py-2 px-2 font-bold">Total</TableCell>
-                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{totals.downtimeSlots}</TableCell>
+                    <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.downtimeEnergy)}</TableCell>
                     {distinctSources.map((src, idx) => {
                       const st = sourceTotals.get(src);
                       return (
