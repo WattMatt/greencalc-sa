@@ -2,11 +2,14 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
 import { ActualGenerationCard } from "./ActualGenerationCard";
 import { GuaranteedGenerationCard } from "./GuaranteedGenerationCard";
 import { BuildingLoadCard } from "./BuildingLoadCard";
 import { PerformanceChart } from "./PerformanceChart";
 import { PerformanceSummaryTable } from "./PerformanceSummaryTable";
+import { SyncScadaDialog } from "./SyncScadaDialog";
 
 export interface GenerationRecord {
   id: string;
@@ -42,6 +45,7 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
   const prev = getPreviousMonth();
   const [selectedMonth, setSelectedMonth] = useState(prev.month.toString());
   const [selectedYear, setSelectedYear] = useState(prev.year.toString());
+  const [syncOpen, setSyncOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const currentYear = new Date().getFullYear();
@@ -84,29 +88,42 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <span className="text-sm font-medium text-muted-foreground">Month:</span>
-        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-          <SelectTrigger className="w-36 h-8">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {MONTH_FULL_NAMES.map((name, i) => (
-              <SelectItem key={i + 1} value={(i + 1).toString()}>{name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={selectedYear} onValueChange={setSelectedYear}>
-          <SelectTrigger className="w-24 h-8">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {yearOptions.map((y) => (
-              <SelectItem key={y} value={y}>{y}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground">Month:</span>
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <SelectTrigger className="w-36 h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTH_FULL_NAMES.map((name, i) => (
+                <SelectItem key={i + 1} value={(i + 1).toString()}>{name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <SelectTrigger className="w-24 h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((y) => (
+                <SelectItem key={y} value={y}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setSyncOpen(true)}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Sync SCADA
+        </Button>
       </div>
+
+      <SyncScadaDialog
+        open={syncOpen}
+        onOpenChange={setSyncOpen}
+        projectId={projectId}
+        onDataSynced={refetch}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <ActualGenerationCard
