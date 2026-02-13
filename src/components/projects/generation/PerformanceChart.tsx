@@ -406,20 +406,20 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
             Sources
           </Button>
           <Button
-            variant={displayUnit === "kW" ? "default" : "outline"}
-            size="sm"
-            className="text-xs px-2 h-8"
-            onClick={() => setDisplayUnit(displayUnit === "kWh" ? "kW" : "kWh")}
-          >
-            {displayUnit === "kW" ? "kW" : "kWh"}
-          </Button>
-          <Button
             variant={stackBars ? "default" : "outline"}
             size="sm"
             className="text-xs px-2 h-8"
             onClick={() => setStackBars(!stackBars)}
           >
             Building
+          </Button>
+          <Button
+            variant={displayUnit === "kW" ? "default" : "outline"}
+            size="sm"
+            className="text-xs px-2 h-8"
+            onClick={() => setDisplayUnit(displayUnit === "kWh" ? "kW" : "kWh")}
+          >
+            {displayUnit === "kW" ? "kW" : "kWh"}
           </Button>
           <ToggleGroup type="single" value={hoursFilter} onValueChange={(v) => v && setHoursFilter(v as "all" | "sun")} size="sm" variant="outline">
             <ToggleGroupItem value="all" className="text-xs px-2 h-8">All Hours</ToggleGroupItem>
@@ -548,7 +548,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                   strokeWidth={1}
                   radius={stackBars ? [2, 2, 0, 0] : undefined}
                   hide={hiddenSeries.has("building_load")}
-                  stackId={stackBars ? "building" : (showSources ? "solar" : undefined)}
+                  stackId={stackBars ? (showSources ? "solar" : "building") : undefined}
                 />
                 {guaranteeValue != null && (
                   <Line
