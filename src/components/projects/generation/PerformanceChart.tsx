@@ -567,17 +567,21 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                 <p className="text-xs font-medium text-muted-foreground">{singleDayLabel}</p>
                 <div className="flex items-center justify-center gap-4 text-xs flex-wrap">
                   {showSources ? (
-                    sourceLabels.map((label, i) => (
-                      <span key={i} className="flex items-center gap-1.5">
-                        <span className="inline-block w-3 h-3 rounded-sm" style={{ background: SOURCE_COLORS[i % SOURCE_COLORS.length], border: "1px solid #d9d9d9" }} />
-                        {label}
-                      </span>
-                    ))
+                    sourceLabels.map((label, i) => {
+                      const key = `source_${i}`;
+                      const hidden = hiddenSeries.has(key);
+                      return (
+                        <span key={i} className="flex items-center gap-1.5 cursor-pointer select-none" style={{ opacity: hidden ? 0.4 : 1 }} onClick={() => setHiddenSeries(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; })}>
+                          <span className="inline-block w-3 h-3 rounded-sm" style={{ background: SOURCE_COLORS[i % SOURCE_COLORS.length], border: "1px solid #d9d9d9" }} />
+                          {label}
+                        </span>
+                      );
+                    })
                   ) : (
-                    <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#f0e442", border: "1px solid #d9d9d9" }} /> Solar Generation</span>
+                    <span className="flex items-center gap-1.5 cursor-pointer select-none" style={{ opacity: hiddenSeries.has("actual") ? 0.4 : 1 }} onClick={() => setHiddenSeries(prev => { const next = new Set(prev); next.has("actual") ? next.delete("actual") : next.add("actual"); return next; })}><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#f0e442", border: "1px solid #d9d9d9" }} /> Solar Generation</span>
                   )}
-                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#898989", border: "1px solid #d9d9d9" }} /> Council Demand</span>
-                  <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-1" style={{ background: "#00b0f0" }} /> Guaranteed Generation</span>
+                  <span className="flex items-center gap-1.5 cursor-pointer select-none" style={{ opacity: hiddenSeries.has("building_load") ? 0.4 : 1 }} onClick={() => setHiddenSeries(prev => { const next = new Set(prev); next.has("building_load") ? next.delete("building_load") : next.add("building_load"); return next; })}><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#898989", border: "1px solid #d9d9d9" }} /> Council Demand</span>
+                  <span className="flex items-center gap-1.5 cursor-pointer select-none" style={{ opacity: hiddenSeries.has("guarantee") ? 0.4 : 1 }} onClick={() => setHiddenSeries(prev => { const next = new Set(prev); next.has("guarantee") ? next.delete("guarantee") : next.add("guarantee"); return next; })}><span className="inline-block w-3 h-1" style={{ background: "#00b0f0" }} /> Guaranteed Generation</span>
                 </div>
               </div>
             )}
