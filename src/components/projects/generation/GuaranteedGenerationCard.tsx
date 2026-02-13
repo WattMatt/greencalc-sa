@@ -66,30 +66,32 @@ export function GuaranteedGenerationCard({ projectId, month, year, monthData, on
           <CardTitle className="text-sm flex items-center justify-between">
             Guaranteed Generation (kWh)
             <div className="flex items-center gap-1">
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={isResetting || monthData.guaranteed_kwh == null}
-                  >
-                    <RotateCcw className="h-3 w-3 mr-1" /> Reset
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Reset Guarantee Data</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will delete all source guarantee values and associations for {monthData.fullName} {year}. This action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleReset}>Reset</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              {monthData.guaranteed_kwh != null && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-muted-foreground"
+                      disabled={isResetting}
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" /> Reset
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Reset Guarantee Data</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will delete all source guarantee values and associations for {monthData.fullName} {year}. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleReset}>Reset</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
               <Button
                 variant="outline"
                 size="sm"
