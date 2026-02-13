@@ -472,8 +472,6 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableHead className="text-xs py-2 px-2 text-right">Metered Generation (R)</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Down Time (R)</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Theoretical Gen (R)</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Over Production (R)</TableHead>
-                    <TableHead className="text-xs py-2 px-2 text-right">Realised Consumption (R)</TableHead>
                     <TableHead className="text-xs py-2 px-2 text-right">Guaranteed Gen Actual (R)</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -487,8 +485,6 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                         <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.yieldGuarantee * rate)}</TableCell>
                         <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.meteredGeneration * rate)}</TableCell>
                         <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.downtimeEnergy * rate)}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.theoreticalGeneration * rate)}</TableCell>
-                        <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(overProd * rate)}</TableCell>
                         <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.theoreticalGeneration * rate)}</TableCell>
                         <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums font-medium", guaranteedActual < 0 ? "text-destructive" : "text-primary")}>
                           {formatRand(guaranteedActual * rate)}
@@ -507,8 +503,6 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                         <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatRand(totals.yieldGuarantee * rate)}</TableCell>
                         <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatRand(totals.meteredGeneration * rate)}</TableCell>
                         <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatRand(totals.downtimeEnergy * rate)}</TableCell>
-                        <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatRand(totals.theoreticalGeneration * rate)}</TableCell>
-                        <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatRand(totalOverProd * rate)}</TableCell>
                         <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatRand(totals.theoreticalGeneration * rate)}</TableCell>
                         <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold", totalGuarActual < 0 ? "text-destructive" : "text-primary")}>
                           {formatRand(totalGuarActual * rate)}
