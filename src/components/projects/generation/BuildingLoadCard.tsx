@@ -147,7 +147,7 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
 
         const { error } = await supabase
           .from("generation_readings")
-          .upsert(upsertBatch, { onConflict: "project_id,timestamp" });
+          .upsert(upsertBatch, { onConflict: "project_id,timestamp,source" });
         if (error) throw error;
       }
     }
