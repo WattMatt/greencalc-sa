@@ -188,9 +188,11 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
           const key = `${d}-${min}-${sourceLabel}`;
           const val = readingLookup.get(key);
           // Missing slot OR zero/null -> downtime
-          if (val === undefined || val === null || val === 0) {
+          const actualVal = (val !== undefined && val !== null) ? val : 0;
+          const threshold = perSlotEnergy * 0.01; // 1% of expected slot energy
+          if (actualVal < threshold) {
             entry.downtimeSlots += 1;
-            entry.downtimeEnergy += perSlotEnergy;
+            entry.downtimeEnergy += (perSlotEnergy - actualVal);
           }
         }
       }
