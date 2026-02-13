@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface MonthData {
   month: number;
@@ -117,13 +118,41 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return timeInMinutes >= 360 && timeInMinutes <= 1050;
   }
 
-  // Extract unique source labels
+  // Extract unique source labels, filtering out stale 'csv' entries
   const sourceLabels = useMemo(() => {
     if (!readings) return [];
     const set = new Set<string>();
-    for (const r of readings) if (r.source) set.add(r.source);
+    for (const r of readings) if (r.source && r.source !== 'csv') set.add(r.source);
     return Array.from(set).sort();
   }, [readings]);
+
+  // Query source guarantees to map raw source names to display labels
+  const { data: chartSourceGuarantees } = useQuery({
+    queryKey: ["chart-source-guarantees", projectId, year, month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("generation_source_guarantees")
+        .select("source_label, reading_source, meter_type")
+        .eq("project_id", projectId)
+        .eq("month", month)
+        .eq("year", year);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Build display name map: raw source -> friendly label
+  const sourceDisplayNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!chartSourceGuarantees) return map;
+    for (const sg of chartSourceGuarantees) {
+      if (sg.meter_type === 'council') continue;
+      if (sg.reading_source) {
+        map.set(sg.reading_source, sg.source_label);
+      }
+    }
+    return map;
+  }, [chartSourceGuarantees]);
 
   // Aggregate readings across all sources by timestamp (used when showSources is false)
   const aggregatedReadings = useMemo(() => {
@@ -366,18 +395,19 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return (d.actual ?? 0) > 0 || (d.building_load ?? 0) > 0;
   });
 
-  // Dynamic chart config for sources mode
+  // Dynamic chart config for sources mode - use display names from guarantees
   const activeChartConfig = useMemo(() => {
     if (!showSources) return chartConfig;
     const cfg: Record<string, { label: string; color: string }> = {
       building_load: chartConfig.building_load,
       guarantee: chartConfig.guarantee,
     };
-    sourceLabels.forEach((label, i) => {
-      cfg[`source_${i}`] = { label, color: SOURCE_COLORS[i % SOURCE_COLORS.length] };
+    sourceLabels.forEach((rawLabel, i) => {
+      const displayLabel = sourceDisplayNameMap.get(rawLabel) || rawLabel;
+      cfg[`source_${i}`] = { label: displayLabel, color: SOURCE_COLORS[i % SOURCE_COLORS.length] };
     });
     return cfg;
-  }, [showSources, sourceLabels]);
+  }, [showSources, sourceLabels, sourceDisplayNameMap]);
 
   const handleLegendClick = (e: any) => {
     const key = e.dataKey;
@@ -515,19 +545,22 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                 <ChartTooltip content={<ChartTooltipContent />} />
                 {!singleDayLabel && <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: "pointer" }} />}
                 {showSources ? (
-                  sourceLabels.map((label, i) => (
-                    <Bar
-                      key={`source_${i}`}
-                      dataKey={`source_${i}`}
-                      name={label}
-                      fill={SOURCE_COLORS[i % SOURCE_COLORS.length]}
-                      stroke="#d9d9d9"
-                      strokeWidth={1}
-                      radius={i === sourceLabels.length - 1 && !stackBars ? [2, 2, 0, 0] : undefined}
-                      hide={hiddenSeries.has(`source_${i}`)}
-                      stackId="solar"
-                    />
-                  ))
+                  sourceLabels.map((rawLabel, i) => {
+                    const displayLabel = sourceDisplayNameMap.get(rawLabel) || rawLabel;
+                    return (
+                      <Bar
+                        key={`source_${i}`}
+                        dataKey={`source_${i}`}
+                        name={displayLabel}
+                        fill={SOURCE_COLORS[i % SOURCE_COLORS.length]}
+                        stroke="#d9d9d9"
+                        strokeWidth={1}
+                        radius={i === sourceLabels.length - 1 && !stackBars ? [2, 2, 0, 0] : undefined}
+                        hide={hiddenSeries.has(`source_${i}`)}
+                        stackId="solar"
+                      />
+                    );
+                  })
                 ) : (
                   <Bar
                     dataKey="actual"
@@ -567,14 +600,24 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                 <p className="text-xs font-medium text-muted-foreground">{singleDayLabel}</p>
                 <div className="flex items-center justify-center gap-4 text-xs flex-wrap">
                   {showSources ? (
-                    sourceLabels.map((label, i) => {
+                    sourceLabels.map((rawLabel, i) => {
                       const key = `source_${i}`;
                       const hidden = hiddenSeries.has(key);
+                      const displayLabel = sourceDisplayNameMap.get(rawLabel) || rawLabel;
                       return (
-                        <span key={i} className="flex items-center gap-1.5 cursor-pointer select-none" style={{ opacity: hidden ? 0.4 : 1 }} onClick={() => setHiddenSeries(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; })}>
-                          <span className="inline-block w-3 h-3 rounded-sm" style={{ background: SOURCE_COLORS[i % SOURCE_COLORS.length], border: "1px solid #d9d9d9" }} />
-                          {label}
-                        </span>
+                        <TooltipProvider key={i}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="flex items-center gap-1.5 cursor-pointer select-none" style={{ opacity: hidden ? 0.4 : 1 }} onClick={() => setHiddenSeries(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; })}>
+                                <span className="inline-block w-3 h-3 rounded-sm" style={{ background: SOURCE_COLORS[i % SOURCE_COLORS.length], border: "1px solid #d9d9d9" }} />
+                                {displayLabel}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                              Source: {rawLabel}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       );
                     })
                   ) : (
