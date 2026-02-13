@@ -247,8 +247,8 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       dailyMap.set(day, existing);
     }
 
-    const rangeStartDay = dateStart >= startDate ? new Date(dateStart).getDate() : 1;
-    const rangeEndDay = dateEnd <= endDate ? new Date(dateEnd).getDate() : days;
+     const rangeStartDay = dateStart >= startDate ? parseInt(dateStart.slice(8, 10)) : 1;
+     const rangeEndDay = dateEnd <= endDate ? parseInt(dateEnd.slice(8, 10)) : days;
     const monthShort = MONTH_SHORT[month - 1];
     return Array.from({ length: rangeEndDay - rangeStartDay + 1 }, (_, i) => {
       const day = rangeStartDay + i;
@@ -363,7 +363,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
 
   const hasData = enrichedData.length > 0 && enrichedData.some((d: any) => {
     if (showSources) return sourceKeys.some(sk => (d[sk] ?? 0) > 0);
-    return d.actual > 0 || d.building_load > 0;
+    return (d.actual ?? 0) > 0 || (d.building_load ?? 0) > 0;
   });
 
   // Dynamic chart config for sources mode
