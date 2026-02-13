@@ -1,34 +1,58 @@
 
 
-## Fix Y-Axis to Consistent Scale Across All Days
+## Download Meter CSV Data from PNP SCADA
 
-### Problem
-Currently, when navigating between different days (or date ranges), the Y-axis auto-scales to fit just the visible data. This makes it hard to compare values across days since the scale changes each time.
+### What We Found
 
-### Solution
-Calculate the maximum Y-axis value from the **entire month's dataset** (respecting the current timeframe, hour filter, unit, and visible series), then set a fixed `domain` on the `YAxis` component so it stays consistent as you navigate between days.
+The existing `fetch-pnpscada` backend function already logs in successfully and can see all 39 meter accounts. However, navigating to individual meter pages fails because each login creates a new session hash (`memh`) that invalidates URLs from previous calls.
+
+The good news: PNP SCADA has a **direct API endpoint** (`readMeterProfile`) that returns CSV profile data for any meter, using just credentials and a serial number -- no session navigation needed.
+
+### Plan
+
+**1. Update the `fetch-pnpscada` backend function** with two improved actions:
+
+- **`list-meters` (improved)**: Login, fetch overview, properly parse all 39 meters extracting their entity IDs, serial numbers, and names (e.g., "Parkdene Solar DB2.1 -- serial 31198")
+
+- **`download-csv` (new action)**: Use the `readMeterProfile` API endpoint to directly download CSV data for a specific meter and date range:
+  ```
+  /readMeterProfile?LOGIN=thukela.USERNAME&PWD=PASSWORD&key1=SERIAL&startdate=YYYY-MM-DD&enddate=YYYY-MM-DD
+  ```
+  No session cookies or page navigation needed -- just a single HTTP GET.
+
+- **`download-all` (new action)**: Loop through a list of meter serials and download CSV for each, returning all data in one response. Useful for bulk monthly downloads.
+
+**2. Update the meter parsing logic**: The current parser misses the actual meters. Fix it to extract entries like:
+```
+<A href='/overview?...&PNPENTID=109883&PNPENTCLASID=109'> 31198</A>  Parkdene Solar DB2.1
+```
+This gives us: entity ID = 109883, serial = 31198, name = "Parkdene Solar DB2.1"
+
+**3. Add a UI button** (in the Generation tab or Settings): A "Sync from SCADA" button that:
+- Calls `list-meters` to show available meters
+- Lets you select which meters to download
+- Specify a date range (e.g., last month)
+- Downloads the CSV data and pipes it into the existing `process-scada-profile` ingestion pipeline
+- Stores results in `generation_readings` for the relevant project
 
 ### Technical Details
 
-**File: `src/components/projects/generation/PerformanceChart.tsx`**
+**File changes:**
+- `supabase/functions/fetch-pnpscada/index.ts` -- Rewrite to use `readMeterProfile` API, fix meter parsing from overview HTML
+- New UI component (location TBD based on where you want the button) -- "Sync SCADA Data" dialog
 
-1. **Compute global Y-axis maximum** -- Add a `useMemo` that iterates over the full filtered readings (before date filtering) aggregated at the current timeframe level. For each data point, compute the visible bar height (sum of stacked visible series + unit conversion) and track the maximum. Also consider the guarantee line value.
+**The `readMeterProfile` endpoint format:**
+```
+GET https://thukela-kadesh.pnpscada.com/readMeterProfile
+  ?LOGIN=thukela.power@wmeng_co_za
+  &PWD=<password>
+  &key1=31198
+  &startdate=2026-01-01
+  &enddate=2026-02-01
+```
+Returns CSV data directly (Date, Time, P1 kW readings at 30-min intervals) -- exactly the format your existing CSV parser already handles.
 
-2. **Apply fixed domain to YAxis** -- Change line 451 from:
-   ```
-   <YAxis fontSize={12} label={...} />
-   ```
-   to:
-   ```
-   <YAxis fontSize={12} domain={[0, yAxisMax]} allowDataOverflow label={...} />
-   ```
+**Credentials**: Already stored as `PNPSCADA_USERNAME` and `PNPSCADA_PASSWORD` secrets. The LOGIN parameter format uses `subdomain.username` with `@` replaced by `_` (based on the PNP SCADA convention seen in the overview: `thukela.power@wmeng_co_za`).
 
-3. The `yAxisMax` computation will:
-   - Use `filteredReadings` (hour-filtered but NOT date-filtered) so it covers the whole month
-   - Aggregate to the current timeframe (30min/hourly/daily)
-   - Apply unit conversion (kW divisor)
-   - For each data point, calculate the total bar height considering stacking and hidden series
-   - Take the max of all data points and the guarantee line value
-   - Round up slightly (e.g., multiply by 1.05) for visual padding
+**No new database tables needed** -- data flows into existing `generation_readings` and/or `scada_imports` tables.
 
-This ensures that as you click the navigation arrows to move between days or date ranges, the bars remain visually comparable since the Y-axis scale never changes within the same month/timeframe/filter combination.
