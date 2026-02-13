@@ -192,6 +192,13 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       }
     }
 
+    // Remove sources that have no guarantee assigned (council/building meters)
+    for (const src of distinctReadingSources) {
+      if (!guaranteeMap.has(src) || (guaranteeMap.get(src) ?? 0) <= 0) {
+        distinctReadingSources.delete(src);
+      }
+    }
+
     // Init sourceDay map
     for (let d = 1; d <= totalDays; d++) {
       for (const src of distinctReadingSources) {
@@ -220,6 +227,8 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
         const day = ts.getDate();
         const minutes = ts.getHours() * 60 + ts.getMinutes();
         const sourceLabel = r.source || "csv";
+        // Skip sources not in our filtered solar PV set
+        if (!distinctReadingSources.has(sourceLabel)) continue;
         const key = `${day}-${minutes}-${sourceLabel}`;
         const existing = readingLookup.get(key);
         if (existing !== undefined) {
