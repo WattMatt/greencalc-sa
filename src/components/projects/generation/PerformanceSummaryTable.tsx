@@ -471,7 +471,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     const guaranteedActual = row.meteredGeneration - row.yieldGuarantee;
                     return (
                       <TableRow key={row.day} className={cn(i % 2 === 0 ? "bg-muted/30" : "")}>
-                        <TableCell className="text-xs py-1.5 px-2 font-medium">{formatDate(year, month, row.day)}</TableCell>
+                        <TableCell className="text-xs py-1.5 px-2 font-medium">{row.day}</TableCell>
                         <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.yieldGuarantee * rate)}</TableCell>
                         <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.meteredGeneration * rate)}</TableCell>
                         <TableCell className="text-xs py-1.5 px-2 text-right tabular-nums">{formatRand(row.downtimeEnergy * rate)}</TableCell>
@@ -538,7 +538,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                 <TableBody>
                   {dailyRows.map((row, i) => (
                     <TableRow key={row.day} className={cn(i % 2 === 0 ? "bg-muted/30" : "")}>
-                      <TableCell className="text-xs py-1.5 px-2 font-medium">{formatDate(year, month, row.day)}</TableCell>
+                      <TableCell className="text-xs py-1.5 px-2 font-medium">{row.day}</TableCell>
                       {distinctSources.map(src => {
                         const sd = sourceDayMap.get(`${row.day}-${src}`);
                         const guarantee = sd?.guarantee ?? 0;
