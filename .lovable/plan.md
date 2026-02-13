@@ -1,39 +1,64 @@
 
 
-## Fix Down Time Tab: Comment Column Separation and Source-Data Mapping
+## Update Downtime Detection: Threshold and Consecutive-Slot Rule
 
-### Problem 1: Comment Column Not Visually Separated
-The "Comment" column blends into the last source group. It needs a `border-l` separator to stand out.
+### Changes to `src/components/projects/generation/PerformanceSummaryTable.tsx`
 
-### Problem 2: Lost Production Values Are Identical Across All Tie-Ins
-The values (413.71, 413.95, 413.75) are nearly identical because the guarantee sources ("Tie-In 1", "Tie-In 2", "Tie-In 3") have **no `reading_source` mapping** set. The actual CSV reading sources are:
+**Location:** Lines 288-298 (the downtime calculation loop)
 
-- `31190 - Parkdene Solar Checkers`
-- `31198 - Parkdene Solar DB2.1`
-- `31193 - Parkdene Solar DB3.1`
+### 1. Lower the threshold from 1% to 0.05%
 
-Since none are linked, the system falls back to distributing the total guarantee evenly across all three sources, producing nearly identical downtime values. **This is a data configuration issue, not a code bug.**
+Current (line 292):
+```
+const threshold = perSlotEnergy * 0.01;
+```
+New:
+```
+const threshold = perSlotEnergy * 0.0005;
+```
 
-### Plan
+### 2. Require two consecutive below-threshold slots to classify as downtime
 
-**Code change (PerformanceSummaryTable.tsx):**
-1. Add `border-l` to the Comment header cells and body/footer cells to visually separate it from the source groups.
+Currently, any single slot below the threshold is counted as downtime. The new logic:
 
-**Data fix (user action required):**
-2. Open the "Guaranteed Generation Sources" dialog for the active month/year and use the "Link to CSV source" dropdown to map each Tie-In to its correct reading source:
-   - Tie-In 1 -> one of `31190 - Parkdene Solar Checkers`, `31198 - Parkdene Solar DB2.1`, `31193 - Parkdene Solar DB3.1`
-   - Tie-In 2 -> another
-   - Tie-In 3 -> the remaining one
+1. First pass: for each source on each day, iterate through all sun-hour slots and record which ones are below the 0.05% threshold (store as a boolean array or set of slot indices).
+2. Second pass: only mark a slot as downtime if **both it and the immediately preceding slot** are below the threshold. The first slot of the day can only be downtime if slot 2 is also below threshold (i.e., require a pair).
+3. This means isolated single-slot dips are ignored; only sustained periods (2+ consecutive slots) count.
 
-Once mapped, the Lost Production and 30-Min Intervals will correctly reflect each source's individual downtime.
+### Technical Detail
 
-### Technical Details
+Replace lines 288-298 with:
 
-**File:** `src/components/projects/generation/PerformanceSummaryTable.tsx`
+```typescript
+// First pass: identify below-threshold slots
+const slotTimes: number[] = [];
+const belowThreshold: boolean[] = [];
+for (let min = sunStartMin; min <= sunEndMin; min += slotIntervalMin) {
+  slotTimes.push(min);
+  const key = `${d}-${min}-${sourceLabel}`;
+  const val = readingLookup.get(key);
+  const actualVal = (val !== undefined && val !== null) ? val : 0;
+  const threshold = perSlotEnergy * 0.0005;
+  belowThreshold.push(actualVal < threshold);
+}
 
-Lines to change:
-- Line 443 (header row 1, Comment): add `border-l` class
-- Line 454 (header row 2, empty Comment sub-header): add `border-l` class
-- Line 471 (body Comment cell): add `border-l` class
-- Line 488 (footer Comment cell): add `border-l` class
+// Second pass: only count downtime when 2+ consecutive slots are below threshold
+for (let i = 0; i < slotTimes.length; i++) {
+  if (!belowThreshold[i]) continue;
+  const hasConsecutive =
+    (i > 0 && belowThreshold[i - 1]) ||
+    (i < slotTimes.length - 1 && belowThreshold[i + 1]);
+  if (hasConsecutive) {
+    const key = `${d}-${slotTimes[i]}-${sourceLabel}`;
+    const val = readingLookup.get(key);
+    const actualVal = (val !== undefined && val !== null) ? val : 0;
+    entry.downtimeSlots += 1;
+    entry.downtimeEnergy += (perSlotEnergy - actualVal);
+    sd.downtimeSlots += 1;
+    sd.downtimeEnergy += (perSlotEnergy - actualVal);
+  }
+}
+```
+
+**File:** `src/components/projects/generation/PerformanceSummaryTable.tsx`, lines 288-298
 
