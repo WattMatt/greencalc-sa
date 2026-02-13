@@ -154,6 +154,13 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return map;
   }, [chartSourceGuarantees]);
 
+  // Council source filename for tooltip
+  const councilSourceName = useMemo(() => {
+    if (!chartSourceGuarantees) return null;
+    const council = chartSourceGuarantees.find(sg => sg.meter_type === 'council');
+    return council?.reading_source || council?.source_label || null;
+  }, [chartSourceGuarantees]);
+
   // Aggregate readings across all sources by timestamp (used when showSources is false)
   const aggregatedReadings = useMemo(() => {
     if (!readings) return null;
@@ -623,7 +630,20 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                   ) : (
                     <span className="flex items-center gap-1.5 cursor-pointer select-none" style={{ opacity: hiddenSeries.has("actual") ? 0.4 : 1 }} onClick={() => setHiddenSeries(prev => { const next = new Set(prev); next.has("actual") ? next.delete("actual") : next.add("actual"); return next; })}><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#f0e442", border: "1px solid #d9d9d9" }} /> Solar Generation</span>
                   )}
-                  <span className="flex items-center gap-1.5 cursor-pointer select-none" style={{ opacity: hiddenSeries.has("building_load") ? 0.4 : 1 }} onClick={() => setHiddenSeries(prev => { const next = new Set(prev); next.has("building_load") ? next.delete("building_load") : next.add("building_load"); return next; })}><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#898989", border: "1px solid #d9d9d9" }} /> Council Demand</span>
+                  {councilSourceName ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="flex items-center gap-1.5 cursor-pointer select-none" style={{ opacity: hiddenSeries.has("building_load") ? 0.4 : 1 }} onClick={() => setHiddenSeries(prev => { const next = new Set(prev); next.has("building_load") ? next.delete("building_load") : next.add("building_load"); return next; })}><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#898989", border: "1px solid #d9d9d9" }} /> Council Demand</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">
+                          Source: {councilSourceName}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <span className="flex items-center gap-1.5 cursor-pointer select-none" style={{ opacity: hiddenSeries.has("building_load") ? 0.4 : 1 }} onClick={() => setHiddenSeries(prev => { const next = new Set(prev); next.has("building_load") ? next.delete("building_load") : next.add("building_load"); return next; })}><span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#898989", border: "1px solid #d9d9d9" }} /> Council Demand</span>
+                  )}
                   <span className="flex items-center gap-1.5 cursor-pointer select-none" style={{ opacity: hiddenSeries.has("guarantee") ? 0.4 : 1 }} onClick={() => setHiddenSeries(prev => { const next = new Set(prev); next.has("guarantee") ? next.delete("guarantee") : next.add("guarantee"); return next; })}><span className="inline-block w-3 h-1" style={{ background: "#00b0f0" }} /> Guaranteed Generation</span>
                 </div>
               </div>
