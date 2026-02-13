@@ -1,33 +1,32 @@
 
 
-# Fix: Council Data Not Displaying in Chart
+# Fix: Building Toggle Stacking Behavior and Button Order
 
-## Root Cause
+## Summary
 
-When council (building load) data is uploaded via the CSV import, the `refetch` callback invalidates query caches to refresh the UI. However, it only invalidates three query keys:
+Two changes:
+1. Swap the **kWh** and **Building** button positions so order becomes: Sources, Building, kWh
+2. Fix the stacking logic so when **Building is OFF**, the council demand bar appears as a standalone bar next to the solar bars (not stacked with them)
 
-- `generation-record`
-- `generation-daily`
-- `generation-readings`
+## Stacking Behavior Matrix
 
-The System Performance chart uses a **different** query key: `generation-readings-chart`. This key is never invalidated after the upload, so the chart continues showing stale cached data without the council values.
+| Sources | Building | Solar Bars | Council Demand Bar |
+|---------|----------|------------|--------------------|
+| OFF | OFF | Standalone bar | Standalone bar (side by side) |
+| OFF | ON | stackId="building" | stackId="building" (stacked) |
+| ON | OFF | stackId="solar" (stacked sources) | Standalone bar (side by side) |
+| ON | ON | stackId="solar" | stackId="solar" (all stacked together) |
 
-Similarly, the Performance Summary Table uses `generation-readings-daily`, which is also not invalidated.
+## Technical Details
 
-## Fix
+### File: `src/components/projects/generation/PerformanceChart.tsx`
 
-Add the missing query key invalidations to the `refetch` function in `GenerationTab.tsx`:
+**Change 1 — Swap buttons (lines 408-423):**
+Move the Building button block (lines 416-423) before the kWh button block (lines 408-415).
 
-```
-generation-readings-chart
-generation-readings-daily
-```
+**Change 2 — Fix building_load stackId (line 551):**
+Current: `stackId={stackBars ? "building" : (showSources ? "solar" : undefined)}`
+New: `stackId={stackBars ? (showSources ? "solar" : "building") : undefined}`
 
-### File: `src/components/projects/generation/GenerationTab.tsx`
-
-Update the `refetch` function (lines 83-87) to also invalidate:
-- `generation-readings-chart` (used by PerformanceChart)
-- `generation-readings-daily` (used by PerformanceSummaryTable)
-
-This is a two-line addition to ensure all chart and table components re-fetch their data after any upload or reset action.
+When Building toggle is OFF (`stackBars` is false), `stackId` becomes `undefined`, making it a standalone bar. When Building is ON and Sources is ON, it joins the `"solar"` stack. When Building is ON and Sources is OFF, it uses `"building"` stack shared with the solar bar.
 
