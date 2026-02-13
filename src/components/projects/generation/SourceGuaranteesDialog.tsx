@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, Save } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,6 +12,7 @@ interface SourceGuarantee {
   source_label: string;
   guaranteed_kwh: number;
   meter_type?: string;
+  reading_source?: string;
   isNew?: boolean;
 }
 
@@ -34,10 +36,12 @@ export function SourceGuaranteesDialog({
   const [rows, setRows] = useState<SourceGuarantee[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [availableSources, setAvailableSources] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     loadData();
+    loadReadingSources();
   }, [open, projectId, month, year]);
 
   const loadData = async () => {
@@ -57,6 +61,7 @@ export function SourceGuaranteesDialog({
           source_label: r.source_label,
           guaranteed_kwh: Number(r.guaranteed_kwh),
           meter_type: r.meter_type || 'solar',
+          reading_source: r.reading_source || '',
         }))
       );
     } catch (err: any) {
@@ -66,10 +71,34 @@ export function SourceGuaranteesDialog({
     }
   };
 
+  const loadReadingSources = async () => {
+    try {
+      const totalDays = new Date(year, month, 0).getDate();
+      const startDate = `${year}-${String(month).padStart(2, "0")}-01T00:00:00`;
+      const endDate = `${year}-${String(month).padStart(2, "0")}-${String(totalDays).padStart(2, "0")}T23:59:59`;
+
+      const { data, error } = await supabase
+        .from("generation_readings")
+        .select("source")
+        .eq("project_id", projectId)
+        .gte("timestamp", startDate)
+        .lte("timestamp", endDate);
+      if (error) throw error;
+
+      const sources = new Set<string>();
+      (data ?? []).forEach((r: any) => {
+        if (r.source) sources.add(r.source);
+      });
+      setAvailableSources(Array.from(sources).sort());
+    } catch (err: any) {
+      console.error("Failed to load reading sources", err);
+    }
+  };
+
   const addRow = () => {
     setRows((prev) => [
       ...prev,
-      { source_label: "", guaranteed_kwh: 0, isNew: true },
+      { source_label: "", guaranteed_kwh: 0, isNew: true, reading_source: '' },
     ]);
   };
 
@@ -120,6 +149,7 @@ export function SourceGuaranteesDialog({
           source_label: r.source_label.trim(),
           guaranteed_kwh: r.guaranteed_kwh || 0,
           meter_type: (r as any).meter_type || 'solar',
+          reading_source: r.reading_source || null,
         }));
 
         const { error: insertError } = await supabase
@@ -152,9 +182,12 @@ export function SourceGuaranteesDialog({
     }
   };
 
+  // Get already-used reading sources to prevent duplicates
+  const usedReadingSources = new Set(rows.map(r => r.reading_source).filter(Boolean));
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-base">
             Guaranteed Generation Sources
@@ -163,7 +196,7 @@ export function SourceGuaranteesDialog({
 
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Add a guarantee value for each generation source. The total is used as the system guarantee.
+            Add a guarantee value for each generation source and link it to the corresponding CSV reading source.
           </p>
 
           {isLoading ? (
@@ -173,18 +206,40 @@ export function SourceGuaranteesDialog({
               {rows.map((row, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <Input
-                    className="text-sm flex-1"
+                    className="text-sm flex-1 min-w-[120px]"
                     placeholder="Source label (e.g. Inverter 1)"
                     value={row.source_label}
                     onChange={(e) => updateRow(i, "source_label", e.target.value)}
                   />
                   <Input
                     type="number"
-                    className="text-sm w-32"
+                    className="text-sm w-28"
                     placeholder="kWh"
                     value={row.guaranteed_kwh || ""}
                     onChange={(e) => updateRow(i, "guaranteed_kwh", e.target.value)}
                   />
+                  {availableSources.length > 0 && (
+                    <Select
+                      value={row.reading_source || ""}
+                      onValueChange={(val) => updateRow(i, "reading_source", val === "__none__" ? "" : val)}
+                    >
+                      <SelectTrigger className="text-sm w-[200px]">
+                        <SelectValue placeholder="Link to CSV source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— None —</SelectItem>
+                        {availableSources.map(src => (
+                          <SelectItem
+                            key={src}
+                            value={src}
+                            disabled={usedReadingSources.has(src) && row.reading_source !== src}
+                          >
+                            {src}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"

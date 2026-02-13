@@ -597,6 +597,7 @@ export type Database = {
           meter_type: string
           month: number
           project_id: string
+          reading_source: string | null
           source_label: string
           updated_at: string
           year: number
@@ -608,6 +609,7 @@ export type Database = {
           meter_type?: string
           month: number
           project_id: string
+          reading_source?: string | null
           source_label: string
           updated_at?: string
           year: number
@@ -619,6 +621,7 @@ export type Database = {
           meter_type?: string
           month?: number
           project_id?: string
+          reading_source?: string | null
           source_label?: string
           updated_at?: string
           year?: number
