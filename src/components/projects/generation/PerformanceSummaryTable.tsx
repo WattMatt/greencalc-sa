@@ -107,7 +107,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
     queryFn: async () => {
       const { data, error } = await supabase
         .from("generation_source_guarantees")
-        .select("source_label, guaranteed_kwh")
+        .select("source_label, guaranteed_kwh, meter_type")
         .eq("project_id", projectId)
         .eq("month", month)
         .eq("year", year);
@@ -164,15 +164,15 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       }
     }
 
-    // Step 1: Remove sources explicitly marked with zero guarantee (council/building meters)
+    // Step 1: Remove sources flagged as council/building meters
     if (sourceGuarantees && sourceGuarantees.length > 0) {
-      const zeroGuaranteeSources = new Set(
+      const councilSources = new Set(
         sourceGuarantees
-          .filter(sg => sg.guaranteed_kwh <= 0)
+          .filter(sg => sg.meter_type === 'council')
           .map(sg => sg.source_label)
       );
       for (const src of distinctReadingSources) {
-        if (zeroGuaranteeSources.has(src)) {
+        if (councilSources.has(src)) {
           distinctReadingSources.delete(src);
         }
       }

@@ -594,6 +594,7 @@ export type Database = {
           created_at: string
           guaranteed_kwh: number
           id: string
+          meter_type: string
           month: number
           project_id: string
           source_label: string
@@ -604,6 +605,7 @@ export type Database = {
           created_at?: string
           guaranteed_kwh?: number
           id?: string
+          meter_type?: string
           month: number
           project_id: string
           source_label: string
@@ -614,6 +616,7 @@ export type Database = {
           created_at?: string
           guaranteed_kwh?: number
           id?: string
+          meter_type?: string
           month?: number
           project_id?: string
           source_label?: string

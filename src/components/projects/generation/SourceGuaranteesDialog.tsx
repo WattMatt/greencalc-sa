@@ -10,6 +10,7 @@ interface SourceGuarantee {
   id?: string;
   source_label: string;
   guaranteed_kwh: number;
+  meter_type?: string;
   isNew?: boolean;
 }
 
@@ -55,6 +56,7 @@ export function SourceGuaranteesDialog({
           id: r.id,
           source_label: r.source_label,
           guaranteed_kwh: Number(r.guaranteed_kwh),
+          meter_type: r.meter_type || 'solar',
         }))
       );
     } catch (err: any) {
@@ -117,6 +119,7 @@ export function SourceGuaranteesDialog({
           year,
           source_label: r.source_label.trim(),
           guaranteed_kwh: r.guaranteed_kwh || 0,
+          meter_type: (r as any).meter_type || 'solar',
         }));
 
         const { error: insertError } = await supabase
