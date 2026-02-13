@@ -157,7 +157,10 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
 
     if (readings) {
       for (const r of readings) {
-        distinctReadingSources.add(r.source || "csv");
+        // Only consider sources that have solar PV data (actual_kwh)
+        if (r.actual_kwh != null && Number(r.actual_kwh) > 0) {
+          distinctReadingSources.add(r.source || "csv");
+        }
       }
     }
 
