@@ -1,64 +1,54 @@
 
 
-## Update Downtime Detection: Threshold and Consecutive-Slot Rule
+## Fix Chart Legends, "csv" Source, Column Separators, and Table Layout
 
-### Changes to `src/components/projects/generation/PerformanceSummaryTable.tsx`
+### 1. Chart Legend Labels: Use Guarantee Display Names + Tooltip with Original File Source
 
-**Location:** Lines 288-298 (the downtime calculation loop)
+**Problem:** The chart legend shows raw CSV source names like `31190 - Parkdene Solar Checkers` instead of the user-friendly guarantee labels (e.g., "Tie-In 1").
 
-### 1. Lower the threshold from 1% to 0.05%
+**Fix in `PerformanceChart.tsx`:**
+- Query `generation_source_guarantees` for the current project/month/year to build a `displayNameMap` (same logic as `PerformanceSummaryTable.tsx`)
+- In `activeChartConfig`, use the mapped display name as the label and store the original CSV source for tooltip
+- In the custom single-day legend and the Recharts `Legend`, wrap each source label in a Tooltip component showing "Source: 31190 - Parkdene Solar Checkers" on hover while displaying "Tie-In 1" as the visible text
 
-Current (line 292):
-```
-const threshold = perSlotEnergy * 0.01;
-```
-New:
-```
-const threshold = perSlotEnergy * 0.0005;
-```
+### 2. The "csv" Legend Label — Explanation and Fix
 
-### 2. Require two consecutive below-threshold slots to classify as downtime
+**Cause:** Some `generation_readings` rows have `source = 'csv'`. This happens when data was uploaded before per-source tracking was implemented — the upload code defaults to `"csv"` when no source label exists. This creates a 4th bar in the chart with a "csv" legend entry.
 
-Currently, any single slot below the threshold is counted as downtime. The new logic:
+**Fix:** Two options:
+- **Data fix (recommended):** Update the stale rows: `UPDATE generation_readings SET source = NULL WHERE source = 'csv' AND project_id = '...'` — or reassign them to the correct source. This can be surfaced to the user.
+- **Code fix:** In `PerformanceChart.tsx`, filter out or merge readings where `source === 'csv'` into the aggregated total, so they don't appear as a separate bar in Sources mode. The chart's `sourceLabels` extraction (line 121-126) will skip `'csv'` entries, and their kWh values will be summed into the non-source aggregated view instead.
 
-1. First pass: for each source on each day, iterate through all sun-hour slots and record which ones are below the 0.05% threshold (store as a boolean array or set of slot indices).
-2. Second pass: only mark a slot as downtime if **both it and the immediately preceding slot** are below the threshold. The first slot of the day can only be downtime if slot 2 is also below threshold (i.e., require a pair).
-3. This means isolated single-slot dips are ignored; only sustained periods (2+ consecutive slots) count.
+I will implement the code fix: skip `'csv'` from per-source breakdown and aggregate it into the total. Additionally, inform the user about the stale data.
 
-### Technical Detail
+### 3. Column Separator Lines on All Tables
 
-Replace lines 288-298 with:
+**Problem:** Only the Down Time tab has `border-l` separators. The Production, Revenue, and Performance tabs lack visual column separators.
 
-```typescript
-// First pass: identify below-threshold slots
-const slotTimes: number[] = [];
-const belowThreshold: boolean[] = [];
-for (let min = sunStartMin; min <= sunEndMin; min += slotIntervalMin) {
-  slotTimes.push(min);
-  const key = `${d}-${min}-${sourceLabel}`;
-  const val = readingLookup.get(key);
-  const actualVal = (val !== undefined && val !== null) ? val : 0;
-  const threshold = perSlotEnergy * 0.0005;
-  belowThreshold.push(actualVal < threshold);
-}
+**Fix:** Add `border-l` to column groups in:
+- **Production tab** (lines 399-442): Add `border-l` between major column groups (Yield Guarantee, Metered Gen, Down Time kWh, Theoretical Gen, Surplus/Deficit)
+- **Revenue tab** (lines 514-567): Add `border-l` between each revenue column
+- **Performance tab** (lines 571-639): Add `border-l` to each source group header and sub-columns (same pattern as Down Time tab), plus alternating `bg-muted/20`
 
-// Second pass: only count downtime when 2+ consecutive slots are below threshold
-for (let i = 0; i < slotTimes.length; i++) {
-  if (!belowThreshold[i]) continue;
-  const hasConsecutive =
-    (i > 0 && belowThreshold[i - 1]) ||
-    (i < slotTimes.length - 1 && belowThreshold[i + 1]);
-  if (hasConsecutive) {
-    const key = `${d}-${slotTimes[i]}-${sourceLabel}`;
-    const val = readingLookup.get(key);
-    const actualVal = (val !== undefined && val !== null) ? val : 0;
-    entry.downtimeSlots += 1;
-    entry.downtimeEnergy += (perSlotEnergy - actualVal);
-    sd.downtimeSlots += 1;
-    sd.downtimeEnergy += (perSlotEnergy - actualVal);
-  }
-}
-```
+### 4. Better Column Width Distribution Across All Tables
 
-**File:** `src/components/projects/generation/PerformanceSummaryTable.tsx`, lines 288-298
+**Fix:** Standardize column widths:
+- Days column: `w-12` across all tabs
+- Numeric columns: `min-w-[100px]` for single-value columns, `min-w-[90px]` for source sub-columns
+- Remove the overly wide `w-40` on the Days column in Revenue and Performance tabs
 
+### Technical Details
+
+**Files to modify:**
+
+**`src/components/projects/generation/PerformanceChart.tsx`:**
+- Add query for `generation_source_guarantees` to get display name mappings
+- Update `activeChartConfig` (lines 370-380) to use display names as labels
+- Filter `'csv'` from `sourceLabels` (lines 121-126)
+- Add Tooltip wrapper around legend items in single-day legend (lines 569-585) showing original CSV source on hover
+- Import Tooltip components
+
+**`src/components/projects/generation/PerformanceSummaryTable.tsx`:**
+- **Production tab** (lines 399-442): Add `border-l` to columns after Days
+- **Revenue tab** (lines 514-567): Add `border-l` to columns after Days, fix `w-40` to `w-12`
+- **Performance tab** (lines 571-639): Add `border-l` and alternating `bg-muted/20` to source group headers and sub-columns, fix `w-40` to `w-12`
