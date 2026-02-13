@@ -143,8 +143,8 @@ async function searchMeters(jar: CookieJar, memh: string, searchStr: string = '*
   return meters;
 }
 
-// Select a meter into the session, load its graph page, and get its memh
-async function selectMeter(jar: CookieJar, memh: string, entityId: string, classId: string): Promise<{ memh: string; graphHtml: string }> {
+// Select a meter into the session, load its graph page with full params, and get its memh
+async function selectMeter(jar: CookieJar, memh: string, entityId: string, classId: string, serial: string, startDate: string, endDate: string): Promise<{ memh: string; graphHtml: string }> {
   // Step 1: Load the meter overview page to set session context
   const overviewUrl = `${PNPSCADA_BASE_URL}/overview?PNPENTID=${entityId}&PNPENTCLASID=${classId}&memh=${memh}`;
   console.log('Selecting meter (overview):', overviewUrl);
@@ -154,15 +154,19 @@ async function selectMeter(jar: CookieJar, memh: string, entityId: string, class
   const overviewMemhMatch = overviewHtml.match(/memh=(-?\d+)/);
   const overviewMemh = overviewMemhMatch ? overviewMemhMatch[1] : memh;
 
-  // Step 2: Load the graph page to fully establish data context
-  const graphUrl = `${PNPSCADA_BASE_URL}/_Graph?memh=${overviewMemh}`;
-  console.log('Loading graph page:', graphUrl);
+  // Step 2: Load the graph page with FULL parameters to prepare server-side data
+  const start = new Date(startDate);
+  const graphUrl = `${PNPSCADA_BASE_URL}/_Graph?hasTariffs=true&hasBills=false&hasCustomers=false&memh=${overviewMemh}&hasTOU=$hasTOU&doBill=1&GSTARTH=0&GSTARTN=0&GENDH=0&GENDN=0&TRIGHT0=False&TLEFT0=True&TRIGHT1=False&TLEFT1=True&TRIGHT2=False&TLEFT2=True&TRIGHT3=False&TLEFT3=True&TRIGHT4=False&TLEFT4=True&TRIGHT5=False&TLEFT5=True&TLEFT6=False&TRIGHT6=True&GINCY=${start.getUTCFullYear()}&GINCM=${start.getUTCMonth() + 1}&GINCD=1&TIMEMODE=2&selGNAME_UTILITY=${serial}$Electricity&TGIDX=0`;
+  console.log('Loading graph page (full params):', graphUrl);
   const graphResp = await fetch(graphUrl, { headers: { 'Cookie': jar.toString() } });
   jar.addFromResponse(graphResp);
   const graphHtml = await graphResp.text();
   const graphMemhMatch = graphHtml.match(/memh=(-?\d+)/);
   const finalMemh = graphMemhMatch ? graphMemhMatch[1] : overviewMemh;
   console.log('Meter ready, memh:', finalMemh, '| graph page:', graphHtml.length, 'bytes', '| cookies:', jar.count);
+
+  // Step 3: Wait for server to prepare data
+  await new Promise(resolve => setTimeout(resolve, 3000));
 
   // Log all links and data endpoints found on graph page
   const dataLinks: string[] = [];
@@ -239,7 +243,7 @@ async function downloadMeterCSV(entityId: string, classId: string, serial: strin
     return JSON.stringify({ error: 'Authentication failed for meter ' + serial });
   }
 
-  const { memh: meterMemh, graphHtml } = await selectMeter(session.jar, session.memh, entityId, classId);
+  const { memh: meterMemh, graphHtml } = await selectMeter(session.jar, session.memh, entityId, classId, serial, startDate, endDate);
 
   // Extract any _DataDownload link from graph page HTML
   const downloadLinkMatch = graphHtml.match(/href="([^"]*_DataDownload[^"]*)"/i);
