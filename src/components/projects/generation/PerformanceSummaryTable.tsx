@@ -146,7 +146,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
 
   const rate = tariffRate ?? 0;
 
-  const { dailyRows, sourceDayMap, distinctSources } = useMemo(() => {
+  const { dailyRows, sourceDayMap, distinctSources, sourceDisplayNames } = useMemo(() => {
     const dayMap = new Map<number, { actual: number; downtimeSlots: number; downtimeEnergy: number }>();
     const sdMap = new Map<string, SourceDayData>();
     const distinctReadingSources = new Set<string>();
@@ -161,21 +161,30 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       }
     }
 
-    // Build guarantee map
+    // Build guarantee map and display name map
     const guaranteeMap = new Map<string, number>();
+    const displayNameMap = new Map<string, string>();
     if (sourceGuarantees && sourceGuarantees.length > 0) {
       let hasMatch = false;
       for (const sg of sourceGuarantees) {
         if (distinctReadingSources.has(sg.source_label)) {
           guaranteeMap.set(sg.source_label, sg.guaranteed_kwh);
+          displayNameMap.set(sg.source_label, sg.source_label);
           hasMatch = true;
         }
       }
       if (!hasMatch && distinctReadingSources.size > 0) {
         const totalSourceGuarantee = sourceGuarantees.reduce((sum, sg) => sum + sg.guaranteed_kwh, 0);
         const perSource = totalSourceGuarantee / distinctReadingSources.size;
-        for (const src of distinctReadingSources) {
+        const readingSourceArr = Array.from(distinctReadingSources);
+        const guaranteeArr = sourceGuarantees.map(sg => sg.source_label);
+        for (let i = 0; i < readingSourceArr.length; i++) {
+          const src = readingSourceArr[i];
           guaranteeMap.set(src, perSource);
+          // Map reading source to guarantee label by index if available
+          if (i < guaranteeArr.length) {
+            displayNameMap.set(src, guaranteeArr[i]);
+          }
         }
       }
     }
@@ -273,7 +282,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       });
     }
 
-    return { dailyRows: rows, sourceDayMap: sdMap, distinctSources: Array.from(distinctReadingSources) };
+    return { dailyRows: rows, sourceDayMap: sdMap, distinctSources: Array.from(distinctReadingSources), sourceDisplayNames: displayNameMap };
   }, [readings, totalDays, monthData.guaranteed_kwh, sourceGuarantees]);
 
   const totals = useMemo(() => {
@@ -391,7 +400,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableHead className="text-xs py-2 px-2 text-right">Down Time (06:00–18:00)</TableHead>
                     {distinctSources.map(src => (
                       <TableHead key={src} className="text-xs py-2 px-2 text-right" colSpan={2}>
-                        {src}
+                        {sourceDisplayNames.get(src) || src}
                       </TableHead>
                     ))}
                     <TableHead className="text-xs py-2 px-2">Comment</TableHead>
@@ -521,7 +530,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableHead className="text-xs py-2 px-2 w-40">Days</TableHead>
                     {distinctSources.map(src => (
                       <TableHead key={src} className="text-xs py-2 px-2 text-center" colSpan={2}>
-                        {src}
+                        {sourceDisplayNames.get(src) || src}
                       </TableHead>
                     ))}
                   </TableRow>
