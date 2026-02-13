@@ -7,6 +7,13 @@ const corsHeaders = {
 
 const PNPSCADA_BASE_URL = 'https://thukela-kadesh.pnpscada.com';
 
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'identity',
+};
+
 interface MeterInfo {
   entityId: string;
   serial: string;
@@ -19,12 +26,24 @@ class CookieJar {
   private cookies: Map<string, string> = new Map();
 
   addFromResponse(response: Response) {
+    // Method 1: getSetCookie (modern API)
     const setCookieHeaders = response.headers.getSetCookie?.() || [];
     for (const header of setCookieHeaders) {
       const cookie = header.split(';')[0];
       const [name] = cookie.split('=');
       if (name) this.cookies.set(name.trim(), cookie);
     }
+
+    // Method 2: forEach iteration fallback
+    response.headers.forEach((value, key) => {
+      if (key.toLowerCase() === 'set-cookie') {
+        const cookie = value.split(';')[0];
+        const [name] = cookie.split('=');
+        if (name) this.cookies.set(name.trim(), cookie);
+      }
+    });
+
+    console.log('Cookies now:', Array.from(this.cookies.keys()).join(', '), '| count:', this.cookies.size);
   }
 
   toString(): string {
@@ -50,10 +69,19 @@ async function createSession(): Promise<{ jar: CookieJar; memh: string; overview
   // POST login
   const loginResponse = await fetch(`${PNPSCADA_BASE_URL}/_Login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { ...BROWSER_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: formData.toString(),
     redirect: 'manual',
   });
+  
+  // Debug: log ALL headers from login response
+  console.log('Login response status:', loginResponse.status);
+  console.log('Login getSetCookie:', JSON.stringify(loginResponse.headers.getSetCookie?.() || []));
+  console.log('Login get set-cookie:', loginResponse.headers.get('set-cookie'));
+  const allHeaders: string[] = [];
+  loginResponse.headers.forEach((v, k) => allHeaders.push(`${k}: ${v}`));
+  console.log('Login ALL headers:', JSON.stringify(allHeaders));
+  
   jar.addFromResponse(loginResponse);
 
   if (loginResponse.status !== 302 && loginResponse.status !== 200) {
@@ -68,7 +96,7 @@ async function createSession(): Promise<{ jar: CookieJar; memh: string; overview
   while (currentUrl && redirectCount < 5) {
     const fullUrl = currentUrl.startsWith('http') ? currentUrl : `${PNPSCADA_BASE_URL}${currentUrl}`;
     const response = await fetch(fullUrl, {
-      headers: { 'Cookie': jar.toString() },
+      headers: { ...BROWSER_HEADERS, 'Cookie': jar.toString() },
       redirect: 'manual',
     });
     jar.addFromResponse(response);
@@ -85,7 +113,7 @@ async function createSession(): Promise<{ jar: CookieJar; memh: string; overview
   // If we got a login page, try overview directly
   if (overviewHtml.includes('Please authenticate') || overviewHtml.includes('_Login')) {
     const overviewResponse = await fetch(`${PNPSCADA_BASE_URL}/overview`, {
-      headers: { 'Cookie': jar.toString() },
+      headers: { ...BROWSER_HEADERS, 'Cookie': jar.toString() },
     });
     jar.addFromResponse(overviewResponse);
     overviewHtml = await overviewResponse.text();
@@ -122,7 +150,7 @@ async function searchMeters(jar: CookieJar, memh: string, searchStr: string = '*
 
   const response = await fetch(`${PNPSCADA_BASE_URL}/browseopen.jsp`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': jar.toString() },
+    headers: { ...BROWSER_HEADERS, 'Content-Type': 'application/x-www-form-urlencoded', 'Cookie': jar.toString() },
     body: formData.toString(),
   });
   jar.addFromResponse(response);
@@ -148,9 +176,10 @@ async function selectMeter(jar: CookieJar, memh: string, entityId: string, class
   // Step 1: Load the meter overview page to set session context
   const overviewUrl = `${PNPSCADA_BASE_URL}/overview?PNPENTID=${entityId}&PNPENTCLASID=${classId}&memh=${memh}`;
   console.log('Selecting meter (overview):', overviewUrl);
-  const overviewResp = await fetch(overviewUrl, { headers: { 'Cookie': jar.toString() } });
+  const overviewResp = await fetch(overviewUrl, { headers: { ...BROWSER_HEADERS, 'Cookie': jar.toString() } });
   jar.addFromResponse(overviewResp);
   const overviewHtml = await overviewResp.text();
+  console.log('Meter overview:', overviewHtml.length, 'bytes, title:', overviewHtml.includes('Overview') ? 'Overview' : overviewHtml.includes('Login') ? 'LOGIN PAGE!' : 'Unknown');
   const overviewMemhMatch = overviewHtml.match(/memh=(-?\d+)/);
   const overviewMemh = overviewMemhMatch ? overviewMemhMatch[1] : memh;
 
@@ -158,15 +187,17 @@ async function selectMeter(jar: CookieJar, memh: string, entityId: string, class
   const start = new Date(startDate);
   const graphUrl = `${PNPSCADA_BASE_URL}/_Graph?hasTariffs=true&hasBills=false&hasCustomers=false&memh=${overviewMemh}&hasTOU=$hasTOU&doBill=1&GSTARTH=0&GSTARTN=0&GENDH=0&GENDN=0&TRIGHT0=False&TLEFT0=True&TRIGHT1=False&TLEFT1=True&TRIGHT2=False&TLEFT2=True&TRIGHT3=False&TLEFT3=True&TRIGHT4=False&TLEFT4=True&TRIGHT5=False&TLEFT5=True&TLEFT6=False&TRIGHT6=True&GINCY=${start.getUTCFullYear()}&GINCM=${start.getUTCMonth() + 1}&GINCD=1&TIMEMODE=2&selGNAME_UTILITY=${serial}$Electricity&TGIDX=0`;
   console.log('Loading graph page (full params):', graphUrl);
-  const graphResp = await fetch(graphUrl, { headers: { 'Cookie': jar.toString() } });
+  const graphResp = await fetch(graphUrl, { headers: { ...BROWSER_HEADERS, 'Cookie': jar.toString(), 'Referer': overviewUrl } });
   jar.addFromResponse(graphResp);
   const graphHtml = await graphResp.text();
   const graphMemhMatch = graphHtml.match(/memh=(-?\d+)/);
   const finalMemh = graphMemhMatch ? graphMemhMatch[1] : overviewMemh;
   console.log('Meter ready, memh:', finalMemh, '| graph page:', graphHtml.length, 'bytes', '| cookies:', jar.count);
+  console.log('Graph HTML snippet (first 2000):', graphHtml.slice(0, 2000));
+  console.log('Graph HTML snippet (last 1000):', graphHtml.slice(-1000));
 
-  // Step 3: Wait for server to prepare data
-  await new Promise(resolve => setTimeout(resolve, 3000));
+  // Step 3: Wait for server to prepare data (server needs ~5s)
+  await new Promise(resolve => setTimeout(resolve, 5000));
 
   // Log all links and data endpoints found on graph page
   const dataLinks: string[] = [];
@@ -187,9 +218,8 @@ async function downloadCSV(jar: CookieJar, memh: string, serial: string, startDa
 
   const csvUrl = `${PNPSCADA_BASE_URL}/_DataDownload?CSV=Yes&TEMPPATH=../temp/&LOCALTEMPPATH=docroot/temp/&GSTARTH=0&GSTARTN=0&GENDH=0&GENDN=0&GSTARTD=${start.getUTCDate()}&GSTARTY=${start.getUTCFullYear()}&GSTARTM=${start.getUTCMonth() + 1}&GENDD=${end.getUTCDate()}&GENDY=${end.getUTCFullYear()}&GENDM=${end.getUTCMonth() + 1}&selGNAME_UTILITY=${serial}$Electricity&TGIDX=0&memh=${memh}`;
   console.log('Downloading CSV:', csvUrl);
+  console.log('Sending cookies:', jar.toString());
 
-  // Use Deno.HttpClient or raw TCP to avoid content-length:0 issue
-  // First try: read body as stream to bypass content-length
   const response = await fetch(csvUrl, {
     headers: {
       'Cookie': jar.toString(),
@@ -236,14 +266,9 @@ async function downloadCSV(jar: CookieJar, memh: string, serial: string, startDa
   return '';
 }
 
-// Full per-meter download: fresh login -> select meter -> download CSV
-async function downloadMeterCSV(entityId: string, classId: string, serial: string, startDate: string, endDate: string): Promise<string> {
-  const session = await createSession();
-  if (!session.authenticated) {
-    return JSON.stringify({ error: 'Authentication failed for meter ' + serial });
-  }
-
-  const { memh: meterMemh, graphHtml } = await selectMeter(session.jar, session.memh, entityId, classId, serial, startDate, endDate);
+// Download CSV using an existing session (no re-login)
+async function downloadMeterCSV(jar: CookieJar, memh: string, entityId: string, classId: string, serial: string, startDate: string, endDate: string): Promise<string> {
+  const { memh: meterMemh, graphHtml } = await selectMeter(jar, memh, entityId, classId, serial, startDate, endDate);
 
   // Extract any _DataDownload link from graph page HTML
   const downloadLinkMatch = graphHtml.match(/href="([^"]*_DataDownload[^"]*)"/i);
@@ -265,18 +290,17 @@ async function downloadMeterCSV(entityId: string, classId: string, serial: strin
     
     console.log('Modified URL:', modifiedUrl);
     const resp = await fetch(modifiedUrl, {
-      headers: { 'Cookie': session.jar.toString(), 'User-Agent': 'Mozilla/5.0', 'Accept-Encoding': 'identity' },
+      headers: { ...BROWSER_HEADERS, 'Cookie': jar.toString() },
     });
-    session.jar.addFromResponse(resp);
+    jar.addFromResponse(resp);
     const text = await resp.text();
     console.log('Graph link download:', text.length, 'bytes, status:', resp.status);
     if (text.length > 0 && !text.includes('<HTML') && !text.includes('authenticate')) {
       return text;
     }
   }
-
   // Fallback: constructed URL
-  const csvData = await downloadCSV(session.jar, meterMemh, serial, startDate, endDate);
+  const csvData = await downloadCSV(jar, meterMemh, serial, startDate, endDate);
   if (csvData.includes('<HTML') || csvData.includes('<html') || csvData.includes('authenticate')) {
     return JSON.stringify({
       error: 'Got HTML instead of CSV',
@@ -340,7 +364,7 @@ serve(async (req) => {
         });
       }
 
-      const csvData = await downloadMeterCSV(entityId, classId, serial, startDate, endDate);
+      const csvData = await downloadMeterCSV(jar, memh, entityId, classId, serial, startDate, endDate);
       return new Response(JSON.stringify({ success: true, serial, csvData }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -357,8 +381,7 @@ serve(async (req) => {
       const results: { serial: string; csvData: string; error?: string }[] = [];
       for (const m of serials) {
         try {
-          // Fresh login per meter to avoid session conflicts
-          const csvData = await downloadMeterCSV(m.entityId, m.classId, m.serial, startDate, endDate);
+          const csvData = await downloadMeterCSV(jar, memh, m.entityId, m.classId, m.serial, startDate, endDate);
           results.push({ serial: m.serial, csvData });
         } catch (err) {
           console.error(`Error downloading meter ${m.serial}:`, err);
