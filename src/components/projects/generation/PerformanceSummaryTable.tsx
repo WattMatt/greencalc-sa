@@ -440,7 +440,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                         {sourceDisplayNames.get(src) || src}
                       </TableHead>
                     ))}
-                    <TableHead className="text-xs py-2 px-2">Comment</TableHead>
+                    <TableHead className="text-xs py-2 px-2 border-l">Comment</TableHead>
                   </TableRow>
                   <TableRow>
                     <TableHead className="text-xs py-1 px-2"></TableHead>
@@ -451,7 +451,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                         <TableHead className={cn("text-xs py-1 px-2 text-right min-w-[90px]", idx % 2 === 1 && "bg-muted/20")}>30-Min Intervals</TableHead>
                       </React.Fragment>
                     ))}
-                    <TableHead className="text-xs py-1 px-2"></TableHead>
+                    <TableHead className="text-xs py-1 px-2 border-l"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -468,7 +468,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                           </React.Fragment>
                         );
                       })}
-                      <TableCell className="text-xs py-1.5 px-2 text-muted-foreground">—</TableCell>
+                      <TableCell className="text-xs py-1.5 px-2 text-muted-foreground border-l">—</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -485,7 +485,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                         </React.Fragment>
                       );
                     })}
-                    <TableCell className="text-xs py-2 px-2"></TableCell>
+                    <TableCell className="text-xs py-2 px-2 border-l"></TableCell>
                   </TableRow>
                 </TableFooter>
               </Table>
