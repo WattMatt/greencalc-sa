@@ -1,7 +1,6 @@
 import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Upload, Save, RotateCcw } from "lucide-react";
@@ -292,13 +291,11 @@ export function ActualGenerationCard({ projectId, month, year, monthData, onData
           <div className="flex items-center gap-3">
             <Label className="text-sm text-muted-foreground w-auto">{monthData.fullName} {year}</Label>
           </div>
-          <Input
-            type="number"
-            className="text-sm"
-            placeholder="Enter kWh"
-            value={displayValue}
-            onChange={(e) => setValue(e.target.value)}
-          />
+          <p className="text-2xl font-semibold tabular-nums">
+            {monthData.actual_kwh != null
+              ? monthData.actual_kwh.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              : "—"}
+          </p>
           {monthData.source && (
             <p className="text-xs text-muted-foreground">
               Source: {monthData.source}
