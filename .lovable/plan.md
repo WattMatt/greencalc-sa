@@ -1,33 +1,39 @@
 
 
-## Down Time Tab: All Pending Changes
+## Fix Down Time Tab: Comment Column Separation and Source-Data Mapping
 
-All of the following approved changes will be implemented in a single edit to `src/components/projects/generation/PerformanceSummaryTable.tsx` (lines 434-490):
+### Problem 1: Comment Column Not Visually Separated
+The "Comment" column blends into the last source group. It needs a `border-l` separator to stand out.
 
-### 1. Column Renames
+### Problem 2: Lost Production Values Are Identical Across All Tie-Ins
+The values (413.71, 413.95, 413.75) are nearly identical because the guarantee sources ("Tie-In 1", "Tie-In 2", "Tie-In 3") have **no `reading_source` mapping** set. The actual CSV reading sources are:
 
-| Current | New |
-|---|---|
-| `Slots` (line 447) | `30-Min Intervals` |
-| `Production (kWh)` (line 450) | `Lost Production (kWh)` |
-| `DT Slots` (line 451) | `30-Min Intervals` |
+- `31190 - Parkdene Solar Checkers`
+- `31198 - Parkdene Solar DB2.1`
+- `31193 - Parkdene Solar DB3.1`
 
-### 2. Value Changes
+Since none are linked, the system falls back to distributing the total guarantee evenly across all three sources, producing nearly identical downtime values. **This is a data configuration issue, not a code bug.**
 
-- **Lost Production column** (line 466): change `sd?.actual` to `sd?.downtimeEnergy`
-- **Footer Lost Production** (line 483): change `st?.actual` to `st?.downtimeEnergy`
+### Plan
 
-### 3. Visual Source Grouping
+**Code change (PerformanceSummaryTable.tsx):**
+1. Add `border-l` to the Comment header cells and body/footer cells to visually separate it from the source groups.
 
-- Add `border-l` on the first sub-column of each source group so there's a clear vertical separator between Tie-In 1, Tie-In 2, Tie-In 3
-- Source name headers already use `colSpan={2}` -- add `border-l` and `text-center` styling
-- Apply alternating subtle background (`bg-muted/20`) on even-indexed source groups for extra clarity
+**Data fix (user action required):**
+2. Open the "Guaranteed Generation Sources" dialog for the active month/year and use the "Link to CSV source" dropdown to map each Tie-In to its correct reading source:
+   - Tie-In 1 -> one of `31190 - Parkdene Solar Checkers`, `31198 - Parkdene Solar DB2.1`, `31193 - Parkdene Solar DB3.1`
+   - Tie-In 2 -> another
+   - Tie-In 3 -> the remaining one
 
-### 4. Better Column Width Distribution
+Once mapped, the Lost Production and 30-Min Intervals will correctly reflect each source's individual downtime.
 
-- Days column: `w-12` (keep compact)
-- 30-Min Intervals (global): `min-w-[80px]`
-- Each source sub-column: `min-w-[90px]`
+### Technical Details
 
-All changes in one file: `src/components/projects/generation/PerformanceSummaryTable.tsx`, lines 434-490.
+**File:** `src/components/projects/generation/PerformanceSummaryTable.tsx`
+
+Lines to change:
+- Line 443 (header row 1, Comment): add `border-l` class
+- Line 454 (header row 2, empty Comment sub-header): add `border-l` class
+- Line 471 (body Comment cell): add `border-l` class
+- Line 488 (footer Comment cell): add `border-l` class
 
