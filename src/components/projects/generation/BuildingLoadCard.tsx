@@ -34,6 +34,7 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
   const [csvDialogOpen, setCsvDialogOpen] = useState(false);
   const [csvDialogLines, setCsvDialogLines] = useState<string[]>([]);
   const [pendingFileCount, setPendingFileCount] = useState(0);
+  const [pendingFileName, setPendingFileName] = useState("");
 
   const displayValue = value !== null ? value : (monthData.building_load_kwh?.toString() ?? "");
 
@@ -140,7 +141,7 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
             timestamp: r.timestamp,
             actual_kwh: existing?.actual_kwh ?? null,
             building_load_kwh: (existing?.building_load_kwh ?? 0) + r.kwh,
-            source: "csv",
+            source: pendingFileName.replace(/\.csv$/i, "").trim() || "csv",
           };
         });
 
@@ -153,7 +154,8 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
 
     // Auto-create source guarantee entry flagged as council meter
     if (readings && readings.length > 0) {
-      const sourceLabel = readings[0]?.timestamp ? "Council Supply" : "csv";
+      const sanitizedName = pendingFileName.replace(/\.csv$/i, "").trim();
+      const sourceLabel = sanitizedName || "Council Supply";
       const affectedMonths = Array.from(totals.keys());
       for (const m of affectedMonths) {
         const { data: existing } = await supabase
@@ -190,6 +192,7 @@ export function BuildingLoadCard({ projectId, month, year, monthData, onDataChan
     if (!files || files.length === 0) return;
 
     try {
+      setPendingFileName(files[0].name);
       const text = await files[0].text();
       const allLines = text.split("\n").filter((l) => l.trim());
       setCsvDialogLines(allLines);
