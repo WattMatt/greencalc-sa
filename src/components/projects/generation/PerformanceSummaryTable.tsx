@@ -285,12 +285,28 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
         const sdKey = `${d}-${sourceLabel}`;
         const sd = sdMap.get(sdKey)!;
 
+        // First pass: identify below-threshold slots
+        const slotTimes: number[] = [];
+        const belowThreshold: boolean[] = [];
         for (let min = sunStartMin; min <= sunEndMin; min += slotIntervalMin) {
+          slotTimes.push(min);
           const key = `${d}-${min}-${sourceLabel}`;
           const val = readingLookup.get(key);
           const actualVal = (val !== undefined && val !== null) ? val : 0;
-          const threshold = perSlotEnergy * 0.01;
-          if (actualVal < threshold) {
+          const threshold = perSlotEnergy * 0.0005;
+          belowThreshold.push(actualVal < threshold);
+        }
+
+        // Second pass: only count downtime when 2+ consecutive slots are below threshold
+        for (let i = 0; i < slotTimes.length; i++) {
+          if (!belowThreshold[i]) continue;
+          const hasConsecutive =
+            (i > 0 && belowThreshold[i - 1]) ||
+            (i < slotTimes.length - 1 && belowThreshold[i + 1]);
+          if (hasConsecutive) {
+            const key = `${d}-${slotTimes[i]}-${sourceLabel}`;
+            const val = readingLookup.get(key);
+            const actualVal = (val !== undefined && val !== null) ? val : 0;
             entry.downtimeSlots += 1;
             entry.downtimeEnergy += (perSlotEnergy - actualVal);
             sd.downtimeSlots += 1;
