@@ -248,9 +248,11 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
     const readingLookup = new Map<string, number | null>();
     if (readings) {
       for (const r of readings) {
-        const ts = new Date(r.timestamp);
-        const day = ts.getDate();
-        const minutes = ts.getHours() * 60 + ts.getMinutes();
+        const tsStr = String(r.timestamp);
+        const tsMatch = tsStr.match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (!tsMatch) continue;
+        const day = parseInt(tsMatch[3], 10);
+        const minutes = parseInt(tsMatch[4], 10) * 60 + parseInt(tsMatch[5], 10);
         const sourceLabel = r.source || "csv";
         // Skip sources not in our filtered solar PV set
         if (!distinctReadingSources.has(sourceLabel)) continue;
