@@ -156,8 +156,16 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
     }
 
     if (readings) {
+      // Track which sources have any actual data
+      const sourceHasData = new Map<string, boolean>();
       for (const r of readings) {
-        distinctReadingSources.add(r.source || "csv");
+        const src = r.source || "csv";
+        if (!sourceHasData.has(src)) sourceHasData.set(src, false);
+        if (r.actual_kwh != null && Number(r.actual_kwh) > 0) sourceHasData.set(src, true);
+      }
+      // Only include sources that have at least some actual data
+      for (const [src, hasData] of sourceHasData) {
+        if (hasData) distinctReadingSources.add(src);
       }
     }
 
