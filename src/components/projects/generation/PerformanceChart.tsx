@@ -86,14 +86,14 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   const { data: readings } = useQuery({
     queryKey: ["generation-readings-chart", projectId, year, month],
     queryFn: async () => {
-      const allReadings: { timestamp: string; actual_kwh: number | null; source: string | null }[] = [];
+      const allReadings: { timestamp: string; actual_kwh: number | null; building_load_kwh: number | null; source: string | null }[] = [];
       const pageSize = 1000;
       let from = 0;
       let hasMore = true;
       while (hasMore) {
         const { data, error } = await supabase
           .from("generation_readings")
-          .select("timestamp, actual_kwh, source")
+          .select("timestamp, actual_kwh, building_load_kwh, source")
           .eq("project_id", projectId)
           .gte("timestamp", `${startDate}T00:00:00`)
           .lte("timestamp", `${endDate}T23:59:59`)
@@ -108,33 +108,6 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     },
     enabled: timeframe !== "monthly",
   });
-
-  // Query council demand from generation_daily_records (building_load_kwh)
-  const { data: dailyRecords } = useQuery({
-    queryKey: ["generation-daily-records-chart", projectId, year, month],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("generation_daily_records")
-        .select("date, building_load_kwh")
-        .eq("project_id", projectId)
-        .gte("date", startDate)
-        .lte("date", endDate)
-        .order("date");
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  // Build a map of day -> building_load_kwh from daily records
-  const dailyBuildingLoad = useMemo(() => {
-    const map = new Map<number, number>();
-    if (!dailyRecords) return map;
-    for (const rec of dailyRecords) {
-      const day = new Date(rec.date).getDate();
-      map.set(day, (map.get(day) ?? 0) + (Number(rec.building_load_kwh) || 0));
-    }
-    return map;
-  }, [dailyRecords]);
 
   const dailyGuarantee = monthData.guaranteed_kwh ? monthData.guaranteed_kwh / days : null;
 
@@ -155,14 +128,15 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   // Aggregate readings across all sources by timestamp (used when showSources is false)
   const aggregatedReadings = useMemo(() => {
     if (!readings) return null;
-    const map = new Map<string, { timestamp: string; actual_kwh: number }>();
+    const map = new Map<string, { timestamp: string; actual_kwh: number; building_load_kwh: number }>();
     for (const r of readings) {
       const key = r.timestamp;
       const existing = map.get(key);
       if (existing) {
         existing.actual_kwh += r.actual_kwh ?? 0;
+        existing.building_load_kwh += r.building_load_kwh ?? 0;
       } else {
-        map.set(key, { timestamp: key, actual_kwh: r.actual_kwh ?? 0 });
+        map.set(key, { timestamp: key, actual_kwh: r.actual_kwh ?? 0, building_load_kwh: r.building_load_kwh ?? 0 });
       }
     }
     return Array.from(map.values());
@@ -171,7 +145,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
   // Per-source readings keyed by timestamp (used when showSources is true)
   const perSourceReadings = useMemo(() => {
     if (!readings || !showSources) return null;
-    const map = new Map<string, { timestamp: string; [key: string]: any }>();
+    const map = new Map<string, { timestamp: string; building_load_kwh: number; [key: string]: any }>();
     for (const r of readings) {
       const key = r.timestamp;
       const sourceIdx = r.source ? sourceLabels.indexOf(r.source) : -1;
@@ -179,8 +153,9 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
       const existing = map.get(key);
       if (existing) {
         existing[sourceKey] = (existing[sourceKey] ?? 0) + (r.actual_kwh ?? 0);
+        existing.building_load_kwh += r.building_load_kwh ?? 0;
       } else {
-        const entry: any = { timestamp: key };
+        const entry: any = { timestamp: key, building_load_kwh: r.building_load_kwh ?? 0 };
         entry[sourceKey] = r.actual_kwh ?? 0;
         map.set(key, entry);
       }

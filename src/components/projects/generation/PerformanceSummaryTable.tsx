@@ -13,6 +13,7 @@ interface MonthData {
   actual_kwh: number | null;
   guaranteed_kwh: number | null;
   expected_kwh: number | null;
+  building_load_kwh: number | null;
 }
 
 interface PerformanceSummaryTableProps {
@@ -78,14 +79,14 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
   const { data: readings } = useQuery({
     queryKey: ["generation-readings-daily", projectId, year, month],
     queryFn: async () => {
-      const allReadings: { timestamp: string; actual_kwh: number | null; source: string | null }[] = [];
+      const allReadings: { timestamp: string; actual_kwh: number | null; building_load_kwh: number | null; source: string | null }[] = [];
       const pageSize = 1000;
       let from = 0;
       let hasMore = true;
       while (hasMore) {
         const { data, error } = await supabase
           .from("generation_readings")
-          .select("timestamp, actual_kwh, source")
+          .select("timestamp, actual_kwh, building_load_kwh, source")
           .eq("project_id", projectId)
           .gte("timestamp", startDate)
           .lte("timestamp", endDate)
@@ -155,16 +156,8 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
     }
 
     if (readings) {
-      // Track which sources have any actual data
-      const sourceHasData = new Map<string, boolean>();
       for (const r of readings) {
-        const src = r.source || "csv";
-        if (!sourceHasData.has(src)) sourceHasData.set(src, false);
-        if (r.actual_kwh != null && Number(r.actual_kwh) > 0) sourceHasData.set(src, true);
-      }
-      // Only include sources that have at least some actual data
-      for (const [src, hasData] of sourceHasData) {
-        if (hasData) distinctReadingSources.add(src);
+        distinctReadingSources.add(r.source || "csv");
       }
     }
 
