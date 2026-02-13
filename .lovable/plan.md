@@ -1,42 +1,33 @@
 
 
-## Link Guarantee Sources to CSV Reading Sources
+## Down Time Tab: All Pending Changes
 
-### Problem
-The guarantee entries ("Tie-In 1", "Tie-In 2", "Tie-In 3") are separate from the CSV reading sources ("31198 - Parkdene Solar DB2.1", "31193 - Parkdene Solar DB3.1", "31190 - Parkdene Solar Checkers"). Currently the system uses an unreliable index-based fallback to associate them.
+All of the following approved changes will be implemented in a single edit to `src/components/projects/generation/PerformanceSummaryTable.tsx` (lines 434-490):
 
-### Solution
-Add a `reading_source` column to `generation_source_guarantees` so each guarantee can be explicitly linked to the CSV source it represents. The Source Guarantees dialog will show a dropdown for each row letting users pick the associated reading source.
+### 1. Column Renames
 
-### Changes
+| Current | New |
+|---|---|
+| `Slots` (line 447) | `30-Min Intervals` |
+| `Production (kWh)` (line 450) | `Lost Production (kWh)` |
+| `DT Slots` (line 451) | `30-Min Intervals` |
 
-**1. Database migration**
-- Add `reading_source text` column (nullable) to `generation_source_guarantees`.
+### 2. Value Changes
 
-**2. Source Guarantees Dialog (`SourceGuaranteesDialog.tsx`)**
-- Fetch distinct reading sources from `generation_readings` for the project/month/year.
-- Add a dropdown (Select) next to each guarantee row where users can pick which reading source it maps to.
-- Save the selected `reading_source` value alongside the existing fields.
+- **Lost Production column** (line 466): change `sd?.actual` to `sd?.downtimeEnergy`
+- **Footer Lost Production** (line 483): change `st?.actual` to `st?.downtimeEnergy`
 
-**3. Performance table filtering (`PerformanceSummaryTable.tsx`)**
-- Fetch `reading_source` in the source guarantees query.
-- When building the guarantee map, use `reading_source` (if set) as the key instead of `source_label`. This directly maps "Tie-In 1" guarantee to "31198 - Parkdene Solar DB2.1" readings.
-- Keep the display name as the guarantee's `source_label` (e.g., "Tie-In 1").
-- Remove the aggressive secondary filter (lines 209-214) that deletes sources with zero guarantees -- council exclusion is already handled by `meter_type`.
+### 3. Visual Source Grouping
 
-### Technical Details
+- Add `border-l` on the first sub-column of each source group so there's a clear vertical separator between Tie-In 1, Tie-In 2, Tie-In 3
+- Source name headers already use `colSpan={2}` -- add `border-l` and `text-center` styling
+- Apply alternating subtle background (`bg-muted/20`) on even-indexed source groups for extra clarity
 
-```text
-generation_source_guarantees
-+-----------------+------------------+----------+----------------+
-| source_label    | guaranteed_kwh   | meter_type | reading_source |
-+-----------------+------------------+----------+----------------+
-| Tie-In 1        | 52,375           | solar    | 31198 - ...    |
-| Tie-In 2        | 89,335           | solar    | 31193 - ...    |
-| Tie-In 3        | 89,335           | solar    | 31190 - ...    |
-| Council Supply  | 0                | council  | NULL           |
-+-----------------+------------------+----------+----------------+
-```
+### 4. Better Column Width Distribution
 
-The guarantee map in `PerformanceSummaryTable` will be keyed by `reading_source` when available, ensuring exact matching to the actual time-series data regardless of label differences.
+- Days column: `w-12` (keep compact)
+- 30-Min Intervals (global): `min-w-[80px]`
+- Each source sub-column: `min-w-[90px]`
+
+All changes in one file: `src/components/projects/generation/PerformanceSummaryTable.tsx`, lines 434-490.
 
