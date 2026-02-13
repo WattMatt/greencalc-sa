@@ -1,54 +1,65 @@
 
 
-## Rewrite fetch-pnpscada to Match Working Python Reference
+# Fix: Downtime Calculation Must Account for Missing Timestamps
 
-### Problem Summary
-The current edge function follows the right general steps but has two critical issues:
-1. **Missing JSESSIONID cookie** -- The Deno `Headers` API may merge or drop multiple `Set-Cookie` headers, so the Jetty session cookie is lost
-2. **`_DataDownload` missing key parameters** -- The working Python script includes `doBill=1` and `selGNAME_UTILITY` in the download request, which our code omits
+## The Problem
 
-### What Changes
+The daily downtime calculation only counts slots where a database row exists with a zero or null value. When a timestamp slot is completely **absent** from the data, it is silently ignored -- meaning the downtime energy is underreported.
 
-**Rewrite `supabase/functions/fetch-pnpscada/index.ts`** to closely mirror the working Python script:
+**Example from Day 1:**
+- Yield Guarantee: 7,453.11 kWh
+- Metered Generation: 0.27 kWh (essentially zero -- the whole day was down)
+- Down Time kWh: 7,297.85 (should be ~7,452.84 to make Theoretical match Guarantee)
+- Gap: **155.26 kWh unaccounted for** -- these are missing timestamp slots
 
-#### 1. Fix Cookie Capture (Critical)
+## Root Cause
 
-Replace the current `CookieJar.addFromResponse` with a method that also parses `response.headers.get('set-cookie')` as a **comma-delimited** string (how Deno may flatten multiple Set-Cookie headers). This catches cookies that `getSetCookie()` and `forEach` miss:
+In `PerformanceSummaryTable.tsx`, the downtime loop iterates over **existing readings only**:
 
-```typescript
-// Parse comma-delimited set-cookie (Deno flattening workaround)
-const raw = response.headers.get('set-cookie');
-if (raw) {
-  // Split on comma followed by a cookie name= pattern (not commas inside dates like "Thu, 01-Jan")
-  const parts = raw.split(/,(?=[^ ]+=)/);
-  for (const part of parts) {
-    const cookie = part.trim().split(';')[0];
-    const [name] = cookie.split('=');
-    if (name) this.cookies.set(name.trim(), cookie);
-  }
+```text
+for (const r of readings) {
+  // only counts downtime if a row exists with actual_kwh == 0 or null
 }
 ```
 
-#### 2. Simplify `_DataDownload` Parameters
+If a sun-hour slot (e.g., 06:30, 07:00) has no row in the database at all, it is never evaluated and never counted as downtime.
 
-Match the Python reference exactly. Remove `TEMPPATH`/`LOCALTEMPPATH` and add `doBill=1` and `selGNAME_UTILITY`:
+## The Fix
+
+**File:** `src/components/projects/generation/PerformanceSummaryTable.tsx`
+
+Replace the current "iterate over readings" approach with a "generate expected slots, then check for data" approach:
+
+1. **For each day**, generate all expected sun-hour timestamps (06:00 to 17:30 at the detected interval -- e.g., 24 slots for 30-min data).
+
+2. **Build a lookup** of existing readings keyed by (day, minuteOfDay, source).
+
+3. **For each expected slot per source**: if no reading exists OR the reading has zero/null actual_kwh, count it as a downtime slot and add the per-slot downtime energy.
+
+This ensures that a fully offline day (no data rows at all) produces downtime kWh equal to the daily yield guarantee, which is the mathematically correct result.
+
+## Technical Detail
 
 ```text
-/_DataDownload?CSV=Yes
-  &selGNAME_UTILITY={serial}$Electricity
-  &GSTARTD={day}&GSTARTM={month}&GSTARTY={year}
-  &GENDD={day}&GENDM={month}&GENDY={year}
-  &doBill=1
+Current flow:
+  readings[] --> for each reading --> if zero during sun hours --> add downtime
+
+Fixed flow:
+  for each day (1..totalDays):
+    for each source in distinctSources:
+      for each sun-hour slot (06:00, 06:30, ..., 17:30):
+        lookup reading at (day, slot, source)
+        if missing OR zero --> count as downtime
 ```
 
-#### 3. Add a Debug Action for Raw Headers
+The per-slot downtime energy formula stays the same: `sourceDailyGuarantee / sunHourSlots`.
 
-Add a `debug-cookies` action that performs the login + overview + select meter + graph load sequence and returns the **raw headers from every response** so we can verify exactly which cookies are being captured and which are lost. This helps us diagnose if the fix works or if something else is wrong.
+## Expected Result After Fix
 
-#### 4. Keep Existing Flow Structure
+For Day 1 with near-zero generation:
+- Down Time kWh will be approximately equal to the Yield Guarantee
+- Theoretical Generation = Metered + Down Time will match the Guarantee
+- Surplus/Deficit will correctly reflect the shortfall against metered (not theoretical)
 
-The 5-step flow stays the same (login -> overview -> select meter -> graph -> download). Only the cookie capture and download URL parameters change.
-
-### Files Modified
-- `supabase/functions/fetch-pnpscada/index.ts` -- Fix cookie parsing, update `_DataDownload` params, add debug-cookies action
+No database changes required. This is a front-end calculation fix only.
 
