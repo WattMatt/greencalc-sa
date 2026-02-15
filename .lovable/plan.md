@@ -1,16 +1,28 @@
 
-## Change Final Down Time Column from Intervals to Lost Production
+## Fix: Sort Source Columns Consistently in Down Time and Performance Tabs
 
-### What Changes
+### Problem
 
-The "Down Time (06:00-18:00)" summary column currently displays `downtimeSlots` (count of 30-min intervals). It should instead display `downtimeEnergy` (summed lost production in kWh).
+The source columns (e.g., Tie-In 1, Tie-In 2, Tie-In 3) appear in arbitrary insertion order because they come from a `Set` iterated in the order readings are encountered. The screenshot shows them as Tie-In 2, Tie-In 1, Tie-In 3 instead of the expected 1, 2, 3 order.
 
-### File: `src/components/projects/generation/PerformanceSummaryTable.tsx`
+### Fix
 
-Three lines need updating:
+**File: `src/components/projects/generation/PerformanceSummaryTable.tsx`**
 
-1. **Header (line 465)**: Change `"30-Min Intervals"` to `"Lost Production (kWh)"`
-2. **Row cells (line 479)**: Change `{row.downtimeSlots}` to `{formatNum(row.downtimeEnergy)}`
-3. **Footer total (line 496)**: Change `{totals.downtimeSlots}` to `{formatNum(totals.downtimeEnergy)}`
+**Line 340** -- Sort `distinctReadingSources` by their display name before returning:
 
-Both `row.downtimeEnergy` and `totals.downtimeEnergy` already exist and contain the correct summed lost production values across all sources. The `formatNum` helper is already used elsewhere in the table for kWh formatting.
+Replace:
+```typescript
+distinctSources: Array.from(distinctReadingSources)
+```
+
+With:
+```typescript
+distinctSources: Array.from(distinctReadingSources).sort((a, b) => {
+  const nameA = displayNameMap.get(a) || a;
+  const nameB = displayNameMap.get(b) || b;
+  return nameA.localeCompare(nameB, undefined, { numeric: true });
+})
+```
+
+Using `{ numeric: true }` in `localeCompare` ensures "Tie-In 2" sorts before "Tie-In 10" (natural/numeric sorting). This single change fixes the column order for both the Down Time and Performance tabs since they both iterate `distinctSources`.
