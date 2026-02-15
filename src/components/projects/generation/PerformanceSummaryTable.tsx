@@ -337,7 +337,11 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       });
     }
 
-    return { dailyRows: rows, sourceDayMap: sdMap, distinctSources: Array.from(distinctReadingSources), sourceDisplayNames: displayNameMap };
+    return { dailyRows: rows, sourceDayMap: sdMap, distinctSources: Array.from(distinctReadingSources).sort((a, b) => {
+      const nameA = displayNameMap.get(a) || a;
+      const nameB = displayNameMap.get(b) || b;
+      return nameA.localeCompare(nameB, undefined, { numeric: true });
+    }), sourceDisplayNames: displayNameMap };
   }, [readings, totalDays, monthData.guaranteed_kwh, sourceGuarantees]);
 
   const totals = useMemo(() => {
