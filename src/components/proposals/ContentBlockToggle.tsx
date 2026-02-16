@@ -14,20 +14,20 @@ export function ContentBlockToggle({ block, onChange, disabled }: ContentBlockTo
   return (
     <div 
       className={cn(
-        "flex items-center gap-3 p-3 rounded-lg border bg-card transition-colors",
+        "flex items-center gap-2 p-3 rounded-lg border bg-card transition-colors",
         block.enabled && "border-primary/30 bg-primary/5",
         !block.enabled && "opacity-60"
       )}
     >
-      <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+      <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground cursor-grab" />
       
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 overflow-hidden">
         <div className="flex items-center gap-2">
-          <Label className="text-sm font-medium cursor-pointer">
+          <Label className="text-sm font-medium cursor-pointer truncate">
             {block.label}
           </Label>
           {block.required && (
-            <Lock className="h-3 w-3 text-muted-foreground" />
+            <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />
           )}
         </div>
         <p className="text-xs text-muted-foreground truncate">
@@ -36,6 +36,7 @@ export function ContentBlockToggle({ block, onChange, disabled }: ContentBlockTo
       </div>
       
       <Switch
+        className="shrink-0"
         checked={block.enabled}
         onCheckedChange={onChange}
         disabled={disabled || block.required}
