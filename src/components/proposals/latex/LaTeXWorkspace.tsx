@@ -12,7 +12,7 @@ interface LaTeXWorkspaceProps {
 
 export function LaTeXWorkspace({ templateData, onPdfReady }: LaTeXWorkspaceProps) {
   const [source, setSource] = useState("");
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [log, setLog] = useState<string | null>(null);
@@ -35,7 +35,12 @@ export function LaTeXWorkspace({ templateData, onPdfReady }: LaTeXWorkspaceProps
     try {
       const result: CompileResult = await compileLatex(src);
       if (src === latestSourceRef.current) {
-        setPdfUrl(result.pdfUrl);
+        if (result.pdf) {
+          const arrayBuf = await result.pdf.arrayBuffer();
+          setPdfData(new Uint8Array(arrayBuf));
+        } else {
+          setPdfData(null);
+        }
         setLog(result.log);
         if (!result.success) {
           setError("Compilation failed");
@@ -84,7 +89,7 @@ export function LaTeXWorkspace({ templateData, onPdfReady }: LaTeXWorkspaceProps
 
       <ResizablePanel defaultSize={55} minSize={25}>
         <PDFPreview
-          pdfUrl={pdfUrl}
+          pdfData={pdfData}
           isCompiling={isCompiling}
           error={error}
           log={log}
