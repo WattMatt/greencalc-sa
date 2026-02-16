@@ -10,6 +10,7 @@ import { BuildingLoadCard } from "./BuildingLoadCard";
 import { PerformanceChart } from "./PerformanceChart";
 import { PerformanceSummaryTable } from "./PerformanceSummaryTable";
 import { SyncScadaDialog } from "./SyncScadaDialog";
+import { LifetimePerformanceChart } from "./LifetimePerformanceChart";
 
 export interface GenerationRecord {
   id: string;
@@ -126,6 +127,8 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
         projectId={projectId}
         onDataSynced={refetch}
       />
+
+      <LifetimePerformanceChart projectId={projectId} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <ActualGenerationCard
