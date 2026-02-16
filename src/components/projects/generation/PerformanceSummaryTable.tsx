@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { DowntimeCommentCell } from "./DowntimeCommentCell";
 
 interface MonthData {
   month: number;
@@ -69,6 +70,46 @@ interface SourceDayData {
 
 export function PerformanceSummaryTable({ projectId, month, year, monthData }: PerformanceSummaryTableProps) {
   const [activeTab, setActiveTab] = useState<string>(TABS[0]);
+  const queryClient = useQueryClient();
+
+  // Fetch saved comments for this month
+  const { data: savedComments } = useQuery({
+    queryKey: ["downtime-comments", projectId, year, month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("downtime_comments")
+        .select("day, comment")
+        .eq("project_id", projectId)
+        .eq("year", year)
+        .eq("month", month);
+      if (error) throw error;
+      const map = new Map<number, string>();
+      for (const row of data ?? []) {
+        map.set(row.day, row.comment);
+      }
+      return map;
+    },
+  });
+
+  // Fetch distinct past comments for this project
+  const { data: pastComments } = useQuery({
+    queryKey: ["downtime-past-comments", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("downtime_comments")
+        .select("comment")
+        .eq("project_id", projectId)
+        .neq("comment", "");
+      if (error) throw error;
+      const unique = [...new Set((data ?? []).map((r) => r.comment))].sort();
+      return unique;
+    },
+  });
+
+  const handleCommentSaved = () => {
+    queryClient.invalidateQueries({ queryKey: ["downtime-comments", projectId, year, month] });
+    queryClient.invalidateQueries({ queryKey: ["downtime-past-comments", projectId] });
+  };
 
   const totalDays = daysInMonth(month, year);
 
@@ -490,7 +531,17 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                           </React.Fragment>
                         );
                       })}
-                      <TableCell className="text-xs py-1.5 px-2 text-muted-foreground border-l">—</TableCell>
+                      <TableCell className="text-xs py-1.5 px-2 border-l">
+                        <DowntimeCommentCell
+                          projectId={projectId}
+                          year={year}
+                          month={month}
+                          day={row.day}
+                          initialValue={savedComments?.get(row.day) ?? ""}
+                          pastComments={pastComments ?? []}
+                          onSaved={handleCommentSaved}
+                        />
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
