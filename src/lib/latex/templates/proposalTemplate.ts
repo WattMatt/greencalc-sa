@@ -65,14 +65,17 @@ export function generatePreamble(data: TemplateData): string {
   const primaryRgb = hexToRgb(branding.primary_color || "#22c55e");
   const secondaryRgb = hexToRgb(branding.secondary_color || "#0f172a");
 
-  return `\\documentclass[8pt, a4paper]{article}
+  return `\\documentclass[11pt, a4paper]{article}
 
-% ── Packages ──
-\\usepackage[top=3cm, bottom=3.5cm, left=1.5cm, right=1.5cm, headheight=40pt]{geometry}
+% ── Page Layout & Margins ──
+\\usepackage[top=25.4mm, bottom=25.4mm, left=25.4mm, right=25.4mm, headheight=40pt]{geometry}
+
+% ── Font Settings ──
 \\usepackage[utf8]{inputenc}
 \\usepackage[T1]{fontenc}
-\\usepackage{helvet}
-\\renewcommand{\\familydefault}{\\sfdefault}
+\\usepackage[sfdefault]{carlito}
+
+% ── Packages ──
 \\usepackage{booktabs}
 \\usepackage{tabularx}
 \\usepackage{xcolor}
@@ -109,6 +112,7 @@ export function generatePreamble(data: TemplateData): string {
   colorlinks=true,
   linkcolor=brandprimary,
   urlcolor=brandprimary,
+  pdfborder={0 0 0}
 }
 
 % ── Section styling ──
