@@ -1,67 +1,52 @@
 
 
-## Fix SwiftLaTeX Script Loading
+## Fix CORS Error for SwiftLaTeX Web Worker
 
 ### Problem
 
-The SwiftLaTeX engine fails to load because the CDN URL points to a **non-existent GitHub repository** (`nicoglennon/swiftlatex-dist`). This is the root cause of the "Failed to load SwiftLaTeX script" error.
-
-Additionally, the current code assumes `PdfTeXEngine` is attached to `window` after the script loads, but the actual SwiftLaTeX `PdfTeXEngine.js` file puts it on a local `exports` object and uses a **Web Worker** architecture -- it spawns a separate worker file (`swiftlatexpdftex.js`) that contains the actual WASM engine.
-
-### Root Cause Summary
-
-1. **Invalid CDN URL**: `nicoglennon/swiftlatex-dist` does not exist on GitHub
-2. **Wrong script file**: The code tries to load `swiftlatexpdftex.js` as a `<script>` tag, but that file is the Web Worker (not the main API)
-3. **Wrong global access**: `PdfTeXEngine` is not placed on `window` by the script
+The patched `PdfTeXEngine.js` tries to create a Web Worker using `new Worker('https://cdn.jsdelivr.net/gh/..../swiftlatexpdftex.js')`. Browsers block cross-origin Worker construction -- the worker script must come from the same origin.
 
 ### Solution
 
-The correct CDN base is:
-```
-https://cdn.jsdelivr.net/gh/SwiftLaTeX/SwiftLaTeX@v20022022/pdftex.wasm/
-```
+Instead of patching `ENGINE_PATH` to point at the CDN URL, we need to **fetch the worker script as well**, wrap it in a Blob URL (which is same-origin), and patch `ENGINE_PATH` to use that Blob URL.
 
-This directory contains:
-- `PdfTeXEngine.js` -- the main API class (12KB) -- this is what we load as a `<script>`
-- `swiftlatexpdftex.js` -- the Web Worker that `PdfTeXEngine.js` spawns internally
+### Implementation
 
-However, there's a complication: `PdfTeXEngine.js` uses `var exports = {}` and puts the class on that local variable, not `window`. And the Web Worker path is hardcoded as `ENGINE_PATH = 'swiftlatexpdftex.js'` (relative), meaning the worker file must be accessible at the same origin path.
+**File: `src/lib/latex/SwiftLaTeXEngine.ts`** -- Update `loadScript()`:
 
-### Implementation Plan
+1. Fetch **both** files from the CDN in parallel:
+   - `PdfTeXEngine.js` (the main API)
+   - `swiftlatexpdftex.js` (the Web Worker)
 
-**File: `src/lib/latex/SwiftLaTeXEngine.ts`** -- Complete rewrite of the loading logic:
+2. Create a Blob URL for the worker script (`swiftlatexpdftex.js`)
 
-1. Change the CDN base URL to the correct one: `https://cdn.jsdelivr.net/gh/SwiftLaTeX/SwiftLaTeX@v20022022/pdftex.wasm/`
+3. Patch `PdfTeXEngine.js` to set `ENGINE_PATH` to the worker's Blob URL instead of the CDN URL
 
-2. Instead of loading `PdfTeXEngine.js` as a script tag (which doesn't export to `window`), fetch it as text and modify it to work:
-   - Fetch `PdfTeXEngine.js` from the CDN
-   - Replace the hardcoded `ENGINE_PATH = 'swiftlatexpdftex.js'` with the full CDN URL so the Web Worker can be loaded cross-origin
-   - Append `window.PdfTeXEngine = PdfTeXEngine;` so the class is accessible
-   - Create a Blob URL from the modified script and inject it as a `<script>` tag
+4. Append `window.PdfTeXEngine = PdfTeXEngine;` as before
 
-3. Keep the rest of the engine wrapper (compile, blob management, download) the same -- those parts work correctly once the engine loads.
+5. Inject the patched main script as a Blob `<script>` tag
 
-### Technical Details
+The key change is just two extra lines: fetch the worker file, create a blob URL for it, and use that blob URL as the `ENGINE_PATH`. Everything else stays the same.
 
-The modified script injection will look like:
+### Technical Detail
 
 ```text
-1. Fetch PdfTeXEngine.js from CDN as text
-2. Replace: var ENGINE_PATH = 'swiftlatexpdftex.js'
-   With:    var ENGINE_PATH = '<full CDN URL>/swiftlatexpdftex.js'
-3. Append:  window.PdfTeXEngine = PdfTeXEngine;
-4. Create Blob URL from modified text
-5. Inject as <script src="blob:...">
-6. On load, window.PdfTeXEngine is available
+Current (broken):
+  ENGINE_PATH = 'https://cdn.jsdelivr.net/.../swiftlatexpdftex.js'
+  --> new Worker(ENGINE_PATH) --> CORS error
+
+Fixed:
+  1. fetch('https://cdn.jsdelivr.net/.../swiftlatexpdftex.js') --> workerText
+  2. workerBlobUrl = URL.createObjectURL(new Blob([workerText]))
+  3. ENGINE_PATH = workerBlobUrl  (blob: URL = same origin)
+  --> new Worker(ENGINE_PATH) --> works
 ```
 
-The Web Worker (`swiftlatexpdftex.js`) will be loaded by `PdfTeXEngine.js` internally using `new Worker(ENGINE_PATH)`, and since we patch the path to the full CDN URL, it will fetch correctly.
+Note: The worker blob URL should NOT be revoked since `PdfTeXEngine` may re-create workers during its lifecycle.
 
 ### Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/lib/latex/SwiftLaTeXEngine.ts` | Fix CDN URL, rewrite `loadScript()` to fetch + patch + inject the script properly |
-
-No other files need changes -- the editor, preview, workspace, and template components are all working correctly. The only issue is the engine script failing to load.
+| `src/lib/latex/SwiftLaTeXEngine.ts` | Fetch worker script, create blob URL for it, patch ENGINE_PATH to blob URL |
 
