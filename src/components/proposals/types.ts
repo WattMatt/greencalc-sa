@@ -210,6 +210,24 @@ export const STATUS_COLORS: Record<Proposal['status'], string> = {
   rejected: 'bg-destructive/10 text-destructive border-destructive/30',
 };
 
+// ============= LaTeX Section Delimiters =============
+
+export const SECTION_BEGIN = (id: string) => `%%-- BEGIN:${id} --%%`;
+export const SECTION_END = (id: string) => `%%-- END:${id} --%%`;
+export const SECTION_REGEX = /%%-- BEGIN:(\w+) --%%\n([\s\S]*?)\n%%-- END:\1 --%%/g;
+
+export type SectionOverrides = Record<string, string>;
+
+export function parseSections(source: string): Map<string, string> {
+  const map = new Map<string, string>();
+  const regex = new RegExp(SECTION_REGEX.source, 'g');
+  let match;
+  while ((match = regex.exec(source)) !== null) {
+    map.set(match[1], match[2]);
+  }
+  return map;
+}
+
 // ============= Formatting Helpers =============
 
 export function formatCurrency(value: number): string {
