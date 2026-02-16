@@ -63,7 +63,7 @@ export function generateBlockContent(
 export function generatePreamble(data: TemplateData): string {
   const { branding, proposal, project } = data;
   // Hardcoded titleblue color — branding/template influence disabled for now
-  const primaryRgb = "23, 100, 166";
+  const primaryRgb = "23, 109, 177";
 
   return `\\documentclass[11pt, a4paper]{article}
 
