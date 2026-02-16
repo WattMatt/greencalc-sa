@@ -1,9 +1,8 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 interface DowntimeCommentCellProps {
   projectId: string;
@@ -26,8 +25,20 @@ export function DowntimeCommentCell({
 }: DowntimeCommentCellProps) {
   const [value, setValue] = useState(initialValue);
   const [open, setOpen] = useState(false);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastSaved = useRef(initialValue);
+
+  const filteredSuggestions = useMemo(() => {
+    if (!value.trim()) return [];
+    const lower = value.toLowerCase();
+    return pastComments.filter((c) => c.toLowerCase().startsWith(lower) && c.toLowerCase() !== lower);
+  }, [value, pastComments]);
+
+  const activeSuggestion = filteredSuggestions.length > 0 ? filteredSuggestions[suggestionIndex % filteredSuggestions.length] : null;
+
+  // The ghost text is the remainder of the suggestion after what the user typed
+  const ghostText = activeSuggestion ? activeSuggestion.slice(value.length) : "";
 
   const save = useCallback(
     async (text: string) => {
@@ -36,7 +47,6 @@ export function DowntimeCommentCell({
       lastSaved.current = trimmed;
 
       if (!trimmed) {
-        // Delete the comment row if empty
         await supabase
           .from("downtime_comments")
           .delete()
@@ -46,13 +56,7 @@ export function DowntimeCommentCell({
           .eq("day", day);
       } else {
         await supabase.from("downtime_comments").upsert(
-          {
-            project_id: projectId,
-            year,
-            month,
-            day,
-            comment: trimmed,
-          },
+          { project_id: projectId, year, month, day, comment: trimmed },
           { onConflict: "project_id,year,month,day" }
         );
       }
@@ -60,6 +64,47 @@ export function DowntimeCommentCell({
     },
     [projectId, year, month, day, onSaved]
   );
+
+  const acceptSuggestion = useCallback(() => {
+    if (activeSuggestion) {
+      setValue(activeSuggestion);
+      save(activeSuggestion);
+      setSuggestionIndex(0);
+    }
+  }, [activeSuggestion, save]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValue(e.target.value);
+    setSuggestionIndex(0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (filteredSuggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSuggestionIndex((prev) => (prev + 1) % filteredSuggestions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSuggestionIndex((prev) => (prev - 1 + filteredSuggestions.length) % filteredSuggestions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        acceptSuggestion();
+        return;
+      }
+      if (e.key === "Escape") {
+        setSuggestionIndex(0);
+        // Clear suggestions by blurring briefly or just let user keep typing
+        return;
+      }
+    }
+    if (e.key === "Enter") {
+      e.currentTarget.blur();
+    }
+  };
 
   const handleBlur = () => {
     save(value);
@@ -69,26 +114,34 @@ export function DowntimeCommentCell({
     setValue(comment);
     setOpen(false);
     save(comment);
-    // Re-focus input after selection
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   return (
     <div className="flex items-center gap-0.5 min-w-[160px]">
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={handleBlur}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.currentTarget.blur();
-          }
-        }}
-        className="flex-1 h-6 px-1.5 text-xs bg-transparent border border-border/50 rounded-sm outline-none focus:border-ring focus:ring-1 focus:ring-ring/30 placeholder:text-muted-foreground"
-        placeholder="Add comment..."
-      />
+      <div className="relative flex-1">
+        {/* Ghost text overlay */}
+        <span
+          aria-hidden
+          className="absolute left-0 top-0 h-6 px-1.5 text-xs flex items-center pointer-events-none whitespace-nowrap overflow-hidden"
+          style={{ maxWidth: "100%" }}
+        >
+          <span className="invisible">{value}</span>
+          {ghostText && (
+            <span className="text-muted-foreground/50">{ghostText}</span>
+          )}
+        </span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          className="w-full h-6 px-1.5 text-xs bg-transparent border border-border/50 rounded-sm outline-none focus:border-ring focus:ring-1 focus:ring-ring/30 placeholder:text-muted-foreground"
+          placeholder="Add comment..."
+        />
+      </div>
       {pastComments.length > 0 && (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
