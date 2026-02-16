@@ -1,65 +1,37 @@
 
 
-## Replace SwiftLaTeX with texlive.net Server-Side Compilation
+## Fix PDF Preview Blocked by MS Edge
 
 ### Problem
-The in-browser SwiftLaTeX WASM engine fails to load (404 on CDN files, CORS issues with Web Workers). Overleaf cloud doesn't expose a public compilation API.
+The LaTeX compilation via texlive.net is working correctly (returns valid PDF). However, Microsoft Edge blocks `blob:` URLs from rendering inside iframes, especially within nested iframe contexts like the Lovable preview window. This causes the "blocked" icon you see.
 
 ### Solution
-Use **texlive.net** for LaTeX compilation via a backend function proxy. This gives access to the full TeX Live distribution with zero setup.
-
-### Architecture
-
-```text
-Browser                    Edge Function              texlive.net
-  |                            |                          |
-  |-- POST /compile-latex ---->|                          |
-  |   { source: "..." }       |-- POST multipart/form -->|
-  |                            |   filecontents[]=source  |
-  |                            |   filename[]=document.tex|
-  |                            |   engine=pdflatex        |
-  |                            |   return=pdf             |
-  |                            |<---- PDF binary ---------|
-  |<---- PDF blob -------------|                          |
-```
+Convert the PDF blob to a **base64 data URL** (`data:application/pdf;base64,...`) instead of using `URL.createObjectURL()`. Data URLs are treated as inline content and are not blocked by Edge's security policies.
 
 ### Files to Change
 
-| File | Action | Description |
-|------|--------|-------------|
-| `supabase/functions/compile-latex/index.ts` | **Create** | Edge function that proxies compilation to texlive.net |
-| `src/lib/latex/SwiftLaTeXEngine.ts` | **Rewrite** | Remove all WASM/script code; call edge function instead |
-| `src/components/proposals/latex/LaTeXWorkspace.tsx` | **Simplify** | Remove engine loading state and spinner |
+| File | Change |
+|------|--------|
+| `src/lib/latex/SwiftLaTeXEngine.ts` | Replace `URL.createObjectURL(blob)` with a base64 data URL conversion |
+| `src/components/proposals/latex/PDFPreview.tsx` | Use `<object>` tag instead of `<iframe>` for better cross-browser PDF rendering |
 
-### Implementation Details
+### Technical Details
 
-**1. Edge Function (`supabase/functions/compile-latex/index.ts`)**
+**1. `SwiftLaTeXEngine.ts`** -- Convert blob to data URL
 
-- CORS headers for browser access
-- Accepts `POST` with `{ source: string }`
-- Builds `multipart/form-data` with fields: `filecontents[]`, `filename[]`, `engine=pdflatex`, `return=pdf`
-- Sends to `https://texlive.net/cgi-bin/latexcgi`
-- If response is `application/pdf`, returns PDF binary
-- If response is text (compilation error), returns `{ error: true, log: "..." }`
+- Add a helper function `blobToDataUrl(blob: Blob): Promise<string>` using `FileReader`
+- Replace `URL.createObjectURL(blob)` with `await blobToDataUrl(blob)`
+- Remove the `lastBlobUrl` tracking and `URL.revokeObjectURL()` calls (data URLs don't need revoking)
 
-**2. Rewrite `SwiftLaTeXEngine.ts`**
+**2. `PDFPreview.tsx`** -- Use `<object>` tag
 
-- Remove: `getEngine()`, `loadScript()`, `writeFile()`, all WASM globals, CDN constants, `Window` type augmentation
-- Keep: `CompileResult` interface, `downloadPdf()` helper
-- New `compileLatex(source)`: POST to edge function, return `{ pdf, pdfUrl, log, success }`
+- Replace `<iframe src={pdfUrl}>` with `<object data={pdfUrl} type="application/pdf">`
+- The `<object>` tag has better cross-browser support for embedded PDFs
+- Add a fallback link inside `<object>` for browsers that still can't render it
 
-**3. Simplify `LaTeXWorkspace.tsx`**
+### Why This Works
 
-- Remove `engineReady`, `engineLoading` state variables
-- Remove engine-loading `useEffect` and the loading spinner
-- The debounced compile calls `compileLatex()` directly on mount
-- Editor and PDF preview panels stay exactly the same
-
-### What Stays Unchanged
-
-- LaTeX editor component
-- PDF preview component (iframe-based)
-- Template generation (proposalTemplate.ts, snippets)
-- 800ms debounce behavior
-- Download/export functionality
+- `blob:` URLs are treated as cross-origin resources by Edge in nested iframe contexts and get blocked
+- `data:` URLs are treated as inline content and bypass this restriction
+- The `<object>` tag is the W3C-recommended way to embed PDFs and has fewer security restrictions than `<iframe>`
 
