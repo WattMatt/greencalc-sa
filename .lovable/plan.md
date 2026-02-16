@@ -1,35 +1,50 @@
 
 
-## Add Inline Autocomplete to Comment Input
+## Recalculate Lost Production Based on Overridden 30-Min Intervals
 
-### What Changes
+### Problem
 
-The comment input box will gain an inline autocomplete feature. As you type, matching past comments will appear as suggestions directly in the input. You can cycle through matches with the up/down arrow keys, and pressing Enter accepts the highlighted suggestion.
+When you manually adjust the 30-Min Intervals using the up/down arrows, only the interval count updates. The associated "Lost Production (kWh)" for that source, the total "Down Time" column, and footer totals all remain unchanged because the override values are not fed back into the energy calculations.
 
-### How It Works
+### Root Cause
 
-1. As you type, the component filters `pastComments` case-insensitively to find entries that start with (or contain) the typed text
-2. The first matching suggestion is shown as greyed-out "ghost text" extending beyond what you've typed -- e.g. if you type "Low" and "Low irradiance" is a past comment, you'll see "Low" in normal text followed by " irradiance" in a muted/highlighted style
-3. Pressing Up/Down arrow keys cycles through all matching suggestions
-4. Pressing Enter accepts the currently shown suggestion and populates the full text, then saves
-5. Pressing Escape or continuing to type dismisses/updates the suggestion
-6. The existing dropdown button remains as an alternative way to browse all past comments
+The main data computation (`useMemo` at line 214) calculates `downtimeEnergy` and `downtimeSlots` from raw readings but does not consider `slotOverrides`. The override map is only used for display in the `DowntimeSlotCell` component and the footer slot count -- it never feeds back into the energy figures.
 
-### Changes to DowntimeCommentCell.tsx
+### Solution
 
-- Add state for `filteredSuggestions` (array of matching comments) and `suggestionIndex` (which one is active)
-- On every keystroke, filter `pastComments` case-insensitively against the current input value
-- Render a "ghost text" overlay or inline span showing the remainder of the active suggestion in a muted color
-- Handle `ArrowUp`, `ArrowDown` to cycle `suggestionIndex`, and `Enter` to accept
-- Clear suggestions when input is empty or no matches found
+After the base downtime calculation completes, apply a correction pass that adjusts energy values when an override exists:
+
+1. Add `slotOverrides` as a dependency to the main `useMemo` block
+2. After the existing downtime loop, iterate over all day/source combinations and check for overrides
+3. When an override exists, recalculate the source's lost production as: `overriddenSlots * perSlotEnergy` (replacing the original calculated energy)
+4. Update both the per-source `sourceDayMap` entry and the aggregate `dayMap` entry so that the total "Down Time" column and all footer totals reflect the override
+
+### Formula
+
+```
+perSlotEnergy = (sourceMonthlyGuarantee / totalDays) / sunHourSlots
+overriddenLostProduction = overriddenSlots * perSlotEnergy
+```
+
+### What Updates Automatically
+
+- Per-source "Lost Production (kWh)" column for overridden rows
+- Total "Down Time (06:00-18:00)" column (leftmost lost production)
+- Footer totals for both per-source lost production and total lost production
+- Production tab "Down Time kWh" and "Theoretical Generation" columns (since they derive from the same `dailyRows`)
+- Revenue tab "Down Time (R)" column (since it multiplies `downtimeEnergy * rate`)
 
 ### Technical Details
 
-- The input will be wrapped in a relative container with an absolutely positioned ghost-text span behind/overlapping the input
-- Ghost text will use `text-muted-foreground/50` styling to appear as a subtle suggestion
-- Matching is done with `startsWith` (case-insensitive) so suggestions feel natural
-- The suggestion list is re-filtered on every `onChange`; arrow keys cycle through the filtered list
-- Enter key: if a suggestion is visible, accept it (populate input + save); if no suggestion, just blur/save as before
-- Tab key can also accept the suggestion for convenience
-- No new dependencies needed -- pure React state logic
+**File: `src/components/projects/generation/PerformanceSummaryTable.tsx`**
+
+- In the main `useMemo` (line 214), after the downtime calculation loop (around line 383), add an override correction pass:
+  - For each day and source, check `slotOverrides.get(\`${d}-${src}\`)`
+  - If an override exists, compute `newEnergy = override * perSlotEnergy`
+  - Compute `delta = newEnergy - sd.downtimeEnergy`
+  - Apply delta to both `sd.downtimeEnergy`, `sd.downtimeSlots`, and the corresponding `dayMap` entry
+- Add `slotOverrides` to the `useMemo` dependency array (line 410)
+- The `perSlotEnergy` calculation already exists inside the loop; it needs to be accessible during the correction pass (store it per-source in a small map)
+
+No changes needed to `DowntimeSlotCell.tsx` or the database -- this is purely a recalculation fix in the table component.
 
