@@ -1,82 +1,47 @@
 
 
-## Fix Toggle Visibility + Implement Section-Aware LaTeX Editing
+## Persist Content Blocks and Ensure All Sections are Enabled by Default
 
-### Problem 1: Toggle Switches Not Visible
-The screenshot shows the Switch components are completely missing from view. The issue is that the `w-11` (44px) switch is being squeezed out despite `shrink-0`. The sidebar is `w-80` (320px), and with `p-3` padding on both the scroll area and the block container, plus the grip icon, there isn't enough room. The `flex-1 min-w-0` on the label container should constrain it, but the text content may be forcing the container wider than expected because the `Label` and `p` elements need explicit `block` display to respect `truncate`/`min-w-0` properly in a flex context.
+### What's Happening Now
 
-**Fix in `ContentBlockToggle.tsx`:**
-- Wrap the entire flex row with explicit `max-w-full` and ensure the middle column has `w-0 flex-1` instead of `flex-1 min-w-0` to force it to shrink.
-- Ensure Label uses `block` display so `truncate` works.
+The content block toggle states (which sections are on/off) are **not saved to the database**. The `proposals` table has no `content_blocks` column. When you reload a proposal, the toggles reset to defaults. The LaTeX delimiters (`%%-- BEGIN:id --%%` / `%%-- END:id --%%`) are already implemented in the template engine, so when all sections are enabled, every section is clearly labeled and identifiable by any AI.
 
-### Problem 2: Section-Aware LaTeX Editing
+The LaTeX you pasted only shows `cover` and `signature` because those were the only two sections toggled ON at the time.
 
-Currently, every change to `templateData` (including toggling a content block) regenerates the **entire** LaTeX source, wiping any manual edits. We need to preserve per-section manual edits.
+### What Will Change
 
-**Architecture:**
+1. **Add a `content_blocks` JSONB column** to the `proposals` table so toggle states persist across sessions.
 
-1. **Delimiters** -- Each section in the generated LaTeX output will be wrapped with comment markers:
-   ```
-   %%-- BEGIN:cover --%%
-   ... LaTeX content ...
-   %%-- END:cover --%%
-   ```
+2. **Save content blocks on proposal save** -- include the current toggle states in both the insert and update mutations.
 
-2. **Section Override Store** -- A `Map<ContentBlockId, string>` state in `LaTeXWorkspace` tracks user-edited section content. When the user manually edits LaTeX in the editor, we parse the source by delimiters and diff against the auto-generated version. Any section that differs is stored as an override.
+3. **Restore content blocks on proposal load** -- when loading an existing proposal, restore the saved toggle states instead of using defaults.
 
-3. **Smart Regeneration** -- When `templateData` changes (e.g., toggle, branding change):
-   - Generate fresh LaTeX for each section
-   - For sections with user overrides, use the override instead of the generated content
-   - Sections toggled OFF are excluded entirely (overrides preserved in the map for if toggled back ON)
-   - A "Reset Section" button per block (or a global "Reset All") clears overrides
-
-4. **Persistence** -- Section overrides are saved to the `proposals` table in a new `section_overrides` JSONB column so they survive page reloads.
-
-### Files to Change
-
-| File | Change |
-|------|--------|
-| `src/components/proposals/ContentBlockToggle.tsx` | Fix layout so Switch is always visible |
-| `src/lib/latex/templates/proposalTemplate.ts` | Wrap each section output with `%%-- BEGIN:id --%%` / `%%-- END:id --%%` delimiters |
-| `src/components/proposals/latex/LaTeXWorkspace.tsx` | Add section override logic: parse editor source by delimiters, detect manual edits, merge overrides with generated content on templateData change |
-| `src/components/proposals/types.ts` | Export delimiter constants and a helper type for section overrides |
+4. **All sections enabled by default** -- this is already the case in `DEFAULT_CONTENT_BLOCKS`. New proposals will start with every section ON, producing a full LaTeX document with all `%%-- BEGIN:id --%%` / `%%-- END:id --%%` markers visible.
 
 ### Technical Details
 
-**Delimiter format in `proposalTemplate.ts`:**
-```typescript
-const sections = enabled.map(block => {
-  const content = /* switch statement */;
-  return `%%-- BEGIN:${block.id} --%%\n${content}\n%%-- END:${block.id} --%%`;
-}).join("\n\\newpage\n");
+**Database migration:**
+```sql
+ALTER TABLE proposals 
+ADD COLUMN content_blocks jsonb DEFAULT NULL;
 ```
 
-**Parsing in `LaTeXWorkspace.tsx`:**
+**Files to change:**
+
+| File | Change |
+|------|--------|
+| `src/pages/ProposalWorkspace.tsx` | Add `content_blocks` to save mutation (both insert and update). Add `setContentBlocks(...)` in the existing proposal load `useEffect`. |
+
+**Save mutation changes (lines 349-361 and 366-378):**
+- Add `content_blocks: JSON.parse(JSON.stringify(contentBlocks))` to both the update and insert payloads.
+
+**Load proposal effect (line 207-238):**
+- After restoring branding/notes, add:
 ```typescript
-function parseSections(source: string): Map<string, string> {
-  const regex = /%%-- BEGIN:(\w+) --%%\n([\s\S]*?)\n%%-- END:\1 --%%/g;
-  const map = new Map();
-  let match;
-  while ((match = regex.exec(source)) !== null) {
-    map.set(match[1], match[2]);
-  }
-  return map;
+if (existingProposal.content_blocks) {
+  setContentBlocks(existingProposal.content_blocks as unknown as ContentBlock[]);
 }
 ```
 
-**Override detection:** When the user edits the source (via `onChange`), we parse both the current editor source and the last auto-generated source. Any section whose content differs from the auto-generated version is stored as an override.
-
-**Merge on regeneration:** When `templateData` changes, instead of replacing the entire source:
-1. Generate fresh per-section content
-2. For each enabled section, use `overrides.get(id) ?? freshContent`
-3. Wrap in preamble + `\begin{document}` / `\end{document}`
-
-**No database migration needed initially** -- overrides can be stored in the existing `simulation_snapshot` JSON or we add a column later when saving is needed.
-
-### Sequence
-
-1. Fix `ContentBlockToggle` layout (immediate visual fix)
-2. Add delimiters to `proposalTemplate.ts`
-3. Implement parse/merge logic in `LaTeXWorkspace.tsx`
-4. Wire up override detection on editor changes
+This ensures that when you toggle sections on/off and save, those states persist. When the proposal is reloaded, the same sections will be enabled/disabled, and the LaTeX will contain the corresponding delimited blocks.
 
