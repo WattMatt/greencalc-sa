@@ -105,11 +105,11 @@ export function ProposalSidebar({
             <LayoutGrid className="h-3 w-3 mr-1" />
             Content
           </TabsTrigger>
-          <TabsTrigger value="branding" className="text-xs">
+          <TabsTrigger value="branding" className="text-xs opacity-50 cursor-not-allowed" disabled>
             <Palette className="h-3 w-3 mr-1" />
             Branding
           </TabsTrigger>
-          <TabsTrigger value="template" className="text-xs">
+          <TabsTrigger value="template" className="text-xs opacity-50 cursor-not-allowed" disabled>
             <FileText className="h-3 w-3 mr-1" />
             Template
           </TabsTrigger>
