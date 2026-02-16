@@ -62,8 +62,8 @@ export function generateBlockContent(
 /** Build the LaTeX preamble (everything before \\begin{document}). */
 export function generatePreamble(data: TemplateData): string {
   const { branding, proposal, project } = data;
-  const primaryRgb = hexToRgb(branding.primary_color || "#22c55e");
-  const secondaryRgb = hexToRgb(branding.secondary_color || "#0f172a");
+  // Hardcoded titleblue color — branding/template influence disabled for now
+  const primaryRgb = "23, 100, 166";
 
   return `\\documentclass[11pt, a4paper]{article}
 
