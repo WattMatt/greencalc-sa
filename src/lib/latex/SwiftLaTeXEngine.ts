@@ -33,15 +33,25 @@ function loadScript(): Promise<void> {
 
   return new Promise(async (resolve, reject) => {
     try {
-      // Fetch PdfTeXEngine.js as text so we can patch it
-      const resp = await fetch(`${CDN_BASE}PdfTeXEngine.js`);
-      if (!resp.ok) throw new Error(`Failed to fetch PdfTeXEngine.js: ${resp.status}`);
-      let scriptText = await resp.text();
+      // Fetch both files in parallel
+      const [mainResp, workerResp] = await Promise.all([
+        fetch(`${CDN_BASE}PdfTeXEngine.js`),
+        fetch(`${CDN_BASE}swiftlatexpdftex.js`),
+      ]);
+      if (!mainResp.ok) throw new Error(`Failed to fetch PdfTeXEngine.js: ${mainResp.status}`);
+      if (!workerResp.ok) throw new Error(`Failed to fetch swiftlatexpdftex.js: ${workerResp.status}`);
 
-      // Patch the worker path from relative to absolute CDN URL
+      let scriptText = await mainResp.text();
+      const workerText = await workerResp.text();
+
+      // Create a same-origin blob URL for the worker to avoid CORS restrictions
+      const workerBlob = new Blob([workerText], { type: "application/javascript" });
+      const workerBlobUrl = URL.createObjectURL(workerBlob);
+
+      // Patch the worker path to use the same-origin blob URL
       scriptText = scriptText.replace(
         /var\s+ENGINE_PATH\s*=\s*['"]swiftlatexpdftex\.js['"]/,
-        `var ENGINE_PATH = '${CDN_BASE}swiftlatexpdftex.js'`
+        `var ENGINE_PATH = '${workerBlobUrl}'`
       );
 
       // Expose PdfTeXEngine on window (the script puts it on a local `exports` var)
