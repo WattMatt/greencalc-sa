@@ -59,7 +59,7 @@ function formatTimeLabel(date: Date, timeframe: Timeframe, month: number, single
     return `${d}-${MONTH_SHORT[month - 1]} ${h}:${m}`;
   }
   if (timeframe === "daily") {
-    return `${date.getDate()}-${MONTH_SHORT[month - 1]}`;
+    return `${date.getDate()}`;
   }
   return MONTH_SHORT[month - 1];
 }
@@ -289,7 +289,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     return Array.from({ length: rangeEndDay - rangeStartDay + 1 }, (_, i) => {
       const day = rangeStartDay + i;
       const rec = dailyMap.get(day) ?? {};
-      const entry: any = { name: `${day}-${monthShort}`, building_load: rec.building_load ?? 0 };
+      const entry: any = { name: `${day}`, building_load: rec.building_load ?? 0 };
       if (showSources) {
         for (const sk of sourceKeys) entry[sk] = rec[sk] ?? 0;
       } else {
@@ -547,7 +547,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
             <ChartContainer config={activeChartConfig} className="h-[300px] w-full">
               <ComposedChart data={enrichedData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} angle={-45} textAnchor="end" height={isSingleDay ? 40 : 60} interval={labelInterval} />
+                <XAxis dataKey="name" fontSize={10} angle={timeframe === "daily" ? 0 : -45} textAnchor={timeframe === "daily" ? "middle" : "end"} height={isSingleDay || timeframe === "daily" ? 50 : 60} interval={labelInterval} label={timeframe === "daily" ? { value: MONTH_FULL[month - 1], position: "bottom", offset: -5, style: { fontSize: 11 } } : isSingleDay ? { value: singleDayLabel, position: "bottom", offset: -5, style: { fontSize: 11 } } : undefined} />
                 <YAxis fontSize={12} domain={yAxisMax ? [0, yAxisMax] : undefined} allowDataOverflow label={{ value: displayUnit, angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 {!singleDayLabel && <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: "pointer" }} />}
