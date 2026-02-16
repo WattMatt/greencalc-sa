@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { DowntimeCommentCell } from "./DowntimeCommentCell";
+import { DowntimeSlotCell } from "./DowntimeSlotCell";
 
 interface MonthData {
   month: number;
@@ -106,9 +107,32 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
     },
   });
 
+  // Fetch slot overrides for this month
+  const { data: slotOverrides } = useQuery({
+    queryKey: ["downtime-slot-overrides", projectId, year, month],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("downtime_slot_overrides")
+        .select("day, reading_source, slot_override")
+        .eq("project_id", projectId)
+        .eq("year", year)
+        .eq("month", month);
+      if (error) throw error;
+      const map = new Map<string, number>();
+      for (const row of data ?? []) {
+        map.set(`${row.day}-${row.reading_source}`, row.slot_override);
+      }
+      return map;
+    },
+  });
+
   const handleCommentSaved = () => {
     queryClient.invalidateQueries({ queryKey: ["downtime-comments", projectId, year, month] });
     queryClient.invalidateQueries({ queryKey: ["downtime-past-comments", projectId] });
+  };
+
+  const handleSlotOverrideChanged = () => {
+    queryClient.invalidateQueries({ queryKey: ["downtime-slot-overrides", projectId, year, month] });
   };
 
   const totalDays = daysInMonth(month, year);
@@ -527,7 +551,18 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                         return (
                           <React.Fragment key={`${src}-${row.day}`}>
                             <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums border-l", idx % 2 === 1 && "bg-muted/20")}>{formatNum(sd?.downtimeEnergy ?? 0)}</TableCell>
-                            <TableCell className={cn("text-xs py-1.5 px-2 text-right tabular-nums", idx % 2 === 1 && "bg-muted/20")}>{sd?.downtimeSlots ?? 0}</TableCell>
+                            <TableCell className={cn("text-xs py-1.5 px-2 text-right", idx % 2 === 1 && "bg-muted/20")}>
+                              <DowntimeSlotCell
+                                projectId={projectId}
+                                year={year}
+                                month={month}
+                                day={row.day}
+                                readingSource={src}
+                                calculatedSlots={sd?.downtimeSlots ?? 0}
+                                overrideValue={slotOverrides?.get(`${row.day}-${src}`)}
+                                onChanged={handleSlotOverrideChanged}
+                              />
+                            </TableCell>
                           </React.Fragment>
                         );
                       })}
@@ -551,10 +586,21 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
                     <TableCell className="text-xs py-2 px-2 text-right tabular-nums font-bold">{formatNum(totals.downtimeEnergy)}</TableCell>
                     {distinctSources.map((src, idx) => {
                       const st = sourceTotals.get(src);
+                      // Sum overrides for this source across all days
+                      let totalSlots = st?.downtimeSlots ?? 0;
+                      if (slotOverrides && slotOverrides.size > 0) {
+                        totalSlots = 0;
+                        for (let d = 1; d <= totalDays; d++) {
+                          const overrideKey = `${d}-${src}`;
+                          const override = slotOverrides.get(overrideKey);
+                          const sd = sourceDayMap.get(`${d}-${src}`);
+                          totalSlots += override ?? (sd?.downtimeSlots ?? 0);
+                        }
+                      }
                       return (
                         <React.Fragment key={`${src}-total`}>
                           <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold border-l", idx % 2 === 1 && "bg-muted/20")}>{formatNum(st?.downtimeEnergy ?? 0)}</TableCell>
-                          <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold", idx % 2 === 1 && "bg-muted/20")}>{st?.downtimeSlots ?? 0}</TableCell>
+                          <TableCell className={cn("text-xs py-2 px-2 text-right tabular-nums font-bold", idx % 2 === 1 && "bg-muted/20")}>{totalSlots}</TableCell>
                         </React.Fragment>
                       );
                     })}
