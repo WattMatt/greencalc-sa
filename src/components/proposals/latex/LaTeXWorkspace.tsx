@@ -9,6 +9,8 @@ import { parseSections, SECTION_BEGIN, SECTION_END, ContentBlockId } from "@/com
 interface LaTeXWorkspaceProps {
   templateData: TemplateData;
   onPdfReady?: (blob: Blob | null) => void;
+  initialOverrides?: Record<string, string>;
+  onOverridesChange?: (overrides: Record<string, string>) => void;
 }
 
 /**
@@ -40,7 +42,7 @@ ${sections}
 `;
 }
 
-export function LaTeXWorkspace({ templateData, onPdfReady }: LaTeXWorkspaceProps) {
+export function LaTeXWorkspace({ templateData, onPdfReady, initialOverrides, onOverridesChange }: LaTeXWorkspaceProps) {
   const [source, setSource] = useState("");
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
@@ -48,7 +50,9 @@ export function LaTeXWorkspace({ templateData, onPdfReady }: LaTeXWorkspaceProps
   const [log, setLog] = useState<string | null>(null);
 
   // Section overrides: user-edited content per block id
-  const overridesRef = useRef<Map<string, string>>(new Map());
+  const overridesRef = useRef<Map<string, string>>(
+    initialOverrides ? new Map(Object.entries(initialOverrides)) : new Map()
+  );
   // The last auto-generated (no-override) section content, for diffing
   const generatedSectionsRef = useRef<Map<string, string>>(new Map());
 
@@ -94,14 +98,15 @@ export function LaTeXWorkspace({ templateData, onPdfReady }: LaTeXWorkspaceProps
     editedSections.forEach((content, id) => {
       const gen = generated.get(id);
       if (gen !== undefined && content !== gen) {
-        // User modified this section — store as override
         overridesRef.current.set(id, content);
       } else if (gen !== undefined && content === gen) {
-        // User reverted to generated — clear override
         overridesRef.current.delete(id);
       }
     });
-  }, []);
+
+    // Notify parent of override changes for persistence
+    onOverridesChange?.(Object.fromEntries(overridesRef.current));
+  }, [onOverridesChange]);
 
   // Compile
   const compile = useCallback(async (src: string) => {
@@ -147,12 +152,12 @@ export function LaTeXWorkspace({ templateData, onPdfReady }: LaTeXWorkspaceProps
   }, [source, compile]);
 
   const handleReset = useCallback(() => {
-    // Clear all overrides and regenerate
     overridesRef.current = new Map();
+    onOverridesChange?.({});
     const newSource = generateLatexSource(templateData);
     isProgrammaticRef.current = true;
     setSource(newSource);
-  }, [templateData]);
+  }, [templateData, onOverridesChange]);
 
   return (
     <ResizablePanelGroup direction="horizontal" className="h-full">

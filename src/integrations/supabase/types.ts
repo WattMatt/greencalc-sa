@@ -1270,6 +1270,7 @@ export type Database = {
           reviewed_at: string | null
           reviewed_by: string | null
           sandbox_id: string | null
+          section_overrides: Json | null
           share_token: string | null
           simulation_id: string | null
           simulation_snapshot: Json | null
@@ -1299,6 +1300,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           sandbox_id?: string | null
+          section_overrides?: Json | null
           share_token?: string | null
           simulation_id?: string | null
           simulation_snapshot?: Json | null
@@ -1328,6 +1330,7 @@ export type Database = {
           reviewed_at?: string | null
           reviewed_by?: string | null
           sandbox_id?: string | null
+          section_overrides?: Json | null
           share_token?: string | null
           simulation_id?: string | null
           simulation_snapshot?: Json | null
