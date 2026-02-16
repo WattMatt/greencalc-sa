@@ -1,24 +1,40 @@
 
 
-## Update X-Axis: Day Numbers as Ticks, Month Name as Axis Title
+## Fix Duplicate "1 January" Label in 30-Min View
 
-### What Changes
+### Problem
 
-In the daily view, the X-axis currently shows tick labels like "1-Jan", "2-Jan", etc. This will be updated so that:
+After the previous X-axis update, the single-day (30-min) view now shows the date label twice:
+1. Once via the XAxis `label` prop (added in the last edit)
+2. Once via the custom `<p>` element rendered below the chart (line 605-607)
 
-- **X-axis ticks** show only the day number: 1, 2, 3, ... 31
-- **X-axis title** shows the month name: "January"
+Both display "1 January", causing duplication as visible in the screenshot.
 
-This matches the single-day view pattern where ticks show times and the axis title shows the date.
+### Solution
 
-### Technical Details
+Remove the XAxis `label` for the single-day case, since the custom block below the chart (lines 605-620) already handles that label along with the inline legend. The XAxis `label` should only apply to the `daily` timeframe.
+
+### Technical Change
 
 **File: `src/components/projects/generation/PerformanceChart.tsx`**
 
-1. **Line 292** -- Change daily tick labels from `${day}-${monthShort}` to just `${day}` (the day number only)
+On line 550, change the XAxis `label` prop from:
 
-2. **Line 550** -- Add an XAxis `label` prop for daily view showing the full month name:
-   - When `timeframe === "daily"`, add `label={{ value: MONTH_FULL[month - 1], position: "bottom", style: { fontSize: 11 } }}`
-   - Adjust height to accommodate the label
+```
+label={timeframe === "daily" ? { value: MONTH_FULL[...], ... } : isSingleDay ? { value: singleDayLabel, ... } : undefined}
+```
 
-3. **Line 62** -- Also update `formatTimeLabel` for the daily case to return just the day number (for consistency, though daily data is built inline at line 292)
+to:
+
+```
+label={timeframe === "daily" ? { value: MONTH_FULL[month - 1], position: "bottom", offset: -5, style: { fontSize: 11 } } : undefined}
+```
+
+This removes the `isSingleDay` branch from the XAxis label, leaving only the daily timeframe case. The single-day label continues to be rendered by the existing custom block below the chart.
+
+Also revert the `height` condition to only apply the shorter height for daily (not `isSingleDay`), since the single-day view no longer has an axis label to accommodate:
+
+```
+height={timeframe === "daily" ? 50 : 60}
+```
+
