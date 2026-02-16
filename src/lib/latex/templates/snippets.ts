@@ -36,36 +36,73 @@ export function coverPage(
   proposal: Partial<Proposal>
 ): string {
   const acCapacity = simulation.solarCapacity;
+  const version = String(proposal.version || 1).padStart(3, "0");
+  const projectName = esc(project?.name || "PROJECT");
+  const companyName = branding.company_name ? esc(branding.company_name) : "WATSON MATTHEUS CONSULTING ELECTRICAL ENGINEERS (PTY) LTD";
+  const address = branding.address ? esc(branding.address) : "141 Witch-Hazel Avenue\\\\Highveld Techno Park\\\\Building 1A";
+  const phone = branding.contact_phone ? esc(branding.contact_phone) : "(012) 665 3487";
+  const contactName = esc(proposal.prepared_by || "Mr Arno Mattheus");
+
   return `
 \\begin{titlepage}
-\\begin{center}
+    % --- 1. Blue Sidebar (Left) ---
+    \\AddToShipoutPictureBG*{
+        \\begin{tikzpicture}[remember picture, overlay]
+            \\fill[titleblue] (current page.north west) rectangle ++(1.8cm, -\\paperheight);
+        \\end{tikzpicture}
+    }
 
-\\vspace*{2cm}
+    \\centering
+    \\vspace*{3cm}
 
-{\\Huge \\textbf{${esc(project?.name || "PROJECT")}}}\\\\[1cm]
-{\\Huge \\textbf{SOLAR PV INSTALLATION}}\\\\[0.5cm]
-{\\Large Financial Analysis}\\\\[0.5cm]
-{\\Large ${num(acCapacity)} KWAC}\\\\[3cm]
+    % --- 2. Title Section (Centered, Blue Text) ---
+    \\textcolor{titleblue}{
+        {\\Huge \\textbf{${projectName}}}\\\\[1.5cm]
+        {\\Huge \\textbf{SOLAR PV INSTALLATION}}\\\\[0.5cm]
+        {\\Large Financial Analysis}\\\\[0.5cm]
+        {\\Large ${num(acCapacity)} kW\\textsubscript{AC}}\\\\[3cm]
+    }
 
-\\textbf{PREPARED BY:}\\\\[0.5cm]
-${branding.company_name ? `\\textbf{${esc(branding.company_name)}}\\\\` : ""}
-${branding.address ? `${esc(branding.address)}\\\\` : ""}
-${branding.contact_phone ? `Tel: ${esc(branding.contact_phone)}\\\\` : ""}
-${branding.contact_email ? `Email: ${esc(branding.contact_email)}\\\\` : ""}
+    % --- 3. Middle Section: Prepared By & Logo ---
+    \\noindent\\rule{\\linewidth}{0.5pt} \\\\
+    \\vspace{1em}
 
-\\vspace{2cm}
+    \\noindent
+    \\begin{minipage}[t]{0.65\\textwidth}
+        \\raggedright
+        \\textbf{\\textcolor{gray}{PREPARED BY:}} \\\\[0.5em]
+        \\textbf{${companyName}}\\\\
+        ${address}\\\\
+        Tel: ${phone}\\\\
+        Contact: ${contactName}
+    \\end{minipage}%
+    \\hfill
+    \\begin{minipage}[t]{0.30\\textwidth}
+        \\raggedleft
+        % --- REPLACEMENT LOGO (TIKZ) ---
+        % Replace this TikZ picture with \\includegraphics when file is available
+        \\begin{tikzpicture}
+            \\node[fill=titleblue, text=white, font=\\bfseries\\huge, minimum width=2.5cm, minimum height=1.4cm, inner sep=0pt] {WM};
+            \\draw[titleblue, thick] (-1.25, 0.7) rectangle (1.25, -0.7);
+            \\draw[titleblue, thick] (-1.35, 0.8) -- (1.25, 0.8);
+            \\draw[titleblue, thick] (-1.35, 0.8) -- (-1.35, -0.7);
+        \\end{tikzpicture}
+    \\end{minipage}
 
-\\begin{tabular}{|l|l|}
-\\hline
-\\textbf{DATE:} & \\today \\\\
-\\hline
-\\textbf{REVISION:} & Rev ${String(proposal.version || 1).padStart(3, "0")} \\\\
-\\hline
-\\textbf{AUTHOR:} & ${esc(proposal.prepared_by || "")} \\\\
-\\hline
-\\end{tabular}
+    \\vspace{1em}
+    \\noindent\\rule{\\linewidth}{0.5pt}
 
-\\end{center}
+    \\vspace{2cm}
+
+    % --- 4. Bottom Section: Date and Revision ---
+    \\noindent
+    \\begin{tabular*}{\\linewidth}{@{\\extracolsep{\\fill}} l r}
+        \\textbf{\\Large DATE:} & \\textcolor{titleblue}{\\Large \\textbf{\\today}} \\\\[1em]
+        \\textbf{\\Large REVISION:} & \\textcolor{titleblue}{\\Large \\textbf{Rev ${version}}} \\\\
+    \\end{tabular*}
+
+    \\vfill
+
 \\end{titlepage}
 `;
 }
