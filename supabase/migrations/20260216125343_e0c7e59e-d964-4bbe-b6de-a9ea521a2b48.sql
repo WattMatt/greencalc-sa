@@ -1,0 +1,1 @@
+ALTER TABLE public.proposals ADD COLUMN content_blocks jsonb DEFAULT NULL;
