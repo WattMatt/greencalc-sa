@@ -56,12 +56,12 @@ function formatTimeLabel(date: Date, timeframe: Timeframe, month: number, single
     const m = date.getMinutes().toString().padStart(2, "0");
     if (singleDay) return `${h}:${m}`;
     const d = date.getDate();
-    return `${d}-${MONTH_SHORT[month - 1]} ${h}:${m}`;
+    return `${d} ${h}:${m}`;
   }
   if (timeframe === "daily") {
     return `${date.getDate()}`;
   }
-  return MONTH_SHORT[month - 1];
+  return `${date.getDate()}`;
 }
 
 const MONTH_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
