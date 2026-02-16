@@ -3,7 +3,6 @@
  * Loads the engine lazily, provides compile + PDF blob helpers.
  */
 
-// SwiftLaTeX exposes PdfTeXEngine on the window after the script loads
 declare global {
   interface Window {
     PdfTeXEngine: new () => SwiftLaTeXInstance;
@@ -23,7 +22,7 @@ interface SwiftLaTeXInstance {
   flushCache(): void;
 }
 
-const SWIFTLATEX_CDN = "https://cdn.jsdelivr.net/gh/nicoglennon/swiftlatex-dist@0.0.3/";
+const CDN_BASE = "https://cdn.jsdelivr.net/gh/SwiftLaTeX/SwiftLaTeX@v20022022/pdftex.wasm/";
 
 let engineInstance: SwiftLaTeXInstance | null = null;
 let engineLoading: Promise<SwiftLaTeXInstance> | null = null;
@@ -32,24 +31,41 @@ let scriptLoaded = false;
 function loadScript(): Promise<void> {
   if (scriptLoaded) return Promise.resolve();
 
-  return new Promise((resolve, reject) => {
-    // SwiftLaTeX needs to know where the WASM file lives
-    const existing = document.querySelector('script[data-swiftlatex]');
-    if (existing) {
-      scriptLoaded = true;
-      resolve();
-      return;
-    }
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Fetch PdfTeXEngine.js as text so we can patch it
+      const resp = await fetch(`${CDN_BASE}PdfTeXEngine.js`);
+      if (!resp.ok) throw new Error(`Failed to fetch PdfTeXEngine.js: ${resp.status}`);
+      let scriptText = await resp.text();
 
-    const script = document.createElement("script");
-    script.src = `${SWIFTLATEX_CDN}swiftlatexpdftex.js`;
-    script.setAttribute("data-swiftlatex", "true");
-    script.onload = () => {
-      scriptLoaded = true;
-      resolve();
-    };
-    script.onerror = () => reject(new Error("Failed to load SwiftLaTeX script"));
-    document.head.appendChild(script);
+      // Patch the worker path from relative to absolute CDN URL
+      scriptText = scriptText.replace(
+        /var\s+ENGINE_PATH\s*=\s*['"]swiftlatexpdftex\.js['"]/,
+        `var ENGINE_PATH = '${CDN_BASE}swiftlatexpdftex.js'`
+      );
+
+      // Expose PdfTeXEngine on window (the script puts it on a local `exports` var)
+      scriptText += `\nwindow.PdfTeXEngine = PdfTeXEngine;\n`;
+
+      // Inject as a blob script
+      const blob = new Blob([scriptText], { type: "application/javascript" });
+      const blobUrl = URL.createObjectURL(blob);
+
+      const script = document.createElement("script");
+      script.src = blobUrl;
+      script.onload = () => {
+        scriptLoaded = true;
+        URL.revokeObjectURL(blobUrl);
+        resolve();
+      };
+      script.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        reject(new Error("Failed to execute patched SwiftLaTeX script"));
+      };
+      document.head.appendChild(script);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
@@ -91,7 +107,6 @@ export async function compileLatex(source: string): Promise<CompileResult> {
 
   const result = await engine.compileLaTeX();
 
-  // Revoke previous blob URL to prevent memory leaks
   if (lastBlobUrl) {
     URL.revokeObjectURL(lastBlobUrl);
     lastBlobUrl = null;
