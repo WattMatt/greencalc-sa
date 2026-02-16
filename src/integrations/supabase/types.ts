@@ -136,6 +136,39 @@ export type Database = {
         }
         Relationships: []
       }
+      downtime_slot_overrides: {
+        Row: {
+          created_at: string
+          day: number
+          id: string
+          month: number
+          project_id: string
+          reading_source: string
+          slot_override: number
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          day: number
+          id?: string
+          month: number
+          project_id: string
+          reading_source: string
+          slot_override: number
+          year: number
+        }
+        Update: {
+          created_at?: string
+          day?: number
+          id?: string
+          month?: number
+          project_id?: string
+          reading_source?: string
+          slot_override?: number
+          year?: number
+        }
+        Relationships: []
+      }
       eskom_batch_status: {
         Row: {
           batch_index: number
