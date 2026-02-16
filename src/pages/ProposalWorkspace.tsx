@@ -75,6 +75,9 @@ export default function ProposalWorkspace() {
   // PDF blob ref for export
   const pdfBlobRef = useRef<Blob | null>(null);
 
+  // Section overrides for LaTeX persistence
+  const sectionOverridesRef = useRef<Record<string, string>>({});
+
   // Fetch organization branding
   const { branding: orgBranding, isLoading: loadingOrgBranding } = useOrganizationBranding();
 
@@ -238,6 +241,9 @@ export default function ProposalWorkspace() {
       if ((existingProposal as any).content_blocks) {
         setContentBlocks((existingProposal as any).content_blocks as ContentBlock[]);
       }
+      if ((existingProposal as any).section_overrides) {
+        sectionOverridesRef.current = (existingProposal as any).section_overrides as Record<string, string>;
+      }
     }
   }, [existingProposal, orgBranding]);
 
@@ -360,8 +366,9 @@ export default function ProposalWorkspace() {
             disclaimers,
             simulation_snapshot: simulationData ? JSON.parse(JSON.stringify(simulationData)) : null,
             content_blocks: JSON.parse(JSON.stringify(contentBlocks)),
+            section_overrides: Object.keys(sectionOverridesRef.current).length > 0 ? sectionOverridesRef.current : null,
             updated_at: new Date().toISOString(),
-          })
+          } as any)
           .eq("id", proposalId);
         if (error) throw error;
       } else {
@@ -379,8 +386,9 @@ export default function ProposalWorkspace() {
             disclaimers,
             simulation_snapshot: simulationData ? JSON.parse(JSON.stringify(simulationData)) : null,
             content_blocks: JSON.parse(JSON.stringify(contentBlocks)),
+            section_overrides: Object.keys(sectionOverridesRef.current).length > 0 ? sectionOverridesRef.current : null,
             version: nextVersion,
-          })
+          } as any)
           .select()
           .single();
         if (error) throw error;
@@ -544,6 +552,8 @@ export default function ProposalWorkspace() {
             <LaTeXWorkspace
               templateData={templateData}
               onPdfReady={handlePdfReady}
+              initialOverrides={sectionOverridesRef.current}
+              onOverridesChange={(overrides) => { sectionOverridesRef.current = overrides; }}
             />
           ) : (
             <div className="h-full flex items-center justify-center">
