@@ -118,15 +118,15 @@ export interface SimulationData {
 
 export type ContentBlockId = 
   | 'cover'
-  | 'executiveSummary'
-  | 'siteOverview'
-  | 'systemDesign'
-  | 'equipmentSpecs'
+  | 'tableOfContents'
+  | 'adminDetails'
+  | 'introduction'
+  | 'backgroundMethodology'
+  | 'tenderReturnData'
   | 'loadAnalysis'
-  | 'energyFlow'
-  | 'financialSummary'
+  | 'financialEstimates'
+  | 'financialConclusion'
   | 'cashflowTable'
-  | 'sensitivityAnalysis'
   | 'terms'
   | 'signature';
 
@@ -144,18 +144,18 @@ export interface ProposalContentBlocks {
 }
 
 export const DEFAULT_CONTENT_BLOCKS: ContentBlock[] = [
-  { id: 'cover', label: 'Cover Page', description: 'Title, key metrics, and company branding', enabled: true, required: true, order: 0 },
-  { id: 'executiveSummary', label: 'Executive Summary', description: 'High-level overview of the proposal', enabled: true, order: 1 },
-  { id: 'siteOverview', label: 'Site Overview', description: 'Location map and site details', enabled: true, order: 2 },
-  { id: 'systemDesign', label: 'System Design', description: 'PV layout and floor plan markup', enabled: false, order: 3 },
-  { id: 'equipmentSpecs', label: 'Equipment Specifications', description: 'Panel, inverter, and battery details', enabled: true, order: 4 },
-  { id: 'loadAnalysis', label: 'Load Analysis', description: 'Tenant consumption breakdown', enabled: true, order: 5 },
-  { id: 'energyFlow', label: 'Energy Flow Analysis', description: 'Generation, consumption, and export charts', enabled: true, order: 6 },
-  { id: 'financialSummary', label: 'Financial Summary', description: 'NPV, IRR, LCOE, and payback metrics', enabled: true, order: 7 },
-  { id: 'cashflowTable', label: '20-Year Cashflow', description: 'Detailed year-by-year projection', enabled: true, order: 8 },
-  { id: 'sensitivityAnalysis', label: 'Sensitivity Analysis', description: 'Best/worst case scenarios', enabled: false, order: 9 },
+  { id: 'cover', label: 'Cover Page', description: 'Title page with company details, revision, and document number', enabled: true, required: true, order: 0 },
+  { id: 'tableOfContents', label: 'Table of Contents', description: 'Section listing with page numbers', enabled: true, order: 1 },
+  { id: 'adminDetails', label: 'Administrative Details', description: 'Project location and admin info', enabled: true, order: 2 },
+  { id: 'introduction', label: 'Introduction', description: 'System description and scope', enabled: true, order: 3 },
+  { id: 'backgroundMethodology', label: 'Background & Methodology', description: 'Assumptions, tariff tables, and financial return inputs', enabled: true, order: 4 },
+  { id: 'tenderReturnData', label: 'Tender Return Data', description: 'Capital costs, yield data, panel specs, and load shedding impact', enabled: true, order: 5 },
+  { id: 'loadAnalysis', label: 'Load Analysis', description: 'Tenant consumption breakdown', enabled: true, order: 6 },
+  { id: 'financialEstimates', label: 'Financial Estimates', description: 'Financial return outputs per load shedding stage', enabled: true, order: 7 },
+  { id: 'financialConclusion', label: 'Financial Conclusion', description: 'Recommended baseline stage and key metrics', enabled: true, order: 8 },
+  { id: 'cashflowTable', label: 'Project Cash Flows', description: 'Landscape 20-year DCF tables per load shedding stage', enabled: true, order: 9 },
   { id: 'terms', label: 'Terms & Conditions', description: 'Assumptions and disclaimers', enabled: true, order: 10 },
-  { id: 'signature', label: 'Signature Block', description: 'Prepared by and client signature', enabled: true, required: true, order: 11 },
+  { id: 'signature', label: 'Signature Block', description: 'Authorization signatures', enabled: true, required: true, order: 11 },
 ];
 
 // ============= Proposal Entity =============

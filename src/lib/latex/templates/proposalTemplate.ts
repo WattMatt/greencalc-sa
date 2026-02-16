@@ -1,5 +1,6 @@
 /**
  * Generates a complete .tex document from proposal data.
+ * Matches the Financial Analysis report layout.
  */
 import { SimulationData, ProposalBranding, ContentBlock, Proposal } from "@/components/proposals/types";
 import * as snippets from "./snippets";
@@ -23,7 +24,7 @@ export interface TemplateData {
 }
 
 export function generateLatexSource(data: TemplateData): string {
-  const { simulation, branding, contentBlocks, proposal, project, tenants, tariffName } = data;
+  const { simulation, branding, contentBlocks, proposal, project, tenants } = data;
 
   const enabled = contentBlocks
     .filter(b => b.enabled)
@@ -37,20 +38,24 @@ export function generateLatexSource(data: TemplateData): string {
     switch (block.id) {
       case "cover":
         return snippets.coverPage(branding, project, simulation, proposal);
-      case "executiveSummary":
-        return snippets.executiveSummary(simulation, project);
-      case "siteOverview":
-        return snippets.siteOverview(project, simulation, tariffName);
-      case "equipmentSpecs":
-        return snippets.equipmentSpecs(simulation);
+      case "tableOfContents":
+        return snippets.tableOfContents();
+      case "adminDetails":
+        return snippets.administrativeDetails(project, simulation);
+      case "introduction":
+        return snippets.introduction(simulation, project);
+      case "backgroundMethodology":
+        return snippets.backgroundMethodology(simulation, project);
+      case "tenderReturnData":
+        return snippets.tenderReturnData(simulation, project);
       case "loadAnalysis":
         return snippets.loadAnalysis(simulation, tenants || [], project);
-      case "financialSummary":
-        return snippets.financialSummary(simulation);
+      case "financialEstimates":
+        return snippets.financialEstimates(simulation);
+      case "financialConclusion":
+        return snippets.financialConclusion(simulation);
       case "cashflowTable":
         return snippets.cashflowTable(simulation);
-      case "sensitivityAnalysis":
-        return snippets.sensitivityAnalysis(simulation);
       case "terms":
         return snippets.termsAndConditions(proposal);
       case "signature":
@@ -60,12 +65,14 @@ export function generateLatexSource(data: TemplateData): string {
     }
   }).join("\n\\newpage\n");
 
-  return `\\documentclass[a4paper,11pt]{article}
+  return `\\documentclass[8pt, a4paper]{article}
 
 % ── Packages ──
-\\usepackage[top=25mm, bottom=25mm, left=20mm, right=20mm]{geometry}
+\\usepackage[top=3cm, bottom=3.5cm, left=1.5cm, right=1.5cm, headheight=40pt]{geometry}
 \\usepackage[utf8]{inputenc}
 \\usepackage[T1]{fontenc}
+\\usepackage{helvet}
+\\renewcommand{\\familydefault}{\\sfdefault}
 \\usepackage{booktabs}
 \\usepackage{tabularx}
 \\usepackage{xcolor}
@@ -73,19 +80,29 @@ export function generateLatexSource(data: TemplateData): string {
 \\usepackage{fancyhdr}
 \\usepackage{hyperref}
 \\usepackage{parskip}
+\\usepackage{pdflscape}
+\\usepackage{longtable}
+\\usepackage{multirow}
+\\usepackage{siunitx}
+\\usepackage{colortbl}
+\\usepackage{array}
 
 % ── Brand Colors ──
 \\definecolor{brandprimary}{RGB}{${primaryRgb}}
 \\definecolor{brandsecondary}{RGB}{${secondaryRgb}}
+\\definecolor{lightgray}{gray}{0.9}
+
+% ── Helpers ──
+\\newcommand{\\negnum}[1]{(#1)}
 
 % ── Header / Footer ──
 \\pagestyle{fancy}
 \\fancyhf{}
-\\renewcommand{\\headrulewidth}{0.4pt}
-\\fancyhead[L]{\\small\\color{gray}${snippets.esc(branding.company_name || "")}}
-\\fancyhead[R]{\\small\\color{gray}${snippets.esc(project?.name || "")}}
-\\fancyfoot[C]{\\small\\thepage}
-\\fancyfoot[R]{\\small\\color{gray}${snippets.esc(branding.website || "")}}
+\\renewcommand{\\headrulewidth}{1pt}
+\\renewcommand{\\footrulewidth}{0.5pt}
+\\lhead{\\textbf{${snippets.esc(project?.name || "PROJECT")}}\\\\SOLAR PV INSTALLATION}
+\\rhead{Financial Analysis\\\\\\today\\\\Rev ${String(proposal.version || 1).padStart(3, "0")}}
+\\rfoot{\\thepage}
 
 % ── Hyperlinks ──
 \\hypersetup{
