@@ -144,7 +144,7 @@ export interface ProposalContentBlocks {
 }
 
 export const DEFAULT_CONTENT_BLOCKS: ContentBlock[] = [
-  { id: 'cover', label: 'Cover Page', description: 'Title page with company details, revision, and document number', enabled: true, required: true, order: 0 },
+  { id: 'cover', label: 'Cover Page', description: 'Title page with company details, revision, and document number', enabled: true, order: 0 },
   { id: 'tableOfContents', label: 'Table of Contents', description: 'Section listing with page numbers', enabled: true, order: 1 },
   { id: 'adminDetails', label: 'Administrative Details', description: 'Project location and admin info', enabled: true, order: 2 },
   { id: 'introduction', label: 'Introduction', description: 'System description and scope', enabled: true, order: 3 },
@@ -155,7 +155,7 @@ export const DEFAULT_CONTENT_BLOCKS: ContentBlock[] = [
   { id: 'financialConclusion', label: 'Financial Conclusion', description: 'Recommended baseline stage and key metrics', enabled: true, order: 8 },
   { id: 'cashflowTable', label: 'Project Cash Flows', description: 'Landscape 20-year DCF tables per load shedding stage', enabled: true, order: 9 },
   { id: 'terms', label: 'Terms & Conditions', description: 'Assumptions and disclaimers', enabled: true, order: 10 },
-  { id: 'signature', label: 'Signature Block', description: 'Authorization signatures', enabled: true, required: true, order: 11 },
+  { id: 'signature', label: 'Signature Block', description: 'Authorization signatures', enabled: true, order: 11 },
 ];
 
 // ============= Proposal Entity =============
