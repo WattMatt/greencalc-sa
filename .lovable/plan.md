@@ -1,54 +1,35 @@
 
 
-## Add Up/Down Arrows to 30-Min Interval Cells in Down Time Tab
+## Add Inline Autocomplete to Comment Input
 
 ### What Changes
 
-Each "30-Min Intervals" cell in the Down Time tab will get small up/down arrow buttons beside the number. Clicking up increments by 1, clicking down decrements by 1 (minimum 0). This lets you manually adjust downtime intervals beyond the auto-calculated values.
+The comment input box will gain an inline autocomplete feature. As you type, matching past comments will appear as suggestions directly in the input. You can cycle through matches with the up/down arrow keys, and pressing Enter accepts the highlighted suggestion.
 
-### New Database Table
+### How It Works
 
-A `downtime_slot_overrides` table will persist manual adjustments:
+1. As you type, the component filters `pastComments` case-insensitively to find entries that start with (or contain) the typed text
+2. The first matching suggestion is shown as greyed-out "ghost text" extending beyond what you've typed -- e.g. if you type "Low" and "Low irradiance" is a past comment, you'll see "Low" in normal text followed by " irradiance" in a muted/highlighted style
+3. Pressing Up/Down arrow keys cycles through all matching suggestions
+4. Pressing Enter accepts the currently shown suggestion and populates the full text, then saves
+5. Pressing Escape or continuing to type dismisses/updates the suggestion
+6. The existing dropdown button remains as an alternative way to browse all past comments
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | uuid (PK) | Auto-generated |
-| project_id | text | Project reference |
-| year | integer | e.g. 2026 |
-| month | integer | 1-12 |
-| day | integer | 1-31 |
-| reading_source | text | The source key (e.g. Tie-In identifier) |
-| slot_override | integer | The user's adjusted value |
-| created_at | timestamptz | Auto-set |
+### Changes to DowntimeCommentCell.tsx
 
-Unique constraint on (project_id, year, month, day, reading_source). RLS: open read/write (consistent with existing downtime_comments).
-
-### UI Approach
-
-- Replace the plain number in each "30-Min Intervals" cell with a compact inline widget: the number flanked by tiny up/down chevron buttons (stacked vertically to the right)
-- Clicking up/down immediately updates the displayed value and upserts to the database
-- The displayed value defaults to the calculated `downtimeSlots` but switches to the override once the user adjusts it
-- Totals row recalculates based on overridden values
-
-### New Component
-
-**`src/components/projects/generation/DowntimeSlotCell.tsx`**
-- Props: `projectId`, `year`, `month`, `day`, `readingSource`, `calculatedSlots`, `overrideValue`, `onChanged`
-- Local state tracks the current value (override or calculated)
-- Up/down buttons use `ChevronUp` / `ChevronDown` icons from lucide-react
-- On click, upserts to `downtime_slot_overrides` table
-
-### Changes to PerformanceSummaryTable.tsx
-
-- Fetch overrides for the current project/year/month via `useQuery`
-- Pass override values to the new `DowntimeSlotCell` component in each source's 30-Min Intervals column
-- Adjust totals computation to use overridden values when present
-- The total row and the aggregated "Down Time" Lost Production column will also reflect overrides (recalculating lost energy as `overriddenSlots * perSlotEnergy`)
+- Add state for `filteredSuggestions` (array of matching comments) and `suggestionIndex` (which one is active)
+- On every keystroke, filter `pastComments` case-insensitively against the current input value
+- Render a "ghost text" overlay or inline span showing the remainder of the active suggestion in a muted color
+- Handle `ArrowUp`, `ArrowDown` to cycle `suggestionIndex`, and `Enter` to accept
+- Clear suggestions when input is empty or no matches found
 
 ### Technical Details
 
-- Database migration: create `downtime_slot_overrides` with unique constraint and open RLS policies
-- Query key: `["downtime-slot-overrides", projectId, year, month]`
-- Override map: `Map<string, number>` keyed by `${day}-${readingSource}`
-- The cell component will use `queryClient.invalidateQueries` after upserting to refresh data
-- Minimum value clamped to 0; no maximum cap (user can go above calculated value)
+- The input will be wrapped in a relative container with an absolutely positioned ghost-text span behind/overlapping the input
+- Ghost text will use `text-muted-foreground/50` styling to appear as a subtle suggestion
+- Matching is done with `startsWith` (case-insensitive) so suggestions feel natural
+- The suggestion list is re-filtered on every `onChange`; arrow keys cycle through the filtered list
+- Enter key: if a suggestion is visible, accept it (populate input + save); if no suggestion, just blur/save as before
+- Tab key can also accept the suggestion for convenience
+- No new dependencies needed -- pure React state logic
+
