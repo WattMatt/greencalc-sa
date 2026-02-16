@@ -1,118 +1,67 @@
 
 
-## SwiftLaTeX-Powered Proposal Builder (Overleaf-Style)
+## Fix SwiftLaTeX Script Loading
 
-### Overview
+### Problem
 
-Replace the current HTML/PDFShift proposal pipeline with an in-browser LaTeX compiler (SwiftLaTeX) that produces real PDFs directly in the browser. The workspace will feature an Overleaf-style split-pane layout: **LaTeX source editor on the left, live PDF preview on the right**, with the existing sidebar for toggling content blocks, branding, and templates.
+The SwiftLaTeX engine fails to load because the CDN URL points to a **non-existent GitHub repository** (`nicoglennon/swiftlatex-dist`). This is the root cause of the "Failed to load SwiftLaTeX script" error.
 
-### Layout
+Additionally, the current code assumes `PdfTeXEngine` is attached to `window` after the script loads, but the actual SwiftLaTeX `PdfTeXEngine.js` file puts it on a local `exports` object and uses a **Web Worker** architecture -- it spawns a separate worker file (`swiftlatexpdftex.js`) that contains the actual WASM engine.
 
-```text
-[Sidebar (content/branding/template)] | [LaTeX Editor] | [PDF Preview]
-                                       <-- resizable -->
+### Root Cause Summary
+
+1. **Invalid CDN URL**: `nicoglennon/swiftlatex-dist` does not exist on GitHub
+2. **Wrong script file**: The code tries to load `swiftlatexpdftex.js` as a `<script>` tag, but that file is the Web Worker (not the main API)
+3. **Wrong global access**: `PdfTeXEngine` is not placed on `window` by the script
+
+### Solution
+
+The correct CDN base is:
+```
+https://cdn.jsdelivr.net/gh/SwiftLaTeX/SwiftLaTeX@v20022022/pdftex.wasm/
 ```
 
-- The sidebar remains unchanged (toggle sections, branding, templates, export buttons)
-- The current single A4 HTML preview pane becomes a resizable split using the existing `react-resizable-panels` library
-- Left pane: monospace LaTeX source editor with line numbers
-- Right pane: rendered PDF displayed via an embedded `<iframe>` or `<object>` showing the compiled PDF blob URL
+This directory contains:
+- `PdfTeXEngine.js` -- the main API class (12KB) -- this is what we load as a `<script>`
+- `swiftlatexpdftex.js` -- the Web Worker that `PdfTeXEngine.js` spawns internally
 
-### How It Works
+However, there's a complication: `PdfTeXEngine.js` uses `var exports = {}` and puts the class on that local variable, not `window`. And the Web Worker path is hardcoded as `ENGINE_PATH = 'swiftlatexpdftex.js'` (relative), meaning the worker file must be accessible at the same origin path.
 
-1. When the user opens the Proposal Workspace, the system **auto-generates a complete `.tex` document** from their project data (simulation results, branding, financial projections, tenant data, etc.)
-2. The LaTeX source appears in the editor pane
-3. **SwiftLaTeX's WASM engine** compiles the `.tex` source to a PDF binary entirely in-browser -- no server round-trips
-4. The compiled PDF is displayed in the preview pane
-5. Users can **edit the LaTeX source directly** to customize wording, spacing, or layout
-6. A "Reset to Auto-Generated" button regenerates the LaTeX from the current sidebar settings
-7. "Export PDF" downloads the compiled PDF blob directly -- no external API needed
+### Implementation Plan
 
-### Package Fetching
+**File: `src/lib/latex/SwiftLaTeXEngine.ts`** -- Complete rewrite of the loading logic:
 
-SwiftLaTeX fetches LaTeX packages (e.g., `geometry`, `graphicx`, `booktabs`, `xcolor`) on demand from CTAN the first time they're used. After the initial fetch, they're cached in the browser. The proposal template will use common packages that compile quickly.
+1. Change the CDN base URL to the correct one: `https://cdn.jsdelivr.net/gh/SwiftLaTeX/SwiftLaTeX@v20022022/pdftex.wasm/`
 
-### New Files
+2. Instead of loading `PdfTeXEngine.js` as a script tag (which doesn't export to `window`), fetch it as text and modify it to work:
+   - Fetch `PdfTeXEngine.js` from the CDN
+   - Replace the hardcoded `ENGINE_PATH = 'swiftlatexpdftex.js'` with the full CDN URL so the Web Worker can be loaded cross-origin
+   - Append `window.PdfTeXEngine = PdfTeXEngine;` so the class is accessible
+   - Create a Blob URL from the modified script and inject it as a `<script>` tag
 
-| File | Purpose |
-|------|---------|
-| `src/lib/latex/SwiftLaTeXEngine.ts` | Singleton wrapper around SwiftLaTeX WASM -- handles `loadEngine()`, `writeMemFSFile()`, `compileLaTeX()`, and PDF blob creation |
-| `src/lib/latex/templates/proposalTemplate.ts` | Generates a complete `.tex` string from `SimulationData`, `ProposalBranding`, `ContentBlock[]`, project data, and tenants |
-| `src/lib/latex/templates/snippets.ts` | Reusable LaTeX snippet generators for each content block (cover page, financial table, cashflow table, site overview, etc.) |
-| `src/components/proposals/latex/LaTeXEditor.tsx` | Left pane: `<textarea>` with monospace font, line numbers via CSS counters, and basic editing features |
-| `src/components/proposals/latex/PDFPreview.tsx` | Right pane: renders the compiled PDF via `<iframe src={blobUrl}>` with loading/error states |
-| `src/components/proposals/latex/LaTeXWorkspace.tsx` | Split-pane container using `ResizablePanelGroup` combining editor + preview, manages compilation lifecycle |
-
-### Modified Files
-
-| File | Change |
-|------|--------|
-| `src/pages/ProposalWorkspace.tsx` | Replace the current A4 HTML preview section with `<LaTeXWorkspace>`. Wire sidebar data into the template generator. Replace `handleExportPDF` to download the compiled PDF blob directly. |
-| `src/components/proposals/ProposalSidebar.tsx` | No structural changes -- "Export PDF" button continues to call the parent's export handler, which now triggers PDF blob download instead of PDFShift |
+3. Keep the rest of the engine wrapper (compile, blob management, download) the same -- those parts work correctly once the engine loads.
 
 ### Technical Details
 
-**Engine Lifecycle:**
-- SwiftLaTeX WASM files (~5MB) are loaded lazily on first use
-- A loading spinner is shown during engine initialization
-- The engine instance is cached as a module-level singleton
-- Compilation is triggered on a 500ms debounce after source changes
+The modified script injection will look like:
 
-**Template Generation:**
-- Each enabled content block maps to a LaTeX section function
-- When the user toggles a section in the sidebar, the `.tex` source regenerates
-- Branding colors are mapped to `\definecolor` commands using the `xcolor` package
-- Logo images are embedded as base64 data URIs using `\includegraphics` with a temporary file written to the WASM filesystem via `writeMemFSFile`
-- Financial tables use the `booktabs` package for professional styling
-- Charts are generated as inline TikZ/pgfplots or as SVG images embedded in the document
-
-**Compilation Flow:**
 ```text
-Sidebar change --> generateLatexSource(data) --> editor updates
-                                              --> debounce 500ms
-                                              --> engine.writeMemFSFile("main.tex", source)
-                                              --> engine.compileLaTeX()
-                                              --> PDF blob --> iframe preview
+1. Fetch PdfTeXEngine.js from CDN as text
+2. Replace: var ENGINE_PATH = 'swiftlatexpdftex.js'
+   With:    var ENGINE_PATH = '<full CDN URL>/swiftlatexpdftex.js'
+3. Append:  window.PdfTeXEngine = PdfTeXEngine;
+4. Create Blob URL from modified text
+5. Inject as <script src="blob:...">
+6. On load, window.PdfTeXEngine is available
 ```
 
-**PDF Export:**
-- The compiled PDF binary is already available from `compileLaTeX()`
-- Export simply creates a Blob and triggers a download -- zero external API calls
-- The existing PDFShift integration (`capturePreview.ts`) remains intact for other report types but is bypassed for proposals
+The Web Worker (`swiftlatexpdftex.js`) will be loaded by `PdfTeXEngine.js` internally using `new Worker(ENGINE_PATH)`, and since we patch the path to the full CDN URL, it will fetch correctly.
 
-**LaTeX Packages Used:**
-- `geometry` -- A4 page margins
-- `graphicx` -- Logo/image embedding
-- `xcolor` -- Brand color definitions
-- `booktabs` -- Professional table styling
-- `tabularx` -- Flexible column widths
-- `fancyhdr` -- Headers and footers with branding
-- `hyperref` -- Clickable links
-- `tikz`/`pgfplots` -- Charts (payback, energy flow)
-- `fontenc`, `inputenc` -- UTF-8 support
+### Files to Modify
 
-**Editor Features (Phase 1):**
-- Monospace textarea with line numbers
-- Tab key inserts spaces (not focus change)
-- Auto-generated source is fully editable
-- "Reset" button to regenerate from sidebar settings
-- Error display panel showing LaTeX compilation errors/warnings
+| File | Change |
+|------|--------|
+| `src/lib/latex/SwiftLaTeXEngine.ts` | Fix CDN URL, rewrite `loadScript()` to fetch + patch + inject the script properly |
 
-### SwiftLaTeX Integration
-
-SwiftLaTeX is loaded via a `<script>` tag pointing to the WASM distribution files hosted in the `public/` directory. The files needed are:
-- `swiftlatexpdftex.js` (JS glue)
-- `swiftlatexpdftex.wasm` (WASM binary)
-
-These will be placed in `public/swiftlatex/` and loaded dynamically.
-
-### No Database Changes
-
-No schema modifications needed. The generated LaTeX source string can optionally be stored in the existing `proposals` table's JSON fields for persistence in a future enhancement.
-
-### Migration Path
-
-- The existing PDFShift pipeline stays intact for sandbox reports and other exports
-- Only the Proposal Workspace switches to LaTeX
-- If SwiftLaTeX compilation fails, the user sees the error in the editor pane and can fix the LaTeX source directly
+No other files need changes -- the editor, preview, workspace, and template components are all working correctly. The only issue is the engine script failing to load.
 
