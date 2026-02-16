@@ -89,10 +89,11 @@ export function generatePreamble(data: TemplateData): string {
 \\usepackage{siunitx}
 \\usepackage{colortbl}
 \\usepackage{array}
+\\usepackage{eso-pic}
+\\usepackage{tikz}
 
 % ── Brand Colors ──
-\\definecolor{brandprimary}{RGB}{${primaryRgb}}
-\\definecolor{brandsecondary}{RGB}{${secondaryRgb}}
+\\definecolor{titleblue}{RGB}{${primaryRgb}}
 \\definecolor{lightgray}{gray}{0.9}
 
 % ── Helpers ──
@@ -110,15 +111,15 @@ export function generatePreamble(data: TemplateData): string {
 % ── Hyperlinks ──
 \\hypersetup{
   colorlinks=true,
-  linkcolor=brandprimary,
-  urlcolor=brandprimary,
+  linkcolor=titleblue,
+  urlcolor=titleblue,
   pdfborder={0 0 0}
 }
 
 % ── Section styling ──
 \\usepackage{titlesec}
-\\titleformat{\\section}{\\Large\\bfseries\\color{brandsecondary}}{\\thesection}{1em}{}
-\\titleformat{\\subsection}{\\large\\bfseries\\color{brandsecondary}}{\\thesubsection}{1em}{}`;
+\\titleformat{\\section}{\\Large\\bfseries\\color{titleblue}}{\\thesection}{1em}{}
+\\titleformat{\\subsection}{\\large\\bfseries\\color{titleblue}}{\\thesubsection}{1em}{}`;
 }
 
 /** Generate a complete .tex document with section delimiters. */
