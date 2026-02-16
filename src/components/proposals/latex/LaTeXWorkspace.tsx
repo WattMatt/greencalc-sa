@@ -3,11 +3,41 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/componen
 import { LaTeXEditor } from "./LaTeXEditor";
 import { PDFPreview } from "./PDFPreview";
 import { compileLatex, CompileResult } from "@/lib/latex/SwiftLaTeXEngine";
-import { generateLatexSource, TemplateData } from "@/lib/latex/templates/proposalTemplate";
+import { generateLatexSource, generateBlockContent, generatePreamble, TemplateData } from "@/lib/latex/templates/proposalTemplate";
+import { parseSections, SECTION_BEGIN, SECTION_END, ContentBlockId } from "@/components/proposals/types";
 
 interface LaTeXWorkspaceProps {
   templateData: TemplateData;
   onPdfReady?: (blob: Blob | null) => void;
+}
+
+/**
+ * Assemble a full .tex document from preamble + per-section content,
+ * using overrides where the user has manually edited a section.
+ */
+function assembleSource(
+  data: TemplateData,
+  overrides: Map<string, string>,
+): string {
+  const enabled = data.contentBlocks
+    .filter(b => b.enabled)
+    .sort((a, b) => a.order - b.order);
+
+  const sections = enabled.map(block => {
+    const content = overrides.has(block.id)
+      ? overrides.get(block.id)!
+      : generateBlockContent(block.id, data);
+    return `${SECTION_BEGIN(block.id)}\n${content}\n${SECTION_END(block.id)}`;
+  }).join("\n\\newpage\n");
+
+  return `${generatePreamble(data)}
+
+\\begin{document}
+
+${sections}
+
+\\end{document}
+`;
 }
 
 export function LaTeXWorkspace({ templateData, onPdfReady }: LaTeXWorkspaceProps) {
@@ -17,15 +47,61 @@ export function LaTeXWorkspace({ templateData, onPdfReady }: LaTeXWorkspaceProps
   const [error, setError] = useState<string | null>(null);
   const [log, setLog] = useState<string | null>(null);
 
+  // Section overrides: user-edited content per block id
+  const overridesRef = useRef<Map<string, string>>(new Map());
+  // The last auto-generated (no-override) section content, for diffing
+  const generatedSectionsRef = useRef<Map<string, string>>(new Map());
+
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const latestSourceRef = useRef(source);
   latestSourceRef.current = source;
 
-  // Generate initial source from template data
+  // Track whether the source change came from the user typing vs programmatic
+  const isProgrammaticRef = useRef(false);
+
+  // Generate / regenerate source from template data, preserving overrides
   useEffect(() => {
-    const newSource = generateLatexSource(templateData);
+    // Build fresh generated sections map
+    const freshMap = new Map<string, string>();
+    templateData.contentBlocks
+      .filter(b => b.enabled)
+      .sort((a, b) => a.order - b.order)
+      .forEach(block => {
+        freshMap.set(block.id, generateBlockContent(block.id, templateData));
+      });
+    generatedSectionsRef.current = freshMap;
+
+    // Assemble using overrides
+    const newSource = assembleSource(templateData, overridesRef.current);
+    isProgrammaticRef.current = true;
     setSource(newSource);
   }, [templateData]);
+
+  // Detect manual edits: when user changes source, diff against generated
+  const handleSourceChange = useCallback((newSource: string) => {
+    setSource(newSource);
+
+    // Skip override detection for programmatic changes
+    if (isProgrammaticRef.current) {
+      isProgrammaticRef.current = false;
+      return;
+    }
+
+    // Parse sections from the edited source
+    const editedSections = parseSections(newSource);
+    const generated = generatedSectionsRef.current;
+
+    editedSections.forEach((content, id) => {
+      const gen = generated.get(id);
+      if (gen !== undefined && content !== gen) {
+        // User modified this section — store as override
+        overridesRef.current.set(id, content);
+      } else if (gen !== undefined && content === gen) {
+        // User reverted to generated — clear override
+        overridesRef.current.delete(id);
+      }
+    });
+  }, []);
 
   // Compile
   const compile = useCallback(async (src: string) => {
@@ -71,7 +147,10 @@ export function LaTeXWorkspace({ templateData, onPdfReady }: LaTeXWorkspaceProps
   }, [source, compile]);
 
   const handleReset = useCallback(() => {
+    // Clear all overrides and regenerate
+    overridesRef.current = new Map();
     const newSource = generateLatexSource(templateData);
+    isProgrammaticRef.current = true;
     setSource(newSource);
   }, [templateData]);
 
@@ -80,7 +159,7 @@ export function LaTeXWorkspace({ templateData, onPdfReady }: LaTeXWorkspaceProps
       <ResizablePanel defaultSize={45} minSize={25}>
         <LaTeXEditor
           value={source}
-          onChange={setSource}
+          onChange={handleSourceChange}
           onReset={handleReset}
         />
       </ResizablePanel>
