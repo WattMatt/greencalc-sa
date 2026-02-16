@@ -299,10 +299,10 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
     });
   })();
 
-  // Single day label for display between x-axis and legend
-  const singleDayLabel = isSingleDay
-    ? `${new Date(dateStart).getDate()} ${MONTH_FULL[month - 1]}`
-    : null;
+  // Chart label always shows the month (and day if single-day view)
+  const chartLabel = isSingleDay
+    ? `${new Date(dateStart).getDate()} ${MONTH_FULL[month - 1]} ${year}`
+    : `${MONTH_FULL[month - 1]} ${year}`;
 
   // Sun hours (06:00–17:30) = 11.5 hours = 23 half-hour intervals
   const sunHourIntervals = 23;
@@ -550,7 +550,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                 <XAxis dataKey="name" fontSize={10} angle={timeframe === "daily" ? 0 : -45} textAnchor={timeframe === "daily" ? "middle" : "end"} height={timeframe === "daily" ? 40 : 60} interval={labelInterval} />
                 <YAxis fontSize={12} domain={yAxisMax ? [0, yAxisMax] : undefined} allowDataOverflow label={{ value: displayUnit, angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
-                {!singleDayLabel && <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: "pointer" }} />}
+                {false && <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: "pointer" }} />}
                 {showSources ? (
                   sourceLabels.map((rawLabel, i) => {
                     const displayLabel = sourceDisplayNameMap.get(rawLabel) || rawLabel;
@@ -602,9 +602,9 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
                 )}
               </ComposedChart>
             </ChartContainer>
-            {singleDayLabel && (
+            {chartLabel && (
               <div className="text-center space-y-1 -mt-1">
-                <p className="text-xs font-medium text-muted-foreground">{singleDayLabel}</p>
+                <p className="text-xs font-medium text-muted-foreground">{chartLabel}</p>
                 <div className="flex items-center justify-center gap-4 text-xs flex-wrap">
                   {showSources ? (
                     sourceLabels.map((rawLabel, i) => {
