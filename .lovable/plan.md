@@ -1,52 +1,65 @@
 
 
-## Fix CORS Error for SwiftLaTeX Web Worker
+## Replace SwiftLaTeX with texlive.net Server-Side Compilation
 
 ### Problem
-
-The patched `PdfTeXEngine.js` tries to create a Web Worker using `new Worker('https://cdn.jsdelivr.net/gh/..../swiftlatexpdftex.js')`. Browsers block cross-origin Worker construction -- the worker script must come from the same origin.
+The in-browser SwiftLaTeX WASM engine fails to load (404 on CDN files, CORS issues with Web Workers). Overleaf cloud doesn't expose a public compilation API.
 
 ### Solution
+Use **texlive.net** for LaTeX compilation via a backend function proxy. This gives access to the full TeX Live distribution with zero setup.
 
-Instead of patching `ENGINE_PATH` to point at the CDN URL, we need to **fetch the worker script as well**, wrap it in a Blob URL (which is same-origin), and patch `ENGINE_PATH` to use that Blob URL.
-
-### Implementation
-
-**File: `src/lib/latex/SwiftLaTeXEngine.ts`** -- Update `loadScript()`:
-
-1. Fetch **both** files from the CDN in parallel:
-   - `PdfTeXEngine.js` (the main API)
-   - `swiftlatexpdftex.js` (the Web Worker)
-
-2. Create a Blob URL for the worker script (`swiftlatexpdftex.js`)
-
-3. Patch `PdfTeXEngine.js` to set `ENGINE_PATH` to the worker's Blob URL instead of the CDN URL
-
-4. Append `window.PdfTeXEngine = PdfTeXEngine;` as before
-
-5. Inject the patched main script as a Blob `<script>` tag
-
-The key change is just two extra lines: fetch the worker file, create a blob URL for it, and use that blob URL as the `ENGINE_PATH`. Everything else stays the same.
-
-### Technical Detail
+### Architecture
 
 ```text
-Current (broken):
-  ENGINE_PATH = 'https://cdn.jsdelivr.net/.../swiftlatexpdftex.js'
-  --> new Worker(ENGINE_PATH) --> CORS error
-
-Fixed:
-  1. fetch('https://cdn.jsdelivr.net/.../swiftlatexpdftex.js') --> workerText
-  2. workerBlobUrl = URL.createObjectURL(new Blob([workerText]))
-  3. ENGINE_PATH = workerBlobUrl  (blob: URL = same origin)
-  --> new Worker(ENGINE_PATH) --> works
+Browser                    Edge Function              texlive.net
+  |                            |                          |
+  |-- POST /compile-latex ---->|                          |
+  |   { source: "..." }       |-- POST multipart/form -->|
+  |                            |   filecontents[]=source  |
+  |                            |   filename[]=document.tex|
+  |                            |   engine=pdflatex        |
+  |                            |   return=pdf             |
+  |                            |<---- PDF binary ---------|
+  |<---- PDF blob -------------|                          |
 ```
 
-Note: The worker blob URL should NOT be revoked since `PdfTeXEngine` may re-create workers during its lifecycle.
+### Files to Change
 
-### Files to Modify
+| File | Action | Description |
+|------|--------|-------------|
+| `supabase/functions/compile-latex/index.ts` | **Create** | Edge function that proxies compilation to texlive.net |
+| `src/lib/latex/SwiftLaTeXEngine.ts` | **Rewrite** | Remove all WASM/script code; call edge function instead |
+| `src/components/proposals/latex/LaTeXWorkspace.tsx` | **Simplify** | Remove engine loading state and spinner |
 
-| File | Change |
-|------|--------|
-| `src/lib/latex/SwiftLaTeXEngine.ts` | Fetch worker script, create blob URL for it, patch ENGINE_PATH to blob URL |
+### Implementation Details
+
+**1. Edge Function (`supabase/functions/compile-latex/index.ts`)**
+
+- CORS headers for browser access
+- Accepts `POST` with `{ source: string }`
+- Builds `multipart/form-data` with fields: `filecontents[]`, `filename[]`, `engine=pdflatex`, `return=pdf`
+- Sends to `https://texlive.net/cgi-bin/latexcgi`
+- If response is `application/pdf`, returns PDF binary
+- If response is text (compilation error), returns `{ error: true, log: "..." }`
+
+**2. Rewrite `SwiftLaTeXEngine.ts`**
+
+- Remove: `getEngine()`, `loadScript()`, `writeFile()`, all WASM globals, CDN constants, `Window` type augmentation
+- Keep: `CompileResult` interface, `downloadPdf()` helper
+- New `compileLatex(source)`: POST to edge function, return `{ pdf, pdfUrl, log, success }`
+
+**3. Simplify `LaTeXWorkspace.tsx`**
+
+- Remove `engineReady`, `engineLoading` state variables
+- Remove engine-loading `useEffect` and the loading spinner
+- The debounced compile calls `compileLatex()` directly on mount
+- Editor and PDF preview panels stay exactly the same
+
+### What Stays Unchanged
+
+- LaTeX editor component
+- PDF preview component (iframe-based)
+- Template generation (proposalTemplate.ts, snippets)
+- 800ms debounce behavior
+- Download/export functionality
 
