@@ -1,17 +1,24 @@
 
-## Fix Tab Key Behavior After Accepting a Suggestion
 
-### Problem
+## Update X-Axis: Day Numbers as Ticks, Month Name as Axis Title
 
-When you type "net" and see a suggestion, pressing Tab correctly accepts it. But if there's another past comment that starts with the now-accepted text, the autocomplete still shows suggestions. So the next Tab press gets intercepted again instead of moving focus to the next input box.
+### What Changes
 
-### Solution
+In the daily view, the X-axis currently shows tick labels like "1-Jan", "2-Jan", etc. This will be updated so that:
 
-Add a `justAccepted` ref flag. When a suggestion is accepted (via Tab or Enter), set the flag to `true`. On the next keydown, if the flag is true and there's no new typing in between, let Tab pass through normally. The flag resets on any `onChange` (i.e., when the user types again).
+- **X-axis ticks** show only the day number: 1, 2, 3, ... 31
+- **X-axis title** shows the month name: "January"
 
-### Changes to `DowntimeCommentCell.tsx`
+This matches the single-day view pattern where ticks show times and the axis title shows the date.
 
-1. Add a `useRef<boolean>` called `justAccepted`, initialized to `false`
-2. In `acceptSuggestion`, set `justAccepted.current = true` after accepting
-3. In `handleKeyDown`, before checking `filteredSuggestions.length > 0`, check if `justAccepted.current` is `true` -- if so, skip the suggestion-handling block entirely (let Tab/Enter behave normally)
-4. In `handleChange`, reset `justAccepted.current = false` so that new typing re-enables autocomplete
+### Technical Details
+
+**File: `src/components/projects/generation/PerformanceChart.tsx`**
+
+1. **Line 292** -- Change daily tick labels from `${day}-${monthShort}` to just `${day}` (the day number only)
+
+2. **Line 550** -- Add an XAxis `label` prop for daily view showing the full month name:
+   - When `timeframe === "daily"`, add `label={{ value: MONTH_FULL[month - 1], position: "bottom", style: { fontSize: 11 } }}`
+   - Adjust height to accommodate the label
+
+3. **Line 62** -- Also update `formatTimeLabel` for the daily case to return just the day number (for consistency, though daily data is built inline at line 292)
