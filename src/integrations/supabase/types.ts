@@ -106,6 +106,36 @@ export type Database = {
           },
         ]
       }
+      downtime_comments: {
+        Row: {
+          comment: string
+          created_at: string
+          day: number
+          id: string
+          month: number
+          project_id: string
+          year: number
+        }
+        Insert: {
+          comment?: string
+          created_at?: string
+          day: number
+          id?: string
+          month: number
+          project_id: string
+          year: number
+        }
+        Update: {
+          comment?: string
+          created_at?: string
+          day?: number
+          id?: string
+          month?: number
+          project_id?: string
+          year?: number
+        }
+        Relationships: []
+      }
       eskom_batch_status: {
         Row: {
           batch_index: number
