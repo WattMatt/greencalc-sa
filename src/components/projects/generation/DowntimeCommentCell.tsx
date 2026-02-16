@@ -28,6 +28,7 @@ export function DowntimeCommentCell({
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastSaved = useRef(initialValue);
+  const justAccepted = useRef(false);
 
   const filteredSuggestions = useMemo(() => {
     if (!value.trim()) return [];
@@ -70,15 +71,24 @@ export function DowntimeCommentCell({
       setValue(activeSuggestion);
       save(activeSuggestion);
       setSuggestionIndex(0);
+      justAccepted.current = true;
     }
   }, [activeSuggestion, save]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setValue(e.target.value);
     setSuggestionIndex(0);
+    justAccepted.current = false;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (justAccepted.current) {
+      if (e.key === "Tab" || e.key === "Enter") {
+        justAccepted.current = false;
+        return; // let default behavior (focus next input)
+      }
+      justAccepted.current = false;
+    }
     if (filteredSuggestions.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
