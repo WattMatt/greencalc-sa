@@ -16,6 +16,10 @@ function currency(value: number): string {
   return `R\\,${value.toLocaleString("en-ZA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
+function currencyDecimal(value: number, decimals = 2): string {
+  return `R${value.toLocaleString("en-ZA", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+}
+
 function num(value: number, decimals = 0): string {
   return value.toLocaleString("en-ZA", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
@@ -45,10 +49,12 @@ export function coverPage(
 
   return `
 \\begin{titlepage}
-    % --- 1. Blue Sidebar (Left) ---
+    % --- 1. Blue Sidebar (Shifted Right) ---
     \\AddToShipoutPictureBG*{
         \\begin{tikzpicture}[remember picture, overlay]
-            \\fill[titleblue] (current page.north west) rectangle ++(1.8cm, -\\paperheight);
+            % Shifted start by 0.5cm from the left edge
+            % Rectangle is 1.0cm wide
+            \\fill[titleblue] ([xshift=0.5cm]current page.north west) rectangle ++(1.0cm, -\\paperheight);
         \\end{tikzpicture}
     }
 
@@ -111,6 +117,15 @@ export function coverPage(
 
 export function tableOfContents(): string {
   return `
+% --- 1. Blue Sidebar (Shifted Right) ---
+    \\AddToShipoutPictureBG*{
+        \\begin{tikzpicture}[remember picture, overlay]
+            % Shifted start by 0.5cm from the left edge
+            % Rectangle is 1.0cm wide
+            \\fill[titleblue] ([xshift=0.5cm]current page.north west) rectangle ++(1.0cm, -\\paperheight);
+        \\end{tikzpicture}
+    }
+
 \\section*{Table of Contents}
 \\tableofcontents
 \\newpage
@@ -147,6 +162,13 @@ export function backgroundMethodology(simulation: SimulationData, project: any):
   const insuranceCost = simulation.yearlyProjections?.[0]?.insurance ?? 0;
   const replacementCost = simulation.yearlyProjections?.find(y => y.replacementCost > 0)?.replacementCost ?? 0;
 
+  // Replacement cost breakdown estimates
+  const solarModuleCost = simulation.equipmentSpecs?.panelCount
+    ? Math.round(replacementCost * 0.265) : 0;
+  const inverterCost = Math.round(replacementCost * 0.569);
+  const batteryCost = simulation.batteryCapacity > 0
+    ? Math.round(replacementCost * 0.166) : 0;
+
   return `
 \\section{Background and Methodology}
 The following assumptions were made to estimate the proposed solar PV system's electrical yield, relevant costs, and returns.
@@ -158,12 +180,17 @@ The following assumptions were made to estimate the proposed solar PV system's e
 
 \\begin{table}[h!]
 \\centering
+\\small
+\\renewcommand{\\arraystretch}{1.2}
 \\begin{tabular}{|l|c|c|c|}
 \\hline
-\\textbf{TIME OF USE} & \\textbf{High Demand} & \\textbf{Low Demand} & \\textbf{Annual Blended} \\\\
-\\textbf{Solar Sun Hours} & \\textbf{JUN-AUG} & \\textbf{SEP-MAY} & \\textbf{Tariff} \\\\ \\hline
-Blended & ${currency(tariffRate)} & ${currency(tariffRate)} & ${currency(tariffRate)} \\\\ \\hline
-\\textbf{KVA Demand Charge} & & & \\textbf{${currency(demandRate)}} \\\\ \\hline
+\\rowcolor[gray]{0.5} & \\multicolumn{3}{c|}{\\textbf{\\color{black} TIME OF USE - Solar Sun Hours}} \\\\ \\hline
+\\rowcolor{gray} & \\cellcolor[RGB]{0,176,240} \\textbf{High Demand JUN-AUG} & \\cellcolor[RGB]{255,192,0} \\textbf{Low Demand SEP-MAY} & \\cellcolor[RGB]{112,48,160} \\textbf{\\color{black} Annual Blended Tariff} \\\\ \\hline
+\\rowcolor{red}\\textbf{Peak} & ${currencyDecimal(tariffRate, 4)} & ${currencyDecimal(tariffRate, 4)} & \\cellcolor[RGB]{112,48,160} \\\\ \\hline
+\\rowcolor{yellow}\\textbf{Standard} & ${currencyDecimal(tariffRate, 4)} & ${currencyDecimal(tariffRate, 4)} & \\cellcolor[RGB]{112,48,160} ${currencyDecimal(tariffRate, 4)} \\\\ \\hline
+\\rowcolor[RGB]{0,176,80}\\textbf{Off Peak} & ${currencyDecimal(tariffRate, 4)} & ${currencyDecimal(tariffRate, 4)} & \\cellcolor[RGB]{112,48,160} \\\\ \\hline
+\\cellcolor[gray]{0.5}\\textbf{BLENDED} & \\cellcolor[RGB]{0,176,240} ${currencyDecimal(tariffRate, 4)} & \\cellcolor[RGB]{255,192,0} ${currencyDecimal(tariffRate, 4)} & \\cellcolor[RGB]{112,48,160} \\\\ \\hline
+\\rowcolor[gray]{0.5} \\multicolumn{3}{|c|}{\\textbf{kVA Demand Charge}} & ${currencyDecimal(demandRate, 2)} \\\\ \\hline
 \\end{tabular}
 \\end{table}
 
@@ -177,17 +204,24 @@ Blended & ${currency(tariffRate)} & ${currency(tariffRate)} & ${currency(tariffR
 
 \\begin{table}[h!]
 \\centering
-\\begin{tabular}{|l|r|l|r|}
+\\small
+\\renewcommand{\\arraystretch}{1.2}
+\\begin{tabular}{|l|l|l|l|}
 \\hline
-\\multicolumn{4}{|c|}{\\textbf{FINANCIAL RETURN INPUTS}} \\\\ \\hline
-Cost of Capital & 9.00\\% & Blended Tariff Yr 1 & ${currency(tariffRate)} \\\\ \\hline
-CPI & 6.00\\% & Electricity kVA cost Year 1 & ${currency(demandRate)} \\\\ \\hline
-Electricity Inflation & 10.00\\% & & \\\\ \\hline
-Project Duration (yr) & 20 & Insurance Cost Year 1 & ${currency(insuranceCost)} \\\\ \\hline
-Adjusted Discount Rate & 15.00\\% & Replacement Cost At Year 10 & ${currency(replacementCost)} \\\\ \\hline
-Cost of Capital (LCOE) & 9.00\\% & & \\\\ \\hline
+\\rowcolor{titleblue} \\multicolumn{4}{|c|}{\\textbf{\\color{white} FINANCIAL RETURN INPUTS}} \\\\ \\hline
+Cost of Capital & 9.00\\% & Low Demand Blended Tariff In Year 1 (ZAR / kWh) & ${currencyDecimal(tariffRate, 4)} \\\\ \\hline
+CPI & 6.00\\% & High Demand Blended Tariff In Year 1 (ZAR / kWh) & ${currencyDecimal(tariffRate, 4)} \\\\ \\hline
+Electricity Inflation & 10.00\\% & Total Demand Blended Tariff In Year 1 (ZAR / kWh) & ${currencyDecimal(tariffRate, 4)} \\\\ \\hline
+Project Duration (yr) & 20 & Blended Tariff Used In Evaluation & \\cellcolor[gray]{0.7} ${currencyDecimal(tariffRate, 4)} \\\\ \\hline
+& & & \\\\ \\hline
+Adjusted Discount Rate & 15.00\\% & Electricity kVA cost Year 1 (ZAR / kVA) & ${currencyDecimal(demandRate, 2)} \\\\ \\hline
+Cost of Capital (LCOE calc) & 9.00\\% & & \\\\ \\hline
+& & Insurance Cost Year 1 (ZAR) & ${currency(insuranceCost)} \\\\ \\hline
 MIRR - Finance rate & 9.00\\% & & \\\\ \\hline
-MIRR - Re-investment rate & 10.00\\% & & \\\\ \\hline
+MIRR - re-investment rate & 10.00\\% & Replacement Cost At Year 10 (ZAR) & ${currency(replacementCost)} \\\\ \\hline
+& & \\hspace{1em} 10\\% On Solar Module Cost & ${currency(solarModuleCost)} \\\\ \\hline
+& & \\hspace{1em} 50\\% On Inverter Cost & ${currency(inverterCost)} \\\\ \\hline
+& & \\hspace{1em} 40\\% On Battery Cost & ${currency(batteryCost)} \\\\ \\hline
 \\end{tabular}
 \\end{table}
 `;
@@ -206,21 +240,92 @@ export function tenderReturnData(simulation: SimulationData, project: any): stri
     ? simulation.yearlyProjections.reduce((sum, y) => sum + y.energyYield, 0)
     : baseYield * 20;
   const oAndMYear1 = simulation.yearlyProjections?.[0]?.oAndM ?? 0;
+  const cost = simulation.systemCost;
 
-  const stageRows = LOAD_SHEDDING_FACTORS.map((_, i) => {
-    const y = getStageYield(baseYield, i);
-    return i < 5
-      ? `STAGE ${i} & ${num(y, 2)}`
-      : `STAGE ${i} & ${num(y, 2)}`;
-  });
+  // Stage yield rows with alternating shading
+  const stageYields = LOAD_SHEDDING_FACTORS.map((_, i) => ({
+    stage: i,
+    yield: getStageYield(baseYield, i),
+  }));
 
-  // Build two-column load shedding table
-  const leftCol = stageRows.slice(0, 5);
-  const rightCol = stageRows.slice(5);
+  const leftCol = stageYields.slice(0, 5);
+  const rightCol = stageYields.slice(5);
   const lsRows = leftCol.map((l, i) => {
-    const r = rightCol[i] ? rightCol[i] : " & ";
-    return `${l} & ${r} \\\\ \\hline`;
+    const shade = i % 2 === 0 ? "\\rowcolor[gray]{0.9} " : "";
+    const r = rightCol[i];
+    const rightPart = r ? `\\textbf{STAGE ${r.stage}} & ${num(r.yield, 2)}` : "& ";
+    return `${shade}\\textbf{STAGE ${l.stage}} & ${num(l.yield, 2)} & ${rightPart} \\\\ \\hline`;
   }).join("\n");
+
+  // Financial metrics per stage helper
+  function stageMetrics(stage: number) {
+    const factor = LOAD_SHEDDING_FACTORS[stage] ?? 1.0;
+    const yld = baseYield * factor;
+    const zarPerKwh = cost / yld;
+    const zarPerWpDc = cost / (dcCapacity * 1000) * 1000;
+    const zarPerWpAc = cost / (simulation.solarCapacity * 1000) * 1000;
+    const lcoe = (simulation.lcoe ?? 0) / factor;
+    const initialYield = (simulation.annualSavings / cost * 100) * factor;
+    const irr = (simulation.irr ?? 0) * factor;
+    const mirr = (simulation.mirr ?? 0) * factor;
+    const payback = simulation.paybackYears / factor;
+    const npv = (simulation.npv ?? 0) * factor;
+    return { zarPerKwh, zarPerWpDc, zarPerWpAc, lcoe, initialYield, irr, mirr, payback, npv };
+  }
+
+  const s0 = stageMetrics(0);
+
+  // Stage 0 standalone financial table
+  const stage0Table = `
+\\begin{table}[h!]
+\\centering
+\\small
+\\renewcommand{\\arraystretch}{1.2}
+\\begin{tabularx}{0.7\\textwidth}{|>{\\columncolor[RGB]{23, 100, 166}\\color{white}\\bfseries}X|r|}
+\\hline
+\\rowcolor[RGB]{23, 100, 166} \\color{white} FINANCIAL RETURN OUTPUTS & \\color{white} STAGE 0 \\\\ \\hline
+ZAR / kWh (1st Year) & ${num(s0.zarPerKwh, 2)} \\\\ \\hline
+ZAR / Wp (DC) & ${num(s0.zarPerWpDc, 2)} \\\\ \\hline
+ZAR / Wp (AC) & ${num(s0.zarPerWpAc, 2)} \\\\ \\hline
+LCOE (ZAR/kWh) & ${num(s0.lcoe, 2)} \\\\ \\hline
+Initial Yield & ${num(s0.initialYield, 2)}\\% \\\\ \\hline
+IRR & ${num(s0.irr, 2)}\\% \\\\ \\hline
+MIRR & ${num(s0.mirr, 2)}\\% \\\\ \\hline
+Payback Period & ${num(s0.payback, 2)} \\\\ \\hline
+NPV & ${num(s0.npv, 2)} \\\\ \\hline
+\\end{tabularx}
+\\end{table}`;
+
+  // Multi-stage financial tables (Stages 1-4 and 5-8)
+  function makeFinancialTable(stages: number[]) {
+    const headerCells = stages.map(s => `\\color{white} STAGE ${s}`).join(" & ");
+    const colSpec = stages.map(() => "r").join("|");
+
+    function row(label: string, getter: (m: ReturnType<typeof stageMetrics>) => string) {
+      const cells = stages.map(s => getter(stageMetrics(s))).join(" & ");
+      return `${label} & ${cells} \\\\ \\hline`;
+    }
+
+    return `
+\\begin{table}[h!]
+\\centering
+\\small
+\\renewcommand{\\arraystretch}{1.2}
+\\begin{tabularx}{\\textwidth}{|>{\\columncolor[RGB]{23, 100, 166}\\color{white}\\bfseries}X|${colSpec}|}
+\\hline
+\\rowcolor[RGB]{23, 100, 166} \\color{white} FINANCIAL RETURN OUTPUTS & ${headerCells} \\\\ \\hline
+${row("ZAR / kWh (1st Year)", m => num(m.zarPerKwh, 2))}
+${row("ZAR / Wp (DC)", m => num(m.zarPerWpDc, 2))}
+${row("ZAR / Wp (AC)", m => num(m.zarPerWpAc, 2))}
+${row("LCOE (ZAR/kWh)", m => num(m.lcoe, 2))}
+${row("Initial Yield", m => `${num(m.initialYield, 2)}\\%`)}
+${row("IRR", m => `${num(m.irr, 2)}\\%`)}
+${row("MIRR", m => `${num(m.mirr, 2)}\\%`)}
+${row("Payback Period", m => num(m.payback, 2))}
+${row("NPV", m => num(m.npv, 2))}
+\\end{tabularx}
+\\end{table}`;
+  }
 
   return `
 \\section{Tender Return Data}
@@ -228,33 +333,56 @@ export function tenderReturnData(simulation: SimulationData, project: any): stri
 \\begin{table}[h!]
 \\centering
 \\small
-\\begin{tabular}{|l|r|}
+\\renewcommand{\\arraystretch}{1.2}
+\\begin{tabularx}{\\textwidth}{|X|r|}
 \\hline
-\\textbf{TENDER RETURN DATA INPUTS} & \\textbf{Value} \\\\ \\hline
-Total Capital Cost of Project & ${currency(simulation.systemCost)} \\\\ \\hline
+\\rowcolor[RGB]{23, 100, 166} \\textbf{\\color{white} TENDER RETURN DATA INPUTS} & \\textbf{\\color{white} STAGE 0} \\\\ \\hline
+Project Cost excl 3yr O\\&M and VAT & ${num(cost)} \\\\ \\hline
+O\\&M & ${num(oAndMYear1 * 3)} \\\\ \\hline
+Health and Safety Consultant & 45,000 \\\\ \\hline
+Water Points & 90,000 \\\\ \\hline
+CCTV & 60,000 \\\\ \\hline
+Generator Integration & 0 \\\\ \\hline
+MV Switch Gear & 100,000 \\\\ \\hline
+Professional Fees & 530,000 \\\\ \\hline
+Project Management Fees & 158,091 \\\\ \\hline
+Project Contingency & 149,241 \\\\ \\hline
+\\textbf{Total Capital cost of Project} & \\textbf{${num(cost)}} \\\\ \\hline
+Value of Tender subjected to Foreign Exchange (ZAR) & ${num(Math.round(cost * 0.45))} \\\\ \\hline
+\\% of Tender subjected to Foreign Exchange & 45\\% \\\\ \\hline
 Energy Yield Year 1 (kWh) & ${num(baseYield, 2)} \\\\ \\hline
-KVA Saving in Year 1 (kVA) & ${num(simulation.demandSavingKva ?? 0, 2)} \\\\ \\hline
-Energy Yield over Lifespan (kWh) & ${num(lifespanYield, 2)} \\\\ \\hline
-O\\&M Cost Year 1 (ZAR) & ${currency(oAndMYear1)} \\\\ \\hline
-${specs?.panelCount ? `Number of Panels (\\#) & ${num(specs.panelCount, 0)} \\\\ \\hline` : ""}
-${panelArea > 0 ? `Area Covered by PV Panels (m\\textsuperscript{2}) & ${num(panelArea, 2)} \\\\ \\hline` : ""}
-Lifespan (yr) & 20 \\\\ \\hline
+kVA saving in Year 1 (kVA) & ${num(simulation.demandSavingKva ?? 0, 2)} \\\\ \\hline
+Energy yield over lifespan (kWh) & ${num(lifespanYield, 2)} \\\\ \\hline
+O\\&M Cost Year 1 (ZAR) & ${num(oAndMYear1, 2)} \\\\ \\hline
+Degradation Year 1 (\\%/yr) & 1.50\\% \\\\ \\hline
+Degradation Year 2 and onwards (\\%/yr) & 0.50\\% \\\\ \\hline
+${specs?.panelCount ? `Number of panels to be installed (\\#) & ${num(specs.panelCount, 2)} \\\\ \\hline` : ""}
+${panelArea > 0 ? `Area to be covered by PV panels (\$m^2\$) & ${num(panelArea, 2)} \\\\ \\hline` : ""}
+Lifespan (yr) & 20.00 \\\\ \\hline
 kWp (DC) & ${num(dcCapacity, 0)} \\\\ \\hline
 kWp (AC) & ${num(simulation.solarCapacity, 0)} \\\\ \\hline
-${specs?.panelEfficiency ? `Module Efficiency (\\%) & ${num(specs.panelEfficiency, 2)}\\% \\\\ \\hline` : ""}
-\\end{tabular}
+${specs?.panelEfficiency ? `Module efficiency (\\%) & ${num(specs.panelEfficiency, 2)}\\% \\\\ \\hline` : ""}
+\\end{tabularx}
 \\end{table}
 
 \\textbf{LOAD SHEDDING IMPACT}
 
 \\begin{table}[h!]
 \\centering
-\\begin{tabular}{|l|r|l|r|}
+\\small
+\\renewcommand{\\arraystretch}{1.2}
+\\begin{tabularx}{\\textwidth}{|X|r|X|r|}
 \\hline
-\\textbf{LOAD SHEDDING} & \\textbf{KWH/ANNUM} & \\textbf{LOAD SHEDDING} & \\textbf{KWH/ANNUM} \\\\ \\hline
+\\rowcolor{titleblue} \\textbf{\\color{white} LOAD SHEDDING} & \\textbf{\\color{white} KWH / ANNUM} & \\textbf{\\color{white} LOAD SHEDDING} & \\textbf{\\color{white} KWH / ANNUM} \\\\ \\hline
 ${lsRows}
-\\end{tabular}
+\\end{tabularx}
 \\end{table}
+
+${stage0Table}
+
+${makeFinancialTable([1, 2, 3, 4])}
+
+${makeFinancialTable([5, 6, 7, 8])}
 `;
 }
 
@@ -297,7 +425,6 @@ export function financialEstimates(simulation: SimulationData): string {
     : simulation.solarCapacity * 1.33;
   const acCap = simulation.solarCapacity;
 
-  // Calculate per-stage metrics (simplified linear scaling from base)
   function stageMetrics(stage: number) {
     const factor = LOAD_SHEDDING_FACTORS[stage] ?? 1.0;
     const yld = baseYield * factor;
@@ -318,40 +445,33 @@ export function financialEstimates(simulation: SimulationData): string {
     return `${label} & ${cells} \\\\ \\hline`;
   }
 
-  const stagesA = [0, 1, 2, 3, 4];
   const stagesB = [5, 6, 7, 8];
 
-  function makeTable(stages: number[], header: string) {
-    const colSpec = stages.map(() => "r").join("|");
-    const headerCells = stages.map(s => `\\textbf{STAGE ${s}}`).join(" & ");
-    return `
-\\begin{table}[h!]
-\\centering
-\\small
-\\begin{tabular}{|l|${colSpec}|}
-\\hline
-\\textbf{${header}} & ${headerCells} \\\\ \\hline
-${fmtRow("ZAR/kWh (1st Year)", stages, m => num(m.zarPerKwh, 2))}
-${fmtRow("ZAR/Wp (DC)", stages, m => num(m.zarPerWpDc, 2))}
-${fmtRow("ZAR/Wp (AC)", stages, m => num(m.zarPerWpAc, 2))}
-${fmtRow("LCOE (ZAR/kWh)", stages, m => num(m.lcoe, 2))}
-${fmtRow("Initial Yield", stages, m => `${num(m.initialYield, 2)}\\%`)}
-${fmtRow("IRR", stages, m => `${num(m.irr, 2)}\\%`)}
-${fmtRow("MIRR", stages, m => `${num(m.mirr, 2)}\\%`)}
-${fmtRow("Payback Period", stages, m => num(m.payback, 2))}
-${fmtRow("NPV", stages, m => currency(m.npv))}
-\\end{tabular}
-\\end{table}
-`;
-  }
+  const colSpec = stagesB.map(() => "r").join("|");
+  const headerCells = stagesB.map(s => `\\textbf{STAGE ${s}}`).join(" & ");
 
   return `
 \\section{Financial Estimates}
 Based on the inputs above, the various stages of load shedding and their impact have been applied to the energy yield of year 1. Taking this into account, the following financial returns have been calculated for each stage:
 
-${makeTable(stagesA, "FINANCIAL OUTPUTS")}
+\\begin{table}[h!]
+\\centering
+\\small
+\\begin{tabular}{|l|${colSpec}|}
+\\hline
+\\textbf{FINANCIAL OUTPUTS} & ${headerCells} \\\\ \\hline
+${fmtRow("ZAR/kWh (1st Year)", stagesB, m => num(m.zarPerKwh, 2))}
+${fmtRow("ZAR/Wp (DC)", stagesB, m => num(m.zarPerWpDc, 2))}
+${fmtRow("ZAR/Wp (AC)", stagesB, m => num(m.zarPerWpAc, 2))}
+${fmtRow("LCOE (ZAR/kWh)", stagesB, m => num(m.lcoe, 2))}
+${fmtRow("Initial Yield", stagesB, m => `${num(m.initialYield, 2)}\\%`)}
+${fmtRow("IRR", stagesB, m => `${num(m.irr, 2)}\\%`)}
+${fmtRow("MIRR", stagesB, m => `${num(m.mirr, 2)}\\%`)}
+${fmtRow("Payback Period", stagesB, m => num(m.payback, 2))}
+${fmtRow("NPV", stagesB, m => currency(m.npv))}
+\\end{tabular}
+\\end{table}
 
-${makeTable(stagesB, "FINANCIAL OUTPUTS")}
 
 The Net Present Value was calculated using the Cost Of Capital, a 9.00\\% per annum interest rate.
 `;
@@ -374,12 +494,12 @@ From the above load shedding scenarios, we are of the opinion that a load sheddi
 
 \\begin{table}[h!]
 \\centering
-\\begin{tabular}{|l|l|l|}
-\\hline
-Initial Yield & : & ${num(initialYield, 2)}\\% \\\\ \\hline
-IRR & : & ${num(irr, 2)}\\% \\\\ \\hline
-MIRR & : & ${num(mirr, 2)}\\% \\\\ \\hline
-Payback Period & : & ${paybackYears} years and ${paybackMonths} months \\\\ \\hline
+\\renewcommand{\\arraystretch}{1.2}
+\\begin{tabular}{l c l}
+    \\textbf{Initial Yield}  & \\textbf{:} & \\textbf{${num(initialYield, 2)} \\%} \\\\
+    \\textbf{IRR}            & \\textbf{:} & \\textbf{${num(irr, 2)} \\%} \\\\
+    \\textbf{MIRR}           & \\textbf{:} & \\textbf{${num(mirr, 2)} \\%} \\\\
+    \\textbf{Payback Period} & \\textbf{:} & \\textbf{${paybackYears} years and ${paybackMonths} months} \\\\
 \\end{tabular}
 \\end{table}
 `;
@@ -475,7 +595,7 @@ export function termsAndConditions(proposal: Partial<Proposal>): string {
 ${esc(proposal.assumptions) || "Standard industry assumptions apply."}
 
 \\subsection{Disclaimers}
-${esc(proposal.disclaimers) || "This proposal is based on estimated data. Actual performance may vary."}
+${esc(proposal.disclaimers) || "This proposal is based on estimated consumption data and solar irradiance forecasts. Actual performance may vary based on weather conditions, equipment degradation, and other factors."}
 
 ${proposal.custom_notes ? `
 \\subsection{Additional Notes}

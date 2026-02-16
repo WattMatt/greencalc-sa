@@ -65,10 +65,22 @@ export function generatePreamble(data: TemplateData): string {
   // Hardcoded titleblue color — branding/template influence disabled for now
   const primaryRgb = "23, 109, 177";
 
+  const projectName = snippets.esc(project?.name || "PROJECT");
+  const version = String(proposal.version || 1).padStart(3, "0");
+
   return `\\documentclass[11pt, a4paper]{article}
 
 % ── Page Layout & Margins ──
-\\usepackage[top=25.4mm, bottom=25.4mm, left=25.4mm, right=25.4mm, headheight=40pt]{geometry}
+\\usepackage[
+    a4paper,
+    left=25.4mm,
+    right=25.4mm,
+    bottom=25.4mm,
+    top=40mm,
+    headheight=40pt,
+    headsep=10mm,
+    footskip=0mm
+]{geometry}
 
 % ── Font Settings ──
 \\usepackage[utf8]{inputenc}
@@ -101,12 +113,58 @@ export function generatePreamble(data: TemplateData): string {
 
 % ── Header / Footer ──
 \\pagestyle{fancy}
-\\fancyhf{}
+\\fancyhf{} % Clear defaults
 \\renewcommand{\\headrulewidth}{1pt}
 \\renewcommand{\\footrulewidth}{0.5pt}
-\\lhead{\\textbf{${snippets.esc(project?.name || "PROJECT")}}\\\\SOLAR PV INSTALLATION}
-\\rhead{Financial Analysis\\\\\\today\\\\Rev ${String(proposal.version || 1).padStart(3, "0")}}
-\\rfoot{\\thepage}
+
+\\fancyhead[C]{%
+    % Outer tabular spans the full text width
+    \\begin{tabular*}{\\textwidth}{@{\\extracolsep{\\fill}} l r @{}}
+        % --- LEFT SIDE ---
+        \\begin{tabular}[b]{@{}c@{}}
+            \\text{${projectName}} \\\\
+            \\text{SOLAR PV INSTALLATION} \\hspace{0.5em} $\\rightarrow$ \\hspace{0.5em} Financial Analysis
+        \\end{tabular} 
+        & 
+        % --- RIGHT SIDE ---
+        \\begin{tabular}[b]{@{}r@{}}
+            \\begin{tabular}[b]{@{}r@{}}
+                \\today \\\\
+                Rev ${version}
+            \\end{tabular}
+            \\hspace{1em}
+            % --- LOGO PLACEHOLDER (TikZ) ---
+            \\raisebox{-10pt}{%
+                \\begin{tikzpicture}
+                    \\node[fill=titleblue, text=white, font=\\bfseries\\large, minimum width=1.6cm, minimum height=0.9cm, inner sep=0pt] (logo) {WM};
+                    \\draw[titleblue, thick] (logo.south west) rectangle (logo.north east);
+                    \\draw[titleblue, thick] ([yshift=2pt]logo.north west) -- ([yshift=2pt]logo.north east);
+                    \\draw[titleblue, thick] ([xshift=-2pt]logo.north west) -- ([xshift=-2pt]logo.south west);
+                    \\draw[titleblue, thick] (logo.north west) -- ([xshift=-2pt, yshift=2pt]logo.north west);
+                    \\draw[titleblue, thick] (logo.north east) -- ([yshift=2pt]logo.north east);
+                \\end{tikzpicture}%
+            }
+        \\end{tabular}
+    \\end{tabular*}
+}
+
+% ── Footer Configuration ──
+\\fancyfoot{} % Clear defaults
+\\renewcommand{\\footrulewidth}{0.5pt}
+
+\\fancyfoot[C]{%
+    \\tiny
+    \\vspace{5mm}
+    
+    \\begin{tabular*}{\\textwidth}{@{\\extracolsep{\\fill}} l r @{}}
+        \\textbf{Document Number} \\hspace{0.5em} [DOCUMENT\\_NUMBER\\_PLACEHOLDER] & 
+        \\textbf{Print date} \\hspace{0.5em} [PRINT\\_DATE\\_PLACEHOLDER] \\hspace{5em} \\thepage
+    \\end{tabular*}
+    \\\\[1em]
+    
+    \\centering
+    [FILE\\_PATH\\_PLACEHOLDER]
+}
 
 % ── Hyperlinks ──
 \\hypersetup{
