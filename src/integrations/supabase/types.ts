@@ -1258,6 +1258,7 @@ export type Database = {
           branding: Json | null
           client_signature: string | null
           client_signed_at: string | null
+          content_blocks: Json | null
           created_at: string
           custom_notes: string | null
           disclaimers: string | null
@@ -1286,6 +1287,7 @@ export type Database = {
           branding?: Json | null
           client_signature?: string | null
           client_signed_at?: string | null
+          content_blocks?: Json | null
           created_at?: string
           custom_notes?: string | null
           disclaimers?: string | null
@@ -1314,6 +1316,7 @@ export type Database = {
           branding?: Json | null
           client_signature?: string | null
           client_signed_at?: string | null
+          content_blocks?: Json | null
           created_at?: string
           custom_notes?: string | null
           disclaimers?: string | null

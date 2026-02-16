@@ -235,6 +235,9 @@ export default function ProposalWorkspace() {
       if (existingProposal.simulation_snapshot) {
         setSimulationData(existingProposal.simulation_snapshot as unknown as SimulationData);
       }
+      if ((existingProposal as any).content_blocks) {
+        setContentBlocks((existingProposal as any).content_blocks as ContentBlock[]);
+      }
     }
   }, [existingProposal, orgBranding]);
 
@@ -356,6 +359,7 @@ export default function ProposalWorkspace() {
             assumptions: assumptions || null,
             disclaimers,
             simulation_snapshot: simulationData ? JSON.parse(JSON.stringify(simulationData)) : null,
+            content_blocks: JSON.parse(JSON.stringify(contentBlocks)),
             updated_at: new Date().toISOString(),
           })
           .eq("id", proposalId);
@@ -374,6 +378,7 @@ export default function ProposalWorkspace() {
             assumptions: assumptions || null,
             disclaimers,
             simulation_snapshot: simulationData ? JSON.parse(JSON.stringify(simulationData)) : null,
+            content_blocks: JSON.parse(JSON.stringify(contentBlocks)),
             version: nextVersion,
           })
           .select()
