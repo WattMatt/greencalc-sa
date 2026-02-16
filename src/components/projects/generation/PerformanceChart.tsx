@@ -547,7 +547,7 @@ export function PerformanceChart({ projectId, month, year, monthData }: Performa
             <ChartContainer config={activeChartConfig} className="h-[300px] w-full">
               <ComposedChart data={enrichedData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} angle={timeframe === "daily" ? 0 : -45} textAnchor={timeframe === "daily" ? "middle" : "end"} height={timeframe === "daily" ? 50 : 60} interval={labelInterval} label={timeframe === "daily" ? { value: MONTH_FULL[month - 1], position: "bottom", offset: -5, style: { fontSize: 11 } } : undefined} />
+                <XAxis dataKey="name" fontSize={10} angle={timeframe === "daily" ? 0 : -45} textAnchor={timeframe === "daily" ? "middle" : "end"} height={timeframe === "daily" ? 40 : 60} interval={labelInterval} />
                 <YAxis fontSize={12} domain={yAxisMax ? [0, yAxisMax] : undefined} allowDataOverflow label={{ value: displayUnit, angle: -90, position: "insideLeft", style: { fontSize: 11 } }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 {!singleDayLabel && <Legend onClick={handleLegendClick} wrapperStyle={{ cursor: "pointer" }} />}
