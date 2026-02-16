@@ -383,6 +383,31 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       }
     }
 
+    // Override correction pass: recalculate lost production when slot overrides exist
+    if (slotOverrides && slotOverrides.size > 0) {
+      for (let d = 1; d <= totalDays; d++) {
+        const entry = dayMap.get(d)!;
+        for (const sourceLabel of distinctReadingSources) {
+          const overrideKey = `${d}-${sourceLabel}`;
+          const override = slotOverrides.get(overrideKey);
+          if (override === undefined) continue;
+
+          const sdKey = `${d}-${sourceLabel}`;
+          const sd = sdMap.get(sdKey)!;
+          const sourceGuaranteeVal = guaranteeMap.get(sourceLabel) ?? 0;
+          const perSlotEnergy = (sourceGuaranteeVal / totalDays) / sunHourSlots;
+          const newEnergy = override * perSlotEnergy;
+          const energyDelta = newEnergy - sd.downtimeEnergy;
+          const slotDelta = override - sd.downtimeSlots;
+
+          sd.downtimeEnergy = newEnergy;
+          sd.downtimeSlots = override;
+          entry.downtimeEnergy += energyDelta;
+          entry.downtimeSlots += slotDelta;
+        }
+      }
+    }
+
     const rows: DailyRow[] = [];
     for (let d = 1; d <= totalDays; d++) {
       const entry = dayMap.get(d)!;
@@ -407,7 +432,7 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
       const nameB = displayNameMap.get(b) || b;
       return nameA.localeCompare(nameB, undefined, { numeric: true });
     }), sourceDisplayNames: displayNameMap };
-  }, [readings, totalDays, monthData.guaranteed_kwh, sourceGuarantees]);
+  }, [readings, totalDays, monthData.guaranteed_kwh, sourceGuarantees, slotOverrides]);
 
   const totals = useMemo(() => {
     return dailyRows.reduce(
