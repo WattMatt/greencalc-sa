@@ -1,26 +1,23 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   ArrowLeft, 
   Save, 
   Loader2, 
   FileCheck, 
-  Eye,
   History,
-  ChevronLeft,
-  ChevronRight
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { useOrganizationBranding } from "@/hooks/useOrganizationBranding";
 import { ProposalSidebar } from "@/components/proposals/ProposalSidebar";
 import { ShareLinkButton } from "@/components/proposals/ShareLinkButton";
-import { generateWYSIWYGPDF } from "@/lib/pdfshift/capturePreview";
+import { LaTeXWorkspace } from "@/components/proposals/latex/LaTeXWorkspace";
+import { downloadPdf } from "@/lib/latex/SwiftLaTeXEngine";
+import { TemplateData } from "@/lib/latex/templates/proposalTemplate";
 import {
   Proposal,
   VerificationChecklist as VerificationChecklistType,
@@ -31,18 +28,7 @@ import {
   STATUS_LABELS,
   STATUS_COLORS
 } from "@/components/proposals/types";
-import { ProposalTemplateId, PROPOSAL_TEMPLATES } from "@/components/proposals/templates/types";
-import {
-  CoverSection,
-  SiteOverviewSection,
-  LoadAnalysisSection,
-  EquipmentSpecsSection,
-  FinancialSummarySection,
-  CashflowTableSection,
-  TermsSection,
-  SignatureSection,
-  PageWrapper
-} from "@/components/proposals/sections";
+import { ProposalTemplateId } from "@/components/proposals/templates/types";
 
 export default function ProposalWorkspace() {
   const { projectId } = useParams();
@@ -58,7 +44,6 @@ export default function ProposalWorkspace() {
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>(DEFAULT_CONTENT_BLOCKS);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [currentPage, setCurrentPage] = useState(0);
 
   const [verificationChecklist, setVerificationChecklist] = useState<VerificationChecklistType>({
     site_coordinates_verified: false,
@@ -86,6 +71,9 @@ export default function ProposalWorkspace() {
     "This proposal is based on estimated consumption data and solar irradiance forecasts. Actual performance may vary based on weather conditions, equipment degradation, and other factors."
   );
   const [selectedTemplate, setSelectedTemplate] = useState<ProposalTemplateId>("modern");
+
+  // PDF blob ref for export
+  const pdfBlobRef = useRef<Blob | null>(null);
 
   // Fetch organization branding
   const { branding: orgBranding, isLoading: loadingOrgBranding } = useOrganizationBranding();
@@ -123,7 +111,6 @@ export default function ProposalWorkspace() {
     enabled: !!projectId,
   });
 
-  // Extract tariff name from project
   const projectTariffName = (project as any)?.tariffs?.name || null;
 
   // Fetch simulations
@@ -275,7 +262,6 @@ export default function ProposalWorkspace() {
           systemCost: results?.systemCost || (sim.solar_capacity_kwp || 0) * 12000,
           tariffName: projectTariffName || results?.tariffName,
           location: project?.location || undefined,
-          // Advanced metrics if available
           npv: results?.npv,
           irr: results?.irr,
           lcoe: results?.lcoe,
@@ -338,11 +324,19 @@ export default function ProposalWorkspace() {
     updated_at: existingProposal?.updated_at || new Date().toISOString(),
   }), [existingProposal, projectId, nextVersion, verificationChecklist, branding, executiveSummary, customNotes, assumptions, disclaimers]);
 
-  // Get template
-  const template = PROPOSAL_TEMPLATES[selectedTemplate];
-
-  // Enabled pages based on content blocks
-  const enabledBlocks = contentBlocks.filter(b => b.enabled).sort((a, b) => a.order - b.order);
+  // Build template data for LaTeX workspace
+  const templateData: TemplateData | null = useMemo(() => {
+    if (!simulationData) return null;
+    return {
+      simulation: simulationData,
+      branding,
+      contentBlocks,
+      proposal: proposalForComponents,
+      project,
+      tenants: tenants || [],
+      tariffName: projectTariffName || undefined,
+    };
+  }, [simulationData, branding, contentBlocks, proposalForComponents, project, tenants, projectTariffName]);
 
   // Save mutation
   const saveMutation = useMutation({
@@ -399,26 +393,19 @@ export default function ProposalWorkspace() {
     },
   });
 
-  // Export handlers
+  // Export: download the compiled PDF blob directly
   const handleExportPDF = async () => {
-    if (!simulationData || !project) return;
-    
+    if (!pdfBlobRef.current) {
+      toast.error("No compiled PDF available. Wait for compilation to finish.");
+      return;
+    }
     setIsExporting(true);
     try {
-      const showSystemDesign = contentBlocks.find(b => b.id === 'systemDesign')?.enabled || false;
-      
-      await generateWYSIWYGPDF({
-        proposal: proposalForComponents,
-        project,
-        simulation: simulationData,
-        tenants,
-        showSystemDesign,
-        templateId: selectedTemplate,
-      }, `${project.name || 'Proposal'}-v${proposalForComponents.version}.pdf`);
-      
+      const filename = `${project?.name || 'Proposal'}-v${proposalForComponents.version}.pdf`;
+      downloadPdf(pdfBlobRef.current, filename);
       toast.success("PDF exported successfully");
-    } catch (error) {
-      console.error("PDF export error:", error);
+    } catch (err) {
+      console.error("PDF export error:", err);
       toast.error("Failed to export PDF");
     } finally {
       setIsExporting(false);
@@ -428,7 +415,6 @@ export default function ProposalWorkspace() {
   const handleExportExcel = () => {
     if (!simulationData) return;
     
-    // Generate CSV with key data
     const rows = [
       ["Solar Proposal Export"],
       ["Project", project?.name || ""],
@@ -460,6 +446,10 @@ export default function ProposalWorkspace() {
     toast.success("Excel/CSV exported");
   };
 
+  const handlePdfReady = useCallback((blob: Blob | null) => {
+    pdfBlobRef.current = blob;
+  }, []);
+
   if (loadingProposal) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -467,140 +457,6 @@ export default function ProposalWorkspace() {
       </div>
     );
   }
-
-  // Page titles for header
-  const PAGE_TITLES: Record<string, string> = {
-    cover: 'Cover',
-    siteOverview: 'Site Overview',
-    loadAnalysis: 'Load Analysis',
-    equipmentSpecs: 'Equipment Specifications',
-    financialSummary: 'Financial Summary',
-    cashflowTable: '20-Year Cashflow',
-    terms: 'Terms & Conditions',
-    signature: 'Authorization',
-  };
-
-  // Render section based on block ID
-  const renderSection = (blockId: string) => {
-    if (!simulationData) return null;
-
-    const pageIndex = enabledBlocks.findIndex(b => b.id === blockId);
-    const pageNumber = pageIndex + 1;
-    const totalPages = enabledBlocks.length;
-    const pageTitle = PAGE_TITLES[blockId] || blockId;
-
-    // Cover section has its own branded header - don't wrap it
-    if (blockId === 'cover') {
-      return (
-        <div className="flex flex-col min-h-[297mm]">
-          <CoverSection
-            proposal={proposalForComponents}
-            project={project}
-            simulation={simulationData}
-            template={template}
-          />
-          {/* Cover page footer */}
-          <div className="mt-auto px-6 py-3 border-t bg-muted/30">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>
-                {[branding.contact_email, branding.contact_phone, branding.website].filter(Boolean).join(' • ') || 
-                 `Generated ${new Date().toLocaleDateString("en-ZA")}`}
-              </span>
-              <span>Page {pageNumber} of {totalPages}</span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Extract shop types for load analysis
-    const shopTypesFromTenants = tenants
-      ?.map(t => t.shop_types)
-      .filter((st): st is NonNullable<typeof st> => st != null) || [];
-    const uniqueShopTypes = Array.from(
-      new Map(shopTypesFromTenants.map(st => [st.id, st])).values()
-    );
-
-    const getSectionContent = () => {
-      switch (blockId) {
-        case 'siteOverview':
-          return (
-            <SiteOverviewSection
-              proposal={proposalForComponents}
-              project={project}
-              simulation={simulationData}
-              template={template}
-              tariffName={projectTariffName || undefined}
-            />
-          );
-        case 'loadAnalysis':
-          return (
-            <LoadAnalysisSection
-              simulation={simulationData}
-              template={template}
-              tenants={tenants || []}
-              shopTypes={uniqueShopTypes}
-              project={project}
-            />
-          );
-        case 'equipmentSpecs':
-          return (
-            <EquipmentSpecsSection
-              simulation={simulationData}
-              template={template}
-            />
-          );
-        case 'financialSummary':
-          return (
-            <FinancialSummarySection
-              simulation={simulationData}
-              template={template}
-            />
-          );
-        case 'cashflowTable':
-          return (
-            <CashflowTableSection
-              simulation={simulationData}
-              template={template}
-              showAllYears={true}
-            />
-          );
-        case 'terms':
-          return (
-            <TermsSection
-              proposal={proposalForComponents}
-              template={template}
-            />
-          );
-        case 'signature':
-          return (
-            <SignatureSection
-              proposal={proposalForComponents}
-              template={template}
-            />
-          );
-        default:
-          return (
-            <div className="text-center text-muted-foreground">
-              <p className="text-sm">{blockId} section coming soon</p>
-            </div>
-          );
-      }
-    };
-
-    return (
-      <PageWrapper
-        pageNumber={pageNumber}
-        totalPages={totalPages}
-        template={template}
-        branding={branding}
-        pageTitle={pageTitle}
-        forPDF={false}
-      >
-        {getSectionContent()}
-      </PageWrapper>
-    );
-  };
 
   return (
     <div className="flex h-screen bg-muted/30">
@@ -677,69 +533,13 @@ export default function ProposalWorkspace() {
           </div>
         </div>
 
-        {/* Preview Area */}
-        <div className="flex-1 overflow-hidden p-6">
-          {simulationData ? (
-            <div className="h-full flex flex-col">
-              {/* Page Navigation */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Eye className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Live Preview</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {simulationData.solarCapacity} kWp System
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-                    disabled={currentPage === 0}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="text-sm text-muted-foreground min-w-[80px] text-center">
-                    Page {currentPage + 1} of {enabledBlocks.length}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(Math.min(enabledBlocks.length - 1, currentPage + 1))}
-                    disabled={currentPage >= enabledBlocks.length - 1}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* A4 Preview Container */}
-              <div className="flex-1 flex items-start justify-center overflow-auto">
-                <Card className="w-[210mm] min-h-[297mm] shadow-lg">
-                  <CardContent className="p-0">
-                    {enabledBlocks[currentPage] && renderSection(enabledBlocks[currentPage].id)}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Page Thumbnails */}
-              <div className="mt-4 flex items-center justify-center gap-2 overflow-x-auto py-2">
-                {enabledBlocks.map((block, index) => (
-                  <button
-                    key={block.id}
-                    onClick={() => setCurrentPage(index)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                      currentPage === index
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                    )}
-                  >
-                    {block.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+        {/* LaTeX Workspace or Empty State */}
+        <div className="flex-1 overflow-hidden">
+          {templateData ? (
+            <LaTeXWorkspace
+              templateData={templateData}
+              onPdfReady={handlePdfReady}
+            />
           ) : (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
