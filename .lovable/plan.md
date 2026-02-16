@@ -1,52 +1,54 @@
 
-## Add Editable Comment Input with Past Comments Dropdown
+
+## Add Up/Down Arrows to 30-Min Interval Cells in Down Time Tab
 
 ### What Changes
 
-The "Comment" column in the Down Time tab currently shows a static dash ("—"). This will be replaced with an interactive input that:
-- Lets you type a free-text comment for each day
-- Shows a dropdown of previously used comments so you can quickly reuse them
-- Persists comments to the database so they survive page reloads
+Each "30-Min Intervals" cell in the Down Time tab will get small up/down arrow buttons beside the number. Clicking up increments by 1, clicking down decrements by 1 (minimum 0). This lets you manually adjust downtime intervals beyond the auto-calculated values.
 
 ### New Database Table
 
-A new `downtime_comments` table will store one comment per project + month + year + day:
+A `downtime_slot_overrides` table will persist manual adjustments:
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | uuid (PK) | Auto-generated |
-| project_id | text | Links to the project |
+| project_id | text | Project reference |
 | year | integer | e.g. 2026 |
 | month | integer | 1-12 |
 | day | integer | 1-31 |
-| comment | text | The user's comment |
+| reading_source | text | The source key (e.g. Tie-In identifier) |
+| slot_override | integer | The user's adjusted value |
 | created_at | timestamptz | Auto-set |
 
-A unique constraint on (project_id, year, month, day) ensures one comment per day. An upsert will be used so typing a comment auto-saves it.
-
-A second query will fetch distinct past comments for this project to populate the dropdown suggestions.
+Unique constraint on (project_id, year, month, day, reading_source). RLS: open read/write (consistent with existing downtime_comments).
 
 ### UI Approach
 
-Each row's Comment cell will become a combo-box style input:
-- A small text input (matching table styling) where you can type freely
-- A dropdown button that shows a list of previously used comments for quick selection
-- Uses the existing Popover + Command (cmdk) components already installed in the project
-- Comments auto-save on blur (losing focus) with a debounce, so no save button is needed
+- Replace the plain number in each "30-Min Intervals" cell with a compact inline widget: the number flanked by tiny up/down chevron buttons (stacked vertically to the right)
+- Clicking up/down immediately updates the displayed value and upserts to the database
+- The displayed value defaults to the calculated `downtimeSlots` but switches to the override once the user adjusts it
+- Totals row recalculates based on overridden values
 
-### Files to Change
+### New Component
 
-1. **Database migration** -- Create `downtime_comments` table with RLS policies (public read/write for now since the app doesn't use auth on this feature)
-2. **`src/components/projects/generation/PerformanceSummaryTable.tsx`** -- Replace the static "—" Comment cell with the new interactive input component; fetch and save comments via Supabase
-3. **`src/components/projects/generation/DowntimeCommentCell.tsx`** (new) -- Extracted component for the comment cell with input + dropdown logic
+**`src/components/projects/generation/DowntimeSlotCell.tsx`**
+- Props: `projectId`, `year`, `month`, `day`, `readingSource`, `calculatedSlots`, `overrideValue`, `onChanged`
+- Local state tracks the current value (override or calculated)
+- Up/down buttons use `ChevronUp` / `ChevronDown` icons from lucide-react
+- On click, upserts to `downtime_slot_overrides` table
+
+### Changes to PerformanceSummaryTable.tsx
+
+- Fetch overrides for the current project/year/month via `useQuery`
+- Pass override values to the new `DowntimeSlotCell` component in each source's 30-Min Intervals column
+- Adjust totals computation to use overridden values when present
+- The total row and the aggregated "Down Time" Lost Production column will also reflect overrides (recalculating lost energy as `overriddenSlots * perSlotEnergy`)
 
 ### Technical Details
 
-- The `DowntimeCommentCell` component will:
-  - Accept `projectId`, `year`, `month`, `day`, `initialValue`, and `pastComments` props
-  - Use local state for the input value
-  - On blur, upsert the comment to the database
-  - Render a Popover with a filterable list of past comments using the existing `cmdk` (Command) component
-- Past comments will be fetched once per table render via a `useQuery` hook in the parent
-- The dropdown will show distinct non-empty comments from this project, sorted alphabetically
-- Selecting a past comment fills the input and triggers an auto-save
+- Database migration: create `downtime_slot_overrides` with unique constraint and open RLS policies
+- Query key: `["downtime-slot-overrides", projectId, year, month]`
+- Override map: `Map<string, number>` keyed by `${day}-${readingSource}`
+- The cell component will use `queryClient.invalidateQueries` after upserting to refresh data
+- Minimum value clamped to 0; no maximum cap (user can go above calculated value)
