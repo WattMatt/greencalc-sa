@@ -1,40 +1,50 @@
 
 
-## Fix Duplicate "1 January" Label in 30-Min View
+## Add Lifetime Performance Overview Chart
 
-### Problem
+### What It Does
 
-After the previous X-axis update, the single-day (30-min) view now shows the date label twice:
-1. Once via the XAxis `label` prop (added in the last edit)
-2. Once via the custom `<p>` element rendered below the chart (line 605-607)
+A new chart placed between the month/year selector row and the three summary cards. It shows the system's performance across all recorded months, with:
 
-Both display "1 January", causing duplication as visible in the screenshot.
+- **Blue bars**: Guaranteed Generation (kWh)
+- **Yellow bars**: Actual Production (kWh)
+- **Dashed line (right Y-axis)**: Cumulative Performance % (running actual / running guaranteed x 100)
+- **X-axis ticks**: "Jan-25", "Feb-26", etc.
+- **Year filter dropdown**: "All", "2025", "2026", etc. (derived from available data)
+- **Data table below chart**: Rows for Guarantee, Production, Monthly %, and Cumulative %
 
-### Solution
+### Layout
 
-Remove the XAxis `label` for the single-day case, since the custom block below the chart (lines 605-620) already handles that label along with the inline legend. The XAxis `label` should only apply to the `daily` timeframe.
-
-### Technical Change
-
-**File: `src/components/projects/generation/PerformanceChart.tsx`**
-
-On line 550, change the XAxis `label` prop from:
-
-```
-label={timeframe === "daily" ? { value: MONTH_FULL[...], ... } : isSingleDay ? { value: singleDayLabel, ... } : undefined}
-```
-
-to:
-
-```
-label={timeframe === "daily" ? { value: MONTH_FULL[month - 1], position: "bottom", offset: -5, style: { fontSize: 11 } } : undefined}
+```text
+[Month selector + Sync SCADA button]
+[NEW: Lifetime Performance Overview]    <-- inserted here
+[Actual Gen | Guaranteed Gen | Council Demand cards]
+[System Performance chart (existing)]
+[System Summary table (existing)]
 ```
 
-This removes the `isSingleDay` branch from the XAxis label, leaving only the daily timeframe case. The single-day label continues to be rendered by the existing custom block below the chart.
+### Technical Details
 
-Also revert the `height` condition to only apply the shorter height for daily (not `isSingleDay`), since the single-day view no longer has an axis label to accommodate:
+**New file: `src/components/projects/generation/LifetimePerformanceChart.tsx`**
 
-```
-height={timeframe === "daily" ? 50 : 60}
-```
+- Props: `projectId: string`
+- Queries all `generation_records` for the project (no month/year filter)
+- State: `yearFilter` ("all" | specific year)
+- Year options derived from distinct years in the fetched data
+- Data sorted chronologically, filtered by selected year
+- Computes per-month %: `actual / guaranteed x 100`
+- Computes cumulative %: `runningActual / runningGuaranteed x 100`
+- Uses `ComposedChart` from recharts with two `Bar` components and one `Line` component
+- Left Y-axis: kWh with "K" suffix formatting for thousands
+- Right Y-axis: 0-100% for cumulative line
+- Horizontal scroll table below for monthly breakdown
+- Card wrapper with title "Lifetime Performance Overview" and year filter in the header
+
+**Modified file: `src/components/projects/generation/GenerationTab.tsx`**
+
+- Import and render `<LifetimePerformanceChart projectId={projectId} />` between the SyncScadaDialog and the cards grid (after line 128, before line 130)
+
+### No Database Changes
+
+All data already exists in the `generation_records` table. The query simply fetches all rows for the project without month/year filters.
 
