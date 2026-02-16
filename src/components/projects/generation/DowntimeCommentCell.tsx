@@ -24,6 +24,7 @@ export function DowntimeCommentCell({
   onSaved,
 }: DowntimeCommentCellProps) {
   const [value, setValue] = useState(initialValue);
+  const [focused, setFocused] = useState(false);
   const [open, setOpen] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -117,6 +118,7 @@ export function DowntimeCommentCell({
   };
 
   const handleBlur = () => {
+    setFocused(false);
     save(value);
   };
 
@@ -137,7 +139,7 @@ export function DowntimeCommentCell({
           style={{ maxWidth: "100%" }}
         >
           <span className="invisible">{value}</span>
-          {ghostText && (
+          {ghostText && focused && (
             <span className="text-muted-foreground/50">{ghostText}</span>
           )}
         </span>
@@ -146,6 +148,7 @@ export function DowntimeCommentCell({
           type="text"
           value={value}
           onChange={handleChange}
+          onFocus={() => setFocused(true)}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           className="w-full h-6 px-1.5 text-xs bg-transparent border border-border/50 rounded-sm outline-none focus:border-ring focus:ring-1 focus:ring-ring/30 placeholder:text-muted-foreground"
