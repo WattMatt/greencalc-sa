@@ -36,7 +36,7 @@ export function ContentBlockToggle({ block, onChange, disabled }: ContentBlockTo
       </div>
       
       <Switch
-        className="shrink-0"
+        className="shrink-0 data-[state=unchecked]:border data-[state=unchecked]:border-muted-foreground/40 data-[state=unchecked]:bg-muted"
         checked={block.enabled}
         onCheckedChange={onChange}
         disabled={disabled || block.required}
