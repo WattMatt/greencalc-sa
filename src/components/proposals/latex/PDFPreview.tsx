@@ -49,11 +49,16 @@ export function PDFPreview({ pdfUrl, isCompiling, error, log }: PDFPreviewProps)
           <span className="text-xs text-muted-foreground">Recompiling…</span>
         </div>
       )}
-      <iframe
-        src={pdfUrl}
+      <object
+        data={pdfUrl}
+        type="application/pdf"
         className="flex-1 w-full border-none"
         title="PDF Preview"
-      />
+      >
+        <p className="p-4 text-sm text-muted-foreground">
+          Unable to display PDF. <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="underline">Download it here</a>.
+        </p>
+      </object>
     </div>
   );
 }

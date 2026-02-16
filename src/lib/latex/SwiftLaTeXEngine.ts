@@ -7,26 +7,25 @@ export interface CompileResult {
   success: boolean;
 }
 
-let lastBlobUrl: string | null = null;
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 export async function compileLatex(source: string): Promise<CompileResult> {
-  const { data: { session } } = await supabase.auth.getSession();
-
   const resp = await supabase.functions.invoke('compile-latex', {
     body: { source },
   });
-
-  if (lastBlobUrl) {
-    URL.revokeObjectURL(lastBlobUrl);
-    lastBlobUrl = null;
-  }
 
   // If the response is a Blob (PDF binary)
   if (resp.data instanceof Blob) {
     const blob = resp.data;
     if (blob.type === 'application/pdf' || blob.size > 100) {
-      const url = URL.createObjectURL(blob);
-      lastBlobUrl = url;
+      const url = await blobToDataUrl(blob);
       return { pdf: blob, pdfUrl: url, log: '', success: true };
     }
     // Might be JSON error returned as blob
