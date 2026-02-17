@@ -24,8 +24,8 @@ interface FoldRegion {
   endLine: number;   // 0-indexed
 }
 
-const BEGIN_RE = /^%%-- BEGIN:(\w+) --%%$/;
-const END_RE = /^%%-- END:(\w+) --%%$/;
+const BEGIN_RE = /^%%--\s*BEGIN:(\w+)\s*--%%$/;
+const END_RE = /^%%--\s*END:(\w+)\s*--%%$/;
 
 function parseFoldRegions(source: string): FoldRegion[] {
   const lines = source.split("\n");
