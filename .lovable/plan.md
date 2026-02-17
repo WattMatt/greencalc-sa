@@ -1,73 +1,64 @@
 
 
-# Proposal Workspace Layout and UX Improvements
+## Collapsible Sections in the LaTeX Editor
 
-## Problem Summary
-Three issues with the current Proposal Workspace:
-1. **Scrollbar overflow** -- The sidebar, editor, and PDF preview each introduce their own scrollbars, making the page feel disjointed instead of fitting cleanly into one screen.
-2. **Auto-compilation on toggle** -- Toggling a section in the sidebar immediately regenerates the LaTeX source and triggers the 800ms debounced compile, sending unnecessary API calls.
-3. **PDF viewer is limited** -- No zoom, no pan, and the page number can only be changed with arrows (not typed directly).
+### Overview
+Add fold/collapse toggles to the line number gutter so you can collapse the content between `%%-- BEGIN:sectionId --%%` and `%%-- END:sectionId --%%` markers. Clicking the arrow on a BEGIN line hides all lines until the matching END line.
 
----
+### Challenge
+A plain `<textarea>` cannot selectively hide lines. To support collapsing, the editor must switch to a line-by-line rendering approach.
 
-## Plan
+### Implementation
 
-### 1. Fix layout overflow (remove extra scrollbars)
+**Replace the textarea with a contentEditable code block** in `LaTeXEditor.tsx`:
 
-**Files:** `ProposalSidebar.tsx`, `ProposalWorkspace.tsx`
+1. **Parse section ranges** -- Scan the source lines to find pairs of BEGIN/END markers and their line ranges.
 
-- The sidebar currently uses `w-80` with `flex-col h-full` and a `ScrollArea` for the content list. The issue is the sidebar's content blocks list grows taller than the viewport.
-- Constrain the sidebar to `h-screen` and ensure the `ScrollArea` only wraps the content block list (not the export buttons). The export buttons are already pinned at the bottom -- this is correct.
-- Ensure the parent layout in `ProposalWorkspace.tsx` uses `h-screen overflow-hidden` so nothing escapes the viewport.
-- The `LaTeXWorkspace` resizable panels already use `h-full` which should cascade correctly once the parent is `overflow-hidden`.
+2. **Track collapsed state** -- Add a `Set<string>` state for collapsed section IDs (keyed by the block name, e.g. "introduction").
 
-### 2. Replace "Reset" with "Sync" -- decouple toggle from compilation
+3. **Line-by-line rendering** -- Replace the textarea with a single `contentEditable` `<pre>` or `<code>` element rendered line-by-line:
+   - Each visible line is a `<div>` inside the editable container.
+   - Lines belonging to a collapsed section (between BEGIN+1 and END-1) are hidden via `display: none` or simply not rendered.
+   - The BEGIN line itself remains visible so the user can see what is collapsed.
 
-**Files:** `LaTeXWorkspace.tsx`, `LaTeXEditor.tsx`
+4. **Gutter fold indicators** -- In the line number column:
+   - BEGIN lines show a small chevron arrow (ChevronRight when collapsed, ChevronDown when expanded).
+   - Clicking the chevron toggles the section's collapsed state.
+   - Collapsed sections show a summary indicator (e.g. "..." or a line count badge) on the BEGIN line.
 
-Current behavior:
-- `templateData` changes (e.g. toggling a block) triggers a `useEffect` that regenerates the source, which triggers the debounced compile.
+5. **Editing via hidden textarea sync** -- To maintain reliable text editing (cursor, selection, undo, paste, IME):
+   - Keep a hidden `<textarea>` as the actual editable surface.
+   - Overlay the styled line display on top.
+   - Sync scroll positions between them.
+   - This avoids contentEditable quirks while still allowing visual line folding in the display layer.
 
-New behavior:
-- Toggling blocks in the sidebar will still update `templateData` and regenerate the source in the editor (so the user sees the updated `.tex` code), but it will **not** automatically compile.
-- Remove the `useEffect` that auto-compiles on every `source` change.
-- Add a `needsSync` state that tracks whether source has changed since last compilation.
-- Replace the "Reset" button with a **"Sync"** button (with a refresh/sync icon). Clicking it sends the current source to the API for compilation.
-- Manual edits in the editor will also set `needsSync = true` but won't auto-compile.
-- The Sync button will show a visual indicator (e.g. highlighted/pulsing) when `needsSync` is true.
+   Alternatively, a simpler approach: use the visible textarea but apply a **virtual fold** -- maintain a mapping between "display lines" and "source lines". The textarea shows only unfolded lines, and a separate `collapsedRanges` map tracks hidden content. When the user types, the editor reconstructs the full source by splicing collapsed content back in at the correct positions.
 
-### 3. Enhanced PDF Viewer with zoom, pan, and page input
+### Recommended Approach (Virtual Fold)
 
-**File:** `PDFPreview.tsx`
+This is simpler and avoids contentEditable issues:
 
-- **Zoom controls**: Add zoom in (+), zoom out (-), and fit-to-width buttons in the toolbar. Track a `scale` state (default: fit-to-width). Re-render the canvas at the chosen scale.
-- **Pan support**: The container already has `overflow-auto`. When zoomed in, the scrollbars on the container div provide panning. This works naturally.
-- **Editable page number**: Replace the static `{pageNum} / {numPages}` text with an editable `<input>` field. The user can type a page number and press Enter (or blur) to jump to that page. Keep the arrow buttons for convenience.
+1. **Source of truth**: The full LaTeX source string (unchanged).
+2. **Display source**: A filtered version with collapsed section contents replaced by a single placeholder line (e.g., `  ... (12 lines hidden)`).
+3. **On edit**: Map display-line edits back to the full source using an index map.
+4. **Gutter**: Render fold arrows on BEGIN marker lines; collapsed sections show a single summary row.
 
----
+### Technical Details
 
-## Technical Details
+**File: `src/components/proposals/latex/LaTeXEditor.tsx`**
 
-### LaTeXWorkspace.tsx changes
-- Remove the `useEffect` at line 141-152 that debounce-compiles on `source` change.
-- Add `needsSync` state, set to `true` whenever `source` changes (both programmatic and manual).
-- Add a `handleSync` callback that calls `compile(source)` and sets `needsSync = false`.
-- Pass `onSync` and `needsSync` props to `LaTeXEditor` instead of `onReset`.
-- Keep the `handleReset` logic available but internalize it or remove it (replaced by Sync).
+- Add `collapsedSections` state (`Set<string>`).
+- Add `parseFoldRegions(source)` helper that returns `{ sectionId, beginLine, endLine }[]`.
+- Compute `visibleLines` and `lineMapping` (display index to source index) from the full source, skipping lines in collapsed regions.
+- Build the display string from visible lines only, set that as the textarea value.
+- On change, use `lineMapping` to reconstruct the full source with collapsed content spliced back in.
+- In the gutter, render fold toggle buttons (ChevronRight/ChevronDown) on BEGIN lines.
+- Style collapsed indicators with a muted "... N lines" badge.
 
-### LaTeXEditor.tsx changes
-- Replace the Reset button with a Sync button (using `RefreshCw` icon from lucide).
-- Accept `onSync` and `needsSync` props.
-- Visually highlight the Sync button when `needsSync` is true (e.g. primary color variant).
-
-### PDFPreview.tsx changes
-- Add `scale` state (default: `0` meaning "fit to width").
-- Add `zoomIn`, `zoomOut`, `fitToWidth` handlers that adjust scale.
-- Update `renderPage` to use the user-specified scale (or compute fit-to-width when scale is 0).
-- Replace the page number span with an `<input type="number">` that allows direct page entry.
-- Add zoom controls (+, -, fit) to the toolbar alongside the pagination controls.
-- Show zoom percentage in the toolbar.
-
-### ProposalSidebar.tsx changes
-- Ensure the root div uses `overflow-hidden` and the `ScrollArea` is properly bounded so the sidebar never exceeds the viewport height.
+### User Experience
+- Click the arrow next to a BEGIN line to collapse that section.
+- Click again to expand.
+- Collapsed sections show the BEGIN marker line with a fold indicator and hidden line count.
+- All editing, right-click menu, scroll preservation, and sync continue to work as before.
+- Collapse state is ephemeral (not persisted) -- sections start expanded.
 
