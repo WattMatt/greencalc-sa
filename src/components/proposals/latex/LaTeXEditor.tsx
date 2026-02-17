@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useLayoutEffect, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Loader2, ChevronRight, ChevronDown } from "lucide-react";
+import { RefreshCw, Loader2, ChevronRight, ChevronDown, WrapText } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -20,8 +20,8 @@ interface LaTeXEditorProps {
 
 interface FoldRegion {
   sectionId: string;
-  beginLine: number; // 0-indexed
-  endLine: number;   // 0-indexed
+  beginLine: number;
+  endLine: number;
 }
 
 const BEGIN_RE = /^%%--\s*BEGIN:(\w+)\s*--%%$/;
@@ -47,12 +47,6 @@ function parseFoldRegions(source: string): FoldRegion[] {
   return regions;
 }
 
-/**
- * Given the full source and collapsed section IDs, produce:
- * - displayLines: the lines to show in the textarea
- * - lineMap: for each display line index, the corresponding source line index (or -1 for placeholder lines)
- * - collapsedRanges: map of source line index of BEGIN -> { sectionId, hiddenCount, sourceStart, sourceEnd }
- */
 function computeDisplayLines(
   source: string,
   collapsedSections: Set<string>,
@@ -60,13 +54,11 @@ function computeDisplayLines(
   const sourceLines = source.split("\n");
   const regions = parseFoldRegions(source);
 
-  // Build a set of source line indices that are hidden
   const hiddenLines = new Set<number>();
   const collapsedInfo = new Map<number, { sectionId: string; hiddenCount: number }>();
 
   for (const region of regions) {
     if (collapsedSections.has(region.sectionId)) {
-      // Hide lines between BEGIN+1 and END (inclusive of END)
       const hiddenStart = region.beginLine + 1;
       const hiddenEnd = region.endLine;
       for (let i = hiddenStart; i <= hiddenEnd; i++) {
@@ -80,7 +72,7 @@ function computeDisplayLines(
   }
 
   const displayLines: string[] = [];
-  const lineMap: number[] = []; // displayIndex -> sourceIndex (-1 for placeholder)
+  const lineMap: number[] = [];
 
   for (let i = 0; i < sourceLines.length; i++) {
     if (hiddenLines.has(i)) continue;
@@ -88,20 +80,16 @@ function computeDisplayLines(
     displayLines.push(sourceLines[i]);
     lineMap.push(i);
 
-    // After a collapsed BEGIN line, insert a placeholder
     const info = collapsedInfo.get(i);
     if (info) {
       displayLines.push(`  ... (${info.hiddenCount} lines hidden)`);
-      lineMap.push(-1); // placeholder, not a real source line
+      lineMap.push(-1);
     }
   }
 
   return { displayLines, lineMap, regions };
 }
 
-/**
- * Given edit in display text, reconstruct the full source.
- */
 function reconstructSource(
   newDisplayText: string,
   originalSource: string,
@@ -112,11 +100,9 @@ function reconstructSource(
   const newDisplayLines = newDisplayText.split("\n");
   const result = [...originalLines];
 
-  // Map each display line back; skip placeholders
   let displayIdx = 0;
   for (let i = 0; i < lineMap.length && displayIdx < newDisplayLines.length; i++) {
     if (lineMap[i] === -1) {
-      // placeholder line — skip in display
       displayIdx++;
       continue;
     }
@@ -124,8 +110,6 @@ function reconstructSource(
     displayIdx++;
   }
 
-  // Handle added/removed lines at the end of the display
-  // If the user added lines at the end of the textarea, append them
   if (displayIdx < newDisplayLines.length) {
     const lastSourceIdx = lineMap.filter(x => x >= 0).pop() ?? originalLines.length - 1;
     const extra = newDisplayLines.slice(displayIdx);
@@ -138,9 +122,11 @@ function reconstructSource(
 export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, disabled }: LaTeXEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
+  const mirrorRef = useRef<HTMLDivElement>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [wordWrap, setWordWrap] = useState(false);
+  const [lineHeights, setLineHeights] = useState<number[]>([]);
 
-  // Sync gutter scroll with textarea scroll
   const handleTextareaScroll = useCallback(() => {
     const ta = textareaRef.current;
     const gutter = gutterRef.current;
@@ -156,9 +142,8 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
 
   const displayText = displayLines.join("\n");
 
-  // Build a set of BEGIN line indices for quick lookup in gutter
   const foldableLines = useMemo(() => {
-    const map = new Map<number, string>(); // sourceLineIdx -> sectionId
+    const map = new Map<number, string>();
     for (const r of regions) {
       map.set(r.beginLine, r.sectionId);
     }
@@ -177,7 +162,6 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newDisplayText = e.target.value;
     if (collapsedSections.size === 0) {
-      // No folding active — pass through directly
       onChange(newDisplayText);
     } else {
       const newSource = reconstructSource(newDisplayText, value, lineMap, collapsedSections);
@@ -229,12 +213,50 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
     });
   }, [displayText, value, onChange, lineMap, collapsedSections]);
 
-  // Build gutter content — one entry per display line
+  // Measure line heights from mirror div when word wrap is on
+  const measureLineHeights = useCallback(() => {
+    if (!wordWrap || !mirrorRef.current) {
+      setLineHeights([]);
+      return;
+    }
+    const children = mirrorRef.current.children;
+    const heights: number[] = [];
+    for (let i = 0; i < children.length; i++) {
+      heights.push((children[i] as HTMLElement).offsetHeight);
+    }
+    setLineHeights(heights);
+  }, [wordWrap]);
+
+  // Re-measure on content or wrap change
+  useLayoutEffect(() => {
+    measureLineHeights();
+  }, [displayLines, wordWrap, measureLineHeights]);
+
+  // ResizeObserver to re-measure when textarea width changes
+  useEffect(() => {
+    if (!wordWrap) return;
+    const ta = textareaRef.current;
+    if (!ta) return;
+
+    const ro = new ResizeObserver(() => {
+      // Sync mirror width to textarea width before measuring
+      if (mirrorRef.current) {
+        mirrorRef.current.style.width = `${ta.clientWidth}px`;
+      }
+      measureLineHeights();
+    });
+    ro.observe(ta);
+    // Set initial width
+    if (mirrorRef.current) {
+      mirrorRef.current.style.width = `${ta.clientWidth}px`;
+    }
+    return () => ro.disconnect();
+  }, [wordWrap, measureLineHeights]);
+
   const gutterEntries = useMemo(() => {
     return displayLines.map((_, displayIdx) => {
       const sourceIdx = lineMap[displayIdx];
       if (sourceIdx === -1) {
-        // Placeholder line
         return { type: "placeholder" as const, lineNum: null, sectionId: null };
       }
       const sectionId = foldableLines.get(sourceIdx);
@@ -246,12 +268,27 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
     });
   }, [displayLines, lineMap, foldableLines, collapsedSections]);
 
+  const getLineHeight = (idx: number) => {
+    if (!wordWrap || lineHeights.length === 0) return 20;
+    return lineHeights[idx] || 20;
+  };
+
   return (
     <div className="flex flex-col h-full bg-card">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/50">
         <span className="text-xs font-medium text-muted-foreground">main.tex</span>
         <div className="flex items-center gap-1">
+          <Button
+            variant={wordWrap ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setWordWrap(w => !w)}
+            className="h-6 text-xs gap-1"
+            title={wordWrap ? "Disable word wrap" : "Enable word wrap"}
+          >
+            <WrapText className="h-3 w-3" />
+            Wrap
+          </Button>
           <span className="text-xs text-muted-foreground mr-2">
             {value.split("\n").length} lines
           </span>
@@ -274,6 +311,35 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
         </div>
       </div>
 
+      {/* Hidden mirror div for measuring wrapped line heights */}
+      {wordWrap && (
+        <div
+          ref={mirrorRef}
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            visibility: "hidden",
+            overflow: "hidden",
+            pointerEvents: "none",
+            // Match textarea styles exactly
+            fontFamily: "monospace",
+            fontSize: "12px",
+            lineHeight: "20px",
+            padding: "8px",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-all",
+            overflowWrap: "break-word",
+            boxSizing: "border-box",
+          }}
+        >
+          {displayLines.map((line, idx) => (
+            <div key={idx} style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", overflowWrap: "break-word" }}>
+              {line || "\u00A0"}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Editor with line numbers */}
       <ContextMenu>
         <ContextMenuTrigger asChild>
@@ -285,16 +351,17 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
               style={{ minWidth: "3.5rem" }}
             >
               {gutterEntries.map((entry, idx) => {
+                const h = getLineHeight(idx);
                 if (entry.type === "placeholder") {
                   return (
-                    <div key={`p-${idx}`} className="flex items-center justify-end pr-2 text-muted-foreground/40" style={{ height: 20 }}>
+                    <div key={`p-${idx}`} className="flex items-center justify-end pr-2 text-muted-foreground/40" style={{ height: h }}>
                       ⋯
                     </div>
                   );
                 }
                 if (entry.type === "foldable") {
                   return (
-                    <div key={`f-${idx}`} className="flex items-center" style={{ height: 20 }}>
+                    <div key={`f-${idx}`} className="flex items-start" style={{ height: h }}>
                       <button
                         type="button"
                         className="flex items-center justify-center w-4 h-5 hover:bg-muted/60 rounded-sm ml-0.5"
@@ -312,7 +379,7 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
                   );
                 }
                 return (
-                  <div key={`n-${idx}`} className="text-right pr-2 pl-5" style={{ height: 20 }}>
+                  <div key={`n-${idx}`} className="text-right pr-2 pl-5" style={{ height: h }}>
                     {entry.lineNum}
                   </div>
                 );
@@ -329,11 +396,21 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
               disabled={disabled}
               spellCheck={false}
               className="flex-1 resize-none border-none outline-none bg-transparent font-mono text-xs leading-[20px] p-2 overflow-auto"
-              style={{ tabSize: 2 }}
+              style={{
+                tabSize: 2,
+                ...(wordWrap
+                  ? { whiteSpace: "pre-wrap", wordBreak: "break-all", overflowWrap: "break-word" }
+                  : { whiteSpace: "pre", overflowX: "auto" as const }),
+              }}
             />
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
+          <ContextMenuItem onSelect={() => setWordWrap(w => !w)}>
+            <WrapText className="h-3.5 w-3.5 mr-2" />
+            {wordWrap ? "Disable Word Wrap" : "Enable Word Wrap"}
+          </ContextMenuItem>
+          <ContextMenuSeparator />
           <ContextMenuItem onSelect={() => insertAtCursor("\\newpage\n")}>
             <code className="text-xs font-mono bg-muted px-1 rounded">\newpage</code>
           </ContextMenuItem>
