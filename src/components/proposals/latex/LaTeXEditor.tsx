@@ -137,7 +137,17 @@ function reconstructSource(
 
 export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, disabled }: LaTeXEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const gutterRef = useRef<HTMLDivElement>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
+  // Sync gutter scroll with textarea scroll
+  const handleTextareaScroll = useCallback(() => {
+    const ta = textareaRef.current;
+    const gutter = gutterRef.current;
+    if (ta && gutter) {
+      gutter.scrollTop = ta.scrollTop;
+    }
+  }, []);
 
   const { displayLines, lineMap, regions } = useMemo(
     () => computeDisplayLines(value, collapsedSections),
@@ -270,20 +280,21 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
           <div className="flex-1 flex overflow-hidden">
             {/* Gutter */}
             <div
-              className="bg-muted/30 text-muted-foreground select-none overflow-hidden border-r py-2 font-mono text-xs leading-5"
+              ref={gutterRef}
+              className="bg-muted/30 text-muted-foreground select-none overflow-hidden border-r py-2 font-mono text-xs leading-[20px]"
               style={{ minWidth: "3.5rem" }}
             >
               {gutterEntries.map((entry, idx) => {
                 if (entry.type === "placeholder") {
                   return (
-                    <div key={`p-${idx}`} className="flex items-center justify-end pr-2 text-muted-foreground/40">
+                    <div key={`p-${idx}`} className="flex items-center justify-end pr-2 text-muted-foreground/40" style={{ height: 20 }}>
                       ⋯
                     </div>
                   );
                 }
                 if (entry.type === "foldable") {
                   return (
-                    <div key={`f-${idx}`} className="flex items-center">
+                    <div key={`f-${idx}`} className="flex items-center" style={{ height: 20 }}>
                       <button
                         type="button"
                         className="flex items-center justify-center w-4 h-5 hover:bg-muted/60 rounded-sm ml-0.5"
@@ -301,7 +312,7 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
                   );
                 }
                 return (
-                  <div key={`n-${idx}`} className="text-right pr-2 pl-5">
+                  <div key={`n-${idx}`} className="text-right pr-2 pl-5" style={{ height: 20 }}>
                     {entry.lineNum}
                   </div>
                 );
@@ -314,9 +325,10 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
               value={displayText}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
+              onScroll={handleTextareaScroll}
               disabled={disabled}
               spellCheck={false}
-              className="flex-1 resize-none border-none outline-none bg-transparent font-mono text-xs leading-5 p-2 overflow-auto"
+              className="flex-1 resize-none border-none outline-none bg-transparent font-mono text-xs leading-[20px] p-2 overflow-auto"
               style={{ tabSize: 2 }}
             />
           </div>
