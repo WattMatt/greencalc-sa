@@ -38,12 +38,14 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
   const insertAtCursor = useCallback((text: string) => {
     const ta = textareaRef.current;
     if (!ta) return;
+    const scrollTop = ta.scrollTop;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
     const newValue = value.substring(0, start) + text + value.substring(end);
     onChange(newValue);
     requestAnimationFrame(() => {
       ta.focus();
+      ta.scrollTop = scrollTop;
       const newPos = start + text.length;
       ta.selectionStart = ta.selectionEnd = newPos;
     });
@@ -104,14 +106,14 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onSelect={() => insertAtCursor("\\newpage\n")}>
-            Insert <code className="ml-2 text-xs font-mono bg-muted px-1 rounded">\\newpage</code>
+            <code className="text-xs font-mono bg-muted px-1 rounded">\newpage</code>
           </ContextMenuItem>
           <ContextMenuItem onSelect={() => insertAtCursor("\\pagebreak\n")}>
-            Insert <code className="ml-2 text-xs font-mono bg-muted px-1 rounded">\\pagebreak</code>
+            <code className="text-xs font-mono bg-muted px-1 rounded">\pagebreak</code>
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onSelect={() => insertAtCursor("\\clearpage\n")}>
-            Insert <code className="ml-2 text-xs font-mono bg-muted px-1 rounded">\\clearpage</code>
+            <code className="text-xs font-mono bg-muted px-1 rounded">\clearpage</code>
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
