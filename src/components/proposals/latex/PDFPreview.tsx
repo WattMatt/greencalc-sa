@@ -24,6 +24,10 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
   const [userScale, setUserScale] = useState(0);
   const [displayScale, setDisplayScale] = useState(1);
 
+  // Drag-to-pan state
+  const isDragging = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+
   useEffect(() => {
     if (!pdfData) return;
     let cancelled = false;
@@ -100,6 +104,61 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
   });
 
   const fitToWidth = () => setUserScale(0);
+
+  // Ctrl+Scroll (or Cmd+Scroll on Mac) to zoom
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        setUserScale(prev => {
+          const current = prev === 0 ? displayScale : prev;
+          return Math.min(Math.max(current + delta, 0.25), 5);
+        });
+      }
+    };
+
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => container.removeEventListener("wheel", handleWheel);
+  }, [displayScale]);
+
+  // Middle-click drag OR left-click drag to pan
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    // Middle button (1) or left button (0) for drag panning
+    if (e.button === 1 || e.button === 0) {
+      const container = containerRef.current;
+      if (!container) return;
+      isDragging.current = true;
+      dragStart.current = {
+        x: e.clientX,
+        y: e.clientY,
+        scrollLeft: container.scrollLeft,
+        scrollTop: container.scrollTop,
+      };
+      container.style.cursor = "grabbing";
+      // Prevent middle-click auto-scroll on Windows
+      if (e.button === 1) e.preventDefault();
+    }
+  }, []);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isDragging.current) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    container.scrollLeft = dragStart.current.scrollLeft - dx;
+    container.scrollTop = dragStart.current.scrollTop - dy;
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    isDragging.current = false;
+    const container = containerRef.current;
+    if (container) container.style.cursor = "grab";
+  }, []);
 
   const handlePageInputCommit = () => {
     const n = parseInt(pageInput, 10);
@@ -178,8 +237,16 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
       </div>
 
       {/* Canvas */}
-      <div ref={containerRef} className="flex-1 overflow-auto bg-muted/10 flex justify-center p-4">
-        <canvas ref={canvasRef} className="shadow-lg" />
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-auto bg-muted/10 flex justify-center p-4"
+        style={{ cursor: "grab" }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+      >
+        <canvas ref={canvasRef} className="shadow-lg pointer-events-none" />
       </div>
     </div>
   );
