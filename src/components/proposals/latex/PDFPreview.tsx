@@ -28,34 +28,6 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
 
-  useEffect(() => {
-    if (!pdfData) return;
-    let cancelled = false;
-
-    async function render() {
-      try {
-        const doc = await pdfjsLib.getDocument({ data: pdfData }).promise;
-        if (cancelled) return;
-        pdfDocRef.current = doc;
-        setNumPages(doc.numPages);
-        setPageNum(1);
-        setPageInput("1");
-        await renderPage(doc, 1);
-      } catch (err) {
-        console.error("pdf.js render error:", err);
-      }
-    }
-
-    render();
-    return () => { cancelled = true; };
-  }, [pdfData]);
-
-  useEffect(() => {
-    if (pdfDocRef.current && pageNum > 0) {
-      renderPage(pdfDocRef.current, pageNum);
-    }
-  }, [pageNum, userScale]);
-
   const renderPage = useCallback(async (doc: pdfjsLib.PDFDocumentProxy, num: number) => {
     try {
       const page = await doc.getPage(num);
@@ -92,6 +64,50 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
       console.error("Error rendering PDF page:", err);
     }
   }, [userScale]);
+
+  useEffect(() => {
+    if (!pdfData) return;
+    let cancelled = false;
+
+    async function render() {
+      try {
+        const doc = await pdfjsLib.getDocument({ data: pdfData }).promise;
+        if (cancelled) return;
+        pdfDocRef.current = doc;
+        setNumPages(doc.numPages);
+        setPageNum(1);
+        setPageInput("1");
+        await renderPage(doc, 1);
+      } catch (err) {
+        console.error("pdf.js render error:", err);
+      }
+    }
+
+    render();
+    return () => { cancelled = true; };
+  }, [pdfData]);
+
+  useEffect(() => {
+    if (pdfDocRef.current && pageNum > 0) {
+      renderPage(pdfDocRef.current, pageNum);
+    }
+  }, [pageNum, userScale]);
+
+  // Re-render on container resize when in fit-to-width mode
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new ResizeObserver(() => {
+      if (userScale === 0 && pdfDocRef.current && pageNum > 0) {
+        renderPage(pdfDocRef.current, pageNum);
+      }
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [userScale, pageNum, renderPage]);
+
+
 
   const zoomIn = () => setUserScale(prev => {
     const current = prev === 0 ? displayScale : prev;
