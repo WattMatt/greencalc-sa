@@ -3,6 +3,7 @@ import { Loader2, AlertCircle, FileText, ChevronLeft, ChevronRight, ZoomIn, Zoom
 import { Button } from "@/components/ui/button";
 import * as pdfjsLib from "pdfjs-dist";
 
+// Use the full worker (not .mjs) for broader browser compatibility including Safari on Mac
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 interface PDFPreviewProps {
@@ -52,31 +53,40 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
   }, [pageNum, userScale]);
 
   const renderPage = useCallback(async (doc: pdfjsLib.PDFDocumentProxy, num: number) => {
-    const page = await doc.getPage(num);
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
+    try {
+      const page = await doc.getPage(num);
+      const canvas = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) return;
 
-    const unscaledViewport = page.getViewport({ scale: 1 });
+      const unscaledViewport = page.getViewport({ scale: 1 });
 
-    let scale: number;
-    if (userScale === 0) {
-      // fit-to-width
-      scale = (container.clientWidth - 32) / unscaledViewport.width;
-    } else {
-      scale = userScale;
+      let scale: number;
+      if (userScale === 0) {
+        // fit-to-width
+        scale = (container.clientWidth - 32) / unscaledViewport.width;
+      } else {
+        scale = userScale;
+      }
+
+      setDisplayScale(scale);
+      const viewport = page.getViewport({ scale });
+
+      // Use devicePixelRatio for sharp rendering on Retina/HiDPI displays (Mac)
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(viewport.width * dpr);
+      canvas.height = Math.floor(viewport.height * dpr);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+    } catch (err) {
+      console.error("Error rendering PDF page:", err);
     }
-
-    setDisplayScale(scale);
-    const viewport = page.getViewport({ scale });
-
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    await page.render({ canvasContext: ctx, viewport }).promise;
   }, [userScale]);
 
   const zoomIn = () => setUserScale(prev => {
