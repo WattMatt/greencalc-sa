@@ -1,6 +1,10 @@
 import { useState, useRef, useCallback, useMemo, useLayoutEffect, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Loader2, ChevronRight, ChevronDown, WrapText } from "lucide-react";
+
+const COMMENT_RE = /^\s*%/;
+const FOLD_MARKER_RE = /^%%--\s*(BEGIN|END):\w+\s*--%%$/;
+const HIDDEN_PLACEHOLDER_RE = /^\s*\.\.\.\s*\(\d+\s*lines?\s*hidden\)$/;
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -143,11 +147,24 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
   const [wordWrap, setWordWrap] = useState(false);
   const [lineHeights, setLineHeights] = useState<number[]>([]);
 
+  const highlightRef = useRef<HTMLDivElement>(null);
+  const textOverlayRef = useRef<HTMLDivElement>(null);
+
   const handleTextareaScroll = useCallback(() => {
     const ta = textareaRef.current;
     const gutter = gutterRef.current;
-    if (ta && gutter) {
-      gutter.scrollTop = ta.scrollTop;
+    const highlight = highlightRef.current;
+    const textOverlay = textOverlayRef.current;
+    if (ta) {
+      if (gutter) gutter.scrollTop = ta.scrollTop;
+      if (highlight) {
+        highlight.scrollTop = ta.scrollTop;
+        highlight.scrollLeft = ta.scrollLeft;
+      }
+      if (textOverlay) {
+        textOverlay.scrollTop = ta.scrollTop;
+        textOverlay.scrollLeft = ta.scrollLeft;
+      }
     }
   }, []);
 
@@ -402,23 +419,79 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
               })}
             </div>
 
-            {/* Textarea */}
-            <textarea
-              ref={textareaRef}
-              value={displayText}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              onScroll={handleTextareaScroll}
-              disabled={disabled}
-              spellCheck={false}
-              className="flex-1 resize-none border-none outline-none bg-transparent font-mono text-xs leading-[20px] p-2 overflow-auto"
-              style={{
-                tabSize: 2,
-                ...(wordWrap
-                  ? { whiteSpace: "pre-wrap", wordBreak: "break-all", overflowWrap: "break-word" }
-                  : { whiteSpace: "pre", overflowX: "auto" as const }),
-              }}
-            />
+            {/* Textarea + highlight overlay wrapper */}
+            <div className="flex-1 relative overflow-hidden">
+              {/* Syntax highlight overlay */}
+              <div
+                ref={highlightRef}
+                aria-hidden="true"
+                className="absolute inset-0 font-mono text-xs leading-[20px] p-2 pointer-events-none overflow-hidden"
+                style={{
+                  tabSize: 2,
+                  ...(wordWrap
+                    ? { whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const, overflowWrap: "break-word" as const }
+                    : { whiteSpace: "pre" as const, overflowX: "auto" as const }),
+                }}
+              >
+                {displayLines.map((line, idx) => {
+                  const trimmed = line.trim();
+                  let color: string | undefined;
+                  if (HIDDEN_PLACEHOLDER_RE.test(trimmed)) {
+                    color = "hsl(var(--muted-foreground) / 0.5)";
+                  } else if (FOLD_MARKER_RE.test(trimmed)) {
+                    color = "hsl(25, 70%, 55%)";
+                  } else if (COMMENT_RE.test(line)) {
+                    color = "hsl(140, 50%, 45%)";
+                  }
+                  return (
+                    <div key={idx} style={{ color, height: getLineHeight(idx), visibility: color ? "visible" : "hidden" }}>
+                      {line || "\u00A0"}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Textarea */}
+              <textarea
+                ref={textareaRef}
+                value={displayText}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                onScroll={handleTextareaScroll}
+                disabled={disabled}
+                spellCheck={false}
+                className="absolute inset-0 w-full h-full resize-none border-none outline-none bg-transparent font-mono text-xs leading-[20px] p-2 overflow-auto"
+                style={{
+                  tabSize: 2,
+                  caretColor: "hsl(var(--foreground))",
+                  color: "transparent",
+                  ...(wordWrap
+                    ? { whiteSpace: "pre-wrap", wordBreak: "break-all", overflowWrap: "break-word" }
+                    : { whiteSpace: "pre", overflowX: "auto" as const }),
+                }}
+              />
+              {/* Visible text layer for non-highlighted lines */}
+              <div
+                ref={textOverlayRef}
+                aria-hidden="true"
+                className="absolute inset-0 font-mono text-xs leading-[20px] p-2 pointer-events-none overflow-hidden"
+                style={{
+                  tabSize: 2,
+                  ...(wordWrap
+                    ? { whiteSpace: "pre-wrap" as const, wordBreak: "break-all" as const, overflowWrap: "break-word" as const }
+                    : { whiteSpace: "pre" as const, overflowX: "auto" as const }),
+                }}
+              >
+                {displayLines.map((line, idx) => {
+                  const trimmed = line.trim();
+                  const isSpecial = HIDDEN_PLACEHOLDER_RE.test(trimmed) || FOLD_MARKER_RE.test(trimmed) || COMMENT_RE.test(line);
+                  return (
+                    <div key={idx} style={{ height: getLineHeight(idx), visibility: isSpecial ? "hidden" : "visible" }}>
+                      {line || "\u00A0"}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
