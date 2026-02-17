@@ -1,44 +1,73 @@
 
 
-## Persist LaTeX Section Overrides to Database
+# Proposal Workspace Layout and UX Improvements
 
-### Current State
+## Problem Summary
+Three issues with the current Proposal Workspace:
+1. **Scrollbar overflow** -- The sidebar, editor, and PDF preview each introduce their own scrollbars, making the page feel disjointed instead of fitting cleanly into one screen.
+2. **Auto-compilation on toggle** -- Toggling a section in the sidebar immediately regenerates the LaTeX source and triggers the 800ms debounced compile, sending unnecessary API calls.
+3. **PDF viewer is limited** -- No zoom, no pan, and the page number can only be changed with arrows (not typed directly).
 
-The section-aware editing system is fully functional **in-session**:
-- Manual edits are detected per-section via `%%-- BEGIN/END --%%` delimiters
-- Overrides are preserved when toggling sections or changing data
-- The "Reset" button clears all overrides
+---
 
-**Gap**: Overrides are stored in a `useRef` (memory only). Reloading the page loses all manual LaTeX edits.
+## Plan
 
-### What Will Change
+### 1. Fix layout overflow (remove extra scrollbars)
 
-Save the per-section override map to the `proposals` table so manual LaTeX edits survive page reloads.
+**Files:** `ProposalSidebar.tsx`, `ProposalWorkspace.tsx`
 
-### Technical Details
+- The sidebar currently uses `w-80` with `flex-col h-full` and a `ScrollArea` for the content list. The issue is the sidebar's content blocks list grows taller than the viewport.
+- Constrain the sidebar to `h-screen` and ensure the `ScrollArea` only wraps the content block list (not the export buttons). The export buttons are already pinned at the bottom -- this is correct.
+- Ensure the parent layout in `ProposalWorkspace.tsx` uses `h-screen overflow-hidden` so nothing escapes the viewport.
+- The `LaTeXWorkspace` resizable panels already use `h-full` which should cascade correctly once the parent is `overflow-hidden`.
 
-**1. Database migration** -- Add a `section_overrides` JSONB column to `proposals`:
-```sql
-ALTER TABLE public.proposals ADD COLUMN section_overrides jsonb DEFAULT NULL;
-```
+### 2. Replace "Reset" with "Sync" -- decouple toggle from compilation
 
-**2. Save overrides on proposal save (`ProposalWorkspace.tsx`)**:
-- Convert `overridesRef.current` (a `Map`) to a plain object and include it in both the update and insert mutations alongside `content_blocks`.
+**Files:** `LaTeXWorkspace.tsx`, `LaTeXEditor.tsx`
 
-**3. Load overrides on proposal load (`ProposalWorkspace.tsx`)**:
-- Pass saved overrides down to `LaTeXWorkspace` as a new prop (e.g., `initialOverrides`).
+Current behavior:
+- `templateData` changes (e.g. toggling a block) triggers a `useEffect` that regenerates the source, which triggers the debounced compile.
 
-**4. Restore overrides in `LaTeXWorkspace.tsx`**:
-- On mount, if `initialOverrides` is provided, populate `overridesRef.current` from it before the first `assembleSource` call.
+New behavior:
+- Toggling blocks in the sidebar will still update `templateData` and regenerate the source in the editor (so the user sees the updated `.tex` code), but it will **not** automatically compile.
+- Remove the `useEffect` that auto-compiles on every `source` change.
+- Add a `needsSync` state that tracks whether source has changed since last compilation.
+- Replace the "Reset" button with a **"Sync"** button (with a refresh/sync icon). Clicking it sends the current source to the API for compilation.
+- Manual edits in the editor will also set `needsSync = true` but won't auto-compile.
+- The Sync button will show a visual indicator (e.g. highlighted/pulsing) when `needsSync` is true.
 
-**5. Pass overrides up for saving**:
-- Add an `onOverridesChange` callback prop to `LaTeXWorkspace` so the parent can capture the current overrides map whenever it changes, making it available for the save mutation.
+### 3. Enhanced PDF Viewer with zoom, pan, and page input
 
-### Files to Change
+**File:** `PDFPreview.tsx`
 
-| File | Change |
-|------|--------|
-| Database migration | Add `section_overrides jsonb DEFAULT NULL` column |
-| `src/pages/ProposalWorkspace.tsx` | Save/load `section_overrides`; pass `initialOverrides` and `onOverridesChange` to `LaTeXWorkspace` |
-| `src/components/proposals/latex/LaTeXWorkspace.tsx` | Accept `initialOverrides` prop; populate overridesRef on mount; call `onOverridesChange` when overrides change |
+- **Zoom controls**: Add zoom in (+), zoom out (-), and fit-to-width buttons in the toolbar. Track a `scale` state (default: fit-to-width). Re-render the canvas at the chosen scale.
+- **Pan support**: The container already has `overflow-auto`. When zoomed in, the scrollbars on the container div provide panning. This works naturally.
+- **Editable page number**: Replace the static `{pageNum} / {numPages}` text with an editable `<input>` field. The user can type a page number and press Enter (or blur) to jump to that page. Keep the arrow buttons for convenience.
+
+---
+
+## Technical Details
+
+### LaTeXWorkspace.tsx changes
+- Remove the `useEffect` at line 141-152 that debounce-compiles on `source` change.
+- Add `needsSync` state, set to `true` whenever `source` changes (both programmatic and manual).
+- Add a `handleSync` callback that calls `compile(source)` and sets `needsSync = false`.
+- Pass `onSync` and `needsSync` props to `LaTeXEditor` instead of `onReset`.
+- Keep the `handleReset` logic available but internalize it or remove it (replaced by Sync).
+
+### LaTeXEditor.tsx changes
+- Replace the Reset button with a Sync button (using `RefreshCw` icon from lucide).
+- Accept `onSync` and `needsSync` props.
+- Visually highlight the Sync button when `needsSync` is true (e.g. primary color variant).
+
+### PDFPreview.tsx changes
+- Add `scale` state (default: `0` meaning "fit to width").
+- Add `zoomIn`, `zoomOut`, `fitToWidth` handlers that adjust scale.
+- Update `renderPage` to use the user-specified scale (or compute fit-to-width when scale is 0).
+- Replace the page number span with an `<input type="number">` that allows direct page entry.
+- Add zoom controls (+, -, fit) to the toolbar alongside the pagination controls.
+- Show zoom percentage in the toolbar.
+
+### ProposalSidebar.tsx changes
+- Ensure the root div uses `overflow-hidden` and the `ScrollArea` is properly bounded so the sidebar never exceeds the viewport height.
 
