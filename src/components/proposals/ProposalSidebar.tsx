@@ -89,18 +89,18 @@ export function ProposalSidebar({
   }
 
   return (
-    <div className="w-80 bg-card border-r flex flex-col h-screen overflow-hidden">
+    <div className="w-80 bg-card border-r flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b flex items-center justify-between">
-        <h2 className="font-semibold">Configure Proposal</h2>
-        <Button variant="ghost" size="icon" onClick={onToggleCollapse}>
+      <div className="p-3 border-b flex items-center justify-between flex-shrink-0">
+        <h2 className="font-semibold text-sm">Configure Proposal</h2>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggleCollapse}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="mx-4 mt-4 grid grid-cols-3">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+        <TabsList className="mx-3 mt-3 grid grid-cols-3 flex-shrink-0">
           <TabsTrigger value="content" className="text-xs">
             <LayoutGrid className="h-3 w-3 mr-1" />
             Content
@@ -115,44 +115,47 @@ export function ProposalSidebar({
           </TabsTrigger>
         </TabsList>
 
-        <ScrollArea className="flex-1 p-4">
-          <TabsContent value="content" className="mt-0 space-y-2">
-            <p className="text-xs text-muted-foreground mb-3">
-              Toggle sections to include in your proposal
-            </p>
-            {contentBlocks
-              .sort((a, b) => a.order - b.order)
-              .map((block) => (
-                <ContentBlockToggle
-                  key={block.id}
-                  block={block}
-                  onChange={(enabled) => handleBlockToggle(block.id, enabled)}
-                  disabled={disabled}
-                />
-              ))}
-          </TabsContent>
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-3">
+            <TabsContent value="content" className="mt-0 space-y-2">
+              <p className="text-xs text-muted-foreground mb-3">
+                Toggle sections to include in your proposal
+              </p>
+              {contentBlocks
+                .sort((a, b) => a.order - b.order)
+                .map((block) => (
+                  <ContentBlockToggle
+                    key={block.id}
+                    block={block}
+                    onChange={(enabled) => handleBlockToggle(block.id, enabled)}
+                    disabled={disabled}
+                  />
+                ))}
+            </TabsContent>
 
-          <TabsContent value="branding" className="mt-0">
-            <BrandingForm
-              branding={branding}
-              onChange={onBrandingChange}
-              disabled={disabled}
-            />
-          </TabsContent>
+            <TabsContent value="branding" className="mt-0">
+              <BrandingForm
+                branding={branding}
+                onChange={onBrandingChange}
+                disabled={disabled}
+              />
+            </TabsContent>
 
-          <TabsContent value="template" className="mt-0">
-            <TemplateSelector
-              selectedTemplate={selectedTemplate}
-              onSelect={onTemplateChange}
-            />
-          </TabsContent>
+            <TabsContent value="template" className="mt-0">
+              <TemplateSelector
+                selectedTemplate={selectedTemplate}
+                onSelect={onTemplateChange}
+              />
+            </TabsContent>
+          </div>
         </ScrollArea>
       </Tabs>
 
       {/* Export Actions */}
-      <div className="p-4 border-t space-y-2">
+      <div className="p-3 border-t space-y-2 flex-shrink-0">
         <Button 
           className="w-full" 
+          size="sm"
           onClick={onExportPDF}
           disabled={!simulation || isExporting}
         >
@@ -165,6 +168,7 @@ export function ProposalSidebar({
         </Button>
         <Button 
           variant="outline" 
+          size="sm"
           className="w-full" 
           onClick={onExportExcel}
           disabled={!simulation}
