@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, DragEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -52,12 +52,48 @@ export function ProposalSidebar({
   onToggleCollapse
 }: ProposalSidebarProps) {
   const [activeTab, setActiveTab] = useState("content");
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const sortedBlocks = [...contentBlocks].sort((a, b) => a.order - b.order);
 
   const handleBlockToggle = (blockId: string, enabled: boolean) => {
     const updatedBlocks = contentBlocks.map(block =>
       block.id === blockId ? { ...block, enabled } : block
     );
     onContentBlocksChange(updatedBlocks);
+  };
+
+  const handleDragStart = (e: DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverIndex(index);
+  };
+
+  const handleDrop = (e: DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const reordered = [...sortedBlocks];
+    const [moved] = reordered.splice(draggedIndex, 1);
+    reordered.splice(dropIndex, 0, moved);
+    const updated = reordered.map((block, i) => ({ ...block, order: i }));
+    onContentBlocksChange(updated);
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
   };
 
   if (collapsed) {
@@ -121,14 +157,18 @@ export function ProposalSidebar({
               <p className="text-xs text-muted-foreground mb-3">
                 Toggle sections to include in your proposal
               </p>
-              {contentBlocks
-                .sort((a, b) => a.order - b.order)
-                .map((block) => (
+              {sortedBlocks.map((block, index) => (
                   <ContentBlockToggle
                     key={block.id}
                     block={block}
                     onChange={(enabled) => handleBlockToggle(block.id, enabled)}
                     disabled={disabled}
+                    isDragging={draggedIndex === index}
+                    isDragOver={dragOverIndex === index && draggedIndex !== index}
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={(e) => handleDrop(e, index)}
                   />
                 ))}
             </TabsContent>
