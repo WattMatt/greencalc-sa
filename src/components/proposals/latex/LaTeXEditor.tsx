@@ -26,11 +26,27 @@ interface FoldRegion {
 
 const BEGIN_RE = /^%%--\s*BEGIN:(\w+)\s*--%%$/;
 const END_RE = /^%%--\s*END:(\w+)\s*--%%$/;
+const DOCUMENTCLASS_RE = /^\\documentclass/;
+const BEGIN_DOCUMENT_RE = /^\\begin\{document\}/;
 
 function parseFoldRegions(source: string): FoldRegion[] {
   const lines = source.split("\n");
   const regions: FoldRegion[] = [];
   const stack: { sectionId: string; beginLine: number }[] = [];
+
+  // Detect prologue: from \documentclass to \begin{document}
+  let prologueStart = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (prologueStart === -1 && DOCUMENTCLASS_RE.test(trimmed)) {
+      prologueStart = i;
+    } else if (prologueStart !== -1 && BEGIN_DOCUMENT_RE.test(trimmed)) {
+      if (i - prologueStart > 1) {
+        regions.push({ sectionId: "_prologue", beginLine: prologueStart, endLine: i - 1 });
+      }
+      break;
+    }
+  }
 
   for (let i = 0; i < lines.length; i++) {
     const beginMatch = lines[i].trim().match(BEGIN_RE);
