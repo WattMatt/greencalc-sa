@@ -499,6 +499,19 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
             <WrapText className="h-3.5 w-3.5 mr-2" />
             {wordWrap ? "Disable Word Wrap" : "Enable Word Wrap"}
           </ContextMenuItem>
+          <ContextMenuItem onSelect={() => {
+            const allIds = regions.map(r => r.sectionId);
+            const allCollapsed = allIds.length > 0 && allIds.every(id => collapsedSections.has(id));
+            if (allCollapsed) {
+              setCollapsedSections(new Set());
+            } else {
+              setCollapsedSections(new Set(allIds));
+            }
+          }}>
+            {regions.length > 0 && regions.every(r => collapsedSections.has(r.sectionId))
+              ? "Expand All Sections"
+              : "Collapse All Sections"}
+          </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onSelect={() => insertAtCursor("\\newpage\n")}>
             <code className="text-xs font-mono bg-muted px-1 rounded">\newpage</code>
