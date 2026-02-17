@@ -169,7 +169,7 @@ export function generatePreamble(data: TemplateData): string {
 % ── Hyperlinks ──
 \\hypersetup{
   colorlinks=true,
-  linkcolor=titleblue,
+  linkcolor=black,
   urlcolor=titleblue,
   pdfborder={0 0 0}
 }
