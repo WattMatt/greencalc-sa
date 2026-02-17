@@ -191,7 +191,7 @@ export function generateLatexSource(data: TemplateData): string {
   const sections = enabled.map(block => {
     const content = generateBlockContent(block.id, data);
     return `${SECTION_BEGIN(block.id)}\n${content}\n${SECTION_END(block.id)}`;
-  }).join("\n\\newpage\n");
+  }).join("\n");
 
   return `${generatePreamble(data)}
 

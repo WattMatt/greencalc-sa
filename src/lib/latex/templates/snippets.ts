@@ -128,7 +128,6 @@ export function tableOfContents(): string {
 
 \\section*{Table of Contents}
 \\tableofcontents
-\\newpage
 `;
 }
 
@@ -435,8 +434,6 @@ Based on the inputs above, the various stages of load shedding and their impact 
     \\end{tabular}
 \\end{table}
 
-\\pagebreak
-
 ${stage0Table}
 
 ${makeFinancialTable([1, 2, 3, 4])}
@@ -543,7 +540,7 @@ Totals & ${num(totalYield)} & & ${currency(totalEnergyIncome)} & & & ${currency(
   }
 
   const stages = Array.from({ length: 9 }, (_, i) => i);
-  const tables = stages.map(s => buildStageTable(s)).join("\n\\newpage\n");
+  const tables = stages.map(s => buildStageTable(s)).join("\n");
 
   return `
 \\begin{landscape}
