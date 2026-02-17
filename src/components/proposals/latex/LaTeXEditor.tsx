@@ -1,19 +1,20 @@
 import { useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { RotateCcw } from "lucide-react";
+import { RefreshCw, Loader2 } from "lucide-react";
 
 interface LaTeXEditorProps {
   value: string;
   onChange: (value: string) => void;
-  onReset?: () => void;
+  onSync?: () => void;
+  needsSync?: boolean;
+  isCompiling?: boolean;
   disabled?: boolean;
 }
 
-export function LaTeXEditor({ value, onChange, onReset, disabled }: LaTeXEditorProps) {
+export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, disabled }: LaTeXEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Tab inserts spaces instead of changing focus
     if (e.key === "Tab") {
       e.preventDefault();
       const ta = e.currentTarget;
@@ -21,7 +22,6 @@ export function LaTeXEditor({ value, onChange, onReset, disabled }: LaTeXEditorP
       const end = ta.selectionEnd;
       const newValue = value.substring(0, start) + "  " + value.substring(end);
       onChange(newValue);
-      // Restore cursor position after React re-renders
       requestAnimationFrame(() => {
         ta.selectionStart = ta.selectionEnd = start + 2;
       });
@@ -37,10 +37,20 @@ export function LaTeXEditor({ value, onChange, onReset, disabled }: LaTeXEditorP
         <span className="text-xs font-medium text-muted-foreground">main.tex</span>
         <div className="flex items-center gap-1">
           <span className="text-xs text-muted-foreground mr-2">{lines} lines</span>
-          {onReset && (
-            <Button variant="ghost" size="sm" onClick={onReset} className="h-6 text-xs">
-              <RotateCcw className="h-3 w-3 mr-1" />
-              Reset
+          {onSync && (
+            <Button
+              variant={needsSync ? "default" : "ghost"}
+              size="sm"
+              onClick={onSync}
+              disabled={isCompiling}
+              className={`h-6 text-xs ${needsSync ? "animate-pulse" : ""}`}
+            >
+              {isCompiling ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3 mr-1" />
+              )}
+              Sync
             </Button>
           )}
         </div>
@@ -48,7 +58,6 @@ export function LaTeXEditor({ value, onChange, onReset, disabled }: LaTeXEditorP
 
       {/* Editor with line numbers */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Line numbers */}
         <div
           className="bg-muted/30 text-muted-foreground text-right select-none overflow-hidden border-r px-2 py-2 font-mono text-xs leading-5"
           style={{ minWidth: "3rem" }}
@@ -58,7 +67,6 @@ export function LaTeXEditor({ value, onChange, onReset, disabled }: LaTeXEditorP
           ))}
         </div>
 
-        {/* Textarea */}
         <textarea
           ref={textareaRef}
           value={value}

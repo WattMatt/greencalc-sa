@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { Loader2, AlertCircle, FileText, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { Loader2, AlertCircle, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import * as pdfjsLib from "pdfjs-dist";
 
-// Set worker source
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 interface PDFPreviewProps {
@@ -17,12 +17,14 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
   const containerRef = useRef<HTMLDivElement>(null);
   const [pageNum, setPageNum] = useState(1);
   const [numPages, setNumPages] = useState(0);
+  const [pageInput, setPageInput] = useState("1");
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+  // 0 = fit-to-width
+  const [userScale, setUserScale] = useState(0);
+  const [displayScale, setDisplayScale] = useState(1);
 
-  // Load and render PDF from raw bytes
   useEffect(() => {
     if (!pdfData) return;
-
     let cancelled = false;
 
     async function render() {
@@ -32,6 +34,7 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
         pdfDocRef.current = doc;
         setNumPages(doc.numPages);
         setPageNum(1);
+        setPageInput("1");
         await renderPage(doc, 1);
       } catch (err) {
         console.error("pdf.js render error:", err);
@@ -42,22 +45,29 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
     return () => { cancelled = true; };
   }, [pdfData]);
 
-  // Re-render on page change
   useEffect(() => {
     if (pdfDocRef.current && pageNum > 0) {
       renderPage(pdfDocRef.current, pageNum);
     }
-  }, [pageNum]);
+  }, [pageNum, userScale]);
 
-  async function renderPage(doc: pdfjsLib.PDFDocumentProxy, num: number) {
+  const renderPage = useCallback(async (doc: pdfjsLib.PDFDocumentProxy, num: number) => {
     const page = await doc.getPage(num);
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const containerWidth = container.clientWidth;
     const unscaledViewport = page.getViewport({ scale: 1 });
-    const scale = containerWidth / unscaledViewport.width;
+
+    let scale: number;
+    if (userScale === 0) {
+      // fit-to-width
+      scale = (container.clientWidth - 32) / unscaledViewport.width;
+    } else {
+      scale = userScale;
+    }
+
+    setDisplayScale(scale);
     const viewport = page.getViewport({ scale });
 
     canvas.width = viewport.width;
@@ -67,7 +77,28 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
     if (!ctx) return;
 
     await page.render({ canvasContext: ctx, viewport }).promise;
-  }
+  }, [userScale]);
+
+  const zoomIn = () => setUserScale(prev => {
+    const current = prev === 0 ? displayScale : prev;
+    return Math.min(current + 0.25, 5);
+  });
+
+  const zoomOut = () => setUserScale(prev => {
+    const current = prev === 0 ? displayScale : prev;
+    return Math.max(current - 0.25, 0.25);
+  });
+
+  const fitToWidth = () => setUserScale(0);
+
+  const handlePageInputCommit = () => {
+    const n = parseInt(pageInput, 10);
+    if (!isNaN(n) && n >= 1 && n <= numPages) {
+      setPageNum(n);
+    } else {
+      setPageInput(String(pageNum));
+    }
+  };
 
   if (isCompiling && !pdfData) {
     return (
@@ -96,30 +127,47 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
     return (
       <div className="flex flex-col items-center justify-center h-full bg-muted/20 gap-3">
         <FileText className="h-8 w-8 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">PDF preview will appear here</p>
+        <p className="text-sm text-muted-foreground">Click Sync to compile and preview PDF</p>
       </div>
     );
   }
 
+  const zoomPercent = Math.round((userScale === 0 ? displayScale : userScale) * 100);
+
   return (
     <div className="flex flex-col h-full">
-      {isCompiling && (
-        <div className="flex items-center gap-2 px-3 py-1 border-b bg-muted/50">
-          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Recompiling…</span>
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-3 py-1 border-b bg-muted/30 gap-2 flex-shrink-0">
+        {/* Pagination */}
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { const p = Math.max(1, pageNum - 1); setPageNum(p); setPageInput(String(p)); }} disabled={pageNum <= 1}>
+            <ChevronLeft className="h-3 w-3" />
+          </Button>
+          <input
+            type="text"
+            value={pageInput}
+            onChange={e => setPageInput(e.target.value)}
+            onBlur={handlePageInputCommit}
+            onKeyDown={e => e.key === "Enter" && handlePageInputCommit()}
+            className="w-8 h-6 text-center text-xs bg-background border rounded"
+          />
+          <span className="text-xs text-muted-foreground">/ {numPages}</span>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { const p = Math.min(numPages, pageNum + 1); setPageNum(p); setPageInput(String(p)); }} disabled={pageNum >= numPages}>
+            <ChevronRight className="h-3 w-3" />
+          </Button>
         </div>
-      )}
-      {numPages > 1 && (
-        <div className="flex items-center justify-center gap-2 px-3 py-1 border-b bg-muted/30">
-          <button onClick={() => setPageNum(p => Math.max(1, p - 1))} disabled={pageNum <= 1} className="p-1 disabled:opacity-30">
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <span className="text-xs text-muted-foreground">{pageNum} / {numPages}</span>
-          <button onClick={() => setPageNum(p => Math.min(numPages, p + 1))} disabled={pageNum >= numPages} className="p-1 disabled:opacity-30">
-            <ChevronRight className="h-4 w-4" />
-          </button>
+
+        {/* Zoom */}
+        <div className="flex items-center gap-1">
+          {isCompiling && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground mr-1" />}
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={zoomOut}><ZoomOut className="h-3 w-3" /></Button>
+          <span className="text-xs text-muted-foreground w-10 text-center">{zoomPercent}%</span>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={zoomIn}><ZoomIn className="h-3 w-3" /></Button>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={fitToWidth} title="Fit to width"><Maximize className="h-3 w-3" /></Button>
         </div>
-      )}
+      </div>
+
+      {/* Canvas */}
       <div ref={containerRef} className="flex-1 overflow-auto bg-muted/10 flex justify-center p-4">
         <canvas ref={canvasRef} className="shadow-lg" />
       </div>

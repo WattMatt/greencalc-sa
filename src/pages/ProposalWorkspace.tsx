@@ -472,7 +472,7 @@ export default function ProposalWorkspace() {
   }
 
   return (
-    <div className="flex h-screen bg-muted/30">
+    <div className="flex h-screen overflow-hidden bg-muted/30">
       {/* Sidebar */}
       <ProposalSidebar
         contentBlocks={contentBlocks}

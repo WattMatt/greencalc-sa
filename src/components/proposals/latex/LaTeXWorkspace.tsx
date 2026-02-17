@@ -13,10 +13,6 @@ interface LaTeXWorkspaceProps {
   onOverridesChange?: (overrides: Record<string, string>) => void;
 }
 
-/**
- * Assemble a full .tex document from preamble + per-section content,
- * using overrides where the user has manually edited a section.
- */
 function assembleSource(
   data: TemplateData,
   overrides: Map<string, string>,
@@ -48,24 +44,18 @@ export function LaTeXWorkspace({ templateData, onPdfReady, initialOverrides, onO
   const [isCompiling, setIsCompiling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [log, setLog] = useState<string | null>(null);
+  const [needsSync, setNeedsSync] = useState(false);
 
-  // Section overrides: user-edited content per block id
   const overridesRef = useRef<Map<string, string>>(
     initialOverrides ? new Map(Object.entries(initialOverrides)) : new Map()
   );
-  // The last auto-generated (no-override) section content, for diffing
   const generatedSectionsRef = useRef<Map<string, string>>(new Map());
-
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const latestSourceRef = useRef(source);
   latestSourceRef.current = source;
-
-  // Track whether the source change came from the user typing vs programmatic
   const isProgrammaticRef = useRef(false);
 
   // Generate / regenerate source from template data, preserving overrides
   useEffect(() => {
-    // Build fresh generated sections map
     const freshMap = new Map<string, string>();
     templateData.contentBlocks
       .filter(b => b.enabled)
@@ -75,23 +65,22 @@ export function LaTeXWorkspace({ templateData, onPdfReady, initialOverrides, onO
       });
     generatedSectionsRef.current = freshMap;
 
-    // Assemble using overrides
     const newSource = assembleSource(templateData, overridesRef.current);
     isProgrammaticRef.current = true;
     setSource(newSource);
+    setNeedsSync(true);
   }, [templateData]);
 
-  // Detect manual edits: when user changes source, diff against generated
+  // Detect manual edits
   const handleSourceChange = useCallback((newSource: string) => {
     setSource(newSource);
+    setNeedsSync(true);
 
-    // Skip override detection for programmatic changes
     if (isProgrammaticRef.current) {
       isProgrammaticRef.current = false;
       return;
     }
 
-    // Parse sections from the edited source
     const editedSections = parseSections(newSource);
     const generated = generatedSectionsRef.current;
 
@@ -104,7 +93,6 @@ export function LaTeXWorkspace({ templateData, onPdfReady, initialOverrides, onO
       }
     });
 
-    // Notify parent of override changes for persistence
     onOverridesChange?.(Object.fromEntries(overridesRef.current));
   }, [onOverridesChange]);
 
@@ -137,27 +125,12 @@ export function LaTeXWorkspace({ templateData, onPdfReady, initialOverrides, onO
     }
   }, [onPdfReady]);
 
-  // Debounced compile on source change
-  useEffect(() => {
+  // Sync handler — only compiles when user clicks Sync
+  const handleSync = useCallback(() => {
     if (!source) return;
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      compile(source);
-    }, 800);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    setNeedsSync(false);
+    compile(source);
   }, [source, compile]);
-
-  const handleReset = useCallback(() => {
-    overridesRef.current = new Map();
-    onOverridesChange?.({});
-    const newSource = generateLatexSource(templateData);
-    isProgrammaticRef.current = true;
-    setSource(newSource);
-  }, [templateData, onOverridesChange]);
 
   return (
     <ResizablePanelGroup direction="horizontal" className="h-full">
@@ -165,7 +138,9 @@ export function LaTeXWorkspace({ templateData, onPdfReady, initialOverrides, onO
         <LaTeXEditor
           value={source}
           onChange={handleSourceChange}
-          onReset={handleReset}
+          onSync={handleSync}
+          needsSync={needsSync}
+          isCompiling={isCompiling}
         />
       </ResizablePanel>
 
