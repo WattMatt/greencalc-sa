@@ -1,19 +1,20 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, ExternalLink, Edit, Calendar, FileText, Loader2 } from "lucide-react"; // Changed ScrollText to FileText to avoid errors if ScrollText not available, but user has FileText. Wait, FileText is used for Reports.
-// Actually ScrollText is standard in Lucide. I'll stick to standard icons.
-import { useNavigate } from "react-router-dom";
+import { Plus, ExternalLink, Edit, Calendar, FileText, Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { ProposalWorkspaceInline } from "@/components/proposals/ProposalWorkspaceInline";
 
 interface ProposalManagerProps {
     projectId: string;
 }
 
 export function ProposalManager({ projectId }: ProposalManagerProps) {
-    const navigate = useNavigate();
+    const [editingProposalId, setEditingProposalId] = useState<string | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
 
     const { data: proposals, isLoading } = useQuery({
         queryKey: ["project-proposals", projectId],
@@ -40,6 +41,31 @@ export function ProposalManager({ projectId }: ProposalManagerProps) {
         }
     };
 
+    const handleEdit = (proposalId: string) => {
+        setEditingProposalId(proposalId);
+        setIsEditing(true);
+    };
+
+    const handleCreate = () => {
+        setEditingProposalId(null);
+        setIsEditing(true);
+    };
+
+    const handleBack = () => {
+        setIsEditing(false);
+        setEditingProposalId(null);
+    };
+
+    if (isEditing) {
+        return (
+            <ProposalWorkspaceInline
+                projectId={projectId}
+                proposalId={editingProposalId}
+                onBack={handleBack}
+            />
+        );
+    }
+
     if (isLoading) {
         return (
             <div className="flex justify-center py-8">
@@ -55,7 +81,7 @@ export function ProposalManager({ projectId }: ProposalManagerProps) {
                     <h2 className="text-lg font-semibold">Proposals</h2>
                     <p className="text-sm text-muted-foreground">Manage and track proposals for this project</p>
                 </div>
-                <Button onClick={() => navigate(`/projects/${projectId}/proposal`)}>
+                <Button onClick={handleCreate}>
                     <Plus className="mr-2 h-4 w-4" />
                     Create Proposal
                 </Button>
@@ -106,7 +132,7 @@ export function ProposalManager({ projectId }: ProposalManagerProps) {
                                         <Button
                                             variant="secondary"
                                             size="sm"
-                                            onClick={() => navigate(`/projects/${projectId}/proposal?id=${proposal.id}`)}
+                                            onClick={() => handleEdit(proposal.id)}
                                         >
                                             <Edit className="mr-2 h-4 w-4" />
                                             Edit
@@ -126,7 +152,7 @@ export function ProposalManager({ projectId }: ProposalManagerProps) {
                             <p className="text-sm text-muted-foreground mb-4">
                                 Create your first proposal to get started with client quotes.
                             </p>
-                            <Button onClick={() => navigate(`/projects/${projectId}/proposal`)}>
+                            <Button onClick={handleCreate}>
                                 <Plus className="mr-2 h-4 w-4" />
                                 Create Proposal
                             </Button>
