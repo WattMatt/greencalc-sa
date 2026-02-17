@@ -239,14 +239,16 @@ export function PDFPreview({ pdfData, isCompiling, error, log }: PDFPreviewProps
       {/* Canvas */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto bg-muted/10 flex justify-center p-4"
+        className="flex-1 overflow-auto bg-muted/10"
         style={{ cursor: "grab" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
       >
-        <canvas ref={canvasRef} className="shadow-lg pointer-events-none" />
+        <div className="min-w-fit flex justify-center p-4">
+          <canvas ref={canvasRef} className="shadow-lg pointer-events-none" />
+        </div>
       </div>
     </div>
   );
