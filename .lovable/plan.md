@@ -1,29 +1,36 @@
 
-## Drag-and-Drop Reordering for Content Blocks
 
-### Overview
-The content block list in the proposal sidebar displays a grip handle icon (GripVertical) but has no actual drag-and-drop functionality wired up. This plan adds native HTML drag-and-drop to allow users to click the grip handle, drag a block to a new position, and drop it to reorder.
+## Embed Proposal Editing Within the Project Page
 
-### Approach
-Use the native HTML5 Drag and Drop API (no new dependencies needed). This keeps it lightweight and consistent with the existing codebase.
+### Problem
+Clicking "Edit" on a proposal navigates away from the project page (with all the section tabs like Overview, Tenants, Load Profile, etc.) to a completely separate full-screen route (`/projects/:projectId/proposal`). This removes all navigation context.
+
+### Solution
+Instead of navigating away, open the Proposal Workspace inline within the Proposals tab on the project detail page. The "Edit" button will switch the Proposals tab into an editing mode that shows the full Proposal Builder (sidebar + LaTeX workspace) while keeping the project tabs visible above.
 
 ### Technical Details
 
-**File: `src/components/proposals/ContentBlockToggle.tsx`**
-- Add drag event handlers: `onDragStart`, `onDragEnd`, `onDragOver`, `onDrop`
-- Accept new props: `onDragStart`, `onDragOver`, `onDrop`, `onDragEnd`, `isDragging`, `isDragOver`
-- Set `draggable={true}` on the outer container
-- Add visual feedback: reduce opacity when dragging, show a top-border indicator on the drop target
-- The grip handle's `cursor-grab` becomes `cursor-grabbing` while dragging
+**File: `src/components/projects/ProposalManager.tsx`**
+- Add an `editingProposalId` state (string | null)
+- When `editingProposalId` is set, render a `ProposalWorkspaceInline` component instead of the proposal list
+- Pass a `onBack` callback to return to the list view
+- The "Edit" button sets `editingProposalId` instead of navigating
+- The "Create Proposal" button sets `editingProposalId` to `"new"` instead of navigating
 
-**File: `src/components/proposals/ProposalSidebar.tsx`**
-- Add local state: `draggedIndex` (number | null) and `dragOverIndex` (number | null)
-- Sort blocks by `order` into a local variable, then render with drag props
-- On drop: compute the new order, update each block's `order` field, and call `onContentBlocksChange` with the reordered array
-- Pass drag state and handlers down to each `ContentBlockToggle`
+**File: `src/components/proposals/ProposalWorkspaceInline.tsx`** (new file)
+- Extract the core logic from `src/pages/ProposalWorkspace.tsx` into a reusable component
+- Accept `projectId`, `proposalId` (string | null), and `onBack` as props
+- Remove the full-screen `h-screen` layout; use a flexible height that fits within the tab content area (e.g., `h-[calc(100vh-12rem)]`)
+- Replace the back arrow navigation with the `onBack` callback
+- Keep all existing functionality: sidebar, LaTeX workspace, save, export, share
+
+**File: `src/pages/ProposalWorkspace.tsx`**
+- Keep this file as-is for backwards compatibility (direct URL access still works)
+- Optionally refactor to wrap `ProposalWorkspaceInline` to avoid code duplication
 
 ### Visual Behavior
-- Grabbing a block reduces its opacity to ~50%
-- Hovering over another block shows a blue top-border highlight indicating where the dragged item will be inserted
-- Dropping snaps the block into its new position and updates the order values
-- The list re-renders in the new order immediately
+- Project tabs remain visible at the top at all times
+- The Proposals tab content area shows either the proposal list OR the full editor
+- A back arrow / "Back to list" button in the editor returns to the proposal list
+- The editor fills the available height below the tabs
+
