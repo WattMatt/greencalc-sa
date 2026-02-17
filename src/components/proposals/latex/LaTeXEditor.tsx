@@ -1,6 +1,13 @@
 import { useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Loader2 } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from "@/components/ui/context-menu";
 
 interface LaTeXEditorProps {
   value: string;
@@ -26,6 +33,20 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
         ta.selectionStart = ta.selectionEnd = start + 2;
       });
     }
+  }, [value, onChange]);
+
+  const insertAtCursor = useCallback((text: string) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const newValue = value.substring(0, start) + text + value.substring(end);
+    onChange(newValue);
+    requestAnimationFrame(() => {
+      ta.focus();
+      const newPos = start + text.length;
+      ta.selectionStart = ta.selectionEnd = newPos;
+    });
   }, [value, onChange]);
 
   const lines = value.split("\n").length;
@@ -57,27 +78,43 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
       </div>
 
       {/* Editor with line numbers */}
-      <div className="flex-1 flex overflow-hidden">
-        <div
-          className="bg-muted/30 text-muted-foreground text-right select-none overflow-hidden border-r px-2 py-2 font-mono text-xs leading-5"
-          style={{ minWidth: "3rem" }}
-        >
-          {Array.from({ length: lines }, (_, i) => (
-            <div key={i + 1}>{i + 1}</div>
-          ))}
-        </div>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="flex-1 flex overflow-hidden">
+            <div
+              className="bg-muted/30 text-muted-foreground text-right select-none overflow-hidden border-r px-2 py-2 font-mono text-xs leading-5"
+              style={{ minWidth: "3rem" }}
+            >
+              {Array.from({ length: lines }, (_, i) => (
+                <div key={i + 1}>{i + 1}</div>
+              ))}
+            </div>
 
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={disabled}
-          spellCheck={false}
-          className="flex-1 resize-none border-none outline-none bg-transparent font-mono text-xs leading-5 p-2 overflow-auto"
-          style={{ tabSize: 2 }}
-        />
-      </div>
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={disabled}
+              spellCheck={false}
+              className="flex-1 resize-none border-none outline-none bg-transparent font-mono text-xs leading-5 p-2 overflow-auto"
+              style={{ tabSize: 2 }}
+            />
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={() => insertAtCursor("\\newpage\n")}>
+            Insert <code className="ml-2 text-xs font-mono bg-muted px-1 rounded">\\newpage</code>
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => insertAtCursor("\\pagebreak\n")}>
+            Insert <code className="ml-2 text-xs font-mono bg-muted px-1 rounded">\\pagebreak</code>
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => insertAtCursor("\\clearpage\n")}>
+            Insert <code className="ml-2 text-xs font-mono bg-muted px-1 rounded">\\clearpage</code>
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </div>
   );
 }
