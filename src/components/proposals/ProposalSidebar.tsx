@@ -148,10 +148,6 @@ export function ProposalSidebar({
         <Button variant="ghost" size="icon" onClick={() => { onToggleCollapse?.(); setActiveTab("template"); }}>
           <FileText className="h-4 w-4" />
         </Button>
-        <Separator className="my-2" />
-        <Button variant="ghost" size="icon" onClick={onExportPDF} disabled={!simulation || isExporting}>
-          <Download className="h-4 w-4" />
-        </Button>
       </div>
     );
   }
@@ -159,7 +155,7 @@ export function ProposalSidebar({
   return (
     <div className="w-80 bg-card border-r flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="p-3 border-b flex items-center justify-between flex-shrink-0">
+      <div className="px-3 py-2 border-b flex items-center justify-between flex-shrink-0">
         <h2 className="font-semibold text-sm">Configure Proposal</h2>
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggleCollapse}>
           <ChevronLeft className="h-4 w-4" />
@@ -247,32 +243,6 @@ export function ProposalSidebar({
         </ScrollArea>
       </Tabs>
 
-      {/* Export Actions */}
-      <div className="p-3 border-t space-y-2 flex-shrink-0">
-        <Button 
-          className="w-full" 
-          size="sm"
-          onClick={onExportPDF}
-          disabled={!simulation || isExporting}
-        >
-          {isExporting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="mr-2 h-4 w-4" />
-          )}
-          Export PDF
-        </Button>
-        <Button 
-          variant="outline" 
-          size="sm"
-          className="w-full" 
-          onClick={onExportExcel}
-          disabled={!simulation}
-        >
-          <FileText className="mr-2 h-4 w-4" />
-          Export Excel
-        </Button>
-      </div>
     </div>
   );
 }
