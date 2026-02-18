@@ -138,12 +138,15 @@ function reconstructSource(
     result.splice(lastMappedSource + 1, 0, ...extra);
   }
 
-  // Calculate expected total length and trim trailing lines deleted by the user
-  const expectedLength = lastMappedSource + 1 +
-    (displayIdx < newDisplayLines.length ? newDisplayLines.length - displayIdx : 0);
+  // Only trim when no sections are collapsed — trimming with collapsed sections
+  // would destroy hidden lines and effectively revert every keystroke.
+  if (collapsedSections.size === 0) {
+    const expectedLength = lastMappedSource + 1 +
+      (displayIdx < newDisplayLines.length ? newDisplayLines.length - displayIdx : 0);
 
-  if (result.length > expectedLength) {
-    result.length = expectedLength;
+    if (result.length > expectedLength) {
+      result.length = expectedLength;
+    }
   }
 
   return result.join("\n");
