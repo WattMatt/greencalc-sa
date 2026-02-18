@@ -123,11 +123,11 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
   const { data: municipalities } = useQuery({
     queryKey: ["municipalities-with-counts"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("municipalities")
-        .select("id, name, source_file_path, total_tariffs, province_id");
+        .select("id, name, nersa_increase_pct, province_id");
       if (error) throw error;
-      return data;
+      return data as any[];
     },
   });
 
@@ -174,12 +174,12 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
     
     setLoadingMunicipalities(prev => new Set(prev).add(municipalityName));
     try {
-      const { data, error } = await supabase
-        .from("tariffs")
+      const { data, error } = await (supabase as any)
+        .from("tariff_plans")
         .select(`
           *,
-          municipality:municipalities(name, province_id, source_file_path),
-          category:tariff_categories(name)
+          municipality:municipalities(name, province_id),
+          tariff_rates(*)
         `)
         .eq("municipality_id", muni.id)
         .order("name");
@@ -205,10 +205,10 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
       const { data, error } = await supabase
         .from("tariff_rates")
         .select("*")
-        .eq("tariff_id", tariffId);
+        .eq("tariff_plan_id", tariffId);
       
       if (!error && data) {
-        setTariffRates(prev => ({ ...prev, [tariffId]: data }));
+        setTariffRates(prev => ({ ...prev, [tariffId]: data as any }));
       }
     } finally {
       setLoadingRates(prev => {
@@ -258,7 +258,8 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
 
   const deleteTariff = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("tariffs").delete().eq("id", id);
+      await supabase.from("tariff_rates").delete().eq("tariff_plan_id", id);
+      const { error } = await supabase.from("tariff_plans").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -273,20 +274,17 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
   const bulkDelete = useMutation({
     mutationFn: async (target: DeleteTarget) => {
       if (target.type === "all") {
-        // Delete all tariff rates first using gte on uuid (matches all)
         const { error: ratesError } = await supabase
           .from("tariff_rates")
           .delete()
           .gte("id", "00000000-0000-0000-0000-000000000000");
         if (ratesError) throw ratesError;
-        // Delete all tariffs
         const { error } = await supabase
-          .from("tariffs")
+          .from("tariff_plans")
           .delete()
           .gte("id", "00000000-0000-0000-0000-000000000000");
         if (error) throw error;
       } else if (target.type === "province") {
-        // Get all municipality IDs for this province
         const { data: municipalities } = await supabase
           .from("municipalities")
           .select("id")
@@ -294,28 +292,23 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
         
         if (municipalities && municipalities.length > 0) {
           const municipalityIds = municipalities.map((m) => m.id);
-          // Get tariff IDs
           const { data: tariffData } = await supabase
-            .from("tariffs")
+            .from("tariff_plans")
             .select("id")
             .in("municipality_id", municipalityIds);
           
           if (tariffData && tariffData.length > 0) {
             const tariffIds = tariffData.map((t) => t.id);
-            // Delete rates first
-            const { error: ratesError } = await supabase.from("tariff_rates").delete().in("tariff_id", tariffIds);
+            const { error: ratesError } = await supabase.from("tariff_rates").delete().in("tariff_plan_id", tariffIds);
             if (ratesError) throw ratesError;
-            // Delete tariffs
-            const { error } = await supabase.from("tariffs").delete().in("municipality_id", municipalityIds);
+            const { error } = await supabase.from("tariff_plans").delete().in("municipality_id", municipalityIds);
             if (error) throw error;
           }
         }
       } else if (target.type === "municipality") {
-        // Delete rates first
-        const { error: ratesError } = await supabase.from("tariff_rates").delete().in("tariff_id", target.tariffIds);
+        const { error: ratesError } = await supabase.from("tariff_rates").delete().in("tariff_plan_id", target.tariffIds);
         if (ratesError) throw ratesError;
-        // Delete tariffs
-        const { error } = await supabase.from("tariffs").delete().in("id", target.tariffIds);
+        const { error } = await supabase.from("tariff_plans").delete().in("id", target.tariffIds);
         if (error) throw error;
       }
     },

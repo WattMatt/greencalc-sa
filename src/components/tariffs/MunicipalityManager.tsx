@@ -157,7 +157,7 @@ export function MunicipalityManager() {
                     <TableRow key={m.id}>
                       <TableCell className="font-medium">{m.name}</TableCell>
                       <TableCell>{(m.province as any)?.name}</TableCell>
-                      <TableCell>{m.increase_percentage ? `${m.increase_percentage}%` : "-"}</TableCell>
+                      <TableCell>{m.nersa_increase_pct ? `${m.nersa_increase_pct}%` : "-"}</TableCell>
                       <TableCell>
                         <Button
                           variant="ghost"

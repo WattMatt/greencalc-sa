@@ -8,8 +8,8 @@ import { Plus, Trash2, Clock } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
 type SeasonType = Database["public"]["Enums"]["season_type"];
-type TimeOfUseType = Database["public"]["Enums"]["time_of_use_type"];
-type DayType = Database["public"]["Enums"]["day_type"];
+type TimeOfUseType = Database["public"]["Enums"]["tou_period"];
+type DayType = string; // day_type enum was removed in schema migration
 
 export type { SeasonType, TimeOfUseType, DayType };
 
@@ -39,14 +39,15 @@ const formatHour = (hour: number) => {
   return `${hour - 12}:00 PM`;
 };
 
-const TIME_OF_USE_COLORS: Record<TimeOfUseType, string> = {
+const TIME_OF_USE_COLORS: Record<string, string> = {
+  peak: "bg-red-100 border-red-300 text-red-800",
   Peak: "bg-red-100 border-red-300 text-red-800",
+  standard: "bg-yellow-100 border-yellow-300 text-yellow-800",
   Standard: "bg-yellow-100 border-yellow-300 text-yellow-800",
+  "off_peak": "bg-green-100 border-green-300 text-green-800",
   "Off-Peak": "bg-green-100 border-green-300 text-green-800",
+  all: "bg-gray-100 border-gray-300 text-gray-800",
   Any: "bg-gray-100 border-gray-300 text-gray-800",
-  "High Demand": "bg-red-100 border-red-300 text-red-800",
-  "Low Demand": "bg-green-100 border-green-300 text-green-800",
-  "Critical Peak": "bg-purple-100 border-purple-300 text-purple-800",
 };
 
 export function TOUPeriodBuilder({ periods, onChange }: TOUPeriodBuilderProps) {
@@ -54,8 +55,8 @@ export function TOUPeriodBuilder({ periods, onChange }: TOUPeriodBuilderProps) {
     const newPeriod: TOUPeriod = {
       id: crypto.randomUUID(),
       season,
-      day_type: "Weekday",
-      time_of_use: "Peak",
+      day_type: "Weekday" as any,
+      time_of_use: "peak" as any,
       start_hour: 6,
       end_hour: 9,
       rate_per_kwh: 0,
@@ -81,8 +82,8 @@ export function TOUPeriodBuilder({ periods, onChange }: TOUPeriodBuilderProps) {
     onChange([...periods, ...newPeriods]);
   };
 
-  const highSeasonPeriods = periods.filter((p) => p.season === "High/Winter");
-  const lowSeasonPeriods = periods.filter((p) => p.season === "Low/Summer");
+  const highSeasonPeriods = periods.filter((p) => p.season === "high" || p.season === ("High/Winter" as any));
+  const lowSeasonPeriods = periods.filter((p) => p.season === "low" || p.season === ("Low/Summer" as any));
 
   const renderPeriodRow = (period: TOUPeriod) => (
     <div
@@ -259,14 +260,14 @@ export function TOUPeriodBuilder({ periods, onChange }: TOUPeriodBuilderProps) {
       </div>
 
       {renderSeasonSection(
-        "High/Winter",
+        "high" as any,
         "High-Demand Season (June - August)",
         "Winter months with higher electricity demand",
         highSeasonPeriods
       )}
 
       {renderSeasonSection(
-        "Low/Summer",
+        "low" as any,
         "Low-Demand Season (September - May)",
         "Summer months with lower electricity demand",
         lowSeasonPeriods

@@ -85,10 +85,10 @@ export default function Calculator() {
   const { data: tariffs } = useQuery({
     queryKey: ["tariffs-filtered", municipalityId, categoryId],
     queryFn: async () => {
-      let query = supabase.from("tariffs").select(`*, rates:tariff_rates(*)`);
+      let query = supabase.from("tariff_plans").select(`*, rates:tariff_rates(*)`) as any;
       if (municipalityId) query = query.eq("municipality_id", municipalityId);
-      if (categoryId) query = query.eq("category_id", categoryId);
-      const { data, error } = await query.order("name");
+      if (categoryId) query = query.eq("category", categoryId);
+      const { data, error } = await query.eq("is_redundant", false).order("name");
       if (error) throw error;
       return data;
     },
@@ -97,10 +97,11 @@ export default function Calculator() {
   const { data: touPeriods } = useQuery({
     queryKey: ["tou-periods", tariffId],
     queryFn: async () => {
+      // TOU info is now embedded in tariff_rates
       const { data, error } = await supabase
-        .from("tou_periods")
+        .from("tariff_rates")
         .select("*")
-        .eq("tariff_id", tariffId);
+        .eq("tariff_plan_id", tariffId!);
       if (error) throw error;
       return data;
     },
