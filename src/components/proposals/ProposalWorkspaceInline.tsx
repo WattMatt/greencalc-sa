@@ -24,6 +24,7 @@ import {
   ProposalBranding,
   SimulationData,
   ContentBlock,
+  ContentBlockId,
   DEFAULT_CONTENT_BLOCKS,
   STATUS_LABELS,
   STATUS_COLORS
@@ -49,6 +50,8 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack }: Propo
   const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>(DEFAULT_CONTENT_BLOCKS);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [aiNarratives, setAiNarratives] = useState<Record<string, { narrative: string; keyHighlights?: string[] }>>({});
+  const [generatingNarrativeId, setGeneratingNarrativeId] = useState<string | null>(null);
 
   const [verificationChecklist, setVerificationChecklist] = useState<VerificationChecklistType>({
     site_coordinates_verified: false,
@@ -442,6 +445,42 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack }: Propo
     toast.success("Excel/CSV exported");
   };
 
+  const handleGenerateNarrative = useCallback(async (blockId: ContentBlockId, sectionType: string) => {
+    if (!simulationData || !project) return;
+    setGeneratingNarrativeId(blockId);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-proposal-narrative', {
+        body: {
+          sectionType,
+          projectData: {
+            projectName: project.name || "Solar Project",
+            location: project.location,
+            buildingArea: project.total_area_sqm,
+            connectionSize: project.connection_size_kva,
+            solarCapacityKwp: simulationData.solarCapacity,
+            batteryCapacityKwh: simulationData.batteryCapacity,
+            dcAcRatio: simulationData.equipmentSpecs?.tiltAngle ? undefined : 1.3,
+            annualSavings: simulationData.annualSavings,
+            paybackYears: simulationData.paybackYears,
+            roiPercent: simulationData.roiPercentage,
+            tariffName: simulationData.tariffName,
+          },
+        },
+      });
+      if (error) throw error;
+      setAiNarratives(prev => ({
+        ...prev,
+        [blockId]: { narrative: data.narrative, keyHighlights: data.keyHighlights },
+      }));
+      toast.success(`AI narrative generated for "${contentBlocks.find(b => b.id === blockId)?.label || blockId}"`);
+    } catch (err) {
+      console.error("Narrative generation error:", err);
+      toast.error("Failed to generate AI narrative");
+    } finally {
+      setGeneratingNarrativeId(null);
+    }
+  }, [simulationData, project, contentBlocks]);
+
   const handlePdfReady = useCallback((blob: Blob | null) => {
     pdfBlobRef.current = blob;
   }, []);
@@ -471,6 +510,9 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack }: Propo
         isExporting={isExporting}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        aiNarratives={aiNarratives}
+        onGenerateNarrative={handleGenerateNarrative}
+        generatingNarrativeId={generatingNarrativeId}
       />
 
       <div className="flex-1 flex flex-col min-w-0">

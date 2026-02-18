@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { format, formatDistanceToNow } from "date-fns";
 import { useSolcastForecast } from "@/hooks/useSolcastForecast";
 import { usePVGISProfile, PVGISTMYResponse, PVGISMonthlyResponse } from "@/hooks/usePVGISProfile";
-import { ReportToggle } from "@/components/reports/ReportToggle";
+
 import { SavedSimulations } from "./SavedSimulations";
 import {
   PVSystemConfig,

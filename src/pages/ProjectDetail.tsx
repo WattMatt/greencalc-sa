@@ -19,7 +19,7 @@ import { TariffSelector } from "@/components/projects/TariffSelector";
 import { SimulationModes, SimulationModesRef } from "@/components/projects/SimulationModes";
 import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { SolarForecastCard } from "@/components/projects/SolarForecastCard";
-import { ReportBuilder } from "@/components/reports/builder";
+
 import { ProjectOverview } from "@/components/projects/ProjectOverview";
 import { ProjectLocationMap } from "@/components/projects/ProjectLocationMap";
 import { ProposalManager } from "@/components/projects/ProposalManager";
@@ -1062,10 +1062,6 @@ export default function ProjectDetail() {
           ? `${proposalCount} proposal${proposalCount > 1 ? 's' : ''} created`
           : "Ready to create proposals"
     },
-    reports: {
-      status: "complete",
-      tooltip: "Generate project reports"
-    },
     schedule: {
       status: ganttTaskCount > 0 ? "complete" : "pending",
       tooltip: ganttTaskCount > 0 
@@ -1152,10 +1148,6 @@ export default function ProjectDetail() {
             <TabWithStatus value="proposals" status={tabStatuses.proposals.status} tooltip={tabStatuses.proposals.tooltip}>
               <ScrollText className="h-4 w-4 mr-2" />
               Proposals
-            </TabWithStatus>
-            <TabWithStatus value="reports" status={tabStatuses.reports.status} tooltip={tabStatuses.reports.tooltip}>
-              <FileText className="h-4 w-4 mr-2" />
-              Reports
             </TabWithStatus>
             <TabWithStatus value="schedule" status={tabStatuses.schedule.status} tooltip={tabStatuses.schedule.tooltip}>
               <CalendarDays className="h-4 w-4 mr-2" />
@@ -1270,13 +1262,6 @@ export default function ProjectDetail() {
           <ProposalManager projectId={id!} />
         </TabsContent>
 
-        <TabsContent value="reports" className="mt-6">
-          <ReportBuilder 
-            projectId={id!} 
-            projectName={project.name}
-            branding={latestProposal?.branding as any}
-          />
-        </TabsContent>
 
         <TabsContent value="schedule" className="mt-6">
           <ProjectGantt projectId={id!} projectName={project.name} />

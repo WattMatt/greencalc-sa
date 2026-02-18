@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sun, Settings2, ChevronDown, Info, MapPin, Compass, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { ReportToggle } from "@/components/reports/ReportToggle";
+
 
 // South African cities with solar resource data (GHI in kWh/m²/day, DNI in kWh/m²/day)
 // Based on PVGIS and NREL data for South Africa
@@ -279,12 +279,6 @@ export function PVSystemConfig({ config, onChange, maxSolarKva, solarCapacity, p
               {(efficiency * 100).toFixed(1)}% system efficiency
             </Badge>
           </CardTitle>
-          <ReportToggle
-            id="pv-config-dcac"
-            segmentType="dcac_comparison"
-            label="DC/AC Analysis"
-            variant="button"
-          />
         </div>
         <CardDescription className="text-xs">
           Configure detailed system parameters (PVWatts-style)
