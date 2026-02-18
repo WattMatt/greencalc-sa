@@ -8,6 +8,8 @@ import {
   Loader2, 
   FileCheck, 
   History,
+  Download,
+  FileText,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -558,6 +560,28 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
                   <span className="text-xs">{proposalVersions.length} versions</span>
                 </div>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportPDF}
+                disabled={!simulationData || isExporting}
+              >
+                {isExporting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Export PDF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+                disabled={!simulationData}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Export Excel
+              </Button>
               {currentProposalId && existingProposal && (
                 <ShareLinkButton
                   proposalId={currentProposalId}

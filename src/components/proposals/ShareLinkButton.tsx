@@ -94,7 +94,7 @@ export function ShareLinkButton({
       <DialogTrigger asChild>
         <Button variant="outline" disabled={!canShare}>
           <Share2 className="mr-2 h-4 w-4" />
-          Share with Client
+          Share
         </Button>
       </DialogTrigger>
       <DialogContent>
