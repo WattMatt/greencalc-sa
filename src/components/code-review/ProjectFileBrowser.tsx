@@ -202,7 +202,7 @@ export const PROJECT_FILES: FileNode[] = [
           { name: "abacus-code-review/index.ts", type: "file", path: "supabase/functions/abacus-code-review/index.ts", language: "typescript" },
           { name: "ai-import-loadprofiles/index.ts", type: "file", path: "supabase/functions/ai-import-loadprofiles/index.ts", language: "typescript" },
           { name: "ai-import-sheet/index.ts", type: "file", path: "supabase/functions/ai-import-sheet/index.ts", language: "typescript" },
-          { name: "fetch-pnpscada/index.ts", type: "file", path: "supabase/functions/fetch-pnpscada/index.ts", language: "typescript" },
+          
           { name: "generate-proposal-narrative/index.ts", type: "file", path: "supabase/functions/generate-proposal-narrative/index.ts", language: "typescript" },
           { name: "process-tariff-file/index.ts", type: "file", path: "supabase/functions/process-tariff-file/index.ts", language: "typescript" },
           { name: "solcast-forecast/index.ts", type: "file", path: "supabase/functions/solcast-forecast/index.ts", language: "typescript" },
