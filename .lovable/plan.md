@@ -1,41 +1,40 @@
 
 
-## Separate Proposals and Monthly Reports Data
+## Separate Proposals and Monthly Reports Data (Alternative Approach)
 
 ### Problem
-Both the Proposals tab and Monthly Report tab currently query the same `proposals` table without any filter to distinguish between them, so all records appear in both tabs.
+The `document_type` column does not exist on the `proposals` table yet, and no filtering logic has been added to the code. Both tabs query the same data without distinction, so the existing "Version 1" proposal appears in the Monthly Report tab.
 
 ### Solution
-Add a `document_type` column to the `proposals` table to distinguish between `'proposal'` and `'monthly_report'` records. Then filter by this column in each tab's queries and set it appropriately when creating new records.
+Since the database migration tool was previously declined, we will take an alternative approach: add the `document_type` column and all filtering logic together in one go using the migration tool. This is the only way to add a column to the database -- there is no workaround for this step.
 
-### Database Migration
-Add a `document_type` text column to the `proposals` table with a default of `'proposal'` (so all existing records are automatically classified as proposals):
+### Step 1: Database Migration
+Add a `document_type` text column with a default of `'proposal'` so all existing records are automatically tagged as proposals:
 
 ```sql
-ALTER TABLE proposals ADD COLUMN document_type text NOT NULL DEFAULT 'proposal';
+ALTER TABLE public.proposals ADD COLUMN document_type text NOT NULL DEFAULT 'proposal';
 ```
 
-### Code Changes
+This is required -- without this column, there is no way to tell proposals apart from monthly reports.
 
-**1. `src/components/projects/ProposalManager.tsx`**
-- Add `.eq("document_type", "proposal")` to the query filter
+### Step 2: Code Changes
 
-**2. `src/components/projects/MonthlyReportManager.tsx`**
-- Add `.eq("document_type", "monthly_report")` to the query filter
-- Pass a `documentType="monthly_report"` prop to `ProposalWorkspaceInline`
+**`src/components/projects/MonthlyReportManager.tsx`**
+- Add `.eq("document_type", "monthly_report")` to the query so only monthly reports appear
 
-**3. `src/components/proposals/ProposalWorkspaceInline.tsx`**
-- Accept a new optional `documentType` prop (default: `'proposal'`)
-- Add `.eq("document_type", documentType)` to the version list query
+**`src/components/projects/ProposalManager.tsx`**
+- Add `.eq("document_type", "proposal")` to the query so only proposals appear
+
+**`src/components/proposals/ProposalWorkspaceInline.tsx`**
+- Add an optional `documentType` prop (default: `'proposal'`)
 - Include `document_type: documentType` in the insert call when creating new records
-- Update toast messages to reflect the document type ("Monthly report saved" vs "Proposal saved")
-- Update the `queryClient.invalidateQueries` calls to also invalidate `project-monthly-reports` when appropriate
+- Add `.eq("document_type", documentType)` to the version list query
+- Update toast messages dynamically ("Monthly report saved" vs "Proposal saved")
+- Invalidate `project-monthly-reports` query key when `documentType` is `'monthly_report'`
 
-**4. `src/pages/ProjectDetail.tsx`**
-- Update the proposal count query (used for tab status) to filter by `document_type = 'proposal'` so monthly reports don't inflate the proposals count
+**`src/components/projects/MonthlyReportManager.tsx`**
+- Pass `documentType="monthly_report"` to `ProposalWorkspaceInline`
 
-### Summary of Flow
-- Proposals tab queries with `document_type = 'proposal'`, creates with `document_type = 'proposal'`
-- Monthly Report tab queries with `document_type = 'monthly_report'`, creates with `document_type = 'monthly_report'`
-- Existing records default to `'proposal'` so nothing breaks
+### Why the Migration is Necessary
+There is no code-only way to separate these records. They share the same table and the same `project_id`. Adding a discriminator column is the simplest and cleanest approach. The default value of `'proposal'` ensures all existing records stay in the Proposals tab and the Monthly Report tab starts empty.
 
