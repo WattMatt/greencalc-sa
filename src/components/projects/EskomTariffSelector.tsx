@@ -108,15 +108,47 @@ export function EskomTariffSelector({
     queryKey: ["eskom-tariffs", municipalityId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("tariffs")
+        .from("tariff_plans")
         .select(`
           *,
           tariff_rates(*)
         `)
         .eq("municipality_id", municipalityId)
+        .eq("is_redundant", false)
         .order("name");
       if (error) throw error;
-      return data as Tariff[];
+      // Map to legacy Tariff interface
+      return (data || []).map((t: any) => {
+        const rates = t.tariff_rates || [];
+        const basicRate = rates.find((r: any) => r.charge === 'basic');
+        const demandRate = rates.find((r: any) => r.charge === 'demand');
+        const networkRate = rates.find((r: any) => r.charge === 'network_access');
+        const reactiveRate = rates.find((r: any) => r.charge === 'reactive_energy');
+        const adminRate = rates.find((r: any) => r.charge === 'admin');
+        const serviceRate = rates.find((r: any) => r.charge === 'service');
+        return {
+          id: t.id,
+          name: t.name,
+          tariff_type: t.structure === 'time_of_use' ? 'TOU' : t.structure === 'inclining_block' ? 'IBT' : 'Fixed',
+          tariff_family: t.scale_code || null,
+          transmission_zone: null,
+          voltage_level: t.voltage ? (t.voltage === 'low' ? 'LV' : t.voltage === 'medium' ? 'MV' : 'HV') : null,
+          fixed_monthly_charge: basicRate?.amount || null,
+          demand_charge_per_kva: demandRate?.amount || null,
+          generation_capacity_charge: null,
+          network_access_charge: networkRate?.amount || null,
+          reactive_energy_charge: reactiveRate?.amount || null,
+          administration_charge_per_day: adminRate?.amount || null,
+          service_charge_per_day: serviceRate?.amount || null,
+          legacy_charge_per_kwh: null,
+          tariff_rates: rates.filter((r: any) => r.charge === 'energy').map((r: any) => ({
+            id: r.id,
+            season: r.season === 'all' ? 'All Year' : r.season === 'high' ? 'High/Winter' : 'Low/Summer',
+            time_of_use: r.tou === 'all' ? 'Any' : r.tou === 'peak' ? 'Peak' : r.tou === 'standard' ? 'Standard' : 'Off-Peak',
+            rate_per_kwh: r.amount / 100, // Convert c/kWh to R/kWh if needed
+          })),
+        } as Tariff;
+      });
     },
     enabled: !!municipalityId,
   });

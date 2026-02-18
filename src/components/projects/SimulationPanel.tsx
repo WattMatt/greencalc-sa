@@ -450,9 +450,15 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       const { data, error } = await supabase
         .from("tariff_rates")
         .select("*")
-        .eq("tariff_id", project.tariff_id);
+        .eq("tariff_plan_id", project.tariff_id);
       if (error) throw error;
-      return data;
+      // Map new schema to legacy interface expected by downstream code
+      return (data || []).map((r: any) => ({
+        ...r,
+        rate_per_kwh: r.charge === 'energy' ? r.amount : 0,
+        time_of_use: r.tou === 'all' ? 'Any' : r.tou === 'peak' ? 'Peak' : r.tou === 'standard' ? 'Standard' : 'Off-Peak',
+        season: r.season === 'all' ? 'All Year' : r.season === 'high' ? 'High/Winter' : 'Low/Summer',
+      }));
     },
     enabled: !!project.tariff_id,
   });
@@ -460,13 +466,28 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const { data: tariff } = useQuery({
     queryKey: ["tariff", project.tariff_id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tariffs")
+      const { data: plan, error } = await supabase
+        .from("tariff_plans")
         .select("*")
         .eq("id", project.tariff_id)
         .single();
       if (error) throw error;
-      return data;
+      // Also fetch rates to extract fixed charges
+      const { data: rates } = await supabase
+        .from("tariff_rates")
+        .select("*")
+        .eq("tariff_plan_id", project.tariff_id);
+      const basicCharge = (rates || []).find((r: any) => r.charge === 'basic')?.amount || 0;
+      const demandCharge = (rates || []).find((r: any) => r.charge === 'demand')?.amount || 0;
+      const networkCharge = (rates || []).find((r: any) => r.charge === 'network_access')?.amount || 0;
+      return {
+        ...plan,
+        fixed_monthly_charge: basicCharge,
+        demand_charge_per_kva: demandCharge,
+        network_access_charge: networkCharge,
+        legacy_charge_per_kwh: 0,
+        tariff_type: (plan as any)?.structure || 'flat',
+      };
     },
     enabled: !!project.tariff_id,
   });
