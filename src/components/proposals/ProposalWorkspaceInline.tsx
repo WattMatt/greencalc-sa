@@ -53,7 +53,14 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
   const [selectedSimulationId, setSelectedSimulationId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<'profile' | 'sandbox' | null>(null);
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null);
-  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>(() => getAllContentBlocks());
+  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>(() => {
+    // Start with all blocks, but disable cross-category blocks by default
+    return getAllContentBlocks().map(block => {
+      if (block.category === 'general') return block;
+      if (block.category === documentType) return block;
+      return { ...block, enabled: false };
+    });
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [aiNarratives, setAiNarratives] = useState<Record<string, { narrative: string; keyHighlights?: string[] }>>({});

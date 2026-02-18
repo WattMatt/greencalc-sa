@@ -73,11 +73,12 @@ export function ProposalSidebar({
   const [activeTab, setActiveTab] = useState("content");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const [blockFilter, setBlockFilter] = useState<'all' | 'proposal' | 'monthly_report'>(documentType);
+  const [blockFilter, setBlockFilter] = useState<'all' | 'proposal' | 'monthly_report' | 'general'>(documentType);
 
   // Filter blocks based on selected filter
   const filteredBlocks = contentBlocks.filter(b => {
     if (blockFilter === 'all') return true;
+    if (blockFilter === 'general') return b.category === 'general';
     return b.category === 'general' || b.category === blockFilter;
   });
   const sortedBlocks = [...filteredBlocks].sort((a, b) => a.order - b.order);
@@ -188,14 +189,14 @@ export function ProposalSidebar({
                 size="sm"
                 className="w-full text-xs h-7 mb-3 justify-between"
                 onClick={() => {
-                  const cycle: Array<'all' | 'proposal' | 'monthly_report'> = [documentType, 'all', documentType === 'proposal' ? 'monthly_report' : 'proposal'];
+                  const cycle: Array<'all' | 'proposal' | 'monthly_report' | 'general'> = ['all', 'general', 'proposal', 'monthly_report'];
                   const currentIndex = cycle.indexOf(blockFilter);
                   const nextIndex = (currentIndex + 1) % cycle.length;
                   setBlockFilter(cycle[nextIndex]);
                 }}
               >
                 <span>
-                  {blockFilter === 'all' ? 'All Sections' : blockFilter === 'proposal' ? 'Proposal' : 'Monthly Report'}
+                  {blockFilter === 'all' ? 'All Sections' : blockFilter === 'general' ? 'General' : blockFilter === 'proposal' ? 'Proposal' : 'Monthly Report'}
                 </span>
                 <RefreshCw className="h-3 w-3 ml-1" />
               </Button>
