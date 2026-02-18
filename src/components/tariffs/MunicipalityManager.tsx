@@ -38,7 +38,7 @@ export function MunicipalityManager() {
   });
 
   const addMunicipality = useMutation({
-    mutationFn: async (data: { name: string; province_id: string; increase_percentage?: number }) => {
+    mutationFn: async (data: { name: string; province_id: string; nersa_increase_pct?: number }) => {
       const { error } = await supabase.from("municipalities").insert(data);
       if (error) throw error;
     },
@@ -74,7 +74,7 @@ export function MunicipalityManager() {
       addMunicipality.mutate({
         name: newMunicipality.trim(),
         province_id: selectedProvince,
-        increase_percentage: increasePercentage ? parseFloat(increasePercentage) : undefined,
+        nersa_increase_pct: increasePercentage ? parseFloat(increasePercentage) : undefined,
       });
     }
   };
