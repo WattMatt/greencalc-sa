@@ -16,6 +16,7 @@ import { ConsumptionProfile, ProfileType, RESIDENTIAL_PROFILE } from "@/componen
 import { TariffComparison } from "@/components/calculator/TariffComparison";
 import { useTOUCalculation } from "@/hooks/useTOUCalculation";
 import { TOUClockDiagram, TOUClockLegend } from "@/components/tariffs/TOUClockDiagram";
+import type { TOUPeriod } from "@/components/tariffs/TOUPeriodBuilder";
 
 const KWP_TO_KWH_MONTHLY = 140;
 
@@ -76,9 +77,15 @@ export default function Calculator() {
   const { data: categories } = useQuery({
     queryKey: ["tariff-categories"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("tariff_categories").select("*").order("name");
-      if (error) throw error;
-      return data;
+      // Categories are now enum values in tariff_plans, return static list
+      return [
+        { id: "domestic", name: "Domestic" },
+        { id: "commercial", name: "Commercial" },
+        { id: "industrial", name: "Industrial" },
+        { id: "agricultural", name: "Agricultural" },
+        { id: "domestic_indigent", name: "Domestic Indigent" },
+        { id: "bulk_reseller", name: "Bulk Reseller" },
+      ];
     },
   });
 
@@ -114,6 +121,21 @@ export default function Calculator() {
 
   const tariffRates = (selectedTariff?.rates as TariffRate[]) || [];
   
+  // Map tariff_rates to TOUPeriod format for the TOU calculation hook
+  const mappedTouPeriods: TOUPeriod[] = useMemo(() => {
+    if (!touPeriods) return [];
+    return (touPeriods as any[]).map((r: any, i: number) => ({
+      id: r.id || `tou-${i}`,
+      season: r.season || "all",
+      day_type: "Weekday",
+      time_of_use: r.tou || "peak",
+      start_hour: 0,
+      end_hour: 24,
+      rate_per_kwh: r.amount || 0,
+      demand_charge_per_kva: r.charge === "demand" ? r.amount : undefined,
+    }));
+  }, [touPeriods]);
+
   // Check if this is a High/Low Demand tariff
   const hasHighLowDemand = tariffRates.some(r => 
     r.time_of_use === "High Demand" || r.time_of_use === "Low Demand"
@@ -155,9 +177,9 @@ export default function Calculator() {
     monthlyConsumption: parseFloat(monthlyConsumption) || 0,
     tariffType: selectedTariff?.tariff_type || "Fixed",
     rates: tariffRates,
-    touPeriods: touPeriods || [],
-    fixedMonthlyCharge: selectedTariff?.fixed_monthly_charge || 0,
-    demandChargePerKva: selectedTariff?.demand_charge_per_kva || 0,
+    touPeriods: mappedTouPeriods,
+    fixedMonthlyCharge: (selectedTariff as any)?.fixed_monthly_charge || 0,
+    demandChargePerKva: (selectedTariff as any)?.demand_charge_per_kva || 0,
     maxDemand: parseFloat(maxDemand) || 0,
     profileType,
     customProfile,
@@ -174,9 +196,9 @@ export default function Calculator() {
     monthlyConsumption: newConsumption,
     tariffType: selectedTariff?.tariff_type || "Fixed",
     rates: tariffRates,
-    touPeriods: touPeriods || [],
-    fixedMonthlyCharge: selectedTariff?.fixed_monthly_charge || 0,
-    demandChargePerKva: selectedTariff?.demand_charge_per_kva || 0,
+    touPeriods: mappedTouPeriods,
+    fixedMonthlyCharge: (selectedTariff as any)?.fixed_monthly_charge || 0,
+    demandChargePerKva: (selectedTariff as any)?.demand_charge_per_kva || 0,
     maxDemand: parseFloat(maxDemand) || 0,
     profileType,
     customProfile,
@@ -399,24 +421,24 @@ export default function Calculator() {
                       <TOUClockDiagram
                         title="High Demand (Jun-Aug)"
                         periods={touPeriods
-                          .filter(p => p.season === "High/Winter")
-                          .map(p => ({
-                            day_type: p.day_type as "Weekday" | "Saturday" | "Sunday",
-                            time_of_use: p.time_of_use as "Peak" | "Standard" | "Off-Peak",
-                            start_hour: p.start_hour,
-                            end_hour: p.end_hour,
+                          .filter((p: any) => p.season === "high")
+                          .map((p: any) => ({
+                            day_type: (p.day_type || "Weekday") as "Weekday" | "Saturday" | "Sunday",
+                            time_of_use: (p.time_of_use || "Peak") as "Peak" | "Standard" | "Off-Peak",
+                            start_hour: p.start_hour || 0,
+                            end_hour: p.end_hour || 24,
                           }))}
                         size={200}
                       />
                       <TOUClockDiagram
                         title="Low Demand (Sep-May)"
                         periods={touPeriods
-                          .filter(p => p.season === "Low/Summer")
-                          .map(p => ({
-                            day_type: p.day_type as "Weekday" | "Saturday" | "Sunday",
-                            time_of_use: p.time_of_use as "Peak" | "Standard" | "Off-Peak",
-                            start_hour: p.start_hour,
-                            end_hour: p.end_hour,
+                          .filter((p: any) => p.season === "low")
+                          .map((p: any) => ({
+                            day_type: (p.day_type || "Weekday") as "Weekday" | "Saturday" | "Sunday",
+                            time_of_use: (p.time_of_use || "Peak") as "Peak" | "Standard" | "Off-Peak",
+                            start_hour: p.start_hour || 0,
+                            end_hour: p.end_hour || 24,
                           }))}
                         size={200}
                       />

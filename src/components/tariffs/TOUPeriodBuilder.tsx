@@ -82,8 +82,8 @@ export function TOUPeriodBuilder({ periods, onChange }: TOUPeriodBuilderProps) {
     onChange([...periods, ...newPeriods]);
   };
 
-  const highSeasonPeriods = periods.filter((p) => p.season === "high" || p.season === ("High/Winter" as any));
-  const lowSeasonPeriods = periods.filter((p) => p.season === "low" || p.season === ("Low/Summer" as any));
+  const highSeasonPeriods = periods.filter((p) => p.season === "high");
+  const lowSeasonPeriods = periods.filter((p) => p.season === "low");
 
   const renderPeriodRow = (period: TOUPeriod) => (
     <div
@@ -216,12 +216,12 @@ export function TOUPeriodBuilder({ periods, onChange }: TOUPeriodBuilderProps) {
             <CardDescription className="text-sm">{description}</CardDescription>
           </div>
           <div className="flex gap-2">
-            {season === "Low/Summer" && highSeasonPeriods.length > 0 && lowSeasonPeriods.length === 0 && (
+            {season === "low" && highSeasonPeriods.length > 0 && lowSeasonPeriods.length === 0 && (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => duplicatePeriodForSeason("High/Winter", "Low/Summer")}
+                onClick={() => duplicatePeriodForSeason("high", "low")}
               >
                 Copy from High Season
               </Button>
@@ -260,14 +260,14 @@ export function TOUPeriodBuilder({ periods, onChange }: TOUPeriodBuilderProps) {
       </div>
 
       {renderSeasonSection(
-        "high" as any,
+        "high",
         "High-Demand Season (June - August)",
         "Winter months with higher electricity demand",
         highSeasonPeriods
       )}
 
       {renderSeasonSection(
-        "low" as any,
+        "low",
         "Low-Demand Season (September - May)",
         "Summer months with lower electricity demand",
         lowSeasonPeriods
