@@ -948,11 +948,11 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                                       // Load rates if not already loaded
                                       let rates = tariffRates[tariff.id];
                                       if (!rates) {
-                                        const { data } = await supabase
+                                      const { data } = await supabase
                                           .from("tariff_rates")
                                           .select("*")
-                                          .eq("tariff_id", tariff.id);
-                                        rates = data || [];
+                                          .eq("tariff_plan_id", tariff.id);
+                                        rates = (data || []) as any;
                                         setTariffRates(prev => ({ ...prev, [tariff.id]: rates }));
                                       }
                                       setEditDialogTariff(tariff);
