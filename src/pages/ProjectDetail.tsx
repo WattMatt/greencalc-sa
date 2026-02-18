@@ -383,8 +383,8 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
                 onChange={(e) => handleParamChange("location", e.target.value)}
                 onBlur={handleFieldBlur}
                 placeholder={
-                  (project as any).tariffs?.municipalities?.name && (project as any).tariffs?.municipalities?.provinces?.name
-                    ? `${(project as any).tariffs.municipalities.provinces.name}, ${(project as any).tariffs.municipalities.name}`
+                  (project as any).tariff_plans?.municipalities?.name && (project as any).tariff_plans?.municipalities?.provinces?.name
+                    ? `${(project as any).tariff_plans.municipalities.provinces.name}, ${(project as any).tariff_plans.municipalities.name}`
                     : "Enter location"
                 }
                 className="h-8"
@@ -792,7 +792,7 @@ export default function ProjectDetail() {
         .from("projects")
         .select(`
           *,
-          tariffs(*, municipality_id, municipalities(name, province_id, provinces(name)))
+          tariff_plans(*, municipality_id, municipalities(name, province_id, provinces(name)))
         `)
         .eq("id", id)
         .single();

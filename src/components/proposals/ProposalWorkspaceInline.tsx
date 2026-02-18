@@ -107,7 +107,7 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("*, tariffs(id, name)")
+        .select("*, tariff_plans(id, name)")
         .eq("id", projectId)
         .single();
       if (error) throw error;
@@ -116,7 +116,7 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
     enabled: !!projectId,
   });
 
-  const projectTariffName = (project as any)?.tariffs?.name || null;
+  const projectTariffName = (project as any)?.tariff_plans?.name || null;
 
   const { data: simulations = [] } = useQuery({
     queryKey: ["project-simulations", projectId],

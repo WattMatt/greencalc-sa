@@ -1107,7 +1107,15 @@ export type Database = {
           total_area_sqm?: number | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "projects_tariff_id_fkey"
+            columns: ["tariff_id"]
+            isOneToOne: false
+            referencedRelation: "tariff_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       proposals: {
         Row: {
