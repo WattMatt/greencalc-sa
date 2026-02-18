@@ -1,110 +1,73 @@
 
-## Update AI Tariff Parsing Engine to NERSA Schema
+
+## Fix: AI Tariff PDF Parsing Truncation Issue
 
 ### Problem
+The Limpopo Province PDF contains **14 municipalities** across 19 pages, but the parsing engine only extracts 5. The root cause is **aggressive text truncation** in the edge function:
 
-The `process-tariff-file` edge function (1,900+ lines) is the AI-powered engine that extracts tariff data from uploaded Excel/PDF files. It currently writes to **tables and columns that no longer exist** after the NERSA schema migration:
+- The PDF vision extraction returns all text successfully
+- But the analysis prompt truncates to `extractedText.slice(0, 8000)` characters (line 211)
+- The municipality extraction prompt truncates to `extractedText.slice(0, 10000)` characters (line 262)
+- 10,000 characters only covers the first ~5 municipalities out of 14
 
-| What it writes to | Status |
-|---|---|
-| `tariffs` table | Does not exist (now `tariff_plans`) |
-| `tariff_categories` table | Does not exist (category is now an enum on `tariff_plans`) |
-| `extraction_runs` table | Does not exist |
-| `eskom_batch_status` table | Does not exist |
-| `municipalities.source_file_path` | Column removed |
-| `municipalities.extraction_status` | Column removed |
-| `municipalities.ai_confidence` | Column removed |
-| `municipalities.total_tariffs` | Column removed |
-| `municipalities.reprise_count` | Column removed |
-| `tariff_rates.tariff_id` | Now `tariff_plan_id` |
-| `tariff_rates.rate_per_kwh` | Now `amount` |
-| `tariff_rates.season` (free text) | Now enum: `high`, `low`, `all` |
-| `tariff_rates.time_of_use` (free text) | Now enum: `peak`, `standard`, `off_peak`, `all` |
-| `tariff_rates.block_start_kwh` | Now `block_min_kwh` |
-| `tariff_rates.block_end_kwh` | Now `block_max_kwh` |
+### All 14 Municipalities in the PDF
+1. BAPHALABORWA
+2. BELABELA
+3. BLOUBERG
+4. ELIAS MOTSOALEDI
+5. EPHRAIM MOGALE
+6. GREATER LETABA
+7. GREATER TZANEEN
+8. LEPHALALE
+9. MAKHADO
+10. MODIMOLLE-MOOKGOPHOONG
+11. MOGALAKWENA
+12. MOLEMOLE
+13. MUSINA
+14. POLOKWANE
+15. THABAZIMBI
 
-The `FileUploadImport.tsx` UI component also uses old interfaces/field names in its preview and edit flows.
+### Solution
 
-### Current NERSA Schema (target)
+**File: `supabase/functions/process-tariff-file/index.ts`**
 
-```text
-tariff_plans:
-  id, municipality_id, name, category (enum), structure (enum),
-  voltage (enum), phase, scale_code, min_amps, max_amps,
-  min_kva, max_kva, is_redundant, is_recommended, description
+1. **Increase text limits for analysis and municipality extraction prompts**
+   - Analysis prompt: increase from `slice(0, 8000)` to `slice(0, 50000)` -- Gemini Flash supports 1M token context
+   - Municipality extraction prompt: increase from `slice(0, 10000)` to `slice(0, 50000)`
+   - These are lightweight extraction tasks; the model can handle much larger inputs
 
-tariff_rates:
-  id, tariff_plan_id, charge (enum: energy/basic/demand/reactive/...),
-  season (enum: high/low/all), tou (enum: peak/standard/off_peak/all),
-  block_number, block_min_kwh, block_max_kwh,
-  consumption_threshold_kwh, is_above_threshold,
-  amount, unit, notes
+2. **Improve the municipality extraction strategy for PDFs**
+   - Instead of sending the full text to AI and asking it to find municipality names, use a two-pass approach:
+     - First pass: Use a regex/heuristic to find lines matching the pattern `MUNICIPALITY_NAME - XX.XX%` or `MUNICIPALITY_NAME XX.XX%` (the consistent format in SA tariff PDFs)
+     - Fall back to the AI extraction if the regex finds nothing
+   - This is faster, cheaper, and more reliable than relying on AI for a simple pattern match
 
-municipalities:
-  id, province_id, name, nersa_increase_pct, financial_year
+3. **Add the sampleText field to include more data**
+   - Increase `extractedText.slice(0, 2000)` on the response sampleText to `slice(0, 5000)` so the UI preview shows more context
+
+### Technical Details
+
+The regex pattern for SA tariff PDFs would be:
+```
+/^([A-Z][A-Z\s\-]+?)\s*[-–]\s*\d+[\.,]\d+%/gm
 ```
 
-### Phase 1: Create Supporting Tables
+This matches lines like:
+- `BAPHALABORWA - 14.59%`
+- `MODIMOLLE-MOOKGOPHOONG LIM 368 - 14.59%`
+- `MUSINA -14.59%`
+- `POLOKWANE 14.59%` (no dash variant -- needs a second pattern)
 
-Create two lightweight tables that were removed but are needed for extraction tracking:
+For the no-dash variant:
+```
+/^([A-Z][A-Z\s\-]+?)\s+\d+[\.,]\d+%/gm
+```
 
-**`extraction_runs`** - Tracks each AI extraction pass (useful for auditing and debugging):
-- `id`, `municipality_id`, `run_type` (extraction/reprise), `tariffs_found`, `tariffs_inserted`, `tariffs_updated`, `tariffs_skipped`, `ai_confidence`, `ai_analysis`, `status`, `completed_at`, `created_at`
-
-**`eskom_batch_status`** - Tracks Eskom's 15-batch extraction progress:
-- `id`, `municipality_id`, `batch_index`, `batch_name`, `status`, `tariffs_extracted`, `created_at`, `updated_at`
-
-### Phase 2: Update Edge Function - Database Writes
-
-Rewrite the database interaction layer in `process-tariff-file/index.ts`:
-
-1. **Remove all `tariff_categories` references** -- category is now a string enum on `tariff_plans` directly
-2. **Replace `tariffs` table writes with `tariff_plans`**:
-   - `tariff_type` -> `structure` (map: Fixed->flat, IBT->inclining_block, TOU->time_of_use)
-   - `customer_category`/`category` -> `category` enum (map: Domestic->domestic, Commercial->commercial, etc.)
-   - `voltage_level` -> `voltage` enum
-   - `tariff_family` -> `scale_code`
-   - `fixed_monthly_charge` -> stored as a `tariff_rates` row with `charge='basic'`
-   - `demand_charge_per_kva` -> stored as a `tariff_rates` row with `charge='demand'`
-   - Remove unbundled Eskom-specific flat columns (they become individual rate rows with appropriate `charge` types)
-3. **Replace `tariff_rates` writes**:
-   - `tariff_id` -> `tariff_plan_id`
-   - `rate_per_kwh` -> `amount`
-   - `season`: "All Year" -> `all`, "High/Winter" -> `high`, "Low/Summer" -> `low`
-   - `time_of_use`: "Any" -> `all`, "Peak" -> `peak`, "Standard" -> `standard`, "Off-Peak" -> `off_peak`
-   - `block_start_kwh` -> `block_min_kwh`
-   - `block_end_kwh` -> `block_max_kwh`
-   - Add `charge` field (default `energy`)
-   - Add `unit` field (e.g. `c/kWh` or `R/kWh`)
-4. **Remove municipality column writes** for columns that no longer exist (`source_file_path`, `extraction_status`, `ai_confidence`, `total_tariffs`, `reprise_count`, etc.)
-5. **Update existing tariff queries** from `tariffs` to `tariff_plans` with correct column names
-6. **Update reprise phase** (Phase 4) with same table/column mappings
-
-### Phase 3: Update AI Tool Schema
-
-Update the `save_tariffs` and `report_corrections` tool definitions sent to the AI model:
-- Change `tariff_type` enum descriptions to map to structure values
-- Update rate field names to match new schema
-- Keep the AI extraction prompt logic intact (it's well-tuned for SA tariff documents)
-- The AI still extracts in its natural format; the edge function maps to the NERSA schema before writing
-
-### Phase 4: Update FileUploadImport.tsx
-
-1. **Update `TariffRate` interface**: `rate_per_kwh` -> `amount`, `time_of_use` -> `tou`, `block_start_kwh` -> `block_min_kwh`, `block_end_kwh` -> `block_max_kwh`
-2. **Update `ExtractedTariffPreview` interface**: `tariff_type` -> `structure`, remove `category: { name }` (now a string enum), remove `is_prepaid`, `fixed_monthly_charge`, `demand_charge_per_kva` (now derived from rates)
-3. **Update preview query** (line ~383): Already partially updated but verify field names match
-4. **Update `saveEditedTariff`** (line ~449): Write to `tariff_plans` with correct columns, write rates with `charge`, `amount`, `unit` fields
-5. **Remove `municipalities.source_file_path`** references in extract-municipalities phase
-
-### Phase 5: Deploy and Test
-
-- Deploy the updated edge function
-- Test with a sample Excel file upload to verify extraction writes to correct tables
+Both patterns will be tried, and the union of results used. The AI fallback remains for non-standard formats.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| Database migration | Create `extraction_runs` and `eskom_batch_status` tables |
-| `supabase/functions/process-tariff-file/index.ts` | Full rewrite of DB interaction layer (~400 lines) |
-| `src/components/tariffs/FileUploadImport.tsx` | Update interfaces, preview query, and save mutation |
+| `supabase/functions/process-tariff-file/index.ts` | Increase text slice limits, add regex-based municipality detection for PDFs, increase sampleText limit |
+
