@@ -16,7 +16,7 @@ import {
 import { ContentBlockToggle } from "./ContentBlockToggle";
 import { BrandingForm } from "./BrandingForm";
 import { TemplateSelector } from "./templates/TemplateSelector";
-import { ContentBlock, ProposalBranding, SimulationData, Proposal, ContentBlockId } from "./types";
+import { ContentBlock, ProposalBranding, SimulationData, Proposal, ContentBlockId, ContentBlockCategory } from "./types";
 import { ProposalTemplateId } from "./templates/types";
 
 // Mapping from ContentBlockId to edge function sectionType
@@ -72,11 +72,13 @@ export function ProposalSidebar({
   const [activeTab, setActiveTab] = useState("content");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [blockFilter, setBlockFilter] = useState<'all' | 'proposal' | 'monthly_report'>(documentType);
 
-  // Filter blocks to show only general + current document type
-  const filteredBlocks = contentBlocks.filter(
-    b => b.category === 'general' || b.category === documentType
-  );
+  // Filter blocks based on selected filter
+  const filteredBlocks = contentBlocks.filter(b => {
+    if (blockFilter === 'all') return true;
+    return b.category === 'general' || b.category === blockFilter;
+  });
   const sortedBlocks = [...filteredBlocks].sort((a, b) => a.order - b.order);
 
   const handleBlockToggle = (blockId: string, enabled: boolean) => {
@@ -183,6 +185,33 @@ export function ProposalSidebar({
         <ScrollArea className="flex-1 min-h-0">
           <div className="p-3">
             <TabsContent value="content" className="mt-0 space-y-2">
+              {/* Block category filter */}
+              <div className="flex gap-1 mb-3">
+                <Button
+                  variant={blockFilter === documentType ? 'default' : 'outline'}
+                  size="sm"
+                  className="text-xs h-7 flex-1"
+                  onClick={() => setBlockFilter(documentType)}
+                >
+                  {documentType === 'monthly_report' ? 'Monthly Report' : 'Proposal'}
+                </Button>
+                <Button
+                  variant={blockFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  className="text-xs h-7 flex-1"
+                  onClick={() => setBlockFilter('all')}
+                >
+                  All
+                </Button>
+                <Button
+                  variant={blockFilter === (documentType === 'proposal' ? 'monthly_report' : 'proposal') ? 'default' : 'outline'}
+                  size="sm"
+                  className="text-xs h-7 flex-1"
+                  onClick={() => setBlockFilter(documentType === 'proposal' ? 'monthly_report' : 'proposal')}
+                >
+                  {documentType === 'proposal' ? 'Monthly Report' : 'Proposal'}
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground mb-3">
                 Toggle sections and generate AI narratives for your proposal
               </p>
