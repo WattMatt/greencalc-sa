@@ -74,6 +74,10 @@ export function generateBlockContent(
       return data.monthlyReportData
         ? monthlySnippets.financialYieldReport(data.monthlyReportData)
         : monthlySnippets.financialYieldReportPlaceholder();
+    case "performanceLog":
+      return data.monthlyReportData
+        ? monthlySnippets.performanceLog(data.monthlyReportData)
+        : monthlySnippets.performanceLogPlaceholder();
     default:
       return `\\section{${snippets.esc(blockId)}}\n\nContent for this section is not yet available.\n`;
   }

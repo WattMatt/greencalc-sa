@@ -135,7 +135,8 @@ export type ContentBlockId =
   | 'executiveSummary'
   | 'dailyLog'
   | 'operationalDowntime'
-  | 'financialYield';
+  | 'financialYield'
+  | 'performanceLog';
 
 export interface ContentBlock {
   id: ContentBlockId;
@@ -172,6 +173,7 @@ export const DEFAULT_CONTENT_BLOCKS: ContentBlock[] = [
   { id: 'dailyLog', label: 'Daily Performance Log', description: 'Day-by-day yield, metered, downtime, theoretical, and surplus/deficit', enabled: true, order: 3, category: 'monthly_report' },
   { id: 'operationalDowntime', label: 'Operational Downtime', description: 'Downtime details with tie-in breakdowns and comments', enabled: true, order: 4, category: 'monthly_report' },
   { id: 'financialYield', label: 'Financial Yield Report', description: 'Daily financial yield with guarantee vs actual in Rands', enabled: true, order: 5, category: 'monthly_report' },
+  { id: 'performanceLog', label: 'Performance Log', description: 'Per-source daily yield guarantee vs metered generation with performance indicators', enabled: true, order: 6, category: 'monthly_report' },
   
   // General blocks (end)
   { id: 'signature', label: 'Signature Block', description: 'Authorization signatures', enabled: true, order: 99, category: 'general' },
