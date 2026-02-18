@@ -1,96 +1,110 @@
 
-
-## Align Tariff Management Dashboard with NERSA Database Schema
+## Update AI Tariff Parsing Engine to NERSA Schema
 
 ### Problem
 
-The database was migrated to a new NERSA-compliant schema (`tariff_plans` + `tariff_rates` with enums), but 4 out of 7 tariff UI components still reference old column names that no longer exist. Additionally, all 4 core tables are empty (0 provinces, 0 municipalities, 0 tariff_plans, 0 tariff_rates), so the dropdowns show nothing.
+The `process-tariff-file` edge function (1,900+ lines) is the AI-powered engine that extracts tariff data from uploaded Excel/PDF files. It currently writes to **tables and columns that no longer exist** after the NERSA schema migration:
 
-### Phase 1: Re-seed Provinces
+| What it writes to | Status |
+|---|---|
+| `tariffs` table | Does not exist (now `tariff_plans`) |
+| `tariff_categories` table | Does not exist (category is now an enum on `tariff_plans`) |
+| `extraction_runs` table | Does not exist |
+| `eskom_batch_status` table | Does not exist |
+| `municipalities.source_file_path` | Column removed |
+| `municipalities.extraction_status` | Column removed |
+| `municipalities.ai_confidence` | Column removed |
+| `municipalities.total_tariffs` | Column removed |
+| `municipalities.reprise_count` | Column removed |
+| `tariff_rates.tariff_id` | Now `tariff_plan_id` |
+| `tariff_rates.rate_per_kwh` | Now `amount` |
+| `tariff_rates.season` (free text) | Now enum: `high`, `low`, `all` |
+| `tariff_rates.time_of_use` (free text) | Now enum: `peak`, `standard`, `off_peak`, `all` |
+| `tariff_rates.block_start_kwh` | Now `block_min_kwh` |
+| `tariff_rates.block_end_kwh` | Now `block_max_kwh` |
 
-Insert the 9 South African provinces + Eskom back into the `provinces` table so the province dropdown works immediately.
+The `FileUploadImport.tsx` UI component also uses old interfaces/field names in its preview and edit flows.
 
-### Phase 2: Update TariffList.tsx (the main tariff display)
+### Current NERSA Schema (target)
 
-**Current problem:** The `Tariff` and `TariffRate` interfaces reference ~20 fields that no longer exist in the database.
+```text
+tariff_plans:
+  id, municipality_id, name, category (enum), structure (enum),
+  voltage (enum), phase, scale_code, min_amps, max_amps,
+  min_kva, max_kva, is_redundant, is_recommended, description
 
-- Replace the `Tariff` interface to match `tariff_plans` columns: `category` (enum), `structure` (enum), `voltage`, `phase`, `scale_code`, `min_amps`, `max_amps`, `min_kva`, `max_kva`, `is_redundant`, `is_recommended`
-- Replace the `TariffRate` interface to match `tariff_rates` columns: `charge`, `season` (high/low/all), `tou` (peak/standard/off_peak/all), `amount`, `unit`, `block_number`, `block_min_kwh`, `block_max_kwh`
-- Remove references to `total_tariffs` and `source_file_path` on municipalities (these columns do not exist)
-- Update the query joins: `tariff_plans` -> `municipalities(name, province_id)` (no `category` relation -- category is now an enum field)
-- Update display logic: replace `tariff.tariff_type` with `tariff.structure`, `rate.rate_per_kwh` with `rate.amount`, `rate.time_of_use` with `rate.tou`, `tariff.fixed_monthly_charge` with a derived lookup from rates where `charge='basic'`
-- Update badges and labels to show the new enum values (e.g. `time_of_use` -> `TOU`, `flat` -> `Flat`)
+tariff_rates:
+  id, tariff_plan_id, charge (enum: energy/basic/demand/reactive/...),
+  season (enum: high/low/all), tou (enum: peak/standard/off_peak/all),
+  block_number, block_min_kwh, block_max_kwh,
+  consumption_threshold_kwh, is_above_threshold,
+  amount, unit, notes
 
-### Phase 3: Update TariffEditDialog.tsx
+municipalities:
+  id, province_id, name, nersa_increase_pct, financial_year
+```
 
-- Same interface alignment as TariffList
-- Update the save mutation to write `charge`, `season`, `tou`, `amount`, `unit` instead of old field names
-- Remove fields that no longer exist (`effective_from`, `effective_to`, `tariff_family`, `voltage_level`, etc.)
+### Phase 1: Create Supporting Tables
 
-### Phase 4: Update EskomTariffMatrix.tsx
+Create two lightweight tables that were removed but are needed for extraction tracking:
 
-- Align the `Tariff` and `TariffRate` interfaces to the new schema
-- Replace field references: `tariff_family` -> group by `scale_code` or `name` prefix, `voltage_level` -> `voltage`, `transmission_zone` -> removed, `rate_per_kwh` -> `amount`
+**`extraction_runs`** - Tracks each AI extraction pass (useful for auditing and debugging):
+- `id`, `municipality_id`, `run_type` (extraction/reprise), `tariffs_found`, `tariffs_inserted`, `tariffs_updated`, `tariffs_skipped`, `ai_confidence`, `ai_analysis`, `status`, `completed_at`, `created_at`
 
-### Phase 5: Update ProvinceFilesManager.tsx
+**`eskom_batch_status`** - Tracks Eskom's 15-batch extraction progress:
+- `id`, `municipality_id`, `batch_index`, `batch_name`, `status`, `tariffs_extracted`, `created_at`, `updated_at`
 
-- Remove references to `municipalities.status`, `municipalities.confidence`, `municipalities.source_file_path`, `municipalities.total_tariffs` (none of these columns exist)
-- Query municipality count per province from actual `municipalities` table
-- Query tariff count from `tariff_plans` grouped by municipality
+### Phase 2: Update Edge Function - Database Writes
 
-### Phase 6: Update MunicipalityManager.tsx (minor)
+Rewrite the database interaction layer in `process-tariff-file/index.ts`:
 
-- The `increase_percentage` field in the insert mutation should map to `nersa_increase_pct` (already correct in display but the insert may not match)
+1. **Remove all `tariff_categories` references** -- category is now a string enum on `tariff_plans` directly
+2. **Replace `tariffs` table writes with `tariff_plans`**:
+   - `tariff_type` -> `structure` (map: Fixed->flat, IBT->inclining_block, TOU->time_of_use)
+   - `customer_category`/`category` -> `category` enum (map: Domestic->domestic, Commercial->commercial, etc.)
+   - `voltage_level` -> `voltage` enum
+   - `tariff_family` -> `scale_code`
+   - `fixed_monthly_charge` -> stored as a `tariff_rates` row with `charge='basic'`
+   - `demand_charge_per_kva` -> stored as a `tariff_rates` row with `charge='demand'`
+   - Remove unbundled Eskom-specific flat columns (they become individual rate rows with appropriate `charge` types)
+3. **Replace `tariff_rates` writes**:
+   - `tariff_id` -> `tariff_plan_id`
+   - `rate_per_kwh` -> `amount`
+   - `season`: "All Year" -> `all`, "High/Winter" -> `high`, "Low/Summer" -> `low`
+   - `time_of_use`: "Any" -> `all`, "Peak" -> `peak`, "Standard" -> `standard`, "Off-Peak" -> `off_peak`
+   - `block_start_kwh` -> `block_min_kwh`
+   - `block_end_kwh` -> `block_max_kwh`
+   - Add `charge` field (default `energy`)
+   - Add `unit` field (e.g. `c/kWh` or `R/kWh`)
+4. **Remove municipality column writes** for columns that no longer exist (`source_file_path`, `extraction_status`, `ai_confidence`, `total_tariffs`, `reprise_count`, etc.)
+5. **Update existing tariff queries** from `tariffs` to `tariff_plans` with correct column names
+6. **Update reprise phase** (Phase 4) with same table/column mappings
+
+### Phase 3: Update AI Tool Schema
+
+Update the `save_tariffs` and `report_corrections` tool definitions sent to the AI model:
+- Change `tariff_type` enum descriptions to map to structure values
+- Update rate field names to match new schema
+- Keep the AI extraction prompt logic intact (it's well-tuned for SA tariff documents)
+- The AI still extracts in its natural format; the edge function maps to the NERSA schema before writing
+
+### Phase 4: Update FileUploadImport.tsx
+
+1. **Update `TariffRate` interface**: `rate_per_kwh` -> `amount`, `time_of_use` -> `tou`, `block_start_kwh` -> `block_min_kwh`, `block_end_kwh` -> `block_max_kwh`
+2. **Update `ExtractedTariffPreview` interface**: `tariff_type` -> `structure`, remove `category: { name }` (now a string enum), remove `is_prepaid`, `fixed_monthly_charge`, `demand_charge_per_kva` (now derived from rates)
+3. **Update preview query** (line ~383): Already partially updated but verify field names match
+4. **Update `saveEditedTariff`** (line ~449): Write to `tariff_plans` with correct columns, write rates with `charge`, `amount`, `unit` fields
+5. **Remove `municipalities.source_file_path`** references in extract-municipalities phase
+
+### Phase 5: Deploy and Test
+
+- Deploy the updated edge function
+- Test with a sample Excel file upload to verify extraction writes to correct tables
 
 ### Files Changed
 
 | File | Change |
-|------|--------|
-| Database migration | Re-seed 9 provinces + Eskom |
-| `src/components/tariffs/TariffList.tsx` | Full interface + query + display alignment |
-| `src/components/tariffs/TariffEditDialog.tsx` | Interface + save mutation alignment |
-| `src/components/tariffs/EskomTariffMatrix.tsx` | Interface alignment |
-| `src/components/tariffs/ProvinceFilesManager.tsx` | Remove non-existent column references |
-| `src/components/tariffs/MunicipalityManager.tsx` | Minor insert field fix |
-
-### What Stays Unchanged
-
-- `TariffBuilder.tsx` -- already writes to the new schema correctly
-- `TOUReference.tsx`, `NERSAGuidelines.tsx`, `LoadSheddingStages.tsx` -- these are reference/static content, no database queries
-- `MunicipalityMap.tsx` -- uses basic municipality fields that still exist
-- `src/lib/tariffCalculations.ts` -- calculation engine uses its own interfaces, not database types directly
-
-### Technical Details
-
-**Old field -> New field mapping:**
-
-```text
-tariff_plans:
-  tariff_type        -> structure (enum: flat, time_of_use, inclining_block)
-  tariff_family      -> scale_code (text)
-  voltage_level      -> voltage (enum: LV, MV, HV)
-  customer_category  -> category (enum: domestic, commercial, industrial, agriculture, street_lighting)
-  phase_type         -> phase (text)
-  amperage_limit     -> min_amps / max_amps (numeric)
-  fixed_monthly_charge    -> (derived from tariff_rates where charge='basic')
-  demand_charge_per_kva   -> (derived from tariff_rates where charge='demand')
-  transmission_zone       -> REMOVED
-  is_prepaid              -> REMOVED
-  has_seasonal_rates      -> (derived: check if rates have season != 'all')
-
-tariff_rates:
-  season (text)           -> season (enum: high, low, all)
-  time_of_use (text)      -> tou (enum: peak, standard, off_peak, all)
-  rate_per_kwh (numeric)  -> amount (numeric) + unit (text)
-  block_start_kwh         -> block_min_kwh
-  block_end_kwh           -> block_max_kwh
-  demand_charge_per_kva   -> REMOVED (now charge='demand')
-  network_charge_per_kwh  -> REMOVED
-  ancillary_charge_per_kwh -> REMOVED
-
-municipalities:
-  source_file_path   -> REMOVED
-  total_tariffs      -> REMOVED (derive via COUNT on tariff_plans)
-  status             -> REMOVED
-  confidence         -> REMOVED
-```
+|---|---|
+| Database migration | Create `extraction_runs` and `eskom_batch_status` tables |
+| `supabase/functions/process-tariff-file/index.ts` | Full rewrite of DB interaction layer (~400 lines) |
+| `src/components/tariffs/FileUploadImport.tsx` | Update interfaces, preview query, and save mutation |
