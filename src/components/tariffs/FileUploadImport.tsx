@@ -292,20 +292,19 @@ export function FileUploadImport() {
 
       if (muniData) {
         // Get tariff IDs for this municipality
-        const { data: existingTariffs } = await supabase
-          .from("tariffs")
+        const { data: existingTariffs } = await (supabase as any)
+          .from("tariff_plans")
           .select("id")
           .eq("municipality_id", muniData.id);
 
         if (existingTariffs && existingTariffs.length > 0) {
-          const tariffIds = existingTariffs.map(t => t.id);
+          const tariffIds = existingTariffs.map((t: any) => t.id);
 
           // Delete related rates first
-          await supabase.from("tariff_rates").delete().in("tariff_id", tariffIds);
-          await supabase.from("tou_periods").delete().in("tariff_id", tariffIds);
+          await (supabase as any).from("tariff_rates").delete().in("tariff_plan_id", tariffIds);
 
-          // Then delete the tariffs
-          await supabase.from("tariffs").delete().eq("municipality_id", muniData.id);
+          // Then delete the tariff plans
+          await (supabase as any).from("tariff_plans").delete().eq("municipality_id", muniData.id);
 
           console.log(`Deleted ${existingTariffs.length} tariffs for ${muni.name}`);
         }
@@ -381,19 +380,15 @@ export function FileUploadImport() {
         .maybeSingle();
 
       if (muniData) {
-        const { data: tariffs } = await supabase
-          .from("tariffs")
+        const { data: tariffs } = await (supabase as any)
+          .from("tariff_plans")
           .select(`
             id,
             name,
-            tariff_type,
-            phase_type,
-            amperage_limit,
-            fixed_monthly_charge,
-            demand_charge_per_kva,
-            is_prepaid,
-            category:tariff_categories(name),
-            rates:tariff_rates(rate_per_kwh, time_of_use, block_start_kwh, block_end_kwh)
+            category,
+            structure,
+            phase,
+            tariff_rates(amount, charge, season, tou, block_min_kwh, block_max_kwh, unit)
           `)
           .eq("municipality_id", muniData.id)
           .order("name");
@@ -457,31 +452,33 @@ export function FileUploadImport() {
     setIsSaving(true);
     try {
       // Update tariff main fields
-      const { error: tariffError } = await supabase
-        .from("tariffs")
+      const { error: tariffError } = await (supabase as any)
+        .from("tariff_plans")
         .update({
-          fixed_monthly_charge: editedTariff.fixed_monthly_charge,
-          demand_charge_per_kva: editedTariff.demand_charge_per_kva,
-          phase_type: editedTariff.phase_type as any,
-          amperage_limit: editedTariff.amperage_limit,
+          name: editedTariff.name,
+          structure: editedTariff.tariff_type === 'TOU' ? 'time_of_use' : editedTariff.tariff_type === 'IBT' ? 'inclining_block' : 'flat',
+          phase: editedTariff.phase_type,
         })
         .eq("id", editedTariff.id);
 
       if (tariffError) throw tariffError;
 
       // Update rates - delete old and insert new
-      await supabase.from("tariff_rates").delete().eq("tariff_id", editedTariff.id);
+      await (supabase as any).from("tariff_rates").delete().eq("tariff_plan_id", editedTariff.id);
 
       if (editedTariff.rates.length > 0) {
         const ratesToInsert = editedTariff.rates.map(rate => ({
-          tariff_id: editedTariff.id,
-          rate_per_kwh: rate.rate_per_kwh,
-          time_of_use: rate.time_of_use as any,
-          block_start_kwh: rate.block_start_kwh,
-          block_end_kwh: rate.block_end_kwh,
+          tariff_plan_id: editedTariff.id,
+          charge: 'energy',
+          amount: rate.rate_per_kwh,
+          season: 'all',
+          tou: rate.time_of_use === 'Peak' ? 'peak' : rate.time_of_use === 'Standard' ? 'standard' : rate.time_of_use === 'Off-Peak' ? 'off_peak' : 'all',
+          block_min_kwh: rate.block_start_kwh,
+          block_max_kwh: rate.block_end_kwh,
+          unit: 'c/kWh',
         }));
 
-        const { error: ratesError } = await supabase.from("tariff_rates").insert(ratesToInsert);
+        const { error: ratesError } = await (supabase as any).from("tariff_rates").insert(ratesToInsert);
         if (ratesError) throw ratesError;
       }
 

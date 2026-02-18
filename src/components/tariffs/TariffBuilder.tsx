@@ -12,10 +12,10 @@ import { toast } from "sonner";
 import { TOUPeriodBuilder, TOUPeriod } from "./TOUPeriodBuilder";
 import type { Database } from "@/integrations/supabase/types";
 
-type TariffType = Database["public"]["Enums"]["tariff_type"];
-type PhaseType = Database["public"]["Enums"]["phase_type"];
+type TariffType = string; // was Database["public"]["Enums"]["tariff_type"] - removed
+type PhaseType = string; // was Database["public"]["Enums"]["phase_type"] - removed
 type SeasonType = Database["public"]["Enums"]["season_type"];
-type TimeOfUseType = Database["public"]["Enums"]["time_of_use_type"];
+type TimeOfUseType = string; // was Database["public"]["Enums"]["time_of_use_type"] - removed
 type VoltageLevel = "LV" | "MV" | "HV";
 type TransmissionZone = "Zone 0-300km" | "Zone 300-600km" | "Zone 600-900km" | "Zone >900km";
 
@@ -80,82 +80,71 @@ export function TariffBuilder() {
   const { data: categories } = useQuery({
     queryKey: ["tariff-categories"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("tariff_categories").select("*").order("name");
-      if (error) throw error;
-      return data;
+      // tariff_categories table removed - use customer_category enum values
+      return CUSTOMER_CATEGORIES.map((name, i) => ({ id: name.toLowerCase(), name }));
     },
   });
 
   const addTariff = useMutation({
     mutationFn: async () => {
-      // Insert the tariff first
-      const { data: tariff, error: tariffError } = await supabase
-        .from("tariffs")
+      // Insert the tariff plan first
+      const { data: tariff, error: tariffError } = await (supabase as any)
+        .from("tariff_plans")
         .insert({
           municipality_id: municipalityId,
-          category_id: categoryId,
           name: tariffName,
-          tariff_type: tariffType,
-          phase_type: phaseType,
-          amperage_limit: amperageLimit || null,
-          fixed_monthly_charge: fixedCharge ? parseFloat(fixedCharge) : 0,
-          demand_charge_per_kva: demandCharge ? parseFloat(demandCharge) : 0,
-          network_access_charge: networkCharge ? parseFloat(networkCharge) : 0,
-          has_seasonal_rates: hasSeasonalRates,
-          is_prepaid: isPrepaid,
-          // NERSA-compliant fields
-          voltage_level: voltageLevel,
-          reactive_energy_charge: reactiveEnergyCharge ? parseFloat(reactiveEnergyCharge) : 0,
-          capacity_kva: capacityKva ? parseFloat(capacityKva) : null,
-          customer_category: customerCategory || null,
-          // Critical Peak Pricing
-          critical_peak_rate: criticalPeakRate ? parseFloat(criticalPeakRate) : null,
-          critical_peak_hours_per_month: criticalPeakHours ? parseInt(criticalPeakHours) : 0,
-          // Unbundled Eskom charges
-          is_unbundled: isUnbundled,
-          tariff_family: tariffFamily || null,
-          transmission_zone: transmissionZone || null,
-          generation_capacity_charge: generationCapacityCharge ? parseFloat(generationCapacityCharge) : null,
-          legacy_charge_per_kwh: legacyChargePerKwh ? parseFloat(legacyChargePerKwh) : null,
-          service_charge_per_day: serviceChargePerDay ? parseFloat(serviceChargePerDay) : null,
-          administration_charge_per_day: administrationChargePerDay ? parseFloat(administrationChargePerDay) : null,
+          category: customerCategory || 'commercial',
+          structure: tariffType === 'TOU' ? 'time_of_use' : tariffType === 'IBT' ? 'inclining_block' : 'flat',
+          phase: phaseType,
+          voltage: voltageLevel || null,
+          is_redundant: false,
+          is_recommended: false,
         })
         .select()
         .single();
 
       if (tariffError) throw tariffError;
 
-      // For TOU tariffs with seasonal rates, insert TOU periods
-      if (tariffType === "TOU" && hasSeasonalRates && touPeriods.length > 0) {
-        const periods = touPeriods.map((period) => ({
-          tariff_id: tariff.id,
-          season: period.season,
-          day_type: period.day_type,
-          time_of_use: period.time_of_use,
-          start_hour: period.start_hour,
-          end_hour: period.end_hour,
-          rate_per_kwh: period.rate_per_kwh,
-          demand_charge_per_kva: period.demand_charge_per_kva,
+      // Insert rate rows mapped to new schema
+      if (rateRows.length > 0) {
+        const rates = rateRows.map((row: any) => ({
+          tariff_plan_id: tariff.id,
+          charge: 'energy' as const,
+          season: row.season === 'High/Winter' ? 'high' : row.season === 'Low/Summer' ? 'low' : 'all',
+          tou: row.time_of_use === 'Peak' ? 'peak' : row.time_of_use === 'Standard' ? 'standard' : row.time_of_use === 'Off-Peak' ? 'off_peak' : 'all',
+          block_number: row.block_number || null,
+          block_min_kwh: row.block_start_kwh || null,
+          block_max_kwh: row.block_end_kwh || null,
+          amount: row.rate_per_kwh || 0,
+          unit: 'c/kWh',
         }));
 
-        const { error: periodsError } = await supabase.from("tou_periods").insert(periods);
-        if (periodsError) throw periodsError;
+        const { error: ratesError } = await (supabase as any).from("tariff_rates").insert(rates);
+        if (ratesError) throw ratesError;
       }
 
-      // Insert the rate rows (for IBT or simple TOU)
-      if (rateRows.length > 0) {
-        const rates = rateRows.map((row) => ({
-          tariff_id: tariff.id,
-          season: row.season,
-          time_of_use: row.time_of_use,
-          block_start_kwh: row.block_start_kwh,
-          block_end_kwh: row.block_end_kwh,
-          rate_per_kwh: row.rate_per_kwh,
-          demand_charge_per_kva: row.demand_charge_per_kva,
-        }));
+      // Insert basic/fixed charge if provided
+      if (fixedCharge && parseFloat(fixedCharge) > 0) {
+        await (supabase as any).from("tariff_rates").insert({
+          tariff_plan_id: tariff.id,
+          charge: 'basic',
+          season: 'all',
+          tou: 'all',
+          amount: parseFloat(fixedCharge),
+          unit: 'R/month',
+        });
+      }
 
-        const { error: ratesError } = await supabase.from("tariff_rates").insert(rates);
-        if (ratesError) throw ratesError;
+      // Insert demand charge if provided
+      if (demandCharge && parseFloat(demandCharge) > 0) {
+        await (supabase as any).from("tariff_rates").insert({
+          tariff_plan_id: tariff.id,
+          charge: 'demand',
+          season: 'all',
+          tou: 'all',
+          amount: parseFloat(demandCharge),
+          unit: 'R/kVA',
+        });
       }
 
       return tariff;
@@ -205,7 +194,7 @@ export function TariffBuilder() {
   const addRateRow = () => {
     const newRow: RateRow = {
       id: crypto.randomUUID(),
-      season: hasSeasonalRates ? "High/Winter" : "All Year",
+      season: hasSeasonalRates ? "High/Winter" as any : "All Year" as any,
       time_of_use: tariffType === "TOU" ? "Peak" : "Any",
       block_start_kwh: 0,
       block_end_kwh: null,
@@ -284,7 +273,7 @@ export function TariffBuilder() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories?.map((c) => (
+                  {(categories as any)?.map((c: any) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>

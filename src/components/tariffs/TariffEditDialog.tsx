@@ -87,24 +87,15 @@ export function TariffEditDialog({ tariff, rates, open, onOpenChange, onSaved }:
     setIsSaving(true);
     
     try {
-      // 1. Update tariff record
-      const { error: tariffError } = await supabase
-        .from("tariffs")
+      // 1. Update tariff plan record
+      const { error: tariffError } = await (supabase as any)
+        .from("tariff_plans")
         .update({
           name: editedTariff.name,
-          customer_category: editedTariff.customer_category,
-          tariff_type: editedTariff.tariff_type as any,
-          fixed_monthly_charge: editedTariff.fixed_monthly_charge,
-          demand_charge_per_kva: editedTariff.demand_charge_per_kva,
-          network_access_charge: editedTariff.network_access_charge,
-          service_charge_per_day: editedTariff.service_charge_per_day,
-          administration_charge_per_day: editedTariff.administration_charge_per_day,
-          reactive_energy_charge: editedTariff.reactive_energy_charge,
-          generation_capacity_charge: editedTariff.generation_capacity_charge,
-          phase_type: editedTariff.phase_type as any,
-          amperage_limit: editedTariff.amperage_limit,
-          effective_from: editedTariff.effective_from,
-          effective_to: editedTariff.effective_to,
+          category: editedTariff.customer_category || editedTariff.category,
+          structure: editedTariff.tariff_type === 'TOU' ? 'time_of_use' : editedTariff.tariff_type === 'IBT' ? 'inclining_block' : 'flat',
+          phase: editedTariff.phase_type,
+          description: (editedTariff as any).description || null,
         })
         .eq("id", editedTariff.id);
       
@@ -123,14 +114,12 @@ export function TariffEditDialog({ tariff, rates, open, onOpenChange, onSaved }:
       // 3. Update existing rates
       const ratesToUpdate = editedRates.filter(r => !r.isNew && !r.isDeleted);
       for (const rate of ratesToUpdate) {
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("tariff_rates")
           .update({
-            rate_per_kwh: rate.rate_per_kwh,
-            season: rate.season as any,
-            time_of_use: rate.time_of_use as any,
-            block_start_kwh: rate.block_start_kwh,
-            block_end_kwh: rate.block_end_kwh,
+            amount: rate.rate_per_kwh,
+            season: rate.season,
+            tou: rate.time_of_use === 'Peak' ? 'peak' : rate.time_of_use === 'Standard' ? 'standard' : rate.time_of_use === 'Off-Peak' ? 'off_peak' : 'all',
           })
           .eq("id", rate.id);
         if (error) throw error;
@@ -139,15 +128,17 @@ export function TariffEditDialog({ tariff, rates, open, onOpenChange, onSaved }:
       // 4. Insert new rates
       const ratesToInsert = editedRates.filter(r => r.isNew && !r.isDeleted);
       if (ratesToInsert.length > 0) {
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("tariff_rates")
           .insert(ratesToInsert.map(r => ({
-            tariff_id: editedTariff.id,
-            rate_per_kwh: r.rate_per_kwh,
-            season: r.season as any,
-            time_of_use: r.time_of_use as any,
-            block_start_kwh: r.block_start_kwh,
-            block_end_kwh: r.block_end_kwh,
+            tariff_plan_id: editedTariff.id,
+            charge: 'energy',
+            amount: r.rate_per_kwh,
+            season: r.season === 'High/Winter' ? 'high' : r.season === 'Low/Summer' ? 'low' : 'all',
+            tou: r.time_of_use === 'Peak' ? 'peak' : r.time_of_use === 'Standard' ? 'standard' : r.time_of_use === 'Off-Peak' ? 'off_peak' : 'all',
+            block_min_kwh: r.block_start_kwh,
+            block_max_kwh: r.block_end_kwh,
+            unit: 'c/kWh',
           })));
         if (error) throw error;
       }

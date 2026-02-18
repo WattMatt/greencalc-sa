@@ -108,26 +108,26 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
         // Fetch municipalities
         const { data: muniData, error: muniError } = await supabase
           .from("municipalities")
-          .select("id, name, extraction_status, ai_confidence, total_tariffs, province:provinces(name)");
+          .select("id, name, nersa_increase_pct, province:provinces(name)") as any;
         
         if (muniError) throw muniError;
         
         // Fetch actual tariff counts per municipality
         const { data: tariffCounts, error: tariffError } = await supabase
-          .from("tariffs")
-          .select("municipality_id");
+          .from("tariff_plans")
+          .select("municipality_id") as any;
         
         if (tariffError) throw tariffError;
         
         // Count tariffs per municipality
         const countMap = new Map<string, number>();
-        tariffCounts?.forEach((t) => {
+        (tariffCounts || []).forEach((t: any) => {
           const count = countMap.get(t.municipality_id) || 0;
           countMap.set(t.municipality_id, count + 1);
         });
         
         // Merge counts with municipality data
-        const enrichedData = (muniData || []).map((m) => ({
+        const enrichedData = (muniData || []).map((m: any) => ({
           ...m,
           tariff_count: countMap.get(m.id) || 0,
         }));

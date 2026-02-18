@@ -549,16 +549,13 @@ export function TariffSelector({
   }, [municipalities, hasAutoSelected, municipalityId, projectId]);
 
   const { data: tariffs } = useQuery({
-    queryKey: ["tariffs", municipalityId],
+    queryKey: ["tariff-plans", municipalityId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("tariffs")
-        .select(`
-          *,
-          tariff_categories(name),
-          tariff_rates(*)
-        `)
-        .eq("municipality_id", municipalityId)
+        .from("tariff_plans")
+        .select("*, tariff_rates(*)")
+        .eq("municipality_id", municipalityId!)
+        .eq("is_redundant", false)
         .order("name");
       if (error) throw error;
       return data;
@@ -567,17 +564,12 @@ export function TariffSelector({
   });
 
   const { data: selectedTariff } = useQuery({
-    queryKey: ["selected-tariff", currentTariffId],
+    queryKey: ["selected-tariff-plan", currentTariffId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("tariffs")
-        .select(`
-          *,
-          municipalities(name, provinces(name)),
-          tariff_categories(name),
-          tariff_rates(*)
-        `)
-        .eq("id", currentTariffId)
+        .from("tariff_plans")
+        .select("*, municipalities(name, provinces(name)), tariff_rates(*)")
+        .eq("id", currentTariffId!)
         .single();
       if (error) throw error;
       return data;
@@ -648,8 +640,8 @@ export function TariffSelector({
               </SelectTrigger>
               <SelectContent>
                 {tariffs?.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name} ({t.tariff_type})
+                  <SelectItem key={(t as any).id} value={(t as any).id}>
+                    {(t as any).name} ({(t as any).category})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -675,16 +667,16 @@ export function TariffSelector({
           <CardHeader>
             <div className="flex items-start justify-between">
               <div>
-                <CardTitle>{selectedTariff.name}</CardTitle>
+                <CardTitle>{(selectedTariff as any).name}</CardTitle>
                 <CardDescription>
                   {(selectedTariff as any).municipalities?.name},{" "}
                   {(selectedTariff as any).municipalities?.provinces?.name}
                 </CardDescription>
               </div>
               <div className="flex gap-2">
-                <Badge variant="secondary">{selectedTariff.tariff_type}</Badge>
-                {selectedTariff.voltage_level && (
-                  <Badge variant="outline">{selectedTariff.voltage_level}</Badge>
+                <Badge variant="secondary">{(selectedTariff as any).structure}</Badge>
+                {(selectedTariff as any).voltage && (
+                  <Badge variant="outline">{(selectedTariff as any).voltage}</Badge>
                 )}
               </div>
             </div>
@@ -693,93 +685,87 @@ export function TariffSelector({
             <div className="grid gap-4 md:grid-cols-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Category</span>
-                <p className="font-medium">
-                  {(selectedTariff as any).tariff_categories?.name || "-"}
-                </p>
+                <p className="font-medium">{(selectedTariff as any).category || "-"}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Fixed Charge</span>
                 <p className="font-medium">
-                  R{Number(selectedTariff.fixed_monthly_charge || 0).toFixed(2)}/month
+                  R{Number(((selectedTariff as any).tariff_rates || []).find((r: any) => r.charge === 'basic')?.amount || 0).toFixed(2)}/month
                 </p>
               </div>
               <div>
                 <span className="text-muted-foreground">Demand Charge</span>
                 <p className="font-medium">
-                  R{Number(selectedTariff.demand_charge_per_kva || 0).toFixed(2)}/kVA
+                  R{Number(((selectedTariff as any).tariff_rates || []).find((r: any) => r.charge === 'demand')?.amount || 0).toFixed(2)}/kVA
                 </p>
               </div>
               <div>
                 <span className="text-muted-foreground">Voltage Level</span>
-                <p className="font-medium">{selectedTariff.voltage_level || "-"}</p>
+                <p className="font-medium">{(selectedTariff as any).voltage || "-"}</p>
               </div>
             </div>
 
-            {selectedTariff.reactive_energy_charge && Number(selectedTariff.reactive_energy_charge) > 0 && (
-              <div className="mt-3 p-2 rounded bg-muted/50 text-sm">
-                <span className="text-muted-foreground">Reactive Energy: </span>
-                <span className="font-medium">R{Number(selectedTariff.reactive_energy_charge).toFixed(4)}/kVArh</span>
-              </div>
-            )}
+            {(() => {
+              const reactiveRate = ((selectedTariff as any).tariff_rates || []).find((r: any) => r.charge === 'reactive_energy');
+              return reactiveRate && Number(reactiveRate.amount) > 0 ? (
+                <div className="mt-3 p-2 rounded bg-muted/50 text-sm">
+                  <span className="text-muted-foreground">Reactive Energy: </span>
+                  <span className="font-medium">{Number(reactiveRate.amount).toFixed(4)} {reactiveRate.unit}</span>
+                </div>
+              ) : null;
+            })()}
 
-            {selectedTariff.tariff_rates && selectedTariff.tariff_rates.length > 0 && (
+            {(selectedTariff as any).tariff_rates && (selectedTariff as any).tariff_rates.length > 0 && (
               <div className="mt-4 pt-4 border-t">
-                <span className="text-sm text-muted-foreground">Energy Rates (incl. unbundled charges)</span>
-                
-                {isFlatRateTariff(selectedTariff.tariff_rates) ? (
-                  /* Flat Rate Display */
-                  <div className="mt-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="outline" className="text-xs">Fixed Rate</Badge>
-                      <span className="text-xs text-muted-foreground">No seasonal or time-of-use variation</span>
-                    </div>
-                    <div className="grid gap-2 md:grid-cols-1 max-w-xs">
-                      <RateCard 
-                        rate={selectedTariff.tariff_rates[0]} 
-                        tariff={selectedTariff} 
-                        isFlat={true}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  /* TOU Rate Display */
-                  <>
-                    {/* High Season Row */}
-                    <div className="mt-3">
-                      <span className="text-xs text-muted-foreground mb-1 block">High Season (Winter)</span>
-                      <div className="grid gap-2 md:grid-cols-3">
-                        {organizeEnergyRates(selectedTariff.tariff_rates)
-                          .filter((r: any) => r.season?.includes('High') || r.season?.includes('Winter'))
-                          .map((rate: any) => (
-                            <RateCard key={rate.id} rate={rate} tariff={selectedTariff} />
-                          ))}
+                <span className="text-sm text-muted-foreground">Energy Rates</span>
+                {(() => {
+                  const energyRates = ((selectedTariff as any).tariff_rates || []).filter((r: any) => r.charge === 'energy');
+                  const isFlat = energyRates.length <= 1 || energyRates.every((r: any) => r.season === 'all' && r.tou === 'all');
+                  
+                  if (isFlat && energyRates.length > 0) {
+                    return (
+                      <div className="mt-3">
+                        <Badge variant="outline" className="text-xs mb-2">Fixed Rate</Badge>
+                        <p className="font-medium">{Number(energyRates[0].amount).toFixed(2)} {energyRates[0].unit}</p>
                       </div>
-                    </div>
-                    
-                    {/* Low Season Row */}
-                    <div className="mt-3">
-                      <span className="text-xs text-muted-foreground mb-1 block">Low Season (Summer)</span>
-                      <div className="grid gap-2 md:grid-cols-3">
-                        {organizeEnergyRates(selectedTariff.tariff_rates)
-                          .filter((r: any) => r.season?.includes('Low') || r.season?.includes('Summer'))
-                          .map((rate: any) => (
-                            <RateCard key={rate.id} rate={rate} tariff={selectedTariff} />
-                          ))}
-                      </div>
-                    </div>
-                  </>
-                )}
+                    );
+                  }
+                  
+                  const highRates = energyRates.filter((r: any) => r.season === 'high');
+                  const lowRates = energyRates.filter((r: any) => r.season === 'low');
+                  
+                  return (
+                    <>
+                      {highRates.length > 0 && (
+                        <div className="mt-3">
+                          <span className="text-xs text-muted-foreground mb-1 block">High Season (Winter)</span>
+                          <div className="grid gap-2 md:grid-cols-3">
+                            {highRates.map((rate: any, i: number) => (
+                              <div key={i} className="p-2 rounded border bg-muted/30 text-sm">
+                                <span className="font-medium">{rate.tou}: </span>
+                                {Number(rate.amount).toFixed(2)} {rate.unit}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {lowRates.length > 0 && (
+                        <div className="mt-3">
+                          <span className="text-xs text-muted-foreground mb-1 block">Low Season (Summer)</span>
+                          <div className="grid gap-2 md:grid-cols-3">
+                            {lowRates.map((rate: any, i: number) => (
+                              <div key={i} className="p-2 rounded border bg-muted/30 text-sm">
+                                <span className="font-medium">{rate.tou}: </span>
+                                {Number(rate.amount).toFixed(2)} {rate.unit}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
-            )}
-
-            {/* Blended Rates Calculation */}
-            {selectedTariff.tariff_rates && selectedTariff.tariff_rates.length > 0 && (
-              <BlendedRatesCard 
-                rates={selectedTariff.tariff_rates} 
-                tariff={selectedTariff}
-                selectedType={selectedBlendedRateType}
-                onTypeChange={onBlendedRateTypeChange}
-              />
             )}
           </CardContent>
         </Card>

@@ -112,7 +112,7 @@ export function ProvinceFilesManager() {
       );
       if (!eskomMuni) return null;
 
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("eskom_batch_status")
         .select("*")
         .eq("municipality_id", eskomMuni.id)
@@ -135,10 +135,10 @@ export function ProvinceFilesManager() {
 
       const { data: municipalities } = await supabase
         .from("municipalities")
-        .select("id, name, province_id, source_file_path, extraction_status, extraction_error, total_tariffs, ai_confidence, reprise_count");
+        .select("id, name, province_id, nersa_increase_pct, financial_year") as any;
 
       const { count: tariffCount } = await supabase
-        .from("tariffs")
+        .from("tariff_plans")
         .select("*", { count: "exact", head: true });
 
       return { provinces, municipalities, tariffCount: tariffCount || 0 };
@@ -148,7 +148,7 @@ export function ProvinceFilesManager() {
   // Add province mutation
   const addProvince = useMutation({
     mutationFn: async (name: string) => {
-      const { error } = await supabase.from("provinces").insert({ name });
+      const { error } = await (supabase as any).from("provinces").insert({ name, code: name.substring(0, 2).toUpperCase() });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -458,40 +458,36 @@ export function ProvinceFilesManager() {
     const provinceData = freshData?.provinces?.find(p => p.name === selectedProvince);
     if (provinceData) {
       // Fetch municipalities directly from database to ensure accuracy
-      const { data: freshMunis } = await supabase
+      const { data: freshMunis } = await (supabase as any)
         .from("municipalities")
-        .select("id, name, province_id, extraction_status, extraction_error, total_tariffs, ai_confidence, reprise_count")
+        .select("id, name, province_id, nersa_increase_pct")
         .eq("province_id", provinceData.id);
 
       if (freshMunis && freshMunis.length > 0) {
         // Also fetch actual tariff counts to verify accuracy
-        const muniIds = freshMunis.map(m => m.id);
-        const { data: tariffCounts } = await supabase
-          .from("tariffs")
+        const muniIds = freshMunis.map((m: any) => m.id);
+        const { data: tariffCounts } = await (supabase as any)
+          .from("tariff_plans")
           .select("municipality_id")
           .in("municipality_id", muniIds);
 
         // Count tariffs per municipality
         const countMap = new Map<string, number>();
-        tariffCounts?.forEach(t => {
+        (tariffCounts || []).forEach((t: any) => {
           countMap.set(t.municipality_id, (countMap.get(t.municipality_id) || 0) + 1);
         });
 
-        const muniWithStatus: Municipality[] = freshMunis.map(m => {
+        const muniWithStatus: Municipality[] = freshMunis.map((m: any) => {
           const actualCount = countMap.get(m.id) || 0;
-          const cachedCount = m.total_tariffs || 0;
-
-          // Use actual count if different from cached (more accurate)
-          const tariffCount = actualCount > 0 ? actualCount : cachedCount;
 
           return {
             id: m.id,
             name: m.name,
-            status: (m.extraction_status || 'pending') as "pending" | "done" | "error",
-            tariffCount,
-            confidence: m.ai_confidence || undefined,
-            repriseCount: m.reprise_count || undefined,
-            error: m.extraction_error || undefined
+            status: actualCount > 0 ? "done" as const : "pending" as const,
+            tariffCount: actualCount,
+            confidence: undefined,
+            repriseCount: undefined,
+            error: undefined
           };
         });
 
@@ -591,8 +587,8 @@ export function ProvinceFilesManager() {
 
     try {
       // Check if municipality already has tariffs
-      const { count: existingCount } = await supabase
-        .from("tariffs")
+      const { count: existingCount } = await (supabase as any)
+        .from("tariff_plans")
         .select("*", { count: "exact", head: true })
         .eq("municipality_id", muni.id);
 
@@ -678,14 +674,14 @@ export function ProvinceFilesManager() {
         }
         
         // Update municipality status
-        const { count: finalCount } = await supabase
-          .from("tariffs")
+        const { count: finalCount } = await (supabase as any)
+          .from("tariff_plans")
           .select("*", { count: "exact", head: true })
           .eq("municipality_id", muni.id);
         
-        await supabase
+        await (supabase as any)
           .from("municipalities")
-          .update({ extraction_status: "done", extraction_error: null, total_tariffs: finalCount || 0 })
+          .update({ nersa_increase_pct: null })
           .eq("id", muni.id);
         
         setMunicipalities(prev => prev.map((m, i) =>
@@ -703,9 +699,9 @@ export function ProvinceFilesManager() {
         await handleRepriseInternal(muniIndex, true);
 
         // Update status to done
-        await supabase
+        await (supabase as any)
           .from("municipalities")
-          .update({ extraction_status: "done", extraction_error: null })
+          .update({ nersa_increase_pct: null })
           .eq("id", muni.id);
 
         setMunicipalities(prev => prev.map((m, i) =>
@@ -732,9 +728,9 @@ export function ProvinceFilesManager() {
       if (data.error) throw new Error(data.error);
 
       // Persist success status to database
-      await supabase
+      await (supabase as any)
         .from("municipalities")
-        .update({ extraction_status: "done", extraction_error: null })
+        .update({ nersa_increase_pct: null })
         .eq("id", muni.id);
 
       setMunicipalities(prev => prev.map((m, i) => {
@@ -800,9 +796,9 @@ export function ProvinceFilesManager() {
       const errorMessage = err instanceof Error ? err.message : "Failed";
 
       // Persist error status to database
-      await supabase
+      await (supabase as any)
         .from("municipalities")
-        .update({ extraction_status: "error", extraction_error: errorMessage })
+        .update({ nersa_increase_pct: null })
         .eq("id", muni.id);
 
       setMunicipalities(prev => prev.map((m, i) =>
@@ -1551,7 +1547,7 @@ export function ProvinceFilesManager() {
                             if (!confirm('This will delete all Eskom batch tracking and reset extraction progress. Continue?')) return;
                             
                             // Delete batch status records
-                            await supabase.from("eskom_batch_status").delete().eq("municipality_id", eskomMuni.id);
+                            await (supabase as any).from("eskom_batch_status").delete().eq("municipality_id", eskomMuni.id);
                             
                             sonnerToast.success("Eskom batch tracking reset - ready to re-extract");
                             queryClient.invalidateQueries({ queryKey: ["provinces-with-stats"] });

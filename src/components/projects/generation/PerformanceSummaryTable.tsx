@@ -193,19 +193,23 @@ export function PerformanceSummaryTable({ projectId, month, year, monthData }: P
         .single();
       if (pErr || !project?.tariff_id) return 0;
 
-      // Get rate from tariff_rates (flat rate fallback)
+      // Get energy rate from tariff_rates via tariff_plans
       const { data: rates, error: rErr } = await supabase
         .from("tariff_rates")
-        .select("rate_per_kwh, season, time_of_use")
-        .eq("tariff_id", project.tariff_id);
+        .select("amount, season, tou, charge, unit")
+        .eq("tariff_plan_id", project.tariff_id)
+        .eq("charge", "energy");
       if (rErr || !rates?.length) return 0;
 
-      // Use three-tier fallback: specific TOU > Any TOU for season > Any/All Year
-      const anyAllYear = rates.find(r => r.time_of_use === "Any" && r.season === "All Year");
-      const anyCurrentSeason = rates.find(r => r.time_of_use === "Any" && (r.season === "High/Winter" || r.season === "Low/Summer"));
+      // Use three-tier fallback: all/all > all season specific > first rate
+      const anyAll = rates.find((r: any) => r.tou === "all" && r.season === "all");
+      const anySeasonAll = rates.find((r: any) => r.tou === "all" && (r.season === "high" || r.season === "low"));
       const firstRate = rates[0];
 
-      return Number(anyAllYear?.rate_per_kwh ?? anyCurrentSeason?.rate_per_kwh ?? firstRate?.rate_per_kwh ?? 0);
+      const raw = Number(anyAll?.amount ?? anySeasonAll?.amount ?? firstRate?.amount ?? 0);
+      // If unit is c/kWh, convert to R/kWh
+      const unit = (anyAll ?? anySeasonAll ?? firstRate)?.unit || "c/kWh";
+      return unit.startsWith("c") ? raw / 100 : raw;
     },
   });
 
