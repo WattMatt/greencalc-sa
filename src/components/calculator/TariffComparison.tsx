@@ -60,12 +60,17 @@ export function TariffComparison() {
     queryFn: async () => {
       if (!selectedMunicipalityId) return [];
       const { data, error } = await supabase
-        .from("tariffs")
+        .from("tariff_plans")
         .select("*, rates:tariff_rates(*)")
         .eq("municipality_id", selectedMunicipalityId)
+        .eq("is_redundant", false)
         .order("name");
       if (error) throw error;
-      return data;
+      return (data || []).map((t: any) => ({
+        ...t,
+        tariff_type: t.structure,
+        fixed_monthly_charge: (t.rates || []).find((r: any) => r.charge === 'basic')?.amount || 0,
+      }));
     },
     enabled: !!selectedMunicipalityId,
   });
@@ -76,11 +81,15 @@ export function TariffComparison() {
     queryFn: async () => {
       if (comparisons.length === 0) return [];
       const { data, error } = await supabase
-        .from("tariffs")
+        .from("tariff_plans")
         .select("*, rates:tariff_rates(*), municipality:municipalities(name)")
         .in("id", comparisons.map(c => c.tariffId));
       if (error) throw error;
-      return data;
+      return (data || []).map((t: any) => ({
+        ...t,
+        tariff_type: t.structure,
+        fixed_monthly_charge: (t.rates || []).find((r: any) => r.charge === 'basic')?.amount || 0,
+      }));
     },
     enabled: comparisons.length > 0,
   });

@@ -7,17 +7,17 @@ export default function Dashboard() {
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
-      const [provinces, municipalities, tariffs, categories] = await Promise.all([
+      const [provinces, municipalities, tariffPlans, tariffRates] = await Promise.all([
         supabase.from("provinces").select("id", { count: "exact" }),
         supabase.from("municipalities").select("id", { count: "exact" }),
-        supabase.from("tariffs").select("id", { count: "exact" }),
-        supabase.from("tariff_categories").select("id", { count: "exact" }),
+        supabase.from("tariff_plans").select("id", { count: "exact" }),
+        supabase.from("tariff_rates").select("id", { count: "exact" }),
       ]);
       return {
         provinces: provinces.count || 0,
         municipalities: municipalities.count || 0,
-        tariffs: tariffs.count || 0,
-        categories: categories.count || 0,
+        tariffPlans: tariffPlans.count || 0,
+        tariffRates: tariffRates.count || 0,
       };
     },
   });
@@ -25,8 +25,8 @@ export default function Dashboard() {
   const statCards = [
     { title: "Provinces", value: stats?.provinces || 0, icon: MapPin, description: "Configured regions" },
     { title: "Municipalities", value: stats?.municipalities || 0, icon: Building2, description: "Local authorities" },
-    { title: "Tariffs", value: stats?.tariffs || 0, icon: FileText, description: "Rate structures" },
-    { title: "Categories", value: stats?.categories || 0, icon: TrendingUp, description: "Tariff types" },
+    { title: "Tariff Plans", value: stats?.tariffPlans || 0, icon: FileText, description: "Rate structures" },
+    { title: "Rate Lines", value: stats?.tariffRates || 0, icon: TrendingUp, description: "Individual charges" },
   ];
 
   return (
@@ -63,8 +63,8 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-3">
             <a href="/tariffs" className="block p-3 rounded-lg bg-accent hover:bg-accent/80 transition-colors">
-              <div className="font-medium text-accent-foreground">Add Municipality Tariffs</div>
-              <div className="text-sm text-muted-foreground">Configure electricity rates for a new municipality</div>
+              <div className="font-medium text-accent-foreground">Browse Tariffs</div>
+              <div className="text-sm text-muted-foreground">View NERSA municipal electricity tariff data</div>
             </a>
             <a href="/calculator" className="block p-3 rounded-lg bg-accent hover:bg-accent/80 transition-colors">
               <div className="font-medium text-accent-foreground">Calculate Solar ROI</div>
@@ -76,7 +76,7 @@ export default function Dashboard() {
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-card-foreground">About This Platform</CardTitle>
-            <CardDescription>Green Energy Financial Modeling</CardDescription>
+            <CardDescription>Green Energy Financial Modelling</CardDescription>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground space-y-2">
             <p>

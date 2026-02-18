@@ -169,112 +169,6 @@ export type Database = {
         }
         Relationships: []
       }
-      eskom_batch_status: {
-        Row: {
-          batch_index: number
-          batch_name: string
-          created_at: string | null
-          error_message: string | null
-          id: string
-          municipality_id: string
-          status: string
-          tariffs_extracted: number | null
-          updated_at: string | null
-        }
-        Insert: {
-          batch_index: number
-          batch_name: string
-          created_at?: string | null
-          error_message?: string | null
-          id?: string
-          municipality_id: string
-          status?: string
-          tariffs_extracted?: number | null
-          updated_at?: string | null
-        }
-        Update: {
-          batch_index?: number
-          batch_name?: string
-          created_at?: string | null
-          error_message?: string | null
-          id?: string
-          municipality_id?: string
-          status?: string
-          tariffs_extracted?: number | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "eskom_batch_status_municipality_id_fkey"
-            columns: ["municipality_id"]
-            isOneToOne: false
-            referencedRelation: "municipalities"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      extraction_runs: {
-        Row: {
-          ai_analysis: string | null
-          ai_confidence: number | null
-          completed_at: string | null
-          corrections_made: number | null
-          created_at: string
-          error_message: string | null
-          id: string
-          municipality_id: string
-          run_type: string
-          started_at: string
-          status: string
-          tariffs_found: number | null
-          tariffs_inserted: number | null
-          tariffs_skipped: number | null
-          tariffs_updated: number | null
-        }
-        Insert: {
-          ai_analysis?: string | null
-          ai_confidence?: number | null
-          completed_at?: string | null
-          corrections_made?: number | null
-          created_at?: string
-          error_message?: string | null
-          id?: string
-          municipality_id: string
-          run_type: string
-          started_at?: string
-          status?: string
-          tariffs_found?: number | null
-          tariffs_inserted?: number | null
-          tariffs_skipped?: number | null
-          tariffs_updated?: number | null
-        }
-        Update: {
-          ai_analysis?: string | null
-          ai_confidence?: number | null
-          completed_at?: string | null
-          corrections_made?: number | null
-          created_at?: string
-          error_message?: string | null
-          id?: string
-          municipality_id?: string
-          run_type?: string
-          started_at?: string
-          status?: string
-          tariffs_found?: number | null
-          tariffs_inserted?: number | null
-          tariffs_skipped?: number | null
-          tariffs_updated?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "extraction_runs_municipality_id_fkey"
-            columns: ["municipality_id"]
-            isOneToOne: false
-            referencedRelation: "municipalities"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       gantt_baseline_tasks: {
         Row: {
           baseline_id: string
@@ -743,57 +637,30 @@ export type Database = {
       }
       municipalities: {
         Row: {
-          ai_confidence: number | null
           created_at: string
-          extraction_error: string | null
-          extraction_score: number | null
-          extraction_status: string | null
+          financial_year: string | null
           id: string
-          increase_percentage: number | null
-          last_extraction_at: string | null
-          last_reprise_at: string | null
           name: string
+          nersa_increase_pct: number | null
           province_id: string
-          reprise_count: number | null
-          source_file_path: string | null
-          total_corrections: number | null
-          total_tariffs: number | null
           updated_at: string
         }
         Insert: {
-          ai_confidence?: number | null
           created_at?: string
-          extraction_error?: string | null
-          extraction_score?: number | null
-          extraction_status?: string | null
+          financial_year?: string | null
           id?: string
-          increase_percentage?: number | null
-          last_extraction_at?: string | null
-          last_reprise_at?: string | null
           name: string
+          nersa_increase_pct?: number | null
           province_id: string
-          reprise_count?: number | null
-          source_file_path?: string | null
-          total_corrections?: number | null
-          total_tariffs?: number | null
           updated_at?: string
         }
         Update: {
-          ai_confidence?: number | null
           created_at?: string
-          extraction_error?: string | null
-          extraction_score?: number | null
-          extraction_status?: string | null
+          financial_year?: string | null
           id?: string
-          increase_percentage?: number | null
-          last_extraction_at?: string | null
-          last_reprise_at?: string | null
           name?: string
+          nersa_increase_pct?: number | null
           province_id?: string
-          reprise_count?: number | null
-          source_file_path?: string | null
-          total_corrections?: number | null
-          total_tariffs?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -1240,15 +1107,7 @@ export type Database = {
           total_area_sqm?: number | null
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "projects_tariff_id_fkey"
-            columns: ["tariff_id"]
-            isOneToOne: false
-            referencedRelation: "tariffs"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       proposals: {
         Row: {
@@ -1370,22 +1229,22 @@ export type Database = {
       }
       provinces: {
         Row: {
+          code: string
           created_at: string
           id: string
           name: string
-          updated_at: string
         }
         Insert: {
+          code: string
           created_at?: string
           id?: string
           name: string
-          updated_at?: string
         }
         Update: {
+          code?: string
           created_at?: string
           id?: string
           name?: string
-          updated_at?: string
         }
         Relationships: []
       }
@@ -1954,244 +1813,76 @@ export type Database = {
           },
         ]
       }
-      tariff_categories: {
+      tariff_plans: {
         Row: {
+          category: Database["public"]["Enums"]["customer_category"]
           created_at: string
           description: string | null
           id: string
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          name: string
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          name?: string
-        }
-        Relationships: []
-      }
-      tariff_rates: {
-        Row: {
-          affordability_subsidy_per_kwh: number | null
-          affordability_subsidy_per_kwh_incl_vat: number | null
-          ancillary_charge_per_kwh: number | null
-          ancillary_charge_per_kwh_incl_vat: number | null
-          block_end_kwh: number | null
-          block_start_kwh: number | null
-          created_at: string
-          demand_charge_per_kva: number | null
-          demand_charge_per_kva_incl_vat: number | null
-          electrification_rural_per_kwh: number | null
-          electrification_rural_per_kwh_incl_vat: number | null
-          energy_charge_per_kwh: number | null
-          energy_charge_per_kwh_incl_vat: number | null
-          id: string
-          network_charge_per_kwh: number | null
-          network_charge_per_kwh_incl_vat: number | null
-          rate_per_kwh: number
-          rate_per_kwh_incl_vat: number | null
-          reactive_energy_charge: number | null
-          season: Database["public"]["Enums"]["season_type"]
-          tariff_id: string
-          time_of_use: Database["public"]["Enums"]["time_of_use_type"]
-        }
-        Insert: {
-          affordability_subsidy_per_kwh?: number | null
-          affordability_subsidy_per_kwh_incl_vat?: number | null
-          ancillary_charge_per_kwh?: number | null
-          ancillary_charge_per_kwh_incl_vat?: number | null
-          block_end_kwh?: number | null
-          block_start_kwh?: number | null
-          created_at?: string
-          demand_charge_per_kva?: number | null
-          demand_charge_per_kva_incl_vat?: number | null
-          electrification_rural_per_kwh?: number | null
-          electrification_rural_per_kwh_incl_vat?: number | null
-          energy_charge_per_kwh?: number | null
-          energy_charge_per_kwh_incl_vat?: number | null
-          id?: string
-          network_charge_per_kwh?: number | null
-          network_charge_per_kwh_incl_vat?: number | null
-          rate_per_kwh: number
-          rate_per_kwh_incl_vat?: number | null
-          reactive_energy_charge?: number | null
-          season?: Database["public"]["Enums"]["season_type"]
-          tariff_id: string
-          time_of_use?: Database["public"]["Enums"]["time_of_use_type"]
-        }
-        Update: {
-          affordability_subsidy_per_kwh?: number | null
-          affordability_subsidy_per_kwh_incl_vat?: number | null
-          ancillary_charge_per_kwh?: number | null
-          ancillary_charge_per_kwh_incl_vat?: number | null
-          block_end_kwh?: number | null
-          block_start_kwh?: number | null
-          created_at?: string
-          demand_charge_per_kva?: number | null
-          demand_charge_per_kva_incl_vat?: number | null
-          electrification_rural_per_kwh?: number | null
-          electrification_rural_per_kwh_incl_vat?: number | null
-          energy_charge_per_kwh?: number | null
-          energy_charge_per_kwh_incl_vat?: number | null
-          id?: string
-          network_charge_per_kwh?: number | null
-          network_charge_per_kwh_incl_vat?: number | null
-          rate_per_kwh?: number
-          rate_per_kwh_incl_vat?: number | null
-          reactive_energy_charge?: number | null
-          season?: Database["public"]["Enums"]["season_type"]
-          tariff_id?: string
-          time_of_use?: Database["public"]["Enums"]["time_of_use_type"]
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tariff_rates_tariff_id_fkey"
-            columns: ["tariff_id"]
-            isOneToOne: false
-            referencedRelation: "tariffs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tariffs: {
-        Row: {
-          administration_charge_per_day: number | null
-          administration_charge_per_day_incl_vat: number | null
-          amperage_limit: string | null
-          capacity_kva: number | null
-          category_id: string
-          created_at: string
-          critical_peak_hours_per_month: number | null
-          critical_peak_rate: number | null
-          customer_category: string | null
-          demand_charge_per_kva: number | null
-          demand_charge_per_kva_incl_vat: number | null
-          effective_from: string | null
-          effective_to: string | null
-          fixed_monthly_charge: number | null
-          fixed_monthly_charge_incl_vat: number | null
-          generation_capacity_charge: number | null
-          generation_capacity_charge_incl_vat: number | null
-          has_seasonal_rates: boolean | null
-          id: string
-          is_prepaid: boolean | null
-          is_unbundled: boolean | null
-          legacy_charge_per_kwh: number | null
-          legacy_charge_per_kwh_incl_vat: number | null
+          is_recommended: boolean | null
+          is_redundant: boolean | null
+          max_amps: number | null
+          max_kva: number | null
+          max_kw: number | null
+          metering: Database["public"]["Enums"]["metering_type"] | null
+          min_amps: number | null
+          min_kva: number | null
+          min_kw: number | null
           municipality_id: string
           name: string
-          network_access_charge: number | null
-          network_access_charge_incl_vat: number | null
-          phase_type: Database["public"]["Enums"]["phase_type"] | null
-          reactive_energy_charge: number | null
-          reactive_energy_charge_incl_vat: number | null
-          service_charge_per_day: number | null
-          service_charge_per_day_incl_vat: number | null
-          tariff_family: string | null
-          tariff_type: Database["public"]["Enums"]["tariff_type"]
-          transmission_zone:
-            | Database["public"]["Enums"]["transmission_zone_type"]
-            | null
+          phase: string | null
+          scale_code: string | null
+          structure: Database["public"]["Enums"]["tariff_structure"]
           updated_at: string
-          voltage_level: Database["public"]["Enums"]["voltage_level"] | null
+          voltage: Database["public"]["Enums"]["voltage_level"] | null
         }
         Insert: {
-          administration_charge_per_day?: number | null
-          administration_charge_per_day_incl_vat?: number | null
-          amperage_limit?: string | null
-          capacity_kva?: number | null
-          category_id: string
+          category: Database["public"]["Enums"]["customer_category"]
           created_at?: string
-          critical_peak_hours_per_month?: number | null
-          critical_peak_rate?: number | null
-          customer_category?: string | null
-          demand_charge_per_kva?: number | null
-          demand_charge_per_kva_incl_vat?: number | null
-          effective_from?: string | null
-          effective_to?: string | null
-          fixed_monthly_charge?: number | null
-          fixed_monthly_charge_incl_vat?: number | null
-          generation_capacity_charge?: number | null
-          generation_capacity_charge_incl_vat?: number | null
-          has_seasonal_rates?: boolean | null
+          description?: string | null
           id?: string
-          is_prepaid?: boolean | null
-          is_unbundled?: boolean | null
-          legacy_charge_per_kwh?: number | null
-          legacy_charge_per_kwh_incl_vat?: number | null
+          is_recommended?: boolean | null
+          is_redundant?: boolean | null
+          max_amps?: number | null
+          max_kva?: number | null
+          max_kw?: number | null
+          metering?: Database["public"]["Enums"]["metering_type"] | null
+          min_amps?: number | null
+          min_kva?: number | null
+          min_kw?: number | null
           municipality_id: string
           name: string
-          network_access_charge?: number | null
-          network_access_charge_incl_vat?: number | null
-          phase_type?: Database["public"]["Enums"]["phase_type"] | null
-          reactive_energy_charge?: number | null
-          reactive_energy_charge_incl_vat?: number | null
-          service_charge_per_day?: number | null
-          service_charge_per_day_incl_vat?: number | null
-          tariff_family?: string | null
-          tariff_type?: Database["public"]["Enums"]["tariff_type"]
-          transmission_zone?:
-            | Database["public"]["Enums"]["transmission_zone_type"]
-            | null
+          phase?: string | null
+          scale_code?: string | null
+          structure: Database["public"]["Enums"]["tariff_structure"]
           updated_at?: string
-          voltage_level?: Database["public"]["Enums"]["voltage_level"] | null
+          voltage?: Database["public"]["Enums"]["voltage_level"] | null
         }
         Update: {
-          administration_charge_per_day?: number | null
-          administration_charge_per_day_incl_vat?: number | null
-          amperage_limit?: string | null
-          capacity_kva?: number | null
-          category_id?: string
+          category?: Database["public"]["Enums"]["customer_category"]
           created_at?: string
-          critical_peak_hours_per_month?: number | null
-          critical_peak_rate?: number | null
-          customer_category?: string | null
-          demand_charge_per_kva?: number | null
-          demand_charge_per_kva_incl_vat?: number | null
-          effective_from?: string | null
-          effective_to?: string | null
-          fixed_monthly_charge?: number | null
-          fixed_monthly_charge_incl_vat?: number | null
-          generation_capacity_charge?: number | null
-          generation_capacity_charge_incl_vat?: number | null
-          has_seasonal_rates?: boolean | null
+          description?: string | null
           id?: string
-          is_prepaid?: boolean | null
-          is_unbundled?: boolean | null
-          legacy_charge_per_kwh?: number | null
-          legacy_charge_per_kwh_incl_vat?: number | null
+          is_recommended?: boolean | null
+          is_redundant?: boolean | null
+          max_amps?: number | null
+          max_kva?: number | null
+          max_kw?: number | null
+          metering?: Database["public"]["Enums"]["metering_type"] | null
+          min_amps?: number | null
+          min_kva?: number | null
+          min_kw?: number | null
           municipality_id?: string
           name?: string
-          network_access_charge?: number | null
-          network_access_charge_incl_vat?: number | null
-          phase_type?: Database["public"]["Enums"]["phase_type"] | null
-          reactive_energy_charge?: number | null
-          reactive_energy_charge_incl_vat?: number | null
-          service_charge_per_day?: number | null
-          service_charge_per_day_incl_vat?: number | null
-          tariff_family?: string | null
-          tariff_type?: Database["public"]["Enums"]["tariff_type"]
-          transmission_zone?:
-            | Database["public"]["Enums"]["transmission_zone_type"]
-            | null
+          phase?: string | null
+          scale_code?: string | null
+          structure?: Database["public"]["Enums"]["tariff_structure"]
           updated_at?: string
-          voltage_level?: Database["public"]["Enums"]["voltage_level"] | null
+          voltage?: Database["public"]["Enums"]["voltage_level"] | null
         }
         Relationships: [
           {
-            foreignKeyName: "tariffs_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "tariff_categories"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tariffs_municipality_id_fkey"
+            foreignKeyName: "tariff_plans_municipality_id_fkey"
             columns: ["municipality_id"]
             isOneToOne: false
             referencedRelation: "municipalities"
@@ -2199,85 +1890,178 @@ export type Database = {
           },
         ]
       }
-      tou_periods: {
+      tariff_rates: {
         Row: {
+          amount: number
+          block_max_kwh: number | null
+          block_min_kwh: number | null
+          block_number: number | null
+          charge: Database["public"]["Enums"]["charge_type"]
+          consumption_threshold_kwh: number | null
           created_at: string
-          day_type: Database["public"]["Enums"]["day_type"]
-          demand_charge_per_kva: number | null
-          end_hour: number
           id: string
-          rate_per_kwh: number
+          is_above_threshold: boolean | null
+          notes: string | null
           season: Database["public"]["Enums"]["season_type"]
-          start_hour: number
-          tariff_id: string
-          time_of_use: Database["public"]["Enums"]["time_of_use_type"]
+          tariff_plan_id: string
+          tou: Database["public"]["Enums"]["tou_period"]
+          unit: string
         }
         Insert: {
+          amount: number
+          block_max_kwh?: number | null
+          block_min_kwh?: number | null
+          block_number?: number | null
+          charge: Database["public"]["Enums"]["charge_type"]
+          consumption_threshold_kwh?: number | null
           created_at?: string
-          day_type?: Database["public"]["Enums"]["day_type"]
-          demand_charge_per_kva?: number | null
-          end_hour: number
           id?: string
-          rate_per_kwh: number
+          is_above_threshold?: boolean | null
+          notes?: string | null
           season?: Database["public"]["Enums"]["season_type"]
-          start_hour: number
-          tariff_id: string
-          time_of_use?: Database["public"]["Enums"]["time_of_use_type"]
+          tariff_plan_id: string
+          tou?: Database["public"]["Enums"]["tou_period"]
+          unit: string
         }
         Update: {
+          amount?: number
+          block_max_kwh?: number | null
+          block_min_kwh?: number | null
+          block_number?: number | null
+          charge?: Database["public"]["Enums"]["charge_type"]
+          consumption_threshold_kwh?: number | null
           created_at?: string
-          day_type?: Database["public"]["Enums"]["day_type"]
-          demand_charge_per_kva?: number | null
-          end_hour?: number
           id?: string
-          rate_per_kwh?: number
+          is_above_threshold?: boolean | null
+          notes?: string | null
           season?: Database["public"]["Enums"]["season_type"]
-          start_hour?: number
-          tariff_id?: string
-          time_of_use?: Database["public"]["Enums"]["time_of_use_type"]
+          tariff_plan_id?: string
+          tou?: Database["public"]["Enums"]["tou_period"]
+          unit?: string
         }
         Relationships: [
           {
-            foreignKeyName: "tou_periods_tariff_id_fkey"
-            columns: ["tariff_id"]
+            foreignKeyName: "tariff_rates_tariff_plan_id_fkey"
+            columns: ["tariff_plan_id"]
             isOneToOne: false
-            referencedRelation: "tariffs"
+            referencedRelation: "tariff_plans"
             referencedColumns: ["id"]
           },
         ]
       }
     }
     Views: {
-      [_ in never]: never
+      v_municipality_summary: {
+        Row: {
+          municipality: string | null
+          nersa_increase_pct: number | null
+          province: string | null
+          tariff_plan_count: number | null
+          total_rate_lines: number | null
+        }
+        Relationships: []
+      }
+      v_tariff_lookup: {
+        Row: {
+          amount: number | null
+          block_max_kwh: number | null
+          block_min_kwh: number | null
+          block_number: number | null
+          category: Database["public"]["Enums"]["customer_category"] | null
+          charge: Database["public"]["Enums"]["charge_type"] | null
+          consumption_threshold_kwh: number | null
+          is_above_threshold: boolean | null
+          is_recommended: boolean | null
+          is_redundant: boolean | null
+          max_amps: number | null
+          max_kva: number | null
+          metering: Database["public"]["Enums"]["metering_type"] | null
+          min_amps: number | null
+          min_kva: number | null
+          municipality: string | null
+          nersa_increase_pct: number | null
+          notes: string | null
+          phase: string | null
+          province: string | null
+          province_code: string | null
+          scale_code: string | null
+          season: Database["public"]["Enums"]["season_type"] | null
+          structure: Database["public"]["Enums"]["tariff_structure"] | null
+          tariff_name: string | null
+          tou: Database["public"]["Enums"]["tou_period"] | null
+          unit: string | null
+          voltage: Database["public"]["Enums"]["voltage_level"] | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      calculate_monthly_cost: {
+        Args: {
+          p_category: Database["public"]["Enums"]["customer_category"]
+          p_demand_kva?: number
+          p_kwh_usage: number
+          p_municipality_id: string
+          p_season?: Database["public"]["Enums"]["season_type"]
+        }
+        Returns: {
+          basic_charge: number
+          demand_charge: number
+          energy_charge: number
+          tariff_name: string
+          total_estimate: number
+        }[]
+      }
       generate_share_token: { Args: never; Returns: string }
     }
     Enums: {
-      day_type: "Weekday" | "Saturday" | "Sunday"
+      charge_type:
+        | "basic"
+        | "energy"
+        | "demand"
+        | "network_access"
+        | "network_demand"
+        | "reactive_energy"
+        | "service"
+        | "admin"
+        | "maintenance"
+        | "availability"
+        | "capacity"
+        | "ancillary"
+        | "subsidy"
+        | "surcharge"
+        | "amperage"
+        | "notified_demand"
+      customer_category:
+        | "domestic"
+        | "domestic_indigent"
+        | "commercial"
+        | "industrial"
+        | "agricultural"
+        | "public_lighting"
+        | "sports_facilities"
+        | "public_benefit"
+        | "bulk_reseller"
+        | "departmental"
+        | "availability"
+        | "other"
       gantt_dependency_type:
         | "finish_to_start"
         | "start_to_start"
         | "finish_to_finish"
         | "start_to_finish"
       gantt_task_status: "not_started" | "in_progress" | "completed"
-      phase_type: "Single Phase" | "Three Phase"
-      season_type: "All Year" | "High/Winter" | "Low/Summer"
-      tariff_type: "Fixed" | "IBT" | "TOU"
-      time_of_use_type:
-        | "Any"
-        | "Peak"
-        | "Standard"
-        | "Off-Peak"
-        | "High Demand"
-        | "Low Demand"
-        | "Critical Peak"
-      transmission_zone_type:
-        | "Zone 0-300km"
-        | "Zone 300-600km"
-        | "Zone 600-900km"
-        | "Zone >900km"
-      voltage_level: "LV" | "MV" | "HV"
+      metering_type: "prepaid" | "conventional" | "both" | "unmetered"
+      season_type: "all" | "low" | "high"
+      tariff_structure:
+        | "flat"
+        | "inclining_block"
+        | "seasonal"
+        | "time_of_use"
+        | "demand"
+        | "hybrid"
+      tou_period: "all" | "peak" | "standard" | "off_peak"
+      voltage_level: "low" | "medium" | "high"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2405,7 +2189,38 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      day_type: ["Weekday", "Saturday", "Sunday"],
+      charge_type: [
+        "basic",
+        "energy",
+        "demand",
+        "network_access",
+        "network_demand",
+        "reactive_energy",
+        "service",
+        "admin",
+        "maintenance",
+        "availability",
+        "capacity",
+        "ancillary",
+        "subsidy",
+        "surcharge",
+        "amperage",
+        "notified_demand",
+      ],
+      customer_category: [
+        "domestic",
+        "domestic_indigent",
+        "commercial",
+        "industrial",
+        "agricultural",
+        "public_lighting",
+        "sports_facilities",
+        "public_benefit",
+        "bulk_reseller",
+        "departmental",
+        "availability",
+        "other",
+      ],
       gantt_dependency_type: [
         "finish_to_start",
         "start_to_start",
@@ -2413,25 +2228,18 @@ export const Constants = {
         "start_to_finish",
       ],
       gantt_task_status: ["not_started", "in_progress", "completed"],
-      phase_type: ["Single Phase", "Three Phase"],
-      season_type: ["All Year", "High/Winter", "Low/Summer"],
-      tariff_type: ["Fixed", "IBT", "TOU"],
-      time_of_use_type: [
-        "Any",
-        "Peak",
-        "Standard",
-        "Off-Peak",
-        "High Demand",
-        "Low Demand",
-        "Critical Peak",
+      metering_type: ["prepaid", "conventional", "both", "unmetered"],
+      season_type: ["all", "low", "high"],
+      tariff_structure: [
+        "flat",
+        "inclining_block",
+        "seasonal",
+        "time_of_use",
+        "demand",
+        "hybrid",
       ],
-      transmission_zone_type: [
-        "Zone 0-300km",
-        "Zone 300-600km",
-        "Zone 600-900km",
-        "Zone >900km",
-      ],
-      voltage_level: ["LV", "MV", "HV"],
+      tou_period: ["all", "peak", "standard", "off_peak"],
+      voltage_level: ["low", "medium", "high"],
     },
   },
 } as const
