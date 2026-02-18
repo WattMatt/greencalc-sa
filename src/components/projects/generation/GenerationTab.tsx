@@ -2,14 +2,11 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
 import { ActualGenerationCard } from "./ActualGenerationCard";
 import { GuaranteedGenerationCard } from "./GuaranteedGenerationCard";
 import { BuildingLoadCard } from "./BuildingLoadCard";
 import { PerformanceChart } from "./PerformanceChart";
 import { PerformanceSummaryTable } from "./PerformanceSummaryTable";
-import { SyncScadaDialog } from "./SyncScadaDialog";
 import { LifetimePerformanceChart } from "./LifetimePerformanceChart";
 
 export interface GenerationRecord {
@@ -46,7 +43,6 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
   const prev = getPreviousMonth();
   const [selectedMonth, setSelectedMonth] = useState(prev.month.toString());
   const [selectedYear, setSelectedYear] = useState(prev.year.toString());
-  const [syncOpen, setSyncOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const currentYear = new Date().getFullYear();
@@ -115,18 +111,7 @@ export function GenerationTab({ projectId }: GenerationTabProps) {
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setSyncOpen(true)}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Sync SCADA
-        </Button>
       </div>
-
-      <SyncScadaDialog
-        open={syncOpen}
-        onOpenChange={setSyncOpen}
-        projectId={projectId}
-        onDataSynced={refetch}
-      />
 
       <LifetimePerformanceChart projectId={projectId} />
 
