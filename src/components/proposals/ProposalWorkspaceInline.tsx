@@ -30,6 +30,7 @@ import {
   ContentBlock,
   ContentBlockId,
   getBlocksForDocumentType,
+  getAllContentBlocks,
   STATUS_LABELS,
   STATUS_COLORS
 } from "@/components/proposals/types";
@@ -52,7 +53,7 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
   const [selectedSimulationId, setSelectedSimulationId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<'profile' | 'sandbox' | null>(null);
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null);
-  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>(() => getBlocksForDocumentType(documentType));
+  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>(() => getAllContentBlocks());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [aiNarratives, setAiNarratives] = useState<Record<string, { narrative: string; keyHighlights?: string[] }>>({});
@@ -303,8 +304,8 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
       }
       if ((existingProposal as any).content_blocks) {
         const saved = (existingProposal as any).content_blocks as ContentBlock[];
-        // Merge saved states with the correct block set for this document type
-        const defaultBlocks = getBlocksForDocumentType(documentType);
+        // Merge saved states with all blocks so cross-category blocks are preserved
+        const defaultBlocks = getAllContentBlocks();
         const merged = defaultBlocks.map(db => {
           const match = saved.find(s => s.id === db.id);
           return match ? { ...db, enabled: match.enabled, order: match.order } : db;
