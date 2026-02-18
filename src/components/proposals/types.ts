@@ -192,6 +192,16 @@ export function getBlocksForDocumentType(documentType: 'proposal' | 'monthly_rep
     .map((block, index) => ({ ...block, order: index }));
 }
 
+/**
+ * Returns ALL content blocks (general + proposal + monthly_report),
+ * used when the sidebar needs to show blocks from all categories.
+ */
+export function getAllContentBlocks(): ContentBlock[] {
+  return [...DEFAULT_CONTENT_BLOCKS]
+    .sort((a, b) => a.order - b.order)
+    .map((block, index) => ({ ...block, order: index }));
+}
+
 // ============= Proposal Entity =============
 
 export interface Proposal {
