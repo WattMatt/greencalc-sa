@@ -1,31 +1,41 @@
 
-## Fix: Sidebar Filter Should Show Only Category-Specific Blocks
 
-### Problem
-When selecting "Proposal" or "Monthly Report" as the filter, general blocks (Cover Page, Table of Contents, Signature Block) still appear because the filter logic includes `category === 'general'` for all non-"all" filters.
+## Remove PnP SCADA Live Sync Functionality
 
-### Expected Behaviour
-- **All Sections**: Shows everything (general + proposal + monthly report)
-- **General**: Shows only general blocks (Cover Page, Table of Contents, Signature Block)
-- **Proposal**: Shows only proposal-specific blocks (Admin Details, Introduction, Background, etc.)
-- **Monthly Report**: Shows only monthly report blocks (Executive Summary, Daily Log, etc.)
+### What Gets Removed
 
-### Change
+The external PnP SCADA connection — the feature that attempts to connect to `thukela-kadesh.pnpscada.com` to list meters and download CSVs in real-time. This has never worked reliably due to session/proxy constraints.
 
-**File: `src/components/proposals/ProposalSidebar.tsx`** (line 82)
+### What Stays (Unchanged)
 
-Update the filter logic to do a strict category match for proposal and monthly_report filters:
+The `scada_imports` database table, the `process-scada-profile` edge function, and all CSV upload workflows. These are your local meter data store used by Load Profiles, Tenant Matching, Simulation, and Monthly Reports. They just happen to be named "scada" but have nothing to do with the live PnP SCADA connection.
 
-```typescript
-// Before (incorrect — includes general in proposal/monthly_report)
-return b.category === 'general' || b.category === blockFilter;
+### Changes
 
-// After (strict match — each filter shows only its own category)
-return b.category === blockFilter;
-```
+**1. Delete edge function: `supabase/functions/fetch-pnpscada/index.ts`**
+- Remove the entire function directory
+- Delete the deployed function from the backend
 
-This is a one-line change. The full filter becomes:
-- `'all'` → show all blocks
-- `'general'` → show only `category === 'general'`
-- `'proposal'` → show only `category === 'proposal'`
-- `'monthly_report'` → show only `category === 'monthly_report'`
+**2. Update `src/components/projects/generation/GenerationTab.tsx`**
+- Remove the `SyncScadaDialog` import
+- Remove the `syncOpen` state and the "Sync SCADA" button
+- Remove the `<SyncScadaDialog>` component render
+
+**3. Delete `src/components/projects/generation/SyncScadaDialog.tsx`**
+- The entire file is no longer needed
+
+**4. Update `src/components/code-review/ProjectFileBrowser.tsx`**
+- Remove the `fetch-pnpscada` entry from the file tree listing
+
+### Files Not Touched
+
+These files reference `scada_imports` (the local CSV data store) and are unrelated to the live sync:
+- `src/components/loadprofiles/ScadaImport.tsx` (CSV upload UI)
+- `src/components/loadprofiles/PivotTable.tsx` (data analysis)
+- `src/components/loadprofiles/hooks/useMonthlyConsumption.ts`
+- `src/components/projects/load-profile/hooks/useMonthlyData.ts`
+- `src/components/projects/TenantProfileMatcher.tsx`
+- `src/components/loadprofiles/ExcelAuditReimport.tsx`
+- `supabase/functions/process-scada-profile/index.ts` (CSV processing)
+- All simulation and monthly report data hooks
+
