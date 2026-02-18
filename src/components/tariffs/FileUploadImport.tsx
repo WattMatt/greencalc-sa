@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Trash2, Eye, Pencil, Save } from "lucide-react";
+import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Eye, Pencil, Save } from "lucide-react";
 
 import { SOUTH_AFRICAN_PROVINCES } from "@/lib/constants";
 
@@ -41,23 +41,22 @@ interface PreviewData {
 
 interface TariffRate {
   id?: string;
-  rate_per_kwh: number;
-  time_of_use: string;
-  block_start_kwh: number | null;
-  block_end_kwh: number | null;
+  amount: number;
+  charge: string;
+  season: string;
+  tou: string;
+  block_min_kwh: number | null;
+  block_max_kwh: number | null;
+  unit: string;
 }
 
 interface ExtractedTariffPreview {
   id: string;
   name: string;
-  tariff_type: string;
-  phase_type: string | null;
-  amperage_limit: string | null;
-  fixed_monthly_charge: number | null;
-  demand_charge_per_kva: number | null;
-  is_prepaid: boolean | null;
-  category: { name: string } | null;
-  rates: TariffRate[];
+  category: string;
+  structure: string;
+  phase: string | null;
+  tariff_rates: TariffRate[];
 }
 
 export function FileUploadImport() {
@@ -70,7 +69,7 @@ export function FileUploadImport() {
   const [isExtractingMunis, setIsExtractingMunis] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
-  const [phase, setPhase] = useState<1 | 2 | 3>(1); // 1=upload, 2=municipalities, 3=tariffs
+  const [phase, setPhase] = useState<1 | 2 | 3>(1);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [extractedTariffs, setExtractedTariffs] = useState<ExtractedTariffPreview[]>([]);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
@@ -95,11 +94,7 @@ export function FileUploadImport() {
 
     const fileType = getFileType(selectedFile.name);
     if (fileType === 'unknown') {
-      toast({
-        title: "Invalid File",
-        description: "Please upload an Excel (.xlsx, .xls, .xlsm) or PDF file",
-        variant: "destructive",
-      });
+      toast({ title: "Invalid File", description: "Please upload an Excel (.xlsx, .xls, .xlsm) or PDF file", variant: "destructive" });
       return;
     }
 
@@ -111,24 +106,13 @@ export function FileUploadImport() {
 
     setIsUploading(true);
     try {
-      const timestamp = Date.now();
-      const filePath = `${timestamp}-${selectedFile.name}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("tariff-uploads")
-        .upload(filePath, selectedFile);
-
+      const filePath = `${Date.now()}-${selectedFile.name}`;
+      const { error: uploadError } = await supabase.storage.from("tariff-uploads").upload(filePath, selectedFile);
       if (uploadError) throw uploadError;
-
       setUploadedPath(filePath);
       toast({ title: "File Uploaded", description: "Ready to analyze" });
     } catch (err) {
-      console.error("Upload error:", err);
-      toast({
-        title: "Upload Failed",
-        description: err instanceof Error ? err.message : "Failed to upload file",
-        variant: "destructive",
-      });
+      toast({ title: "Upload Failed", description: err instanceof Error ? err.message : "Failed to upload file", variant: "destructive" });
       setFile(null);
     } finally {
       setIsUploading(false);
@@ -137,31 +121,18 @@ export function FileUploadImport() {
 
   const handleAnalyze = async () => {
     if (!uploadedPath || !file) return;
-
     setIsAnalyzing(true);
     setAnalysis(null);
-
     try {
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: {
-          filePath: uploadedPath,
-          fileType: getFileType(file.name),
-          action: "analyze"
-        },
+        body: { filePath: uploadedPath, fileType: getFileType(file.name), action: "analyze" },
       });
-
       if (error) throw error;
       if (data.error) throw new Error(data.error);
-
       setAnalysis(data);
       toast({ title: "Analysis Complete", description: "Review the structure, then extract municipalities" });
     } catch (err) {
-      console.error("Analysis error:", err);
-      toast({
-        title: "Analysis Failed",
-        description: err instanceof Error ? err.message : "Failed to analyze file",
-        variant: "destructive",
-      });
+      toast({ title: "Analysis Failed", description: err instanceof Error ? err.message : "Failed to analyze file", variant: "destructive" });
     } finally {
       setIsAnalyzing(false);
     }
@@ -169,46 +140,24 @@ export function FileUploadImport() {
 
   const handleExtractMunicipalities = async () => {
     if (!uploadedPath || !file) return;
-
     setIsExtractingMunis(true);
-
     try {
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: {
-          filePath: uploadedPath,
-          fileType: getFileType(file.name),
-          province: province,
-          action: "extract-municipalities"
-        },
+        body: { filePath: uploadedPath, fileType: getFileType(file.name), province, action: "extract-municipalities" },
       });
-
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
       const munis: Municipality[] = data.municipalities.map((m: { id: string; name: string; sheetName?: string }) => ({
-        id: m.id,
-        name: m.name,
-        sheetName: m.sheetName,
-        status: "pending" as const
+        id: m.id, name: m.name, sheetName: m.sheetName, status: "pending" as const
       }));
-
       setMunicipalities(munis);
       setPhase(2);
-
-      toast({
-        title: "Municipalities Extracted",
-        description: `Found ${munis.length} municipalities in ${province}`
-      });
-
+      toast({ title: "Municipalities Extracted", description: `Found ${munis.length} municipalities in ${province}` });
       queryClient.invalidateQueries({ queryKey: ["municipalities"] });
       queryClient.invalidateQueries({ queryKey: ["provinces"] });
     } catch (err) {
-      console.error("Municipality extraction error:", err);
-      toast({
-        title: "Extraction Failed",
-        description: err instanceof Error ? err.message : "Failed to extract municipalities",
-        variant: "destructive",
-      });
+      toast({ title: "Extraction Failed", description: err instanceof Error ? err.message : "Failed to extract municipalities", variant: "destructive" });
     } finally {
       setIsExtractingMunis(false);
     }
@@ -218,58 +167,33 @@ export function FileUploadImport() {
     const muni = municipalities[muniIndex];
     if (!muni || !uploadedPath || !file) return;
 
-    setMunicipalities(prev => prev.map((m, i) =>
-      i === muniIndex ? { ...m, status: "extracting" as const } : m
-    ));
+    setMunicipalities(prev => prev.map((m, i) => i === muniIndex ? { ...m, status: "extracting" as const } : m));
 
     try {
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: {
-          filePath: uploadedPath,
-          fileType: getFileType(file.name),
-          province: province,
-          municipality: muni.name,
-          action: "extract-tariffs"
-        },
+        body: { filePath: uploadedPath, fileType: getFileType(file.name), province, municipality: muni.name, action: "extract-tariffs" },
       });
-
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
       const totalChanged = (data.inserted || 0) + (data.updated || 0);
-      setMunicipalities(prev => prev.map((m, i) =>
-        i === muniIndex ? { ...m, status: "done" as const, tariffCount: totalChanged } : m
-      ));
+      setMunicipalities(prev => prev.map((m, i) => i === muniIndex ? { ...m, status: "done" as const, tariffCount: totalChanged } : m));
 
       const parts = [];
       if (data.inserted > 0) parts.push(`${data.inserted} new`);
       if (data.updated > 0) parts.push(`${data.updated} updated`);
       if (data.skipped > 0) parts.push(`${data.skipped} skipped`);
-
-      toast({
-        title: `${muni.name} Complete`,
-        description: parts.length > 0 ? parts.join(", ") : "No changes needed"
-      });
-
+      toast({ title: `${muni.name} Complete`, description: parts.length > 0 ? parts.join(", ") : "No changes needed" });
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
     } catch (err) {
-      console.error("Tariff extraction error:", err);
-      setMunicipalities(prev => prev.map((m, i) =>
-        i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m
-      ));
-      toast({
-        title: `${muni.name} Failed`,
-        description: err instanceof Error ? err.message : "Failed to extract tariffs",
-        variant: "destructive",
-      });
+      setMunicipalities(prev => prev.map((m, i) => i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m));
+      toast({ title: `${muni.name} Failed`, description: err instanceof Error ? err.message : "Failed to extract tariffs", variant: "destructive" });
     }
   };
 
   const handleExtractAll = async () => {
     for (let i = 0; i < municipalities.length; i++) {
-      if (municipalities[i].status === "pending") {
-        await handleExtractTariffs(i);
-      }
+      if (municipalities[i].status === "pending") await handleExtractTariffs(i);
     }
   };
 
@@ -277,117 +201,57 @@ export function FileUploadImport() {
     const muni = municipalities[muniIndex];
     if (!muni || !uploadedPath || !file) return;
 
-    // Set to extracting state
-    setMunicipalities(prev => prev.map((m, i) =>
-      i === muniIndex ? { ...m, status: "extracting" as const } : m
-    ));
+    setMunicipalities(prev => prev.map((m, i) => i === muniIndex ? { ...m, status: "extracting" as const } : m));
 
     try {
-      // First, delete existing tariffs for this municipality
-      const { data: muniData } = await supabase
-        .from("municipalities")
-        .select("id")
-        .ilike("name", muni.name)
-        .maybeSingle();
-
+      const { data: muniData } = await supabase.from("municipalities").select("id").ilike("name", muni.name).maybeSingle();
       if (muniData) {
-        // Get tariff IDs for this municipality
-        const { data: existingTariffs } = await (supabase as any)
-          .from("tariff_plans")
-          .select("id")
-          .eq("municipality_id", muniData.id);
-
-        if (existingTariffs && existingTariffs.length > 0) {
-          const tariffIds = existingTariffs.map((t: any) => t.id);
-
-          // Delete related rates first
-          await (supabase as any).from("tariff_rates").delete().in("tariff_plan_id", tariffIds);
-
-          // Then delete the tariff plans
-          await (supabase as any).from("tariff_plans").delete().eq("municipality_id", muniData.id);
-
-          console.log(`Deleted ${existingTariffs.length} tariffs for ${muni.name}`);
+        const { data: existingPlans } = await supabase.from("tariff_plans").select("id").eq("municipality_id", muniData.id);
+        if (existingPlans && existingPlans.length > 0) {
+          const planIds = existingPlans.map((t: any) => t.id);
+          await supabase.from("tariff_rates").delete().in("tariff_plan_id", planIds);
+          await supabase.from("tariff_plans").delete().eq("municipality_id", muniData.id);
         }
       }
 
-      // Now extract fresh tariffs
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: {
-          filePath: uploadedPath,
-          fileType: getFileType(file.name),
-          province: province,
-          municipality: muni.name,
-          action: "extract-tariffs"
-        },
+        body: { filePath: uploadedPath, fileType: getFileType(file.name), province, municipality: muni.name, action: "extract-tariffs" },
       });
-
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
       const totalChanged = (data.inserted || 0) + (data.updated || 0);
-      setMunicipalities(prev => prev.map((m, i) =>
-        i === muniIndex ? { ...m, status: "done" as const, tariffCount: totalChanged } : m
-      ));
-
-      toast({
-        title: `${muni.name} Re-extracted`,
-        description: `Imported ${totalChanged} tariffs (previous data replaced)`
-      });
-
+      setMunicipalities(prev => prev.map((m, i) => i === muniIndex ? { ...m, status: "done" as const, tariffCount: totalChanged } : m));
+      toast({ title: `${muni.name} Re-extracted`, description: `Imported ${totalChanged} tariffs` });
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
     } catch (err) {
-      console.error("Re-extraction error:", err);
-      setMunicipalities(prev => prev.map((m, i) =>
-        i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m
-      ));
-      toast({
-        title: `${muni.name} Re-extraction Failed`,
-        description: err instanceof Error ? err.message : "Failed to re-extract tariffs",
-        variant: "destructive",
-      });
+      setMunicipalities(prev => prev.map((m, i) => i === muniIndex ? { ...m, status: "error" as const, error: err instanceof Error ? err.message : "Failed" } : m));
+      toast({ title: `${muni.name} Re-extraction Failed`, description: err instanceof Error ? err.message : "Failed", variant: "destructive" });
     }
   };
 
   const handlePreview = async (muniName: string) => {
     if (!uploadedPath || !file) return;
-
     setIsLoadingPreview(true);
     setPreviewData(null);
     setExtractedTariffs([]);
     setPreviewOpen(true);
 
     try {
-      // Fetch raw document data
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: {
-          filePath: uploadedPath,
-          fileType: getFileType(file.name),
-          municipality: muniName,
-          action: "preview"
-        },
+        body: { filePath: uploadedPath, fileType: getFileType(file.name), municipality: muniName, action: "preview" },
       });
-
       if (error) throw error;
       if (data.error) throw new Error(data.error);
-
       setPreviewData(data);
 
-      // Also fetch extracted tariffs from database
-      const { data: muniData } = await supabase
-        .from("municipalities")
-        .select("id")
-        .ilike("name", muniName)
-        .maybeSingle();
-
+      // Fetch extracted tariff_plans from database
+      const { data: muniData } = await supabase.from("municipalities").select("id").ilike("name", muniName).maybeSingle();
       if (muniData) {
-        const { data: tariffs } = await (supabase as any)
+        const { data: tariffs } = await supabase
           .from("tariff_plans")
           .select(`
-            id,
-            name,
-            category,
-            structure,
-            phase,
+            id, name, category, structure, phase,
             tariff_rates(amount, charge, season, tou, block_min_kwh, block_max_kwh, unit)
           `)
           .eq("municipality_id", muniData.id)
@@ -398,12 +262,7 @@ export function FileUploadImport() {
         }
       }
     } catch (err) {
-      console.error("Preview error:", err);
-      toast({
-        title: "Preview Failed",
-        description: err instanceof Error ? err.message : "Failed to load preview",
-        variant: "destructive",
-      });
+      toast({ title: "Preview Failed", description: err instanceof Error ? err.message : "Failed to load preview", variant: "destructive" });
       setPreviewOpen(false);
     } finally {
       setIsLoadingPreview(false);
@@ -426,7 +285,7 @@ export function FileUploadImport() {
 
   const startEditing = (tariff: ExtractedTariffPreview) => {
     setEditingTariffId(tariff.id);
-    setEditedTariff({ ...tariff, rates: [...tariff.rates] });
+    setEditedTariff({ ...tariff, tariff_rates: [...tariff.tariff_rates] });
   };
 
   const cancelEditing = () => {
@@ -441,63 +300,53 @@ export function FileUploadImport() {
 
   const updateEditedRate = (index: number, field: keyof TariffRate, value: any) => {
     if (!editedTariff) return;
-    const newRates = [...editedTariff.rates];
+    const newRates = [...editedTariff.tariff_rates];
     newRates[index] = { ...newRates[index], [field]: value };
-    setEditedTariff({ ...editedTariff, rates: newRates });
+    setEditedTariff({ ...editedTariff, tariff_rates: newRates });
   };
 
   const saveEditedTariff = async () => {
     if (!editedTariff) return;
-
     setIsSaving(true);
     try {
-      // Update tariff main fields
-      const { error: tariffError } = await (supabase as any)
+      // Update tariff_plans
+      const { error: planError } = await supabase
         .from("tariff_plans")
         .update({
           name: editedTariff.name,
-          structure: editedTariff.tariff_type === 'TOU' ? 'time_of_use' : editedTariff.tariff_type === 'IBT' ? 'inclining_block' : 'flat',
-          phase: editedTariff.phase_type,
+          structure: editedTariff.structure as any,
+          phase: editedTariff.phase,
         })
         .eq("id", editedTariff.id);
 
-      if (tariffError) throw tariffError;
+      if (planError) throw planError;
 
-      // Update rates - delete old and insert new
-      await (supabase as any).from("tariff_rates").delete().eq("tariff_plan_id", editedTariff.id);
+      // Delete old rates and insert new
+      await supabase.from("tariff_rates").delete().eq("tariff_plan_id", editedTariff.id);
 
-      if (editedTariff.rates.length > 0) {
-        const ratesToInsert = editedTariff.rates.map(rate => ({
+      if (editedTariff.tariff_rates.length > 0) {
+        const ratesToInsert = editedTariff.tariff_rates.map(rate => ({
           tariff_plan_id: editedTariff.id,
-          charge: 'energy',
-          amount: rate.rate_per_kwh,
-          season: 'all',
-          tou: rate.time_of_use === 'Peak' ? 'peak' : rate.time_of_use === 'Standard' ? 'standard' : rate.time_of_use === 'Off-Peak' ? 'off_peak' : 'all',
-          block_min_kwh: rate.block_start_kwh,
-          block_max_kwh: rate.block_end_kwh,
-          unit: 'c/kWh',
+          charge: rate.charge as any,
+          amount: rate.amount,
+          season: rate.season as any,
+          tou: rate.tou as any,
+          block_min_kwh: rate.block_min_kwh,
+          block_max_kwh: rate.block_max_kwh,
+          unit: rate.unit || 'R/kWh',
         }));
 
-        const { error: ratesError } = await (supabase as any).from("tariff_rates").insert(ratesToInsert);
+        const { error: ratesError } = await supabase.from("tariff_rates").insert(ratesToInsert);
         if (ratesError) throw ratesError;
       }
 
-      // Update local state
-      setExtractedTariffs(prev => prev.map(t =>
-        t.id === editedTariff.id ? editedTariff : t
-      ));
-
+      setExtractedTariffs(prev => prev.map(t => t.id === editedTariff.id ? editedTariff : t));
       toast({ title: "Tariff Updated", description: `${editedTariff.name} has been saved.` });
       setEditingTariffId(null);
       setEditedTariff(null);
       queryClient.invalidateQueries({ queryKey: ["tariffs"] });
     } catch (err) {
-      console.error("Save error:", err);
-      toast({
-        title: "Save Failed",
-        description: err instanceof Error ? err.message : "Failed to save changes",
-        variant: "destructive",
-      });
+      toast({ title: "Save Failed", description: err instanceof Error ? err.message : "Failed to save changes", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
@@ -506,6 +355,11 @@ export function FileUploadImport() {
   const completedCount = municipalities.filter(m => m.status === "done").length;
   const pendingCount = municipalities.filter(m => m.status === "pending").length;
   const totalTariffs = municipalities.reduce((sum, m) => sum + (m.tariffCount || 0), 0);
+
+  // Helper to get energy rates only for display
+  const getEnergyRates = (rates: TariffRate[]) => rates.filter(r => r.charge === "energy");
+  const getBasicCharge = (rates: TariffRate[]) => rates.find(r => r.charge === "basic");
+  const getDemandCharge = (rates: TariffRate[]) => rates.find(r => r.charge === "demand");
 
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetState(); }}>
@@ -540,10 +394,7 @@ export function FileUploadImport() {
           <div className="space-y-2">
             <Label>Select File</Label>
             {!file ? (
-              <div
-                className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
-                onClick={() => fileInputRef.current?.click()}
-              >
+              <div className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors" onClick={() => fileInputRef.current?.click()}>
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex gap-2">
                     <FileSpreadsheet className="h-8 w-8 text-green-600" />
@@ -552,31 +403,15 @@ export function FileUploadImport() {
                   <p className="text-sm font-medium">Click to upload Excel or PDF</p>
                   <p className="text-xs text-muted-foreground">.xlsx, .xls, or .pdf files</p>
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls,.xlsm,.pdf,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.xlsm,.pdf" onChange={handleFileSelect} className="hidden" />
               </div>
             ) : (
               <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                {getFileType(file.name) === 'pdf' ? (
-                  <FileText className="h-5 w-5 text-red-500" />
-                ) : (
-                  <FileSpreadsheet className="h-5 w-5 text-green-600" />
-                )}
+                {getFileType(file.name) === 'pdf' ? <FileText className="h-5 w-5 text-red-500" /> : <FileSpreadsheet className="h-5 w-5 text-green-600" />}
                 <span className="flex-1 text-sm font-medium truncate">{file.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {(file.size / 1024).toFixed(1)} KB
-                </span>
-                {isUploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={resetState}>
-                    <X className="h-4 w-4" />
-                  </Button>
+                <span className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</span>
+                {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={resetState}><X className="h-4 w-4" /></Button>
                 )}
               </div>
             )}
@@ -591,9 +426,7 @@ export function FileUploadImport() {
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
                 {SOUTH_AFRICAN_PROVINCES.map((prov) => (
-                  <SelectItem key={prov} value={prov}>
-                    {prov}
-                  </SelectItem>
+                  <SelectItem key={prov} value={prov}>{prov}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -603,73 +436,29 @@ export function FileUploadImport() {
           {uploadedPath && phase === 1 && (
             <div className="space-y-3">
               {!analysis ? (
-                <Button
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzing}
-                  variant="secondary"
-                  className="w-full gap-2"
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4" />
-                      Analyze File Structure
-                    </>
-                  )}
+                <Button onClick={handleAnalyze} disabled={isAnalyzing} variant="secondary" className="w-full gap-2">
+                  {isAnalyzing ? <><Loader2 className="h-4 w-4 animate-spin" />Analyzing...</> : <><Search className="h-4 w-4" />Analyze File Structure</>}
                 </Button>
               ) : (
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <FileSpreadsheet className="h-4 w-4" />
-                      Analysis Result
-                    </CardTitle>
+                    <CardTitle className="text-sm flex items-center gap-2"><FileSpreadsheet className="h-4 w-4" />Analysis Result</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {analysis.sheets && analysis.sheets.length > 0 && (
                       <div>
                         <Label className="text-xs text-muted-foreground">Sheets/Municipalities Found</Label>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {analysis.sheets.slice(0, 10).map((sheet) => (
-                            <Badge key={sheet} variant="secondary" className="text-xs">
-                              {sheet}
-                            </Badge>
-                          ))}
-                          {analysis.sheets.length > 10 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{analysis.sheets.length - 10} more
-                            </Badge>
-                          )}
+                          {analysis.sheets.slice(0, 10).map((sheet) => <Badge key={sheet} variant="secondary" className="text-xs">{sheet}</Badge>)}
+                          {analysis.sheets.length > 10 && <Badge variant="outline" className="text-xs">+{analysis.sheets.length - 10} more</Badge>}
                         </div>
                       </div>
                     )}
-
                     <ScrollArea className="h-24">
-                      <div className="text-xs whitespace-pre-wrap text-muted-foreground">
-                        {analysis.analysis}
-                      </div>
+                      <div className="text-xs whitespace-pre-wrap text-muted-foreground">{analysis.analysis}</div>
                     </ScrollArea>
-
-                    <Button
-                      onClick={handleExtractMunicipalities}
-                      disabled={isExtractingMunis}
-                      className="w-full gap-2"
-                    >
-                      {isExtractingMunis ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Extracting Municipalities...
-                        </>
-                      ) : (
-                        <>
-                          <MapPin className="h-4 w-4" />
-                          Extract & Save Municipalities
-                        </>
-                      )}
+                    <Button onClick={handleExtractMunicipalities} disabled={isExtractingMunis} className="w-full gap-2">
+                      {isExtractingMunis ? <><Loader2 className="h-4 w-4 animate-spin" />Extracting...</> : <><MapPin className="h-4 w-4" />Extract & Save Municipalities</>}
                     </Button>
                   </CardContent>
                 </Card>
@@ -682,129 +471,49 @@ export function FileUploadImport() {
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Municipalities ({municipalities.length})
-                  </CardTitle>
-                  <div className="text-xs text-muted-foreground">
-                    {completedCount}/{municipalities.length} done • {totalTariffs} tariffs
-                  </div>
+                  <CardTitle className="text-sm flex items-center gap-2"><Building2 className="h-4 w-4" />Municipalities ({municipalities.length})</CardTitle>
+                  <div className="text-xs text-muted-foreground">{completedCount}/{municipalities.length} done • {totalTariffs} tariffs</div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {pendingCount > 0 && (
-                  <Button
-                    onClick={handleExtractAll}
-                    variant="default"
-                    size="sm"
-                    className="w-full gap-2"
-                  >
-                    <Zap className="h-4 w-4" />
-                    Extract All Remaining ({pendingCount})
+                  <Button onClick={handleExtractAll} variant="default" size="sm" className="w-full gap-2">
+                    <Zap className="h-4 w-4" />Extract All Remaining ({pendingCount})
                   </Button>
                 )}
-
                 <ScrollArea className="h-64">
                   <div className="space-y-2">
                     {municipalities.map((muni, index) => (
-                      <div
-                        key={muni.id}
-                        className="flex items-center justify-between p-2 rounded border bg-background"
-                      >
+                      <div key={muni.id} className="flex items-center justify-between p-2 rounded border bg-background">
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           {muni.status === "done" && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
                           {muni.status === "error" && <AlertCircle className="h-4 w-4 text-destructive shrink-0" />}
                           {muni.status === "extracting" && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
                           {muni.status === "pending" && <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />}
-
                           <span className="text-sm truncate">{muni.name}</span>
-
-                          {muni.tariffCount !== undefined && (
-                            <Badge variant="secondary" className="text-xs shrink-0">
-                              {muni.tariffCount} tariffs
-                            </Badge>
-                          )}
+                          {muni.tariffCount !== undefined && <Badge variant="secondary" className="text-xs shrink-0">{muni.tariffCount} tariffs</Badge>}
                         </div>
 
                         {muni.status === "pending" && (
                           <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs shrink-0 gap-1"
-                              onClick={() => handlePreview(muni.name)}
-                              title="Preview raw document data"
-                            >
-                              <Eye className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs shrink-0"
-                              onClick={() => handleExtractTariffs(index)}
-                            >
-                              Extract
-                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 text-xs shrink-0 gap-1" onClick={() => handlePreview(muni.name)}><Eye className="h-3 w-3" /></Button>
+                            <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={() => handleExtractTariffs(index)}>Extract</Button>
                           </div>
                         )}
-
                         {muni.status === "done" && (
                           <div className="flex items-center gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs shrink-0 gap-1"
-                              onClick={() => handlePreview(muni.name)}
-                              title="Preview and verify extracted data"
-                            >
-                              <Eye className="h-3 w-3" />
-                              Preview
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs shrink-0 gap-1 text-orange-600 border-orange-300 hover:bg-orange-50 hover:text-orange-700"
-                              onClick={() => handleReextractTariffs(index)}
-                              title="Delete existing tariffs and re-extract from source"
-                            >
-                              <RefreshCw className="h-3 w-3" />
-                              Re-extract
-                            </Button>
+                            <Button variant="outline" size="sm" className="h-7 text-xs shrink-0 gap-1" onClick={() => handlePreview(muni.name)}><Eye className="h-3 w-3" />Preview</Button>
+                            <Button variant="outline" size="sm" className="h-7 text-xs shrink-0 gap-1 text-orange-600 border-orange-300 hover:bg-orange-50 hover:text-orange-700" onClick={() => handleReextractTariffs(index)}><RefreshCw className="h-3 w-3" />Re-extract</Button>
                           </div>
                         )}
-
                         {muni.status === "error" && (
                           <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs shrink-0 gap-1"
-                              onClick={() => handlePreview(muni.name)}
-                              title="Preview raw document data"
-                            >
-                              <Eye className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs shrink-0"
-                              onClick={() => handleExtractTariffs(index)}
-                            >
-                              Retry
-                            </Button>
+                            <Button variant="ghost" size="sm" className="h-7 text-xs shrink-0 gap-1" onClick={() => handlePreview(muni.name)}><Eye className="h-3 w-3" /></Button>
+                            <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={() => handleExtractTariffs(index)}>Retry</Button>
                           </div>
                         )}
-
                         {muni.status === "extracting" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs shrink-0 gap-1"
-                            onClick={() => handlePreview(muni.name)}
-                            title="Preview raw document data"
-                          >
-                            <Eye className="h-3 w-3" />
-                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs shrink-0 gap-1" onClick={() => handlePreview(muni.name)}><Eye className="h-3 w-3" /></Button>
                         )}
                       </div>
                     ))}
@@ -814,9 +523,7 @@ export function FileUploadImport() {
                 {completedCount === municipalities.length && municipalities.length > 0 && (
                   <Alert className="border-green-500">
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    <AlertDescription>
-                      All municipalities extracted! {totalTariffs} total tariffs imported.
-                    </AlertDescription>
+                    <AlertDescription>All municipalities extracted! {totalTariffs} total tariffs imported.</AlertDescription>
                   </Alert>
                 )}
               </CardContent>
@@ -829,27 +536,19 @@ export function FileUploadImport() {
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="sm:max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileSpreadsheet className="h-5 w-5" />
-              Comparison: {previewData?.sheetTitle || "Loading..."}
-            </DialogTitle>
-            <DialogDescription>
-              Side-by-side comparison of raw document data and extracted tariffs for verification.
-            </DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5" />Comparison: {previewData?.sheetTitle || "Loading..."}</DialogTitle>
+            <DialogDescription>Side-by-side comparison of raw document data and extracted tariffs.</DialogDescription>
           </DialogHeader>
 
           {isLoadingPreview ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
+            <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
           ) : previewData ? (
             <div className="grid grid-cols-2 gap-4 flex-1 overflow-hidden">
               {/* Left: Raw Document Data */}
               <Card className="flex flex-col overflow-hidden">
                 <CardHeader className="py-2 px-3 border-b bg-muted/50">
                   <CardTitle className="text-sm flex items-center gap-2">
-                    <FileSpreadsheet className="h-4 w-4 text-green-600" />
-                    Raw Document Data
+                    <FileSpreadsheet className="h-4 w-4 text-green-600" />Raw Document Data
                     <Badge variant="secondary" className="text-xs">{previewData.rowCount} rows</Badge>
                   </CardTitle>
                 </CardHeader>
@@ -861,18 +560,14 @@ export function FileUploadImport() {
                           <TableRow>
                             <TableHead className="w-8 text-xs sticky left-0 bg-background">#</TableHead>
                             {previewData.data[0]?.slice(0, 8).map((_, colIdx) => (
-                              <TableHead key={colIdx} className="text-xs min-w-[80px]">
-                                {colIdx + 1}
-                              </TableHead>
+                              <TableHead key={colIdx} className="text-xs min-w-[80px]">{colIdx + 1}</TableHead>
                             ))}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {previewData.data.slice(0, 60).map((row, rowIdx) => (
                             <TableRow key={rowIdx} className={rowIdx % 2 === 0 ? "bg-muted/30" : ""}>
-                              <TableCell className="text-xs text-muted-foreground font-mono sticky left-0 bg-background">
-                                {rowIdx + 1}
-                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground font-mono sticky left-0 bg-background">{rowIdx + 1}</TableCell>
                               {row.slice(0, 8).map((cell, cellIdx) => (
                                 <TableCell key={cellIdx} className="text-xs whitespace-nowrap p-1">
                                   {cell !== null && cell !== undefined && cell !== "" ? String(cell).slice(0, 30) : "-"}
@@ -891,8 +586,7 @@ export function FileUploadImport() {
               <Card className="flex flex-col overflow-hidden">
                 <CardHeader className="py-2 px-3 border-b bg-muted/50">
                   <CardTitle className="text-sm flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-primary" />
-                    Extracted Tariffs
+                    <Zap className="h-4 w-4 text-primary" />Extracted Tariffs
                     <Badge variant="secondary" className="text-xs">{extractedTariffs.length} tariffs</Badge>
                   </CardTitle>
                 </CardHeader>
@@ -911,6 +605,9 @@ export function FileUploadImport() {
                         {extractedTariffs.map((tariff) => {
                           const isEditing = editingTariffId === tariff.id;
                           const displayTariff = isEditing && editedTariff ? editedTariff : tariff;
+                          const energyRates = getEnergyRates(displayTariff.tariff_rates || []);
+                          const basicCharge = getBasicCharge(displayTariff.tariff_rates || []);
+                          const demandCharge = getDemandCharge(displayTariff.tariff_rates || []);
 
                           return (
                             <Card key={tariff.id} className={`text-xs ${isEditing ? "ring-2 ring-primary" : ""}`}>
@@ -918,43 +615,19 @@ export function FileUploadImport() {
                                 <div className="flex items-start justify-between gap-2">
                                   <div>
                                     <div className="font-medium text-sm">{tariff.name}</div>
-                                    <div className="text-muted-foreground">{tariff.category?.name || "Uncategorized"}</div>
+                                    <div className="text-muted-foreground">{tariff.category}</div>
                                   </div>
                                   <div className="flex items-center gap-1">
-                                    <Badge variant="outline" className="text-[10px]">{tariff.tariff_type}</Badge>
-                                    {tariff.is_prepaid && <Badge variant="secondary" className="text-[10px]">Prepaid</Badge>}
+                                    <Badge variant="outline" className="text-[10px]">{tariff.structure}</Badge>
                                     {isEditing ? (
                                       <>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-6 px-2 text-xs"
-                                          onClick={cancelEditing}
-                                          disabled={isSaving}
-                                        >
-                                          <X className="h-3 w-3" />
-                                        </Button>
-                                        <Button
-                                          variant="default"
-                                          size="sm"
-                                          className="h-6 px-2 text-xs gap-1"
-                                          onClick={saveEditedTariff}
-                                          disabled={isSaving}
-                                        >
-                                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                                          Save
+                                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={cancelEditing} disabled={isSaving}><X className="h-3 w-3" /></Button>
+                                        <Button variant="default" size="sm" className="h-6 px-2 text-xs gap-1" onClick={saveEditedTariff} disabled={isSaving}>
+                                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}Save
                                         </Button>
                                       </>
                                     ) : (
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 px-2 text-xs gap-1"
-                                        onClick={() => startEditing(tariff)}
-                                      >
-                                        <Pencil className="h-3 w-3" />
-                                        Edit
-                                      </Button>
+                                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={() => startEditing(tariff)}><Pencil className="h-3 w-3" />Edit</Button>
                                     )}
                                   </div>
                                 </div>
@@ -964,34 +637,9 @@ export function FileUploadImport() {
                                   <>
                                     <div className="grid grid-cols-2 gap-2">
                                       <div>
-                                        <Label className="text-[10px] text-muted-foreground">Basic Charge (R/month)</Label>
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          className="h-7 text-xs"
-                                          value={displayTariff.fixed_monthly_charge || ""}
-                                          onChange={(e) => updateEditedTariff("fixed_monthly_charge", e.target.value ? parseFloat(e.target.value) : null)}
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label className="text-[10px] text-muted-foreground">Demand Charge (R/kVA)</Label>
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          className="h-7 text-xs"
-                                          value={displayTariff.demand_charge_per_kva || ""}
-                                          onChange={(e) => updateEditedTariff("demand_charge_per_kva", e.target.value ? parseFloat(e.target.value) : null)}
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label className="text-[10px] text-muted-foreground">Phase Type</Label>
-                                        <Select
-                                          value={displayTariff.phase_type || ""}
-                                          onValueChange={(v) => updateEditedTariff("phase_type", v || null)}
-                                        >
-                                          <SelectTrigger className="h-7 text-xs">
-                                            <SelectValue placeholder="Select" />
-                                          </SelectTrigger>
+                                        <Label className="text-[10px] text-muted-foreground">Phase</Label>
+                                        <Select value={displayTariff.phase || ""} onValueChange={(v) => updateEditedTariff("phase", v || null)}>
+                                          <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
                                           <SelectContent className="bg-popover">
                                             <SelectItem value="Single Phase">Single Phase</SelectItem>
                                             <SelectItem value="Three Phase">Three Phase</SelectItem>
@@ -999,45 +647,33 @@ export function FileUploadImport() {
                                         </Select>
                                       </div>
                                       <div>
-                                        <Label className="text-[10px] text-muted-foreground">Amperage Limit</Label>
-                                        <Input
-                                          type="text"
-                                          className="h-7 text-xs"
-                                          value={displayTariff.amperage_limit || ""}
-                                          onChange={(e) => updateEditedTariff("amperage_limit", e.target.value || null)}
-                                        />
+                                        <Label className="text-[10px] text-muted-foreground">Structure</Label>
+                                        <Select value={displayTariff.structure} onValueChange={(v) => updateEditedTariff("structure", v)}>
+                                          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                                          <SelectContent className="bg-popover">
+                                            <SelectItem value="flat">Flat</SelectItem>
+                                            <SelectItem value="inclining_block">IBT</SelectItem>
+                                            <SelectItem value="time_of_use">TOU</SelectItem>
+                                            <SelectItem value="demand">Demand</SelectItem>
+                                          </SelectContent>
+                                        </Select>
                                       </div>
                                     </div>
-                                    {displayTariff.rates && displayTariff.rates.length > 0 && (
+                                    {energyRates.length > 0 && (
                                       <div className="pt-2 border-t">
-                                        <Label className="text-[10px] text-muted-foreground">Energy Rates (c/kWh)</Label>
+                                        <Label className="text-[10px] text-muted-foreground">Energy Rates</Label>
                                         <div className="space-y-1 mt-1">
-                                          {displayTariff.rates.map((rate, idx) => (
+                                          {displayTariff.tariff_rates.map((rate, idx) => (
                                             <div key={idx} className="flex items-center gap-2 bg-muted/50 p-1 rounded">
-                                              <Select
-                                                value={rate.time_of_use}
-                                                onValueChange={(v) => updateEditedRate(idx, "time_of_use", v)}
-                                              >
-                                                <SelectTrigger className="h-6 text-xs w-28">
-                                                  <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent className="bg-popover">
-                                                  <SelectItem value="Any">Any</SelectItem>
-                                                  <SelectItem value="High Demand">High Demand</SelectItem>
-                                                  <SelectItem value="Low Demand">Low Demand</SelectItem>
-                                                  <SelectItem value="Peak">Peak</SelectItem>
-                                                  <SelectItem value="Standard">Standard</SelectItem>
-                                                  <SelectItem value="Off-Peak">Off-Peak</SelectItem>
-                                                </SelectContent>
-                                              </Select>
+                                              <Badge variant="outline" className="text-[9px] w-14 justify-center">{rate.charge}</Badge>
                                               <Input
-                                                type="number"
-                                                step="0.01"
-                                                className="h-6 text-xs w-20"
-                                                value={(rate.rate_per_kwh * 100).toFixed(2)}
-                                                onChange={(e) => updateEditedRate(idx, "rate_per_kwh", parseFloat(e.target.value) / 100)}
+                                                type="number" step="0.01" className="h-6 text-xs w-20"
+                                                value={rate.amount}
+                                                onChange={(e) => updateEditedRate(idx, "amount", parseFloat(e.target.value) || 0)}
                                               />
-                                              <span className="text-[10px] text-muted-foreground">c/kWh</span>
+                                              <span className="text-[10px] text-muted-foreground">{rate.unit}</span>
+                                              {rate.tou !== "all" && <Badge variant="secondary" className="text-[9px]">{rate.tou}</Badge>}
+                                              {rate.season !== "all" && <Badge variant="secondary" className="text-[9px]">{rate.season}</Badge>}
                                             </div>
                                           ))}
                                         </div>
@@ -1047,49 +683,46 @@ export function FileUploadImport() {
                                 ) : (
                                   <>
                                     <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                      {displayTariff.fixed_monthly_charge !== null && displayTariff.fixed_monthly_charge > 0 && (
+                                      {basicCharge && (
                                         <div>
                                           <span className="text-muted-foreground">Basic Charge:</span>{" "}
-                                          <span className="font-medium text-green-600">R{displayTariff.fixed_monthly_charge.toFixed(2)}/m</span>
+                                          <span className="font-medium text-green-600">R{basicCharge.amount.toFixed(2)}/m</span>
                                         </div>
                                       )}
-                                      {displayTariff.demand_charge_per_kva !== null && displayTariff.demand_charge_per_kva > 0 && (
+                                      {demandCharge && (
                                         <div>
                                           <span className="text-muted-foreground">Demand Charge:</span>{" "}
-                                          <span className="font-medium text-green-600">R{displayTariff.demand_charge_per_kva.toFixed(2)}/kVA</span>
+                                          <span className="font-medium text-green-600">R{demandCharge.amount.toFixed(2)}/kVA</span>
                                         </div>
                                       )}
-                                      {displayTariff.phase_type && (
-                                        <div>
-                                          <span className="text-muted-foreground">Phase:</span> {displayTariff.phase_type}
-                                        </div>
-                                      )}
-                                      {displayTariff.amperage_limit && (
-                                        <div>
-                                          <span className="text-muted-foreground">Amperage:</span> {displayTariff.amperage_limit}
-                                        </div>
+                                      {displayTariff.phase && (
+                                        <div><span className="text-muted-foreground">Phase:</span> {displayTariff.phase}</div>
                                       )}
                                     </div>
-                                    {displayTariff.rates && displayTariff.rates.length > 0 && (
+                                    {energyRates.length > 0 && (
                                       <div className="mt-2 pt-2 border-t">
                                         <div className="text-muted-foreground mb-1">Energy Rates:</div>
                                         <div className="space-y-0.5">
-                                          {displayTariff.rates.map((rate, idx) => (
+                                          {energyRates.map((rate, idx) => (
                                             <div key={idx} className="flex items-center justify-between bg-muted/50 px-2 py-0.5 rounded">
-                                              <span className={`font-medium ${rate.time_of_use === "High Demand" ? "text-orange-600" :
-                                                  rate.time_of_use === "Low Demand" ? "text-blue-600" :
-                                                    rate.time_of_use === "Peak" ? "text-red-600" :
-                                                      rate.time_of_use === "Off-Peak" ? "text-green-600" :
-                                                        "text-foreground"
-                                                }`}>
-                                                {rate.time_of_use}
-                                                {rate.block_start_kwh !== null && rate.block_end_kwh !== null && (
-                                                  <span className="text-muted-foreground ml-1">
-                                                    ({rate.block_start_kwh}-{rate.block_end_kwh} kWh)
-                                                  </span>
+                                              <span className={`font-medium ${
+                                                rate.tou === "peak" ? "text-red-600" :
+                                                rate.tou === "standard" ? "text-foreground" :
+                                                rate.tou === "off_peak" ? "text-green-600" :
+                                                "text-foreground"
+                                              }`}>
+                                                {rate.tou !== "all" ? rate.tou : "Flat"}
+                                                {rate.season !== "all" && ` (${rate.season})`}
+                                                {rate.block_min_kwh !== null && rate.block_max_kwh !== null && (
+                                                  <span className="text-muted-foreground ml-1">({rate.block_min_kwh}-{rate.block_max_kwh} kWh)</span>
+                                                )}
+                                                {rate.block_min_kwh !== null && rate.block_max_kwh === null && (
+                                                  <span className="text-muted-foreground ml-1">({'>'}{rate.block_min_kwh} kWh)</span>
                                                 )}
                                               </span>
-                                              <span className="font-mono">{(rate.rate_per_kwh * 100).toFixed(2)} c/kWh</span>
+                                              <span className="font-mono">
+                                                {rate.unit === "R/kWh" ? `${(rate.amount * 100).toFixed(2)} c/kWh` : `${rate.amount.toFixed(2)} ${rate.unit}`}
+                                              </span>
                                             </div>
                                           ))}
                                         </div>
@@ -1108,9 +741,7 @@ export function FileUploadImport() {
               </Card>
             </div>
           ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No preview data available
-            </div>
+            <div className="text-center py-8 text-muted-foreground">No preview data available</div>
           )}
         </DialogContent>
       </Dialog>

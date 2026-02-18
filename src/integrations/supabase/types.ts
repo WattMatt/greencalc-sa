@@ -169,6 +169,103 @@ export type Database = {
         }
         Relationships: []
       }
+      eskom_batch_status: {
+        Row: {
+          batch_index: number
+          batch_name: string
+          created_at: string
+          id: string
+          municipality_id: string
+          status: string
+          tariffs_extracted: number | null
+          updated_at: string
+        }
+        Insert: {
+          batch_index: number
+          batch_name: string
+          created_at?: string
+          id?: string
+          municipality_id: string
+          status?: string
+          tariffs_extracted?: number | null
+          updated_at?: string
+        }
+        Update: {
+          batch_index?: number
+          batch_name?: string
+          created_at?: string
+          id?: string
+          municipality_id?: string
+          status?: string
+          tariffs_extracted?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eskom_batch_status_municipality_id_fkey"
+            columns: ["municipality_id"]
+            isOneToOne: false
+            referencedRelation: "municipalities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      extraction_runs: {
+        Row: {
+          ai_analysis: string | null
+          ai_confidence: number | null
+          completed_at: string | null
+          corrections_made: number | null
+          created_at: string
+          id: string
+          municipality_id: string
+          run_type: string
+          status: string
+          tariffs_found: number | null
+          tariffs_inserted: number | null
+          tariffs_skipped: number | null
+          tariffs_updated: number | null
+        }
+        Insert: {
+          ai_analysis?: string | null
+          ai_confidence?: number | null
+          completed_at?: string | null
+          corrections_made?: number | null
+          created_at?: string
+          id?: string
+          municipality_id: string
+          run_type?: string
+          status?: string
+          tariffs_found?: number | null
+          tariffs_inserted?: number | null
+          tariffs_skipped?: number | null
+          tariffs_updated?: number | null
+        }
+        Update: {
+          ai_analysis?: string | null
+          ai_confidence?: number | null
+          completed_at?: string | null
+          corrections_made?: number | null
+          created_at?: string
+          id?: string
+          municipality_id?: string
+          run_type?: string
+          status?: string
+          tariffs_found?: number | null
+          tariffs_inserted?: number | null
+          tariffs_skipped?: number | null
+          tariffs_updated?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extraction_runs_municipality_id_fkey"
+            columns: ["municipality_id"]
+            isOneToOne: false
+            referencedRelation: "municipalities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gantt_baseline_tasks: {
         Row: {
           baseline_id: string
