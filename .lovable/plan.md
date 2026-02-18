@@ -1,40 +1,58 @@
 
 
-## Problem
+## Problem: Backspace Fails at Last Lines of LaTeX Editor
 
-The NERSA schema migration dropped the old `tariffs` table and replaced it with `tariff_plans`, but:
-- The `projects.tariff_id` column still exists with no foreign key constraint
-- Multiple queries still try to join `projects` with the deleted `tariffs` table
-- This causes a 400 error ("Could not find a relationship between 'projects' and 'tariffs'"), which means **no projects load at all**
+### Root Cause
 
-## Fix
+The editor uses a `ContextMenuTrigger asChild` (Radix) wrapping the entire editing area (gutter + textarea + overlays). Radix's context menu trigger attaches keyboard event listeners to the wrapper `div` that can intercept and swallow key events (like Backspace, Delete) when focus is on a child element, particularly at boundary positions in the textarea. This prevents native textarea editing behaviour at the end of the content.
 
-### 1. Database Migration
-Add a foreign key from `projects.tariff_id` to `tariff_plans.id`:
-```sql
-ALTER TABLE projects
-  ADD CONSTRAINT projects_tariff_id_fkey
-  FOREIGN KEY (tariff_id) REFERENCES tariff_plans(id)
-  ON DELETE SET NULL;
+Additionally, the `reconstructSource` function has a logic gap: when sections are collapsed and the user deletes lines from the end (via Backspace), the function copies the original source lines into `result` but never removes trailing lines that no longer exist in the edited display. This means backspace-deletions at the bottom are silently discarded.
+
+### Fix (2 changes in LaTeXEditor.tsx)
+
+**1. Stop ContextMenu from intercepting keyboard events**
+
+Add an `onKeyDown` handler on the wrapper div (the `ContextMenuTrigger` child) that stops propagation for all key events originating from the textarea. This prevents Radix from capturing Backspace/Delete:
+
+```tsx
+<div className="flex-1 flex overflow-hidden"
+  onKeyDownCapture={(e) => {
+    // Prevent Radix ContextMenu from swallowing keyboard events in the textarea
+    if (e.target === textareaRef.current) {
+      e.stopPropagation();
+    }
+  }}
+>
 ```
 
-### 2. Update Queries (4 files)
+**2. Fix `reconstructSource` to handle line deletions**
 
-**src/pages/Projects.tsx** (line ~58)
-- Change `tariffs(name, municipality_id, municipalities(name))` to `tariff_plans(name, municipality_id, municipalities(name))`
+Update the function to trim trailing source lines when the user deletes lines from the display:
 
-**src/pages/ProjectDetail.tsx** (line ~795)
-- Change `tariffs(*, municipality_id, municipalities(name, province_id, provinces(name)))` to `tariff_plans(*, municipality_id, municipalities(name, province_id, provinces(name)))`
+```typescript
+function reconstructSource(...): string {
+  // ... existing mapping logic ...
 
-**src/pages/ProposalWorkspace.tsx** (line ~108)
-- Change `tariffs(id, name)` to `tariff_plans(id, name)`
+  // After mapping: calculate expected total length
+  // If display has fewer lines than mapped, trim the result
+  const mappedSourceIndices = lineMap.filter(x => x >= 0);
+  const lastMappedSource = mappedSourceIndices[mappedSourceIndices.length - 1] ?? 0;
+  const expectedLength = lastMappedSource + 1 + 
+    (displayIdx < newDisplayLines.length ? newDisplayLines.length - displayIdx : 0);
+  
+  // Trim extra trailing lines that were deleted by the user
+  if (result.length > expectedLength) {
+    result.length = expectedLength;
+  }
 
-**src/components/proposals/ProposalWorkspaceInline.tsx** (line ~110)
-- Change `tariffs(id, name)` to `tariff_plans(id, name)`
+  return result.join("\n");
+}
+```
 
-### 3. Update Property References
-Any code accessing `project.tariffs` (the joined result) will need to be updated to `project.tariff_plans` throughout these files. This includes things like:
-- `project.tariffs?.name` becomes `project.tariff_plans?.name`
-- `project.tariffs?.municipalities?.name` becomes `project.tariff_plans?.municipalities?.name`
+### Technical Details
 
-This is a straightforward find-and-replace across the 4 affected files.
+- **Files changed**: `src/components/proposals/latex/LaTeXEditor.tsx` only
+- **No new dependencies**
+- The `onKeyDownCapture` approach uses the capture phase to intercept events before Radix processes them, but only for events originating from the textarea itself (so the context menu keyboard navigation still works)
+- The `reconstructSource` fix ensures that when `newDisplayLines` has fewer entries than expected (from backspace at end), the surplus original lines are trimmed from the result
+
