@@ -213,6 +213,8 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
   }, [value, onChange, lineMap, collapsedSections]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Stop propagation for ALL keys so Radix ContextMenu never swallows them
+    e.stopPropagation();
     if (e.key === "Tab") {
       e.preventDefault();
       const ta = e.currentTarget;
