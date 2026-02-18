@@ -94,18 +94,16 @@ export function LaTeXWorkspace({ templateData, onPdfReady, initialOverrides, onO
       return;
     }
 
-    // Parse section content overrides
+    // Save ALL section content as overrides — whatever is between BEGIN/END markers
+    // gets persisted exactly as-is, no comparison with generated content
     const editedSections = parseSections(newSource);
-    const generated = generatedSectionsRef.current;
 
+    // Clear old overrides for sections no longer in source, keep all current ones
+    const newOverrides = new Map<string, string>();
     editedSections.forEach((content, id) => {
-      const gen = generated.get(id);
-      if (gen !== undefined && content !== gen) {
-        overridesRef.current.set(id, content);
-      } else if (gen !== undefined && content === gen) {
-        overridesRef.current.delete(id);
-      }
+      newOverrides.set(id, content);
     });
+    overridesRef.current = newOverrides;
 
     // Parse inter-section prefixes (content between END of previous section and BEGIN of next)
     // This captures \newpage, \pagebreak, \clearpage etc. that users add between sections
