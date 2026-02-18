@@ -23,6 +23,7 @@ export function ProposalManager({ projectId }: ProposalManagerProps) {
                 .from("proposals")
                 .select("*")
                 .eq("project_id", projectId)
+                .eq("document_type", "proposal")
                 .order("created_at", { ascending: false });
 
             if (error) throw error;

@@ -1262,6 +1262,7 @@ export type Database = {
           created_at: string
           custom_notes: string | null
           disclaimers: string | null
+          document_type: string
           executive_summary: string | null
           id: string
           prepared_at: string | null
@@ -1292,6 +1293,7 @@ export type Database = {
           created_at?: string
           custom_notes?: string | null
           disclaimers?: string | null
+          document_type?: string
           executive_summary?: string | null
           id?: string
           prepared_at?: string | null
@@ -1322,6 +1324,7 @@ export type Database = {
           created_at?: string
           custom_notes?: string | null
           disclaimers?: string | null
+          document_type?: string
           executive_summary?: string | null
           id?: string
           prepared_at?: string | null
