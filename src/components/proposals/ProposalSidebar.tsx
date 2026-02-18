@@ -79,7 +79,7 @@ export function ProposalSidebar({
   const filteredBlocks = contentBlocks.filter(b => {
     if (blockFilter === 'all') return true;
     if (blockFilter === 'general') return b.category === 'general';
-    return b.category === 'general' || b.category === blockFilter;
+    return b.category === blockFilter;
   });
   const sortedBlocks = [...filteredBlocks].sort((a, b) => a.order - b.order);
 
