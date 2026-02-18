@@ -160,6 +160,19 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
   const highlightRef = useRef<HTMLDivElement>(null);
   const textOverlayRef = useRef<HTMLDivElement>(null);
 
+  // CRITICAL: Register a native capture-phase keydown listener on the textarea
+  // to prevent Radix ContextMenu from swallowing Backspace, Enter, and other keys.
+  // This fires before any React or Radix listeners.
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const handler = (e: KeyboardEvent) => {
+      e.stopPropagation();
+    };
+    ta.addEventListener("keydown", handler, true); // capture phase
+    return () => ta.removeEventListener("keydown", handler, true);
+  }, []);
+
   const handleTextareaScroll = useCallback(() => {
     const ta = textareaRef.current;
     const gutter = gutterRef.current;
