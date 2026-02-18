@@ -35,9 +35,10 @@ interface ProposalWorkspaceInlineProps {
   projectId: string;
   proposalId: string | null;
   onBack: () => void;
+  documentType?: 'proposal' | 'monthly_report';
 }
 
-export function ProposalWorkspaceInline({ projectId, proposalId, onBack }: ProposalWorkspaceInlineProps) {
+export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documentType = 'proposal' }: ProposalWorkspaceInlineProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   
@@ -191,6 +192,7 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack }: Propo
         .from("proposals")
         .select("id, version, status, created_at")
         .eq("project_id", projectId)
+        .eq("document_type", documentType)
         .order("version", { ascending: false });
       if (error) throw error;
       return data;
@@ -374,6 +376,7 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack }: Propo
             content_blocks: JSON.parse(JSON.stringify(contentBlocks)),
             section_overrides: Object.keys(sectionOverridesRef.current).length > 0 ? sectionOverridesRef.current : null,
             version: nextVersion,
+            document_type: documentType,
           } as any)
           .select()
           .single();
@@ -382,10 +385,12 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack }: Propo
       }
     },
     onSuccess: () => {
-      toast.success(currentProposalId ? "Proposal saved" : "Proposal created");
+      const label = documentType === 'monthly_report' ? 'Monthly report' : 'Proposal';
+      toast.success(currentProposalId ? `${label} saved` : `${label} created`);
       queryClient.invalidateQueries({ queryKey: ["proposal-versions", projectId] });
       queryClient.invalidateQueries({ queryKey: ["proposal", currentProposalId] });
       queryClient.invalidateQueries({ queryKey: ["project-proposals", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project-monthly-reports", projectId] });
     },
     onError: (error) => {
       console.error("Save error:", error);

@@ -23,6 +23,7 @@ export function MonthlyReportManager({ projectId }: MonthlyReportManagerProps) {
                 .from("proposals")
                 .select("*")
                 .eq("project_id", projectId)
+                .eq("document_type", "monthly_report")
                 .order("created_at", { ascending: false });
 
             if (error) throw error;
@@ -62,6 +63,7 @@ export function MonthlyReportManager({ projectId }: MonthlyReportManagerProps) {
                 projectId={projectId}
                 proposalId={editingProposalId}
                 onBack={handleBack}
+                documentType="monthly_report"
             />
         );
     }

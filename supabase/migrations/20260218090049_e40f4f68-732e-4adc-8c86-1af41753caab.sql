@@ -1,0 +1,1 @@
+ALTER TABLE public.proposals ADD COLUMN document_type text NOT NULL DEFAULT 'proposal';
