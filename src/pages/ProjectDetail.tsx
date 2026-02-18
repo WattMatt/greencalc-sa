@@ -23,6 +23,7 @@ import { SolarForecastCard } from "@/components/projects/SolarForecastCard";
 import { ProjectOverview } from "@/components/projects/ProjectOverview";
 import { ProjectLocationMap } from "@/components/projects/ProjectLocationMap";
 import { ProposalManager } from "@/components/projects/ProposalManager";
+import { MonthlyReportManager } from "@/components/projects/MonthlyReportManager";
 import { SystemCostsManager, SystemCostsData } from "@/components/projects/SystemCostsManager";
 import { DEFAULT_SYSTEM_COSTS } from "@/components/projects/simulation/FinancialAnalysis";
 import { ProjectGantt } from "@/components/gantt";
@@ -1075,6 +1076,10 @@ export default function ProjectDetail() {
     generation: {
       status: "pending" as TabStatus,
       tooltip: "Track plant generation performance"
+    },
+    "monthly-report": {
+      status: "pending" as TabStatus,
+      tooltip: "Manage monthly reports"
     }
   };
 
@@ -1160,6 +1165,10 @@ export default function ProjectDetail() {
             <TabWithStatus value="generation" status={tabStatuses.generation.status} tooltip={tabStatuses.generation.tooltip}>
               <TrendingUp className="h-4 w-4 mr-2" />
               Generation
+            </TabWithStatus>
+            <TabWithStatus value="monthly-report" status={tabStatuses["monthly-report"].status} tooltip={tabStatuses["monthly-report"].tooltip}>
+              <FileText className="h-4 w-4 mr-2" />
+              Monthly Report
             </TabWithStatus>
           </TabsList>
         </TooltipProvider>
@@ -1273,6 +1282,10 @@ export default function ProjectDetail() {
 
         <TabsContent value="generation" className="mt-6">
           <GenerationTab projectId={id!} />
+        </TabsContent>
+
+        <TabsContent value="monthly-report" className="mt-6">
+          <MonthlyReportManager projectId={id!} />
         </TabsContent>
       </Tabs>
     </div>
