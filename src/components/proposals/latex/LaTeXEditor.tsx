@@ -114,39 +114,66 @@ function reconstructSource(
   newDisplayText: string,
   originalSource: string,
   lineMap: number[],
-  collapsedSections: Set<string>,
+  _collapsedSections: Set<string>,
+  oldDisplayLines: string[],
 ): string {
   const originalLines = originalSource.split("\n");
   const newDisplayLines = newDisplayText.split("\n");
   const result = [...originalLines];
 
-  let displayIdx = 0;
-  for (let i = 0; i < lineMap.length && displayIdx < newDisplayLines.length; i++) {
-    if (lineMap[i] === -1) {
-      displayIdx++;
-      continue;
-    }
-    result[lineMap[i]] = newDisplayLines[displayIdx];
-    displayIdx++;
+  const oldLen = oldDisplayLines.length;
+  const newLen = newDisplayLines.length;
+
+  // Find common prefix length (identical lines from the top)
+  let prefixLen = 0;
+  while (prefixLen < oldLen && prefixLen < newLen && oldDisplayLines[prefixLen] === newDisplayLines[prefixLen]) {
+    prefixLen++;
   }
 
-  const mappedSourceIndices = lineMap.filter(x => x >= 0);
-  const lastMappedSource = mappedSourceIndices[mappedSourceIndices.length - 1] ?? originalLines.length - 1;
-
-  if (displayIdx < newDisplayLines.length) {
-    const extra = newDisplayLines.slice(displayIdx);
-    result.splice(lastMappedSource + 1, 0, ...extra);
+  // Find common suffix length (identical lines from the bottom, not overlapping prefix)
+  let suffixLen = 0;
+  while (
+    suffixLen < (oldLen - prefixLen) &&
+    suffixLen < (newLen - prefixLen) &&
+    oldDisplayLines[oldLen - 1 - suffixLen] === newDisplayLines[newLen - 1 - suffixLen]
+  ) {
+    suffixLen++;
   }
 
-  // Only trim when no sections are collapsed — trimming with collapsed sections
-  // would destroy hidden lines and effectively revert every keystroke.
-  if (collapsedSections.size === 0) {
-    const expectedLength = lastMappedSource + 1 +
-      (displayIdx < newDisplayLines.length ? newDisplayLines.length - displayIdx : 0);
+  // Map prefix/suffix boundaries to source line indices
+  // Skip placeholder lines (lineMap === -1) when finding real source boundaries
+  const firstChangedDisplay = prefixLen;
+  const lastChangedDisplayOld = oldLen - suffixLen - 1;
 
-    if (result.length > expectedLength) {
-      result.length = expectedLength;
-    }
+  // Find the source start: first real mapped line at or after firstChangedDisplay
+  let sourceStart = -1;
+  for (let i = firstChangedDisplay; i <= lastChangedDisplayOld; i++) {
+    if (lineMap[i] >= 0) { sourceStart = lineMap[i]; break; }
+  }
+
+  // Find the source end: last real mapped line at or before lastChangedDisplayOld
+  let sourceEnd = -1;
+  for (let i = lastChangedDisplayOld; i >= firstChangedDisplay; i--) {
+    if (lineMap[i] >= 0) { sourceEnd = lineMap[i]; break; }
+  }
+
+  // Collect new content lines, skipping placeholder lines
+  const newContent: string[] = [];
+  const newChangedStart = prefixLen;
+  const newChangedEnd = newLen - suffixLen;
+  for (let i = newChangedStart; i < newChangedEnd; i++) {
+    // Skip placeholder lines (... (N lines hidden))
+    if (HIDDEN_PLACEHOLDER_RE.test(newDisplayLines[i].trim())) continue;
+    newContent.push(newDisplayLines[i]);
+  }
+
+  if (sourceStart >= 0 && sourceEnd >= 0) {
+    result.splice(sourceStart, sourceEnd - sourceStart + 1, ...newContent);
+  } else if (newContent.length > 0) {
+    // All changed display lines were placeholders in the old version — append after last mapped source line
+    const mappedSourceIndices = lineMap.filter(x => x >= 0);
+    const lastMapped = mappedSourceIndices[mappedSourceIndices.length - 1] ?? originalLines.length - 1;
+    result.splice(lastMapped + 1, 0, ...newContent);
   }
 
   return result.join("\n");
@@ -223,7 +250,7 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
     if (collapsedSections.size === 0) {
       onChange(newDisplayText);
     } else {
-      const newSource = reconstructSource(newDisplayText, value, lineMap, collapsedSections);
+      const newSource = reconstructSource(newDisplayText, value, lineMap, collapsedSections, displayLines);
       onChange(newSource);
     }
   }, [value, onChange, lineMap, collapsedSections]);
@@ -242,7 +269,7 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
       if (collapsedSections.size === 0) {
         onChange(newDisplay);
       } else {
-        onChange(reconstructSource(newDisplay, value, lineMap, collapsedSections));
+        onChange(reconstructSource(newDisplay, value, lineMap, collapsedSections, displayLines));
       }
 
       requestAnimationFrame(() => {
@@ -263,7 +290,7 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
     if (collapsedSections.size === 0) {
       onChange(newDisplay);
     } else {
-      onChange(reconstructSource(newDisplay, value, lineMap, collapsedSections));
+      onChange(reconstructSource(newDisplay, value, lineMap, collapsedSections, displayLines));
     }
 
     requestAnimationFrame(() => {
