@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { 
   Users, BarChart3, DollarSign, Zap, Sun, MapPin, Plug, 
   CheckCircle2, AlertCircle, ArrowRight, Building2, TrendingDown, Wallet, TrendingUp,
-  ChevronRight, Lock, CloudSun, ScrollText, FileText, GitBranch
+  ChevronRight, Lock, CloudSun, ScrollText, GitBranch
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, LineChart, Line, Legend, CartesianGrid, ReferenceLine, PieChart, Pie, Cell } from "recharts";
 import { cn } from "@/lib/utils";
@@ -310,14 +310,6 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
       statusText: "Create proposal",
       dependsOn: ["simulation"]
     },
-    {
-      id: "reports",
-      label: "Reports",
-      icon: FileText,
-      status: "complete",
-      statusText: "Generate reports",
-      dependsOn: []
-    }
   ], [tenants.length, assignedProfiles, hasTariff, dailyTotal, maxSolarKva, project.location]);
 
   const completedWorkflowSteps = workflowSteps.filter(s => s.status === "complete").length;
@@ -453,8 +445,6 @@ export function ProjectOverview({ project, tenants, onNavigateTab }: ProjectOver
               <WorkflowNode step={workflowSteps[4]} onClick={() => onNavigateTab("simulation")} />
               <WorkflowConnector isComplete={workflowSteps[4].status === "complete"} />
               <WorkflowNode step={workflowSteps[7]} onClick={() => onNavigateTab("proposals")} />
-              <WorkflowConnector isComplete={workflowSteps[7].status === "complete"} />
-              <WorkflowNode step={workflowSteps[8]} onClick={() => onNavigateTab("reports")} />
             </div>
             
             {/* Row 2: Supporting tools (PV Layout, Solar Forecast) */}

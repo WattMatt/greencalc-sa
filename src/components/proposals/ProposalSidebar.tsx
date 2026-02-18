@@ -10,13 +10,23 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  Wand2
 } from "lucide-react";
 import { ContentBlockToggle } from "./ContentBlockToggle";
 import { BrandingForm } from "./BrandingForm";
 import { TemplateSelector } from "./templates/TemplateSelector";
-import { ContentBlock, ProposalBranding, SimulationData, Proposal } from "./types";
+import { ContentBlock, ProposalBranding, SimulationData, Proposal, ContentBlockId } from "./types";
 import { ProposalTemplateId } from "./templates/types";
+
+// Mapping from ContentBlockId to edge function sectionType
+const NARRATIVE_SECTION_MAP: Partial<Record<ContentBlockId, string>> = {
+  introduction: "executive_summary",
+  backgroundMethodology: "tariff_details",
+  tenderReturnData: "engineering_specs",
+  financialEstimates: "payback_timeline",
+  financialConclusion: "investment_recommendation",
+};
 
 interface ProposalSidebarProps {
   contentBlocks: ContentBlock[];
@@ -34,6 +44,9 @@ interface ProposalSidebarProps {
   disabled?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  aiNarratives?: Record<string, { narrative: string; keyHighlights?: string[] }>;
+  onGenerateNarrative?: (blockId: ContentBlockId, sectionType: string) => void;
+  generatingNarrativeId?: string | null;
 }
 
 export function ProposalSidebar({
@@ -49,7 +62,10 @@ export function ProposalSidebar({
   isExporting,
   disabled,
   collapsed,
-  onToggleCollapse
+  onToggleCollapse,
+  aiNarratives,
+  onGenerateNarrative,
+  generatingNarrativeId
 }: ProposalSidebarProps) {
   const [activeTab, setActiveTab] = useState("content");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -94,6 +110,13 @@ export function ProposalSidebar({
   const handleDragEnd = () => {
     setDraggedIndex(null);
     setDragOverIndex(null);
+  };
+
+  const handleGenerateNarrative = (blockId: ContentBlockId) => {
+    const sectionType = NARRATIVE_SECTION_MAP[blockId];
+    if (sectionType && onGenerateNarrative) {
+      onGenerateNarrative(blockId, sectionType);
+    }
   };
 
   if (collapsed) {
@@ -155,22 +178,29 @@ export function ProposalSidebar({
           <div className="p-3">
             <TabsContent value="content" className="mt-0 space-y-2">
               <p className="text-xs text-muted-foreground mb-3">
-                Toggle sections to include in your proposal
+                Toggle sections and generate AI narratives for your proposal
               </p>
-              {sortedBlocks.map((block, index) => (
-                  <ContentBlockToggle
-                    key={block.id}
-                    block={block}
-                    onChange={(enabled) => handleBlockToggle(block.id, enabled)}
-                    disabled={disabled}
-                    isDragging={draggedIndex === index}
-                    isDragOver={dragOverIndex === index && draggedIndex !== index}
-                    onDragStart={(e) => handleDragStart(e, index)}
-                    onDragEnd={handleDragEnd}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDrop={(e) => handleDrop(e, index)}
-                  />
-                ))}
+              {sortedBlocks.map((block, index) => {
+                  const canGenerate = !!NARRATIVE_SECTION_MAP[block.id];
+                  return (
+                    <ContentBlockToggle
+                      key={block.id}
+                      block={block}
+                      onChange={(enabled) => handleBlockToggle(block.id, enabled)}
+                      disabled={disabled}
+                      isDragging={draggedIndex === index}
+                      isDragOver={dragOverIndex === index && draggedIndex !== index}
+                      onDragStart={(e) => handleDragStart(e, index)}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDrop={(e) => handleDrop(e, index)}
+                      hasNarrative={!!aiNarratives?.[block.id]}
+                      canGenerateNarrative={canGenerate}
+                      onGenerateNarrative={() => handleGenerateNarrative(block.id)}
+                      isGeneratingNarrative={generatingNarrativeId === block.id}
+                    />
+                  );
+                })}
             </TabsContent>
 
             <TabsContent value="branding" className="mt-0">

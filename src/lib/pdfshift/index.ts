@@ -1,11 +1,11 @@
 // PDFShift PDF generation service
 import { supabase } from "@/integrations/supabase/client";
-import { generateReportHTML, ReportData } from './templates/report';
+
 import { generateProposalHTML, ProposalData } from './templates/proposal';
 import { generateSandboxHTML, SandboxData } from './templates/sandbox';
 
-export { generateReportHTML, generateProposalHTML, generateSandboxHTML };
-export type { ReportData, ProposalData, SandboxData };
+export { generateProposalHTML, generateSandboxHTML };
+export type { ProposalData, SandboxData };
 
 interface PDFOptions {
   landscape?: boolean;
@@ -76,11 +76,6 @@ async function generateAndDownloadPDF(
 /**
  * Generate and download a professional report PDF
  */
-export async function generateReportPDF(data: ReportData): Promise<GeneratePDFResult> {
-  const html = generateReportHTML(data);
-  const filename = `${data.reportName.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`;
-  return generateAndDownloadPDF('report', html, filename);
-}
 
 /**
  * Generate and download a proposal PDF
