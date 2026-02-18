@@ -1,58 +1,27 @@
 
+## Move Export Buttons and Tidy Up Header
 
-## Problem: Backspace Fails at Last Lines of LaTeX Editor
+### Changes
 
-### Root Cause
+**1. Remove Export buttons from sidebar** (`ProposalSidebar.tsx`)
+- Remove the "Export PDF" and "Export Excel" buttons from the bottom of the sidebar (the `border-t` section at lines 250-275)
+- Also remove the collapsed-state export button (line 152-154)
 
-The editor uses a `ContextMenuTrigger asChild` (Radix) wrapping the entire editing area (gutter + textarea + overlays). Radix's context menu trigger attaches keyboard event listeners to the wrapper `div` that can intercept and swallow key events (like Backspace, Delete) when focus is on a child element, particularly at boundary positions in the textarea. This prevents native textarea editing behaviour at the end of the content.
+**2. Add Export buttons to the top-right header bar** (`ProposalWorkspaceInline.tsx`)
+- Add "Export PDF" and "Export Excel" buttons alongside the existing Save and Share buttons in the header area (lines 554-580)
+- Order: Export PDF, Export Excel, Share, Save
 
-Additionally, the `reconstructSource` function has a logic gap: when sections are collapsed and the user deletes lines from the end (via Backspace), the function copies the original source lines into `result` but never removes trailing lines that no longer exist in the edited display. This means backspace-deletions at the bottom are silently discarded.
+**3. Rename "Share with Client" to "Share"** (`ShareLinkButton.tsx`)
+- Change the button label from "Share with Client" to "Share" (line 97)
 
-### Fix (2 changes in LaTeXEditor.tsx)
-
-**1. Stop ContextMenu from intercepting keyboard events**
-
-Add an `onKeyDown` handler on the wrapper div (the `ContextMenuTrigger` child) that stops propagation for all key events originating from the textarea. This prevents Radix from capturing Backspace/Delete:
-
-```tsx
-<div className="flex-1 flex overflow-hidden"
-  onKeyDownCapture={(e) => {
-    // Prevent Radix ContextMenu from swallowing keyboard events in the textarea
-    if (e.target === textareaRef.current) {
-      e.stopPropagation();
-    }
-  }}
->
-```
-
-**2. Fix `reconstructSource` to handle line deletions**
-
-Update the function to trim trailing source lines when the user deletes lines from the display:
-
-```typescript
-function reconstructSource(...): string {
-  // ... existing mapping logic ...
-
-  // After mapping: calculate expected total length
-  // If display has fewer lines than mapped, trim the result
-  const mappedSourceIndices = lineMap.filter(x => x >= 0);
-  const lastMappedSource = mappedSourceIndices[mappedSourceIndices.length - 1] ?? 0;
-  const expectedLength = lastMappedSource + 1 + 
-    (displayIdx < newDisplayLines.length ? newDisplayLines.length - displayIdx : 0);
-  
-  // Trim extra trailing lines that were deleted by the user
-  if (result.length > expectedLength) {
-    result.length = expectedLength;
-  }
-
-  return result.join("\n");
-}
-```
+**4. Match the horizontal divider lines** (`ProposalWorkspaceInline.tsx` + `ProposalSidebar.tsx`)
+- Ensure the sidebar header border (`border-b` on line 162 of ProposalSidebar) and the Proposal Builder header border (`border-b` on line 532 of ProposalWorkspaceInline) use the same styling so they appear as one continuous horizontal line across the top of the workspace
 
 ### Technical Details
 
-- **Files changed**: `src/components/proposals/latex/LaTeXEditor.tsx` only
-- **No new dependencies**
-- The `onKeyDownCapture` approach uses the capture phase to intercept events before Radix processes them, but only for events originating from the textarea itself (so the context menu keyboard navigation still works)
-- The `reconstructSource` fix ensures that when `newDisplayLines` has fewer entries than expected (from backspace at end), the surplus original lines are trimmed from the result
-
+- **ProposalSidebar.tsx**: Remove the export actions `div` (lines 250-275) and the collapsed download button. The `onExportPDF`, `onExportExcel`, and `isExporting` props remain but will no longer be used in this component (can be cleaned up or kept for flexibility).
+- **ProposalWorkspaceInline.tsx**: Add two new buttons in the `div.flex.items-center.gap-2` (line 554) before the ShareLinkButton:
+  - Export PDF button with Download icon (uses existing `handleExportPDF` and `isExporting` state)
+  - Export Excel button with FileText icon (uses existing `handleExportExcel`)
+- **ShareLinkButton.tsx**: Simple text change on line 97.
+- **Divider alignment**: Ensure both the sidebar header and the main header use matching `py-2` / `p-3` padding and `border-b border-border` so the bottom border aligns visually into a single continuous line.
