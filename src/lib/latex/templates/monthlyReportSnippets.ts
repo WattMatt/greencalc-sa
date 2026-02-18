@@ -401,10 +401,10 @@ ${rows}
 function perfCellColor(actual: number, guarantee: number): string {
   if (guarantee <= 0) return "";
   const ratio = actual / guarantee;
-  if (ratio > 1.0) return "\\cellcolor{green!20}";
-  if (ratio > 0.95) return "\\cellcolor{yellow!20}";
-  if (ratio > 0.50) return "\\cellcolor{red!20}";
-  return "";
+  if (ratio > 1.0) return "\\cellcolor{green!30}";
+  if (ratio >= 0.95) return "\\cellcolor{yellow!40}";
+  if (ratio >= 0.50) return "\\cellcolor{red!30}";
+  return "\\cellcolor{gray!20}";
 }
 
 export function performanceLog(data: MonthlyReportData): string {
