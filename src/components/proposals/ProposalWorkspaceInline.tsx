@@ -129,6 +129,58 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
 
   const projectTariffName = (project as any)?.tariff_plans?.name || null;
 
+  // Fetch available year/month combos from generation_readings for this project
+  const { data: availablePeriods = [] } = useQuery({
+    queryKey: ["generation-available-periods", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("generation_readings")
+        .select("timestamp")
+        .eq("project_id", projectId)
+        .order("timestamp", { ascending: true });
+      if (error) throw error;
+      // Extract unique year-month combos
+      const seen = new Set<string>();
+      const periods: { year: number; month: number }[] = [];
+      for (const row of data || []) {
+        const d = new Date(row.timestamp);
+        const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          periods.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+        }
+      }
+      return periods;
+    },
+    enabled: documentType === 'monthly_report' && !!projectId,
+  });
+
+  const availableYears = useMemo(() => {
+    const years = [...new Set(availablePeriods.map(p => p.year))];
+    years.sort((a, b) => b - a);
+    return years;
+  }, [availablePeriods]);
+
+  const availableMonths = useMemo(() => {
+    const months = availablePeriods
+      .filter(p => p.year === reportYear)
+      .map(p => p.month);
+    months.sort((a, b) => a - b);
+    return months;
+  }, [availablePeriods, reportYear]);
+
+  // Auto-select valid year/month when available periods load
+  useEffect(() => {
+    if (availablePeriods.length > 0) {
+      const hasCurrentSelection = availablePeriods.some(p => p.year === reportYear && p.month === reportMonth);
+      if (!hasCurrentSelection) {
+        const latest = availablePeriods[availablePeriods.length - 1];
+        setReportYear(latest.year);
+        setReportMonth(latest.month);
+      }
+    }
+  }, [availablePeriods]);
+
   // Monthly report data pipeline
   const { data: monthlyReportData } = useMonthlyReportData(
     documentType === 'monthly_report' ? projectId : '',
@@ -575,27 +627,32 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
                 <p className="text-sm text-muted-foreground">{project?.name}</p>
                 {documentType === 'monthly_report' && (
                   <div className="flex items-center gap-2 mt-1">
-                    <Select value={String(reportMonth)} onValueChange={(v) => setReportMonth(Number(v))}>
-                      <SelectTrigger className="h-7 w-[120px] text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 12 }, (_, i) => (
-                          <SelectItem key={i + 1} value={String(i + 1)}>
-                            {new Date(2000, i).toLocaleString("en-ZA", { month: "long" })}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                     <Select value={String(reportYear)} onValueChange={(v) => setReportYear(Number(v))}>
                       <SelectTrigger className="h-7 w-[80px] text-xs">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Array.from({ length: 10 }, (_, i) => {
-                          const y = new Date().getFullYear() - i;
-                          return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
-                        })}
+                        {availableYears.length > 0 ? availableYears.map(y => (
+                          <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                        )) : (
+                          <SelectItem value={String(reportYear)}>{reportYear}</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Select value={String(reportMonth)} onValueChange={(v) => setReportMonth(Number(v))}>
+                      <SelectTrigger className="h-7 w-[120px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableMonths.length > 0 ? availableMonths.map(m => (
+                          <SelectItem key={m} value={String(m)}>
+                            {new Date(2000, m - 1).toLocaleString("en-ZA", { month: "long" })}
+                          </SelectItem>
+                        )) : (
+                          <SelectItem value={String(reportMonth)}>
+                            {new Date(2000, reportMonth - 1).toLocaleString("en-ZA", { month: "long" })}
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
