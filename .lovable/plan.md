@@ -1,24 +1,41 @@
 
 
-## Add "Monthly Report" Tab After Generation
+## Separate Proposals and Monthly Reports Data
 
-### Overview
-Add a new tab called "Monthly Report" positioned after the "Generation" tab. It will be a complete duplicate of the existing "Proposals" tab, reusing the same `ProposalManager` component (which provides the list view and inline editing workspace).
+### Problem
+Both the Proposals tab and Monthly Report tab currently query the same `proposals` table without any filter to distinguish between them, so all records appear in both tabs.
 
-### Changes
+### Solution
+Add a `document_type` column to the `proposals` table to distinguish between `'proposal'` and `'monthly_report'` records. Then filter by this column in each tab's queries and set it appropriately when creating new records.
 
-**File: `src/components/projects/MonthlyReportManager.tsx`** (new file)
-- A thin wrapper around the same pattern used in `ProposalManager.tsx`
-- Identical logic: lists proposals, allows create/edit inline via `ProposalWorkspaceInline`
-- The heading text will say "Monthly Reports" instead of "Proposals"
-- Uses the same `proposals` table filtered by `project_id` (same data source, or we can add a `type` filter later if needed to distinguish proposal types)
+### Database Migration
+Add a `document_type` text column to the `proposals` table with a default of `'proposal'` (so all existing records are automatically classified as proposals):
 
-**File: `src/pages/ProjectDetail.tsx`**
-- Import `MonthlyReportManager`
-- Add a new `TabWithStatus` entry for `"monthly-report"` after the `"generation"` tab trigger (around line 1163), using the `FileText` icon and label "Monthly Report"
-- Add a corresponding `TabsContent` for `"monthly-report"` after the generation `TabsContent` (around line 1276), rendering `<MonthlyReportManager projectId={id!} />`
-- Add a `"monthly-report"` entry to the `tabStatuses` record (around line 1076) with a sensible default status and tooltip
+```sql
+ALTER TABLE proposals ADD COLUMN document_type text NOT NULL DEFAULT 'proposal';
+```
 
-### Technical Notes
-- The `MonthlyReportManager` component is a direct copy of `ProposalManager` with only the display text changed ("Monthly Reports" instead of "Proposals", "Create Monthly Report" instead of "Create Proposal")
-- Both tabs share the same underlying `proposals` table and `ProposalWorkspaceInline` editor -- if you later want them to show different data, a `type` column can be added to the `proposals` table to filter by `"proposal"` vs `"monthly_report"`
+### Code Changes
+
+**1. `src/components/projects/ProposalManager.tsx`**
+- Add `.eq("document_type", "proposal")` to the query filter
+
+**2. `src/components/projects/MonthlyReportManager.tsx`**
+- Add `.eq("document_type", "monthly_report")` to the query filter
+- Pass a `documentType="monthly_report"` prop to `ProposalWorkspaceInline`
+
+**3. `src/components/proposals/ProposalWorkspaceInline.tsx`**
+- Accept a new optional `documentType` prop (default: `'proposal'`)
+- Add `.eq("document_type", documentType)` to the version list query
+- Include `document_type: documentType` in the insert call when creating new records
+- Update toast messages to reflect the document type ("Monthly report saved" vs "Proposal saved")
+- Update the `queryClient.invalidateQueries` calls to also invalidate `project-monthly-reports` when appropriate
+
+**4. `src/pages/ProjectDetail.tsx`**
+- Update the proposal count query (used for tab status) to filter by `document_type = 'proposal'` so monthly reports don't inflate the proposals count
+
+### Summary of Flow
+- Proposals tab queries with `document_type = 'proposal'`, creates with `document_type = 'proposal'`
+- Monthly Report tab queries with `document_type = 'monthly_report'`, creates with `document_type = 'monthly_report'`
+- Existing records default to `'proposal'` so nothing breaks
+
