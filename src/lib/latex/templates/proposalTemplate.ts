@@ -4,6 +4,7 @@
  */
 import { SimulationData, ProposalBranding, ContentBlock, Proposal, SECTION_BEGIN, SECTION_END } from "@/components/proposals/types";
 import * as snippets from "./snippets";
+import * as monthlySnippets from "./monthlyReportSnippets";
 
 function hexToRgb(hex: string): string {
   const h = hex.replace("#", "");
@@ -54,6 +55,15 @@ export function generateBlockContent(
       return snippets.termsAndConditions(proposal);
     case "signature":
       return snippets.signatureBlock(proposal, branding);
+    // Monthly report blocks
+    case "executiveSummary":
+      return monthlySnippets.executiveSummary(simulation, project);
+    case "dailyLog":
+      return monthlySnippets.dailyPerformanceLog();
+    case "operationalDowntime":
+      return monthlySnippets.operationalDowntime();
+    case "financialYield":
+      return monthlySnippets.financialYieldReport();
     default:
       return `\\section{${snippets.esc(blockId)}}\n\nContent for this section is not yet available.\n`;
   }
@@ -107,6 +117,12 @@ export function generatePreamble(data: TemplateData): string {
 % ── Brand Colors ──
 \\definecolor{titleblue}{RGB}{${primaryRgb}}
 \\definecolor{lightgray}{gray}{0.9}
+\\definecolor{rowgray}{gray}{0.95}
+
+% ── Custom Column Types ──
+\\newcolumntype{L}[1]{>{\\raggedright\\arraybackslash}b{#1}}
+\\newcolumntype{C}[1]{>{\\centering\\arraybackslash}b{#1}}
+\\newcolumntype{R}[1]{>{\\raggedleft\\arraybackslash}b{#1}}
 
 % ── Helpers ──
 \\newcommand{\\negnum}[1]{(#1)}
