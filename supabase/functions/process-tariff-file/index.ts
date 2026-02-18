@@ -208,7 +208,7 @@ Deno.serve(async (req) => {
 
     // PHASE 1: Analyze
     if (action === "analyze") {
-      const analysisPrompt = `Analyze this South African electricity tariff data and describe its structure:\n\n${extractedText.slice(0, 8000)}\n\nIdentify:\n1. Municipality names found\n2. Tariff categories (Domestic, Commercial, Industrial, etc.)\n3. Tariff types (Fixed, IBT/block tariffs, TOU/time-of-use)\n4. Rate structures (basic charges, energy rates, demand charges)\n5. Any issues or inconsistencies in the data\n\nBe specific and concise.`;
+      const analysisPrompt = `Analyze this South African electricity tariff data and describe its structure:\n\n${extractedText.slice(0, 50000)}\n\nIdentify:\n1. Municipality names found\n2. Tariff categories (Domestic, Commercial, Industrial, etc.)\n3. Tariff types (Fixed, IBT/block tariffs, TOU/time-of-use)\n4. Rate structures (basic charges, energy rates, demand charges)\n5. Any issues or inconsistencies in the data\n\nBe specific and concise.`;
 
       const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -234,7 +234,7 @@ Deno.serve(async (req) => {
           sheets: Object.keys(sheetData),
           rowCounts: Object.fromEntries(Object.entries(sheetData).map(([k, v]) => [k, v.length])),
           analysis,
-          sampleText: extractedText.slice(0, 2000)
+          sampleText: extractedText.slice(0, 5000)
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -259,36 +259,62 @@ Deno.serve(async (req) => {
           }
         }
       } else {
-        const muniPrompt = `Extract ONLY the municipality names from this South African electricity tariff document.\n\n${extractedText.slice(0, 10000)}\n\nReturn ONLY municipality names, one per line. Remove any percentages like "- 12.72%".`;
+        // Two-pass approach: regex first, AI fallback
+        // Pass 1: Regex-based extraction for standard SA tariff PDF format
+        // Pattern: "MUNICIPALITY_NAME - XX.XX%" or "MUNICIPALITY_NAME XX.XX%"
+        const regexWithDash = /^([A-Z][A-Z\s\-\/]+?)\s*[-–]\s*\d+[\.,]\d+%/gm;
+        const regexNoDash = /^([A-Z][A-Z\s\-\/]+?)\s+\d+[\.,]\d+%/gm;
+        
+        const regexMatches = new Set<string>();
+        let match: RegExpExecArray | null;
+        
+        while ((match = regexWithDash.exec(extractedText)) !== null) {
+          const name = match[1].replace(/\s*(LIM|EC|WC|NC|NW|FS|GP|KZN|MP)\s*\d+/gi, '').trim();
+          if (name.length > 2) regexMatches.add(name);
+        }
+        while ((match = regexNoDash.exec(extractedText)) !== null) {
+          const name = match[1].replace(/\s*(LIM|EC|WC|NC|NW|FS|GP|KZN|MP)\s*\d+/gi, '').trim();
+          if (name.length > 2) regexMatches.add(name);
+        }
+        
+        console.log(`Regex found ${regexMatches.size} municipality names:`, [...regexMatches]);
+        
+        if (regexMatches.size > 0) {
+          municipalityNames = [...regexMatches];
+        } else {
+          // Pass 2: AI fallback with increased context
+          console.log("Regex found no matches, falling back to AI extraction...");
+          const muniPrompt = `Extract ONLY the municipality names from this South African electricity tariff document.\n\n${extractedText.slice(0, 50000)}\n\nReturn ONLY municipality names, one per line. Remove any percentages like "- 12.72%".`;
 
-        const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [{ role: "user", content: muniPrompt }],
-            tools: [{
-              type: "function",
-              function: {
-                name: "list_municipalities",
-                description: "List extracted municipality names",
-                parameters: {
-                  type: "object",
-                  properties: { municipalities: { type: "array", items: { type: "string" } } },
-                  required: ["municipalities"]
+          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: [{ role: "user", content: muniPrompt }],
+              tools: [{
+                type: "function",
+                function: {
+                  name: "list_municipalities",
+                  description: "List extracted municipality names",
+                  parameters: {
+                    type: "object",
+                    properties: { municipalities: { type: "array", items: { type: "string" } } },
+                    required: ["municipalities"]
+                  }
                 }
-              }
-            }],
-            tool_choice: { type: "function", function: { name: "list_municipalities" } }
-          }),
-        });
+              }],
+              tool_choice: { type: "function", function: { name: "list_municipalities" } }
+            }),
+          });
 
-        if (aiRes.ok) {
-          const aiData = await aiRes.json();
-          const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-          if (toolCall) {
-            const args = JSON.parse(toolCall.function.arguments);
-            municipalityNames = args.municipalities || [];
+          if (aiRes.ok) {
+            const aiData = await aiRes.json();
+            const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+            if (toolCall) {
+              const args = JSON.parse(toolCall.function.arguments);
+              municipalityNames = args.municipalities || [];
+            }
           }
         }
       }
