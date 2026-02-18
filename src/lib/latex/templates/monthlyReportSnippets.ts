@@ -367,6 +367,7 @@ ${rows}
 }
 
 export function financialYieldReportPlaceholder(): string {
+
   const rows = Array.from({ length: 31 }, (_, i) => {
     const day = i + 1;
     return `    ${day} & R [GUARANTEE] & R [METERED] & R [DOWNTIME] & R [THEO] & R [VAR] \\\\ \\hline`;
@@ -391,6 +392,117 @@ export function financialYieldReportPlaceholder(): string {
 
 ${rows}
     \\rowcolor{rowgray} \\textbf{Total} & \\textbf{R [TOTAL\\_GUARANTEE]} & \\textbf{R [TOTAL\\_METERED]} & \\textbf{R [TOTAL\\_DOWNTIME]} & \\textbf{R [TOTAL\\_THEO]} & \\textbf{R [TOTAL\\_VAR]} \\\\ \\hline
+\\end{longtable}
+`;
+}
+
+// ────────────────────── Performance Log ──────────────────────
+
+function perfCellColor(actual: number, guarantee: number): string {
+  if (guarantee <= 0) return "";
+  const ratio = actual / guarantee;
+  if (ratio > 1.0) return "\\cellcolor{green!20}";
+  if (ratio > 0.95) return "\\cellcolor{yellow!20}";
+  if (ratio > 0.50) return "\\cellcolor{red!20}";
+  return "";
+}
+
+export function performanceLog(data: MonthlyReportData): string {
+  const sortedSources = Array.from(data.sourceDisplayNames.entries())
+    .sort(([, a], [, b]) => a.localeCompare(b, undefined, { numeric: true }));
+  const sourceKeys = sortedSources.map(([key]) => key);
+  const labels = sortedSources.map(([, label]) => label);
+
+  if (sourceKeys.length === 0) return performanceLogPlaceholder();
+
+  // Column spec: Day | (Guarantee | Metered) per source
+  const srcColDef = sourceKeys.map(() => "R{18mm}|R{18mm}").join("|");
+
+  // Header row with multicolumn for each source
+  const headerCols = labels.map(l =>
+    `\\multicolumn{2}{c|}{\\textbf{\\color{white} ${esc(l)}}}`
+  ).join(" &\n        ");
+
+  const subHeaderCols = sourceKeys.map(() =>
+    `\\textbf{\\color{white} Guarantee} & \\textbf{\\color{white} Metered}`
+  ).join(" & ");
+
+  // Continuation header (compact)
+  const contHeaderCols = labels.map(l =>
+    `\\multicolumn{2}{c|}{\\textbf{\\color{white} ${esc(l)}}}`
+  ).join(" & ");
+  const contSubHeaderCols = subHeaderCols;
+
+  // Data rows
+  const rows = Array.from({ length: data.totalDays }, (_, i) => {
+    const day = i + 1;
+    const srcCells = sourceKeys.map(src => {
+      const sd = data.sourceDayMap.get(`${day}-${src}`);
+      const guarantee = sd?.guarantee ?? 0;
+      const actual = sd?.actual ?? 0;
+      const color = perfCellColor(actual, guarantee);
+      return `${fmtNum(guarantee)} & ${color}${fmtNum(actual)}`;
+    }).join(" & ");
+    return `    ${day} & ${srcCells} \\\\ \\hline`;
+  }).join("\n");
+
+  // Totals row
+  const totalCells = sourceKeys.map(src => {
+    const st = data.sourceTotals.get(src);
+    const guarantee = st?.guarantee ?? 0;
+    const actual = st?.actual ?? 0;
+    const color = perfCellColor(actual, guarantee);
+    return `\\textbf{${fmtNum(guarantee)}} & ${color}\\textbf{${fmtNum(actual)}}`;
+  }).join(" & ");
+
+  return `
+\\section{Performance Log}
+
+\\begin{longtable}{|C{10mm}|${srcColDef}|}
+    \\hline
+    \\rowcolor{titleblue}
+    \\multirow{2}{*}{\\textbf{\\color{white} Day}} &
+        ${headerCols} \\\\ \\cline{2-${1 + sourceKeys.length * 2}}
+    \\rowcolor{titleblue}
+    & ${subHeaderCols} \\\\ \\hline
+    \\endfirsthead
+    \\hline
+    \\rowcolor{titleblue} \\multirow{2}{*}{\\textbf{\\color{white} Day}} & ${contHeaderCols} \\\\ \\cline{2-${1 + sourceKeys.length * 2}}
+    \\rowcolor{titleblue} & ${contSubHeaderCols} \\\\ \\hline
+    \\endhead
+
+${rows}
+    \\rowcolor{rowgray} \\textbf{Total} & ${totalCells} \\\\ \\hline
+\\end{longtable}
+`;
+}
+
+export function performanceLogPlaceholder(): string {
+  const rows = Array.from({ length: 31 }, (_, i) => {
+    const day = i + 1;
+    return `    ${day} & [GUARANTEE] & [METERED] & [GUARANTEE] & [METERED] \\\\ \\hline`;
+  }).join("\\n");
+
+  return `
+\\section{Performance Log}
+
+\\begin{longtable}{|C{10mm}|R{18mm}|R{18mm}|R{18mm}|R{18mm}|}
+    \\hline
+    \\rowcolor{titleblue}
+    \\multirow{2}{*}{\\textbf{\\color{white} Day}} &
+        \\multicolumn{2}{c|}{\\textbf{\\color{white} Tie-In 1}} &
+        \\multicolumn{2}{c|}{\\textbf{\\color{white} Tie-In 2}} \\\\ \\cline{2-5}
+    \\rowcolor{titleblue}
+    & \\textbf{\\color{white} Guarantee} & \\textbf{\\color{white} Metered}
+    & \\textbf{\\color{white} Guarantee} & \\textbf{\\color{white} Metered} \\\\ \\hline
+    \\endfirsthead
+    \\hline
+    \\rowcolor{titleblue} \\multirow{2}{*}{\\textbf{\\color{white} Day}} & \\multicolumn{2}{c|}{\\textbf{\\color{white} Tie-In 1}} & \\multicolumn{2}{c|}{\\textbf{\\color{white} Tie-In 2}} \\\\ \\cline{2-5}
+    \\rowcolor{titleblue} & \\textbf{\\color{white} Guar.} & \\textbf{\\color{white} Met.} & \\textbf{\\color{white} Guar.} & \\textbf{\\color{white} Met.} \\\\ \\hline
+    \\endhead
+
+${rows}
+    \\rowcolor{rowgray} \\textbf{Total} & \\textbf{[TOTAL]} & \\textbf{[TOTAL]} & \\textbf{[TOTAL]} & \\textbf{[TOTAL]} \\\\ \\hline
 \\end{longtable}
 `;
 }
