@@ -16,6 +16,7 @@ interface LaTeXWorkspaceProps {
 function assembleSource(
   data: TemplateData,
   overrides: Map<string, string>,
+  sectionPrefixes: Map<string, string>,
 ): string {
   const enabled = data.contentBlocks
     .filter(b => b.enabled)
@@ -25,7 +26,8 @@ function assembleSource(
     const content = overrides.has(block.id)
       ? overrides.get(block.id)!
       : generateBlockContent(block.id, data);
-    return `${SECTION_BEGIN(block.id)}\n${content}\n${SECTION_END(block.id)}`;
+    const prefix = sectionPrefixes.get(block.id) ?? "";
+    return `${prefix}${SECTION_BEGIN(block.id)}\n${content}\n${SECTION_END(block.id)}`;
   }).join("\n");
 
   return `${generatePreamble(data)}
@@ -47,9 +49,20 @@ export function LaTeXWorkspace({ templateData, onPdfReady, initialOverrides, onO
   const [needsSync, setNeedsSync] = useState(false);
 
   const overridesRef = useRef<Map<string, string>>(
-    initialOverrides ? new Map(Object.entries(initialOverrides)) : new Map()
+    initialOverrides
+      ? new Map(Object.entries(initialOverrides).filter(([k]) => !k.startsWith("__prefix__")))
+      : new Map()
   );
   const generatedSectionsRef = useRef<Map<string, string>>(new Map());
+  const sectionPrefixesRef = useRef<Map<string, string>>(
+    initialOverrides
+      ? new Map(
+          Object.entries(initialOverrides)
+            .filter(([k]) => k.startsWith("__prefix__"))
+            .map(([k, v]) => [k.replace("__prefix__", ""), v])
+        )
+      : new Map()
+  );
   const latestSourceRef = useRef(source);
   latestSourceRef.current = source;
   const isProgrammaticRef = useRef(false);
@@ -65,13 +78,13 @@ export function LaTeXWorkspace({ templateData, onPdfReady, initialOverrides, onO
       });
     generatedSectionsRef.current = freshMap;
 
-    const newSource = assembleSource(templateData, overridesRef.current);
+    const newSource = assembleSource(templateData, overridesRef.current, sectionPrefixesRef.current);
     isProgrammaticRef.current = true;
     setSource(newSource);
     setNeedsSync(true);
   }, [templateData]);
 
-  // Detect manual edits
+  // Detect manual edits — captures both section content AND inter-section prefixes
   const handleSourceChange = useCallback((newSource: string) => {
     setSource(newSource);
     setNeedsSync(true);
@@ -81,6 +94,7 @@ export function LaTeXWorkspace({ templateData, onPdfReady, initialOverrides, onO
       return;
     }
 
+    // Parse section content overrides
     const editedSections = parseSections(newSource);
     const generated = generatedSectionsRef.current;
 
@@ -93,7 +107,57 @@ export function LaTeXWorkspace({ templateData, onPdfReady, initialOverrides, onO
       }
     });
 
-    onOverridesChange?.(Object.fromEntries(overridesRef.current));
+    // Parse inter-section prefixes (content between END of previous section and BEGIN of next)
+    // This captures \newpage, \pagebreak, \clearpage etc. that users add between sections
+    const beginRegex = /%%-- BEGIN:(\w+) --%%/g;
+    const endRegex = /%%-- END:(\w+) --%%/g;
+    const newPrefixes = new Map<string, string>();
+
+    // Find all BEGIN positions
+    const beginPositions: { id: string; index: number }[] = [];
+    let bm;
+    while ((bm = beginRegex.exec(newSource)) !== null) {
+      beginPositions.push({ id: bm[1], index: bm.index });
+    }
+
+    // Find all END positions
+    const endPositions: { id: string; endIndex: number }[] = [];
+    let em;
+    while ((em = endRegex.exec(newSource)) !== null) {
+      endPositions.push({ id: em[1], endIndex: em.index + em[0].length });
+    }
+
+    for (let i = 0; i < beginPositions.length; i++) {
+      const bp = beginPositions[i];
+      // Find the text between the previous END and this BEGIN
+      let prefixStart = 0;
+      if (i > 0) {
+        // Find the END that corresponds to the previous section
+        const prevEnd = endPositions.find(e => e.id === beginPositions[i - 1].id);
+        if (prevEnd) prefixStart = prevEnd.endIndex;
+      } else {
+        // For the first section, find where \begin{document} ends
+        const docBegin = newSource.indexOf("\\begin{document}");
+        if (docBegin >= 0) prefixStart = docBegin + "\\begin{document}".length;
+      }
+
+      const between = newSource.substring(prefixStart, bp.index);
+      // Only store if there's meaningful content (not just whitespace/newlines)
+      const trimmed = between.replace(/^\n+|\n+$/g, "").trim();
+      if (trimmed.length > 0) {
+        // Preserve the leading newline + content + trailing newline
+        newPrefixes.set(bp.id, trimmed + "\n");
+      }
+    }
+
+    sectionPrefixesRef.current = newPrefixes;
+
+    // Include prefixes in the persisted overrides with a special key prefix
+    const allOverrides: Record<string, string> = {};
+    overridesRef.current.forEach((v, k) => { allOverrides[k] = v; });
+    newPrefixes.forEach((v, k) => { allOverrides[`__prefix__${k}`] = v; });
+
+    onOverridesChange?.(allOverrides);
   }, [onOverridesChange]);
 
   // Compile
