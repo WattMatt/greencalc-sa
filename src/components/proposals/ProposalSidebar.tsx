@@ -11,7 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  Wand2
+  Wand2,
+  RefreshCw
 } from "lucide-react";
 import { ContentBlockToggle } from "./ContentBlockToggle";
 import { BrandingForm } from "./BrandingForm";
@@ -185,33 +186,23 @@ export function ProposalSidebar({
         <ScrollArea className="flex-1 min-h-0">
           <div className="p-3">
             <TabsContent value="content" className="mt-0 space-y-2">
-              {/* Block category filter */}
-              <div className="flex gap-1 mb-3">
-                <Button
-                  variant={blockFilter === documentType ? 'default' : 'outline'}
-                  size="sm"
-                  className="text-xs h-7 flex-1"
-                  onClick={() => setBlockFilter(documentType)}
-                >
-                  {documentType === 'monthly_report' ? 'Monthly Report' : 'Proposal'}
-                </Button>
-                <Button
-                  variant={blockFilter === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                  className="text-xs h-7 flex-1"
-                  onClick={() => setBlockFilter('all')}
-                >
-                  All
-                </Button>
-                <Button
-                  variant={blockFilter === (documentType === 'proposal' ? 'monthly_report' : 'proposal') ? 'default' : 'outline'}
-                  size="sm"
-                  className="text-xs h-7 flex-1"
-                  onClick={() => setBlockFilter(documentType === 'proposal' ? 'monthly_report' : 'proposal')}
-                >
-                  {documentType === 'proposal' ? 'Monthly Report' : 'Proposal'}
-                </Button>
-              </div>
+              {/* Block category filter - single cycling button */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs h-7 mb-3 justify-between"
+                onClick={() => {
+                  const cycle: Array<'all' | 'proposal' | 'monthly_report'> = [documentType, 'all', documentType === 'proposal' ? 'monthly_report' : 'proposal'];
+                  const currentIndex = cycle.indexOf(blockFilter);
+                  const nextIndex = (currentIndex + 1) % cycle.length;
+                  setBlockFilter(cycle[nextIndex]);
+                }}
+              >
+                <span>
+                  {blockFilter === 'all' ? 'All Sections' : blockFilter === 'proposal' ? 'Proposal' : 'Monthly Report'}
+                </span>
+                <RefreshCw className="h-3 w-3 ml-1" />
+              </Button>
               <p className="text-xs text-muted-foreground mb-3">
                 Toggle sections and generate AI narratives for your proposal
               </p>
