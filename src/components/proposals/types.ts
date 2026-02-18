@@ -116,6 +116,8 @@ export interface SimulationData {
 
 // ============= Content Blocks =============
 
+export type ContentBlockCategory = 'general' | 'proposal' | 'monthly_report';
+
 export type ContentBlockId = 
   | 'cover'
   | 'tableOfContents'
@@ -128,7 +130,12 @@ export type ContentBlockId =
   | 'financialConclusion'
   | 'cashflowTable'
   | 'terms'
-  | 'signature';
+  | 'signature'
+  // Monthly report blocks
+  | 'executiveSummary'
+  | 'dailyLog'
+  | 'operationalDowntime'
+  | 'financialYield';
 
 export interface ContentBlock {
   id: ContentBlockId;
@@ -137,6 +144,7 @@ export interface ContentBlock {
   enabled: boolean;
   required?: boolean;
   order: number;
+  category?: ContentBlockCategory;
 }
 
 export interface ProposalContentBlocks {
@@ -144,19 +152,43 @@ export interface ProposalContentBlocks {
 }
 
 export const DEFAULT_CONTENT_BLOCKS: ContentBlock[] = [
-  { id: 'cover', label: 'Cover Page', description: 'Title page with company details, revision, and document number', enabled: true, order: 0 },
-  { id: 'tableOfContents', label: 'Table of Contents', description: 'Section listing with page numbers', enabled: true, order: 1 },
-  { id: 'adminDetails', label: 'Administrative Details', description: 'Project location and admin info', enabled: true, order: 2 },
-  { id: 'introduction', label: 'Introduction', description: 'System description and scope', enabled: true, order: 3 },
-  { id: 'backgroundMethodology', label: 'Background & Methodology', description: 'Assumptions, tariff tables, and financial return inputs', enabled: true, order: 4 },
-  { id: 'tenderReturnData', label: 'Tender Return Data', description: 'Capital costs, yield data, panel specs, and load shedding impact', enabled: true, order: 5 },
-  { id: 'loadAnalysis', label: 'Load Analysis', description: 'Tenant consumption breakdown', enabled: true, order: 6 },
-  { id: 'financialEstimates', label: 'Financial Estimates', description: 'Financial return outputs per load shedding stage', enabled: true, order: 7 },
-  { id: 'financialConclusion', label: 'Financial Conclusion', description: 'Recommended baseline stage and key metrics', enabled: true, order: 8 },
-  { id: 'cashflowTable', label: 'Project Cash Flows', description: 'Landscape 20-year DCF tables per load shedding stage', enabled: true, order: 9 },
-  { id: 'terms', label: 'Terms & Conditions', description: 'Assumptions and disclaimers', enabled: true, order: 10 },
-  { id: 'signature', label: 'Signature Block', description: 'Authorization signatures', enabled: true, order: 11 },
+  // General blocks (shared across all document types)
+  { id: 'cover', label: 'Cover Page', description: 'Title page with company details, revision, and document number', enabled: true, order: 0, category: 'general' },
+  { id: 'tableOfContents', label: 'Table of Contents', description: 'Section listing with page numbers', enabled: true, order: 1, category: 'general' },
+  
+  // Proposal-specific blocks
+  { id: 'adminDetails', label: 'Administrative Details', description: 'Project location and admin info', enabled: true, order: 2, category: 'proposal' },
+  { id: 'introduction', label: 'Introduction', description: 'System description and scope', enabled: true, order: 3, category: 'proposal' },
+  { id: 'backgroundMethodology', label: 'Background & Methodology', description: 'Assumptions, tariff tables, and financial return inputs', enabled: true, order: 4, category: 'proposal' },
+  { id: 'tenderReturnData', label: 'Tender Return Data', description: 'Capital costs, yield data, panel specs, and load shedding impact', enabled: true, order: 5, category: 'proposal' },
+  { id: 'loadAnalysis', label: 'Load Analysis', description: 'Tenant consumption breakdown', enabled: true, order: 6, category: 'proposal' },
+  { id: 'financialEstimates', label: 'Financial Estimates', description: 'Financial return outputs per load shedding stage', enabled: true, order: 7, category: 'proposal' },
+  { id: 'financialConclusion', label: 'Financial Conclusion', description: 'Recommended baseline stage and key metrics', enabled: true, order: 8, category: 'proposal' },
+  { id: 'cashflowTable', label: 'Project Cash Flows', description: 'Landscape 20-year DCF tables per load shedding stage', enabled: true, order: 9, category: 'proposal' },
+  { id: 'terms', label: 'Terms & Conditions', description: 'Assumptions and disclaimers', enabled: true, order: 10, category: 'proposal' },
+  
+  // Monthly report blocks
+  { id: 'executiveSummary', label: 'Executive Summary', description: 'Installed equipment specs, monthly and yearly energy generation tables', enabled: true, order: 2, category: 'monthly_report' },
+  { id: 'dailyLog', label: 'Daily Performance Log', description: 'Day-by-day yield, metered, downtime, theoretical, and surplus/deficit', enabled: true, order: 3, category: 'monthly_report' },
+  { id: 'operationalDowntime', label: 'Operational Downtime', description: 'Downtime details with tie-in breakdowns and comments', enabled: true, order: 4, category: 'monthly_report' },
+  { id: 'financialYield', label: 'Financial Yield Report', description: 'Daily financial yield with guarantee vs actual in Rands', enabled: true, order: 5, category: 'monthly_report' },
+  
+  // General blocks (end)
+  { id: 'signature', label: 'Signature Block', description: 'Authorization signatures', enabled: true, order: 99, category: 'general' },
 ];
+
+/**
+ * Returns general blocks + blocks matching the given document type,
+ * with correct ordering (general blocks at start/end, type-specific in between).
+ */
+export function getBlocksForDocumentType(documentType: 'proposal' | 'monthly_report'): ContentBlock[] {
+  const filtered = DEFAULT_CONTENT_BLOCKS.filter(
+    b => b.category === 'general' || b.category === documentType
+  );
+  return filtered
+    .sort((a, b) => a.order - b.order)
+    .map((block, index) => ({ ...block, order: index }));
+}
 
 // ============= Proposal Entity =============
 

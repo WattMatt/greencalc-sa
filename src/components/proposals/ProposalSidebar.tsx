@@ -47,6 +47,7 @@ interface ProposalSidebarProps {
   aiNarratives?: Record<string, { narrative: string; keyHighlights?: string[] }>;
   onGenerateNarrative?: (blockId: ContentBlockId, sectionType: string) => void;
   generatingNarrativeId?: string | null;
+  documentType?: 'proposal' | 'monthly_report';
 }
 
 export function ProposalSidebar({
@@ -65,13 +66,18 @@ export function ProposalSidebar({
   onToggleCollapse,
   aiNarratives,
   onGenerateNarrative,
-  generatingNarrativeId
+  generatingNarrativeId,
+  documentType = 'proposal'
 }: ProposalSidebarProps) {
   const [activeTab, setActiveTab] = useState("content");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  const sortedBlocks = [...contentBlocks].sort((a, b) => a.order - b.order);
+  // Filter blocks to show only general + current document type
+  const filteredBlocks = contentBlocks.filter(
+    b => b.category === 'general' || b.category === documentType
+  );
+  const sortedBlocks = [...filteredBlocks].sort((a, b) => a.order - b.order);
 
   const handleBlockToggle = (blockId: string, enabled: boolean) => {
     const updatedBlocks = contentBlocks.map(block =>

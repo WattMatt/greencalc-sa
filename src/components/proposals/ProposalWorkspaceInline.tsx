@@ -25,7 +25,7 @@ import {
   SimulationData,
   ContentBlock,
   ContentBlockId,
-  DEFAULT_CONTENT_BLOCKS,
+  getBlocksForDocumentType,
   STATUS_LABELS,
   STATUS_COLORS
 } from "@/components/proposals/types";
@@ -48,7 +48,7 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
   const [selectedSimulationId, setSelectedSimulationId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<'profile' | 'sandbox' | null>(null);
   const [simulationData, setSimulationData] = useState<SimulationData | null>(null);
-  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>(DEFAULT_CONTENT_BLOCKS);
+  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>(() => getBlocksForDocumentType(documentType));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [aiNarratives, setAiNarratives] = useState<Record<string, { narrative: string; keyHighlights?: string[] }>>({});
@@ -232,7 +232,14 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
         setSimulationData(existingProposal.simulation_snapshot as unknown as SimulationData);
       }
       if ((existingProposal as any).content_blocks) {
-        setContentBlocks((existingProposal as any).content_blocks as ContentBlock[]);
+        const saved = (existingProposal as any).content_blocks as ContentBlock[];
+        // Merge saved states with the correct block set for this document type
+        const defaultBlocks = getBlocksForDocumentType(documentType);
+        const merged = defaultBlocks.map(db => {
+          const match = saved.find(s => s.id === db.id);
+          return match ? { ...db, enabled: match.enabled, order: match.order } : db;
+        });
+        setContentBlocks(merged);
       }
       if ((existingProposal as any).section_overrides) {
         sectionOverridesRef.current = (existingProposal as any).section_overrides as Record<string, string>;
@@ -518,6 +525,7 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
         aiNarratives={aiNarratives}
         onGenerateNarrative={handleGenerateNarrative}
         generatingNarrativeId={generatingNarrativeId}
+        documentType={documentType}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
