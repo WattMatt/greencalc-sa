@@ -130,10 +130,20 @@ function reconstructSource(
     displayIdx++;
   }
 
+  const mappedSourceIndices = lineMap.filter(x => x >= 0);
+  const lastMappedSource = mappedSourceIndices[mappedSourceIndices.length - 1] ?? originalLines.length - 1;
+
   if (displayIdx < newDisplayLines.length) {
-    const lastSourceIdx = lineMap.filter(x => x >= 0).pop() ?? originalLines.length - 1;
     const extra = newDisplayLines.slice(displayIdx);
-    result.splice(lastSourceIdx + 1, 0, ...extra);
+    result.splice(lastMappedSource + 1, 0, ...extra);
+  }
+
+  // Calculate expected total length and trim trailing lines deleted by the user
+  const expectedLength = lastMappedSource + 1 +
+    (displayIdx < newDisplayLines.length ? newDisplayLines.length - displayIdx : 0);
+
+  if (result.length > expectedLength) {
+    result.length = expectedLength;
   }
 
   return result.join("\n");
@@ -376,7 +386,14 @@ export function LaTeXEditor({ value, onChange, onSync, needsSync, isCompiling, d
       {/* Editor with line numbers */}
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex overflow-hidden"
+            onKeyDownCapture={(e) => {
+              // Prevent Radix ContextMenu from swallowing keyboard events in the textarea
+              if (e.target === textareaRef.current) {
+                e.stopPropagation();
+              }
+            }}
+          >
             {/* Gutter */}
             <div
               ref={gutterRef}
