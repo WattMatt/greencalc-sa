@@ -14,6 +14,8 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useMonthlyReportData } from "@/hooks/useMonthlyReportData";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useOrganizationBranding } from "@/hooks/useOrganizationBranding";
 import { ProposalSidebar } from "@/components/proposals/ProposalSidebar";
 import { ShareLinkButton } from "@/components/proposals/ShareLinkButton";
@@ -55,6 +57,13 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
   const [isExporting, setIsExporting] = useState(false);
   const [aiNarratives, setAiNarratives] = useState<Record<string, { narrative: string; keyHighlights?: string[] }>>({});
   const [generatingNarrativeId, setGeneratingNarrativeId] = useState<string | null>(null);
+
+  // Monthly report month/year selector (default to previous month)
+  const now = new Date();
+  const defaultMonth = now.getMonth() === 0 ? 12 : now.getMonth(); // previous month (1-indexed)
+  const defaultYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+  const [reportMonth, setReportMonth] = useState<number>(defaultMonth);
+  const [reportYear, setReportYear] = useState<number>(defaultYear);
 
   const [verificationChecklist, setVerificationChecklist] = useState<VerificationChecklistType>({
     site_coordinates_verified: false,
@@ -119,6 +128,13 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
   });
 
   const projectTariffName = (project as any)?.tariff_plans?.name || null;
+
+  // Monthly report data pipeline
+  const { data: monthlyReportData } = useMonthlyReportData(
+    documentType === 'monthly_report' ? projectId : '',
+    reportMonth,
+    reportYear,
+  );
 
   const { data: simulations = [] } = useQuery({
     queryKey: ["project-simulations", projectId],
@@ -333,17 +349,24 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
   }), [existingProposal, projectId, nextVersion, verificationChecklist, branding, executiveSummary, customNotes, assumptions, disclaimers]);
 
   const templateData: TemplateData | null = useMemo(() => {
-    if (!simulationData) return null;
+    // For monthly reports, allow rendering even without simulation data
+    const sim = simulationData || (documentType === 'monthly_report' ? {
+      solarCapacity: 0, batteryCapacity: 0, batteryPower: 0,
+      annualSolarGeneration: 0, annualGridImport: 0, annualGridExport: 0,
+      annualSavings: 0, paybackYears: 0, roiPercentage: 0, systemCost: 0,
+    } as any : null);
+    if (!sim) return null;
     return {
-      simulation: simulationData,
+      simulation: sim,
       branding,
       contentBlocks,
       proposal: proposalForComponents,
       project,
       tenants: tenants || [],
       tariffName: projectTariffName || undefined,
+      monthlyReportData: monthlyReportData || undefined,
     };
-  }, [simulationData, branding, contentBlocks, proposalForComponents, project, tenants, projectTariffName]);
+  }, [simulationData, branding, contentBlocks, proposalForComponents, project, tenants, projectTariffName, monthlyReportData, documentType]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -550,6 +573,33 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground">{project?.name}</p>
+                {documentType === 'monthly_report' && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Select value={String(reportMonth)} onValueChange={(v) => setReportMonth(Number(v))}>
+                      <SelectTrigger className="h-7 w-[120px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 12 }, (_, i) => (
+                          <SelectItem key={i + 1} value={String(i + 1)}>
+                            {new Date(2000, i).toLocaleString("en-ZA", { month: "long" })}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={String(reportYear)} onValueChange={(v) => setReportYear(Number(v))}>
+                      <SelectTrigger className="h-7 w-[80px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 10 }, (_, i) => {
+                          const y = new Date().getFullYear() - i;
+                          return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </div>
 

@@ -3,6 +3,7 @@
  * Matches the Financial Analysis report layout.
  */
 import { SimulationData, ProposalBranding, ContentBlock, Proposal, SECTION_BEGIN, SECTION_END } from "@/components/proposals/types";
+import { MonthlyReportData } from "@/utils/monthlyReportData";
 import * as snippets from "./snippets";
 import * as monthlySnippets from "./monthlyReportSnippets";
 
@@ -22,6 +23,7 @@ export interface TemplateData {
   project: any;
   tenants: any[];
   tariffName?: string;
+  monthlyReportData?: MonthlyReportData;
 }
 
 /** Generate content for a single block (no delimiters). */
@@ -57,13 +59,21 @@ export function generateBlockContent(
       return snippets.signatureBlock(proposal, branding);
     // Monthly report blocks
     case "executiveSummary":
-      return monthlySnippets.executiveSummary(simulation, project);
+      return data.monthlyReportData
+        ? monthlySnippets.executiveSummary(data.monthlyReportData, data.project)
+        : monthlySnippets.executiveSummaryPlaceholder(data.simulation, data.project);
     case "dailyLog":
-      return monthlySnippets.dailyPerformanceLog();
+      return data.monthlyReportData
+        ? monthlySnippets.dailyPerformanceLog(data.monthlyReportData)
+        : monthlySnippets.dailyPerformanceLogPlaceholder();
     case "operationalDowntime":
-      return monthlySnippets.operationalDowntime();
+      return data.monthlyReportData
+        ? monthlySnippets.operationalDowntime(data.monthlyReportData)
+        : monthlySnippets.operationalDowntimePlaceholder();
     case "financialYield":
-      return monthlySnippets.financialYieldReport();
+      return data.monthlyReportData
+        ? monthlySnippets.financialYieldReport(data.monthlyReportData)
+        : monthlySnippets.financialYieldReportPlaceholder();
     default:
       return `\\section{${snippets.esc(blockId)}}\n\nContent for this section is not yet available.\n`;
   }
