@@ -55,7 +55,7 @@ export default function Projects() {
         .from("projects")
         .select(`
           *,
-          tariffs(name, municipality_id, municipalities(name)),
+          tariff_plans(name, municipality_id, municipalities(name)),
           project_tenants(count)
         `)
         .order("created_at", { ascending: false });
@@ -90,7 +90,7 @@ export default function Projects() {
       const matchesLocation = locationFilter === "all" || project.location === locationFilter;
       
       // Tariff filter
-      const hasTariff = !!(project as any).tariffs?.name;
+      const hasTariff = !!(project as any).tariff_plans?.name;
       const matchesTariff = tariffFilter === "all" || 
         (tariffFilter === "set" && hasTariff) ||
         (tariffFilter === "not-set" && !hasTariff);
@@ -399,7 +399,7 @@ export default function Projects() {
                   <div>
                     <span className="text-muted-foreground">Tariff</span>
                     <p className="font-medium truncate">
-                      {(project as any).tariffs?.name || "Not set"}
+                      {(project as any).tariff_plans?.name || "Not set"}
                     </p>
                   </div>
                 </div>
@@ -455,7 +455,7 @@ export default function Projects() {
                   <div className="text-center min-w-[100px]">
                     <span className="text-muted-foreground block">Tariff</span>
                     <span className="font-medium truncate block">
-                      {(project as any).tariffs?.name || "Not set"}
+                      {(project as any).tariff_plans?.name || "Not set"}
                     </span>
                   </div>
                 </div>

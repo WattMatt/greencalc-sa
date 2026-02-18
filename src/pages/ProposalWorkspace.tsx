@@ -105,7 +105,7 @@ export default function ProposalWorkspace() {
       if (!projectId) return null;
       const { data, error } = await supabase
         .from("projects")
-        .select("*, tariffs(id, name)")
+        .select("*, tariff_plans(id, name)")
         .eq("id", projectId)
         .single();
       if (error) throw error;
@@ -114,7 +114,7 @@ export default function ProposalWorkspace() {
     enabled: !!projectId,
   });
 
-  const projectTariffName = (project as any)?.tariffs?.name || null;
+  const projectTariffName = (project as any)?.tariff_plans?.name || null;
 
   // Fetch simulations
   const { data: simulations = [] } = useQuery({
