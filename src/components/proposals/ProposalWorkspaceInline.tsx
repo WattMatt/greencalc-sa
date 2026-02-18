@@ -539,7 +539,7 @@ export function ProposalWorkspaceInline({ projectId, proposalId, onBack, documen
               </Button>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-semibold">Proposal Builder</h1>
+                  <h1 className="text-xl font-semibold">{documentType === 'monthly_report' ? 'Monthly Report' : 'Proposal Builder'}</h1>
                   {existingProposal && (
                     <>
                       <Badge variant="outline">v{existingProposal.version}</Badge>
