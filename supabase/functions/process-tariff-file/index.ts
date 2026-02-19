@@ -245,8 +245,6 @@ Deno.serve(async (req) => {
         }
       } else {
         // Two-pass approach: regex first, AI fallback
-        // Pass 1: Regex-based extraction for standard SA tariff PDF format
-        // Pattern: "MUNICIPALITY_NAME - XX.XX%" or "MUNICIPALITY_NAME XX.XX%"
         const regexWithDash = /^([A-Z][A-Z\s\-\/]+?)\s*[-–]\s*\d+[\.,]\d+%/gm;
         const regexNoDash = /^([A-Z][A-Z\s\-\/]+?)\s+\d+[\.,]\d+%/gm;
         
@@ -267,7 +265,6 @@ Deno.serve(async (req) => {
         if (regexMatches.size > 0) {
           municipalityNames = [...regexMatches];
         } else {
-          // Pass 2: AI fallback with increased context
           console.log("Regex found no matches, falling back to AI extraction...");
           const muniPrompt = `Extract ONLY the municipality names from this South African electricity tariff document.\n\n${extractedText.slice(0, 50000)}\n\nReturn ONLY municipality names, one per line. Remove any percentages like "- 12.72%".`;
 
@@ -304,7 +301,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Save to database - NO source_file_path references
+      // Fetch province and known municipalities from DB
       const { data: provinces } = await supabase.from("provinces").select("id, name");
       const provinceMap = new Map(provinces?.map(p => [p.name.toLowerCase(), p.id]) || []);
       
@@ -314,29 +311,84 @@ Deno.serve(async (req) => {
         if (newProv) provinceId = newProv.id;
       }
 
-      const savedMunicipalities: Array<{ id: string; name: string; sheetName?: string }> = [];
+      // Fetch pre-seeded known municipalities for this province
+      const { data: knownMunicipalities } = await supabase
+        .from("municipalities")
+        .select("id, name")
+        .eq("province_id", provinceId || '');
+
+      // Fuzzy matching helper: normalise name for comparison
+      function normaliseName(name: string): string {
+        return name
+          .toLowerCase()
+          .replace(/\s*(local\s+)?municipality/gi, '')
+          .replace(/\s*(lim|ec|wc|nc|nw|fs|gp|kzn|mp)\s*\d*/gi, '')
+          .replace(/\s*province\s*/gi, '')
+          .replace(/[-–]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      function findBestMatch(extractedName: string, known: Array<{ id: string; name: string }>): { id: string; name: string } | null {
+        const normalised = normaliseName(extractedName);
+        if (!normalised) return null;
+        
+        // 1. Exact normalised match
+        for (const k of known) {
+          if (normaliseName(k.name) === normalised) return k;
+        }
+        // 2. Contains match (either direction)
+        for (const k of known) {
+          const nk = normaliseName(k.name);
+          if (nk.includes(normalised) || normalised.includes(nk)) return k;
+        }
+        // 3. Starts-with match (first 5+ chars)
+        if (normalised.length >= 5) {
+          for (const k of known) {
+            const nk = normaliseName(k.name);
+            if (nk.startsWith(normalised.substring(0, 5)) || normalised.startsWith(nk.substring(0, 5))) return k;
+          }
+        }
+        return null;
+      }
+
+      const savedMunicipalities: Array<{ id: string; name: string; sheetName?: string; matched: boolean }> = [];
       const errors: string[] = [];
+      const knownList = knownMunicipalities || [];
 
       if (provinceId) {
-        const { data: existingMunis } = await supabase
-          .from("municipalities")
-          .select("id, name")
-          .eq("province_id", provinceId);
-        
-        const existingNames = new Set(existingMunis?.map(m => m.name.toLowerCase()) || []);
-
         for (const muniName of municipalityNames) {
           const cleanName = muniName.replace(/\s*[-–]\s*(\d+[\.,]\d*%)?$/, '').trim();
           if (!cleanName) continue;
+
+          // Try to match against known municipalities
+          const match = findBestMatch(cleanName, knownList);
           
-          if (existingNames.has(cleanName.toLowerCase())) {
-            const existing = existingMunis?.find(m => m.name.toLowerCase() === cleanName.toLowerCase());
-            if (existing) {
-              savedMunicipalities.push({ id: existing.id, name: existing.name, sheetName: sheetNameToMuni[cleanName] || cleanName });
+          if (match) {
+            // Check we haven't already added this match
+            if (!savedMunicipalities.some(s => s.id === match.id)) {
+              savedMunicipalities.push({ id: match.id, name: match.name, sheetName: sheetNameToMuni[cleanName] || cleanName, matched: true });
             }
             continue;
           }
 
+          // No match found — check if it already exists in DB (case-insensitive)
+          const { data: existingMunis } = await supabase
+            .from("municipalities")
+            .select("id, name")
+            .eq("province_id", provinceId)
+            .ilike("name", cleanName);
+
+          if (existingMunis && existingMunis.length > 0) {
+            const existing = existingMunis[0];
+            if (!savedMunicipalities.some(s => s.id === existing.id)) {
+              savedMunicipalities.push({ id: existing.id, name: existing.name, sheetName: sheetNameToMuni[cleanName] || cleanName, matched: true });
+            }
+            continue;
+          }
+
+          // Genuinely new municipality — create it with a warning
+          console.warn(`No known match for "${cleanName}" in ${province} — creating new entry`);
           const { data: newMuni, error } = await supabase
             .from("municipalities")
             .insert({ name: cleanName, province_id: provinceId })
@@ -344,8 +396,7 @@ Deno.serve(async (req) => {
             .single();
           
           if (newMuni) {
-            savedMunicipalities.push({ id: newMuni.id, name: newMuni.name, sheetName: sheetNameToMuni[cleanName] || cleanName });
-            existingNames.add(cleanName.toLowerCase());
+            savedMunicipalities.push({ id: newMuni.id, name: newMuni.name, sheetName: sheetNameToMuni[cleanName] || cleanName, matched: false });
           } else if (error) {
             errors.push(`${cleanName}: ${error.message}`);
           }
@@ -586,12 +637,29 @@ Deno.serve(async (req) => {
         ? `\n\nEXISTING TARIFFS IN DATABASE (${existingTariffSummary.length} total):\n${JSON.stringify(existingTariffSummary, null, 2)}\n\nINCREMENTAL EXTRACTION RULES:\n- Compare against existing tariffs above\n- ONLY return NEW or UPDATED tariffs\n- Mark each with "action": "new" or "action": "update"\n- Skip tariffs with IDENTICAL values`
         : "";
 
+      // Fetch known municipality names for this province to help AI attribution
+      let knownMuniContext = "";
+      if (!isEskomExtraction) {
+        const { data: provForMuni } = await supabase.from("municipalities").select("id, name, province:provinces(name)").eq("id", muniData.id).single();
+        if (provForMuni) {
+          const provinceId = (provForMuni as any).province?.id;
+          // Get province_id from the municipality's province relation
+          const { data: muniProvince } = await supabase.from("municipalities").select("province_id").eq("id", muniData.id).single();
+          if (muniProvince) {
+            const { data: knownMunis } = await supabase.from("municipalities").select("name").eq("province_id", muniProvince.province_id).order("name");
+            if (knownMunis && knownMunis.length > 0) {
+              knownMuniContext = `\n\nKNOWN MUNICIPALITIES IN THIS PROVINCE:\n${knownMunis.map(m => m.name).join(", ")}\n\nIMPORTANT: When attributing tariff data, use ONLY the municipality names from the list above. Do NOT invent new municipality names.`;
+            }
+          }
+        }
+      }
+
       const currentBatch = isEskomExtraction ? eskomBatches[currentBatchIndex] : null;
       
       // Build extraction prompt (keeping AI prompt logic intact - well-tuned for SA tariff docs)
       const extractPrompt = isEskomExtraction 
         ? `TASK: Extract ${currentBatch?.name || "Eskom"} tariffs from Eskom 2025-2026 tariff data.\n\nBATCH FOCUS: ${currentBatch?.name || "All"} - ${currentBatch?.description || "Extract all tariffs"}\nBatch ${currentBatchIndex + 1}/${eskomBatches.length}\n\nSOURCE DATA:\n${municipalityText.slice(0, 15000)}\n${existingContext}\n\n=== ESKOM 2025-2026 UNBUNDLED TARIFF STRUCTURE ===\n\nExtract ALL variants of ${currentBatch?.name || "Eskom"} tariffs with these fields:\n- category: "Domestic", "Commercial", "Industrial", "Agricultural", "Public Lighting", or "Other"\n- tariff_name: Full name from document\n- tariff_type: "Fixed", "IBT", or "TOU"\n- voltage_level: "LV", "MV", or "HV"\n- phase_type: "Single Phase" or "Three Phase"\n- is_prepaid: boolean\n- tariff_family: "${currentBatch?.name || "Megaflex"}"\n- fixed_monthly_charge: Basic/service charge in R/month\n- demand_charge_per_kva: Network access charge in R/kVA\n- rates: Array of energy rates in R/kWh (convert c/kWh ÷ 100)\n  - Each rate: { rate_per_kwh, season ("All Year"/"High/Winter"/"Low/Summer"), time_of_use ("Any"/"Peak"/"Standard"/"Off-Peak"), block_start_kwh, block_end_kwh }\n\nKEY RULES:\n1. Use VAT-EXCLUSIVE values only\n2. c/kWh → R/kWh: divide by 100\n3. TOU tariffs need 6 rates minimum (Peak/Standard/Off-Peak × High/Low seasons)\n4. Include all voltage and zone variants\n\nExtract EVERY variant with COMPLETE rate data!`
-        : `TASK: Extract electricity tariffs for "${municipality}" municipality.\n\nSOURCE DATA:\n${municipalityText.slice(0, 15000)}\n\n=== EXTRACTION RULES ===\n\n1. TARIFF IDENTIFICATION: Look for "Domestic", "Commercial", "Industrial", "Agricultural", "Prepaid" sections.\n\n2. TARIFF TYPE DETECTION:\n   - IBT: Different rates for different kWh levels → tariff_type: "IBT"\n   - TOU: High/Low Demand or Peak/Standard/Off-Peak → tariff_type: "TOU"  \n   - Fixed: Single flat rate → tariff_type: "Fixed"\n\n3. IBT BLOCKS: EVERY IBT rate MUST have block_start_kwh and block_end_kwh!\n   - "Block 1 (0-50)kWh" → block_start_kwh: 0, block_end_kwh: 50\n   - ">600kWh" → block_start_kwh: 600, block_end_kwh: null\n\n4. CHARGES:\n   - "Basic Charge (R/month)" → fixed_monthly_charge\n   - "Per kVA" charges → demand_charge_per_kva\n   - "Energy Charge (c/kWh)" → rates array\n\n5. RATE CONVERSION: c/kWh → R/kWh (divide by 100). Use VAT-EXCLUSIVE values.\n\n6. CATEGORIES: Domestic, Commercial, Industrial, Agriculture\n\n7. PHASE: "Single Phase" or "Three Phase"\n\n8. PREPAID: is_prepaid: true if "Prepaid" in name\n\n9. TOU RATES must have at least 6 entries:\n   - High/Winter: Peak, Standard, Off-Peak\n   - Low/Summer: Peak, Standard, Off-Peak\n\n10. VOLTAGE: "LV" (≤400V), "MV" (11kV/22kV), "HV" (≥44kV)\n\n11. EFFECTIVE DATES: If the document mentions effective dates, financial year, or validity period (e.g. "Effective 1 July 2024", "2024/2025 tariffs"), extract them as:\n   - effective_from: YYYY-MM-DD (e.g. "2024-07-01")\n   - effective_to: YYYY-MM-DD (e.g. "2025-06-30")\n\nExtract ALL tariffs with COMPLETE rate data!`;
+        : `TASK: Extract electricity tariffs for "${municipality}" municipality.${knownMuniContext}\n\nSOURCE DATA:\n${municipalityText.slice(0, 15000)}\n\n=== EXTRACTION RULES ===\n\n1. TARIFF IDENTIFICATION: Look for "Domestic", "Commercial", "Industrial", "Agricultural", "Prepaid" sections.\n\n2. TARIFF TYPE DETECTION:\n   - IBT: Different rates for different kWh levels → tariff_type: "IBT"\n   - TOU: High/Low Demand or Peak/Standard/Off-Peak → tariff_type: "TOU"  \n   - Fixed: Single flat rate → tariff_type: "Fixed"\n\n3. IBT BLOCKS: EVERY IBT rate MUST have block_start_kwh and block_end_kwh!\n   - "Block 1 (0-50)kWh" → block_start_kwh: 0, block_end_kwh: 50\n   - ">600kWh" → block_start_kwh: 600, block_end_kwh: null\n\n4. CHARGES:\n   - "Basic Charge (R/month)" → fixed_monthly_charge\n   - "Per kVA" charges → demand_charge_per_kva\n   - "Energy Charge (c/kWh)" → rates array\n\n5. RATE CONVERSION: c/kWh → R/kWh (divide by 100). Use VAT-EXCLUSIVE values.\n\n6. CATEGORIES: Domestic, Commercial, Industrial, Agriculture\n\n7. PHASE: "Single Phase" or "Three Phase"\n\n8. PREPAID: is_prepaid: true if "Prepaid" in name\n\n9. TOU RATES must have at least 6 entries:\n   - High/Winter: Peak, Standard, Off-Peak\n   - Low/Summer: Peak, Standard, Off-Peak\n\n10. VOLTAGE: "LV" (≤400V), "MV" (11kV/22kV), "HV" (≥44kV)\n\n11. EFFECTIVE DATES: If the document mentions effective dates, financial year, or validity period (e.g. "Effective 1 July 2024", "2024/2025 tariffs"), extract them as:\n   - effective_from: YYYY-MM-DD (e.g. "2024-07-01")\n   - effective_to: YYYY-MM-DD (e.g. "2025-06-30")\n\nExtract ALL tariffs with COMPLETE rate data!`;
 
       // Retry logic for AI call
       const MAX_RETRIES = 3;
