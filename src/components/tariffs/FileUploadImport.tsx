@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Eye, Pencil, Save, ChevronLeft, ChevronRight } from "lucide-react";
+import { ExtractionSteps, type ExtractionStep } from "./ExtractionSteps";
 
 // Configure pdf.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -453,14 +454,15 @@ export function FileUploadImport() {
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 py-4">
-          {/* Progress Indicator */}
-          <div className="flex items-center gap-2 text-sm">
-            <Badge variant={phase >= 1 ? "default" : "outline"}>1. Upload</Badge>
-            <span className="text-muted-foreground">→</span>
-            <Badge variant={phase >= 2 ? "default" : "outline"}>2. Municipalities</Badge>
-            <span className="text-muted-foreground">→</span>
-            <Badge variant={phase >= 3 ? "default" : "outline"}>3. Tariffs</Badge>
-          </div>
+          {/* Progress Stepper */}
+          <ExtractionSteps
+            currentStep={
+              phase === 1 ? "upload" :
+              phase === 2 ? (municipalities.some(m => m.status === "extracting") ? "extract" : "review") :
+              completedCount === municipalities.length && completedCount > 0 ? "save" : "review"
+            }
+            isProcessing={isAnalyzing || isExtractingMunis || municipalities.some(m => m.status === "extracting")}
+          />
 
           {/* File Upload */}
           <div className="space-y-2">

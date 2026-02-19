@@ -48,6 +48,8 @@ interface Tariff {
   is_recommended: boolean | null;
   metering: string | null;
   description: string | null;
+  effective_from: string | null;
+  effective_to: string | null;
   municipality?: { name: string; province_id: string } | null;
   tariff_rates?: TariffRate[];
 }
@@ -101,6 +103,8 @@ export function TariffEditDialog({ tariff, rates, open, onOpenChange, onSaved }:
           description: editedTariff.description,
           is_redundant: editedTariff.is_redundant,
           is_recommended: editedTariff.is_recommended,
+          effective_from: editedTariff.effective_from || null,
+          effective_to: editedTariff.effective_to || null,
         })
         .eq("id", editedTariff.id);
       
@@ -292,6 +296,24 @@ export function TariffEditDialog({ tariff, rates, open, onOpenChange, onSaved }:
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Effective From</Label>
+                <Input
+                  type="date"
+                  className="h-9"
+                  value={editedTariff.effective_from || ""}
+                  onChange={(e) => setEditedTariff({ ...editedTariff, effective_from: e.target.value || null })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Effective To</Label>
+                <Input
+                  type="date"
+                  className="h-9"
+                  value={editedTariff.effective_to || ""}
+                  onChange={(e) => setEditedTariff({ ...editedTariff, effective_to: e.target.value || null })}
+                />
               </div>
             </div>
 
