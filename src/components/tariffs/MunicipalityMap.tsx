@@ -553,14 +553,104 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
       if (data?.success && data.latitude && data.longitude) {
         // Remove existing search marker
         searchMarkerRef.current?.remove();
-        // Add pin marker
+
+        // Reverse geocode to find province/municipality
+        let reverseInfo: { province?: string; municipality?: string } = {};
+        try {
+          const { data: revData } = await supabase.functions.invoke("geocode-location", {
+            body: { reverse: true, latitude: data.latitude, longitude: data.longitude }
+          });
+          if (revData?.success) {
+            reverseInfo = { province: revData.province, municipality: revData.municipality };
+          }
+        } catch (revErr) {
+          console.error("Reverse geocode failed:", revErr);
+        }
+
+        // Try to match to a DB municipality
+        let matchedMuni: DbMunicipality | null = null;
+        if (reverseInfo.municipality) {
+          const normalizedSearch = normalizeName(reverseInfo.municipality);
+          matchedMuni = dbMunicipalities.find(m => {
+            const normalizedDb = normalizeName(m.name);
+            // Check province match too if available
+            if (reverseInfo.province && m.province?.name) {
+              const provMatch = m.province.name.toLowerCase().includes(reverseInfo.province.toLowerCase()) ||
+                reverseInfo.province.toLowerCase().includes(m.province.name.toLowerCase());
+              if (provMatch && (normalizedDb.includes(normalizedSearch) || normalizedSearch.includes(normalizedDb))) {
+                return true;
+              }
+            }
+            return normalizedDb === normalizedSearch || normalizedDb.includes(normalizedSearch) || normalizedSearch.includes(normalizedDb);
+          }) || null;
+        }
+
+        // Build popup HTML with tariff info
+        const locationLabel = `<strong>${result.main_text}</strong><br/><span style="color:#64748b;font-size:11px;">${result.secondary_text}</span>`;
+        const provinceLabel = reverseInfo.province ? `<div style="margin-top:4px;font-size:11px;color:#64748b;">Province: <strong>${reverseInfo.province}</strong></div>` : "";
+        const muniLabel = reverseInfo.municipality ? `<div style="font-size:11px;color:#64748b;">Municipality: <strong>${reverseInfo.municipality}</strong></div>` : "";
+
+        let tariffSection = "";
+        if (matchedMuni) {
+          const tariffCount = matchedMuni.tariff_count || 0;
+          tariffSection = `
+            <div style="margin-top:6px;padding:4px 8px;background:#f0fdf4;border-left:3px solid #22c55e;font-size:11px;">
+              <strong>${matchedMuni.name}</strong> — ${tariffCount} tariff${tariffCount !== 1 ? 's' : ''} available
+            </div>
+            ${tariffCount > 0 ? `
+              <button class="search-pin-view-tariffs" data-muni-id="${matchedMuni.id}" data-muni-name="${matchedMuni.name}"
+                style="margin-top:6px;width:100%;padding:6px 12px;background:hsl(142.1 76.2% 36.3%);color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:500;">
+                View ${tariffCount} Tariff${tariffCount !== 1 ? 's' : ''} →
+              </button>
+              <button class="search-pin-yoy-trends" data-muni-id="${matchedMuni.id}" data-muni-name="${matchedMuni.name}"
+                style="margin-top:4px;width:100%;padding:6px 12px;background:hsl(221.2 83.2% 53.3%);color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:500;">
+                📊 YoY Trends
+              </button>
+            ` : ''}
+          `;
+        } else if (reverseInfo.municipality) {
+          tariffSection = `<div style="margin-top:6px;padding:4px 8px;background:#f1f5f9;font-size:11px;color:#64748b;">No tariffs found for this municipality</div>`;
+        }
+
+        const popupHtml = `<div style="padding:4px;font-size:12px;min-width:200px;">${locationLabel}${provinceLabel}${muniLabel}${tariffSection}</div>`;
+
+        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(popupHtml);
+
         searchMarkerRef.current = new mapboxgl.Marker({ color: "#ef4444" })
           .setLngLat([data.longitude, data.latitude])
-          .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(
-            `<div style="padding:4px;font-size:12px;"><strong>${result.main_text}</strong><br/><span style="color:#64748b;font-size:11px;">${result.secondary_text}</span></div>`
-          ))
+          .setPopup(popup)
           .addTo(map.current!);
         searchMarkerRef.current.togglePopup();
+
+        // Attach click handlers after popup renders
+        setTimeout(() => {
+          const viewBtn = document.querySelector('.search-pin-view-tariffs');
+          if (viewBtn) {
+            viewBtn.addEventListener('click', (evt) => {
+              const target = evt.target as HTMLButtonElement;
+              const muniId = target.getAttribute('data-muni-id');
+              const muniName = target.getAttribute('data-muni-name');
+              if (muniId && muniName && onMunicipalityClick) {
+                popup.remove();
+                onMunicipalityClick(muniId, muniName);
+              }
+            });
+          }
+          const yoyBtn = document.querySelector('.search-pin-yoy-trends');
+          if (yoyBtn) {
+            yoyBtn.addEventListener('click', (evt) => {
+              const target = evt.target as HTMLButtonElement;
+              const muniId = target.getAttribute('data-muni-id');
+              const muniName = target.getAttribute('data-muni-name');
+              if (muniId && muniName) {
+                popup.remove();
+                setSelectedMuniForYoy({ id: muniId, name: muniName });
+                setYoyDialogOpen(true);
+              }
+            });
+          }
+        }, 10);
+
         map.current?.flyTo({ center: [data.longitude, data.latitude], zoom: 10 });
       }
     } catch (err) {
@@ -571,7 +661,7 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
       setSearchResults([]);
       setIsSearching(false);
     }
-  }, []);
+  }, [dbMunicipalities, normalizeName, onMunicipalityClick]);
 
   // Close suggestions on outside click
   useEffect(() => {
