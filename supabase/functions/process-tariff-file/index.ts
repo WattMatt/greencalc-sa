@@ -177,6 +177,7 @@ Deno.serve(async (req) => {
       const uint8Array = new Uint8Array(await fileData.arrayBuffer());
       const { encode } = await import("https://deno.land/std@0.208.0/encoding/base64.ts");
       const base64 = encode(uint8Array);
+      console.log("PDF base64 size:", base64.length, "bytes");
       
       const visionRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -204,6 +205,8 @@ Deno.serve(async (req) => {
           extractedText = "PDF extraction failed - AI response was invalid";
         }
       } else {
+        const errBody = await visionRes.text();
+        console.error("Vision API failed:", visionRes.status, errBody);
         extractedText = "PDF extraction failed - please try Excel format";
       }
     }
