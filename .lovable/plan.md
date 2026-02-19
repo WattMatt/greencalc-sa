@@ -1,67 +1,103 @@
 
-## Fix PDF Preview and Raw Data Display in Tariff Comparison
+## Incorporate WM-tariffs Features into Tariff Management Dashboard
 
-### Problems Identified
+### Overview
 
-1. **PDF preview shows "PDF preview not supported in this browser"** - The current implementation uses an `<object>` tag with a blob URL to render PDFs. This approach is blocked in sandboxed iframes (the Lovable preview environment). The project already has a working pdf.js canvas-based renderer (`PDFPreview.tsx`) that solves this exact problem.
+Three features from the WM-tariffs project will be adapted to work with this project's NERSA-compliant schema (`tariff_plans` + `tariff_rates`).
 
-2. **Raw data shows AI JSON output instead of human-readable text** - When toggling to "Text" mode, the left pane displays the AI's JSON response (e.g., `"municipality": "BAPHALABO"`) because `extractedText` for PDFs contains the AI vision model's structured output, not the raw document text. This is expected for PDFs since we can only get text via AI vision, but the display format is confusing.
+---
 
-3. **Preview loading is slow** - The "Preview" button calls the edge function which re-downloads and re-processes the entire PDF through AI vision just to show the raw data. This is inherently slow for large multi-page PDFs.
+### Feature 1: Tariff Period Comparison Charts
 
-### Solution
+**What it does:** A dialog with bar charts showing how charges (basic, energy, demand) change across tariff periods, with YoY trend indicators (percentage change, average annual increase).
 
-#### Part 1: Replace `<object>` tag with pdf.js Canvas Renderer
+**Challenge:** The current `tariff_plans` table has no `effective_from`/`effective_to` date columns. WM-tariffs uses these to group tariffs by period. Without date columns, period comparison is not possible.
 
-**File: `src/components/tariffs/FileUploadImport.tsx`**
+**Implementation:**
 
-- Remove the `<object>` tag approach for PDF rendering
-- Instead, when the user toggles to "PDF" mode, download the PDF from storage as an `ArrayBuffer`/`Uint8Array` and store it in state
-- Render it using pdf.js directly (canvas-based), following the same pattern as `PDFPreview.tsx`
-- Add basic page navigation (prev/next) since tariff PDFs are multi-page
-- This approach works reliably across all browsers including sandboxed iframes
+1. **Database migration** -- Add two nullable columns to `tariff_plans`:
+   - `effective_from DATE` (nullable, defaults to NULL)
+   - `effective_to DATE` (nullable, defaults to NULL)
 
-Changes:
-1. Replace `pdfBlobUrl` state with `pdfArrayBuffer: Uint8Array | null` state
-2. When toggle switches to PDF mode, download the file and convert to `Uint8Array`
-3. Replace the `<object>` block with an inline pdf.js canvas renderer (simplified version of `PDFPreview.tsx` with page navigation)
-4. Import `pdfjs-dist` and configure the worker (same as existing `PDFPreview.tsx`)
+2. **New component** -- `src/components/tariffs/TariffPeriodComparisonDialog.tsx`
+   - Adapted from WM-tariffs but queries `tariff_rates` (charge, season, tou, amount) instead of `tariff_charges`
+   - Accepts a tariff name + municipality ID; fetches all `tariff_plans` with matching name, grouped by `effective_from`
+   - Bar chart (Recharts) with a charge-type selector dropdown (Basic Charge, Energy - Low Season, Energy - High Season, Demand - Low Season, Demand - High Season)
+   - Trend indicators: total % change and average YoY % using `TrendingUp`/`TrendingDown` icons
+   - Requires at least 2 periods to display
 
-#### Part 2: Improve Raw Text Display for PDFs
+3. **Integration** -- Add a "Compare Periods" button in `TariffList.tsx` (municipality preview dialog or inline), visible when 2+ tariff plans share the same name within a municipality
 
-**No edge function changes needed.** The extracted text from AI vision is the best we can get for PDFs. However, the current display as single-column rows of JSON is confusing.
+---
 
-In `FileUploadImport.tsx`, when `previewData.isPdf` is true and the data looks like JSON (starts with triple backticks or `[`), clean up the display:
-- Strip markdown code fences (the triple backtick lines)
-- Display as formatted text rather than a table with row numbers, since this is AI-extracted content not tabular data
+### Feature 2: Multi-Period Support per Tariff Name
+
+**What it does:** Allows multiple tariff records with the same name but different effective date ranges (e.g., "Domestic Conventional" for 2023/24 and 2024/25).
+
+**Implementation:**
+
+1. **Uses the same migration** from Feature 1 (the `effective_from`/`effective_to` columns)
+
+2. **Update TariffEditDialog** -- Add `effective_from` and `effective_to` date input fields to the tariff edit form
+
+3. **Update AI extraction prompt** -- Modify the `process-tariff-file` edge function's extraction prompt to also extract effective dates when present in the document. Map to the new columns on insert.
+
+4. **Update TariffList display** -- When a municipality has multiple tariffs with the same name, show a period badge (e.g., "Jul 2024 - Jun 2025") next to the tariff name. Group them visually.
+
+5. **Update TariffBuilder** -- Add optional effective date fields to the manual tariff creation form.
+
+---
+
+### Feature 3: Extraction Progress Stepper
+
+**What it does:** A visual stepper bar at the top of the extraction workflow showing progress through 4 stages: Upload > AI Extraction > Review > Save.
+
+**Implementation:**
+
+1. **New component** -- `src/components/tariffs/ExtractionSteps.tsx`
+   - Adapted directly from WM-tariffs
+   - Steps: "Upload File", "AI Extraction", "Review Data", "Save to Database"
+   - Uses `CheckCircle2` (complete), `Loader2` (active/spinning), `Circle` (upcoming) icons
+   - Connected horizontal progress lines between steps (filled = complete, muted = pending)
+
+2. **Integration into FileUploadImport.tsx** -- Map the existing `phase` state (1/2/3) and sub-states to stepper steps:
+   - Phase 1 (file selection/upload) = "upload" step active
+   - Phase 2 (analysing/extracting municipalities) = "extract" step active
+   - Phase 3 (reviewing extracted tariffs) = "review" step active
+   - After successful save = "save"/"complete" step
+   - Render `<ExtractionSteps>` at the top of the dialog content, above the current phase content
+
+---
 
 ### Technical Details
 
-#### pdf.js Inline Renderer (embedded in FileUploadImport.tsx)
+#### Database Migration
 
 ```text
-State additions:
-  - pdfUint8: Uint8Array | null (replaces pdfBlobUrl)
-  - pdfPageNum: number (current page, default 1)
-  - pdfNumPages: number (total pages)
-
-On toggle to PDF mode:
-  1. Download from supabase.storage.from("tariff-uploads").download(pdfFilePath)
-  2. Convert blob to Uint8Array
-  3. Store in pdfUint8 state
-
-Rendering:
-  - useEffect watches pdfUint8 + pdfPageNum
-  - Loads document with pdfjsLib.getDocument({ data: pdfUint8 })
-  - Renders current page to a canvas element
-  - Simple prev/next buttons for page navigation
+ALTER TABLE tariff_plans
+  ADD COLUMN effective_from DATE,
+  ADD COLUMN effective_to DATE;
 ```
 
-#### Cleanup on resetState / dialog close:
-- Set `pdfUint8` to null (no URL.revokeObjectURL needed since we're not using blob URLs)
+#### Files to Create
 
-### Files Changed
+| File | Description |
+|---|---|
+| `src/components/tariffs/ExtractionSteps.tsx` | Visual stepper component (4 steps with icons and connecting lines) |
+| `src/components/tariffs/TariffPeriodComparisonDialog.tsx` | Bar chart dialog for comparing charge amounts across periods |
+
+#### Files to Modify
 
 | File | Change |
 |---|---|
-| `src/components/tariffs/FileUploadImport.tsx` | Replace `<object>` PDF rendering with pdf.js canvas renderer; add page navigation; improve raw text display for PDF-extracted JSON content |
+| `src/components/tariffs/TariffList.tsx` | Add "Compare Periods" button; show period badges for multi-period tariffs |
+| `src/components/tariffs/TariffEditDialog.tsx` | Add effective_from/effective_to date inputs |
+| `src/components/tariffs/FileUploadImport.tsx` | Integrate ExtractionSteps at top of dialog; map phase state to step names |
+| `supabase/functions/process-tariff-file/index.ts` | Update AI extraction prompt to extract effective dates; include in insert payload |
+
+#### Sequencing
+
+1. Database migration (add columns) -- required first
+2. ExtractionSteps component -- standalone, no dependencies
+3. TariffPeriodComparisonDialog -- depends on migration
+4. UI integrations (TariffList, TariffEditDialog, FileUploadImport, edge function) -- depends on all above
