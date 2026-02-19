@@ -1,76 +1,46 @@
 
 
-## Improve Fuzzy Matcher and Show All Expected Municipalities
+## Store Municipality Boundaries in Backend File Storage
 
 ### Problem
-
-1. **Fuzzy matching is too rigid**: The known-name scan uses exact `includes()` which misses spelling variations like "MOOKGOPHOONG" (document) vs "Modimolle-Mookgophong" (database). The `findBestMatch` function only does basic contains/starts-with checks.
-
-2. **No visibility into missing municipalities**: The extraction response only returns municipalities that were found in the document. There is no way to see which municipalities from the database were NOT found, making it hard to spot gaps.
+The municipality boundary GeoJSON (~10MB) is fetched directly from the ArcGIS API on every page load (line 165-190 of `MunicipalityMap.tsx`). This causes slow map loads and failures when the ArcGIS service is down or slow.
 
 ### Solution
+1. **Create an edge function** (`cache-boundaries`) that fetches the GeoJSON from ArcGIS once and stores it in a storage bucket, then serves it from storage on subsequent requests.
+2. **Update the frontend** to call this edge function instead of ArcGIS directly.
 
-**1. Enhance fuzzy matching with Levenshtein distance and normalisation**
+### How It Works
 
-Update `supabase/functions/process-tariff-file/index.ts`:
-
-- Improve the known-name scan (lines 275-284) to use normalised fuzzy matching instead of exact `includes()`:
-  - Strip common suffixes like "Local Municipality", hyphens, spaces
-  - Collapse consecutive duplicate vowels (e.g., "oo" matches "o")  
-  - Use a simple Levenshtein-based similarity check (threshold ~80%) for short names
-  - Check individual words from multi-word municipality names
-
-- Improve the `findBestMatch` function (lines 353-374) to add:
-  - Levenshtein distance calculation with a similarity threshold
-  - Word-level matching for compound names (e.g., "MODIMOLLE" found in text should match "Modimolle-Mookgophong")
-
-**2. Return all known municipalities in the response**
-
-Update the response at line 427-430 to include the full list of known municipalities for the province, each marked as `found: true/false`. This way the UI can display:
-- Found municipalities (matched from document)
-- Missing municipalities (expected but not found in document)
-
-**3. Update the frontend to display all expected municipalities**
-
-Update `src/components/tariffs/FileUploadImport.tsx` to show:
-- A list of matched municipalities (as currently, ready for extraction)
-- A separate section showing municipalities NOT found in the document, so the user can see what is missing
+1. Frontend calls `cache-boundaries` edge function
+2. Edge function checks if `municipality-boundaries.geojson` exists in storage
+3. If yes: return a signed URL (or the file content) from storage
+4. If no (first time / manual refresh): fetch from ArcGIS, upload to storage, then return it
+5. Optional `?refresh=true` parameter to force re-fetch from ArcGIS
 
 ### Technical Details
 
-**Edge function changes** (`supabase/functions/process-tariff-file/index.ts`):
+**New edge function: `supabase/functions/cache-boundaries/index.ts`**
+- Checks for `boundary-cache/municipality-boundaries.geojson` in a storage bucket
+- If file exists, downloads and returns it as JSON
+- If file missing (or `?refresh=true`), fetches from ArcGIS, uploads to storage, returns the result
+- Uses the existing `tariff-uploads` bucket (private) with a subfolder `boundary-cache/`
 
-- Add a `levenshteinDistance` function and a `similarity` helper
-- Update `normaliseName` to also strip hyphens and collapse repeated vowels
-- In the known-name scan, for each known municipality, check fuzzy similarity against each line/word-group in the extracted text (not just exact includes)
-- In `findBestMatch`, add a Levenshtein similarity step (>=80% threshold) before returning null
-- Change the response shape to include `allKnown` alongside `municipalities`:
+**Config: `supabase/config.toml`**
+- Add `[functions.cache-boundaries]` with `verify_jwt = false`
 
-```text
-Response shape:
-{
-  success: true,
-  province: "Limpopo",
-  provinceId: "...",
-  municipalities: [...found ones...],
-  allKnown: [
-    { id, name, found: true },
-    { id, name, found: false },
-    ...
-  ],
-  total: 15,
-  totalKnown: 22,
-  errors: []
-}
-```
+**Frontend: `src/components/tariffs/MunicipalityMap.tsx`**
+- Replace the direct ArcGIS fetch (lines 165-190) with a call to `supabase.functions.invoke("cache-boundaries")`
+- Remove the `ARCGIS_BOUNDARY_URL` constant (line 81)
+- Everything else (map rendering, popup logic, filters) stays unchanged
 
-**Frontend changes** (`src/components/tariffs/FileUploadImport.tsx`):
-
-- After extraction, display the `allKnown` list grouped into "Found in Document" and "Not Found in Document"
-- The "Not Found" section uses a muted/warning style so the user can quickly see which municipalities are missing
-- Only the "Found" municipalities proceed to the tariff extraction phase
+### Benefits
+- Map loads from backend storage (fast, reliable)
+- No dependency on ArcGIS availability at runtime
+- One-time fetch populates the cache; subsequent loads are instant
+- Manual refresh available via `?refresh=true` if boundaries ever update
 
 ### Files Modified
+- `supabase/functions/cache-boundaries/index.ts` -- new edge function
+- `supabase/config.toml` -- register new function
+- `src/components/tariffs/MunicipalityMap.tsx` -- use edge function instead of ArcGIS
 
-- `supabase/functions/process-tariff-file/index.ts` -- improved fuzzy matching + return all known municipalities
-- `src/components/tariffs/FileUploadImport.tsx` -- display all expected vs found municipalities
