@@ -415,7 +415,7 @@ Deno.serve(async (req) => {
       const { data: existingTariffs } = await supabase
         .from("tariff_plans")
         .select(`
-          id, name, structure, category, phase, scale_code, voltage, metering,
+          id, name, structure, category, phase, scale_code, voltage, metering, effective_from, effective_to,
           tariff_rates(amount, charge, season, tou, block_min_kwh, block_max_kwh, unit)
         `)
         .eq("municipality_id", muniData.id);
@@ -739,7 +739,7 @@ Deno.serve(async (req) => {
 
       // === NERSA SCHEMA: Write to tariff_plans + tariff_rates ===
       const existingTariffMap = new Map(
-        existingTariffs?.map(t => [`${t.name.toLowerCase()}|${t.category}`, t]) || []
+        existingTariffs?.map(t => [`${t.name.toLowerCase()}|${t.category}|${t.effective_from || ''}`, t]) || []
       );
 
       let inserted = 0;
@@ -765,12 +765,12 @@ Deno.serve(async (req) => {
             is_redundant: false,
             is_recommended: false,
             description: null as string | null,
-            effective_from: tariff.effective_from || null,
-            effective_to: tariff.effective_to || null,
+            effective_from: tariff.effective_from || effectiveFrom || null,
+            effective_to: tariff.effective_to || effectiveTo || null,
           };
 
           // Check if tariff already exists
-          const tariffKey = `${tariff.tariff_name.toLowerCase()}|${tariffPlanData.category}`;
+          const tariffKey = `${tariff.tariff_name.toLowerCase()}|${tariffPlanData.category}|${tariffPlanData.effective_from || ''}`;
           const existingTariff = existingTariffMap.get(tariffKey);
 
           let tariffPlanId: string;
