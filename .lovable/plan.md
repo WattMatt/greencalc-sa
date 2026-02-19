@@ -1,51 +1,76 @@
 
-## Fix: Missing 15th Municipality During PDF Extraction
+
+## Improve Fuzzy Matcher and Show All Expected Municipalities
 
 ### Problem
 
-The regex-based municipality extraction from Limpopo PDFs only finds 14 of the 15 municipalities present in the document. The regex requires names in ALL CAPS followed by a percentage pattern (e.g., `POLOKWANE - 12.72%`). If a municipality's entry in the PDF has slightly different formatting (no percentage, different casing, line breaks, etc.), it gets missed entirely.
+1. **Fuzzy matching is too rigid**: The known-name scan uses exact `includes()` which misses spelling variations like "MOOKGOPHOONG" (document) vs "Modimolle-Mookgophong" (database). The `findBestMatch` function only does basic contains/starts-with checks.
 
-### Root Cause
-
-The extraction relies solely on two regex patterns:
-1. `^([A-Z][A-Z\s\-\/]+?)\s*[-–]\s*\d+[\.,]\d+%` (name dash percentage)
-2. `^([A-Z][A-Z\s\-\/]+?)\s+\d+[\.,]\d+%` (name space percentage)
-
-If a municipality appears in the document without a trailing percentage, or with different formatting, neither regex catches it.
+2. **No visibility into missing municipalities**: The extraction response only returns municipalities that were found in the document. There is no way to see which municipalities from the database were NOT found, making it hard to spot gaps.
 
 ### Solution
 
-Add a **complementary known-name scan** after the regex pass. Since the database already contains all 22 official Limpopo municipalities, scan the extracted PDF text for occurrences of each known municipality name. Any known name found in the text that was NOT already captured by regex gets added to the list.
+**1. Enhance fuzzy matching with Levenshtein distance and normalisation**
 
-### Changes
+Update `supabase/functions/process-tariff-file/index.ts`:
 
-**File: `supabase/functions/process-tariff-file/index.ts`** (lines ~263-301)
+- Improve the known-name scan (lines 275-284) to use normalised fuzzy matching instead of exact `includes()`:
+  - Strip common suffixes like "Local Municipality", hyphens, spaces
+  - Collapse consecutive duplicate vowels (e.g., "oo" matches "o")  
+  - Use a simple Levenshtein-based similarity check (threshold ~80%) for short names
+  - Check individual words from multi-word municipality names
 
-After the regex pass (line 263), before the `municipalityNames = [...regexMatches]` assignment:
+- Improve the `findBestMatch` function (lines 353-374) to add:
+  - Levenshtein distance calculation with a similarity threshold
+  - Word-level matching for compound names (e.g., "MODIMOLLE" found in text should match "Modimolle-Mookgophong")
 
-1. Fetch the known municipalities for this province from the database (this already happens later at line 315, so we move it earlier or duplicate the lookup).
-2. For each known municipality name, check if it appears in `extractedText` (case-insensitive).
-3. Add any found names that are not already in the regex matches.
-4. This ensures that even if the regex misses a municipality, the known-name scan catches it.
+**2. Return all known municipalities in the response**
+
+Update the response at line 427-430 to include the full list of known municipalities for the province, each marked as `found: true/false`. This way the UI can display:
+- Found municipalities (matched from document)
+- Missing municipalities (expected but not found in document)
+
+**3. Update the frontend to display all expected municipalities**
+
+Update `src/components/tariffs/FileUploadImport.tsx` to show:
+- A list of matched municipalities (as currently, ready for extraction)
+- A separate section showing municipalities NOT found in the document, so the user can see what is missing
+
+### Technical Details
+
+**Edge function changes** (`supabase/functions/process-tariff-file/index.ts`):
+
+- Add a `levenshteinDistance` function and a `similarity` helper
+- Update `normaliseName` to also strip hyphens and collapse repeated vowels
+- In the known-name scan, for each known municipality, check fuzzy similarity against each line/word-group in the extracted text (not just exact includes)
+- In `findBestMatch`, add a Levenshtein similarity step (>=80% threshold) before returning null
+- Change the response shape to include `allKnown` alongside `municipalities`:
 
 ```text
-Pseudocode:
-  // After regex pass
-  const knownForProvince = await fetchKnownMunicipalities(province);
-  for (const known of knownForProvince) {
-    const upperName = known.name.toUpperCase();
-    if (extractedText.toUpperCase().includes(upperName)) {
-      regexMatches.add(known.name);  // Use canonical name
-    }
-  }
+Response shape:
+{
+  success: true,
+  province: "Limpopo",
+  provinceId: "...",
+  municipalities: [...found ones...],
+  allKnown: [
+    { id, name, found: true },
+    { id, name, found: false },
+    ...
+  ],
+  total: 15,
+  totalKnown: 22,
+  errors: []
+}
 ```
 
-This is a minimal, safe change:
-- It only adds municipalities that actually appear in the document text
-- It uses the canonical DB name (not raw text), so fuzzy matching downstream works perfectly
-- It does not remove or change the existing regex logic
-- It runs before the AI fallback, so the AI path is only used if both regex AND known-name scan find nothing
+**Frontend changes** (`src/components/tariffs/FileUploadImport.tsx`):
+
+- After extraction, display the `allKnown` list grouped into "Found in Document" and "Not Found in Document"
+- The "Not Found" section uses a muted/warning style so the user can quickly see which municipalities are missing
+- Only the "Found" municipalities proceed to the tariff extraction phase
 
 ### Files Modified
 
-- `supabase/functions/process-tariff-file/index.ts` -- add known-name text scan after regex extraction
+- `supabase/functions/process-tariff-file/index.ts` -- improved fuzzy matching + return all known municipalities
+- `src/components/tariffs/FileUploadImport.tsx` -- display all expected vs found municipalities
