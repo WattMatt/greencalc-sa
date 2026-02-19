@@ -22,6 +22,29 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs
 
 import { SOUTH_AFRICAN_PROVINCES } from "@/lib/constants";
 
+function parseFileNameMetadata(fileName: string) {
+  const nameOnly = fileName.replace(/\.[^.]+$/, "");
+  const normalised = nameOnly.replace(/[_\-]/g, " ");
+
+  // Province: match against known list, ignoring "Province"
+  const cleaned = normalised.replace(/\bProvince\b/gi, "").trim();
+  const province = SOUTH_AFRICAN_PROVINCES.find(p =>
+    cleaned.toLowerCase().includes(p.toLowerCase())
+  );
+
+  // Dates: find YYYYMMDD patterns
+  const dateMatches = nameOnly.match(/\b(\d{8})\b/g) || [];
+  const dates = dateMatches
+    .map(d => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`)
+    .filter(d => !isNaN(new Date(d).getTime()));
+
+  return {
+    province: province || undefined,
+    effectiveFrom: dates[0] || undefined,
+    effectiveTo: dates[1] || undefined,
+  };
+}
+
 interface Municipality {
   id: string;
   name: string;
@@ -94,6 +117,8 @@ export function FileUploadImport() {
   const [editingTariffId, setEditingTariffId] = useState<string | null>(null);
   const [editedTariff, setEditedTariff] = useState<ExtractedTariffPreview | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [effectiveFrom, setEffectiveFrom] = useState("");
+  const [effectiveTo, setEffectiveTo] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -174,6 +199,12 @@ export function FileUploadImport() {
     setUploadedPath(null);
     setPhase(1);
 
+    // Auto-extract province and dates from filename
+    const meta = parseFileNameMetadata(selectedFile.name);
+    if (meta.province) setProvince(meta.province);
+    if (meta.effectiveFrom) setEffectiveFrom(meta.effectiveFrom);
+    if (meta.effectiveTo) setEffectiveTo(meta.effectiveTo);
+
     setIsUploading(true);
     try {
       const filePath = `${Date.now()}-${selectedFile.name}`;
@@ -241,7 +272,7 @@ export function FileUploadImport() {
 
     try {
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: { filePath: uploadedPath, fileType: getFileType(file.name), province, municipality: muni.name, action: "extract-tariffs" },
+        body: { filePath: uploadedPath, fileType: getFileType(file.name), province, municipality: muni.name, action: "extract-tariffs", effectiveFrom: effectiveFrom || undefined, effectiveTo: effectiveTo || undefined },
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
@@ -285,7 +316,7 @@ export function FileUploadImport() {
       }
 
       const { data, error } = await supabase.functions.invoke("process-tariff-file", {
-        body: { filePath: uploadedPath, fileType: getFileType(file.name), province, municipality: muni.name, action: "extract-tariffs" },
+        body: { filePath: uploadedPath, fileType: getFileType(file.name), province, municipality: muni.name, action: "extract-tariffs", effectiveFrom: effectiveFrom || undefined, effectiveTo: effectiveTo || undefined },
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
@@ -350,6 +381,8 @@ export function FileUploadImport() {
     setPreviewOpen(false);
     setEditingTariffId(null);
     setEditedTariff(null);
+    setEffectiveFrom("");
+    setEffectiveTo("");
     setLeftPaneMode("text");
     setPdfUint8(null);
     setPdfPageNum(1);
@@ -508,6 +541,30 @@ export function FileUploadImport() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Effective Dates */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="effective-from">Effective From</Label>
+              <Input
+                id="effective-from"
+                type="date"
+                value={effectiveFrom}
+                onChange={(e) => setEffectiveFrom(e.target.value)}
+                disabled={phase > 1}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="effective-to">Effective To</Label>
+              <Input
+                id="effective-to"
+                type="date"
+                value={effectiveTo}
+                onChange={(e) => setEffectiveTo(e.target.value)}
+                disabled={phase > 1}
+              />
+            </div>
           </div>
 
           {/* Phase 1: Analysis */}

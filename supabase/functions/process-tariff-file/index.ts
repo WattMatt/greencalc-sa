@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { filePath, fileType, province = "Western Cape", action = "analyze", municipality } = await req.json();
+    const { filePath, fileType, province = "Western Cape", action = "analyze", municipality, effectiveFrom, effectiveTo } = await req.json();
     
     if (!filePath) {
       return new Response(
@@ -782,8 +782,8 @@ Deno.serve(async (req) => {
             is_redundant: false,
             is_recommended: false,
             description: null as string | null,
-            effective_from: tariff.effective_from || null,
-            effective_to: tariff.effective_to || null,
+            effective_from: tariff.effective_from || effectiveFrom || null,
+            effective_to: tariff.effective_to || effectiveTo || null,
           };
 
           // Check if tariff already exists
