@@ -33,7 +33,7 @@ function parseFileNameMetadata(fileName: string) {
   );
 
   // Dates: find YYYYMMDD patterns
-  const dateMatches = nameOnly.match(/\b(\d{8})\b/g) || [];
+  const dateMatches = nameOnly.match(/(?<!\d)(\d{8})(?!\d)/g) || [];
   const dates = dateMatches
     .map(d => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`)
     .filter(d => !isNaN(new Date(d).getTime()));
