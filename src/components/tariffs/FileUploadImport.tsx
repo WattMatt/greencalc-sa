@@ -23,7 +23,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs
 import { SOUTH_AFRICAN_PROVINCES } from "@/lib/constants";
 
 function parseFileNameMetadata(fileName: string) {
-  const nameOnly = fileName.replace(/\.[^.]+$/, "");
+  const nameOnly = fileName.replace(/(\.[^._\d]+)+$/, "");
   const normalised = nameOnly.replace(/[_\-]/g, " ");
 
   // Province: match against known list, ignoring "Province"
