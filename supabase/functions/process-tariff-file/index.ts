@@ -262,6 +262,27 @@ Deno.serve(async (req) => {
         
         console.log(`Regex found ${regexMatches.size} municipality names:`, [...regexMatches]);
         
+        // Complementary known-name scan: check DB municipalities against extracted text
+        const { data: knownForProvince } = await supabase
+          .from("municipalities")
+          .select("id, name")
+          .eq("province_id", (await (async () => {
+            const { data: provs } = await supabase.from("provinces").select("id, name");
+            const pMap = new Map(provs?.map(p => [p.name.toLowerCase(), p.id]) || []);
+            return pMap.get(province.toLowerCase()) || '';
+          })()));
+        
+        if (knownForProvince && knownForProvince.length > 0) {
+          const upperText = extractedText.toUpperCase();
+          for (const known of knownForProvince) {
+            const upperName = known.name.toUpperCase();
+            if (upperText.includes(upperName)) {
+              regexMatches.add(known.name); // Use canonical DB name
+            }
+          }
+          console.log(`After known-name scan: ${regexMatches.size} municipality names:`, [...regexMatches]);
+        }
+        
         if (regexMatches.size > 0) {
           municipalityNames = [...regexMatches];
         } else {
