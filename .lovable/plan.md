@@ -1,48 +1,49 @@
 
 
-## Group Tariffs by Date Range Period
+## Municipality Map: YoY Comparison Popup and Local Boundary Storage
 
-### Problem
-When you expand a municipality (e.g. Polokwane), all tariffs from both uploaded documents are shown in a single flat list. There is no way to tell which tariff came from which document/period.
+### What Changes
 
-### Solution
-Add a **date range sub-group** between the municipality level and the individual tariff cards. When you expand Polokwane, you will see collapsible sections like:
+**1. Municipality click popup shows YoY comparison chart**
 
-```text
-POLOKWANE (21 tariffs)
-  |
-  +-- 1 Jun 2024 - 31 May 2025 (8 tariffs)
-  |     Bulk Supply >100A 3Phase - High Voltage
-  |     Commercial Prepaid Single Phase
-  |     ...
-  |
-  +-- 1 Jun 2025 - 31 May 2026 (11 tariffs)
-  |     Bulk Supply >100A 3Phase - High Voltage
-  |     Single Phase Domestic Prepaid
-  |     ...
-  |
-  +-- No Period Specified (2 tariffs)
-        Municipal Tariff
-        ...
-```
+When you click a municipality on the map (e.g. Polokwane), instead of the current basic info popup, a React dialog will open showing:
+- A tariff name selector (dropdown of all tariffs in that municipality)
+- The YoY bar chart comparing the same tariff across date periods
+- Trend badges showing total % change and average annual change
+- Charge type filter (Basic, Energy Low/High, Demand Low/High)
 
-Each period sub-group will show a date badge (e.g. "1 Jun 2024 - 31 May 2025") with a tariff count, and will be independently expandable/collapsible.
+This reuses the existing `TariffPeriodComparisonDialog` logic but is triggered from the map click instead of from a non-existent button.
+
+**2. Store boundary GeoJSON locally**
+
+Currently, every time you open the Municipalities tab, the app fetches ~230 municipality boundaries from the ArcGIS server (`services7.arcgis.com`). This will be changed to:
+- Download the GeoJSON file once and save it as `public/data/sa-local-municipality-boundaries.geojson`
+- The `MunicipalityMap` component will load it from the local file instead of making an external API call
+- This eliminates the external dependency and speeds up load times
 
 ### Technical Details
 
-**File: `src/components/tariffs/TariffList.tsx`**
+**File: `public/data/sa-local-municipality-boundaries.geojson`** (new)
+- Fetched once from the ArcGIS endpoint and stored as a static asset
+- Contains all SA local municipality boundary polygons with MUNICNAME, PROVINCE, CAT_B properties
 
-Changes are localised to the municipality accordion content area (around lines 660-830):
+**File: `src/components/tariffs/MunicipalityMap.tsx`**
+- Remove the ArcGIS fetch `useEffect` (lines 146-170)
+- Replace with a local fetch: `fetch('/data/sa-local-municipality-boundaries.geojson')`
+- Remove the `ARCGIS_BOUNDARY_URL` constant
+- On municipality click (line 358-438): instead of rendering an HTML popup, open the `TariffPeriodComparisonDialog` via React state
+- Add state for `selectedMunicipalityId` and `selectedMunicipalityName` to control the dialog
+- The existing "View Tariffs" button remains in the popup; the YoY chart opens as a separate dialog
 
-1. **Group tariffs by period** -- After tariffs are loaded for a municipality, group them by a composite key of `effective_from|effective_to`. Tariffs with null dates go into an "Unspecified" group.
+**File: `src/components/tariffs/TariffPeriodComparisonDialog.tsx`**
+- Add a new prop: `initialTariffName?: string` (optional, auto-selects first available if not provided)
+- Add a tariff name selector dropdown that queries distinct tariff names in the municipality that have 2+ date periods
+- When the municipality is clicked from the map, this dialog opens with all matching tariffs available for selection
 
-2. **Render period sub-groups** -- Replace the current flat `municipality.tariffs.map(...)` with:
-   - An outer loop over each period group
-   - A `Collapsible` header showing the formatted date range and count badge
-   - The existing tariff cards rendered inside each group
+**Flow:**
+1. User clicks municipality on map
+2. Mapbox popup appears with basic info (name, province, tariff count)
+3. Popup includes a "YoY Trends" button (in addition to existing "View Tariffs" button)
+4. Clicking "YoY Trends" opens the `TariffPeriodComparisonDialog` with a tariff selector pre-loaded for that municipality
+5. User can switch between tariff names and charge types to see trends
 
-3. **Format the period label** -- Use `date-fns` (already installed) to format dates as "1 Jun 2024 - 31 May 2025". Null dates display as "No Period Specified".
-
-4. **Period badge styling** -- Each period header gets a `Calendar` icon (from lucide-react) and a subtle background to visually separate it from the municipality and tariff levels.
-
-No database changes or edge function changes are required. This is purely a UI grouping change in the existing component.
