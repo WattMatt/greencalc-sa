@@ -173,57 +173,20 @@ Deno.serve(async (req) => {
       }
       console.log(`Processed ${workbook.SheetNames.length} sheets`);
     } else if (fileType === "pdf") {
-      console.log("Processing PDF file - extracting text with pdf-parse...");
+      console.log("Processing PDF file...");
       const uint8Array = new Uint8Array(await fileData.arrayBuffer());
       console.log("PDF size:", uint8Array.length, "bytes");
       
-      try {
-        // Use pdf-parse to extract text directly - no vision API needed
-        const pdfParse = (await import("npm:pdf-parse@1.1.1")).default;
-        const pdfData = await pdfParse(Buffer.from(uint8Array));
-        extractedText = pdfData.text || "";
-        console.log("PDF text extracted successfully, length:", extractedText.length);
-        
-        if (!extractedText.trim()) {
-          console.warn("pdf-parse returned empty text, falling back to AI vision...");
-          // Fallback to AI vision for scanned/image PDFs
-          const { encode } = await import("https://deno.land/std@0.208.0/encoding/base64.ts");
-          const base64 = encode(uint8Array);
-          
-          const visionRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${lovableApiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash",
-              messages: [{
-                role: "user",
-                content: [
-                  { type: "text", text: "Extract ALL text content from this PDF document. This contains South African electricity tariff data. Preserve the structure - identify municipality names, tariff categories, and all rates/charges. Format as structured text." },
-                  { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } }
-                ]
-              }],
-            }),
-          });
-          
-          if (visionRes.ok) {
-            try {
-              const visionData = await visionRes.json();
-              extractedText = visionData.choices?.[0]?.message?.content || "";
-            } catch {
-              extractedText = "PDF extraction failed - AI response was invalid";
-            }
-          } else {
-            const errBody = await visionRes.text();
-            console.error("Vision API fallback also failed:", visionRes.status, errBody);
-            extractedText = "PDF extraction failed - please try Excel format";
-          }
-        }
-      } catch (pdfErr) {
-        console.error("pdf-parse failed:", pdfErr);
-        extractedText = "PDF extraction failed - please try Excel format";
+      const pdfParse = (await import("npm:pdf-parse@1.1.1")).default;
+      const pdfData = await pdfParse(Buffer.from(uint8Array));
+      extractedText = pdfData.text || "";
+      console.log("PDF text extracted, length:", extractedText.length);
+      
+      if (!extractedText.trim()) {
+        return new Response(
+          JSON.stringify({ error: "Could not extract text from this PDF. It may be a scanned image — please try Excel format instead." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
     }
 
