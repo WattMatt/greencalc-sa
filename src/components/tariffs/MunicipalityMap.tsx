@@ -77,8 +77,7 @@ interface MunicipalityMapProps {
   onMunicipalityClick?: (municipalityId: string, municipalityName: string) => void;
 }
 
-// ArcGIS Feature Service URL for SA Local Municipality Boundaries
-const ARCGIS_BOUNDARY_URL = "https://services7.arcgis.com/vhM1EF9boZaqDxYt/arcgis/rest/services/SA_Local_Municipal_Boundary/FeatureServer/0/query";
+// Boundaries are served from backend storage via the cache-boundaries edge function
 
 export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -162,23 +161,16 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
     fetchMunicipalities();
   }, []);
 
-  // Fetch boundary GeoJSON from ArcGIS
+  // Fetch boundary GeoJSON from backend storage (cached)
   useEffect(() => {
     async function fetchBoundaries() {
       setLoadingBoundaries(true);
       try {
-        const params = new URLSearchParams({
-          where: "1=1",
-          outFields: "MUNICNAME,PROVINCE,CAT_B,DISTRICT",
-          f: "geojson",
-          outSR: "4326",
-        });
-
-        const response = await fetch(`${ARCGIS_BOUNDARY_URL}?${params}`);
-        if (!response.ok) throw new Error("Failed to fetch boundaries");
+        const { data, error } = await supabase.functions.invoke("cache-boundaries");
+        if (error) throw error;
         
-        const geojson = await response.json();
-        console.log(`Loaded ${geojson.features?.length || 0} municipality boundaries`);
+        const geojson = typeof data === "string" ? JSON.parse(data) : data;
+        console.log(`Loaded ${geojson.features?.length || 0} municipality boundaries from cache`);
         setBoundaryGeoJSON(geojson);
       } catch (err) {
         console.error("Failed to fetch boundary data:", err);
