@@ -179,23 +179,51 @@ Deno.serve(async (req) => {
       const base64 = encode(uint8Array);
       console.log("PDF base64 size:", base64.length, "bytes");
       
-      const visionRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      // Try multiple approaches for PDF extraction
+      let visionRes: Response | null = null;
+      
+      // Approach 1: Use inline_data format (Gemini-native PDF support)
+      visionRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${lovableApiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-pro",
+          model: "google/gemini-2.5-flash",
           messages: [{
             role: "user",
             content: [
               { type: "text", text: "Extract ALL text content from this PDF document. This contains South African electricity tariff data. Preserve the structure - identify municipality names, tariff categories, and all rates/charges. Format as structured text." },
-              { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } }
+              { type: "image_url", image_url: { url: `data:image/png;base64,${base64}` } }
             ]
           }],
         }),
       });
+      
+      // If that fails, try with gemini-2.5-pro
+      if (!visionRes.ok) {
+        const err1 = await visionRes.text();
+        console.error("Vision attempt 1 failed:", visionRes.status, err1);
+        
+        visionRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${lovableApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-pro",
+            messages: [{
+              role: "user",
+              content: [
+                { type: "text", text: "Extract ALL text content from this PDF document. This contains South African electricity tariff data. Preserve the structure - identify municipality names, tariff categories, and all rates/charges. Format as structured text." },
+                { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } }
+              ]
+            }],
+          }),
+        });
+      }
 
       if (visionRes.ok) {
         try {
