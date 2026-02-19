@@ -326,7 +326,7 @@ Deno.serve(async (req) => {
         const existingNames = new Set(existingMunis?.map(m => m.name.toLowerCase()) || []);
 
         for (const muniName of municipalityNames) {
-          const cleanName = muniName.replace(/\s*-\s*\d+\.?\d*%$/, '').trim();
+          const cleanName = muniName.replace(/\s*[-–]\s*(\d+[\.,]\d*%)?$/, '').trim();
           if (!cleanName) continue;
           
           if (existingNames.has(cleanName.toLowerCase())) {
