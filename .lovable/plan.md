@@ -1,39 +1,55 @@
 
 
-## Fix: Add Error Logging to PDF Vision API Call
+## Fix: PDF Extraction — Single Approach with pdf-parse
 
 ### Problem
-The PDF analysis is failing silently. When the AI vision API returns an error, the edge function just sets `extractedText = "PDF extraction failed"` without logging the HTTP status or error body. This makes it impossible to diagnose why.
+The pdf-parse code was written but **never actually deployed** — the logs still show the old vision API version running, which is now returning 500 errors from the gateway. On top of that, the current code has unnecessary fallback logic that makes things complicated.
 
-### Root Cause
-This is NOT caused by the date regex change. The vision API call (line 181-197 of the edge function) is returning a non-200 response, but the error is swallowed silently at line 206-207.
+### Evidence
+- Logs say: `"Processing PDF file - using AI vision..."` 
+- Code says: `"Processing PDF file - extracting text with pdf-parse..."`  
+- The deployed version is stale. The vision API is returning `500 {"type":"internal_server_error","message":"","details":""}`.
+
+### Solution
+Rewrite the PDF section to use **only** `pdf-parse` — a library that extracts text directly from the PDF bytes. No API call, no gateway, no fallback chain. One approach.
 
 ### Changes
 
-**File:** `supabase/functions/process-tariff-file/index.ts`
+**File:** `supabase/functions/process-tariff-file/index.ts` (lines 175-228)
 
-1. Add error logging when the vision API fails -- log the HTTP status and response body so we can see what went wrong:
+Replace the entire PDF block with:
 
 ```typescript
-} else {
-  const errBody = await visionRes.text();
-  console.error("Vision API failed:", visionRes.status, errBody);
-  extractedText = "PDF extraction failed - please try Excel format";
+} else if (fileType === "pdf") {
+  console.log("Processing PDF file...");
+  const uint8Array = new Uint8Array(await fileData.arrayBuffer());
+  console.log("PDF size:", uint8Array.length, "bytes");
+  
+  const pdfParse = (await import("npm:pdf-parse@1.1.1")).default;
+  const pdfData = await pdfParse(Buffer.from(uint8Array));
+  extractedText = pdfData.text || "";
+  console.log("PDF text extracted, length:", extractedText.length);
+  
+  if (!extractedText.trim()) {
+    return new Response(
+      JSON.stringify({ error: "Could not extract text from this PDF. It may be a scanned image — please try Excel format instead." }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
 }
 ```
 
-2. Also log the base64 payload size so we know if the PDF is too large:
+Key points:
+- No vision API, no fallback, no fallback-of-fallback
+- If the PDF is a scanned image with no text, it tells the user clearly instead of silently failing
+- Wrapping the whole thing in a try/catch at the outer level already handles unexpected errors
 
-```typescript
-console.log("PDF base64 size:", base64.length, "bytes");
-```
-
-### Expected Outcome
-After deploying, re-upload the file. The edge function logs will now show exactly why the vision API is rejecting the request (e.g., payload too large, auth error, model issue). We can then apply the correct fix based on the actual error.
+### Deployment
+After editing, explicitly deploy the function and verify the logs show the new `"Processing PDF file..."` message (not the old one).
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| `supabase/functions/process-tariff-file/index.ts` | Add error logging for vision API failures and PDF payload size |
+| `supabase/functions/process-tariff-file/index.ts` | Replace PDF extraction block with single pdf-parse approach, remove all vision API fallback code |
 
