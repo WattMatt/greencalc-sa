@@ -1,45 +1,54 @@
 
 
-## Add Year Period Dropdown to Project Tariff Selector
+## Minimal Dropbox Test Edge Function
 
-### Problem
-When selecting a tariff within a project, the user sees a flat list of all tariffs for the selected municipality. Since tariffs are uploaded for different financial years (e.g., "1 Jun 2024 - 31 May 2025" and "1 Jun 2025 - 31 May 2026"), the list is cluttered and there is no way to filter by period. The user needs a "Year" dropdown between Municipality and Tariff to select which period's tariffs to use.
+### What Gets Built
 
-### Solution
-Add a new dropdown labelled "Year" between the Municipality and Tariff selectors in `TariffSelector.tsx`. This dropdown will:
-- Show distinct date periods from the tariffs available for that municipality (e.g., "Jun 2025 - May 2026")
-- Default to the most recent period
-- Filter the tariff dropdown to only show tariffs from the selected period
-- Include a "All Periods" option to see everything
-- Handle tariffs with no dates (grouped as "No Period Specified")
+**1. Edge function: `supabase/functions/dropbox-proxy/index.ts`**
 
-### Layout Change
+A single edge function that accepts a POST with an `action` parameter. For this test phase, it supports one action:
 
-Current: `Province | Municipality | Tariff`
+- **`list_folder`**: Takes an optional `path` (defaults to `""` for root) and an `access_token`, then calls the Dropbox API `POST https://api.dropboxapi.com/2/files/list_folder` and returns the results.
 
-New: `Province | Municipality | Year | Tariff` (4 columns on md+)
+The access token is passed in the request body for now (since the short-lived token you generated expires in ~4 hours, this keeps things simple for testing). Once we confirm connectivity, we will implement the full OAuth refresh token flow.
+
+**2. Config: `supabase/config.toml`** (auto-managed)
+
+Registers `[functions.dropbox-proxy]` with `verify_jwt = false`.
+
+### Testing Plan
+
+After deployment:
+1. I will call the edge function with `action: "list_folder"`, `path: ""`, and your access token
+2. The response will show your root Dropbox folder structure
+3. We can then navigate into subfolders to confirm you can see the shared folders
+4. Based on what we see, we decide how to scope the browser in the UI
 
 ### Technical Details
 
-**File: `src/components/projects/TariffSelector.tsx`**
+The edge function implementation:
 
-1. **Add state**: `const [selectedPeriod, setSelectedPeriod] = useState<string>("")`
+```text
+POST /dropbox-proxy
+Body: {
+  "action": "list_folder",
+  "path": "",           // "" = root, or "/Some Folder"
+  "access_token": "sl.u.xxx..."
+}
 
-2. **Derive available periods** from the `tariffs` query result using `useMemo`:
-   - Group tariffs by their `effective_from + effective_to` combination
-   - Format each as a label like "Jun 2025 - May 2026"
-   - Sort descending (most recent first)
-   - Include "No Period" for tariffs where both dates are null
+Response: {
+  "entries": [
+    { ".tag": "folder", "name": "Projects", "path_lower": "/projects" },
+    { ".tag": "file", "name": "readme.txt", "path_lower": "/readme.txt", "size": 1234 }
+  ],
+  "has_more": false
+}
+```
 
-3. **Auto-select the most recent period** via `useEffect` when tariffs load or municipality changes
+The function proxies to `https://api.dropboxapi.com/2/files/list_folder` with the provided token, includes standard CORS headers, and returns the Dropbox API response directly.
 
-4. **Filter tariffs** shown in the Tariff dropdown to only those matching the selected period
+### Files
+- **New**: `supabase/functions/dropbox-proxy/index.ts`
 
-5. **Reset period** when municipality changes (alongside existing reset logic)
+No database changes needed for this test phase.
 
-6. **Grid update**: Change `md:grid-cols-3` to `md:grid-cols-4` to accommodate the new dropdown
-
-7. The Year dropdown is only shown for non-Eskom tariffs (same condition as the Tariff dropdown)
-
-### Files Modified
-- `src/components/projects/TariffSelector.tsx` -- add Year period dropdown, filter tariffs by selected period
