@@ -1,89 +1,67 @@
 
+## Fix PDF Preview and Raw Data Display in Tariff Comparison
 
-## Fix AI Tariff Extraction for PDFs + Add PDF Preview Toggle
+### Problems Identified
 
-### Problem Summary
+1. **PDF preview shows "PDF preview not supported in this browser"** - The current implementation uses an `<object>` tag with a blob URL to render PDFs. This approach is blocked in sandboxed iframes (the Lovable preview environment). The project already has a working pdf.js canvas-based renderer (`PDFPreview.tsx`) that solves this exact problem.
 
-Two issues need to be addressed:
+2. **Raw data shows AI JSON output instead of human-readable text** - When toggling to "Text" mode, the left pane displays the AI's JSON response (e.g., `"municipality": "BAPHALABO"`) because `extractedText` for PDFs contains the AI vision model's structured output, not the raw document text. This is expected for PDFs since we can only get text via AI vision, but the display format is confusing.
 
-1. **AI tariff extraction produces 0 results for PDF municipalities** - When extracting tariffs for a specific municipality from a PDF (e.g., POLOKWANE), the edge function passes the entire PDF text to the AI without instructing it to focus on the specific municipality's section. For multi-municipality PDFs, the AI gets overwhelmed by data from 14+ municipalities and may fail to isolate the correct one. Additionally, the `municipalityText` for PDFs is the full `extractedText` which can be very large.
-
-2. **Comparison dialog shows 0 raw data rows for PDFs** - The "preview" action in the edge function (line 385-394) only handles Excel files. For PDFs, it returns empty `previewData`, so the left pane shows "0 rows". The user wants to toggle between the raw extracted text and the actual PDF image on the left pane.
+3. **Preview loading is slow** - The "Preview" button calls the edge function which re-downloads and re-processes the entire PDF through AI vision just to show the raw data. This is inherently slow for large multi-page PDFs.
 
 ### Solution
 
-#### Part 1: Fix PDF Tariff Extraction
+#### Part 1: Replace `<object>` tag with pdf.js Canvas Renderer
 
-**File: `supabase/functions/process-tariff-file/index.ts`**
+**File: `src/components/tariffs/FileUploadImport.tsx`**
 
-Update the PDF branch in the extract-tariffs action (lines 564-566) to:
+- Remove the `<object>` tag approach for PDF rendering
+- Instead, when the user toggles to "PDF" mode, download the PDF from storage as an `ArrayBuffer`/`Uint8Array` and store it in state
+- Render it using pdf.js directly (canvas-based), following the same pattern as `PDFPreview.tsx`
+- Add basic page navigation (prev/next) since tariff PDFs are multi-page
+- This approach works reliably across all browsers including sandboxed iframes
 
-1. Instead of passing the entire `extractedText` to the AI, filter the text to only the section relevant to the target municipality
-2. Use a regex/heuristic to find the municipality's section boundaries in the extracted text (municipality names in SA tariff PDFs are typically uppercase headers like `POLOKWANE - 14.59%`)
-3. Pass only the relevant section (plus some surrounding context) to the extraction prompt
-4. Add the municipality name prominently in the extraction prompt so the AI focuses on it
+Changes:
+1. Replace `pdfBlobUrl` state with `pdfArrayBuffer: Uint8Array | null` state
+2. When toggle switches to PDF mode, download the file and convert to `Uint8Array`
+3. Replace the `<object>` block with an inline pdf.js canvas renderer (simplified version of `PDFPreview.tsx` with page navigation)
+4. Import `pdfjs-dist` and configure the worker (same as existing `PDFPreview.tsx`)
 
-The current code:
-```
-} else {
-  municipalityText = extractedText;
-}
-```
+#### Part 2: Improve Raw Text Display for PDFs
 
-Will become logic that:
-- Searches `extractedText` for the municipality name as a section boundary
-- Extracts text from that municipality header until the next municipality header
-- Falls back to the full text if no section boundary is found, but adds explicit instructions to focus on the named municipality
+**No edge function changes needed.** The extracted text from AI vision is the best we can get for PDFs. However, the current display as single-column rows of JSON is confusing.
 
-#### Part 2: Fix PDF Preview (Raw Data) in Comparison Dialog
-
-**File: `supabase/functions/process-tariff-file/index.ts`** - Update the `preview` action:
-
-For PDFs, instead of returning empty data, return the extracted text split into rows for display. Also return a flag indicating this is a PDF so the UI knows to offer the PDF image toggle.
-
-Add to the preview response:
-- `isPdf: true` flag
-- `extractedTextRows`: The AI-extracted text split by newlines for table display
-- `pdfFilePath`: The storage path so the UI can render the actual PDF
-
-#### Part 3: Add PDF/Text Toggle in Comparison Dialog
-
-**File: `src/components/tariffs/FileUploadImport.tsx`** - Update the left pane:
-
-Add a toggle switch next to the "Raw Document Data" header:
-- **Text mode** (default): Shows the AI-extracted text as rows (current table view)
-- **PDF mode**: Renders the actual PDF using the existing pdf.js canvas renderer or an iframe/object embed
-
-This requires:
-1. Adding a `viewMode` state: `"text" | "pdf"`
-2. Adding a `Switch` toggle component next to the "Raw Document Data" title
-3. In PDF mode, downloading the file from storage and rendering it (similar to `FilePreviewDialog.tsx`)
-4. Updating `PreviewData` interface to include `isPdf`, `extractedTextRows`, and `pdfFilePath`
+In `FileUploadImport.tsx`, when `previewData.isPdf` is true and the data looks like JSON (starts with triple backticks or `[`), clean up the display:
+- Strip markdown code fences (the triple backtick lines)
+- Display as formatted text rather than a table with row numbers, since this is AI-extracted content not tabular data
 
 ### Technical Details
 
-#### Edge Function Changes (`process-tariff-file/index.ts`)
+#### pdf.js Inline Renderer (embedded in FileUploadImport.tsx)
 
-**Preview action (~line 377)**:
-- Add PDF handling: when `fileType === "pdf"`, return `{ isPdf: true, extractedTextRows: extractedText.split('\n'), pdfFilePath: filePath, municipality, sheetTitle: municipality, rowCount: lineCount }`
+```text
+State additions:
+  - pdfUint8: Uint8Array | null (replaces pdfBlobUrl)
+  - pdfPageNum: number (current page, default 1)
+  - pdfNumPages: number (total pages)
 
-**Extract-tariffs action (~line 564)**:
-- For PDFs, find the municipality section using regex: `/MUNICIPALITY_NAME.*?(?=\n[A-Z]{3,}.*?\d+[\.,]\d+%|\Z)/s`
-- Pass only the relevant section (up to 15,000 chars) to the AI
-- Add explicit instruction: `"Focus ONLY on tariffs for ${municipality}. Ignore data for other municipalities."`
+On toggle to PDF mode:
+  1. Download from supabase.storage.from("tariff-uploads").download(pdfFilePath)
+  2. Convert blob to Uint8Array
+  3. Store in pdfUint8 state
 
-#### UI Changes (`FileUploadImport.tsx`)
+Rendering:
+  - useEffect watches pdfUint8 + pdfPageNum
+  - Loads document with pdfjsLib.getDocument({ data: pdfUint8 })
+  - Renders current page to a canvas element
+  - Simple prev/next buttons for page navigation
+```
 
-1. Update `PreviewData` interface to add `isPdf?: boolean` and `pdfFilePath?: string`
-2. Add state: `const [leftPaneMode, setLeftPaneMode] = useState<"text" | "pdf">("text")`
-3. Add a `Switch` import from shadcn/ui
-4. In the left pane header, add: `{previewData?.isPdf && <Switch checked={leftPaneMode === "pdf"} onCheckedChange={...} />}` with labels "Text" / "PDF"
-5. When in PDF mode, download the file from `tariff-uploads` storage and render via `<object>` tag (same pattern as `FilePreviewDialog.tsx`)
+#### Cleanup on resetState / dialog close:
+- Set `pdfUint8` to null (no URL.revokeObjectURL needed since we're not using blob URLs)
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/process-tariff-file/index.ts` | Fix PDF preview action to return extracted text; fix PDF extract-tariffs to filter by municipality section |
-| `src/components/tariffs/FileUploadImport.tsx` | Add PDF/Text toggle switch on left pane; handle PDF preview data; render PDF inline |
-
+| `src/components/tariffs/FileUploadImport.tsx` | Replace `<object>` PDF rendering with pdf.js canvas renderer; add page navigation; improve raw text display for PDF-extracted JSON content |
