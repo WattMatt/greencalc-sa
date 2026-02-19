@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Sun, Clock, Calculator, Info } from "lucide-react";
+import { Sun, Clock, Calculator, Info, Calendar } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { EskomTariffSelector } from "./EskomTariffSelector";
 import {
@@ -425,6 +425,7 @@ export function TariffSelector({
 }: TariffSelectorProps) {
   const [provinceId, setProvinceId] = useState<string>("");
   const [municipalityId, setMunicipalityId] = useState<string>("");
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("");
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
@@ -563,6 +564,72 @@ export function TariffSelector({
     enabled: !!municipalityId && !isEskomSelected,
   });
 
+  // Derive available periods from tariffs
+  const availablePeriods = useMemo(() => {
+    if (!tariffs || tariffs.length === 0) return [];
+    
+    const periodMap = new Map<string, { key: string; label: string; effectiveFrom: string | null }>();
+    
+    for (const t of tariffs) {
+      const from = (t as any).effective_from;
+      const to = (t as any).effective_to;
+      
+      if (!from && !to) {
+        periodMap.set("no_period", { key: "no_period", label: "No Period Specified", effectiveFrom: null });
+      } else {
+        const key = `${from || ""}|${to || ""}`;
+        if (!periodMap.has(key)) {
+          const fromDate = from ? new Date(from) : null;
+          const toDate = to ? new Date(to) : null;
+          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          
+          let label = "";
+          if (fromDate && toDate) {
+            label = `${months[fromDate.getMonth()]} ${fromDate.getFullYear()} - ${months[toDate.getMonth()]} ${toDate.getFullYear()}`;
+          } else if (fromDate) {
+            label = `From ${months[fromDate.getMonth()]} ${fromDate.getFullYear()}`;
+          } else if (toDate) {
+            label = `Until ${months[toDate.getMonth()]} ${toDate.getFullYear()}`;
+          }
+          
+          periodMap.set(key, { key, label, effectiveFrom: from });
+        }
+      }
+    }
+    
+    // Sort descending by effective_from (most recent first), nulls last
+    return Array.from(periodMap.values()).sort((a, b) => {
+      if (!a.effectiveFrom && !b.effectiveFrom) return 0;
+      if (!a.effectiveFrom) return 1;
+      if (!b.effectiveFrom) return -1;
+      return b.effectiveFrom.localeCompare(a.effectiveFrom);
+    });
+  }, [tariffs]);
+
+  // Auto-select the most recent period when tariffs load or municipality changes
+  useEffect(() => {
+    if (availablePeriods.length > 0 && !selectedPeriod) {
+      setSelectedPeriod(availablePeriods[0].key);
+    }
+  }, [availablePeriods, selectedPeriod]);
+
+  // Filter tariffs by selected period
+  const filteredTariffs = useMemo(() => {
+    if (!tariffs) return [];
+    if (!selectedPeriod || selectedPeriod === "all") return tariffs;
+    
+    if (selectedPeriod === "no_period") {
+      return tariffs.filter(t => !(t as any).effective_from && !(t as any).effective_to);
+    }
+    
+    const [from, to] = selectedPeriod.split("|");
+    return tariffs.filter(t => {
+      const tFrom = (t as any).effective_from || "";
+      const tTo = (t as any).effective_to || "";
+      return tFrom === from && tTo === to;
+    });
+  }, [tariffs, selectedPeriod]);
+
   const { data: selectedTariff } = useQuery({
     queryKey: ["selected-tariff-plan", currentTariffId],
     queryFn: async () => {
@@ -586,12 +653,13 @@ export function TariffSelector({
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <div className="space-y-2">
           <Label>Province</Label>
           <Select value={provinceId} onValueChange={(value) => {
             setProvinceId(value);
             setMunicipalityId("");
+            setSelectedPeriod("");
           }}>
             <SelectTrigger>
               <SelectValue placeholder="Select province..." />
@@ -610,7 +678,10 @@ export function TariffSelector({
           <Label>Municipality</Label>
           <Select
             value={municipalityId}
-            onValueChange={setMunicipalityId}
+            onValueChange={(value) => {
+              setMunicipalityId(value);
+              setSelectedPeriod("");
+            }}
             disabled={!provinceId}
           >
             <SelectTrigger>
@@ -626,6 +697,35 @@ export function TariffSelector({
           </Select>
         </div>
 
+        {/* Year period dropdown - only for non-Eskom */}
+        {!isEskomSelected && (
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5" />
+              Year
+            </Label>
+            <Select
+              value={selectedPeriod}
+              onValueChange={setSelectedPeriod}
+              disabled={!municipalityId || availablePeriods.length === 0}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select period..." />
+              </SelectTrigger>
+              <SelectContent>
+                {availablePeriods.length > 1 && (
+                  <SelectItem value="all">All Periods</SelectItem>
+                )}
+                {availablePeriods.map((p) => (
+                  <SelectItem key={p.key} value={p.key}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Only show regular tariff dropdown for non-Eskom */}
         {!isEskomSelected && (
           <div className="space-y-2">
@@ -639,7 +739,7 @@ export function TariffSelector({
                 <SelectValue placeholder="Select tariff..." />
               </SelectTrigger>
               <SelectContent>
-                {tariffs?.map((t) => (
+                {filteredTariffs?.map((t) => (
                   <SelectItem key={(t as any).id} value={(t as any).id}>
                     {(t as any).name} ({(t as any).category})
                   </SelectItem>
