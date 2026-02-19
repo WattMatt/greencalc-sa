@@ -1,5 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import * as pdfjsLib from "pdfjs-dist";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -13,7 +14,10 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Eye, Pencil, Save } from "lucide-react";
+import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Eye, Pencil, Save, ChevronLeft, ChevronRight } from "lucide-react";
+
+// Configure pdf.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 import { SOUTH_AFRICAN_PROVINCES } from "@/lib/constants";
 
@@ -77,7 +81,12 @@ export function FileUploadImport() {
   const [extractedTariffs, setExtractedTariffs] = useState<ExtractedTariffPreview[]>([]);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [leftPaneMode, setLeftPaneMode] = useState<"text" | "pdf">("text");
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfUint8, setPdfUint8] = useState<Uint8Array | null>(null);
+  const [pdfPageNum, setPdfPageNum] = useState(1);
+  const [pdfNumPages, setPdfNumPages] = useState(0);
+  const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+  const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [editingTariffId, setEditingTariffId] = useState<string | null>(null);
   const [editedTariff, setEditedTariff] = useState<ExtractedTariffPreview | null>(null);
@@ -85,6 +94,59 @@ export function FileUploadImport() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // pdf.js rendering effect
+  const renderPdfPage = useCallback(async (doc: pdfjsLib.PDFDocumentProxy, num: number) => {
+    try {
+      const page = await doc.getPage(num);
+      const canvas = pdfCanvasRef.current;
+      const container = pdfContainerRef.current;
+      if (!canvas || !container) return;
+
+      const unscaledViewport = page.getViewport({ scale: 1 });
+      const scale = (container.clientWidth - 16) / unscaledViewport.width;
+      const viewport = page.getViewport({ scale });
+
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(viewport.width * dpr);
+      canvas.height = Math.floor(viewport.height * dpr);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+    } catch (err) {
+      console.error("Error rendering PDF page:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!pdfUint8) return;
+    let cancelled = false;
+
+    async function loadDoc() {
+      try {
+        const doc = await pdfjsLib.getDocument({ data: pdfUint8 }).promise;
+        if (cancelled) return;
+        pdfDocRef.current = doc;
+        setPdfNumPages(doc.numPages);
+        setPdfPageNum(1);
+        await renderPdfPage(doc, 1);
+      } catch (err) {
+        console.error("pdf.js load error:", err);
+      }
+    }
+    loadDoc();
+    return () => { cancelled = true; };
+  }, [pdfUint8, renderPdfPage]);
+
+  useEffect(() => {
+    if (pdfDocRef.current && pdfPageNum > 0) {
+      renderPdfPage(pdfDocRef.current, pdfPageNum);
+    }
+  }, [pdfPageNum, renderPdfPage]);
 
   const getFileType = (filename: string): string => {
     const ext = filename.split('.').pop()?.toLowerCase();
@@ -286,8 +348,10 @@ export function FileUploadImport() {
     setEditingTariffId(null);
     setEditedTariff(null);
     setLeftPaneMode("text");
-    if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
-    setPdfBlobUrl(null);
+    setPdfUint8(null);
+    setPdfPageNum(1);
+    setPdfNumPages(0);
+    pdfDocRef.current = null;
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -566,12 +630,11 @@ export function FileUploadImport() {
                           onCheckedChange={(checked) => {
                             const mode = checked ? "pdf" : "text";
                             setLeftPaneMode(mode);
-                            if (mode === "pdf" && previewData.pdfFilePath && !pdfBlobUrl) {
-                              // Download PDF from storage for inline display
-                              supabase.storage.from("tariff-uploads").download(previewData.pdfFilePath).then(({ data }) => {
+                            if (mode === "pdf" && previewData.pdfFilePath && !pdfUint8) {
+                              supabase.storage.from("tariff-uploads").download(previewData.pdfFilePath).then(async ({ data }) => {
                                 if (data) {
-                                  const url = URL.createObjectURL(data);
-                                  setPdfBlobUrl(url);
+                                  const arrayBuffer = await data.arrayBuffer();
+                                  setPdfUint8(new Uint8Array(arrayBuffer));
                                 }
                               });
                             }
@@ -583,14 +646,25 @@ export function FileUploadImport() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0 flex-1 overflow-hidden">
-                  {leftPaneMode === "pdf" && pdfBlobUrl ? (
-                    <object
-                      data={pdfBlobUrl}
-                      type="application/pdf"
-                      className="w-full h-[55vh]"
-                    >
-                      <p className="p-4 text-sm text-muted-foreground">PDF preview not supported in this browser.</p>
-                    </object>
+                  {leftPaneMode === "pdf" && pdfUint8 ? (
+                    <div className="flex flex-col h-[55vh]">
+                      <div className="flex items-center justify-between px-3 py-1 border-b bg-muted/30">
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { const p = Math.max(1, pdfPageNum - 1); setPdfPageNum(p); }} disabled={pdfPageNum <= 1}>
+                            <ChevronLeft className="h-3 w-3" />
+                          </Button>
+                          <span className="text-xs text-muted-foreground">{pdfPageNum} / {pdfNumPages}</span>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { const p = Math.min(pdfNumPages, pdfPageNum + 1); setPdfPageNum(p); }} disabled={pdfPageNum >= pdfNumPages}>
+                            <ChevronRight className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div ref={pdfContainerRef} className="flex-1 overflow-auto bg-muted/10">
+                        <div className="flex justify-center p-2">
+                          <canvas ref={pdfCanvasRef} className="shadow-md" />
+                        </div>
+                      </div>
+                    </div>
                   ) : (
                   <ScrollArea className="h-[55vh]">
                     <div className="overflow-x-auto">
