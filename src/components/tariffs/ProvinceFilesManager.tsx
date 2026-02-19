@@ -29,7 +29,8 @@ import {
   Zap,
   Plus,
   Sparkles,
-  Eye
+  Eye,
+  Download
 } from "lucide-react";
 import { FilePreviewDialog } from "./FilePreviewDialog";
 
@@ -374,7 +375,36 @@ export function ProvinceFilesManager() {
     }
   };
 
+  const handleDownloadFile = async (filePath: string, fileName: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from("tariff-uploads")
+        .download(filePath);
+
+      if (error) throw error;
+
+      const blob = new Blob([data]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({
+        title: "Download Failed",
+        description: err instanceof Error ? err.message : "Failed to download file",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDeleteFile = async (filePath: string) => {
+    if (!window.confirm("Are you sure you want to delete this file? This will not remove any extracted tariff data.")) {
+      return;
+    }
     try {
       const { error } = await supabase.storage
         .from("tariff-uploads")
@@ -1152,6 +1182,15 @@ export function ProvinceFilesManager() {
                                           title="Preview file"
                                         >
                                           <Eye className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8"
+                                          onClick={() => handleDownloadFile(file.path, file.name)}
+                                          title="Download file"
+                                        >
+                                          <Download className="h-4 w-4" />
                                         </Button>
                                         <Button
                                           variant="ghost"
