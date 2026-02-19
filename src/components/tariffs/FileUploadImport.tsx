@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { Switch } from "@/components/ui/switch";
 import { Upload, FileSpreadsheet, FileText, Search, Building2, CheckCircle2, AlertCircle, Loader2, X, Zap, MapPin, RefreshCw, Eye, Pencil, Save } from "lucide-react";
 
 import { SOUTH_AFRICAN_PROVINCES } from "@/lib/constants";
@@ -37,6 +38,8 @@ interface PreviewData {
   sheetTitle: string;
   data: string[][];
   rowCount: number;
+  isPdf?: boolean;
+  pdfFilePath?: string;
 }
 
 interface TariffRate {
@@ -73,6 +76,8 @@ export function FileUploadImport() {
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [extractedTariffs, setExtractedTariffs] = useState<ExtractedTariffPreview[]>([]);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [leftPaneMode, setLeftPaneMode] = useState<"text" | "pdf">("text");
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [editingTariffId, setEditingTariffId] = useState<string | null>(null);
   const [editedTariff, setEditedTariff] = useState<ExtractedTariffPreview | null>(null);
@@ -280,6 +285,9 @@ export function FileUploadImport() {
     setPreviewOpen(false);
     setEditingTariffId(null);
     setEditedTariff(null);
+    setLeftPaneMode("text");
+    if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+    setPdfBlobUrl(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -550,9 +558,40 @@ export function FileUploadImport() {
                   <CardTitle className="text-sm flex items-center gap-2">
                     <FileSpreadsheet className="h-4 w-4 text-green-600" />Raw Document Data
                     <Badge variant="secondary" className="text-xs">{previewData.rowCount} rows</Badge>
+                    {previewData.isPdf && (
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        <span className="text-[10px] text-muted-foreground">Text</span>
+                        <Switch
+                          checked={leftPaneMode === "pdf"}
+                          onCheckedChange={(checked) => {
+                            const mode = checked ? "pdf" : "text";
+                            setLeftPaneMode(mode);
+                            if (mode === "pdf" && previewData.pdfFilePath && !pdfBlobUrl) {
+                              // Download PDF from storage for inline display
+                              supabase.storage.from("tariff-uploads").download(previewData.pdfFilePath).then(({ data }) => {
+                                if (data) {
+                                  const url = URL.createObjectURL(data);
+                                  setPdfBlobUrl(url);
+                                }
+                              });
+                            }
+                          }}
+                        />
+                        <span className="text-[10px] text-muted-foreground">PDF</span>
+                      </div>
+                    )}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0 flex-1 overflow-hidden">
+                  {leftPaneMode === "pdf" && pdfBlobUrl ? (
+                    <object
+                      data={pdfBlobUrl}
+                      type="application/pdf"
+                      className="w-full h-[55vh]"
+                    >
+                      <p className="p-4 text-sm text-muted-foreground">PDF preview not supported in this browser.</p>
+                    </object>
+                  ) : (
                   <ScrollArea className="h-[55vh]">
                     <div className="overflow-x-auto">
                       <Table>
@@ -579,6 +618,7 @@ export function FileUploadImport() {
                       </Table>
                     </div>
                   </ScrollArea>
+                  )}
                 </CardContent>
               </Card>
 
