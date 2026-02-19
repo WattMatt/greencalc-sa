@@ -65,6 +65,8 @@ interface ExtractedTariffPreview {
   structure: string;
   phase: string | null;
   tariff_rates: TariffRate[];
+  effective_from?: string | null;
+  effective_to?: string | null;
 }
 
 export function FileUploadImport() {
@@ -319,7 +321,7 @@ export function FileUploadImport() {
         const { data: tariffs } = await supabase
           .from("tariff_plans")
           .select(`
-            id, name, category, structure, phase,
+            id, name, category, structure, phase, effective_from, effective_to,
             tariff_rates(amount, charge, season, tou, block_min_kwh, block_max_kwh, unit)
           `)
           .eq("municipality_id", muniData.id)
@@ -389,6 +391,8 @@ export function FileUploadImport() {
           name: editedTariff.name,
           structure: editedTariff.structure as any,
           phase: editedTariff.phase,
+          effective_from: editedTariff.effective_from || null,
+          effective_to: editedTariff.effective_to || null,
         })
         .eq("id", editedTariff.id);
 
@@ -773,6 +777,26 @@ export function FileUploadImport() {
                                             <SelectItem value="demand">Demand</SelectItem>
                                           </SelectContent>
                                         </Select>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground">Effective From</Label>
+                                        <Input
+                                          type="date"
+                                          className="h-7 text-xs"
+                                          value={displayTariff.effective_from || ""}
+                                          onChange={(e) => updateEditedTariff("effective_from", e.target.value || null)}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-[10px] text-muted-foreground">Effective To</Label>
+                                        <Input
+                                          type="date"
+                                          className="h-7 text-xs"
+                                          value={displayTariff.effective_to || ""}
+                                          onChange={(e) => updateEditedTariff("effective_to", e.target.value || null)}
+                                        />
                                       </div>
                                     </div>
                                     {energyRates.length > 0 && (
