@@ -1,68 +1,96 @@
 
 
-## Add Effective Date Fields to TariffBuilder and FileUploadImport Review Step
+## Auto-Extract Province and Dates from File Name
 
 ### Overview
 
-Two gaps were identified after the multi-period feature implementation. The `effective_from` and `effective_to` date columns exist in the database and are supported in the TariffEditDialog and AI extraction, but are missing from:
-
-1. **TariffBuilder** -- manual tariff creation has no way to set effective dates
-2. **FileUploadImport review step** -- no UI to view or override the dates that the AI extracted (or to set them if the AI did not find any)
+When a user selects a file like `Limpopo_Province_Tariffs_20250601_20260531.pdf`, the system will automatically pre-fill the province dropdown and two new date fields. All values remain fully editable.
 
 ---
 
-### Change 1: TariffBuilder -- Add Effective Date Inputs
+### File Name Pattern
 
-**File:** `src/components/tariffs/TariffBuilder.tsx`
+Based on the example `Limpopo_Province_Tariffs_20250601_20260531.pdf`, the parser will:
 
-- Add two new state variables: `effectiveFrom` and `effectiveTo` (both `string`, default `""`)
-- Add two date `<Input type="date">` fields in the "Basic Info" grid (after the existing fields like Amperage Limit), labelled "Effective From" and "Effective To"
-- Include both values in the `.insert()` call to `tariff_plans` (lines 91-104), mapping empty strings to `null`
-- Add both to the `resetForm()` function
+1. **Province**: Match any known province name in the filename (underscores/hyphens treated as spaces, case-insensitive). The word "Province" is stripped. So `Limpopo_Province` matches "Limpopo".
+2. **Dates**: Look for `YYYYMMDD` patterns (8-digit sequences). The first match becomes `effective_from`, the second becomes `effective_to`. Dates are formatted as `YYYY-MM-DD` for the date inputs.
 
-This is a small, self-contained change -- two inputs, two state variables, and a two-field addition to the insert payload.
+### Example Parsing Results
+
+```text
+"Limpopo_Province_Tariffs_20250601_20260531.pdf"
+  -> province: "Limpopo", effectiveFrom: "2025-06-01", effectiveTo: "2026-05-31"
+
+"KwaZulu-Natal_Tariffs_20240701_20250630.xlsx"
+  -> province: "KwaZulu-Natal", effectiveFrom: "2024-07-01", effectiveTo: "2025-06-30"
+
+"Eskom_Schedule_20250101.pdf"
+  -> province: "Eskom", effectiveFrom: "2025-01-01"
+
+"random_file.pdf"
+  -> no matches, user selects manually as before
+```
 
 ---
 
-### Change 2: FileUploadImport -- Add Date Fields to Review Step
+### Changes
 
 **File:** `src/components/tariffs/FileUploadImport.tsx`
 
-- Extend the `ExtractedTariffPreview` interface with `effective_from?: string | null` and `effective_to?: string | null`
-- In the Phase 3 review UI (the tariff card/accordion where each extracted tariff is shown), add two small date inputs per tariff for effective dates
-- These fields should be pre-populated if the AI extracted dates, and editable by the user
-- When the user clicks "Save" on an individual tariff (the existing `saveEditedTariff` function), include `effective_from` and `effective_to` in the update payload to `tariff_plans`
-- When initially receiving extracted tariffs from the edge function response, map any `effective_from`/`effective_to` fields from the AI response into the preview state
+1. Add a `parseFileNameMetadata(fileName)` function that:
+   - Normalises the filename (replace underscores/hyphens with spaces, remove extension)
+   - Matches against `SOUTH_AFRICAN_PROVINCES` (case-insensitive, ignoring the word "Province")
+   - Extracts `YYYYMMDD` date patterns and converts to `YYYY-MM-DD`
+   - Returns `{ province?, effectiveFrom?, effectiveTo? }`
+
+2. Add two state variables: `effectiveFrom` and `effectiveTo` (strings, default `""`)
+
+3. In `handleFileSelect`, after setting the file, call the parser and auto-fill:
+   - Province dropdown (if matched)
+   - `effectiveFrom` and `effectiveTo` fields (if dates found)
+
+4. Add two `<Input type="date">` fields in the Phase 1 UI, below the Province selector, labelled "Effective From" and "Effective To". Disabled once extraction begins.
+
+5. Pass `effectiveFrom` and `effectiveTo` to the edge function in `handleExtractTariffs` and `handleReextractTariffs` body payloads, so the AI uses them as defaults when no dates are found in the document.
+
+**File:** `supabase/functions/process-tariff-file/index.ts`
+
+6. Accept optional `effectiveFrom` and `effectiveTo` in the request body for the `extract-tariffs` action.
+7. When inserting tariff plans, use these as fallback values if the AI did not extract dates from the document content.
 
 ---
 
-### Technical Details
+### Technical Detail: Parser Function
 
-#### TariffBuilder State Additions
 ```text
-const [effectiveFrom, setEffectiveFrom] = useState("");
-const [effectiveTo, setEffectiveTo] = useState("");
-```
+function parseFileNameMetadata(fileName: string) {
+  const nameOnly = fileName.replace(/\.[^.]+$/, "");        // strip extension
+  const normalised = nameOnly.replace(/[_\-]/g, " ");       // underscores/hyphens to spaces
 
-#### TariffBuilder Insert Payload Addition
-```text
-effective_from: effectiveFrom || null,
-effective_to: effectiveTo || null,
-```
+  // Province: match against known list, ignoring "Province"
+  const cleaned = normalised.replace(/\bProvince\b/gi, "").trim();
+  const province = SOUTH_AFRICAN_PROVINCES.find(p =>
+    cleaned.toLowerCase().includes(p.toLowerCase())
+  );
 
-#### ExtractedTariffPreview Interface Update
-```text
-interface ExtractedTariffPreview {
-  // ...existing fields...
-  effective_from?: string | null;
-  effective_to?: string | null;
+  // Dates: find YYYYMMDD patterns
+  const dateMatches = nameOnly.match(/\b(\d{8})\b/g) || [];
+  const dates = dateMatches
+    .map(d => `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`)
+    .filter(d => !isNaN(new Date(d).getTime()));
+
+  return {
+    province: province || undefined,
+    effectiveFrom: dates[0] || undefined,
+    effectiveTo: dates[1] || undefined,
+  };
 }
 ```
 
-#### Files Modified
+### Files Modified
 
 | File | Change |
 |---|---|
-| `src/components/tariffs/TariffBuilder.tsx` | Add `effectiveFrom`/`effectiveTo` state, date inputs in form grid, include in insert payload and resetForm |
-| `src/components/tariffs/FileUploadImport.tsx` | Extend `ExtractedTariffPreview` interface, add date inputs to review card, include in save payload, map from AI response |
+| `src/components/tariffs/FileUploadImport.tsx` | Add parser function, state variables, date inputs in Phase 1 UI, pass dates to edge function |
+| `supabase/functions/process-tariff-file/index.ts` | Accept and use fallback dates from request body |
 
