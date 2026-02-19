@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Sun, Clock, Calculator, Info, Calendar } from "lucide-react";
+import { Sun, Clock, Calculator, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { EskomTariffSelector } from "./EskomTariffSelector";
 import {
@@ -700,10 +700,7 @@ export function TariffSelector({
         {/* Year period dropdown - only for non-Eskom */}
         {!isEskomSelected && (
           <div className="space-y-2">
-            <Label className="flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5" />
-              Year
-            </Label>
+            <Label>Year</Label>
             <Select
               value={selectedPeriod}
               onValueChange={setSelectedPeriod}
