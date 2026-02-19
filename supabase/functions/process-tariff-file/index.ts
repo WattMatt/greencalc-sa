@@ -782,8 +782,8 @@ Deno.serve(async (req) => {
             is_redundant: false,
             is_recommended: false,
             description: null as string | null,
-            effective_from: tariff.effective_from || effectiveFrom || null,
-            effective_to: tariff.effective_to || effectiveTo || null,
+            effective_from: tariff.effective_from || null,
+            effective_to: tariff.effective_to || null,
           };
 
           // Check if tariff already exists
