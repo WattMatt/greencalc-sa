@@ -67,6 +67,9 @@ export function TariffBuilder() {
   const [legacyChargePerKwh, setLegacyChargePerKwh] = useState("");
   const [serviceChargePerDay, setServiceChargePerDay] = useState("");
   const [administrationChargePerDay, setAdministrationChargePerDay] = useState("");
+  // Effective date fields
+  const [effectiveFrom, setEffectiveFrom] = useState("");
+  const [effectiveTo, setEffectiveTo] = useState("");
 
   const { data: municipalities } = useQuery({
     queryKey: ["municipalities"],
@@ -99,6 +102,8 @@ export function TariffBuilder() {
           voltage: voltageLevel || null,
           is_redundant: false,
           is_recommended: false,
+          effective_from: effectiveFrom || null,
+          effective_to: effectiveTo || null,
         })
         .select()
         .single();
@@ -189,6 +194,9 @@ export function TariffBuilder() {
     setLegacyChargePerKwh("");
     setServiceChargePerDay("");
     setAdministrationChargePerDay("");
+    // Reset effective dates
+    setEffectiveFrom("");
+    setEffectiveTo("");
   };
 
   const addRateRow = () => {
@@ -362,6 +370,24 @@ export function TariffBuilder() {
                 value={capacityKva}
                 onChange={(e) => setCapacityKva(e.target.value)}
                 placeholder="e.g., 100"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Effective From</Label>
+              <Input
+                type="date"
+                value={effectiveFrom}
+                onChange={(e) => setEffectiveFrom(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Effective To</Label>
+              <Input
+                type="date"
+                value={effectiveTo}
+                onChange={(e) => setEffectiveTo(e.target.value)}
               />
             </div>
           </div>
