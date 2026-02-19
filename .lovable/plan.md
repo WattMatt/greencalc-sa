@@ -1,103 +1,68 @@
 
-## Incorporate WM-tariffs Features into Tariff Management Dashboard
+
+## Add Effective Date Fields to TariffBuilder and FileUploadImport Review Step
 
 ### Overview
 
-Three features from the WM-tariffs project will be adapted to work with this project's NERSA-compliant schema (`tariff_plans` + `tariff_rates`).
+Two gaps were identified after the multi-period feature implementation. The `effective_from` and `effective_to` date columns exist in the database and are supported in the TariffEditDialog and AI extraction, but are missing from:
+
+1. **TariffBuilder** -- manual tariff creation has no way to set effective dates
+2. **FileUploadImport review step** -- no UI to view or override the dates that the AI extracted (or to set them if the AI did not find any)
 
 ---
 
-### Feature 1: Tariff Period Comparison Charts
+### Change 1: TariffBuilder -- Add Effective Date Inputs
 
-**What it does:** A dialog with bar charts showing how charges (basic, energy, demand) change across tariff periods, with YoY trend indicators (percentage change, average annual increase).
+**File:** `src/components/tariffs/TariffBuilder.tsx`
 
-**Challenge:** The current `tariff_plans` table has no `effective_from`/`effective_to` date columns. WM-tariffs uses these to group tariffs by period. Without date columns, period comparison is not possible.
+- Add two new state variables: `effectiveFrom` and `effectiveTo` (both `string`, default `""`)
+- Add two date `<Input type="date">` fields in the "Basic Info" grid (after the existing fields like Amperage Limit), labelled "Effective From" and "Effective To"
+- Include both values in the `.insert()` call to `tariff_plans` (lines 91-104), mapping empty strings to `null`
+- Add both to the `resetForm()` function
 
-**Implementation:**
-
-1. **Database migration** -- Add two nullable columns to `tariff_plans`:
-   - `effective_from DATE` (nullable, defaults to NULL)
-   - `effective_to DATE` (nullable, defaults to NULL)
-
-2. **New component** -- `src/components/tariffs/TariffPeriodComparisonDialog.tsx`
-   - Adapted from WM-tariffs but queries `tariff_rates` (charge, season, tou, amount) instead of `tariff_charges`
-   - Accepts a tariff name + municipality ID; fetches all `tariff_plans` with matching name, grouped by `effective_from`
-   - Bar chart (Recharts) with a charge-type selector dropdown (Basic Charge, Energy - Low Season, Energy - High Season, Demand - Low Season, Demand - High Season)
-   - Trend indicators: total % change and average YoY % using `TrendingUp`/`TrendingDown` icons
-   - Requires at least 2 periods to display
-
-3. **Integration** -- Add a "Compare Periods" button in `TariffList.tsx` (municipality preview dialog or inline), visible when 2+ tariff plans share the same name within a municipality
+This is a small, self-contained change -- two inputs, two state variables, and a two-field addition to the insert payload.
 
 ---
 
-### Feature 2: Multi-Period Support per Tariff Name
+### Change 2: FileUploadImport -- Add Date Fields to Review Step
 
-**What it does:** Allows multiple tariff records with the same name but different effective date ranges (e.g., "Domestic Conventional" for 2023/24 and 2024/25).
+**File:** `src/components/tariffs/FileUploadImport.tsx`
 
-**Implementation:**
-
-1. **Uses the same migration** from Feature 1 (the `effective_from`/`effective_to` columns)
-
-2. **Update TariffEditDialog** -- Add `effective_from` and `effective_to` date input fields to the tariff edit form
-
-3. **Update AI extraction prompt** -- Modify the `process-tariff-file` edge function's extraction prompt to also extract effective dates when present in the document. Map to the new columns on insert.
-
-4. **Update TariffList display** -- When a municipality has multiple tariffs with the same name, show a period badge (e.g., "Jul 2024 - Jun 2025") next to the tariff name. Group them visually.
-
-5. **Update TariffBuilder** -- Add optional effective date fields to the manual tariff creation form.
-
----
-
-### Feature 3: Extraction Progress Stepper
-
-**What it does:** A visual stepper bar at the top of the extraction workflow showing progress through 4 stages: Upload > AI Extraction > Review > Save.
-
-**Implementation:**
-
-1. **New component** -- `src/components/tariffs/ExtractionSteps.tsx`
-   - Adapted directly from WM-tariffs
-   - Steps: "Upload File", "AI Extraction", "Review Data", "Save to Database"
-   - Uses `CheckCircle2` (complete), `Loader2` (active/spinning), `Circle` (upcoming) icons
-   - Connected horizontal progress lines between steps (filled = complete, muted = pending)
-
-2. **Integration into FileUploadImport.tsx** -- Map the existing `phase` state (1/2/3) and sub-states to stepper steps:
-   - Phase 1 (file selection/upload) = "upload" step active
-   - Phase 2 (analysing/extracting municipalities) = "extract" step active
-   - Phase 3 (reviewing extracted tariffs) = "review" step active
-   - After successful save = "save"/"complete" step
-   - Render `<ExtractionSteps>` at the top of the dialog content, above the current phase content
+- Extend the `ExtractedTariffPreview` interface with `effective_from?: string | null` and `effective_to?: string | null`
+- In the Phase 3 review UI (the tariff card/accordion where each extracted tariff is shown), add two small date inputs per tariff for effective dates
+- These fields should be pre-populated if the AI extracted dates, and editable by the user
+- When the user clicks "Save" on an individual tariff (the existing `saveEditedTariff` function), include `effective_from` and `effective_to` in the update payload to `tariff_plans`
+- When initially receiving extracted tariffs from the edge function response, map any `effective_from`/`effective_to` fields from the AI response into the preview state
 
 ---
 
 ### Technical Details
 
-#### Database Migration
-
+#### TariffBuilder State Additions
 ```text
-ALTER TABLE tariff_plans
-  ADD COLUMN effective_from DATE,
-  ADD COLUMN effective_to DATE;
+const [effectiveFrom, setEffectiveFrom] = useState("");
+const [effectiveTo, setEffectiveTo] = useState("");
 ```
 
-#### Files to Create
+#### TariffBuilder Insert Payload Addition
+```text
+effective_from: effectiveFrom || null,
+effective_to: effectiveTo || null,
+```
 
-| File | Description |
-|---|---|
-| `src/components/tariffs/ExtractionSteps.tsx` | Visual stepper component (4 steps with icons and connecting lines) |
-| `src/components/tariffs/TariffPeriodComparisonDialog.tsx` | Bar chart dialog for comparing charge amounts across periods |
+#### ExtractedTariffPreview Interface Update
+```text
+interface ExtractedTariffPreview {
+  // ...existing fields...
+  effective_from?: string | null;
+  effective_to?: string | null;
+}
+```
 
-#### Files to Modify
+#### Files Modified
 
 | File | Change |
 |---|---|
-| `src/components/tariffs/TariffList.tsx` | Add "Compare Periods" button; show period badges for multi-period tariffs |
-| `src/components/tariffs/TariffEditDialog.tsx` | Add effective_from/effective_to date inputs |
-| `src/components/tariffs/FileUploadImport.tsx` | Integrate ExtractionSteps at top of dialog; map phase state to step names |
-| `supabase/functions/process-tariff-file/index.ts` | Update AI extraction prompt to extract effective dates; include in insert payload |
+| `src/components/tariffs/TariffBuilder.tsx` | Add `effectiveFrom`/`effectiveTo` state, date inputs in form grid, include in insert payload and resetForm |
+| `src/components/tariffs/FileUploadImport.tsx` | Extend `ExtractedTariffPreview` interface, add date inputs to review card, include in save payload, map from AI response |
 
-#### Sequencing
-
-1. Database migration (add columns) -- required first
-2. ExtractionSteps component -- standalone, no dependencies
-3. TariffPeriodComparisonDialog -- depends on migration
-4. UI integrations (TariffList, TariffEditDialog, FileUploadImport, edge function) -- depends on all above
