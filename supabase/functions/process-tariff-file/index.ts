@@ -274,10 +274,70 @@ Deno.serve(async (req) => {
         
         if (knownForProvince && knownForProvince.length > 0) {
           const upperText = extractedText.toUpperCase();
+          const textLines = upperText.split(/\n/).map(l => l.trim()).filter(l => l.length > 2);
+          
           for (const known of knownForProvince) {
+            // Direct contains check
             const upperName = known.name.toUpperCase();
             if (upperText.includes(upperName)) {
-              regexMatches.add(known.name); // Use canonical DB name
+              regexMatches.add(known.name);
+              continue;
+            }
+            
+            // Fuzzy: normalise and check individual words against text lines
+            const normKnown = known.name
+              .toLowerCase()
+              .replace(/[-–\/]/g, ' ')
+              .replace(/([aeiou])\1+/gi, '$1')
+              .replace(/\s+/g, ' ')
+              .trim();
+            const knownWords = normKnown.split(' ').filter(w => w.length >= 4);
+            
+            let found = false;
+            for (const line of textLines) {
+              const normLine = line
+                .toLowerCase()
+                .replace(/[-–\/]/g, ' ')
+                .replace(/([aeiou])\1+/gi, '$1')
+                .replace(/\s+/g, ' ')
+                .trim();
+              
+              // Check if normalised known name appears in normalised line
+              if (normLine.includes(normKnown)) {
+                found = true;
+                break;
+              }
+              
+              // Check individual words with fuzzy matching
+              for (const kw of knownWords) {
+                const lineWords = normLine.split(/\s+/);
+                for (const lw of lineWords) {
+                  if (lw.length < 4) continue;
+                  // Simple Levenshtein similarity
+                  const maxLen = Math.max(kw.length, lw.length);
+                  if (maxLen === 0) continue;
+                  let dp: number[][] = Array.from({ length: kw.length + 1 }, () => Array(lw.length + 1).fill(0));
+                  for (let i = 0; i <= kw.length; i++) dp[i][0] = i;
+                  for (let j = 0; j <= lw.length; j++) dp[0][j] = j;
+                  for (let i = 1; i <= kw.length; i++) {
+                    for (let j = 1; j <= lw.length; j++) {
+                      const cost = kw[i-1] === lw[j-1] ? 0 : 1;
+                      dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost);
+                    }
+                  }
+                  const sim = 1 - dp[kw.length][lw.length] / maxLen;
+                  if (sim >= 0.8) {
+                    found = true;
+                    break;
+                  }
+                }
+                if (found) break;
+              }
+              if (found) break;
+            }
+            
+            if (found) {
+              regexMatches.add(known.name);
             }
           }
           console.log(`After known-name scan: ${regexMatches.size} municipality names:`, [...regexMatches]);
@@ -345,9 +405,33 @@ Deno.serve(async (req) => {
           .replace(/\s*(local\s+)?municipality/gi, '')
           .replace(/\s*(lim|ec|wc|nc|nw|fs|gp|kzn|mp)\s*\d*/gi, '')
           .replace(/\s*province\s*/gi, '')
-          .replace(/[-–]/g, '')
+          .replace(/[-–\/]/g, ' ')
+          .replace(/([aeiou])\1+/gi, '$1') // collapse repeated vowels: oo->o, ee->e
           .replace(/\s+/g, ' ')
           .trim();
+      }
+
+      // Levenshtein distance for fuzzy matching
+      function levenshteinDistance(a: string, b: string): number {
+        const m = a.length, n = b.length;
+        if (m === 0) return n;
+        if (n === 0) return m;
+        const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+        for (let i = 0; i <= m; i++) dp[i][0] = i;
+        for (let j = 0; j <= n; j++) dp[0][j] = j;
+        for (let i = 1; i <= m; i++) {
+          for (let j = 1; j <= n; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+          }
+        }
+        return dp[m][n];
+      }
+
+      function similarityScore(a: string, b: string): number {
+        const maxLen = Math.max(a.length, b.length);
+        if (maxLen === 0) return 1;
+        return 1 - levenshteinDistance(a, b) / maxLen;
       }
 
       function findBestMatch(extractedName: string, known: Array<{ id: string; name: string }>): { id: string; name: string } | null {
@@ -363,7 +447,29 @@ Deno.serve(async (req) => {
           const nk = normaliseName(k.name);
           if (nk.includes(normalised) || normalised.includes(nk)) return k;
         }
-        // 3. Starts-with match (first 5+ chars)
+        // 3. Word-level match: if any word from the extracted name matches a word in the known name
+        const extractedWords = normalised.split(' ').filter(w => w.length >= 4);
+        for (const k of known) {
+          const knownWords = normaliseName(k.name).split(' ').filter(w => w.length >= 4);
+          for (const ew of extractedWords) {
+            for (const kw of knownWords) {
+              if (ew === kw || similarityScore(ew, kw) >= 0.8) return k;
+            }
+          }
+        }
+        // 4. Levenshtein similarity >= 80%
+        let bestSim = 0;
+        let bestK: { id: string; name: string } | null = null;
+        for (const k of known) {
+          const nk = normaliseName(k.name);
+          const sim = similarityScore(normalised, nk);
+          if (sim >= 0.8 && sim > bestSim) {
+            bestSim = sim;
+            bestK = k;
+          }
+        }
+        if (bestK) return bestK;
+        // 5. Starts-with match (first 5+ chars)
         if (normalised.length >= 5) {
           for (const k of known) {
             const nk = normaliseName(k.name);
@@ -424,8 +530,16 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Build allKnown list: every known municipality for this province, marked found or not
+      const foundIds = new Set(savedMunicipalities.map(s => s.id));
+      const allKnown = knownList.map(k => ({
+        id: k.id,
+        name: k.name,
+        found: foundIds.has(k.id),
+      }));
+
       return new Response(
-        JSON.stringify({ success: true, province, provinceId, municipalities: savedMunicipalities, total: savedMunicipalities.length, errors }),
+        JSON.stringify({ success: true, province, provinceId, municipalities: savedMunicipalities, allKnown, total: savedMunicipalities.length, totalKnown: knownList.length, errors }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

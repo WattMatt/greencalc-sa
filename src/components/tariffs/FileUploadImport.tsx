@@ -54,6 +54,12 @@ interface Municipality {
   error?: string;
 }
 
+interface KnownMunicipality {
+  id: string;
+  name: string;
+  found: boolean;
+}
+
 interface AnalysisResult {
   fileType: string;
   sheets?: string[];
@@ -102,6 +108,7 @@ export function FileUploadImport() {
   const [isExtractingMunis, setIsExtractingMunis] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
+  const [allKnownMunicipalities, setAllKnownMunicipalities] = useState<KnownMunicipality[]>([]);
   const [phase, setPhase] = useState<1 | 2 | 3>(1);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [extractedTariffs, setExtractedTariffs] = useState<ExtractedTariffPreview[]>([]);
@@ -253,8 +260,14 @@ export function FileUploadImport() {
         id: m.id, name: m.name, sheetName: m.sheetName, status: "pending" as const
       }));
       setMunicipalities(munis);
+      
+      // Store all known municipalities for the province
+      if (data.allKnown) {
+        setAllKnownMunicipalities(data.allKnown);
+      }
+      
       setPhase(2);
-      toast({ title: "Municipalities Extracted", description: `Found ${munis.length} municipalities in ${province}` });
+      toast({ title: "Municipalities Extracted", description: `Found ${munis.length} of ${data.totalKnown || '?'} expected municipalities in ${province}` });
       queryClient.invalidateQueries({ queryKey: ["municipalities"] });
       queryClient.invalidateQueries({ queryKey: ["provinces"] });
     } catch (err) {
@@ -375,6 +388,7 @@ export function FileUploadImport() {
     setUploadedPath(null);
     setAnalysis(null);
     setMunicipalities([]);
+    setAllKnownMunicipalities([]);
     setPhase(1);
     setPreviewData(null);
     setExtractedTariffs([]);
@@ -606,7 +620,10 @@ export function FileUploadImport() {
             <Card>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm flex items-center gap-2"><Building2 className="h-4 w-4" />Municipalities ({municipalities.length})</CardTitle>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Found ({municipalities.length}{allKnownMunicipalities.length > 0 ? ` of ${allKnownMunicipalities.length}` : ''})
+                  </CardTitle>
                   <div className="text-xs text-muted-foreground">{completedCount}/{municipalities.length} done • {totalTariffs} tariffs</div>
                 </div>
               </CardHeader>
@@ -660,6 +677,27 @@ export function FileUploadImport() {
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
                     <AlertDescription>All municipalities extracted! {totalTariffs} total tariffs imported.</AlertDescription>
                   </Alert>
+                )}
+
+                {/* Not Found in Document */}
+                {allKnownMunicipalities.filter(k => !k.found).length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Not Found in Document ({allKnownMunicipalities.filter(k => !k.found).length} of {allKnownMunicipalities.length})
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {allKnownMunicipalities
+                        .filter(k => !k.found)
+                        .map(k => (
+                          <Badge key={k.id} variant="outline" className="text-xs text-muted-foreground">
+                            {k.name}
+                          </Badge>
+                        ))}
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
