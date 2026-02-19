@@ -3,9 +3,10 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MapPin, Loader2, Filter } from "lucide-react";
+import { MapPin, Loader2, Filter, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { TariffPeriodComparisonDialog } from "./TariffPeriodComparisonDialog";
 
 // South African province colors (using province codes from ArcGIS)
@@ -55,6 +56,13 @@ const STATUS_COLORS = {
 
 type FilterType = "all" | "database" | "done" | "pending" | "error";
 
+interface GooglePlacesSuggestion {
+  place_id: string;
+  place_name: string;
+  main_text: string;
+  secondary_text: string;
+}
+
 interface DbMunicipality {
   id: string;
   name: string;
@@ -84,6 +92,15 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
   const [filter, setFilter] = useState<FilterType>("all");
   const [yoyDialogOpen, setYoyDialogOpen] = useState(false);
   const [selectedMuniForYoy, setSelectedMuniForYoy] = useState<{ id: string; name: string } | null>(null);
+  
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<GooglePlacesSuggestion[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
   // Fetch Mapbox token
   useEffect(() => {
@@ -495,6 +512,78 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
     }
   }, [filter, getFilterExpression]);
 
+  // Location search handlers
+  const handleSearchChange = useCallback((query: string) => {
+    setSearchQuery(query);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (query.length < 3) {
+      setSearchResults([]);
+      setShowSuggestions(false);
+      return;
+    }
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("google-places-search", {
+          body: { query: query + " South Africa" }
+        });
+        if (error) throw error;
+        if (data?.suggestions?.length > 0) {
+          setSearchResults(data.suggestions);
+          setShowSuggestions(true);
+        } else {
+          setSearchResults([]);
+        }
+      } catch (err) {
+        console.error("Search failed:", err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+  }, []);
+
+  const handleSelectSearchResult = useCallback(async (result: GooglePlacesSuggestion) => {
+    setIsSearching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("google-places-search", {
+        body: { place_id: result.place_id }
+      });
+      if (error) throw error;
+      if (data?.success && data.latitude && data.longitude) {
+        // Remove existing search marker
+        searchMarkerRef.current?.remove();
+        // Add pin marker
+        searchMarkerRef.current = new mapboxgl.Marker({ color: "#ef4444" })
+          .setLngLat([data.longitude, data.latitude])
+          .setPopup(new mapboxgl.Popup({ offset: 25 }).setHTML(
+            `<div style="padding:4px;font-size:12px;"><strong>${result.main_text}</strong><br/><span style="color:#64748b;font-size:11px;">${result.secondary_text}</span></div>`
+          ))
+          .addTo(map.current!);
+        searchMarkerRef.current.togglePopup();
+        map.current?.flyTo({ center: [data.longitude, data.latitude], zoom: 10 });
+      }
+    } catch (err) {
+      console.error("Failed to get place details:", err);
+    } finally {
+      setSearchQuery("");
+      setShowSuggestions(false);
+      setSearchResults([]);
+      setIsSearching(false);
+    }
+  }, []);
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   if (error) {
     return (
       <Card>
@@ -561,6 +650,48 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
             {boundaryCount} boundaries • {dbCount} in database • {doneCount} extracted • {totalTariffs} tariffs
           </div>
         )}
+        {/* Location Search */}
+        <div ref={searchContainerRef} className="relative mt-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onFocus={() => searchResults.length > 0 && setShowSuggestions(true)}
+              placeholder="Search municipality or location…"
+              className="h-8 text-xs pl-8 pr-8"
+            />
+            {isSearching && (
+              <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            )}
+            {!isSearching && searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(""); setSearchResults([]); setShowSuggestions(false); searchMarkerRef.current?.remove(); }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2"
+              >
+                <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+              </button>
+            )}
+          </div>
+          {showSuggestions && searchResults.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-50 max-h-[200px] overflow-y-auto">
+              {searchResults.map((result, i) => (
+                <button
+                  key={result.place_id || i}
+                  onClick={() => handleSelectSearchResult(result)}
+                  className="w-full px-3 py-2 text-left text-xs hover:bg-accent flex items-start gap-2 border-b border-border/50 last:border-0"
+                >
+                  <MapPin className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                  <div className="flex flex-col overflow-hidden">
+                    <span className="font-medium truncate">{result.main_text}</span>
+                    <span className="text-muted-foreground text-[10px] truncate">{result.secondary_text}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <div ref={mapContainer} className="h-[500px] rounded-b-lg" />
