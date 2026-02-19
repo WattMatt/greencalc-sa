@@ -177,6 +177,7 @@ Deno.serve(async (req) => {
       const uint8Array = new Uint8Array(await fileData.arrayBuffer());
       console.log("PDF size:", uint8Array.length, "bytes");
       
+      const { Buffer } = await import("node:buffer");
       const pdfParse = (await import("npm:pdf-parse@1.1.1")).default;
       const pdfData = await pdfParse(Buffer.from(uint8Array));
       extractedText = pdfData.text || "";
