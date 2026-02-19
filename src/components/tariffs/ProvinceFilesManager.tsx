@@ -1147,7 +1147,7 @@ export function ProvinceFilesManager() {
                             {stats.files.length} file{stats.files.length !== 1 ? "s" : ""}
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-2xl">
+                        <DialogContent className="max-w-4xl">
                           <DialogHeader>
                             <DialogTitle>{stats.province} - Uploaded Files</DialogTitle>
                             <DialogDescription>
