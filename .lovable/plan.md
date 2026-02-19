@@ -1,46 +1,45 @@
 
 
-## Store Municipality Boundaries in Backend File Storage
+## Add Year Period Dropdown to Project Tariff Selector
 
 ### Problem
-The municipality boundary GeoJSON (~10MB) is fetched directly from the ArcGIS API on every page load (line 165-190 of `MunicipalityMap.tsx`). This causes slow map loads and failures when the ArcGIS service is down or slow.
+When selecting a tariff within a project, the user sees a flat list of all tariffs for the selected municipality. Since tariffs are uploaded for different financial years (e.g., "1 Jun 2024 - 31 May 2025" and "1 Jun 2025 - 31 May 2026"), the list is cluttered and there is no way to filter by period. The user needs a "Year" dropdown between Municipality and Tariff to select which period's tariffs to use.
 
 ### Solution
-1. **Create an edge function** (`cache-boundaries`) that fetches the GeoJSON from ArcGIS once and stores it in a storage bucket, then serves it from storage on subsequent requests.
-2. **Update the frontend** to call this edge function instead of ArcGIS directly.
+Add a new dropdown labelled "Year" between the Municipality and Tariff selectors in `TariffSelector.tsx`. This dropdown will:
+- Show distinct date periods from the tariffs available for that municipality (e.g., "Jun 2025 - May 2026")
+- Default to the most recent period
+- Filter the tariff dropdown to only show tariffs from the selected period
+- Include a "All Periods" option to see everything
+- Handle tariffs with no dates (grouped as "No Period Specified")
 
-### How It Works
+### Layout Change
 
-1. Frontend calls `cache-boundaries` edge function
-2. Edge function checks if `municipality-boundaries.geojson` exists in storage
-3. If yes: return a signed URL (or the file content) from storage
-4. If no (first time / manual refresh): fetch from ArcGIS, upload to storage, then return it
-5. Optional `?refresh=true` parameter to force re-fetch from ArcGIS
+Current: `Province | Municipality | Tariff`
+
+New: `Province | Municipality | Year | Tariff` (4 columns on md+)
 
 ### Technical Details
 
-**New edge function: `supabase/functions/cache-boundaries/index.ts`**
-- Checks for `boundary-cache/municipality-boundaries.geojson` in a storage bucket
-- If file exists, downloads and returns it as JSON
-- If file missing (or `?refresh=true`), fetches from ArcGIS, uploads to storage, returns the result
-- Uses the existing `tariff-uploads` bucket (private) with a subfolder `boundary-cache/`
+**File: `src/components/projects/TariffSelector.tsx`**
 
-**Config: `supabase/config.toml`**
-- Add `[functions.cache-boundaries]` with `verify_jwt = false`
+1. **Add state**: `const [selectedPeriod, setSelectedPeriod] = useState<string>("")`
 
-**Frontend: `src/components/tariffs/MunicipalityMap.tsx`**
-- Replace the direct ArcGIS fetch (lines 165-190) with a call to `supabase.functions.invoke("cache-boundaries")`
-- Remove the `ARCGIS_BOUNDARY_URL` constant (line 81)
-- Everything else (map rendering, popup logic, filters) stays unchanged
+2. **Derive available periods** from the `tariffs` query result using `useMemo`:
+   - Group tariffs by their `effective_from + effective_to` combination
+   - Format each as a label like "Jun 2025 - May 2026"
+   - Sort descending (most recent first)
+   - Include "No Period" for tariffs where both dates are null
 
-### Benefits
-- Map loads from backend storage (fast, reliable)
-- No dependency on ArcGIS availability at runtime
-- One-time fetch populates the cache; subsequent loads are instant
-- Manual refresh available via `?refresh=true` if boundaries ever update
+3. **Auto-select the most recent period** via `useEffect` when tariffs load or municipality changes
+
+4. **Filter tariffs** shown in the Tariff dropdown to only those matching the selected period
+
+5. **Reset period** when municipality changes (alongside existing reset logic)
+
+6. **Grid update**: Change `md:grid-cols-3` to `md:grid-cols-4` to accommodate the new dropdown
+
+7. The Year dropdown is only shown for non-Eskom tariffs (same condition as the Tariff dropdown)
 
 ### Files Modified
-- `supabase/functions/cache-boundaries/index.ts` -- new edge function
-- `supabase/config.toml` -- register new function
-- `src/components/tariffs/MunicipalityMap.tsx` -- use edge function instead of ArcGIS
-
+- `src/components/projects/TariffSelector.tsx` -- add Year period dropdown, filter tariffs by selected period
