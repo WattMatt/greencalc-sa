@@ -381,8 +381,17 @@ Deno.serve(async (req) => {
 
       let previewData: string[][] = [];
       let sheetTitle = municipality;
+      let isPdf = false;
+      let pdfFilePath: string | null = null;
 
-      if (fileType === "xlsx" || fileType === "xls") {
+      if (fileType === "pdf") {
+        // For PDFs, return the extracted text split into rows for display
+        isPdf = true;
+        pdfFilePath = filePath;
+        const lines = extractedText.split('\n').filter((l: string) => l.trim());
+        previewData = lines.map((line: string) => [line]);
+        sheetTitle = municipality;
+      } else if (fileType === "xlsx" || fileType === "xls") {
         const matchingSheet = sheetNames.find(name => 
           name.toLowerCase().includes(municipality.toLowerCase()) ||
           municipality.toLowerCase().includes(name.replace(/\s*-\s*\d+\.?\d*%$/, '').toLowerCase())
@@ -394,7 +403,7 @@ Deno.serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ success: true, municipality, sheetTitle, data: previewData, rowCount: previewData.length }),
+        JSON.stringify({ success: true, municipality, sheetTitle, data: previewData, rowCount: previewData.length, isPdf, pdfFilePath }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -562,7 +571,25 @@ Deno.serve(async (req) => {
             ).filter(row => row.trim()).join("\n");
         }
       } else {
-        municipalityText = extractedText;
+        // PDF: Extract only the section relevant to this municipality
+        const muniUpper = municipality.toUpperCase();
+        // Try to find municipality section boundaries using regex
+        // SA tariff PDFs typically have headers like "POLOKWANE - 14.59%" or "POLOKWANE 14.59%"
+        const escapedName = muniUpper.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const sectionRegex = new RegExp(
+          `(${escapedName}[\\s\\S]*?)(?=\\n[A-Z][A-Z\\s\\-\\/]{2,}\\s*[-–]?\\s*\\d+[\\.,]\\d+%|$)`,
+          's'
+        );
+        const sectionMatch = extractedText.match(sectionRegex);
+        
+        if (sectionMatch && sectionMatch[1]) {
+          municipalityText = sectionMatch[1].slice(0, 15000);
+          console.log(`Found municipality section for ${municipality}: ${municipalityText.length} chars`);
+        } else {
+          // Fallback: pass full text but with strong focus instruction
+          municipalityText = `FOCUS ONLY ON TARIFFS FOR: ${municipality}\nIgnore data for all other municipalities.\n\n${extractedText.slice(0, 15000)}`;
+          console.log(`No section boundary found for ${municipality}, using full text with focus instruction`);
+        }
       }
 
       if (!municipalityText) {
