@@ -1,25 +1,32 @@
 
 
-## Store Source File Reference on Extraction Runs
+## Improve File Management: Delete, Download, and Discoverability
 
-### Current State
-When you upload a tariff file, it gets stored in the `tariff-uploads` storage bucket with a timestamped name (e.g. `1771491250342-Limpopo_Province_Tariffs_20250601_20260531.pdf`). The file exists in storage, but there is no record linking it back to the municipalities or extraction runs it produced. If you want to find and download the original file later, there is no easy way to do so.
+### Problem
+The Provinces and Tariff Files table shows an "X files" button per province, but the delete and download actions are buried inside a nested dialog. This makes it hard to manage files — you can't easily delete or download them from the main view.
 
 ### What We Will Do
 
-1. **Add a `source_file_path` and `source_file_name` column to the `extraction_runs` table** so each extraction records which file it came from.
+**1. Enhance the file list dialog with a Download button**
+Currently, each file row in the dialog only has Preview (eye icon) and Delete (trash icon). We will add a dedicated Download button (download icon) so you can download a file directly without opening the preview first.
 
-2. **Update the edge function** (`process-tariff-file/index.ts`) to save the `filePath` into the `extraction_runs` record when creating it during the extraction phase.
+**2. Add a confirmation prompt before deleting files**
+Currently, clicking the trash icon deletes immediately with no confirmation. We will add a simple `confirm()` dialog to prevent accidental deletions.
 
-3. **Update the UI** to show a download/preview button next to each extraction run or municipality, using the stored file path to fetch from the `tariff-uploads` bucket.
+**3. Make the "Files" column more interactive**
+The existing "X files" button already opens a dialog with all the actions. We will make sure the dialog is clearly labelled and the buttons are more prominent so it is obvious that you can manage files from there.
 
 ### Technical Details
 
-| Step | Change |
+| Change | File |
 |---|---|
-| Database migration | `ALTER TABLE extraction_runs ADD COLUMN source_file_path text, ADD COLUMN source_file_name text;` |
-| Edge function (`process-tariff-file/index.ts`) | When inserting into `extraction_runs`, include `source_file_path: filePath` and `source_file_name` (parsed from the path) |
-| UI (`ProvinceFilesManager.tsx`) | Where extraction runs are displayed, add a download/preview button that uses the `FilePreviewDialog` with the stored `source_file_path` |
+| Add Download button to file rows in the dialog | `src/components/tariffs/ProvinceFilesManager.tsx` (lines 1146-1165) |
+| Add delete confirmation prompt | `src/components/tariffs/ProvinceFilesManager.tsx` (handleDeleteFile function, line 377) |
+| Import `Download` icon from lucide-react | `src/components/tariffs/ProvinceFilesManager.tsx` (line 16) |
 
-### Backfill
-The most recent uploads are already in the bucket. We can backfill the latest extraction runs with the most recent file path if needed, or simply start tracking from now onwards.
+### How It Will Work
+- Click **"X files"** on any province row to open the file management dialog
+- Each file shows: **Preview** (eye), **Download** (arrow-down), and **Delete** (trash with confirmation)
+- Download triggers a direct browser download of the file from the storage bucket
+- Delete now asks "Are you sure you want to delete this file?" before proceeding
+
