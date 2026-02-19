@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, ChevronDown, ChevronRight, MapPin, Building2, Zap, Filter, Eye, Pencil, Save, X, Loader2, FileSpreadsheet } from "lucide-react";
+import { Trash2, ChevronDown, ChevronRight, MapPin, Building2, Zap, Filter, Eye, Pencil, Save, X, Loader2, FileSpreadsheet, BarChart3 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EskomTariffMatrix } from "./EskomTariffMatrix";
 import { TariffEditDialog } from "./TariffEditDialog";
+import { TariffPeriodComparisonDialog } from "./TariffPeriodComparisonDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,9 +49,9 @@ interface Tariff {
   id: string;
   name: string;
   municipality_id: string;
-  category: string; // enum: domestic, commercial, industrial, agriculture, street_lighting
-  structure: string; // enum: flat, time_of_use, inclining_block
-  voltage: string | null; // enum: LV, MV, HV
+  category: string;
+  structure: string;
+  voltage: string | null;
   phase: string | null;
   scale_code: string | null;
   min_amps: number | null;
@@ -63,6 +64,8 @@ interface Tariff {
   is_recommended: boolean | null;
   metering: string | null;
   description: string | null;
+  effective_from: string | null;
+  effective_to: string | null;
   municipality?: { name: string; province_id: string } | null;
   tariff_rates?: TariffRate[];
 }
@@ -139,6 +142,11 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
   const [editDialogTariff, setEditDialogTariff] = useState<Tariff | null>(null);
   const [editDialogRates, setEditDialogRates] = useState<TariffRate[]>([]);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+
+  // Period comparison dialog state
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [comparisonTariffName, setComparisonTariffName] = useState("");
+  const [comparisonMunicipalityId, setComparisonMunicipalityId] = useState("");
 
   const { data: provinces } = useQuery({
     queryKey: ["provinces"],
@@ -840,8 +848,33 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
               <Building2 className="h-5 w-5" />
               {previewMunicipality?.name} - Tariffs
             </DialogTitle>
-            <DialogDescription>
-              Review extracted tariffs. Click Edit to modify values.
+            <DialogDescription className="flex items-center justify-between">
+              <span>Review extracted tariffs. Click Edit to modify values.</span>
+              {(() => {
+                const tariffs = previewMunicipality?.tariffs || [];
+                const nameCount = new Map<string, number>();
+                tariffs.forEach(t => nameCount.set(t.name, (nameCount.get(t.name) || 0) + 1));
+                const hasMultiPeriod = [...nameCount.values()].some(c => c >= 2);
+                if (!hasMultiPeriod) return null;
+                const multiName = [...nameCount.entries()].find(([, c]) => c >= 2)?.[0];
+                const muniId = tariffs[0]?.municipality_id;
+                if (!multiName || !muniId) return null;
+                return (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1 ml-2 shrink-0"
+                    onClick={() => {
+                      setComparisonTariffName(multiName);
+                      setComparisonMunicipalityId(muniId);
+                      setComparisonOpen(true);
+                    }}
+                  >
+                    <BarChart3 className="h-3 w-3" />
+                    Compare Periods
+                  </Button>
+                );
+              })()}
             </DialogDescription>
           </DialogHeader>
           
@@ -866,12 +899,18 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                     >
                       <CardHeader className="py-2 px-3">
                         <div className="flex items-start justify-between gap-2">
-                          <div>
+                            <div>
                             <div className="font-medium text-sm">{tariff.name}</div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-muted-foreground">{tariff.category}</span>
                               {tariff.voltage && (
                                 <Badge variant="outline" className="text-[10px]">{tariff.voltage}</Badge>
+                              )}
+                              {tariff.effective_from && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {new Date(tariff.effective_from).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}
+                                  {tariff.effective_to ? ` – ${new Date(tariff.effective_to).toLocaleDateString('en-ZA', { month: 'short', year: 'numeric' })}` : " →"}
+                                </Badge>
                               )}
                             </div>
                           </div>
@@ -1015,6 +1054,14 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
             }
           }
         }}
+      />
+
+      {/* Period Comparison Dialog */}
+      <TariffPeriodComparisonDialog
+        tariffName={comparisonTariffName}
+        municipalityId={comparisonMunicipalityId}
+        open={comparisonOpen}
+        onOpenChange={setComparisonOpen}
       />
     </div>
   );

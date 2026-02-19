@@ -1923,6 +1923,8 @@ export type Database = {
           category: Database["public"]["Enums"]["customer_category"]
           created_at: string
           description: string | null
+          effective_from: string | null
+          effective_to: string | null
           id: string
           is_recommended: boolean | null
           is_redundant: boolean | null
@@ -1945,6 +1947,8 @@ export type Database = {
           category: Database["public"]["Enums"]["customer_category"]
           created_at?: string
           description?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
           id?: string
           is_recommended?: boolean | null
           is_redundant?: boolean | null
@@ -1967,6 +1971,8 @@ export type Database = {
           category?: Database["public"]["Enums"]["customer_category"]
           created_at?: string
           description?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
           id?: string
           is_recommended?: boolean | null
           is_redundant?: boolean | null
