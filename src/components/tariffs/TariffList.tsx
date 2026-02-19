@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, ChevronDown, ChevronRight, MapPin, Building2, Zap, Filter, Eye, Pencil, Save, X, Loader2, FileSpreadsheet, BarChart3 } from "lucide-react";
+import { Trash2, ChevronDown, ChevronRight, MapPin, Building2, Zap, Filter, Eye, Pencil, Save, X, Loader2, FileSpreadsheet, BarChart3, Calendar } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -685,8 +686,42 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                             );
                           }
                           
-                          // Default flat list for non-Eskom
-                          return municipality.tariffs.map((tariff) => (
+                          // Group tariffs by period
+                          const periodGroups = new Map<string, { label: string; tariffs: Tariff[] }>();
+                          municipality.tariffs.forEach((tariff) => {
+                            const key = (tariff.effective_from && tariff.effective_to)
+                              ? `${tariff.effective_from}|${tariff.effective_to}`
+                              : 'unspecified';
+                            if (!periodGroups.has(key)) {
+                              let label = 'No Period Specified';
+                              if (tariff.effective_from && tariff.effective_to) {
+                                try {
+                                  label = `${format(parseISO(tariff.effective_from), 'd MMM yyyy')} – ${format(parseISO(tariff.effective_to), 'd MMM yyyy')}`;
+                                } catch { label = `${tariff.effective_from} – ${tariff.effective_to}`; }
+                              }
+                              periodGroups.set(key, { label, tariffs: [] });
+                            }
+                            periodGroups.get(key)!.tariffs.push(tariff);
+                          });
+
+                          const sortedPeriods = Array.from(periodGroups.entries()).sort(([a], [b]) => {
+                            if (a === 'unspecified') return 1;
+                            if (b === 'unspecified') return -1;
+                            return a.localeCompare(b);
+                          });
+
+                          return sortedPeriods.map(([periodKey, group]) => (
+                            <Collapsible key={periodKey} defaultOpen={sortedPeriods.length === 1}>
+                              <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2 rounded-md bg-muted/50 hover:bg-muted transition-colors text-sm font-medium text-foreground">
+                                <Calendar className="h-4 w-4 text-primary" />
+                                <span>{group.label}</span>
+                                <Badge variant="outline" className="ml-auto text-xs">
+                                  {group.tariffs.length} {group.tariffs.length === 1 ? 'tariff' : 'tariffs'}
+                                </Badge>
+                                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [[data-state=closed]>&]:rotate-[-90deg]" />
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="mt-1 space-y-2 pl-2 border-l-2 border-primary/20 ml-2">
+                                {group.tariffs.map((tariff) => (
                           <Collapsible key={tariff.id} open={expandedTariffs.has(tariff.id)}>
                             <div className="border rounded bg-background">
                               <div className="flex items-center justify-between p-3">
@@ -827,8 +862,12 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                               </CollapsibleContent>
                             </div>
                           </Collapsible>
-                        ))
+                                ))}
+                              </CollapsibleContent>
+                            </Collapsible>
+                          ))
                         })()
+
                         )}
                       </div>
                     </AccordionContent>
