@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin, Loader2, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { TariffPeriodComparisonDialog } from "./TariffPeriodComparisonDialog";
 
 // South African province colors (using province codes from ArcGIS)
 const PROVINCE_COLORS: Record<string, string> = {
@@ -81,6 +82,8 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
   const [loadingBoundaries, setLoadingBoundaries] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
+  const [yoyDialogOpen, setYoyDialogOpen] = useState(false);
+  const [selectedMuniForYoy, setSelectedMuniForYoy] = useState<{ id: string; name: string } | null>(null);
 
   // Fetch Mapbox token
   useEffect(() => {
@@ -393,6 +396,14 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
               >
                 View ${tariffs} Tariff${tariffs > 1 ? 's' : ''} →
               </button>
+              <button 
+                data-municipality-id="${municipalityId}"
+                data-municipality-name="${dbName}"
+                class="yoy-trends-btn"
+                style="margin-top: 4px; width: 100%; padding: 6px 12px; background: hsl(221.2 83.2% 53.3%); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;"
+              >
+                📊 YoY Trends
+              </button>
             `;
           }
         } else {
@@ -420,17 +431,30 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
           `)
           .addTo(map.current!);
 
-        // Add click handler for the view tariffs button
+        // Add click handlers for popup buttons
         setTimeout(() => {
-          const btn = document.querySelector('.view-tariffs-btn');
-          if (btn) {
-            btn.addEventListener('click', (evt) => {
+          const viewBtn = document.querySelector('.view-tariffs-btn');
+          if (viewBtn) {
+            viewBtn.addEventListener('click', (evt) => {
               const target = evt.target as HTMLButtonElement;
               const muniId = target.getAttribute('data-municipality-id');
               const muniName = target.getAttribute('data-municipality-name');
               if (muniId && muniName && onMunicipalityClick) {
                 popup.remove();
                 onMunicipalityClick(muniId, muniName);
+              }
+            });
+          }
+          const yoyBtn = document.querySelector('.yoy-trends-btn');
+          if (yoyBtn) {
+            yoyBtn.addEventListener('click', (evt) => {
+              const target = evt.target as HTMLButtonElement;
+              const muniId = target.getAttribute('data-municipality-id');
+              const muniName = target.getAttribute('data-municipality-name');
+              if (muniId && muniName) {
+                popup.remove();
+                setSelectedMuniForYoy({ id: muniId, name: muniName });
+                setYoyDialogOpen(true);
               }
             });
           }
@@ -503,6 +527,7 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
   ];
 
   return (
+    <>
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
@@ -575,5 +600,16 @@ export function MunicipalityMap({ onMunicipalityClick }: MunicipalityMapProps) {
         </div>
       </CardContent>
     </Card>
+
+    {/* YoY Trends Dialog */}
+    {selectedMuniForYoy && (
+      <TariffPeriodComparisonDialog
+        municipalityId={selectedMuniForYoy.id}
+        municipalityName={selectedMuniForYoy.name}
+        open={yoyDialogOpen}
+        onOpenChange={setYoyDialogOpen}
+      />
+    )}
+    </>
   );
 }

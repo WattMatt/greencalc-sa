@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,8 +10,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { format } from "date-fns";
 
 interface TariffPeriodComparisonDialogProps {
-  tariffName: string;
   municipalityId: string;
+  municipalityName?: string;
+  tariffName?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -38,16 +39,59 @@ function formatPeriod(from: string | null, to: string | null): string {
 }
 
 export function TariffPeriodComparisonDialog({
-  tariffName,
   municipalityId,
+  municipalityName,
+  tariffName: initialTariffName,
   open,
   onOpenChange,
 }: TariffPeriodComparisonDialogProps) {
   const [chargeFilter, setChargeFilter] = useState<ChargeFilter>("energy_low");
+  const [selectedTariffName, setSelectedTariffName] = useState<string | null>(initialTariffName ?? null);
 
-  // Fetch all tariff plans with matching name in this municipality, ordered by effective_from
+  // Fetch distinct tariff names with 2+ periods in this municipality
+  const { data: availableTariffNames } = useQuery({
+    queryKey: ["tariff-names-with-periods", municipalityId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tariff_plans")
+        .select("name, effective_from")
+        .eq("municipality_id", municipalityId)
+        .not("effective_from", "is", null);
+
+      if (error) throw error;
+
+      // Group by name, keep only those with 2+ distinct effective_from
+      const nameMap = new Map<string, Set<string>>();
+      (data || []).forEach((row) => {
+        if (!nameMap.has(row.name)) nameMap.set(row.name, new Set());
+        if (row.effective_from) nameMap.get(row.name)!.add(row.effective_from);
+      });
+
+      return Array.from(nameMap.entries())
+        .filter(([, dates]) => dates.size >= 2)
+        .map(([name]) => name)
+        .sort();
+    },
+    enabled: open,
+  });
+
+  // Auto-select first available tariff name
+  useEffect(() => {
+    if (availableTariffNames && availableTariffNames.length > 0 && !selectedTariffName) {
+      setSelectedTariffName(availableTariffNames[0]);
+    }
+  }, [availableTariffNames, selectedTariffName]);
+
+  // Reset selection when dialog opens for a different municipality
+  useEffect(() => {
+    if (open) {
+      setSelectedTariffName(initialTariffName ?? null);
+    }
+  }, [open, municipalityId, initialTariffName]);
+
+  // Fetch all tariff plans for selected tariff name
   const { data: periods, isLoading } = useQuery({
-    queryKey: ["tariff-period-comparison", tariffName, municipalityId],
+    queryKey: ["tariff-period-comparison", selectedTariffName, municipalityId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tariff_plans")
@@ -56,7 +100,7 @@ export function TariffPeriodComparisonDialog({
           tariff_rates(amount, charge, season, tou, unit)
         `)
         .eq("municipality_id", municipalityId)
-        .eq("name", tariffName)
+        .eq("name", selectedTariffName!)
         .order("effective_from", { ascending: true, nullsFirst: true });
 
       if (error) throw error;
@@ -68,7 +112,7 @@ export function TariffPeriodComparisonDialog({
         tariff_rates: Array<{ amount: number; charge: string; season: string; tou: string; unit: string | null }>;
       }>;
     },
-    enabled: open,
+    enabled: open && !!selectedTariffName,
   });
 
   // Build chart data based on selected charge filter
@@ -124,6 +168,8 @@ export function TariffPeriodComparisonDialog({
   }, [chartData]);
 
   const hasEnoughPeriods = (periods?.length ?? 0) >= 2;
+  const hasTariffs = (availableTariffNames?.length ?? 0) > 0;
+  const dialogTitle = municipalityName ? `${municipalityName} — YoY Trends` : "Period Comparison";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -131,10 +177,10 @@ export function TariffPeriodComparisonDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            Period Comparison
+            {dialogTitle}
           </DialogTitle>
           <DialogDescription>
-            {tariffName} — YoY charge trends
+            {selectedTariffName ? `${selectedTariffName} — YoY charge trends` : "Select a tariff to view trends"}
           </DialogDescription>
         </DialogHeader>
 
@@ -142,15 +188,32 @@ export function TariffPeriodComparisonDialog({
           <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
             Loading periods…
           </div>
-        ) : !hasEnoughPeriods ? (
+        ) : !hasTariffs ? (
           <div className="text-center py-12 text-muted-foreground text-sm">
-            At least 2 effective date periods are needed for comparison.
+            No tariffs with multiple date periods found for this municipality.
             <br />
-            <span className="text-xs">Set effective dates on tariff plans to enable this feature.</span>
+            <span className="text-xs">Set effective dates on tariff plans to enable YoY comparison.</span>
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Charge filter */}
+            {/* Tariff name selector */}
+            {availableTariffNames && availableTariffNames.length > 1 && (
+              <div className="flex items-center gap-3">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Tariff</Label>
+                <Select value={selectedTariffName ?? ""} onValueChange={setSelectedTariffName}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select tariff…" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover">
+                    {availableTariffNames.map((name) => (
+                      <SelectItem key={name} value={name} className="text-xs">{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Charge type filter */}
             <div className="flex items-center gap-3">
               <Label className="text-xs text-muted-foreground whitespace-nowrap">Charge Type</Label>
               <Select value={chargeFilter} onValueChange={(v) => setChargeFilter(v as ChargeFilter)}>
@@ -165,34 +228,42 @@ export function TariffPeriodComparisonDialog({
               </Select>
             </div>
 
-            {/* Trend badges */}
-            {trend && (
-              <div className="flex items-center gap-3">
-                <Badge variant={trend.isUp ? "destructive" : "secondary"} className="gap-1 text-xs">
-                  {trend.isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                  {trend.totalChange >= 0 ? "+" : ""}{trend.totalChange.toFixed(1)}% total
-                </Badge>
-                <Badge variant="outline" className="text-xs">
-                  ~{trend.avgYoY >= 0 ? "+" : ""}{trend.avgYoY.toFixed(1)}% avg/year
-                </Badge>
+            {!hasEnoughPeriods ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                {selectedTariffName ? `"${selectedTariffName}" needs at least 2 date periods for comparison.` : "Select a tariff above."}
               </div>
-            )}
+            ) : (
+              <>
+                {/* Trend badges */}
+                {trend && (
+                  <div className="flex items-center gap-3">
+                    <Badge variant={trend.isUp ? "destructive" : "secondary"} className="gap-1 text-xs">
+                      {trend.isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                      {trend.totalChange >= 0 ? "+" : ""}{trend.totalChange.toFixed(1)}% total
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      ~{trend.avgYoY >= 0 ? "+" : ""}{trend.avgYoY.toFixed(1)}% avg/year
+                    </Badge>
+                  </div>
+                )}
 
-            {/* Bar chart */}
-            <div className="h-[260px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="period" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
-                  <YAxis tick={{ fontSize: 10 }} className="fill-muted-foreground" />
-                  <Tooltip
-                    contentStyle={{ fontSize: 12 }}
-                    formatter={(value: number) => [value.toFixed(2), chargeFilterLabels[chargeFilter]]}
-                  />
-                  <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+                {/* Bar chart */}
+                <div className="h-[260px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="period" tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                      <YAxis tick={{ fontSize: 10 }} className="fill-muted-foreground" />
+                      <Tooltip
+                        contentStyle={{ fontSize: 12 }}
+                        formatter={(value: number) => [value.toFixed(2), chargeFilterLabels[chargeFilter]]}
+                      />
+                      <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
           </div>
         )}
       </DialogContent>
