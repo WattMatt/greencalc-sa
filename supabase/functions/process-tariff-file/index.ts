@@ -867,6 +867,7 @@ Deno.serve(async (req) => {
       }
 
       // Create extraction run record
+      const sourceFileName = filePath.replace(/^\d+-/, '');
       await supabase.from("extraction_runs").insert({
         municipality_id: muniData.id,
         run_type: "extraction",
@@ -876,7 +877,9 @@ Deno.serve(async (req) => {
         tariffs_skipped: skipped,
         ai_confidence: confidenceScore,
         status: "completed",
-        completed_at: new Date().toISOString()
+        completed_at: new Date().toISOString(),
+        source_file_path: filePath,
+        source_file_name: sourceFileName
       });
 
       // Update Eskom batch status if applicable
@@ -1069,9 +1072,11 @@ Deno.serve(async (req) => {
       }
 
       if (!corrections || corrections.length === 0) {
+        const sourceFileName = filePath.replace(/^\d+-/, '');
         await supabase.from("extraction_runs").insert({
           municipality_id: muniData.id, run_type: "reprise", corrections_made: 0,
-          ai_confidence: repriseConfidence, ai_analysis: analysis, status: "completed", completed_at: new Date().toISOString()
+          ai_confidence: repriseConfidence, ai_analysis: analysis, status: "completed", completed_at: new Date().toISOString(),
+          source_file_path: filePath, source_file_name: sourceFileName
         });
 
         return new Response(
@@ -1158,11 +1163,13 @@ Deno.serve(async (req) => {
       }
 
       // Record reprise run
+      const repriseSourceFileName = filePath.replace(/^\d+-/, '');
       await supabase.from("extraction_runs").insert({
         municipality_id: muniData.id, run_type: "reprise",
         tariffs_inserted: added, tariffs_updated: correctionUpdated, corrections_made: corrections.length,
         ai_confidence: repriseConfidence, ai_analysis: analysis,
-        status: "completed", completed_at: new Date().toISOString()
+        status: "completed", completed_at: new Date().toISOString(),
+        source_file_path: filePath, source_file_name: repriseSourceFileName
       });
 
       return new Response(

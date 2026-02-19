@@ -220,6 +220,8 @@ export type Database = {
           id: string
           municipality_id: string
           run_type: string
+          source_file_name: string | null
+          source_file_path: string | null
           status: string
           tariffs_found: number | null
           tariffs_inserted: number | null
@@ -235,6 +237,8 @@ export type Database = {
           id?: string
           municipality_id: string
           run_type?: string
+          source_file_name?: string | null
+          source_file_path?: string | null
           status?: string
           tariffs_found?: number | null
           tariffs_inserted?: number | null
@@ -250,6 +254,8 @@ export type Database = {
           id?: string
           municipality_id?: string
           run_type?: string
+          source_file_name?: string | null
+          source_file_path?: string | null
           status?: string
           tariffs_found?: number | null
           tariffs_inserted?: number | null

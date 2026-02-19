@@ -1,0 +1,1 @@
+ALTER TABLE public.extraction_runs ADD COLUMN source_file_path text, ADD COLUMN source_file_name text;
