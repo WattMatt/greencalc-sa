@@ -9,16 +9,41 @@ export interface EnvelopePoint {
 }
 
 // Parse raw_data which might be in different formats (same as useSpecificDateData)
+// Month name lookup for "DD Mon YYYY HH:MM" format
+const MONTH_MAP: Record<string, string> = {
+  Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
+  Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
+};
+
 function parseRawData(rawData: unknown): RawDataPoint[] {
   if (!rawData) return [];
 
   if (Array.isArray(rawData) && rawData.length > 0) {
     const firstItem = rawData[0];
 
+    // Format: { date, time, value }
     if (firstItem.date && firstItem.time && "value" in firstItem) {
       return rawData as RawDataPoint[];
     }
 
+    // Format: { timestamp: "DD Mon YYYY HH:MM", value }
+    if (firstItem.timestamp && "value" in firstItem && !firstItem.date) {
+      return rawData.map((item: { timestamp: string; value: number }) => {
+        const parts = item.timestamp.split(" ");
+        // "09 Nov 2022 12:00" -> parts = ["09", "Nov", "2022", "12:00"]
+        if (parts.length >= 4) {
+          const day = parts[0].padStart(2, "0");
+          const month = MONTH_MAP[parts[1]] || "01";
+          const year = parts[2];
+          const time = parts[3] + ":00"; // "12:00" -> "12:00:00"
+          const date = `${year}-${month}-${day}`;
+          return { date, time, timestamp: `${date}T${time}`, value: item.value || 0 };
+        }
+        return { date: "", time: "", timestamp: "", value: 0 };
+      }).filter((p) => p.date !== "");
+    }
+
+    // Format: { csvContent: "..." }
     if (firstItem.csvContent && typeof firstItem.csvContent === "string") {
       const parsed: RawDataPoint[] = [];
       const lines = firstItem.csvContent.split("\n");
