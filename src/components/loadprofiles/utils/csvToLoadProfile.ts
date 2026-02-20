@@ -136,6 +136,31 @@ function parseDateTime(dateStr: string, timeStr: string | null, format: string =
   if (!dateStr) return null;
   dateStr = dateStr.trim();
   
+  // Try "DD MMM YYYY HH:MM" or "DD-MMM-YYYY HH:MM:SS" (text month names)
+  const monthNames: Record<string, number> = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+  };
+  const textMonthMatch = dateStr.match(
+    /^(\d{1,2})[\s\-\/]([A-Za-z]{3,9})[\s\-\/](\d{2,4})(?:[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/
+  );
+  if (textMonthMatch) {
+    const day = parseInt(textMonthMatch[1]);
+    const monthKey = textMonthMatch[2].toLowerCase().substring(0, 3);
+    const monthNum = monthNames[monthKey];
+    let year = parseInt(textMonthMatch[3]);
+    if (textMonthMatch[3].length === 2) year += year > 50 ? 1900 : 2000;
+
+    if (monthNum !== undefined && day >= 1 && day <= 31) {
+      const date = new Date(year, monthNum, day);
+      if (!isNaN(date.getTime())) {
+        const hour = textMonthMatch[4] ? parseInt(textMonthMatch[4]) : 0;
+        const minute = textMonthMatch[5] ? parseInt(textMonthMatch[5]) : 0;
+        return { date, hour, minute };
+      }
+    }
+  }
+  
   // Try combined datetime format: "31/12/2024 23:30:00" or "2024-12-31 23:30:00"
   const dtMatch = dateStr.match(/^(\d{1,4})[-\/](\d{1,2})[-\/](\d{1,4})[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (dtMatch) {
