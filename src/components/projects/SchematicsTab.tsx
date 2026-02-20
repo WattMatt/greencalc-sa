@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,17 +9,19 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, FileText, Upload, Eye, Trash2, PenTool } from "lucide-react";
+import { Plus, FileText, Upload, Eye, Trash2, PenTool, ArrowLeft } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Schematic, getFileTypeIcon } from "@/types/schematic";
+import SchematicEditor from "@/components/schematic/SchematicEditor";
 
 interface SchematicsTabProps {
   projectId: string;
 }
 
 export default function SchematicsTab({ projectId }: SchematicsTabProps) {
-  const navigate = useNavigate();
+  const [activeSchematic, setActiveSchematic] = useState<Schematic | null>(null);
+  const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
   const [schematics, setSchematics] = useState<Schematic[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -419,6 +420,46 @@ export default function SchematicsTab({ projectId }: SchematicsTabProps) {
     }
   };
 
+  const openSchematicEditor = (schematic: Schematic) => {
+    // Resolve image URL
+    let imgUrl: string | null = null;
+    if (schematic.file_path) {
+      if (schematic.file_type === "application/pdf" && schematic.converted_image_path) {
+        const { data } = supabase.storage.from("project-schematics").getPublicUrl(schematic.converted_image_path);
+        imgUrl = data.publicUrl;
+      } else {
+        const { data } = supabase.storage.from("project-schematics").getPublicUrl(schematic.file_path);
+        imgUrl = data.publicUrl;
+      }
+    }
+    setActiveImageUrl(imgUrl);
+    setActiveSchematic(schematic);
+  };
+
+  // If a schematic is active, render inline editor
+  if (activeSchematic) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => { setActiveSchematic(null); setActiveImageUrl(null); }}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold">{activeSchematic.name}</h2>
+            <p className="text-sm text-muted-foreground">
+              {activeSchematic.description || "No description"}
+            </p>
+          </div>
+        </div>
+        <SchematicEditor
+          schematicId={activeSchematic.id}
+          schematicUrl={activeImageUrl}
+          projectId={projectId}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -600,7 +641,7 @@ export default function SchematicsTab({ projectId }: SchematicsTabProps) {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Button variant="outline" size="icon"
-                          onClick={() => navigate(`/projects/${projectId}/schematics/${schematic.id}`)}
+                          onClick={() => openSchematicEditor(schematic)}
                           title="View schematic"
                         >
                           <Eye className="w-4 h-4" />
