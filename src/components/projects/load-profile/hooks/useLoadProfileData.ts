@@ -226,6 +226,8 @@ interface UseLoadProfileDataProps {
   solcastProfile?: SolcastPVProfile;
   systemLosses?: number;
   diversityFactor?: number;
+  /** Map of scada_import_id -> raw_data, fetched on demand by useRawScadaData */
+  rawDataMap?: Record<string, unknown>;
 }
 
 const TEMP_COEFFICIENT = 0.004;
@@ -246,9 +248,15 @@ export function useLoadProfileData({
   solcastProfile,
   systemLosses = 0.14,
   diversityFactor = 1.0,
+  rawDataMap,
 }: UseLoadProfileDataProps) {
   const daysArray = Array.from(selectedDays);
   const isWeekend = daysArray.every(d => d === 0 || d === 6);
+
+  // Helper: get raw data for a tenant, preferring the on-demand rawDataMap over the (now empty) inline field
+  const getRawData = (tenant: Tenant): unknown =>
+    (rawDataMap && tenant.scada_import_id ? rawDataMap[tenant.scada_import_id] : undefined)
+    || tenant.scada_imports?.raw_data;
 
   const pvNormalizedProfile = useMemo(() => {
     if (solcastProfile) {
@@ -268,12 +276,12 @@ export function useLoadProfileData({
       const hasValidProfile = (len?: number) => len && [24, 48, 96].includes(len);
       const hasMultiMeter = (t.tenant_meters?.length || 0) > 0 && 
         t.tenant_meters?.some(m => hasValidProfile(m.scada_imports?.load_profile_weekday?.length));
-      const hasRawData = parseRawData(t.scada_imports?.raw_data).length > 0;
+      const hasRawData = parseRawData(getRawData(t)).length > 0;
       if (hasRawData || hasMultiMeter || hasValidProfile(t.scada_imports?.load_profile_weekday?.length)) scadaCount++;
       else estimatedCount++;
     });
     return { tenantsWithScada: scadaCount, tenantsEstimated: estimatedCount };
-  }, [tenants]);
+  }, [tenants, rawDataMap]);
 
   // Calculate daily kWh totals for weekday and weekend (for monthly calculation)
   const { weekdayDailyKwh, weekendDailyKwh } = useMemo(() => {
@@ -284,15 +292,16 @@ export function useLoadProfileData({
       const tenantArea = Number(tenant.area_sqm) || 0;
 
       // Try raw data first for weekday (Mon-Fri = 1,2,3,4,5)
-      const rawPoints = parseRawData(tenant.scada_imports?.raw_data);
+      const tenantRawData = getRawData(tenant);
+      const rawPoints = parseRawData(tenantRawData);
       if (rawPoints.length > 0) {
         const weekdaySet = new Set([1, 2, 3, 4, 5]);
         const weekendSet = new Set([0, 6]);
         const weekdayProfile = computeHourlyFromRawData(
-          tenant.scada_imports?.raw_data, weekdaySet, tenantArea, tenant.scada_imports?.area_sqm
+          tenantRawData, weekdaySet, tenantArea, tenant.scada_imports?.area_sqm
         );
         const weekendProfile = computeHourlyFromRawData(
-          tenant.scada_imports?.raw_data, weekendSet, tenantArea, tenant.scada_imports?.area_sqm
+          tenantRawData, weekendSet, tenantArea, tenant.scada_imports?.area_sqm
         );
         if (weekdayProfile) {
           weekdayTotal += weekdayProfile.reduce((s, v) => s + v, 0);
@@ -366,7 +375,7 @@ export function useLoadProfileData({
     });
     
     return { weekdayDailyKwh: weekdayTotal, weekendDailyKwh: weekendTotal };
-  }, [tenants, shopTypes]);
+  }, [tenants, shopTypes, rawDataMap]);
 
   // Calculate base kW data using raw time-series when available
   const baseChartData = useMemo(() => {
@@ -384,14 +393,15 @@ export function useLoadProfileData({
         let handled = false;
 
         // Priority 1: Raw time-series data (same source as envelope chart)
-        const rawPoints = parseRawData(tenant.scada_imports?.raw_data);
+        const tenantRawData = getRawData(tenant);
+        const rawPoints = parseRawData(tenantRawData);
         if (rawPoints.length > 0) {
           // computeHourlyFromRawData handles day filtering, area scaling, day multipliers,
           // and outage threshold internally. We cache per-tenant to avoid recomputing per hour.
           // Since useMemo runs once, we use a closure-level cache.
           if (!(tenant as any).__rawHourlyCache) {
             (tenant as any).__rawHourlyCache = computeHourlyFromRawData(
-              tenant.scada_imports?.raw_data,
+              tenantRawData,
               selectedDays,
               tenantArea,
               tenant.scada_imports?.area_sqm,
@@ -477,7 +487,7 @@ export function useLoadProfileData({
     });
 
     return hourlyData;
-  }, [tenants, shopTypes, daysArray, selectedDays]);
+  }, [tenants, shopTypes, daysArray, selectedDays, rawDataMap]);
 
   // Apply diversity factor and convert to kVA if needed
   const chartData = useMemo((): ChartDataPoint[] => {
