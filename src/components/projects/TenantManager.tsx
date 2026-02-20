@@ -366,6 +366,15 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
 
   const updateTenantProfile = useMutation({
     mutationFn: async ({ tenantId, scadaImportId }: { tenantId: string; scadaImportId: string | null }) => {
+      // If assigning a profile, first clear it from any other tenant
+      if (scadaImportId) {
+        await supabase
+          .from("project_tenants")
+          .update({ scada_import_id: null })
+          .eq("project_id", projectId)
+          .eq("scada_import_id", scadaImportId)
+          .neq("id", tenantId);
+      }
       const { error } = await supabase
         .from("project_tenants")
         .update({ scada_import_id: scadaImportId })
@@ -1102,7 +1111,13 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedTenants.map((tenant) => {
+              {(() => {
+                const assignedProfileIds = new Set(
+                  sortedTenants
+                    .filter(t => t.scada_import_id)
+                    .map(t => t.scada_import_id!)
+                );
+                return sortedTenants.map((tenant) => {
                 const tenantArea = Number(tenant.area_sqm) || 0;
                 const scadaArea = tenant.scada_imports?.area_sqm || null;
                 const meterCount = tenantMeterCounts[tenant.id] || 0;
@@ -1138,7 +1153,21 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     <TableCell className="font-medium">{getTenantDisplayName(tenant)}</TableCell>
                     <TableCell>{tenantArea.toLocaleString()}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        {assignedProfile && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateTenantProfile.mutate({ tenantId: tenant.id, scadaImportId: null });
+                            }}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                        <div className="flex items-center gap-2">
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button
@@ -1186,7 +1215,9 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                               <CommandList>
                                 <CommandEmpty>No profile found.</CommandEmpty>
                                 <CommandGroup>
-                                  {sortedSuggestions.map(({ profile: meter, matchType }) => (
+                                  {sortedSuggestions
+                                    .filter(({ profile: meter }) => meter.id === tenant.scada_import_id || !assignedProfileIds.has(meter.id))
+                                    .map(({ profile: meter, matchType }) => (
                                     <CommandItem
                                       key={meter.id}
                                       value={`${meter.shop_name || ""} ${meter.site_name || ""} ${meter.area_sqm || ""}`}
@@ -1247,6 +1278,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                             </Tooltip>
                           </TooltipProvider>
                         )}
+                      </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
@@ -1335,7 +1367,8 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     </TableCell>
                   </TableRow>
                 );
-              })}
+               });
+              })()}
             </TableBody>
           </Table>
         </Card>
