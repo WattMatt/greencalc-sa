@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Upload, Trash2, Download, Pencil, RotateCcw, Settings2 } from "lucide-react";
+import { Plus, Upload, Trash2, Pencil, RotateCcw, Settings2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Switch } from "@/components/ui/switch";
@@ -569,16 +569,6 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     setColumnMapperData(null);
   }, [projectId, queryClient]);
 
-  const downloadTemplate = () => {
-    const csv = "shop_number,shop_name,area_sqm\nG12,Woolworths,850\nG15,Pick n Pay,1200\nL01,Cape Union Mart,320\n";
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "tenant_template.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   const totalArea = tenants.reduce((sum, t) => sum + Number(t.area_sqm), 0);
   const totalMonthlyKwh = tenants.reduce((sum, t) => {
@@ -612,14 +602,6 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={downloadTemplate}>
-            <Download className="h-4 w-4 mr-2" />
-            Template
-          </Button>
-          <Button variant="outline" onClick={() => setWizardOpen(true)}>
-            <Upload className="h-4 w-4 mr-2" />
-            Import
-          </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -776,6 +758,10 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
               </div>
             </DialogContent>
           </Dialog>
+          <Button variant="outline" onClick={() => setWizardOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import Data
+          </Button>
         </div>
       </div>
 
