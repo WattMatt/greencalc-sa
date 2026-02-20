@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,8 @@ interface Tenant {
   shop_type_id: string | null;
   scada_import_id: string | null;
   monthly_kwh_override: number | null;
+  include_in_load_profile: boolean;
+  is_virtual: boolean;
   shop_types?: { name: string; kwh_per_sqm_month: number } | null;
   scada_imports?: { shop_name: string | null; area_sqm: number | null; load_profile_weekday: number[] | null } | null;
   // Multi-meter support
@@ -439,6 +442,20 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
       toast.success("Tenant updated");
       setEditTenant(null);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const updateTenantIncludeInProfile = useMutation({
+    mutationFn: async ({ tenantId, include }: { tenantId: string; include: boolean }) => {
+      const { error } = await supabase
+        .from("project_tenants")
+        .update({ include_in_load_profile: include } as any)
+        .eq("id", tenantId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -1147,7 +1164,9 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     )}
                   </button>
                 </TableHead>
+                <TableHead className="text-center w-[80px]">Include</TableHead>
                 <TableHead className="text-center">Source</TableHead>
+                <TableHead className="text-center w-[80px]">Type</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -1354,6 +1373,14 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                       />
                     </TableCell>
                     <TableCell className="text-center">
+                      <Checkbox
+                        checked={tenant.include_in_load_profile !== false}
+                        onCheckedChange={(checked) =>
+                          updateTenantIncludeInProfile.mutate({ tenantId: tenant.id, include: !!checked })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
                       <AccuracyBadge 
                         level={meterCount > 1 
                           ? "actual" 
@@ -1363,6 +1390,11 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                             )} 
                         showIcon={true}
                       />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={tenant.is_virtual ? "outline" : "secondary"} className="text-xs">
+                        {tenant.is_virtual ? "Virtual" : "Actual"}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
