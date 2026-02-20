@@ -1,48 +1,31 @@
 
 
-## Fix: Restore Bidirectional Checkbox Toggle with Proper Sync
+## Fix: Envelope Chart Not Respecting Tenant Inclusion Filter
 
 ### Problem
-The previous edit removed the schematic checkbox click handler but left the checkboxes looking interactive. The user wants to toggle from **both** the Tenants table and the Schematic view, with changes propagating instantly between them.
+The Envelope Chart (Min/Max/Average) includes data from **all** tenants, ignoring the `include_in_load_profile` flag. This was fixed for the main Load Profile chart but never applied to the envelope hook. The result is a massively inflated band because:
+- Excluded tenants contribute data on some dates but not others
+- Dates with partial tenant coverage produce artificially low sums (the near-zero min line)
+- Dates with full coverage show the real total (the ~1.9k max line)
 
 ### Solution
-Re-add the `mouse:down` click handler in `SchematicEditor.tsx` that toggles `include_in_load_profile` in the database, and add proper cache invalidation so the Tenants table picks up the change. Also add an optimistic update to the Tenants table mutation so it feels instant.
+Apply the same `include_in_load_profile` filter to `useEnvelopeData` that was added to `useLoadProfileData`.
 
 ### Technical Details
 
-**File 1: `src/components/schematic/SchematicEditor.tsx`**
+**File: `src/components/projects/load-profile/hooks/useEnvelopeData.ts`**
 
-1. **Re-import `useQueryClient`** from `@tanstack/react-query` (was removed in previous edit).
+Add a single filter at the top of the hook, then use the filtered list everywhere:
 
-2. **Re-add `useQueryClient()` hook call** inside the component.
+```typescript
+const includedTenants = tenants.filter(t => t.include_in_load_profile !== false);
+```
 
-3. **Re-add `mouse:down` event handler** after the checkbox rendering `useEffect` (around line 758). This handler will:
-   - Detect clicks on objects marked `isProfileCheckbox`
-   - Look up the linked meter ID in `tenantProfileMap`
-   - Optimistically toggle the local state
-   - Update the database via Supabase
-   - On success: invalidate the `["project-tenants", projectId]` query so the Tenants tab refreshes
-   - On error: roll back the optimistic local state and show a toast
+Replace all references to `tenants` in the two `useMemo` blocks (lines 26-40 for `availableYears` and lines 48-133 for `envelopeData`) with `includedTenants`.
 
-4. **Keep checkbox overlays as `evented: true, hoverCursor: 'pointer'`** (they already are -- no change needed).
-
-**File 2: `src/components/projects/TenantManager.tsx`**
-
-5. **Add optimistic update** to the existing `updateTenantIncludeInProfile` mutation (around line 449):
-   - `onMutate`: Cancel outgoing queries, snapshot current cache, immediately set new value in TanStack Query cache
-   - `onError`: Roll back to snapshot
-   - `onSettled`: Invalidate to ensure consistency
-
-   This makes the Tenants table checkbox toggle feel instant instead of waiting for the network round-trip.
-
-### Changes Summary
-
-| File | Change |
-|------|--------|
-| `SchematicEditor.tsx` | Re-add `useQueryClient` import and hook; re-add `mouse:down` handler with optimistic local state + DB update + query invalidation |
-| `TenantManager.tsx` | Add optimistic update pattern to `updateTenantIncludeInProfile` mutation for instant UI feedback |
+This ensures the envelope chart only shows the min/max/avg spread for the same set of tenants that appear in the main load profile, producing a meaningful and consistent envelope.
 
 ### Result
-- Schematic view: clicking a checkbox toggles it instantly (optimistic local state), writes to the database, and invalidates the Tenants query
-- Tenants table: clicking a checkbox toggles it instantly (optimistic cache update), writes to the database
-- Switching tabs: the `isActive` effect already refetches `tenantProfileMap` when the Schematic tab becomes active, so it picks up any changes made in the Tenants tab
+- The envelope band will tighten significantly, showing realistic variation across included tenants only
+- Min, max, and average lines will be consistent with the main load profile chart
+- Excluded tenants (e.g., virtual check meters) will no longer distort the statistics
