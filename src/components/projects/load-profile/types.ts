@@ -26,6 +26,7 @@ export interface Tenant {
   shop_type_id: string | null;
   scada_import_id: string | null;
   monthly_kwh_override: number | null;
+  include_in_load_profile?: boolean;
   shop_types?: {
     name: string;
     kwh_per_sqm_month: number;

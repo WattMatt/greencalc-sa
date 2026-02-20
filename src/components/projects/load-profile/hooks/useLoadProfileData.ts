@@ -250,6 +250,12 @@ export function useLoadProfileData({
   diversityFactor = 1.0,
   rawDataMap,
 }: UseLoadProfileDataProps) {
+  // Filter out tenants excluded from load profile
+  const includedTenants = useMemo(() => 
+    tenants.filter(t => t.include_in_load_profile !== false),
+    [tenants]
+  );
+
   const daysArray = Array.from(selectedDays);
   const isWeekend = daysArray.every(d => d === 0 || d === 6);
 
@@ -272,7 +278,7 @@ export function useLoadProfileData({
   const { tenantsWithScada, tenantsEstimated } = useMemo(() => {
     let scadaCount = 0;
     let estimatedCount = 0;
-    tenants.forEach((t) => {
+    includedTenants.forEach((t) => {
       const hasValidProfile = (len?: number) => len && [24, 48, 96].includes(len);
       const hasMultiMeter = (t.tenant_meters?.length || 0) > 0 && 
         t.tenant_meters?.some(m => hasValidProfile(m.scada_imports?.load_profile_weekday?.length));
@@ -281,14 +287,14 @@ export function useLoadProfileData({
       else estimatedCount++;
     });
     return { tenantsWithScada: scadaCount, tenantsEstimated: estimatedCount };
-  }, [tenants, rawDataMap]);
+  }, [includedTenants, rawDataMap]);
 
   // Calculate daily kWh totals for weekday and weekend (for monthly calculation)
   const { weekdayDailyKwh, weekendDailyKwh } = useMemo(() => {
     let weekdayTotal = 0;
     let weekendTotal = 0;
     
-    tenants.forEach((tenant) => {
+    includedTenants.forEach((tenant) => {
       const tenantArea = Number(tenant.area_sqm) || 0;
 
       // Try raw data first for weekday (Mon-Fri = 1,2,3,4,5)
@@ -375,7 +381,7 @@ export function useLoadProfileData({
     });
     
     return { weekdayDailyKwh: weekdayTotal, weekendDailyKwh: weekendTotal };
-  }, [tenants, shopTypes, rawDataMap]);
+  }, [includedTenants, shopTypes, rawDataMap]);
 
   // Calculate base kW data using raw time-series when available
   const baseChartData = useMemo(() => {
@@ -385,7 +391,7 @@ export function useLoadProfileData({
       const hourLabel = `${h.toString().padStart(2, "0")}:00`;
       const hourData: { hour: string; total: number; [key: string]: number | string } = { hour: hourLabel, total: 0 };
 
-      tenants.forEach((tenant) => {
+      includedTenants.forEach((tenant) => {
         const tenantArea = Number(tenant.area_sqm) || 0;
         const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
 
@@ -482,12 +488,12 @@ export function useLoadProfileData({
     }
 
     // Clean up the temporary cache we added to tenant objects
-    tenants.forEach((tenant) => {
+    includedTenants.forEach((tenant) => {
       delete (tenant as any).__rawHourlyCache;
     });
 
     return hourlyData;
-  }, [tenants, shopTypes, daysArray, selectedDays, rawDataMap]);
+  }, [includedTenants, shopTypes, daysArray, selectedDays, rawDataMap]);
 
   // Apply diversity factor and convert to kVA if needed
   const chartData = useMemo((): ChartDataPoint[] => {
