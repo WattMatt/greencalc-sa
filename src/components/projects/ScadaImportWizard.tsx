@@ -284,12 +284,45 @@ export function ScadaImportWizard({
 
   const deleteImportMutation = useMutation({
     mutationFn: async (importId: string) => {
-      const { error } = await supabase.from("scada_imports").delete().eq("id", importId);
+      // Get the import record first (need file_name for storage cleanup)
+      const { data: imp } = await supabase
+        .from("scada_imports")
+        .select("file_name")
+        .eq("id", importId)
+        .single();
+
+      // 1. Clear tenant references
+      await supabase
+        .from("project_tenants")
+        .update({ scada_import_id: null })
+        .eq("scada_import_id", importId);
+
+      // 2. Remove file from storage
+      if (imp?.file_name) {
+        const { data: files } = await supabase.storage
+          .from("scada-csvs")
+          .list(projectId);
+        const matches = (files || []).filter(f =>
+          f.name.endsWith(`_${imp.file_name}`)
+        );
+        if (matches.length > 0) {
+          await supabase.storage
+            .from("scada-csvs")
+            .remove(matches.map(f => `${projectId}/${f.name}`));
+        }
+      }
+
+      // 3. Delete the DB record
+      const { error } = await supabase
+        .from("scada_imports")
+        .delete()
+        .eq("id", importId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["existing-scada-imports", projectId] });
-      toast.success("Import record deleted");
+      queryClient.invalidateQueries({ queryKey: ["project-tenants"] });
+      toast.success("Import and associated data deleted");
     },
     onError: (err: Error) => {
       toast.error(`Failed to delete: ${err.message}`);
@@ -619,7 +652,11 @@ export function ScadaImportWizard({
                                 variant="ghost"
                                 size="icon"
                                 className="h-6 w-6"
-                                onClick={() => deleteImportMutation.mutate(imp.id)}
+                                onClick={() => {
+                                  if (confirm("Delete this import? This will also remove the uploaded file and unlink any assigned tenants.")) {
+                                    deleteImportMutation.mutate(imp.id);
+                                  }
+                                }}
                                 disabled={deleteImportMutation.isPending}
                               >
                                 <Trash2 className="h-3 w-3 text-destructive" />
