@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Canvas as FabricCanvas, Circle, Line, FabricImage, Rect, Point, Polyline, FabricText } from "fabric";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -154,6 +155,7 @@ async function createMeterCardImage(
 }
 
 export default function SchematicEditor({ schematicId, schematicUrl, projectId, isActive }: SchematicEditorProps) {
+  const queryClient = useQueryClient();
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -757,6 +759,51 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
     return () => clearTimeout(timeout);
   }, [fabricCanvas, isInitialDataLoaded, isCanvasReady, showMeterCards, meterPositions, tenantProfileMap]);
 
+  // Handle checkbox clicks on schematic to toggle include_in_load_profile
+  useEffect(() => {
+    if (!fabricCanvas) return;
+
+    const handler = async (opt: any) => {
+      const target = opt.target;
+      if (!target || !(target as any).isProfileCheckbox) return;
+
+      const meterId = (target as any).linkedMeterId;
+      if (!meterId) return;
+
+      const tenantInfo = tenantProfileMap[meterId];
+      if (!tenantInfo) return;
+
+      const newValue = !tenantInfo.include;
+
+      // Optimistically update local state
+      setTenantProfileMap(prev => ({
+        ...prev,
+        [meterId]: { ...prev[meterId], include: newValue }
+      }));
+
+      try {
+        const { error } = await supabase
+          .from("project_tenants")
+          .update({ include_in_load_profile: newValue } as any)
+          .eq("id", tenantInfo.tenantId);
+
+        if (error) throw error;
+
+        // Invalidate tenants query so TenantManager picks up the change
+        queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
+      } catch (err: any) {
+        // Roll back optimistic update
+        setTenantProfileMap(prev => ({
+          ...prev,
+          [meterId]: { ...prev[meterId], include: !newValue }
+        }));
+        toast.error("Failed to update: " + (err.message || "Unknown error"));
+      }
+    };
+
+    fabricCanvas.on('mouse:down', handler);
+    return () => { fabricCanvas.off('mouse:down', handler); };
+  }, [fabricCanvas, tenantProfileMap, projectId, queryClient]);
 
   // Render connection lines
   useEffect(() => {
