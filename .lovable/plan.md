@@ -1,26 +1,31 @@
 
 
-## Add CSV Import Button to Add Tenant Dialog
+## Fix TenantColumnMapper -- Make Area Optional
 
-### What Changes
-Add an "Import CSV" button inside the "Add Tenant" dialog header, next to the title. When clicked, it opens a file picker for `.csv` files. Once a file is selected, the dialog closes and the existing `TenantColumnMapper` opens for column assignment (Shop Number, Shop Name, Area) and bulk import.
+### Problem
+The CSV file has "-" (dashes) in the Area column, meaning no area data is available. The current validation requires both Shop Name AND Area with `area > 0`, causing all 49 rows to fail validation and showing "0 valid tenants".
 
-### File: `src/components/projects/TenantManager.tsx`
+### Solution
+Make Area optional in the column mapper. When area is missing or invalid (like "-"), import the tenant with `area_sqm: 0` (or null) instead of rejecting the row entirely.
 
-1. **Add a `useRef<HTMLInputElement>`** for a hidden file input element.
+### Changes
 
-2. **Add a hidden `<input type="file" accept=".csv">`** in the component body, wired to the ref.
+**File: `src/components/projects/TenantColumnMapper.tsx`**
 
-3. **Update the `DialogHeader`** to use a flex layout with the "Add Tenant" title on the left and a small "Import CSV" button (with Upload icon) on the right.
+1. **Change `canImport` condition** -- only require `shop_name` to be mapped (remove area requirement):
+   - `const canImport = roleColumns.shop_name !== null;` (was: `roleColumns.shop_name !== null && roleColumns.area !== null`)
 
-4. **CSV file handler**: When a file is selected:
-   - Read the file text content via `FileReader`
-   - Split into lines, then split each line by comma
-   - Extract headers from row 0, data rows from row 1+
-   - Close the Add Tenant dialog (`setDialogOpen(false)`)
-   - Set `columnMapperData` with parsed headers/rows
-   - Open `columnMapperOpen` to show the existing `TenantColumnMapper`
-   - Reset the file input value so the same file can be re-selected
+2. **Update `handleImport`** -- handle missing/invalid area gracefully:
+   - If no area column is mapped, set `area_sqm: 0`
+   - If area column is mapped but value is "-" or invalid, set `area_sqm: 0`
+   - Remove the `area > 0` check from the row validation -- only require a non-empty shop name
 
-No new files. No new dependencies. No database changes. The existing `TenantColumnMapper` and `handleMappedImport` handle everything from there.
+3. **Update `validCount` memo** -- same logic: count rows with a valid shop name regardless of area
+
+4. **Update description text** -- change "Shop Name and Area are required" to "Shop Name is required. Area is optional."
+
+5. **Update the footer hint** -- change "Assign Shop Name and Area to continue" to "Assign Shop Name to continue"
+
+### Result
+All 49 rows with valid shop names will import successfully. Tenants without area data will get `area_sqm: 0`, which can be edited later.
 
