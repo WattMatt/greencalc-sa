@@ -1,38 +1,96 @@
 
 
-## Fix: Sanitise Filenames Before Storage Upload
+## Improve Tenant Profile Assignment UX
 
-### Problem
-The file "SM 4 [Kiosk ] Bulk meter .xlsx" fails to upload because square brackets (`[` and `]`) and spaces are invalid characters in storage keys. The upload code on line 537 of `ScadaImportWizard.tsx` uses the raw filename directly:
+Three changes to the tenant profile assignment dropdown in `TenantManager.tsx`:
 
-```
-const path = `${projectId}/${Date.now()}_${f.name}`;
-```
+### 1. Auto-clear previous tenant when reassigning a meter
 
-This causes an "Invalid key" error from storage for any filename containing special characters.
+Currently, if Meter A is assigned to Tenant 1 and you then assign Meter A to Tenant 2, Tenant 1 still keeps Meter A in its `scada_import_id`. The `updateTenantProfile` mutation will be updated to first clear any other tenant that currently has the same `scadaImportId` before assigning it to the new tenant.
 
-### Fix
+### 2. Hide already-assigned meters from the dropdown
 
-**File: `src/components/projects/ScadaImportWizard.tsx` (line 537)**
+Meters that are already assigned to other tenants should not appear in the profile dropdown. The `getSortedProfilesWithSuggestions` call will be wrapped with a filter that excludes profiles whose ID matches any other tenant's `scada_import_id` (but still shows the currently assigned profile for that specific tenant row).
 
-Add a single line to sanitise the filename before building the storage path. Replace all characters that are not alphanumeric, hyphens, underscores, or dots with underscores:
+### 3. Add a small X button to clear a specific assignment
+
+To the left of the "Sort by" label (or next to the profile name in the trigger button), add a small X icon button that clears the assignment for that tenant. This calls `updateTenantProfile.mutate({ tenantId, scadaImportId: null })`.
+
+---
+
+### Technical Details
+
+**File: `src/components/projects/TenantManager.tsx`**
+
+**Change 1 -- Auto-clear on reassignment (lines 367-379):**
+
+Update the `updateTenantProfile` mutation to first nullify `scada_import_id` on any other tenant that currently holds the same profile, then assign it to the new tenant:
 
 ```typescript
-// Before:
-const path = `${projectId}/${Date.now()}_${f.name}`;
-
-// After:
-const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-const path = `${projectId}/${Date.now()}_${safeName}`;
+const updateTenantProfile = useMutation({
+  mutationFn: async ({ tenantId, scadaImportId }: { tenantId: string; scadaImportId: string | null }) => {
+    // If assigning a profile, first clear it from any other tenant
+    if (scadaImportId) {
+      await supabase
+        .from("project_tenants")
+        .update({ scada_import_id: null })
+        .eq("project_id", projectId)
+        .eq("scada_import_id", scadaImportId)
+        .neq("id", tenantId);
+    }
+    const { error } = await supabase
+      .from("project_tenants")
+      .update({ scada_import_id: scadaImportId })
+      .eq("id", tenantId);
+    if (error) throw error;
+  },
+  // ...existing callbacks
+});
 ```
 
-This converts `SM 4 [Kiosk ] Bulk meter .xlsx` into `SM_4__Kiosk___Bulk_meter_.xlsx` for the storage key only. The original human-readable filename is still stored in the database record via `f.name` for display purposes.
+**Change 2 -- Filter assigned profiles from dropdown (around line 1126-1133):**
 
-### What This Does NOT Change
-- The parsing logic -- the Excel file's date format (`08 Nov 2022 04:00`) is already supported by the existing text-based month name parser.
-- The database record -- it still stores the original filename for display.
-- Any other upload behaviour.
+Compute a set of already-assigned profile IDs from all tenants, then filter `sortedSuggestions` to exclude profiles assigned to *other* tenants:
+
+```typescript
+// Compute once above the map loop (around line 1104)
+const assignedProfileIds = new Set(
+  sortedTenants
+    .filter(t => t.scada_import_id)
+    .map(t => t.scada_import_id!)
+);
+
+// Inside the loop, filter suggestions for this tenant's dropdown
+const filteredSuggestions = sortedSuggestions.filter(
+  ({ profile }) => profile.id === tenant.scada_import_id || !assignedProfileIds.has(profile.id)
+);
+```
+
+**Change 3 -- Add X clear button next to the profile trigger (around line 1141-1224):**
+
+Add a small X button next to the combobox trigger that appears only when a profile is assigned:
+
+```typescript
+<div className="flex items-center gap-1">
+  {assignedProfile && (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-6 w-6 shrink-0"
+      onClick={(e) => {
+        e.stopPropagation();
+        updateTenantProfile.mutate({ tenantId: tenant.id, scadaImportId: null });
+      }}
+    >
+      <X className="h-3 w-3" />
+    </Button>
+  )}
+  <Popover>
+    {/* ...existing combobox */}
+  </Popover>
+</div>
+```
 
 ### Files Modified
-- `src/components/projects/ScadaImportWizard.tsx` -- one line added to sanitise the filename before the storage upload call.
+- `src/components/projects/TenantManager.tsx` -- three targeted changes as described above.
 
