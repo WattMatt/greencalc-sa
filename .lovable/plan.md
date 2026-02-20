@@ -1,39 +1,45 @@
 
 
-## Add Auto-Match Refresh Button to Tenant Table
+## Fix: Auto-Match Should Extract Numbers from Profile Names
 
-### Overview
-A small refresh icon will be added immediately to the right of the Load Profile toggle switch. Clicking it will automatically scan all unassigned tenants and match them to the best available SCADA profile based on the current toggle scope (global vs local).
+### Problem
+The SCADA import is named "AC Shop 2" with **no `shop_number` field**. All tenants are named "AC Shop" with different shop numbers (2, 18, 30, etc.). The current logic only compares `tenant.shop_number` against `profile.shop_number` -- but the profile's `shop_number` is null. It falls through to the fuzzy name matcher, which gives **equal scores to all "AC Shop" tenants** since they all substring-match "AC Shop 2". The greedy sort then arbitrarily picks shop 30 instead of shop 2.
 
-### Matching Rules
+### Fix
 
-**Global scope** (toggle off): For each unassigned tenant, find the SCADA import with the highest name-match confidence (using the existing `getProfileSuggestions` logic). Multiple tenants can share the same global profile, so no deduplication is needed -- just pick the best match per tenant.
+**File: `src/components/projects/TenantManager.tsx` -- `autoMatchProfiles` function (around line 465)**
 
-**Local scope** (toggle on): Each local SCADA import (project-scoped) can only be assigned to **one** tenant. The matcher will greedily assign the highest-confidence matches first and remove used profiles from the pool to prevent double-assignment.
+Add a new matching step: when the profile has no explicit `shop_number`, extract trailing numbers from the profile's `shop_name` or `site_name` and compare them against the tenant's `shop_number`.
 
-In both modes, only matches with a confidence score of 60 or above will be auto-assigned. Additionally, `shop_number` will be checked as a secondary match signal (exact match on `shop_number` yields a score of 95).
+The logic (inserted right after the existing `shop_number` check at line 476, before the `getProfileSuggestions` fallback):
 
-### UI Change
-- Add a `RefreshCw` icon (from lucide-react) as a ghost button, placed right after the `</TooltipProvider>` inside the existing `<div className="flex items-center gap-3">` wrapper on the Load Profile header column.
-- Wrapped in a Tooltip showing "Auto-match profiles to tenants".
-- While running, the icon gets the `animate-spin` class.
+```typescript
+// If profile has no shop_number, try extracting a number from the profile name
+// e.g. "AC Shop 2" -> "2", "Shop 23A" -> "23A"
+if (score === 0 && tenant.shop_number) {
+  const profileLabel = profile.shop_name || profile.site_name || '';
+  // Extract trailing number/alphanumeric identifier from profile name
+  const profileTrailingMatch = profileLabel.match(/[\s_\-](\d+[A-Za-z]?)$/);
+  if (profileTrailingMatch) {
+    const extractedId = profileTrailingMatch[1];
+    const tenantShopTrimmed = tenant.shop_number.trim();
+    // Exact string match (case-insensitive)
+    if (extractedId.toLowerCase() === tenantShopTrimmed.toLowerCase()) {
+      score = 93; // High confidence, slightly below explicit shop_number match
+    } else {
+      // Try numeric comparison (e.g. "2" == "2.0")
+      const extractedNum = parseFloat(extractedId);
+      const tenantNum = parseFloat(tenantShopTrimmed);
+      if (!isNaN(extractedNum) && !isNaN(tenantNum) && extractedNum === tenantNum) {
+        score = 93;
+      }
+    }
+  }
+}
+```
 
-### Technical Details
-
-**File: `src/components/projects/TenantManager.tsx`**
-
-1. **Import**: Add `RefreshCw` to the lucide-react import on line 10.
-2. **State**: Add `const [autoMatching, setAutoMatching] = useState(false);`.
-3. **Auto-match function** (`autoMatchProfiles`):
-   - Filter tenants to only those with `scada_import_id === null`.
-   - For each unassigned tenant, call `getProfileSuggestions(tenantName, availableProfiles)` and also check `shop_number` match.
-   - Pick the top match with score >= 60.
-   - **If local scope**: track used profile IDs and exclude them from subsequent matching (one-to-one).
-   - **If global scope**: no deduplication needed (many-to-one is fine).
-   - Batch-update all matched tenants via individual `supabase.from("project_tenants").update({ scada_import_id }).eq("id", tenantId)` calls.
-   - Invalidate query cache and show a summary toast: "Auto-matched X of Y unassigned tenants".
-4. **UI insertion** (around line 902): Add the refresh button right after the closing `</TooltipProvider>` tag, inside the existing flex wrapper.
+This ensures "AC Shop 2" matches tenant with `shop_number = "2"` at score 93, while "AC Shop 30" would only match tenant `shop_number = "30"`.
 
 ### Files Modified
-- `src/components/projects/TenantManager.tsx` -- add RefreshCw button, auto-match state, and matching logic
+- `src/components/projects/TenantManager.tsx` -- add number-extraction matching step in `autoMatchProfiles`
 
