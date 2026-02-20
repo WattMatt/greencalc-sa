@@ -80,8 +80,9 @@ const snapToNearestMeterAxis = (
   canvas.getObjects().forEach((obj: any) => {
     if (!obj.isMeterCard) return;
     if (excludeMeterId && obj.meterId === excludeMeterId) return;
-    const cx = obj.left + (obj.width * (obj.scaleX || 1)) / 2;
-    const cy = obj.top + (obj.height * (obj.scaleY || 1)) / 2;
+    // Cards use originX/Y: 'center', so obj.left/top IS the centre
+    const cx = obj.left;
+    const cy = obj.top;
     const dx = Math.abs(pointer.x - cx);
     const dy = Math.abs(pointer.y - cy);
     if (dx < minDx) { minDx = dx; bestX = cx; }
@@ -500,36 +501,84 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
       }
     });
 
-    // Node dragging updates connected lines
+    // Object moving - handle connection node dragging AND meter card Shift-snapping
     canvas.on('object:moving', (opt) => {
-      if (!opt.target || !(opt.target as any).isConnectionNode) return;
-      const node = opt.target as Circle;
-      const connected = (node as any).connectedLines as Line[];
-      if (!connected) return;
-      connected.forEach((line, index) => {
-        if (connected.length === 1) {
-          const d1 = Math.sqrt(Math.pow((line.x1 || 0) - node.left!, 2) + Math.pow((line.y1 || 0) - node.top!, 2));
-          const d2 = Math.sqrt(Math.pow((line.x2 || 0) - node.left!, 2) + Math.pow((line.y2 || 0) - node.top!, 2));
-          if (d2 < d1) line.set({ x2: node.left, y2: node.top });
-          else line.set({ x1: node.left, y1: node.top });
+      const target = opt.target;
+      if (!target) return;
+
+      // Connection node dragging
+      if ((target as any).isConnectionNode) {
+        const node = target as Circle;
+        const connected = (node as any).connectedLines as Line[];
+        if (!connected) return;
+        connected.forEach((line, index) => {
+          if (connected.length === 1) {
+            const d1 = Math.sqrt(Math.pow((line.x1 || 0) - node.left!, 2) + Math.pow((line.y1 || 0) - node.top!, 2));
+            const d2 = Math.sqrt(Math.pow((line.x2 || 0) - node.left!, 2) + Math.pow((line.y2 || 0) - node.top!, 2));
+            if (d2 < d1) line.set({ x2: node.left, y2: node.top });
+            else line.set({ x1: node.left, y1: node.top });
+          } else {
+            if (index === 0) line.set({ x2: node.left, y2: node.top });
+            else line.set({ x1: node.left, y1: node.top });
+          }
+        });
+        canvas.renderAll();
+        return;
+      }
+
+      // Meter card Shift-snap: snap to nearest meter's horizontal/vertical axis
+      if ((target as any).isMeterCard) {
+        const lastEvt = (opt as any).e as MouseEvent | undefined;
+        if (lastEvt && lastEvt.shiftKey) {
+          const origX = target.left || 0;
+          const origY = target.top || 0;
+          const snapped = snapToNearestMeterAxis(canvas, { x: origX, y: origY }, (target as any).meterId);
+          target.set({ left: snapped.x, top: snapped.y });
+
+          // Remove old axis guides and draw new ones
+          canvas.getObjects().filter((o: any) => o.isAxisGuide).forEach(o => canvas.remove(o));
+          const cw = canvasDimensions.width;
+          const ch = canvasDimensions.height;
+          // Show vertical guide if X was snapped
+          if (Math.abs(snapped.x - origX) > 1) {
+            const vLine = new Line([snapped.x, 0, snapped.x, ch], {
+              stroke: '#3b82f6', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.5,
+            });
+            (vLine as any).isAxisGuide = true;
+            canvas.add(vLine);
+          }
+          // Show horizontal guide if Y was snapped
+          if (Math.abs(snapped.y - origY) > 1) {
+            const hLine = new Line([0, snapped.y, cw, snapped.y], {
+              stroke: '#3b82f6', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.5,
+            });
+            (hLine as any).isAxisGuide = true;
+            canvas.add(hLine);
+          }
         } else {
-          if (index === 0) line.set({ x2: node.left, y2: node.top });
-          else line.set({ x1: node.left, y1: node.top });
+          canvas.getObjects().filter((o: any) => o.isAxisGuide).forEach(o => canvas.remove(o));
         }
-      });
-      canvas.renderAll();
+        canvas.renderAll();
+      }
     });
 
-    // Meter card drag saves position
+    // Clean up axis guides when drag ends
     canvas.on('object:modified', (e) => {
+      canvas.getObjects().filter((o: any) => o.isAxisGuide).forEach(o => canvas.remove(o));
+      canvas.renderAll();
       const obj = e.target;
-      if (obj && obj.type === 'image' && (obj as any).data?.meterId) {
-        const cw = canvas.getWidth();
-        const ch = canvas.getHeight();
+      if (obj && (obj as any).isMeterCard && (obj as any).data?.meterId) {
+        const cw = canvasDimensions.width;
+        const ch = canvasDimensions.height;
         const xPct = ((obj.left || 0) / cw) * 100;
         const yPct = ((obj.top || 0) / ch) * 100;
         const posId = (obj as any).data?.positionId;
+        const meterId = (obj as any).data?.meterId;
         if (posId) {
+          // Update local state so re-renders use the new position
+          setMeterPositions(prev => prev.map(p => 
+            p.id === posId ? { ...p, x_position: xPct, y_position: yPct } : p
+          ));
           supabase.from('project_schematic_meter_positions').update({ x_position: xPct, y_position: yPct }).eq('id', posId)
             .then(({ error }) => { if (error) toast.error('Failed to save position'); else toast.success('Position saved'); });
         }
@@ -775,12 +824,12 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
     if (!fabricCanvas) return;
     setIsSaving(true);
     try {
-      // Collect current positions from canvas objects
+      // Collect current positions from canvas objects using base dimensions (not zoomed)
+      const cw = canvasDimensions.width;
+      const ch = canvasDimensions.height;
       const updates: PromiseLike<any>[] = [];
       fabricCanvas.getObjects().forEach((obj: any) => {
         if (obj.isMeterCard && obj.data?.positionId) {
-          const cw = fabricCanvas.getWidth();
-          const ch = fabricCanvas.getHeight();
           const xPct = ((obj.left || 0) / cw) * 100;
           const yPct = ((obj.top || 0) / ch) * 100;
           updates.push(
@@ -791,6 +840,8 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
         }
       });
       await Promise.all(updates);
+      // Refresh positions from DB to ensure consistency
+      await fetchMeterPositions();
       toast.success("Schematic saved");
     } catch (err) {
       toast.error("Failed to save schematic");
