@@ -1153,21 +1153,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     <TableCell className="font-medium">{getTenantDisplayName(tenant)}</TableCell>
                     <TableCell>{tenantArea.toLocaleString()}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        {assignedProfile && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 shrink-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateTenantProfile.mutate({ tenantId: tenant.id, scadaImportId: null });
-                            }}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button
@@ -1187,7 +1173,22 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                           </PopoverTrigger>
                           <PopoverContent className="w-[340px] p-0" align="start">
                             <div className="flex items-center justify-between px-3 py-2 border-b">
-                              <span className="text-xs text-muted-foreground">Sort by:</span>
+                              <div className="flex items-center gap-1">
+                                {assignedProfile && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 shrink-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      updateTenantProfile.mutate({ tenantId: tenant.id, scadaImportId: null });
+                                    }}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                )}
+                                <span className="text-xs text-muted-foreground">Sort by:</span>
+                              </div>
                               <div className="flex gap-1">
                                 <Button 
                                   variant={sortByArea ? "ghost" : "secondary"} 
@@ -1278,7 +1279,6 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                             </Tooltip>
                           </TooltipProvider>
                         )}
-                      </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
