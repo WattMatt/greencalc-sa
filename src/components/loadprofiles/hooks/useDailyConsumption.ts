@@ -40,6 +40,11 @@ interface UseDailyConsumptionResult {
 }
 
 // Parse various date formats
+const MONTH_NAMES: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+};
+
 function parseDateTime(timestamp?: string, date?: string, time?: string): { date: Date; hour: number; minute: number } | null {
   // Try timestamp first
   if (timestamp) {
@@ -47,6 +52,17 @@ function parseDateTime(timestamp?: string, date?: string, time?: string): { date
     if (timestamp.includes('T')) {
       const d = parseISO(timestamp);
       if (isValid(d)) return { date: d, hour: d.getHours(), minute: d.getMinutes() };
+    }
+    
+    // Try "DD Mon YYYY HH:mm" format (e.g. "09 Nov 2022 11:00")
+    const textMonthMatch = timestamp.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (textMonthMatch) {
+      const [, dayStr, monStr, yearStr, hourStr, minStr] = textMonthMatch;
+      const monthIdx = MONTH_NAMES[monStr.toLowerCase()];
+      if (monthIdx !== undefined) {
+        const d = new Date(parseInt(yearStr), monthIdx, parseInt(dayStr), parseInt(hourStr), parseInt(minStr));
+        if (isValid(d)) return { date: d, hour: parseInt(hourStr), minute: parseInt(minStr) };
+      }
     }
     
     // Try DD/MM/YYYY HH:mm:ss or YYYY-MM-DD HH:mm:ss format
@@ -77,6 +93,17 @@ function parseDateTime(timestamp?: string, date?: string, time?: string): { date
   if (date) {
     const dateTimeStr = time ? `${date} ${time}` : date;
     
+    // DD Mon YYYY format
+    const textMonthMatch = dateTimeStr.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (textMonthMatch) {
+      const [, dayStr, monStr, yearStr, hourStr, minStr] = textMonthMatch;
+      const monthIdx = MONTH_NAMES[monStr.toLowerCase()];
+      if (monthIdx !== undefined) {
+        const d = new Date(parseInt(yearStr), monthIdx, parseInt(dayStr), parseInt(hourStr || '0'), parseInt(minStr || '0'));
+        if (isValid(d)) return { date: d, hour: parseInt(hourStr || '0'), minute: parseInt(minStr || '0') };
+      }
+    }
+    
     // DD/MM/YYYY format
     const match = dateTimeStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
     if (match) {
@@ -101,7 +128,8 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
     const line = lines[i].toLowerCase();
     // Check if this line contains typical header column names
     if (line.includes('time') || line.includes('date') || line.includes('rdate') || 
-        line.includes('kwh') || line.includes('timestamp')) {
+        line.includes('kwh') || line.includes('timestamp') || line.includes('from') ||
+        line.includes('periods')) {
       headerIdx = i;
       break;
     }
@@ -117,7 +145,8 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
   
   // Look for date/time column - include 'time' as a valid column name
   const dateCol = headers.findIndex(h => 
-    h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate')
+    h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate') ||
+    h === 'from' || h.includes('periods')
   );
   // Look for kWh value column - prioritize "p1 (kwh)" or just "kwh" or first value after time
   const valueCol = headers.findIndex(h => 
