@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ChevronsUpDown, Check, Layers, MoreVertical, Eye, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from "lucide-react";
+import { ChevronsUpDown, Check, Layers, MoreVertical, Eye, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -446,29 +446,22 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       }
 
       const availableProfiles = [...scadaImports];
+      // One-to-one: track already-assigned profiles across ALL tenants
       const usedProfileIds = new Set<string>();
-      
-      // Also track profiles already assigned to other tenants (for local scope)
-      if (profileScope === 'local') {
-        for (const t of tenants) {
-          if (t.scada_import_id) usedProfileIds.add(t.scada_import_id);
-        }
+      for (const t of tenants) {
+        if (t.scada_import_id) usedProfileIds.add(t.scada_import_id);
       }
 
       // Build scored candidates for all unassigned tenants
-      const candidates: { tenantId: string; profileId: string; score: number }[] = [];
+      type Candidate = { tenantId: string; profileId: string; score: number };
+      const allCandidates: Candidate[] = [];
 
       for (const tenant of unassigned) {
         const tenantName = tenant.shop_name || tenant.name || '';
-        const pool = profileScope === 'local'
-          ? availableProfiles.filter(p => !usedProfileIds.has(p.id))
-          : availableProfiles;
 
-        // Check shop_number exact match first
-        let bestScore = 0;
-        let bestProfileId: string | null = null;
+        for (const profile of availableProfiles) {
+          if (usedProfileIds.has(profile.id)) continue;
 
-        for (const profile of pool) {
           let score = 0;
 
           // Shop number match: parse both as numbers for numeric comparison, fall back to exact string
@@ -483,45 +476,26 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
           }
           
           if (score === 0) {
-            // Name-based matching via existing logic
             const suggestions = getProfileSuggestions(tenantName, [profile]);
             score = suggestions[0]?.score || 0;
           }
 
-          if (score > bestScore) {
-            bestScore = score;
-            bestProfileId = profile.id;
-          }
-        }
-
-        if (bestProfileId && bestScore >= 60) {
-          candidates.push({ tenantId: tenant.id, profileId: bestProfileId, score: bestScore });
-          if (profileScope === 'local') {
-            usedProfileIds.add(bestProfileId);
+          if (score >= 60) {
+            allCandidates.push({ tenantId: tenant.id, profileId: profile.id, score });
           }
         }
       }
 
-      // Sort by score desc for greedy assignment (local scope benefits most)
-      candidates.sort((a, b) => b.score - a.score);
+      // Sort by score desc for greedy one-to-one assignment
+      allCandidates.sort((a, b) => b.score - a.score);
 
-      // For local scope, re-run deduplication after sorting
-      if (profileScope === 'local') {
-        const finalUsed = new Set<string>();
-        // Re-add already-assigned profiles
-        for (const t of tenants) {
-          if (t.scada_import_id) finalUsed.add(t.scada_import_id);
-        }
-        
-        const dedupedCandidates: typeof candidates = [];
-        for (const c of candidates) {
-          if (!finalUsed.has(c.profileId)) {
-            dedupedCandidates.push(c);
-            finalUsed.add(c.profileId);
-          }
-        }
-        candidates.length = 0;
-        candidates.push(...dedupedCandidates);
+      const assignedTenants = new Set<string>();
+      const candidates: Candidate[] = [];
+      for (const c of allCandidates) {
+        if (assignedTenants.has(c.tenantId) || usedProfileIds.has(c.profileId)) continue;
+        candidates.push(c);
+        assignedTenants.add(c.tenantId);
+        usedProfileIds.add(c.profileId);
       }
 
       // Execute updates
@@ -542,7 +516,31 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       setAutoMatching(false);
     }
   };
-  
+
+  // Clear all profile assignments for all tenants in this project
+  const clearAllProfileAssignments = async () => {
+    const assigned = tenants.filter(t => t.scada_import_id);
+    if (assigned.length === 0) {
+      toast.info("No profile assignments to clear");
+      return;
+    }
+
+    setAutoMatching(true);
+    try {
+      const { error } = await supabase
+        .from("project_tenants")
+        .update({ scada_import_id: null })
+        .eq("project_id", projectId);
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
+      toast.success(`Cleared profile assignments from ${assigned.length} tenants`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to clear assignments");
+    } finally {
+      setAutoMatching(false);
+    }
+  };
   
   // Get display name for tenant (shop_name or fallback to name)
   const getTenantDisplayName = (tenant: Tenant): string => {
@@ -1042,6 +1040,24 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>Auto-match profiles to tenants</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            disabled={autoMatching}
+                            onClick={clearAllProfileAssignments}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Clear all profile assignments</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
