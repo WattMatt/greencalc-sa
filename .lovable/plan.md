@@ -1,54 +1,38 @@
 
 
-## Add Step 4: Upload Pane with Per-File Progress Tracking
+## Fix: Sanitise Filenames Before Storage Upload
 
-### What Changes
+### Problem
+The file "SM 4 [Kiosk ] Bulk meter .xlsx" fails to upload because square brackets (`[` and `]`) and spaces are invalid characters in storage keys. The upload code on line 537 of `ScadaImportWizard.tsx` uses the raw filename directly:
 
-The wizard gets a 4th tab called **"4. Upload"**. The "Complete Import" button on step 3 (Preview) navigates to this new tab instead of immediately uploading. The Upload pane shows every file with live status indicators, and a "Complete Import" button at the bottom right kicks off the actual upload + parse process one file at a time.
+```
+const path = `${projectId}/${Date.now()}_${f.name}`;
+```
 
-### User Flow
+This causes an "Invalid key" error from storage for any filename containing special characters.
 
-1. Steps 1-3 remain the same (Select Files, Parse & Ingest, Preview).
-2. Clicking "Complete Import" on step 3 now navigates to step 4 instead of uploading.
-3. **Step 4 (Upload)** displays all files in a list with their status. A "Complete Import" button at the bottom right starts the sequential upload process.
-4. Each file progresses through: Pending -> Uploading -> Parsing -> Done / Error.
-5. Files that fail show an inline error message so you can see exactly which ones had problems.
-6. Successful files still get imported; failed files are skipped (no "abort everything" behaviour).
-7. After all files are processed, a summary shows "X of Y files imported successfully" and the button changes to "Close".
+### Fix
 
-### UI for Step 4
+**File: `src/components/projects/ScadaImportWizard.tsx` (line 537)**
 
-- Summary bar at top: "X of Y files uploaded successfully" (updates in real time).
-- Each file as a card row showing:
-  - File name and assigned tenant
-  - Status icon: clock (pending), spinner (uploading/parsing), green tick (done), red cross (error)
-  - Error message shown in red text below the file name if it failed
-- Bottom right: "Complete Import" button. While running: "Importing... (3/10)". When done: "Close".
+Add a single line to sanitise the filename before building the storage path. Replace all characters that are not alphanumeric, hyphens, underscores, or dots with underscores:
 
-### Technical Details
+```typescript
+// Before:
+const path = `${projectId}/${Date.now()}_${f.name}`;
 
-**File: `src/components/projects/ScadaImportWizard.tsx`**
+// After:
+const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+const path = `${projectId}/${Date.now()}_${safeName}`;
+```
 
-1. **New state**:
-   - `uploadStatuses: Record<number, { status: 'pending' | 'uploading' | 'parsing' | 'done' | 'error'; error?: string }>` -- per-file index status map.
-   - `isImporting: boolean` -- whether the import loop is running.
-   - `importComplete: boolean` -- all files have been processed.
+This converts `SM 4 [Kiosk ] Bulk meter .xlsx` into `SM_4__Kiosk___Bulk_meter_.xlsx` for the storage key only. The original human-readable filename is still stored in the database record via `f.name` for display purposes.
 
-2. **Tab grid**: Change `grid-cols-3` to `grid-cols-4`. Add a 4th `TabsTrigger` for "4. Upload", disabled until on the preview step.
-
-3. **Step 3 button change**: The "Complete Import" button on the Preview tab now calls `setActiveTab("import")` and initialises all `uploadStatuses` to "pending".
-
-4. **Step 4 `handleStartImport` function**: Replaces the old `handleComplete`. Loops through files sequentially:
-   - Set file status to "uploading" -> upload to storage.
-   - Set file status to "parsing" -> call `onComplete` callback with that single file's result.
-   - Set file status to "done" or "error" with message.
-   - Continue to next file regardless of failure.
-   - After all files, set `importComplete = true`.
-
-5. **Old `handleComplete`**: Removed / replaced by the new per-file logic in step 4.
-
-6. **New icons imported**: `Clock`, `CheckCircle2`, `XCircle` from lucide-react for the status indicators.
+### What This Does NOT Change
+- The parsing logic -- the Excel file's date format (`08 Nov 2022 04:00`) is already supported by the existing text-based month name parser.
+- The database record -- it still stores the original filename for display.
+- Any other upload behaviour.
 
 ### Files Modified
-- `src/components/projects/ScadaImportWizard.tsx` -- add 4th tab, per-file progress state, sequential upload with error isolation.
+- `src/components/projects/ScadaImportWizard.tsx` -- one line added to sanitise the filename before the storage upload call.
 
