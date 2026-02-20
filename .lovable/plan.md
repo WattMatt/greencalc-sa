@@ -1,49 +1,70 @@
 
 
-## Add Column Mapping to Tenant Import
+## Multi-File Import with Column Configuration for Tenants & Profiles
 
-### Problem
-When importing tenant data (CSV or Excel), the current flow auto-detects columns by header name. Users cannot manually select which columns map to **Shop Number**, **Shop Name**, and **Area**. If the headers are non-standard, the import fails or picks wrong columns.
+### Overview
+Replace the current single-file import flow with a multi-step "Bulk Ingestion Tool" dialog, modelled on the WM-Tariffs project's `CsvBulkIngestionTool` and `SingleMeterCsvParseDialog`. This new tool supports uploading multiple CSV/Excel files, assigning tenants to each file, configuring the parser (delimiter, header row), selecting and renaming columns with data types, and previewing the parsed result.
 
-### Solution
-Add a **column mapping step** after the CSV Import Wizard finishes parsing. This mimics the column-role-assignment pattern already used in the Generation tab's `CSVPreviewDialog` -- click a column header to assign it as "Shop Number", "Shop Name", or "Area".
+### User Flow
 
-### How It Works
+**Step 1 -- Upload Files**
+- Click "Import" button to open the dialog
+- "Choose Files" button accepts `.csv`, `.xlsx`, `.xls` (multiple files allowed)
+- Each selected file appears as a row: file name on the left, a tenant dropdown on the right
+- The tenant dropdown defaults to blank; if tenants exist, user can assign one per file
+- Assigned tenants are removed from the dropdown options for other files (reducing list)
+- "Upload All" button uploads files to storage and advances to Step 2
 
-1. User clicks **Import** and selects a CSV or Excel file
-2. The existing `CsvImportWizard` opens for delimiter/parse configuration (Steps 1-3)
-3. **Skip Step 4** (load profile column selection -- not relevant for tenant data)
-4. A **new `TenantColumnMapper` dialog** opens showing the parsed data in a table
-5. User clicks column headers to assign roles: **Shop Number** (optional), **Shop Name** (required), **Area** (required)
-6. Only mapped columns are used to create tenants
+**Step 2 -- Parse & Ingest**
+- Parsing Configuration card with:
+  - Column Separator dropdown (Tab, Comma, Semicolon, Space)
+  - Header Row Number input
+- Column Interpretation section (appears after loading a preview):
+  - Select All / Deselect All checkbox header
+  - Each column shown as a card with:
+    - Checkbox to include/exclude
+    - Editable Column Name input
+    - Data Type dropdown (DateTime, Float, Int, String, Boolean)
+    - DateTime Format dropdown (shown only when Data Type is DateTime)
+    - Split Column By dropdown (No split, Tab, Comma, Semicolon, Space)
+- File list with status badges and per-file parse/preview/delete actions
 
-### New File
-
-**`src/components/projects/TenantColumnMapper.tsx`**
-
-A dialog component with:
-- A data preview table showing parsed headers and first ~50 rows
-- Dropdown on each column header to assign a role: Shop Number, Shop Name, Area (m2), or Skip
-- Auto-detection as a starting suggestion (pre-selects columns based on header names, user can override)
-- Visual highlighting: assigned columns get colour-coded backgrounds (like the Generation CSV dialog)
-- "Import" button enabled only when Shop Name and Area are both assigned
-- Row count summary
-
-### Modified File
-
-**`src/components/projects/TenantManager.tsx`**
-
-- Add state for the column mapper dialog (`columnMapperOpen`, `columnMapperData`)
-- Change `processWizardData` to **not process tenants directly** -- instead, store the parsed data and open the `TenantColumnMapper`
-- New `handleMappedImport` callback receives the user's column selections and creates tenants using only those mapped columns
-- The wizard's Step 4 is skipped by finishing at Step 3 (the wizard already supports this via `onProcess` being called)
+**Step 3 -- Preview**
+- Displays a table of parsed data using the column interpretation settings
+- Shows the reading count
+- Only visible (checked) columns are shown
+- Column headers reflect any renamed values
 
 ### Technical Details
 
-- Reuses the same dropdown-on-header pattern from `CSVPreviewDialog` (DropdownMenu on table headers)
-- Column roles: `"shop_number" | "shop_name" | "area" | null`
-- Icons: `Hash` for Shop Number, `Store` for Shop Name, `Ruler` for Area (from lucide-react)
-- Auto-detect logic moved from `processWizardData` into the mapper as initial suggestions
-- Existing `detectCsvType` validation still runs before showing the mapper
-- No new dependencies required
+**New file: `src/components/projects/ScadaImportWizard.tsx`**
+
+A new large dialog component (~800-1000 lines) containing:
+- Three-tab layout using `Tabs` (Upload Files, Parse & Ingest, Preview)
+- State management for: files list, separator, header row number, column mappings, column visibility, column data types, column splits, preview data
+- File handling: uses `xlsx` library for Excel files, plain text for CSV
+- Storage: uploads files to a `scada-csvs` storage bucket (or existing bucket)
+- Tenant assignment: queries `project_tenants` for the current project to populate the dropdown
+- Column configuration UI matching the WM-Tariffs `SingleMeterCsvParseDialog` pattern
+- Preview loading: reads the file content, applies separator and header row config, displays first 20 rows
+
+**Modified file: `src/components/projects/TenantManager.tsx`**
+
+- Replace the current `CsvImportWizard` + `TenantColumnMapper` flow with the new `ScadaImportWizard`
+- Remove the hidden file input and `handleFileUpload` function
+- Import button opens the `ScadaImportWizard` dialog directly
+- Remove `CsvImportWizard` and `TenantColumnMapper` imports (no longer needed for this flow)
+- Keep existing tenant CRUD mutations
+
+**Storage bucket (SQL migration)**
+
+Create a `scada-csvs` bucket for uploaded CSV/Excel files with appropriate RLS policies so authenticated users can upload and read files.
+
+### What stays the same
+- Existing tenant table, add/edit/delete tenant, profile assignment, multi-meter selector -- all unchanged
+- The Download Template button stays
+- The `TenantProfileMatcher` and `MultiMeterSelector` components remain untouched
+
+### Dependencies
+- No new npm packages required (`xlsx` is already installed, all UI components exist)
 
