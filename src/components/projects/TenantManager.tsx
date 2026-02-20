@@ -522,7 +522,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
             <Download className="h-4 w-4 mr-2" />
             Template
           </Button>
-          <Button variant="outline" className="text-muted-foreground" onClick={() => setWizardOpen(true)}>
+          <Button variant="outline" disabled onClick={() => setWizardOpen(true)}>
             <Upload className="h-4 w-4 mr-2" />
             Import
           </Button>
