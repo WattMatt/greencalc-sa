@@ -799,6 +799,47 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
     return () => window.removeEventListener('keydown', handler);
   }, [activeTool, fabricCanvas]);
 
+  // Delete selected meter card (Delete/Backspace key)
+  const handleDeleteSelectedMeter = async () => {
+    if (!fabricCanvas || !isEditMode) return;
+    const active = fabricCanvas.getActiveObject() as any;
+    if (!active || !active.isMeterCard || !active.data?.positionId) {
+      toast.error('Select a meter card to delete');
+      return;
+    }
+    const positionId = active.data.positionId;
+    const meterId = active.data.meterId;
+    try {
+      fabricCanvas.remove(active);
+      fabricCanvas.renderAll();
+      const { error } = await supabase
+        .from('project_schematic_meter_positions')
+        .delete()
+        .eq('id', positionId);
+      if (error) throw error;
+      setMeterPositions(prev => prev.filter(p => p.id !== positionId));
+      toast.success('Meter removed from schematic');
+    } catch (err) {
+      console.error('Error deleting meter position:', err);
+      toast.error('Failed to delete meter');
+      await fetchMeterPositions();
+    }
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && isEditMode && activeTool === 'select') {
+        // Prevent browser back navigation on Backspace
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        e.preventDefault();
+        handleDeleteSelectedMeter();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [fabricCanvas, isEditMode, activeTool]);
+
   // Zoom controls
   const handleZoomIn = () => {
     if (!fabricCanvas) return;
@@ -894,6 +935,10 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
             <Button variant="outline" size="sm" onClick={() => setIsConnectionsDialogOpen(true)}>
               <GitBranch className="w-4 h-4 mr-1" />
               Manage
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleDeleteSelectedMeter} className="text-destructive hover:text-destructive">
+              <Trash2 className="w-4 h-4 mr-1" />
+              Delete
             </Button>
             <Separator orientation="vertical" className="h-6" />
             <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving}>
