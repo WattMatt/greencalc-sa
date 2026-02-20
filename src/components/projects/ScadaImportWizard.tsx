@@ -55,8 +55,7 @@ interface FileEntry {
   file: File;
   name: string;
   tenantId: string | null;
-  status: "pending" | "uploaded" | "parsed" | "error";
-  storagePath?: string;
+  status: "pending" | "ready" | "parsed" | "error";
   content?: string; // raw CSV text after reading
 }
 
@@ -294,7 +293,7 @@ export function ScadaImportWizard({
     setFiles((prev) => prev.filter((_, i) => i !== fileIdx));
   }, []);
 
-  const handleUploadAll = useCallback(async () => {
+  const handleReadAll = useCallback(async () => {
     if (files.length === 0) {
       toast.error("No files selected");
       return;
@@ -305,24 +304,11 @@ export function ScadaImportWizard({
       const updated = [...files];
       for (let i = 0; i < updated.length; i++) {
         const entry = updated[i];
-        if (entry.status === "uploaded") continue;
+        if (entry.status === "ready") continue;
 
-        // Read content
+        // Read content locally only — no network calls
         const content = await readFileAsText(entry.file);
-        const path = `${projectId}/${Date.now()}_${entry.name}`;
-
-        // Upload to storage (upsert to replace existing)
-        const { error } = await supabase.storage
-          .from("scada-csvs")
-          .upload(path, entry.file, { upsert: true });
-
-        if (error) {
-          updated[i] = { ...entry, status: "error" };
-          toast.error(`Failed to upload ${entry.name}: ${error.message}`);
-          continue;
-        }
-
-        updated[i] = { ...entry, status: "uploaded", storagePath: path, content };
+        updated[i] = { ...entry, status: "ready", content };
       }
 
       setFiles(updated);
@@ -332,14 +318,13 @@ export function ScadaImportWizard({
       if (firstContent) {
         const detected = detectSeparator(firstContent);
         setSeparator(detected);
-        // Load preview
         loadPreview(firstContent, detected, headerRow);
       }
 
-      toast.success("Files uploaded successfully");
+      toast.success("Files loaded successfully");
       setActiveTab("parse");
     } catch (err) {
-      toast.error("Upload failed");
+      toast.error("Failed to read files");
     } finally {
       setIsUploading(false);
     }
@@ -455,10 +440,23 @@ export function ScadaImportWizard({
 
   // ── Complete / Close ─────────────────────────────────────────
 
-  const handleComplete = useCallback(() => {
+  const handleComplete = useCallback(async () => {
     if (!onComplete) {
       onClose();
       return;
+    }
+
+    // Upload files to storage now (deferred from Step 1)
+    for (const f of files) {
+      if (!f.content) continue;
+      const path = `${projectId}/${Date.now()}_${f.name}`;
+      const { error } = await supabase.storage
+        .from("scada-csvs")
+        .upload(path, f.file, { upsert: true });
+      if (error) {
+        toast.error(`Failed to upload ${f.name}: ${error.message}`);
+        return; // Abort — don't partially import
+      }
     }
 
     const results: ParsedFileResult[] = [];
@@ -479,7 +477,7 @@ export function ScadaImportWizard({
 
     onComplete(results);
     onClose();
-  }, [files, separator, headerRow, visibleColumns, visibleColIndices, onComplete, onClose]);
+  }, [files, projectId, separator, headerRow, visibleColumns, visibleColIndices, onComplete, onClose]);
 
   const handleDialogClose = useCallback(() => {
     setFiles([]);
@@ -500,7 +498,7 @@ export function ScadaImportWizard({
         <DialogHeader>
           <DialogTitle>Bulk Upload</DialogTitle>
           <DialogDescription>
-            Upload multiple files, preview and transform your data, and ingest with a single click
+            Select files, configure parsing, preview your data, then upload and import with a single click
           </DialogDescription>
         </DialogHeader>
 
@@ -510,7 +508,7 @@ export function ScadaImportWizard({
           className="flex-1 flex flex-col min-h-0"
         >
           <TabsList className="w-full grid grid-cols-3">
-            <TabsTrigger value="upload">1. Upload Files</TabsTrigger>
+            <TabsTrigger value="upload">1. Select Files</TabsTrigger>
             <TabsTrigger
               value="parse"
               disabled={files.every((f) => f.status === "pending")}
@@ -570,13 +568,13 @@ export function ScadaImportWizard({
                     )}
                   </div>
                   <Button
-                    onClick={handleUploadAll}
+                    onClick={handleReadAll}
                     disabled={
                       isUploading ||
-                      files.every((f) => f.status === "uploaded")
+                      files.every((f) => f.status === "ready")
                     }
                   >
-                    {isUploading ? "Uploading..." : "Upload All"}
+                    {isUploading ? "Reading..." : "Continue"}
                   </Button>
                 </div>
 
@@ -591,8 +589,8 @@ export function ScadaImportWizard({
                               {entry.name}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {entry.status === "uploaded"
-                                ? "Uploaded"
+                              {entry.status === "ready"
+                                ? "Ready"
                                 : entry.status === "error"
                                 ? "Error"
                                 : "Pending"}
