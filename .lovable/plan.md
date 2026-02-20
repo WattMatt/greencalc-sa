@@ -1,66 +1,53 @@
 
 
-## Fix: Tenant Meter Assignment Display Independent of Global/Local Toggle
+## Fix: Honour User's Column Selections When Saving and Viewing Meter Data
 
 ### Problem
 
-The assigned meter display in each tenant row depends on the `scadaImports` array, which is filtered by the Global/Local toggle (`profileScope`). When switching scope, previously assigned meters may not be found in the filtered list, causing them to show as "Unassigned" even though the assignment still exists in the database.
+When you select specific columns in the CSV import wizard, two things go wrong:
 
-The root cause is on line 1142 of `TenantManager.tsx`:
-```
-const assignedProfile = scadaImports?.find(m => m.id === tenant.scada_import_id);
-```
+1. **Saving ignores your selections**: The re-import dialog (`MeterReimportDialog`) discards the wizard configuration and re-detects columns using hardcoded header patterns (looking for "date", "kwh", etc.). If your CSV has non-standard headers, it picks the wrong columns.
 
-`scadaImports` is scope-filtered, so if the assigned meter falls outside the current scope, it resolves to `undefined` and displays "Unassigned".
+2. **Viewing ignores your selections**: The daily and monthly consumption hooks (`useDailyConsumption`, `useMonthlyConsumption`) re-parse embedded CSV content from scratch using their own hardcoded header detection (including the incorrectly added "from" and "periods" patterns), completely bypassing your wizard selections.
 
 ### Solution
 
-Separate the **display data** from the **dropdown options**:
+#### 1. Fix `MeterReimportDialog.tsx` - Use wizard config for raw_data construction
 
-1. Add a second query (`assignedScadaImports`) that fetches ONLY the SCADA imports currently assigned to tenants, with NO scope filter. This is used purely for displaying the assigned meter name in the button label and preview icon.
-
-2. Keep the existing `scadaImports` query (scope-filtered) for populating the dropdown options list only.
-
-3. Update the `assignedProfile` lookup (line 1142) to first check the unfiltered `assignedScadaImports`, falling back to `scadaImports`.
-
-### Technical Details
-
-**File: `src/components/projects/TenantManager.tsx`**
-
-Add a new query after the existing `scadaImports` query (~line 333):
+Replace the hardcoded column detection (lines 76-84) with the explicit indices from the wizard config:
 
 ```typescript
-// Fetch assigned SCADA imports (unfiltered) for display purposes
-const assignedScadaIds = tenants
-  .map(t => t.scada_import_id)
-  .filter(Boolean) as string[];
+// BEFORE (broken - ignores user selections):
+const dateIdx = headers.findIndex(h => h.includes('date') || h === 'rdate');
+const valueIdx = headers.findIndex(h => h.includes('kwh') || ...);
 
-const { data: assignedScadaImports } = useQuery({
-  queryKey: ["assigned-scada-display", assignedScadaIds],
-  queryFn: async () => {
-    if (assignedScadaIds.length === 0) return [];
-    const { data, error } = await supabase
-      .from("scada_imports")
-      .select("id, shop_name, site_name, area_sqm, data_points, ...")
-      .in("id", assignedScadaIds);
-    if (error) throw error;
-    return data as ScadaImport[];
-  },
-  enabled: assignedScadaIds.length > 0,
-});
+// AFTER (uses wizard config):
+const dateIdx = config.dateColumnIndex ?? headers.findIndex(h => h.includes('date'));
+const timeIdx = config.timeColumnIndex ?? headers.findIndex(h => h.includes('time'));
+const valueIdx = config.valueColumnIndex ?? headers.findIndex(h => h.includes('kwh'));
 ```
 
-Update the `assignedProfile` lookup (line 1142):
+#### 2. Fix `BulkCsvDropzone.tsx` - Store pre-processed data points, not raw CSV
 
-```typescript
-const assignedProfile = tenant.scada_import_id
-  ? (scadaImports?.find(m => m.id === tenant.scada_import_id)
-     ?? assignedScadaImports?.find(m => m.id === tenant.scada_import_id))
-  : undefined;
-```
+When the bulk import wizard processes files, instead of storing `[{ csvContent: rawCsv }]`, store the already-parsed data points as `[{ timestamp, value }]` arrays. This means the user's column selections are baked into the stored data and never need to be re-detected.
 
-This ensures:
-- The **dropdown list** is still filtered by Global/Local scope (controlling what new assignments are available).
-- The **displayed assignment** always resolves correctly, regardless of toggle state.
-- No database schema changes required.
+#### 3. Clean up `useDailyConsumption.ts` and `useMonthlyConsumption.ts`
+
+- Remove the `"from"` and `"periods"` patterns from header detection (these were incorrectly added).
+- Keep the `parseEmbeddedCSV` function as a fallback for legacy data, but ensure new imports store pre-processed data that bypasses re-detection entirely.
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/components/loadprofiles/MeterReimportDialog.tsx` | Use `config.dateColumnIndex` / `config.valueColumnIndex` / `config.timeColumnIndex` for raw_data construction |
+| `src/components/loadprofiles/BulkCsvDropzone.tsx` | Store processed `[{timestamp, value}]` instead of `[{csvContent}]` after wizard column selection |
+| `src/components/loadprofiles/hooks/useDailyConsumption.ts` | Remove "from" and "periods" from header detection patterns |
+| `src/components/loadprofiles/hooks/useMonthlyConsumption.ts` | Remove "from" and "periods" from header detection patterns (if present) |
+
+### Impact
+
+- Existing meters with `csvContent` in `raw_data` will continue to work via the legacy `parseEmbeddedCSV` fallback.
+- New imports and re-imports will store clean `{timestamp, value}` arrays that reflect your exact column choices.
+- The "from" column will no longer hijack the date detection.
 
