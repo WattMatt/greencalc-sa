@@ -496,6 +496,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     };
 
     let importedCount = 0;
+    let updatedCount = 0;
     for (const result of results) {
       try {
         const processed = processCSVToLoadProfile(result.headers, result.rows, defaultConfig);
@@ -505,7 +506,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
           continue;
         }
 
-        const fileName = result.fileName || `Meter ${importedCount + 1}`;
+        const fileName = result.fileName || `Meter ${importedCount + updatedCount + 1}`;
         const shopName = fileName.replace(/\.(csv|xlsx?)$/i, "");
 
         // Build raw_data JSONB payload from original CSV content
@@ -518,7 +519,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
           ? tenants.find((t) => t.id === result.tenantId)
           : null;
 
-        const { error } = await supabase.from("scada_imports").insert({
+        const payload = {
           project_id: projectId,
           site_name: shopName,
           shop_name: shopName,
@@ -534,25 +535,51 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
           file_name: fileName,
           raw_data: rawData,
           area_sqm: assignedTenant?.area_sqm ?? null,
-        });
+        };
 
-        if (error) {
-          console.error(`[handleWizardComplete] Insert error for ${shopName}:`, error);
-          continue;
+        // Check for existing record with same project_id + file_name
+        const { data: existing } = await supabase
+          .from("scada_imports")
+          .select("id")
+          .eq("project_id", projectId)
+          .eq("file_name", fileName)
+          .maybeSingle();
+
+        if (existing) {
+          // Update existing record instead of creating a duplicate
+          const { error } = await supabase
+            .from("scada_imports")
+            .update(payload)
+            .eq("id", existing.id);
+          if (error) {
+            console.error(`[handleWizardComplete] Update error for ${shopName}:`, error);
+            continue;
+          }
+          updatedCount++;
+        } else {
+          const { error } = await supabase.from("scada_imports").insert(payload);
+          if (error) {
+            console.error(`[handleWizardComplete] Insert error for ${shopName}:`, error);
+            continue;
+          }
+          importedCount++;
         }
-        importedCount++;
       } catch (err) {
         console.error(`[handleWizardComplete] Processing error:`, err);
       }
     }
 
-    if (importedCount > 0) {
+    const totalCount = importedCount + updatedCount;
+    if (totalCount > 0) {
       queryClient.invalidateQueries({ queryKey: ["scada-imports-for-assignment"] });
       queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
       queryClient.invalidateQueries({ queryKey: ["meter-library"] });
       queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
       queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });
-      toast.success(`Imported ${importedCount} meter profile${importedCount > 1 ? 's' : ''} for this project`);
+      const parts: string[] = [];
+      if (importedCount > 0) parts.push(`imported ${importedCount}`);
+      if (updatedCount > 0) parts.push(`updated ${updatedCount}`);
+      toast.success(`Successfully ${parts.join(' and ')} meter profile${totalCount > 1 ? 's' : ''}`);
       setProfileScope('local'); // Auto-switch to local view
     } else {
       toast.error("No meter profiles could be processed from the uploaded files");
