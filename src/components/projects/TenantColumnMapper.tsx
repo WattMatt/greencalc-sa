@@ -86,7 +86,7 @@ export function TenantColumnMapper({ open, onClose, headers, rows, onImport }: T
     return result;
   }, [columnRoles]);
 
-  const canImport = roleColumns.shop_name !== null && roleColumns.area !== null;
+  const canImport = roleColumns.shop_name !== null;
 
   const assignRole = (colIdx: number, role: TenantColumnRole) => {
     setColumnRoles(prev => {
@@ -133,17 +133,21 @@ export function TenantColumnMapper({ open, onClose, headers, rows, onImport }: T
     setIsImporting(true);
 
     const nameIdx = roleColumns.shop_name!;
-    const areaIdx = roleColumns.area!;
+    const areaIdx = roleColumns.area;
     const numIdx = roleColumns.shop_number;
 
     const tenants: TenantMappedData[] = [];
     for (const row of rows) {
       const shopName = row[nameIdx]?.trim();
-      const areaStr = row[areaIdx]?.replace(/[^\d.]/g, "");
-      const area = parseFloat(areaStr);
+      let area = 0;
+      if (areaIdx !== null) {
+        const areaStr = row[areaIdx]?.replace(/[^\d.]/g, "") || "";
+        const parsed = parseFloat(areaStr);
+        if (!isNaN(parsed) && parsed > 0) area = parsed;
+      }
       const shopNumber = numIdx !== null ? row[numIdx]?.trim() || null : null;
 
-      if (shopName && !isNaN(area) && area > 0) {
+      if (shopName) {
         tenants.push({ shop_number: shopNumber, shop_name: shopName, area_sqm: area });
       }
     }
@@ -156,12 +160,10 @@ export function TenantColumnMapper({ open, onClose, headers, rows, onImport }: T
   const validCount = useMemo(() => {
     if (!canImport) return 0;
     const nameIdx = roleColumns.shop_name!;
-    const areaIdx = roleColumns.area!;
     let count = 0;
     for (const row of rows) {
       const name = row[nameIdx]?.trim();
-      const area = parseFloat(row[areaIdx]?.replace(/[^\d.]/g, "") || "");
-      if (name && !isNaN(area) && area > 0) count++;
+      if (name) count++;
     }
     return count;
   }, [rows, roleColumns, canImport]);
@@ -172,7 +174,7 @@ export function TenantColumnMapper({ open, onClose, headers, rows, onImport }: T
         <DialogHeader>
           <DialogTitle>Map Tenant Columns</DialogTitle>
           <DialogDescription>
-            Click a column header to assign it as Shop Number, Shop Name, or Area. Shop Name and Area are required.
+            Click a column header to assign it as Shop Number, Shop Name, or Area. Shop Name is required. Area is optional.
           </DialogDescription>
         </DialogHeader>
 
@@ -231,7 +233,7 @@ export function TenantColumnMapper({ open, onClose, headers, rows, onImport }: T
           <div className="flex gap-2">
             {!canImport && (
               <span className="text-xs text-muted-foreground self-center">
-                Assign Shop Name and Area to continue
+                Assign Shop Name to continue
               </span>
             )}
           </div>
