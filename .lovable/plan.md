@@ -1,110 +1,54 @@
 
+## Add Min/Max/Average Envelope Chart with Year Range Filter
 
-## Fix: Store Pre-Processed Data Points Instead of Raw CSV
+### What You Get
 
-### Problem
+A new chart placed below the existing Load Profile chart showing:
+- **Upper line**: Maximum kW per hour across all days in the selected year range
+- **Lower line**: Minimum kW per hour across all days in the selected year range
+- **Dotted middle line**: Average kW per hour
+- **Shaded fill** between the upper and lower boundaries
+- **Year range dropdowns**: `[From] to [To]` -- no labels, just the from dropdown, the word "to", and the to dropdown. Dropdowns are constrained to years present in the dataset.
 
-When you upload a CSV through the bulk upload wizard and manually configure columns (date, time, float), your configuration is **completely thrown away** at the storage step. Here is the chain of what happens:
+### Architecture
 
-1. You configure columns in the wizard (date, time, float) -- this works correctly
-2. The wizard passes results to `TenantManager.handleWizardComplete`
-3. That function **ignores your column selections** and stores the raw CSV string:
-   ```
-   raw_data: [{ csvContent: result.rawContent }]
-   ```
-4. When displaying the data, the hooks find `csvContent` and try to auto-detect columns from scratch
-5. The auto-detection fails because it does not recognise "From" as a date header
-6. Result: "No data available"
-
-Your manual configuration is used to generate the load profile averages (weekday/weekend), but the raw data for graphs is stored as an unprocessed CSV dump.
-
-### Solution
-
-Replace the raw CSV storage with pre-processed `[{timestamp, value}]` arrays that use the column selections from the wizard. Also fix the legacy fallback parser as a safety net for any old data.
-
-### Changes
-
-#### 1. `src/components/projects/TenantManager.tsx` (lines 686-689)
-
-Instead of storing `[{ csvContent: rawCSV }]`, build data points from the parsed rows using the user's configured columns:
-
-```
-// BEFORE:
-const rawData = result.rawContent
-  ? [{ csvContent: result.rawContent }]
-  : null;
-
-// AFTER:
-// Find the date, time, and value columns from the user's configuration
-const dateColIdx = result.columns.findIndex(c =>
-  c.dataType === 'DateTime' ||
-  c.originalName.toLowerCase().includes('date') ||
-  c.originalName.toLowerCase() === 'from' ||
-  c.originalName.toLowerCase() === 'time'
-);
-const timeColIdx = result.columns.findIndex((c, i) =>
-  i !== dateColIdx && (
-    c.originalName.toLowerCase().includes('time') ||
-    c.originalName.toLowerCase() === 'to'
-  )
-);
-const valueColIdx = result.columns.findIndex(c =>
-  c.dataType === 'Float' || c.dataType === 'Int' ||
-  c.originalName.toLowerCase().includes('kwh') ||
-  c.originalName.toLowerCase().includes('kw')
-);
-
-const rawData = (dateColIdx >= 0 && valueColIdx >= 0)
-  ? result.rows.map(row => ({
-      timestamp: `${row[dateColIdx] || ''} ${timeColIdx >= 0 ? (row[timeColIdx] || '') : ''}`.trim(),
-      value: parseFloat(row[valueColIdx]?.replace(/[^\d.-]/g, '') || '0') || 0
-    })).filter(d => d.timestamp)
-  : result.rawContent ? [{ csvContent: result.rawContent }] : null;
+```text
+src/components/projects/load-profile/
+  hooks/useEnvelopeData.ts       (NEW) - Computes min/max/avg per hour from raw_data
+  charts/EnvelopeChart.tsx       (NEW) - Renders the shaded envelope chart
+  index.tsx                      (EDIT) - Adds the EnvelopeChart below LoadChart
 ```
 
-This means when you set a column as "DateTime" and another as "Float", those exact selections determine what gets stored.
+### Technical Details
 
-#### 2. `src/components/loadprofiles/hooks/useDailyConsumption.ts` (line 147)
+#### 1. `hooks/useEnvelopeData.ts` (New)
 
-Safety net -- add `h === 'from'` to date column detection in the legacy fallback parser:
+- Reuses the existing `parseRawData` function pattern from `useSpecificDateData.ts`
+- Iterates all tenants' `scada_imports.raw_data`, parsing each `RawDataPoint`
+- Extracts available years from `date_range_start` / `date_range_end` (or from the actual data points)
+- For each hour (0-23), across all days within the selected year range:
+  - Sums all tenant kW values for that hour on each day (same as `useSpecificDateData` does for a single date)
+  - Tracks the min, max, and running average of those daily totals per hour
+- Returns: `{ envelopeData, availableYears, yearFrom, setYearFrom, yearTo, setYearTo }`
+- `envelopeData` is an array of 24 objects: `{ hour, min, max, avg }`
 
-```
-const dateCol = headers.findIndex(h => 
-  h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate') || h === 'from'
-);
-```
+#### 2. `charts/EnvelopeChart.tsx` (New)
 
-#### 3. `src/components/loadprofiles/hooks/useMonthlyConsumption.ts` (lines 104-110)
+- Uses Recharts `ComposedChart` with `Area` for the shaded region and `Line` for the dotted average
+- The shaded fill uses an `Area` with `dataKey="max"` as upper bound and a second `Area` with `dataKey="min"` subtracted (using the Recharts stacking pattern where min is rendered as a transparent base area, and the gap between min and max is the visible shaded fill)
+- Average line: dashed/dotted stroke style
+- Year range controls rendered inline above the chart: two `<Select>` dropdowns with no labels, separated by the word "to"
+- Follows existing chart styling conventions (same axis formatting, muted grid, 200px height)
 
-Safety net -- fix header scanning and add `h === 'from'`:
+#### 3. `index.tsx` (Edit)
 
-```
-// Replace naive header scanning with keyword-based search
-let headerIdx = -1;
-for (let i = 0; i < Math.min(lines.length, 10); i++) {
-  const line = lines[i].toLowerCase();
-  if (line.includes('time') || line.includes('date') || line.includes('rdate') || 
-      line.includes('kwh') || line.includes('timestamp') || line.includes('from')) {
-    headerIdx = i;
-    break;
-  }
-}
-if (headerIdx === -1) return [];
-```
+- Import and render `EnvelopeChart` below the existing `LoadChart`, passing `tenants` and `displayUnit`/`powerFactor`
+- The envelope chart is always visible when there is SCADA raw data (it self-hides if no raw data exists)
 
-And add `h === 'from'` to the dateCol detection.
+### Files to Create/Modify
 
-### Files to Modify
-
-| File | Change |
+| File | Action |
 |------|--------|
-| `src/components/projects/TenantManager.tsx` | Use user's column config to store `[{timestamp, value}]` instead of `csvContent` |
-| `src/components/loadprofiles/hooks/useDailyConsumption.ts` | Add `'from'` to date column detection (safety net for old data) |
-| `src/components/loadprofiles/hooks/useMonthlyConsumption.ts` | Fix header scanning and add `'from'` to date column detection (safety net for old data) |
-
-### Impact
-
-- **New uploads**: Your manual column configuration will be honoured. Data is stored pre-processed and never re-parsed.
-- **Existing uploads** (e.g. "Mamalia Bulk 2"): The legacy parser fix ensures they display correctly without needing to re-import.
-- **No re-import required** for old data thanks to the fallback fix.
-
+| `src/components/projects/load-profile/hooks/useEnvelopeData.ts` | Create |
+| `src/components/projects/load-profile/charts/EnvelopeChart.tsx` | Create |
+| `src/components/projects/load-profile/index.tsx` | Add EnvelopeChart below LoadChart |
