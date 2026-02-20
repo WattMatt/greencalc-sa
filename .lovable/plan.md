@@ -1,40 +1,49 @@
 
 
-## Fix: Load Profile Shows Zero When Tenants Have area_sqm = 0
+## Allow Creating Clean (Blank Canvas) Schematics
 
-### Problem
-All tenants in this project have `area_sqm = 0`. The load profile calculation in `useLoadProfileData.ts` has early-return guards (`if (tenantArea <= 0) return;`) at two locations (lines 198 and 273) that skip every tenant entirely -- even those with valid SCADA profiles assigned. The chart shows 0 kW because no tenant data is ever processed.
+### What Changes
 
-### Root Cause
-The code was designed around area-based scaling (kW/m2 intensity), but when a tenant has a directly assigned SCADA profile, the raw kW values from that profile should be used as-is without requiring area data.
+The "Upload Schematic" button and dialog will be updated so that file upload is optional. When no file is attached, the schematic is created as a blank canvas.
 
-### Fix
+### UI Changes
 
-**File: `src/components/projects/load-profile/hooks/useLoadProfileData.ts`**
+1. **Top-right button**: Stays as "+ Upload Schematic" (this opens the dialog).
+2. **Empty state button**: Same -- opens the dialog.
+3. **Dialog title**: Changes from "Upload Schematic Diagram" to "Create Schematic Diagram" with updated subtitle "Create a blank canvas or upload a diagram (PDF, PNG, JPG, SVG)".
+4. **Submit button text** (bottom of dialog):
+   - No file selected: **"Clean Schematic"**
+   - File selected: **"Upload Schematic"**
+5. **File upload area**: Remains as-is but is no longer required. The `disabled={!selectedFile}` guard on the submit button is removed.
 
-At both guard locations (lines 197-198 in the daily kWh calculation, and lines 272-273 in the chart data calculation), change the logic so that:
+### Database Change
 
-1. If `tenantArea <= 0` **and** the tenant has no SCADA data (no `scada_imports` and no `tenant_meters` with profiles), skip the tenant (no data to show).
-2. If `tenantArea <= 0` **but** the tenant has SCADA data assigned, use the raw kW values directly from the SCADA profile without area scaling.
+A migration to make `file_path` and `file_type` nullable on `project_schematics`, since clean schematics have no uploaded file:
 
-**Specific changes:**
+```sql
+ALTER TABLE public.project_schematics
+  ALTER COLUMN file_path DROP NOT NULL,
+  ALTER COLUMN file_type DROP NOT NULL;
+```
 
-**Location 1 -- Daily kWh totals (around line 196-248):**
-- Remove the blanket `if (tenantArea <= 0) return;` guard.
-- In the multi-meter branch: skip if `tenantArea <= 0` (multi-meter averaging requires area).
-- In the single SCADA branch: when `tenantArea <= 0`, use raw kW values directly (sum profile = daily kWh) instead of scaling by area ratio.
-- In the shop type fallback branch: skip if `tenantArea <= 0` (estimation requires area).
+### Logic Changes (SchematicsTab.tsx)
 
-**Location 2 -- Chart data / baseChartData (around line 271-314):**
-- Remove the blanket `if (tenantArea <= 0) return;` guard.
-- In the multi-meter branch: skip if `tenantArea <= 0`.
-- In the single SCADA branch: when `tenantArea <= 0`, use raw kW values directly (`hourlyKw = scadaProfile[h] * dayMultiplier`) with `areaScale = 1`.
-- In the shop type fallback branch: skip if `tenantArea <= 0`.
+1. **`handleSubmit`**: If `selectedFile` is null, insert a record with `file_path: null` and `file_type: 'canvas'` (or null). Skip the storage upload and PDF conversion steps.
+2. **Delete logic**: Guard the storage delete calls -- only attempt to remove files from storage when `file_path` is not null.
+3. **Table display**: For clean schematics, show a canvas icon (e.g. `PenTool` from lucide) instead of calling `getFileTypeIcon`. The Status column shows "Canvas" instead of conversion status.
 
-### Technical Detail
+### Technical Details
 
-The key insight: when a SCADA profile is directly assigned to a tenant (via `scada_import_id`), the profile already contains actual kW readings from that specific meter. Area scaling is only needed when you're adapting a profile from a differently-sized reference facility. When `area_sqm = 0`, we treat it as "use the raw SCADA data as-is" rather than "this tenant has no load".
+**File: `src/components/projects/SchematicsTab.tsx`**
+- Remove `disabled={isLoading || !selectedFile}` from submit button; replace with `disabled={isLoading}`.
+- Change button text: `{isLoading ? "Creating..." : selectedFile ? "Upload Schematic" : "Clean Schematic"}`.
+- In `handleSubmit`: wrap the storage upload + PDF conversion in `if (selectedFile) { ... }` and set `file_path`/`file_type` to `null`/`'canvas'` when no file.
+- In `handleConfirmDelete` and `handleBulkDelete`: wrap `supabase.storage.from(...).remove(...)` in `if (schematic.file_path) { ... }`.
+- In the table row rendering: handle `file_type === 'canvas'` or `!file_path` for the icon and status columns.
 
-### Files Modified
-- `src/components/projects/load-profile/hooks/useLoadProfileData.ts` -- remove blanket area guards, allow SCADA data pass-through for zero-area tenants
+**File: `src/types/schematic.ts`**
+- Update `file_path` and `file_type` to allow `null`: `file_path: string | null`.
+
+**File: `src/integrations/supabase/types.ts`**
+- This will auto-update after the migration.
 
