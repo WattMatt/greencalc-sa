@@ -1,70 +1,86 @@
 
 
-## Multi-File Import with Column Configuration for Tenants & Profiles
+## Schematics Tab -- Carbon Copy from WM-Tariffs
 
 ### Overview
-Replace the current single-file import flow with a multi-step "Bulk Ingestion Tool" dialog, modelled on the WM-Tariffs project's `CsvBulkIngestionTool` and `SingleMeterCsvParseDialog`. This new tool supports uploading multiple CSV/Excel files, assigning tenants to each file, configuring the parser (delimiter, header row), selecting and renaming columns with data types, and previewing the parsed result.
+Replicate the full Schematics tab from WM-Tariffs into this project, placed between the Tenants and Load Profile tabs. This includes schematic file upload (PDF, PNG, JPG, SVG), listing with metadata table, viewing, replacing files, and deleting -- all adapted to work with `project_id` instead of `site_id`.
 
-### User Flow
+### What Gets Built
 
-**Step 1 -- Upload Files**
-- Click "Import" button to open the dialog
-- "Choose Files" button accepts `.csv`, `.xlsx`, `.xls` (multiple files allowed)
-- Each selected file appears as a row: file name on the left, a tenant dropdown on the right
-- The tenant dropdown defaults to blank; if tenants exist, user can assign one per file
-- Assigned tenants are removed from the dropdown options for other files (reducing list)
-- "Upload All" button uploads files to storage and advances to Step 2
+**Schematics Tab UI (matching WM-Tariffs exactly):**
+- Header: "Schematics" title with subtitle "Electrical distribution diagrams for this site"
+- "+ Upload Schematic" button opening a dialog with:
+  - Schematic Name input (auto-populated from file name)
+  - Description textarea
+  - Total Pages number input
+  - Drag-and-drop file upload zone (PDF, PNG, JPG, SVG up to 50MB)
+- Table listing schematics with columns: Checkbox, Type (icon), Name, Pages, Uploaded date, Status, Actions
+- Bulk select with "Delete Selected" button
+- Action buttons per row: View (eye icon), Replace (upload icon), Delete (trash icon)
+- Replace dialog preserving all metadata while swapping the file
+- Delete confirmation dialog
+- PDF auto-conversion to PNG image on upload for faster viewing
+- Empty state with icon and "Upload Schematic" CTA
 
-**Step 2 -- Parse & Ingest**
-- Parsing Configuration card with:
-  - Column Separator dropdown (Tab, Comma, Semicolon, Space)
-  - Header Row Number input
-- Column Interpretation section (appears after loading a preview):
-  - Select All / Deselect All checkbox header
-  - Each column shown as a card with:
-    - Checkbox to include/exclude
-    - Editable Column Name input
-    - Data Type dropdown (DateTime, Float, Int, String, Boolean)
-    - DateTime Format dropdown (shown only when Data Type is DateTime)
-    - Split Column By dropdown (No split, Tab, Comma, Semicolon, Space)
-- File list with status badges and per-file parse/preview/delete actions
-
-**Step 3 -- Preview**
-- Displays a table of parsed data using the column interpretation settings
-- Shows the reading count
-- Only visible (checked) columns are shown
-- Column headers reflect any renamed values
+**Schematic Viewer Page:**
+- New route `/projects/:projectId/schematics/:id`
+- Displays the schematic image with zoom/pan controls
+- Meter data extraction panel (AI-powered, using drawn regions)
+- Meter position overlays on the schematic
+- Full SchematicEditor with Fabric.js canvas for meter placement, connections, and region extraction
 
 ### Technical Details
 
-**New file: `src/components/projects/ScadaImportWizard.tsx`**
+**Database Migration:**
+- `project_schematics` table: id, project_id (FK to projects), name, description, file_path, file_type, page_number, total_pages, converted_image_path, uploaded_by, created_at, updated_at
+- `project_schematic_meter_positions` table: id, schematic_id (FK), meter_id (text -- mapped to tenant or reference), x_position, y_position, label, scale_x, scale_y, created_at, updated_at
+- RLS policies for authenticated users (SELECT, INSERT, UPDATE, DELETE)
+- Updated_at triggers
 
-A new large dialog component (~800-1000 lines) containing:
-- Three-tab layout using `Tabs` (Upload Files, Parse & Ingest, Preview)
-- State management for: files list, separator, header row number, column mappings, column visibility, column data types, column splits, preview data
-- File handling: uses `xlsx` library for Excel files, plain text for CSV
-- Storage: uploads files to a `scada-csvs` storage bucket (or existing bucket)
-- Tenant assignment: queries `project_tenants` for the current project to populate the dropdown
-- Column configuration UI matching the WM-Tariffs `SingleMeterCsvParseDialog` pattern
-- Preview loading: reads the file content, applies separator and header row config, displays first 20 rows
+**Storage:**
+- `project-schematics` storage bucket (public, 50MB limit, PDF/PNG/JPG/SVG)
+- RLS policies for authenticated user access
 
-**Modified file: `src/components/projects/TenantManager.tsx`**
+**New Files:**
+1. `src/types/schematic.ts` -- Shared type definitions (Schematic, getFileTypeIcon, etc.)
+2. `src/components/projects/SchematicsTab.tsx` -- Main tab component (~900 lines), carbon-copied from WM-Tariffs `SchematicsTab` with `projectId` replacing `siteId`
+3. `src/pages/SchematicViewer.tsx` -- Viewer page with zoom/pan and meter overlays
+4. `src/components/schematic/SchematicEditor.tsx` -- Fabric.js canvas editor
+5. `src/components/schematic/PdfToImageConverter.tsx` -- PDF to image conversion dialog
+6. `src/components/schematic/MeterDataExtractor.tsx` -- AI meter extraction panel
+7. `src/components/schematic/MeterFormFields.tsx` -- Meter form input fields
+8. `src/components/schematic/MeterConnectionsManager.tsx` -- Meter connection hierarchy dialog
+9. `src/components/schematic/QuickMeterDialog.tsx` -- Quick meter placement dialog
 
-- Replace the current `CsvImportWizard` + `TenantColumnMapper` flow with the new `ScadaImportWizard`
-- Remove the hidden file input and `handleFileUpload` function
-- Import button opens the `ScadaImportWizard` dialog directly
-- Remove `CsvImportWizard` and `TenantColumnMapper` imports (no longer needed for this flow)
-- Keep existing tenant CRUD mutations
+**Modified Files:**
+1. `src/pages/ProjectDetail.tsx`:
+   - Import SchematicsTab component
+   - Add "schematics" entry to `tabStatuses` (pending/complete based on count)
+   - Add `<TabWithStatus value="schematics">` between Tenants and Load Profile tabs
+   - Add `<TabsContent value="schematics">` rendering `<SchematicsTab projectId={id!} />`
+   - Add `FileText` icon import for the tab
 
-**Storage bucket (SQL migration)**
+2. `src/App.tsx`:
+   - Add lazy import for SchematicViewer page
+   - Add route: `/projects/:projectId/schematics/:id`
 
-Create a `scada-csvs` bucket for uploaded CSV/Excel files with appropriate RLS policies so authenticated users can upload and read files.
-
-### What stays the same
-- Existing tenant table, add/edit/delete tenant, profile assignment, multi-meter selector -- all unchanged
-- The Download Template button stays
-- The `TenantProfileMatcher` and `MultiMeterSelector` components remain untouched
+### Key Adaptations from WM-Tariffs
+- All references to `site_id` become `project_id`
+- Storage bucket changes from `client-files` to `project-schematics`
+- The `generateStoragePath` utility is simplified (no hierarchical client/site path needed)
+- Navigation paths use `/projects/:projectId/schematics/:id` instead of `/schematics/:id`
+- Realtime subscriptions filter by project-specific schematic IDs
+- No role-based access (`has_role` function) -- uses standard authenticated user RLS
 
 ### Dependencies
-- No new npm packages required (`xlsx` is already installed, all UI components exist)
+- No new packages needed
+- Uses existing: `pdfjs-dist` (PDF rendering), `xlsx` (not needed here), all Shadcn/UI components
+- Note: Fabric.js is NOT currently installed. The SchematicEditor requires it. Will need to evaluate if we install `fabric` or defer the editor to a later phase and focus on the upload/list/view/delete functionality first.
 
+### Implementation Order
+1. Database migration (table + storage bucket)
+2. Type definitions
+3. SchematicsTab component (upload, list, delete, replace)
+4. Integration into ProjectDetail.tsx tabs
+5. SchematicViewer page + route
+6. SchematicEditor and supporting components (may require `fabric` package)
