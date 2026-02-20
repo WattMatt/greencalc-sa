@@ -1,45 +1,40 @@
 
 
-## Fix: Auto-Match Should Extract Numbers from Profile Names
+## Fix: Load Profile Shows Zero When Tenants Have area_sqm = 0
 
 ### Problem
-The SCADA import is named "AC Shop 2" with **no `shop_number` field**. All tenants are named "AC Shop" with different shop numbers (2, 18, 30, etc.). The current logic only compares `tenant.shop_number` against `profile.shop_number` -- but the profile's `shop_number` is null. It falls through to the fuzzy name matcher, which gives **equal scores to all "AC Shop" tenants** since they all substring-match "AC Shop 2". The greedy sort then arbitrarily picks shop 30 instead of shop 2.
+All tenants in this project have `area_sqm = 0`. The load profile calculation in `useLoadProfileData.ts` has early-return guards (`if (tenantArea <= 0) return;`) at two locations (lines 198 and 273) that skip every tenant entirely -- even those with valid SCADA profiles assigned. The chart shows 0 kW because no tenant data is ever processed.
+
+### Root Cause
+The code was designed around area-based scaling (kW/m2 intensity), but when a tenant has a directly assigned SCADA profile, the raw kW values from that profile should be used as-is without requiring area data.
 
 ### Fix
 
-**File: `src/components/projects/TenantManager.tsx` -- `autoMatchProfiles` function (around line 465)**
+**File: `src/components/projects/load-profile/hooks/useLoadProfileData.ts`**
 
-Add a new matching step: when the profile has no explicit `shop_number`, extract trailing numbers from the profile's `shop_name` or `site_name` and compare them against the tenant's `shop_number`.
+At both guard locations (lines 197-198 in the daily kWh calculation, and lines 272-273 in the chart data calculation), change the logic so that:
 
-The logic (inserted right after the existing `shop_number` check at line 476, before the `getProfileSuggestions` fallback):
+1. If `tenantArea <= 0` **and** the tenant has no SCADA data (no `scada_imports` and no `tenant_meters` with profiles), skip the tenant (no data to show).
+2. If `tenantArea <= 0` **but** the tenant has SCADA data assigned, use the raw kW values directly from the SCADA profile without area scaling.
 
-```typescript
-// If profile has no shop_number, try extracting a number from the profile name
-// e.g. "AC Shop 2" -> "2", "Shop 23A" -> "23A"
-if (score === 0 && tenant.shop_number) {
-  const profileLabel = profile.shop_name || profile.site_name || '';
-  // Extract trailing number/alphanumeric identifier from profile name
-  const profileTrailingMatch = profileLabel.match(/[\s_\-](\d+[A-Za-z]?)$/);
-  if (profileTrailingMatch) {
-    const extractedId = profileTrailingMatch[1];
-    const tenantShopTrimmed = tenant.shop_number.trim();
-    // Exact string match (case-insensitive)
-    if (extractedId.toLowerCase() === tenantShopTrimmed.toLowerCase()) {
-      score = 93; // High confidence, slightly below explicit shop_number match
-    } else {
-      // Try numeric comparison (e.g. "2" == "2.0")
-      const extractedNum = parseFloat(extractedId);
-      const tenantNum = parseFloat(tenantShopTrimmed);
-      if (!isNaN(extractedNum) && !isNaN(tenantNum) && extractedNum === tenantNum) {
-        score = 93;
-      }
-    }
-  }
-}
-```
+**Specific changes:**
 
-This ensures "AC Shop 2" matches tenant with `shop_number = "2"` at score 93, while "AC Shop 30" would only match tenant `shop_number = "30"`.
+**Location 1 -- Daily kWh totals (around line 196-248):**
+- Remove the blanket `if (tenantArea <= 0) return;` guard.
+- In the multi-meter branch: skip if `tenantArea <= 0` (multi-meter averaging requires area).
+- In the single SCADA branch: when `tenantArea <= 0`, use raw kW values directly (sum profile = daily kWh) instead of scaling by area ratio.
+- In the shop type fallback branch: skip if `tenantArea <= 0` (estimation requires area).
+
+**Location 2 -- Chart data / baseChartData (around line 271-314):**
+- Remove the blanket `if (tenantArea <= 0) return;` guard.
+- In the multi-meter branch: skip if `tenantArea <= 0`.
+- In the single SCADA branch: when `tenantArea <= 0`, use raw kW values directly (`hourlyKw = scadaProfile[h] * dayMultiplier`) with `areaScale = 1`.
+- In the shop type fallback branch: skip if `tenantArea <= 0`.
+
+### Technical Detail
+
+The key insight: when a SCADA profile is directly assigned to a tenant (via `scada_import_id`), the profile already contains actual kW readings from that specific meter. Area scaling is only needed when you're adapting a profile from a differently-sized reference facility. When `area_sqm = 0`, we treat it as "use the raw SCADA data as-is" rather than "this tenant has no load".
 
 ### Files Modified
-- `src/components/projects/TenantManager.tsx` -- add number-extraction matching step in `autoMatchProfiles`
+- `src/components/projects/load-profile/hooks/useLoadProfileData.ts` -- remove blanket area guards, allow SCADA data pass-through for zero-area tenants
 
