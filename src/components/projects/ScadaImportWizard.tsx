@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Upload, FileText, Trash2, Settings2, Eye, ChevronDown, Check, ChevronsUpDown, Database, Loader2 } from "lucide-react";
+import { Upload, FileText, Trash2, Settings2, Eye, ChevronDown, Check, ChevronsUpDown, Database, Loader2, Clock, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
@@ -240,6 +240,11 @@ export function ScadaImportWizard({
   const [openSection, setOpenSection] = useState<"parsing" | "columns">("parsing");
   // Track which file's tenant popover is open
   const [openTenantPopover, setOpenTenantPopover] = useState<number | null>(null);
+
+  // Step 4 state
+  const [uploadStatuses, setUploadStatuses] = useState<Record<number, { status: 'pending' | 'uploading' | 'parsing' | 'done' | 'error'; error?: string }>>({});
+  const [isImporting, setIsImporting] = useState(false);
+  const [importComplete, setImportComplete] = useState(false);
 
   // Fetch tenants for assignment
   const { data: tenants = [] } = useQuery({
@@ -501,52 +506,79 @@ export function ScadaImportWizard({
     [previewRows, visibleColIndices]
   );
 
-  // ── Complete / Close ─────────────────────────────────────────
+  // ── Navigate to Step 4 ───────────────────────────────────────
 
-  const handleComplete = useCallback(async () => {
-    if (!onComplete) {
-      onClose();
-      return;
-    }
+  const handleGoToImport = useCallback(() => {
+    const statuses: Record<number, { status: 'pending' | 'uploading' | 'parsing' | 'done' | 'error'; error?: string }> = {};
+    files.forEach((_, i) => {
+      statuses[i] = { status: 'pending' };
+    });
+    setUploadStatuses(statuses);
+    setImportComplete(false);
+    setIsImporting(false);
+    setActiveTab("import");
+  }, [files]);
 
-    // Upload files to storage now (deferred from Step 1)
-    for (const f of files) {
-      if (!f.content) continue;
-      const path = `${projectId}/${Date.now()}_${f.name}`;
-      const { error } = await supabase.storage
-        .from("scada-csvs")
-        .upload(path, f.file, { upsert: true });
-      if (error) {
-        toast.error(`Failed to upload ${f.name}: ${error.message}`);
-        return; // Abort — don't partially import
+  // ── Step 4: Sequential import ──────────────────────────────
+
+  const handleStartImport = useCallback(async () => {
+    setIsImporting(true);
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      if (!f.content) {
+        setUploadStatuses(prev => ({ ...prev, [i]: { status: 'error', error: 'No file content' } }));
+        continue;
+      }
+
+      try {
+        // Uploading
+        setUploadStatuses(prev => ({ ...prev, [i]: { status: 'uploading' } }));
+        const path = `${projectId}/${Date.now()}_${f.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("scada-csvs")
+          .upload(path, f.file, { upsert: true });
+        if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+        // Parsing
+        setUploadStatuses(prev => ({ ...prev, [i]: { status: 'parsing' } }));
+        const { headers, rows } = parseContent(f.content, separator, headerRow);
+        const result: ParsedFileResult = {
+          fileName: f.name,
+          tenantId: f.tenantId,
+          headers: visibleColumns.map((c) => c.displayName),
+          rows: rows.map((r) => visibleColIndices.map((ci) => r[ci] || "")),
+          columns: visibleColumns,
+          rawContent: f.content,
+        };
+
+        // Call onComplete for this single file
+        if (onComplete) {
+          onComplete([result]);
+        }
+
+        setUploadStatuses(prev => ({ ...prev, [i]: { status: 'done' } }));
+      } catch (err: any) {
+        setUploadStatuses(prev => ({ ...prev, [i]: { status: 'error', error: err.message || 'Unknown error' } }));
       }
     }
 
-    const results: ParsedFileResult[] = [];
-    for (const f of files) {
-      if (!f.content) continue;
-      const { headers, rows } = parseContent(f.content, separator, headerRow);
-      results.push({
-        fileName: f.name,
-        tenantId: f.tenantId,
-        headers: visibleColumns.map((c) => c.displayName),
-        rows: rows.map((r) =>
-          visibleColIndices.map((ci) => r[ci] || "")
-        ),
-        columns: visibleColumns,
-        rawContent: f.content,
-      });
-    }
+    setIsImporting(false);
+    setImportComplete(true);
+    queryClient.invalidateQueries({ queryKey: ["existing-scada-imports", projectId] });
+  }, [files, projectId, separator, headerRow, visibleColumns, visibleColIndices, onComplete, queryClient]);
 
-    onComplete(results);
-    onClose();
-  }, [files, projectId, separator, headerRow, visibleColumns, visibleColIndices, onComplete, onClose]);
+  const doneCount = useMemo(() => Object.values(uploadStatuses).filter(s => s.status === 'done').length, [uploadStatuses]);
+  const processedCount = useMemo(() => Object.values(uploadStatuses).filter(s => s.status === 'done' || s.status === 'error').length, [uploadStatuses]);
 
   const handleDialogClose = useCallback(() => {
     setFiles([]);
     setColumns([]);
     setPreviewHeaders([]);
     setPreviewRows([]);
+    setUploadStatuses({});
+    setIsImporting(false);
+    setImportComplete(false);
     setActiveTab("upload");
     setSeparator("comma");
     setHeaderRow(1);
@@ -570,7 +602,7 @@ export function ScadaImportWizard({
           onValueChange={setActiveTab}
           className="flex-1 flex flex-col min-h-0"
         >
-          <TabsList className="w-full grid grid-cols-3">
+          <TabsList className="w-full grid grid-cols-4">
             <TabsTrigger value="upload">1. Select Files</TabsTrigger>
             <TabsTrigger
               value="parse"
@@ -583,6 +615,12 @@ export function ScadaImportWizard({
               disabled={columns.length === 0}
             >
               3. Preview
+            </TabsTrigger>
+            <TabsTrigger
+              value="import"
+              disabled={Object.keys(uploadStatuses).length === 0}
+            >
+              4. Upload
             </TabsTrigger>
           </TabsList>
 
@@ -1092,10 +1130,115 @@ export function ScadaImportWizard({
               <Button variant="outline" onClick={handleDialogClose}>
                 Cancel
               </Button>
-              <Button onClick={handleComplete}>
+              <Button onClick={handleGoToImport}>
                 <Upload className="h-4 w-4 mr-2" />
-                Complete Import
+                Continue to Upload
               </Button>
+            </div>
+          </TabsContent>
+
+          {/* ── Tab 4: Upload Progress ───────────────────────── */}
+          <TabsContent
+            value="import"
+            className="flex-1 flex flex-col min-h-0 space-y-4"
+          >
+            {/* Summary bar */}
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">
+                {importComplete
+                  ? `${doneCount} of ${files.length} files imported successfully`
+                  : isImporting
+                  ? `Importing... (${processedCount}/${files.length})`
+                  : `${files.length} files ready to import`}
+              </div>
+              {importComplete && doneCount < files.length && (
+                <Badge variant="destructive" className="text-xs">
+                  {files.length - doneCount} failed
+                </Badge>
+              )}
+            </div>
+
+            {/* File list */}
+            <div className="overflow-auto flex-1 min-h-0 space-y-2">
+              {files.map((entry, idx) => {
+                const st = uploadStatuses[idx] || { status: 'pending' };
+                const tenantName = entry.tenantId
+                  ? (() => {
+                      const t = tenants.find((t) => t.id === entry.tenantId);
+                      return t ? `${t.shop_name || t.name}${t.shop_number ? ` (${t.shop_number})` : ""}` : "Unassigned";
+                    })()
+                  : "Unassigned";
+
+                return (
+                  <Card key={idx} className="p-3">
+                    <div className="flex items-center gap-3">
+                      {/* Status icon */}
+                      <div className="shrink-0">
+                        {st.status === 'pending' && <Clock className="h-4 w-4 text-muted-foreground" />}
+                        {(st.status === 'uploading' || st.status === 'parsing') && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                        {st.status === 'done' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                        {st.status === 'error' && <XCircle className="h-4 w-4 text-destructive" />}
+                      </div>
+
+                      {/* File info */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate">{entry.name}</p>
+                          <Badge variant="outline" className="text-xs shrink-0">
+                            {tenantName}
+                          </Badge>
+                        </div>
+                        {st.status === 'uploading' && (
+                          <p className="text-xs text-muted-foreground">Uploading to storage...</p>
+                        )}
+                        {st.status === 'parsing' && (
+                          <p className="text-xs text-muted-foreground">Parsing and importing...</p>
+                        )}
+                        {st.status === 'error' && st.error && (
+                          <p className="text-xs text-destructive mt-0.5">{st.error}</p>
+                        )}
+                        {st.status === 'done' && (
+                          <p className="text-xs text-green-600">Imported successfully</p>
+                        )}
+                      </div>
+
+                      {/* Status badge */}
+                      <Badge
+                        variant={st.status === 'done' ? 'default' : st.status === 'error' ? 'destructive' : 'secondary'}
+                        className={cn("text-xs shrink-0", st.status === 'done' && "bg-green-600")}
+                      >
+                        {st.status === 'pending' && 'Pending'}
+                        {st.status === 'uploading' && 'Uploading'}
+                        {st.status === 'parsing' && 'Parsing'}
+                        {st.status === 'done' && 'Done'}
+                        {st.status === 'error' && 'Failed'}
+                      </Badge>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {/* Action button */}
+            <div className="flex justify-end gap-2 shrink-0">
+              <Button variant="outline" onClick={handleDialogClose}>
+                {importComplete ? "Close" : "Cancel"}
+              </Button>
+              {!importComplete && (
+                <Button onClick={handleStartImport} disabled={isImporting}>
+                  {isImporting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Importing... ({processedCount}/{files.length})
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Complete Import
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </TabsContent>
         </Tabs>
