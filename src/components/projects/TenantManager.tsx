@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -18,14 +18,13 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
-import * as XLSX from 'xlsx';
+
 import { TenantProfileMatcher } from "./TenantProfileMatcher";
 import { MultiMeterSelector } from "./MultiMeterSelector";
 import { AccuracyBadge, AccuracySummary, getAccuracyLevel } from "@/components/simulation/AccuracyBadge";
-import { CsvImportWizard, WizardParseConfig } from "@/components/loadprofiles/CsvImportWizard";
-import { detectCsvType, buildMismatchErrorMessage } from "@/components/loadprofiles/utils/csvTypeDetection";
 import { ScaledMeterPreview } from "./ScaledMeterPreview";
 import { TenantColumnMapper, type TenantMappedData } from "./TenantColumnMapper";
+import { ScadaImportWizard, type ParsedFileResult } from "./ScadaImportWizard";
 
 interface Tenant {
   id: string;
@@ -232,18 +231,16 @@ type SortDirection = 'asc' | 'desc';
 
 export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerProps) {
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newTenant, setNewTenant] = useState({ shop_number: "", shop_name: "", area_sqm: "", scada_import_id: "" });
   const [profilePopoverOpen, setProfilePopoverOpen] = useState(false);
   const [addDialogSortByArea, setAddDialogSortByArea] = useState(false);
   
-  // CSV Wizard state
+  // Scada Import Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [wizardFile, setWizardFile] = useState<{ name: string; content: string } | null>(null);
-  const [isProcessingWizard, setIsProcessingWizard] = useState(false);
   
-  // Column mapper state
+  // Column mapper state (still used after wizard completes)
   const [columnMapperOpen, setColumnMapperOpen] = useState(false);
   const [columnMapperData, setColumnMapperData] = useState<{ headers: string[]; rows: string[][] } | null>(null);
   
@@ -451,44 +448,21 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     return sortDirection === 'asc' ? comparison : -comparison;
   });
 
-  const processWizardData = useCallback(async (
-    config: WizardParseConfig, 
-    parsedData: { headers: string[]; rows: string[][] }
-  ) => {
-    try {
-      // Detect CSV type and check for mismatch
-      const detection = detectCsvType(parsedData.headers);
-      if (detection.detectedType !== "tenant-list" && detection.detectedType !== "unknown") {
-        const errorMsg = buildMismatchErrorMessage("tenant-list", detection, parsedData.headers);
-        throw new Error(errorMsg);
-      }
-      
-      // Close wizard and open column mapper
-      setWizardOpen(false);
-      setWizardFile(null);
-      setColumnMapperData({ headers: parsedData.headers, rows: parsedData.rows });
-      setColumnMapperOpen(true);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to process file";
-      if (message.includes("\n")) {
-        const [title, ...rest] = message.split("\n\n");
-        toast.error(title, { 
-          description: rest.join("\n\n"),
-          duration: 10000 
-        });
-      } else {
-        toast.error(message);
-      }
-    }
+  const handleWizardComplete = useCallback((results: ParsedFileResult[]) => {
+    if (results.length === 0) return;
+    // Use the first file result for tenant column mapping
+    const first = results[0];
+    setColumnMapperData({ headers: first.headers, rows: first.rows });
+    setColumnMapperOpen(true);
   }, []);
 
-  const handleMappedImport = useCallback(async (tenants: TenantMappedData[]) => {
-    if (tenants.length === 0) {
+  const handleMappedImport = useCallback(async (mappedTenants: TenantMappedData[]) => {
+    if (mappedTenants.length === 0) {
       toast.error("No valid tenants found");
       return;
     }
 
-    const tenantsToInsert = tenants.map(t => ({
+    const tenantsToInsert = mappedTenants.map(t => ({
       project_id: projectId,
       name: t.shop_name,
       shop_number: t.shop_number,
@@ -507,34 +481,6 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     setColumnMapperOpen(false);
     setColumnMapperData(null);
   }, [projectId, queryClient]);
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      if (ext === 'xlsx' || ext === 'xls') {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const data = new Uint8Array(event.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const csvContent = XLSX.utils.sheet_to_csv(firstSheet);
-          setWizardFile({ name: file.name, content: csvContent });
-          setWizardOpen(true);
-        };
-        reader.readAsArrayBuffer(file);
-      } else {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const content = event.target?.result as string;
-          setWizardFile({ name: file.name, content });
-          setWizardOpen(true);
-        };
-        reader.readAsText(file);
-      }
-    }
-    e.target.value = "";
-  };
 
   const downloadTemplate = () => {
     const csv = "shop_number,shop_name,area_sqm\nG12,Woolworths,850\nG15,Pick n Pay,1200\nL01,Cape Union Mart,320\n";
@@ -576,14 +522,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
             <Download className="h-4 w-4 mr-2" />
             Template
           </Button>
-          <input
-            type="file"
-            accept=".csv,.xlsx,.xls"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+          <Button variant="outline" onClick={() => setWizardOpen(true)}>
             <Upload className="h-4 w-4 mr-2" />
             Import
           </Button>
@@ -1081,16 +1020,11 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         <TenantProfileMatcher projectId={projectId} tenants={tenants} />
       )}
 
-      <CsvImportWizard
-        isOpen={wizardOpen}
-        onClose={() => {
-          setWizardOpen(false);
-          setWizardFile(null);
-        }}
-        csvContent={wizardFile?.content || null}
-        fileName={wizardFile?.name || ""}
-        onProcess={processWizardData}
-        isProcessing={isProcessingWizard}
+      <ScadaImportWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        projectId={projectId}
+        onComplete={handleWizardComplete}
       />
 
       {/* Tenant Column Mapper */}
