@@ -1,36 +1,33 @@
 
 
-## Align Tenant Bulk Upload with Global Meter Database
+## Fix: Prevent Duplicate Meter Imports (Upsert Instead of Insert)
 
 ### Problem
-The current `handleWizardComplete` in `TenantManager.tsx` inserts into `scada_imports` but is missing key fields and query invalidations that the Load Profiles ingestion flows use. This means meters imported from the Tenants tab will:
+Every time you use the Bulk Upload wizard and re-import the same CSV files, new rows are created in the database. There is no check for whether a meter with the same file name already exists for this project. This causes duplicate entries to pile up.
 
-1. **Not store `raw_data`** (the original CSV content) -- so they cannot be re-previewed, re-parsed, or displayed in the Configuration Wizard or meter detail views
-2. **Not invalidate the right query keys** -- so the Load Profiles dashboard, Meter Library, and cross-site comparison won't pick up the new meters until a manual refresh
+### Solution
+Before inserting each file's data, check if a `scada_imports` record already exists for this project with the same `file_name`. If it does, **update** the existing record instead of creating a new one.
 
-### What Needs to Change
+### What Changes
 
-**File: `src/components/projects/TenantManager.tsx` -- `handleWizardComplete` function (around line 484)**
+**File: `src/components/projects/TenantManager.tsx` -- `handleWizardComplete` function**
 
-1. **Store `raw_data`**: Build the `[{"csvContent": "..."}]` JSONB payload from the original file content (available as `result.rows` joined back into CSV text) and include it in the insert, matching the format used by `BulkMeterImport.tsx` and `ScadaImport.tsx`
-
-2. **Include `area_sqm`**: If the file was assigned a tenant (via `result.tenantId`), look up that tenant's `area_sqm` from the project tenants list and include it in the insert
-
-3. **Broaden query invalidations**: After successful imports, also invalidate:
-   - `scada-imports` (used by Meter Library)
-   - `meter-library` (used by Meter Library tab)
-   - `load-profiles-stats` (used by Load Profiles Dashboard)
-   - `scada-imports-raw` (used by meter detail/preview views)
+1. For each file result, query `scada_imports` for an existing record matching `project_id` + `file_name`
+2. If a match is found, use `.update()` on that record's ID instead of `.insert()`
+3. If no match, proceed with `.insert()` as before
+4. Update the success toast to distinguish between "imported" and "updated" counts
 
 ### Technical Detail
 
-The `raw_data` field stores the original CSV as `[{"csvContent": "<full CSV text>"}]`. The `ScadaImportWizard` already reads each file's content and stores it in `FileEntry.content`. Currently `handleComplete` in the wizard only passes `headers`, `rows`, and `columns` to the parent -- but not the raw content.
+```text
+For each result:
+  1. SELECT id FROM scada_imports WHERE project_id = ? AND file_name = ?
+  2. If found -> UPDATE scada_imports SET ... WHERE id = existing.id
+  3. If not found -> INSERT INTO scada_imports (...)
+```
 
-To fix this:
-- Extend `ParsedFileResult` interface to include an optional `rawContent?: string` field
-- In `ScadaImportWizard.handleComplete`, populate `rawContent` from `f.content`
-- In `TenantManager.handleWizardComplete`, use `result.rawContent` to build the `raw_data` JSONB payload
+This mirrors the storage-level `upsert: true` already used for the file uploads in the wizard, ensuring both the storage bucket and database stay in sync without duplicates.
 
 ### Files Modified
-- `src/components/projects/ScadaImportWizard.tsx` -- add `rawContent` to `ParsedFileResult`, populate it in `handleComplete`
-- `src/components/projects/TenantManager.tsx` -- update `handleWizardComplete` to store `raw_data`, `area_sqm`, and invalidate all relevant query keys
+- `src/components/projects/TenantManager.tsx` -- replace blind `.insert()` with a check-then-upsert pattern in `handleWizardComplete`
+
