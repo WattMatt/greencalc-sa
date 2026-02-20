@@ -30,7 +30,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, FileText, Trash2, Settings2, Eye } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Upload, FileText, Trash2, Settings2, Eye, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -221,6 +222,7 @@ export function ScadaImportWizard({
 
   // Step 3 state
   const [previewActive, setPreviewActive] = useState(false);
+  const [openSection, setOpenSection] = useState<"parsing" | "columns">("parsing");
 
   // Fetch tenants for assignment
   const { data: tenants = [] } = useQuery({
@@ -636,180 +638,200 @@ export function ScadaImportWizard({
             className="flex-1 flex flex-col min-h-0 overflow-auto space-y-4"
           >
             {/* Parsing Configuration */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Settings2 className="h-4 w-4" />
-                  Parsing Configuration
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm font-medium mb-3">File Interpretation</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Column Separator</Label>
-                    <Select
-                      value={separator}
-                      onValueChange={handleSeparatorChange}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="tab">Tab</SelectItem>
-                        <SelectItem value="comma">Comma</SelectItem>
-                        <SelectItem value="semicolon">Semicolon</SelectItem>
-                        <SelectItem value="space">Space</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Header Row Number</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={headerRow}
-                      onChange={(e) => handleHeaderRowChange(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <Collapsible
+              open={openSection === "parsing"}
+              onOpenChange={(open) => open && setOpenSection("parsing")}
+            >
+              <Card>
+                <CollapsibleTrigger asChild>
+                  <CardHeader className="pb-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Settings2 className="h-4 w-4" />
+                      Parsing Configuration
+                      <ChevronDown className={`h-4 w-4 ml-auto transition-transform ${openSection === "parsing" ? "rotate-180" : ""}`} />
+                    </CardTitle>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent>
+                    <p className="text-sm font-medium mb-3">File Interpretation</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Column Separator</Label>
+                        <Select
+                          value={separator}
+                          onValueChange={handleSeparatorChange}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="tab">Tab</SelectItem>
+                            <SelectItem value="comma">Comma</SelectItem>
+                            <SelectItem value="semicolon">Semicolon</SelectItem>
+                            <SelectItem value="space">Space</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Header Row Number</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={headerRow}
+                          onChange={(e) => handleHeaderRowChange(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
 
             {/* Column Interpretation */}
             {columns.length > 0 && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Settings2 className="h-4 w-4" />
-                    Column Interpretation
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {/* Select All header */}
-                  <div className="flex items-center gap-2 border rounded-md p-3 bg-muted/30">
-                    <Checkbox
-                      checked={allVisible}
-                      onCheckedChange={(v) => toggleAllColumns(!!v)}
-                      className="mr-1"
-                    />
-                    <span className="text-sm font-medium">Column Name</span>
-                  </div>
-
-                  {/* Column cards */}
-                  {columns.map((col, idx) => (
-                    <div
-                      key={idx}
-                      className="border rounded-md p-3 space-y-3 bg-card"
-                    >
-                      <div className="flex items-center gap-3">
+              <Collapsible
+                open={openSection === "columns"}
+                onOpenChange={(open) => open && setOpenSection("columns")}
+              >
+                <Card>
+                  <CollapsibleTrigger asChild>
+                    <CardHeader className="pb-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Settings2 className="h-4 w-4" />
+                        Column Interpretation
+                        <ChevronDown className={`h-4 w-4 ml-auto transition-transform ${openSection === "columns" ? "rotate-180" : ""}`} />
+                      </CardTitle>
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-3">
+                      {/* Select All header */}
+                      <div className="flex items-center gap-2 border rounded-md p-3 bg-muted/30">
                         <Checkbox
-                          checked={col.visible}
-                          onCheckedChange={() => toggleColumnVisibility(idx)}
+                          checked={allVisible}
+                          onCheckedChange={(v) => toggleAllColumns(!!v)}
+                          className="mr-1"
                         />
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 flex-1">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Column Name</Label>
-                            <Input
-                              value={col.displayName}
-                              onChange={(e) =>
-                                updateColumnName(idx, e.target.value)
-                              }
-                              className="h-8"
+                        <span className="text-sm font-medium">Column Name</span>
+                      </div>
+
+                      {/* Column cards */}
+                      {columns.map((col, idx) => (
+                        <div
+                          key={idx}
+                          className="border rounded-md p-3 space-y-3 bg-card"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Checkbox
+                              checked={col.visible}
+                              onCheckedChange={() => toggleColumnVisibility(idx)}
                             />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Data Type</Label>
-                            <Select
-                              value={col.dataType}
-                              onValueChange={(v) =>
-                                updateColumnDataType(
-                                  idx,
-                                  v as ColumnInterpretation["dataType"]
-                                )
-                              }
-                            >
-                              <SelectTrigger className="h-8">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="DateTime">DateTime</SelectItem>
-                                <SelectItem value="Float">Float</SelectItem>
-                                <SelectItem value="Int">Int</SelectItem>
-                                <SelectItem value="String">String</SelectItem>
-                                <SelectItem value="Boolean">Boolean</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 flex-1">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Column Name</Label>
+                                <Input
+                                  value={col.displayName}
+                                  onChange={(e) =>
+                                    updateColumnName(idx, e.target.value)
+                                  }
+                                  className="h-8"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Data Type</Label>
+                                <Select
+                                  value={col.dataType}
+                                  onValueChange={(v) =>
+                                    updateColumnDataType(
+                                      idx,
+                                      v as ColumnInterpretation["dataType"]
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="DateTime">DateTime</SelectItem>
+                                    <SelectItem value="Float">Float</SelectItem>
+                                    <SelectItem value="Int">Int</SelectItem>
+                                    <SelectItem value="String">String</SelectItem>
+                                    <SelectItem value="Boolean">Boolean</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              {col.dataType === "DateTime" && (
+                                <div className="space-y-1">
+                                  <Label className="text-xs">DateTime Format</Label>
+                                  <Select
+                                    value={DATETIME_FORMATS.includes(col.dateTimeFormat) ? col.dateTimeFormat : "__custom__"}
+                                    onValueChange={(v) => {
+                                      if (v === "__custom__") {
+                                        updateColumnDateFormat(idx, "");
+                                      } else {
+                                        updateColumnDateFormat(idx, v);
+                                      }
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-8">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {DATETIME_FORMATS.map((fmt) => (
+                                        <SelectItem key={fmt} value={fmt}>
+                                          {fmt}
+                                        </SelectItem>
+                                      ))}
+                                      <SelectItem value="__custom__">Custom Format</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  {!DATETIME_FORMATS.includes(col.dateTimeFormat) && (
+                                    <Input
+                                      value={col.dateTimeFormat}
+                                      onChange={(e) => updateColumnDateFormat(idx, e.target.value)}
+                                      placeholder="e.g. DD/MMM/YY HH:mm"
+                                      className="h-8 mt-1"
+                                    />
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
 
-                          {col.dataType === "DateTime" && (
-                            <div className="space-y-1">
-                              <Label className="text-xs">DateTime Format</Label>
+                          <div className="pl-8">
+                            <div className="space-y-1 max-w-xs">
+                              <Label className="text-xs">Split Column By</Label>
                               <Select
-                                value={DATETIME_FORMATS.includes(col.dateTimeFormat) ? col.dateTimeFormat : "__custom__"}
-                                onValueChange={(v) => {
-                                  if (v === "__custom__") {
-                                    updateColumnDateFormat(idx, "");
-                                  } else {
-                                    updateColumnDateFormat(idx, v);
-                                  }
-                                }}
+                                value={col.splitBy}
+                                onValueChange={(v) =>
+                                  updateColumnSplit(
+                                    idx,
+                                    v as ColumnInterpretation["splitBy"]
+                                  )
+                                }
                               >
                                 <SelectTrigger className="h-8">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {DATETIME_FORMATS.map((fmt) => (
-                                    <SelectItem key={fmt} value={fmt}>
-                                      {fmt}
-                                    </SelectItem>
-                                  ))}
-                                  <SelectItem value="__custom__">Custom Format</SelectItem>
+                                  <SelectItem value="none">No split</SelectItem>
+                                  <SelectItem value="tab">Tab</SelectItem>
+                                  <SelectItem value="comma">Comma</SelectItem>
+                                  <SelectItem value="semicolon">Semicolon</SelectItem>
+                                  <SelectItem value="space">Space</SelectItem>
                                 </SelectContent>
                               </Select>
-                              {!DATETIME_FORMATS.includes(col.dateTimeFormat) && (
-                                <Input
-                                  value={col.dateTimeFormat}
-                                  onChange={(e) => updateColumnDateFormat(idx, e.target.value)}
-                                  placeholder="e.g. DD/MMM/YY HH:mm"
-                                  className="h-8 mt-1"
-                                />
-                              )}
                             </div>
-                          )}
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="pl-8">
-                        <div className="space-y-1 max-w-xs">
-                          <Label className="text-xs">Split Column By</Label>
-                          <Select
-                            value={col.splitBy}
-                            onValueChange={(v) =>
-                              updateColumnSplit(
-                                idx,
-                                v as ColumnInterpretation["splitBy"]
-                              )
-                            }
-                          >
-                            <SelectTrigger className="h-8">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">No split</SelectItem>
-                              <SelectItem value="tab">Tab</SelectItem>
-                              <SelectItem value="comma">Comma</SelectItem>
-                              <SelectItem value="semicolon">Semicolon</SelectItem>
-                              <SelectItem value="space">Space</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+                      ))}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
             )}
 
             {/* Preview Data button */}
