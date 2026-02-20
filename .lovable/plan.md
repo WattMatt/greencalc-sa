@@ -1,33 +1,40 @@
 
 
-## Fix: Prevent Duplicate Meter Imports (Upsert Instead of Insert)
+## Defer All Uploads to the Preview Tab
 
 ### Problem
-Every time you use the Bulk Upload wizard and re-import the same CSV files, new rows are created in the database. There is no check for whether a meter with the same file name already exists for this project. This causes duplicate entries to pile up.
+Currently, clicking "Upload All" in the **Upload Files** tab immediately uploads files to the storage bucket (`scada-csvs`). While the database insert only happens on "Complete Import" in the Preview tab, the user expects **nothing** to leave the browser until they are satisfied with the parsed preview and explicitly confirm.
 
 ### Solution
-Before inserting each file's data, check if a `scada_imports` record already exists for this project with the same `file_name`. If it does, **update** the existing record instead of creating a new one.
+Restructure the wizard so that:
+- **Tab 1 ("Select Files")**: Only selects files from disk and reads their content locally in the browser. No network calls. The "Upload All" button becomes "Read All" or simply auto-reads on selection. Tenant assignment stays here.
+- **Tab 2 ("Parse & Configure")**: Same as today -- configure separator, header row, column interpretation.
+- **Tab 3 ("Preview & Import")**: Shows the parsed preview. The "Complete Import" button now does **both** the storage upload and the database insert in one go.
 
-### What Changes
+### Changes in `src/components/projects/ScadaImportWizard.tsx`
 
-**File: `src/components/projects/TenantManager.tsx` -- `handleWizardComplete` function**
+1. **Rename Tab 1** from "Upload Files" to "Select Files" and update the description to clarify no upload happens yet.
 
-1. For each file result, query `scada_imports` for an existing record matching `project_id` + `file_name`
-2. If a match is found, use `.update()` on that record's ID instead of `.insert()`
-3. If no match, proceed with `.insert()` as before
-4. Update the success toast to distinguish between "imported" and "updated" counts
+2. **Refactor `handleUploadAll`** to only read file content locally (no `supabase.storage.upload` call). Rename it to `handleReadAll`. It will:
+   - Call `readFileAsText()` for each file (already done today)
+   - Set status to `"uploaded"` (rename to `"ready"` for clarity)
+   - Auto-detect separator and load preview
+   - Advance to Tab 2
+   - **Remove** the `supabase.storage.from("scada-csvs").upload(...)` call entirely from this function
 
-### Technical Detail
+3. **Move storage upload into `handleComplete`**: Before the `onComplete(results)` call, loop through files and upload each to `scada-csvs` storage. This means the storage upload and database insert (done by the parent `TenantManager.tsx`) both happen at the same moment -- when the user clicks "Complete Import".
 
-```text
-For each result:
-  1. SELECT id FROM scada_imports WHERE project_id = ? AND file_name = ?
-  2. If found -> UPDATE scada_imports SET ... WHERE id = existing.id
-  3. If not found -> INSERT INTO scada_imports (...)
-```
+4. **Update button labels and toasts**:
+   - "Upload All" becomes "Continue" or "Read Files" (since it just reads locally)
+   - Success toast changes from "Files uploaded successfully" to "Files loaded successfully"
+   - Tab 3 button "Complete Import" stays the same but now also handles the storage upload
 
-This mirrors the storage-level `upsert: true` already used for the file uploads in the wizard, ensuring both the storage bucket and database stay in sync without duplicates.
+### File Modified
+- `src/components/projects/ScadaImportWizard.tsx`
 
-### Files Modified
-- `src/components/projects/TenantManager.tsx` -- replace blind `.insert()` with a check-then-upsert pattern in `handleWizardComplete`
+### What Stays the Same
+- Tab 2 (Parse & Configure) -- no changes
+- Tab 3 preview table -- no changes
+- `TenantManager.tsx` `handleWizardComplete` -- no changes (it already handles the DB insert on complete)
+- The upsert dedup logic added previously -- no changes
 
