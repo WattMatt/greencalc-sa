@@ -172,6 +172,7 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
   const [meterConnections, setMeterConnections] = useState<any[]>([]);
   const [schematicLines, setSchematicLines] = useState<any[]>([]);
   const [tenantProfileMap, setTenantProfileMap] = useState<Record<string, { tenantId: string; include: boolean }>>({}); 
+  const tenantProfileMapRef = useRef<Record<string, { tenantId: string; include: boolean }>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [isInitialDataLoaded, setIsInitialDataLoaded] = useState(false);
   const [isCanvasReady, setIsCanvasReady] = useState(false);
@@ -266,6 +267,7 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
       }
     });
     setTenantProfileMap(map);
+    tenantProfileMapRef.current = map;
   };
 
   // Container resize
@@ -770,16 +772,16 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
       const meterId = (target as any).linkedMeterId;
       if (!meterId) return;
 
-      const tenantInfo = tenantProfileMap[meterId];
+      const currentMap = tenantProfileMapRef.current;
+      const tenantInfo = currentMap[meterId];
       if (!tenantInfo) return;
 
       const newValue = !tenantInfo.include;
 
-      // Optimistically update local state
-      setTenantProfileMap(prev => ({
-        ...prev,
-        [meterId]: { ...prev[meterId], include: newValue }
-      }));
+      // Optimistically update local state + ref
+      const updatedMap = { ...currentMap, [meterId]: { ...currentMap[meterId], include: newValue } };
+      tenantProfileMapRef.current = updatedMap;
+      setTenantProfileMap(updatedMap);
 
       try {
         const { error } = await supabase
@@ -793,17 +795,16 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
         queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
       } catch (err: any) {
         // Roll back optimistic update
-        setTenantProfileMap(prev => ({
-          ...prev,
-          [meterId]: { ...prev[meterId], include: !newValue }
-        }));
+        const rolledBack = { ...tenantProfileMapRef.current, [meterId]: { ...tenantProfileMapRef.current[meterId], include: !newValue } };
+        tenantProfileMapRef.current = rolledBack;
+        setTenantProfileMap(rolledBack);
         toast.error("Failed to update: " + (err.message || "Unknown error"));
       }
     };
 
     fabricCanvas.on('mouse:down', handler);
     return () => { fabricCanvas.off('mouse:down', handler); };
-  }, [fabricCanvas, tenantProfileMap, projectId, queryClient]);
+  }, [fabricCanvas, projectId, queryClient]);
 
   // Render connection lines
   useEffect(() => {
