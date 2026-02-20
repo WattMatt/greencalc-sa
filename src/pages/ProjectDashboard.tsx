@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Toggle } from "@/components/ui/toggle";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
@@ -16,12 +17,18 @@ import {
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
+interface SystemConfig {
+  solarPV: boolean;
+  battery: boolean;
+  generator: boolean;
+}
+
 interface ProjectParams {
   name: string;
   location: string;
   totalArea: number;
   capacity: number;
-  systemType: "Solar" | "Wind" | "Hybrid" | "";
+  systemConfig: SystemConfig;
   clientName: string;
   budget: number;
   targetDate: Date | undefined;
@@ -50,7 +57,7 @@ const ProjectDashboard = () => {
     location: "",
     totalArea: 0,
     capacity: 0,
-    systemType: "",
+    systemConfig: { solarPV: true, battery: false, generator: false },
     clientName: "",
     budget: 0,
     targetDate: undefined,
@@ -79,7 +86,7 @@ const ProjectDashboard = () => {
 
   const completedSteps = workflowSteps.filter(s => s.status === "complete").length;
 
-  const handleParamChange = (key: keyof ProjectParams, value: string | number | Date | undefined) => {
+  const handleParamChange = (key: keyof ProjectParams, value: string | number | Date | SystemConfig | undefined) => {
     setParams(prev => ({ ...prev, [key]: value }));
   };
 
@@ -154,22 +161,38 @@ const ProjectDashboard = () => {
               />
             </div>
 
-            {/* System Type */}
+            {/* System Configuration */}
             <div className="space-y-2">
-              <Label>System Type</Label>
-              <Select
-                value={params.systemType}
-                onValueChange={(value) => handleParamChange("systemType", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select system type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Solar">Solar</SelectItem>
-                  <SelectItem value="Wind">Wind</SelectItem>
-                  <SelectItem value="Hybrid">Hybrid</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>System Configuration</Label>
+              <div className="flex flex-wrap gap-2">
+                <Toggle
+                  variant="outline"
+                  pressed={params.systemConfig.solarPV}
+                  onPressedChange={(pressed) => handleParamChange("systemConfig", { ...params.systemConfig, solarPV: pressed })}
+                  className="gap-1.5 data-[state=on]:bg-accent data-[state=on]:text-accent-foreground"
+                >
+                  <Sun className="h-4 w-4" />
+                  Solar PV
+                </Toggle>
+                <Toggle
+                  variant="outline"
+                  pressed={params.systemConfig.battery}
+                  onPressedChange={(pressed) => handleParamChange("systemConfig", { ...params.systemConfig, battery: pressed })}
+                  className="gap-1.5 data-[state=on]:bg-accent data-[state=on]:text-accent-foreground"
+                >
+                  <Battery className="h-4 w-4" />
+                  Battery
+                </Toggle>
+                <Toggle
+                  variant="outline"
+                  pressed={params.systemConfig.generator}
+                  onPressedChange={(pressed) => handleParamChange("systemConfig", { ...params.systemConfig, generator: pressed })}
+                  className="gap-1.5 data-[state=on]:bg-accent data-[state=on]:text-accent-foreground"
+                >
+                  <Zap className="h-4 w-4" />
+                  Generator
+                </Toggle>
+              </div>
             </div>
 
             {/* Client Name */}
