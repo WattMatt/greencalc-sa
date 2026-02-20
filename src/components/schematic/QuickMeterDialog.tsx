@@ -123,6 +123,20 @@ export const QuickMeterDialog = ({
 
       if (insertError || !newMeter) throw insertError || new Error("No data returned");
 
+      // Create a matching tenant record so the meter appears in the Tenants tab
+      const { error: tenantError } = await supabase
+        .from("project_tenants")
+        .insert({
+          project_id: projectId,
+          name: virtualShopName.trim() || virtualLabel.trim(),
+          shop_name: virtualShopName.trim() || null,
+          shop_number: virtualShopNumber.trim() || null,
+          area_sqm: 0,
+          scada_import_id: newMeter.id,
+        });
+
+      if (tenantError) throw tenantError;
+
       const { error: posError } = await supabase
         .from("project_schematic_meter_positions")
         .insert({
