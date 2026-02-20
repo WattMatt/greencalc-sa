@@ -1,96 +1,106 @@
 
 
-## Improve Tenant Profile Assignment UX
+## Fix Blank Canvas Loading + Port Schematic Editor from WM-Tariffs
 
-Three changes to the tenant profile assignment dropdown in `TenantManager.tsx`:
+This is a significant feature port that involves fixing a bug, creating new database tables, and porting a ~6,800-line Fabric.js-based schematic editor.
 
-### 1. Auto-clear previous tenant when reassigning a meter
+### Bug Fix: Blank Canvas Never Finishes Loading
 
-Currently, if Meter A is assigned to Tenant 1 and you then assign Meter A to Tenant 2, Tenant 1 still keeps Meter A in its `scada_import_id`. The `updateTenantProfile` mutation will be updated to first clear any other tenant that currently has the same `scadaImportId` before assigning it to the new tenant.
+The SchematicViewer crashes when opening a "clean schematic" (blank canvas) because `file_path` is `null`. Line 58 of `SchematicViewer.tsx` calls `supabase.storage.getPublicUrl(data.file_path)` which throws `Cannot read properties of null (reading 'replace')`. The fix guards against null `file_path` and renders a blank canvas instead.
 
-### 2. Hide already-assigned meters from the dropdown
+### Port: Fabric.js Schematic Editor from WM-Tariffs
 
-Meters that are already assigned to other tenants should not appear in the profile dropdown. The `getSortedProfilesWithSuggestions` call will be wrapped with a filter that excludes profiles whose ID matches any other tenant's `scada_import_id` (but still shows the currently assigned profile for that specific tenant row).
-
-### 3. Add a small X button to clear a specific assignment
-
-To the left of the "Sort by" label (or next to the profile name in the trigger button), add a small X icon button that clears the assignment for that tenant. This calls `updateTenantProfile.mutate({ tenantId, scadaImportId: null })`.
+The WM-tariffs project has a fully featured schematic editor (`SchematicEditor.tsx`, 6,775 lines) with supporting components. This needs to be adapted to this project's data model (which uses `project_id` instead of `site_id`, and has `project_schematics` / `project_schematic_meter_positions` instead of `schematics` / `meter_positions`).
 
 ---
 
-### Technical Details
+### Phase 1: Database Schema Changes
 
-**File: `src/components/projects/TenantManager.tsx`**
+Create two new tables to support meter connections and schematic connection lines:
 
-**Change 1 -- Auto-clear on reassignment (lines 367-379):**
+1. **`project_meter_connections`** -- Stores parent-child meter hierarchy
+   - `id` (uuid, PK)
+   - `parent_meter_id` (text) -- references the parent/upstream meter
+   - `child_meter_id` (text) -- references the child/downstream meter
+   - `project_id` (uuid, FK to projects)
+   - `created_at` (timestamptz)
 
-Update the `updateTenantProfile` mutation to first nullify `scada_import_id` on any other tenant that currently holds the same profile, then assign it to the new tenant:
+2. **`project_schematic_lines`** -- Stores line segments drawn between meters on the canvas
+   - `id` (uuid, PK)
+   - `schematic_id` (uuid, FK to project_schematics)
+   - `from_x` (numeric) -- start X as percentage
+   - `from_y` (numeric) -- start Y as percentage
+   - `to_x` (numeric) -- end X as percentage
+   - `to_y` (numeric) -- end Y as percentage
+   - `line_type` (text) -- e.g. 'connection'
+   - `color` (text)
+   - `stroke_width` (numeric)
+   - `metadata` (jsonb) -- stores parent/child meter IDs, node index
+   - `created_at` (timestamptz)
 
-```typescript
-const updateTenantProfile = useMutation({
-  mutationFn: async ({ tenantId, scadaImportId }: { tenantId: string; scadaImportId: string | null }) => {
-    // If assigning a profile, first clear it from any other tenant
-    if (scadaImportId) {
-      await supabase
-        .from("project_tenants")
-        .update({ scada_import_id: null })
-        .eq("project_id", projectId)
-        .eq("scada_import_id", scadaImportId)
-        .neq("id", tenantId);
-    }
-    const { error } = await supabase
-      .from("project_tenants")
-      .update({ scada_import_id: scadaImportId })
-      .eq("id", tenantId);
-    if (error) throw error;
-  },
-  // ...existing callbacks
-});
-```
+Both tables will have RLS policies matching the project-based access pattern used throughout the app.
 
-**Change 2 -- Filter assigned profiles from dropdown (around line 1126-1133):**
+### Phase 2: Fix SchematicViewer for Blank Canvas
 
-Compute a set of already-assigned profile IDs from all tenants, then filter `sortedSuggestions` to exclude profiles assigned to *other* tenants:
+Update `src/pages/SchematicViewer.tsx`:
+- Guard against `file_path === null` (clean schematics)
+- When `file_path` is null, skip the storage URL fetch and render the Fabric.js editor directly as a blank canvas
+- Load the SchematicEditor component instead of just an image viewer
 
-```typescript
-// Compute once above the map loop (around line 1104)
-const assignedProfileIds = new Set(
-  sortedTenants
-    .filter(t => t.scada_import_id)
-    .map(t => t.scada_import_id!)
-);
+### Phase 3: Port Schematic Editor Components
 
-// Inside the loop, filter suggestions for this tenant's dropdown
-const filteredSuggestions = sortedSuggestions.filter(
-  ({ profile }) => profile.id === tenant.scada_import_id || !assignedProfileIds.has(profile.id)
-);
-```
+Create the following files adapted from WM-tariffs:
 
-**Change 3 -- Add X clear button next to the profile trigger (around line 1141-1224):**
+1. **`src/components/schematic/SchematicEditor.tsx`** -- The main Fabric.js canvas editor, adapted to use:
+   - `project_schematics` instead of `schematics`
+   - `project_schematic_meter_positions` instead of `meter_positions`
+   - `project_meter_connections` instead of `meter_connections`
+   - `project_schematic_lines` instead of `schematic_lines`
+   - `project_id` context instead of `site_id`
+   
+   Core features ported:
+   - Fabric.js canvas initialisation with background image or blank canvas
+   - Meter card placement (rendered as image objects with table-style fields)
+   - Meter card dragging and repositioning
+   - Connection drawing with snap points on meter card edges
+   - Multi-segment connection lines with intermediate draggable nodes
+   - 45-degree angle snapping (Shift key)
+   - Zoom (scroll + Ctrl), pan (middle mouse / drag)
+   - Edit mode toggle (showing confirmation status colours)
+   - Legend visibility toggles for meter types, connections, background
+   - Save/load meter positions and connection lines to database
+   - Quick meter placement dialog
+   - Meter connections manager dialog
 
-Add a small X button next to the combobox trigger that appears only when a profile is assigned:
+2. **`src/components/schematic/QuickMeterDialog.tsx`** -- Dialog for placing existing or new meters at a clicked position on the canvas
 
-```typescript
-<div className="flex items-center gap-1">
-  {assignedProfile && (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="h-6 w-6 shrink-0"
-      onClick={(e) => {
-        e.stopPropagation();
-        updateTenantProfile.mutate({ tenantId: tenant.id, scadaImportId: null });
-      }}
-    >
-      <X className="h-3 w-3" />
-    </Button>
-  )}
-  <Popover>
-    {/* ...existing combobox */}
-  </Popover>
-</div>
-```
+3. **`src/components/schematic/MeterConnectionsManager.tsx`** -- Dialog for managing the parent-child meter hierarchy
+
+4. **`src/components/schematic/MeterFormFields.tsx`** -- Reusable form fields for meter data entry
+
+### Phase 4: Update SchematicViewer Page
+
+Rewrite `src/pages/SchematicViewer.tsx` to:
+- Detect clean schematics (file_path is null) and load the editor in blank-canvas mode
+- For image-backed schematics, load the editor with the image as background
+- Embed the `SchematicEditor` component with proper props
+- Retain header, zoom controls, and navigation
+
+### Adaptation Notes
+
+The WM-tariffs project uses `site_id` as the organisational unit, while this project uses `project_id`. All queries will be adapted accordingly. The `meters` table in WM-tariffs maps to the existing tenant meters and SCADA imports in this project -- the meter cards will reference project tenant meter data.
+
+### Files Created
+- `src/components/schematic/SchematicEditor.tsx`
+- `src/components/schematic/QuickMeterDialog.tsx`
+- `src/components/schematic/MeterConnectionsManager.tsx`
+- `src/components/schematic/MeterFormFields.tsx`
 
 ### Files Modified
-- `src/components/projects/TenantManager.tsx` -- three targeted changes as described above.
+- `src/pages/SchematicViewer.tsx`
+
+### Database Changes
+- Create `project_meter_connections` table
+- Create `project_schematic_lines` table
+- Add RLS policies for both tables
 
