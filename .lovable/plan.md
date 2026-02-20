@@ -1,35 +1,41 @@
 
-## Add Virtual Meter to Place Meter Dialog
+## Fix: Virtual Meter Not Appearing in Tenants Tab
 
-### Problem
-The "Place Meter" dialog only shows existing SCADA imports. If no meters have been imported yet (or you need a placeholder/label-only meter on the schematic), there is no way to place one.
+### Root Cause
+
+The "Create Virtual Meter" flow in the schematic editor only creates a record in `scada_imports` (the meter/channel data) and `project_schematic_meter_positions` (the canvas position). It does **not** create a corresponding `project_tenants` record. The Tenants tab exclusively reads from `project_tenants`, so the virtual meter is invisible there.
 
 ### Solution
-Add a "Create Virtual Meter" section at the top of the QuickMeterDialog. This creates a lightweight record in the database (no file upload or raw data needed) and immediately places it on the schematic.
 
-### How it works for the user
-1. Click "Place Meter" and click on the canvas -- the dialog opens as usual.
-2. At the top of the dialog, a new collapsible section titled "Create Virtual Meter" appears with fields for: Meter Label, Shop Name, and Shop Number.
-3. Fill in at least the Meter Label, click "Create and Place".
-4. The virtual meter is saved to the database and placed on the schematic in one step.
-5. The existing SCADA meter list remains below, unchanged.
+After inserting the `scada_imports` record, also insert a `project_tenants` row linked to it via `scada_import_id`. This mirrors what happens when a user manually adds a tenant and assigns a meter to it.
 
 ### Technical Details
 
 **File: `src/components/schematic/QuickMeterDialog.tsx`**
 
-1. Add a collapsible "Create Virtual Meter" section (using Collapsible from Radix) above the search/list area.
-2. The section contains three input fields: Meter Label (required), Shop Name (optional), Shop Number (optional).
-3. On "Create and Place" click:
-   - Insert a new row into `scada_imports` with `site_name` set to the meter label, `project_id` set to the current project, and the optional fields. No `file_name`, `raw_data`, or profile arrays -- just a label-only record.
-   - Use the returned `id` to insert into `project_schematic_meter_positions` at the clicked position (same logic as `handleSelectMeter`).
-   - Call `onMeterPlaced()` and close the dialog.
-4. Virtual meters will render on the canvas using the same meter card logic -- the label shows the meter label, shop/number show as provided or "N/A", file shows "N/A".
+In the `handleCreateVirtualMeter` function, after the `scada_imports` insert succeeds and before the `project_schematic_meter_positions` insert, add:
 
-**No database migration needed** -- `scada_imports` already accepts all these fields as nullable (only `site_name` is required), and there is no foreign key constraint from `project_schematic_meter_positions.meter_id` to `scada_imports` (the types show no such relationship).
+```typescript
+// Create a matching tenant record so the meter appears in the Tenants tab
+await supabase
+  .from("project_tenants")
+  .insert({
+    project_id: projectId,
+    name: virtualShopName.trim() || virtualLabel.trim(),
+    shop_name: virtualShopName.trim() || null,
+    shop_number: virtualShopNumber.trim() || null,
+    area_sqm: 0,
+    scada_import_id: newMeter.id,
+  });
+```
+
+The `project_tenants` table requires `name`, `project_id`, and `area_sqm`. The `scada_import_id` foreign key links it back to the SCADA record. Area defaults to 0 (the user can update it later in the Tenants tab).
 
 ### What stays the same
-- Existing SCADA meter list and search functionality
-- Meter card rendering on canvas
-- Connection drawing and hierarchy logic
-- All other schematic editor features
+- The `scada_imports` record creation (unchanged)
+- The `project_schematic_meter_positions` placement (unchanged)
+- All existing tenant/meter rendering in the Tenants tab
+- Meter card rendering on the schematic canvas
+
+### Expected outcome
+After creating a virtual meter in the schematic, it immediately appears in the Tenants tab with its label, shop name, and shop number -- just like any other tenant with an assigned meter. The total tenant count increments accordingly (e.g. 49 becomes 50).
