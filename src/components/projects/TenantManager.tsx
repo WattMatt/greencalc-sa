@@ -867,9 +867,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                           </div>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>{profileScope === 'local' 
-                            ? "Local: Showing only meters imported for this project" 
-                            : "Global: Showing all meters from the global library"}</p>
+                          <p>{profileScope === 'local' ? "Local data set" : "Global data set"}</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
