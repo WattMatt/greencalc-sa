@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,9 +30,14 @@ export const QuickMeterDialog = ({
   const [virtualLabel, setVirtualLabel] = useState("");
   const [virtualShopName, setVirtualShopName] = useState("");
   const [virtualShopNumber, setVirtualShopNumber] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) fetchMeters();
+    if (open) {
+      fetchMeters();
+      // Auto-focus search input when dialog opens
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
   }, [open, projectId]);
 
   const fetchMeters = async () => {
@@ -209,52 +214,57 @@ export const QuickMeterDialog = ({
           </CollapsibleContent>
         </Collapsible>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search meters..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        {!virtualOpen && (
+          <>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                placeholder="Search meters..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
 
-        <ScrollArea className="h-[400px] rounded-md border p-4">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <Loader2 className="h-6 w-6 animate-spin" />
-            </div>
-          ) : filteredMeters.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">
-              {searchTerm ? "No meters found" : "No meters available. Import SCADA data first."}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {filteredMeters.map((meter) => (
-                <Button
-                  key={meter.id}
-                  variant="outline"
-                  className="w-full justify-start h-auto p-4"
-                  onClick={() => handleSelectMeter(meter.id)}
-                  disabled={isSaving}
-                >
-                  <div className="text-left space-y-1 w-full">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono font-bold">{meter.meter_label || meter.site_name}</span>
-                      {meter.shop_name && (
-                        <Badge variant="outline" className="text-xs">{meter.shop_name}</Badge>
-                      )}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {meter.shop_number && `#${meter.shop_number} • `}
-                      {meter.file_name || "No file"}
-                    </div>
-                  </div>
-                </Button>
-              ))}
-            </div>
-          )}
-        </ScrollArea>
+            <ScrollArea className="h-[400px] rounded-md border p-4">
+              {isLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : filteredMeters.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">
+                  {searchTerm ? "No meters found" : "No meters available. Import SCADA data first."}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredMeters.map((meter) => (
+                    <Button
+                      key={meter.id}
+                      variant="outline"
+                      className="w-full justify-start h-auto p-4"
+                      onClick={() => handleSelectMeter(meter.id)}
+                      disabled={isSaving}
+                    >
+                      <div className="text-left space-y-1 w-full">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold">{meter.meter_label || meter.site_name}</span>
+                          {meter.shop_name && (
+                            <Badge variant="outline" className="text-xs">{meter.shop_name}</Badge>
+                          )}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {meter.shop_number && `#${meter.shop_number} • `}
+                          {meter.file_name || "No file"}
+                        </div>
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
