@@ -277,6 +277,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   
   // Sort mode toggle per tenant for inline dropdowns
   const [sortByAreaMap, setSortByAreaMap] = useState<Record<string, boolean>>({});
+  const [popoverOpenMap, setPopoverOpenMap] = useState<Record<string, boolean>>({});
   
   // Profile preview state
   const [previewContext, setPreviewContext] = useState<{ meter: ScadaImport; tenant: Tenant } | null>(null);
@@ -1154,7 +1155,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     <TableCell>{tenantArea.toLocaleString()}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Popover>
+                        <Popover open={popoverOpenMap[tenant.id] ?? false} onOpenChange={(open) => setPopoverOpenMap(prev => ({ ...prev, [tenant.id]: open }))}>
                           <PopoverTrigger asChild>
                             <Button
                               variant="outline"
@@ -1227,6 +1228,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                                           tenantId: tenant.id,
                                           scadaImportId: meter.id,
                                         });
+                                        setPopoverOpenMap(prev => ({ ...prev, [tenant.id]: false }));
                                       }}
                                       className="text-sm"
                                     >
