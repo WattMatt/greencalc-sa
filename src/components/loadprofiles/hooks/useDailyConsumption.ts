@@ -128,8 +128,7 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
     const line = lines[i].toLowerCase();
     // Check if this line contains typical header column names
     if (line.includes('time') || line.includes('date') || line.includes('rdate') || 
-        line.includes('kwh') || line.includes('timestamp') || line.includes('from') ||
-        line.includes('periods')) {
+        line.includes('kwh') || line.includes('timestamp')) {
       headerIdx = i;
       break;
     }
@@ -145,8 +144,7 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
   
   // Look for date/time column - include 'time' as a valid column name
   const dateCol = headers.findIndex(h => 
-    h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate') ||
-    h === 'from' || h.includes('periods')
+    h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate')
   );
   // Look for kWh value column - prioritize "p1 (kwh)" or just "kwh" or first value after time
   const valueCol = headers.findIndex(h => 

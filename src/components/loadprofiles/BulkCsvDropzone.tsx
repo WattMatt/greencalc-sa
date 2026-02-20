@@ -442,7 +442,10 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
             site_name: displayName,
             shop_name: displayName,
             file_name: file.name,
-            raw_data: [{ csvContent: content }],
+            raw_data: rows.map(row => ({
+              timestamp: `${row[dateCol] || ''} ${timeCol >= 0 ? (row[timeCol] || '') : ''}`.trim(),
+              value: parseFloat(row[valueCol]?.replace(/[^\d.-]/g, '') || '0') || 0
+            })).filter(d => d.value !== 0 || d.timestamp),
             site_id: siteId || null,
           })
           .select("id")
@@ -473,7 +476,10 @@ export function BulkCsvDropzone({ siteId, onComplete }: BulkCsvDropzoneProps) {
           date_range_end: profile.dateRangeEnd,
           detected_interval_minutes: profile.detectedInterval,
           processed_at: new Date().toISOString(),
-          raw_data: [{ csvContent: content }],
+          raw_data: rows.map(row => ({
+            timestamp: `${row[dateCol] || ''} ${timeCol >= 0 ? (row[timeCol] || '') : ''}`.trim(),
+            value: parseFloat(row[valueCol]?.replace(/[^\d.-]/g, '') || '0') || 0
+          })).filter(d => d.value !== 0 || d.timestamp),
           file_name: file.name,
         })
         .eq("id", targetMeterId);
