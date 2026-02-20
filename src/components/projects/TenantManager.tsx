@@ -332,6 +332,25 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     },
   });
 
+  // Fetch assigned SCADA imports (unfiltered) for display purposes
+  const assignedScadaIds = tenants
+    .map(t => t.scada_import_id)
+    .filter(Boolean) as string[];
+
+  const { data: assignedScadaImports } = useQuery({
+    queryKey: ["assigned-scada-display", assignedScadaIds],
+    queryFn: async () => {
+      if (assignedScadaIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("scada_imports")
+        .select("id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend, meter_label, meter_color, date_range_start, date_range_end, weekday_days, weekend_days, processed_at, shop_number")
+        .in("id", assignedScadaIds);
+      if (error) throw error;
+      return data as ScadaImport[];
+    },
+    enabled: assignedScadaIds.length > 0,
+  });
+
   const addTenant = useMutation({
     mutationFn: async (tenant: { shop_number: string | null; shop_name: string; area_sqm: number; scada_import_id: string | null }) => {
       const { error } = await supabase.from("project_tenants").insert({
@@ -1139,7 +1158,10 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                   calculatedKwh = (tenant.shop_types?.kwh_per_sqm_month || 50) * tenantArea;
                 }
 
-                const assignedProfile = scadaImports?.find(m => m.id === tenant.scada_import_id);
+                const assignedProfile = tenant.scada_import_id
+                  ? (scadaImports?.find(m => m.id === tenant.scada_import_id)
+                     ?? assignedScadaImports?.find(m => m.id === tenant.scada_import_id))
+                  : undefined;
                 const sortByArea = sortByAreaMap[tenant.id] ?? false;
                 const sortedSuggestions = getSortedProfilesWithSuggestions(
                   tenant.name,
