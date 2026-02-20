@@ -70,7 +70,6 @@ export const PROJECT_FILES: FileNode[] = [
             type: "folder",
             children: [
               { name: "BulkCsvDropzone.tsx", type: "file", path: "src/components/loadprofiles/BulkCsvDropzone.tsx", language: "typescript" },
-              { name: "BulkMeterImport.tsx", type: "file", path: "src/components/loadprofiles/BulkMeterImport.tsx", language: "typescript" },
               { name: "CategoryMapper.tsx", type: "file", path: "src/components/loadprofiles/CategoryMapper.tsx", language: "typescript" },
               { name: "CsvImportWizard.tsx", type: "file", path: "src/components/loadprofiles/CsvImportWizard.tsx", language: "typescript" },
               { name: "LoadProfileEditor.tsx", type: "file", path: "src/components/loadprofiles/LoadProfileEditor.tsx", language: "typescript" },
