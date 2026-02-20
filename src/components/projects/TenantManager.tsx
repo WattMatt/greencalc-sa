@@ -508,6 +508,16 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         const fileName = result.fileName || `Meter ${importedCount + 1}`;
         const shopName = fileName.replace(/\.(csv|xlsx?)$/i, "");
 
+        // Build raw_data JSONB payload from original CSV content
+        const rawData = result.rawContent
+          ? [{ csvContent: result.rawContent }]
+          : null;
+
+        // Look up tenant area_sqm if assigned
+        const assignedTenant = result.tenantId
+          ? tenants.find((t) => t.id === result.tenantId)
+          : null;
+
         const { error } = await supabase.from("scada_imports").insert({
           project_id: projectId,
           site_name: shopName,
@@ -522,6 +532,8 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
           detected_interval_minutes: processed.detectedInterval,
           processed_at: new Date().toISOString(),
           file_name: fileName,
+          raw_data: rawData,
+          area_sqm: assignedTenant?.area_sqm ?? null,
         });
 
         if (error) {
@@ -536,12 +548,16 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
 
     if (importedCount > 0) {
       queryClient.invalidateQueries({ queryKey: ["scada-imports-for-assignment"] });
+      queryClient.invalidateQueries({ queryKey: ["scada-imports"] });
+      queryClient.invalidateQueries({ queryKey: ["meter-library"] });
+      queryClient.invalidateQueries({ queryKey: ["load-profiles-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["scada-imports-raw"] });
       toast.success(`Imported ${importedCount} meter profile${importedCount > 1 ? 's' : ''} for this project`);
       setProfileScope('local'); // Auto-switch to local view
     } else {
       toast.error("No meter profiles could be processed from the uploaded files");
     }
-  }, [projectId, queryClient]);
+  }, [projectId, queryClient, tenants]);
 
   const handleMappedImport = useCallback(async (mappedTenants: TenantMappedData[]) => {
     if (mappedTenants.length === 0) {
