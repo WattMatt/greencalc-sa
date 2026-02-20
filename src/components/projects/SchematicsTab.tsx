@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, FileText, Upload, Eye, Trash2 } from "lucide-react";
+import { Plus, FileText, Upload, Eye, Trash2, PenTool } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Schematic, getFileTypeIcon } from "@/types/schematic";
@@ -133,7 +133,6 @@ export default function SchematicsTab({ projectId }: SchematicsTabProps) {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!selectedFile) { toast.error("Please select a file"); return; }
 
     setIsLoading(true);
     const formData = new FormData(e.currentTarget);
@@ -142,62 +141,82 @@ export default function SchematicsTab({ projectId }: SchematicsTabProps) {
     const totalPages = parseInt(formData.get("total_pages") as string) || 1;
 
     try {
-      const timestamp = Date.now();
-      const fileName = `${projectId}/${timestamp}-${selectedFile.name}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("project-schematics")
-        .upload(fileName, selectedFile);
-
-      if (uploadError) throw uploadError;
-
       const { data: { user } } = await supabase.auth.getUser();
 
-      const { data: schematicData, error: dbError } = await supabase
-        .from("project_schematics")
-        .insert({
-          name,
-          description: description || null,
-          file_path: fileName,
-          file_type: selectedFile.type,
-          total_pages: totalPages,
-          uploaded_by: user?.id,
-          project_id: projectId,
-        })
-        .select()
-        .single();
+      if (selectedFile) {
+        // Upload flow
+        const timestamp = Date.now();
+        const fileName = `${projectId}/${timestamp}-${selectedFile.name}`;
 
-      if (dbError) throw dbError;
+        const { error: uploadError } = await supabase.storage
+          .from("project-schematics")
+          .upload(fileName, selectedFile);
 
-      toast.success("Schematic uploaded successfully");
-      
-      // Auto-convert PDF to image
-      if (selectedFile.type === "application/pdf" && schematicData) {
-        toast.info("Converting PDF to image for faster viewing...");
-        try {
-          const { convertPdfFileToImage } = await import('@/lib/pdfConversion');
-          const { blob } = await convertPdfFileToImage(selectedFile, { scale: 2.0 });
-          
-          const convertedImageName = `${projectId}/${timestamp}-${selectedFile.name.replace('.pdf', '')}_converted.png`;
-          
-          const { error: convUploadError } = await supabase.storage
-            .from("project-schematics")
-            .upload(convertedImageName, blob, { contentType: 'image/png' });
-          
-          if (convUploadError) throw convUploadError;
-          
-          const { error: updateError } = await supabase
-            .from('project_schematics')
-            .update({ converted_image_path: convertedImageName })
-            .eq('id', schematicData.id);
-          
-          if (updateError) throw updateError;
-          toast.success('PDF converted to image successfully');
-          fetchSchematics();
-        } catch (conversionError: any) {
-          console.error('PDF conversion failed:', conversionError);
-          toast.error('PDF conversion failed, but file is uploaded');
+        if (uploadError) throw uploadError;
+
+        const { data: schematicData, error: dbError } = await supabase
+          .from("project_schematics")
+          .insert({
+            name,
+            description: description || null,
+            file_path: fileName,
+            file_type: selectedFile.type,
+            total_pages: totalPages,
+            uploaded_by: user?.id,
+            project_id: projectId,
+          })
+          .select()
+          .single();
+
+        if (dbError) throw dbError;
+
+        toast.success("Schematic uploaded successfully");
+        
+        // Auto-convert PDF to image
+        if (selectedFile.type === "application/pdf" && schematicData) {
+          toast.info("Converting PDF to image for faster viewing...");
+          try {
+            const { convertPdfFileToImage } = await import('@/lib/pdfConversion');
+            const { blob } = await convertPdfFileToImage(selectedFile, { scale: 2.0 });
+            
+            const convertedImageName = `${projectId}/${timestamp}-${selectedFile.name.replace('.pdf', '')}_converted.png`;
+            
+            const { error: convUploadError } = await supabase.storage
+              .from("project-schematics")
+              .upload(convertedImageName, blob, { contentType: 'image/png' });
+            
+            if (convUploadError) throw convUploadError;
+            
+            const { error: updateError } = await supabase
+              .from('project_schematics')
+              .update({ converted_image_path: convertedImageName })
+              .eq('id', schematicData.id);
+            
+            if (updateError) throw updateError;
+            toast.success('PDF converted to image successfully');
+            fetchSchematics();
+          } catch (conversionError: any) {
+            console.error('PDF conversion failed:', conversionError);
+            toast.error('PDF conversion failed, but file is uploaded');
+          }
         }
+      } else {
+        // Clean schematic (blank canvas)
+        const { error: dbError } = await supabase
+          .from("project_schematics")
+          .insert({
+            name,
+            description: description || null,
+            file_path: null,
+            file_type: null,
+            total_pages: 1,
+            uploaded_by: user?.id,
+            project_id: projectId,
+          });
+
+        if (dbError) throw dbError;
+
+        toast.success("Clean schematic created successfully");
       }
 
       setIsDialogOpen(false);
@@ -206,7 +225,7 @@ export default function SchematicsTab({ projectId }: SchematicsTabProps) {
       setIsNameManuallyEdited(false);
       fetchSchematics();
     } catch (error: any) {
-      toast.error(error.message || "Failed to upload schematic");
+      toast.error(error.message || "Failed to create schematic");
     } finally {
       setIsLoading(false);
     }
@@ -250,9 +269,11 @@ export default function SchematicsTab({ projectId }: SchematicsTabProps) {
         try {
           await supabase.from("project_schematic_meter_positions").delete().eq("schematic_id", schematicId);
 
-          const filesToDelete = [schematic.file_path];
-          if (schematic.converted_image_path) filesToDelete.push(schematic.converted_image_path);
-          await supabase.storage.from("project-schematics").remove(filesToDelete);
+          if (schematic.file_path) {
+            const filesToDelete: string[] = [schematic.file_path];
+            if (schematic.converted_image_path) filesToDelete.push(schematic.converted_image_path);
+            await supabase.storage.from("project-schematics").remove(filesToDelete);
+          }
 
           const { error: dbError } = await supabase.from("project_schematics").delete().eq("id", schematicId);
           if (dbError) throw dbError;
@@ -282,9 +303,11 @@ export default function SchematicsTab({ projectId }: SchematicsTabProps) {
     try {
       await supabase.from("project_schematic_meter_positions").delete().eq("schematic_id", schematicToDelete.id);
 
-      const filesToDelete = [schematicToDelete.file_path];
-      if (schematicToDelete.converted_image_path) filesToDelete.push(schematicToDelete.converted_image_path);
-      await supabase.storage.from("project-schematics").remove(filesToDelete);
+      if (schematicToDelete.file_path) {
+        const filesToDelete = [schematicToDelete.file_path];
+        if (schematicToDelete.converted_image_path) filesToDelete.push(schematicToDelete.converted_image_path);
+        await supabase.storage.from("project-schematics").remove(filesToDelete);
+      }
 
       const { error: dbError } = await supabase.from("project_schematics").delete().eq("id", schematicToDelete.id);
       if (dbError) throw dbError;
@@ -472,8 +495,8 @@ export default function SchematicsTab({ projectId }: SchematicsTabProps) {
                     </div>
                   </Label>
                 </div>
-                <Button type="submit" className="w-full" disabled={isLoading || !selectedFile}>
-                  {isLoading ? "Uploading..." : "Upload Schematic"}
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Creating..." : selectedFile ? "Upload Schematic" : "Clean Schematic"}
                 </Button>
               </form>
             </DialogContent>
@@ -536,7 +559,11 @@ export default function SchematicsTab({ projectId }: SchematicsTabProps) {
                       />
                     </TableCell>
                     <TableCell>
-                      <span className="text-2xl">{getFileTypeIcon(schematic.file_type)}</span>
+                      {!schematic.file_path ? (
+                        <PenTool className="w-5 h-5 text-muted-foreground" />
+                      ) : (
+                        <span className="text-2xl">{getFileTypeIcon(schematic.file_type || '')}</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
@@ -557,7 +584,9 @@ export default function SchematicsTab({ projectId }: SchematicsTabProps) {
                       {new Date(schematic.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
-                      {schematic.file_type === "application/pdf" ? (
+                      {!schematic.file_path ? (
+                        <Badge variant="outline" className="w-fit text-xs">Canvas</Badge>
+                      ) : schematic.file_type === "application/pdf" ? (
                         <Badge 
                           variant={schematic.converted_image_path ? "default" : "secondary"}
                           className="w-fit text-xs"

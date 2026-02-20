@@ -992,8 +992,8 @@ export type Database = {
           converted_image_path: string | null
           created_at: string
           description: string | null
-          file_path: string
-          file_type: string
+          file_path: string | null
+          file_type: string | null
           id: string
           name: string
           page_number: number
@@ -1006,8 +1006,8 @@ export type Database = {
           converted_image_path?: string | null
           created_at?: string
           description?: string | null
-          file_path: string
-          file_type: string
+          file_path?: string | null
+          file_type?: string | null
           id?: string
           name: string
           page_number?: number
@@ -1020,8 +1020,8 @@ export type Database = {
           converted_image_path?: string | null
           created_at?: string
           description?: string | null
-          file_path?: string
-          file_type?: string
+          file_path?: string | null
+          file_type?: string | null
           id?: string
           name?: string
           page_number?: number

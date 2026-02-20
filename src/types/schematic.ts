@@ -6,8 +6,8 @@ export interface Schematic {
   id: string;
   name: string;
   description: string | null;
-  file_path: string;
-  file_type: string;
+  file_path: string | null;
+  file_type: string | null;
   page_number: number;
   total_pages: number;
   created_at: string;
