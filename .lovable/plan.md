@@ -1,60 +1,27 @@
 
 
-## Fix: Tenant "Include in Load Profile" Toggle Not Syncing to Schematic View
+## Fix: Make Schematic Checkboxes Read-Only (Driven by Tenants Tab Only)
 
 ### Problem
-
-The toggle in the Tenants table **does save correctly** to the database (confirmed by network response showing `include_in_load_profile: false` for "Bulck Check"). However, when switching to the Schematics tab, the schematic editor shows all checkboxes as green/enabled because it only fetches the `tenantProfileMap` once on mount (keyed by `schematicId` and `projectId`, which don't change between tab switches).
-
-### Root Cause
-
-In `SchematicEditor.tsx`, the data-loading `useEffect` (line 215-222) depends on `[schematicId, projectId]`. Since these values remain constant across tab switches within the same project page, the effect never re-runs. The `tenantProfileMap` retains its original values from when the schematic was first opened.
+The schematic view and tenants view each independently toggle `include_in_load_profile`, causing confusion and sync issues. They need to show the same state, controlled from one place.
 
 ### Solution
-
-Re-fetch the `tenantProfileMap` whenever the schematic editor becomes visible (i.e., when the user switches back to the Schematics tab). Two changes:
+Remove the click handler on the schematic canvas checkboxes so they become **display-only**. The green/grey indicators will still render correctly based on the tenant data, but clicking them will do nothing. Users toggle the "Include" status exclusively from the Tenants table.
 
 ### Technical Details
 
-**1. `src/components/schematic/SchematicEditor.tsx`**
+**File: `src/components/schematic/SchematicEditor.tsx`**
 
-Add a visibility-based refetch using `document.visibilityState` or, more precisely, detect when the component re-enters the viewport. The simplest approach: add a `key` prop or a refresh trigger.
+1. **Remove the `mouse:down` handler** (lines 760-796) that currently intercepts clicks on profile checkbox overlays and updates the database. This entire `useEffect` block will be deleted.
 
-The cleanest fix is to use a `focus`/`visibility` listener or accept a `refreshKey` prop that changes whenever the Schematics tab is activated.
+2. **Remove the `useQueryClient` import and usage** (no longer needed since nothing is being mutated from the schematic).
 
-**Approach:** Add a `useEffect` that listens for the window `focus` event to refetch `tenantProfileMap`. This handles both tab switches within the app and returning from another browser tab:
+3. **Keep everything else unchanged**:
+   - The `fetchTenantProfileMap()` function still fetches tenant inclusion status
+   - The `isActive` refetch still refreshes data when switching to the Schematics tab
+   - The visual rendering of green ticks / grey circles on meter cards remains intact (read-only display)
 
-```typescript
-// Re-fetch tenant profile map when window regains focus
-useEffect(() => {
-  const handleFocus = () => { fetchTenantProfileMap(); };
-  window.addEventListener('focus', handleFocus);
-  return () => window.removeEventListener('focus', handleFocus);
-}, [projectId]);
-```
-
-**2. `src/components/projects/SchematicsTab.tsx`**
-
-Pass a `refreshKey` prop to `SchematicEditor` that increments whenever the schematics tab becomes active. Alternatively, since `TabsContent` in Radix UI unmounts content when not active by default (via `forceMount`), we can verify if the editor is being unmounted/remounted.
-
-**Preferred approach:** Since the SchematicEditor is conditionally rendered (only when `activeSchematic` is set), the simplest fix is to make the data-fetch `useEffect` also depend on a visible/active signal. We will:
-
-- In `SchematicsTab.tsx`, pass an `isVisible` boolean prop (or simply a counter that increments each time the tab activates).
-- In `SchematicEditor.tsx`, add this prop to the data-fetch dependency array so `tenantProfileMap` refreshes on every tab activation.
-
-Alternatively, the most minimal fix: just call `fetchTenantProfileMap()` inside the existing canvas render effect that already depends on `tenantProfileMap`, ensuring it refetches when the canvas becomes ready.
-
-**Simplest correct fix:** Add a window `focus` listener in `SchematicEditor.tsx` to refetch `tenantProfileMap` and also refetch it when `isEditMode` changes (entering/leaving edit mode triggers a fresh pull).
-
-### Changes Summary
-
-| File | Change |
-|------|--------|
-| `src/components/schematic/SchematicEditor.tsx` | Add `useEffect` with `focus` event listener to refetch `tenantProfileMap` on window focus. Also refetch when `isEditMode` toggles. |
-
-### What stays the same
-- The Tenants tab toggle mutation (already saves correctly)
-- The schematic canvas rendering logic
-- The checkbox overlay click handler in the schematic
-- All other data fetching in the editor
-
+### Result
+- Schematic view: checkboxes are visual indicators only (read-only)
+- Tenants table: the sole place to toggle "Include in Load Profile"
+- Switching to the Schematics tab refetches the latest state, so the indicators always reflect what was set in the Tenants table
