@@ -1,76 +1,60 @@
 
 
-## Add "Include in Load Profile" and "Meter Type" Columns to Tenants Table
+## Fix: Tenant "Include in Load Profile" Toggle Not Syncing to Schematic View
 
-### Overview
-Three changes are needed:
-1. Add an `include_in_load_profile` boolean column to `project_tenants` (default `true`) -- a checkbox between "Est. kWh/month" and "Source" columns.
-2. Add an `is_virtual` boolean column to `project_tenants` (default `false`) -- displayed as a badge/label indicating "Actual" or "Virtual" in a new column.
-3. Add a checkbox overlay on meter cards in the schematic editor so you can toggle `include_in_load_profile` directly from the schematic view.
+### Problem
 
-Additionally, the "Council Check" virtual meter that was created before the tenant-insert fix needs to be verified and, if missing, a tenant record manually created for it.
+The toggle in the Tenants table **does save correctly** to the database (confirmed by network response showing `include_in_load_profile: false` for "Bulck Check"). However, when switching to the Schematics tab, the schematic editor shows all checkboxes as green/enabled because it only fetches the `tenantProfileMap` once on mount (keyed by `schematicId` and `projectId`, which don't change between tab switches).
 
----
+### Root Cause
 
-### Database Migration
+In `SchematicEditor.tsx`, the data-loading `useEffect` (line 215-222) depends on `[schematicId, projectId]`. Since these values remain constant across tab switches within the same project page, the effect never re-runs. The `tenantProfileMap` retains its original values from when the schematic was first opened.
 
-Add two new columns to `project_tenants`:
+### Solution
 
-```sql
-ALTER TABLE project_tenants
-  ADD COLUMN include_in_load_profile boolean NOT NULL DEFAULT true,
-  ADD COLUMN is_virtual boolean NOT NULL DEFAULT false;
+Re-fetch the `tenantProfileMap` whenever the schematic editor becomes visible (i.e., when the user switches back to the Schematics tab). Two changes:
+
+### Technical Details
+
+**1. `src/components/schematic/SchematicEditor.tsx`**
+
+Add a visibility-based refetch using `document.visibilityState` or, more precisely, detect when the component re-enters the viewport. The simplest approach: add a `key` prop or a refresh trigger.
+
+The cleanest fix is to use a `focus`/`visibility` listener or accept a `refreshKey` prop that changes whenever the Schematics tab is activated.
+
+**Approach:** Add a `useEffect` that listens for the window `focus` event to refetch `tenantProfileMap`. This handles both tab switches within the app and returning from another browser tab:
+
+```typescript
+// Re-fetch tenant profile map when window regains focus
+useEffect(() => {
+  const handleFocus = () => { fetchTenantProfileMap(); };
+  window.addEventListener('focus', handleFocus);
+  return () => window.removeEventListener('focus', handleFocus);
+}, [projectId]);
 ```
 
-No RLS changes needed -- existing policies cover all operations.
+**2. `src/components/projects/SchematicsTab.tsx`**
 
----
+Pass a `refreshKey` prop to `SchematicEditor` that increments whenever the schematics tab becomes active. Alternatively, since `TabsContent` in Radix UI unmounts content when not active by default (via `forceMount`), we can verify if the editor is being unmounted/remounted.
 
-### Technical Changes
+**Preferred approach:** Since the SchematicEditor is conditionally rendered (only when `activeSchematic` is set), the simplest fix is to make the data-fetch `useEffect` also depend on a visible/active signal. We will:
 
-**1. `src/components/projects/TenantManager.tsx`**
+- In `SchematicsTab.tsx`, pass an `isVisible` boolean prop (or simply a counter that increments each time the tab activates).
+- In `SchematicEditor.tsx`, add this prop to the data-fetch dependency array so `tenantProfileMap` refreshes on every tab activation.
 
-- Update the `Tenant` interface to include `include_in_load_profile: boolean` and `is_virtual: boolean`.
-- Add a new mutation `updateTenantIncludeInProfile` that updates `include_in_load_profile` on `project_tenants`.
-- Add two new table columns in the `<TableHeader>`:
-  - **"Include"** column: between "Est. kWh/month" and "Source", rendered as a `<Checkbox>`.
-  - **"Type"** column: after "Source" (or between "Source" and the actions column), showing a `<Badge>` reading "Virtual" or "Actual".
-- In each `<TableRow>`, render:
-  - A `<Checkbox>` bound to `tenant.include_in_load_profile`, toggling via the mutation on change.
-  - A `<Badge>` showing `tenant.is_virtual ? "Virtual" : "Actual"` with distinct styling (e.g., outline for Virtual, green for Actual).
+Alternatively, the most minimal fix: just call `fetchTenantProfileMap()` inside the existing canvas render effect that already depends on `tenantProfileMap`, ensuring it refetches when the canvas becomes ready.
 
-**2. `src/pages/ProjectDetail.tsx`**
+**Simplest correct fix:** Add a window `focus` listener in `SchematicEditor.tsx` to refetch `tenantProfileMap` and also refetch it when `isEditMode` changes (entering/leaving edit mode triggers a fresh pull).
 
-- The tenant query already uses `select(*, ...)` so the new columns will be included automatically once the migration runs and types regenerate.
+### Changes Summary
 
-**3. `src/components/schematic/QuickMeterDialog.tsx`**
-
-- When creating a virtual meter, set `is_virtual: true` in the `project_tenants` insert.
-
-**4. `src/components/schematic/SchematicEditor.tsx`**
-
-- After rendering each meter card on the canvas, add a small checkbox indicator (a coloured circle or tick icon) on the card that reflects the `include_in_load_profile` status.
-- To get this data, fetch `project_tenants` for the project (filtered by `scada_import_id` matching placed meters) and build a lookup map of `scada_import_id -> include_in_load_profile`.
-- Add a click handler on the checkbox overlay that toggles `include_in_load_profile` in the database and updates the visual state.
-- The checkbox will appear as a small green tick (included) or grey empty circle (excluded) in the top-right corner of each meter card.
-
-**5. Existing Virtual Meter Fix**
-
-- The "Council Check" meter was created before the tenant-insert fix. We will check the database for any `scada_imports` records with `project_id` matching this project that have no corresponding `project_tenants` row, and if found, insert the missing tenant record. This will be handled as part of the implementation.
-
----
+| File | Change |
+|------|--------|
+| `src/components/schematic/SchematicEditor.tsx` | Add `useEffect` with `focus` event listener to refetch `tenantProfileMap` on window focus. Also refetch when `isEditMode` toggles. |
 
 ### What stays the same
-- All existing tenant CRUD operations
-- Load profile assignment logic
-- Meter card rendering (just adding an overlay)
-- Connection drawing and hierarchy logic
-- All existing schematic editor features
-
-### Expected outcome
-- The tenants table shows a checkbox column ("Include") to toggle whether each meter contributes to the load profile calculation.
-- The tenants table shows a "Type" column with "Actual" or "Virtual" badges.
-- Meter cards on the schematic show a small checkbox indicator for load profile inclusion, clickable in edit mode.
-- Virtual meters created from the schematic are automatically marked as `is_virtual: true`.
-- The "Council Check" meter appears in the tenants table (50 total).
+- The Tenants tab toggle mutation (already saves correctly)
+- The schematic canvas rendering logic
+- The checkbox overlay click handler in the schematic
+- All other data fetching in the editor
 
