@@ -161,6 +161,8 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
   const containerRef = useRef<HTMLDivElement>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const [canvasDimensions, setCanvasDimensions] = useState({ width: 1400, height: 900 });
+  const canvasDimensionsRef = useRef({ width: 1400, height: 900 });
+  const canvasInstanceRef = useRef<FabricCanvas | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const isEditModeRef = useRef(false);
 
@@ -202,6 +204,7 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
   useEffect(() => { connectionStartRef.current = connectionStart; }, [connectionStart]);
   useEffect(() => { connectionPointsRef.current = connectionPoints; }, [connectionPoints]);
   useEffect(() => { isEditModeRef.current = isEditMode; }, [isEditMode]);
+  useEffect(() => { canvasDimensionsRef.current = canvasDimensions; }, [canvasDimensions]);
 
   // Cursor for connection mode
   useEffect(() => {
@@ -285,17 +288,20 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
   }, []);
 
   // Canvas init
+  // Canvas init — runs ONCE, never recreated on resize
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || canvasInstanceRef.current) return;
 
+    const dims = canvasDimensionsRef.current;
     const canvas = new FabricCanvas(canvasRef.current, {
-      width: canvasDimensions.width,
-      height: canvasDimensions.height,
+      width: dims.width,
+      height: dims.height,
       backgroundColor: "#f8f9fa",
       selection: false,
       renderOnAddRemove: true,
       preserveObjectStacking: true,
     });
+    canvasInstanceRef.current = canvas;
 
     // Middle mouse pan
     const handleNativeMouseDown = (e: MouseEvent) => {
@@ -567,8 +573,8 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
 
           // Remove old axis guides and draw new ones
           canvas.getObjects().filter((o: any) => o.isAxisGuide).forEach(o => canvas.remove(o));
-          const cw = canvasDimensions.width;
-          const ch = canvasDimensions.height;
+          const cw = canvasDimensionsRef.current.width;
+          const ch = canvasDimensionsRef.current.height;
           // Show vertical guide if X was snapped
           if (Math.abs(snapped.x - origX) > 1) {
             const vLine = new Line([snapped.x, 0, snapped.x, ch], {
@@ -598,8 +604,8 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
       canvas.renderAll();
       const obj = e.target;
       if (obj && (obj as any).isMeterCard && (obj as any).data?.meterId) {
-        const cw = canvasDimensions.width;
-        const ch = canvasDimensions.height;
+        const cw = canvasDimensionsRef.current.width;
+        const ch = canvasDimensionsRef.current.height;
         const xPct = ((obj.left || 0) / cw) * 100;
         const yPct = ((obj.top || 0) / ch) * 100;
         const posId = (obj as any).data?.positionId;
@@ -637,8 +643,22 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
       window.removeEventListener('mousedown', handleNativeMouseDown, true);
       window.removeEventListener('mouseup', handleMouseUpGlobal);
       canvas.dispose();
+      canvasInstanceRef.current = null;
     };
-  }, [canvasDimensions]);
+  }, [schematicUrl]);
+
+  // Resize canvas without destroying it
+  useEffect(() => {
+    if (!fabricCanvas) return;
+    fabricCanvas.setDimensions({ width: canvasDimensions.width, height: canvasDimensions.height });
+    // Re-scale background image to fit
+    const bg = fabricCanvas.getObjects().find((o: any) => o.isBackgroundImage);
+    if (bg) {
+      const scale = Math.min(canvasDimensions.width / ((bg as any).width || 1), canvasDimensions.height / ((bg as any).height || 1));
+      bg.set({ scaleX: scale, scaleY: scale });
+    }
+    fabricCanvas.renderAll();
+  }, [canvasDimensions, fabricCanvas]);
 
   // Update meter card selectability when edit mode changes
   useEffect(() => {
@@ -704,7 +724,7 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
         };
       });
     });
-  }, [fabricCanvas, isInitialDataLoaded, isCanvasReady, meterPositions, meters, showMeterCards, isEditMode]);
+  }, [fabricCanvas, isInitialDataLoaded, isCanvasReady, meterPositions, meters, showMeterCards, isEditMode, canvasDimensions]);
 
   // Render load profile inclusion checkboxes on meter cards
   useEffect(() => {
@@ -868,7 +888,7 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
     });
 
     fabricCanvas.renderAll();
-  }, [fabricCanvas, isInitialDataLoaded, isCanvasReady, schematicLines, showConnections]);
+  }, [fabricCanvas, isInitialDataLoaded, isCanvasReady, schematicLines, showConnections, canvasDimensions]);
 
   // Add/remove snap points for connection mode
   useEffect(() => {
