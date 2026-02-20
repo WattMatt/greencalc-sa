@@ -1,53 +1,29 @@
 
 
-## Fix: Honour User's Column Selections When Saving and Viewing Meter Data
+## Consolidate: Remove Dead `BulkMeterImport.tsx`
 
-### Problem
+### What We Found
 
-When you select specific columns in the CSV import wizard, two things go wrong:
+- **`BulkCsvDropzone.tsx`** is the active component, used in both `SitesTab.tsx` and `MeterLibrary.tsx`. It auto-detects columns, stores pre-processed `[{timestamp, value}]` data, and handles fuzzy meter matching.
+- **`BulkMeterImport.tsx`** is **dead code** -- it is imported in `SitesTab.tsx` but never rendered. No component in the entire codebase actually uses `<BulkMeterImport />`.
 
-1. **Saving ignores your selections**: The re-import dialog (`MeterReimportDialog`) discards the wizard configuration and re-detects columns using hardcoded header patterns (looking for "date", "kwh", etc.). If your CSV has non-standard headers, it picks the wrong columns.
+There is no reason to have two files. The old one (`BulkMeterImport`) was superseded by the newer, smarter `BulkCsvDropzone` but was never cleaned up.
 
-2. **Viewing ignores your selections**: The daily and monthly consumption hooks (`useDailyConsumption`, `useMonthlyConsumption`) re-parse embedded CSV content from scratch using their own hardcoded header detection (including the incorrectly added "from" and "periods" patterns), completely bypassing your wizard selections.
-
-### Solution
-
-#### 1. Fix `MeterReimportDialog.tsx` - Use wizard config for raw_data construction
-
-Replace the hardcoded column detection (lines 76-84) with the explicit indices from the wizard config:
-
-```typescript
-// BEFORE (broken - ignores user selections):
-const dateIdx = headers.findIndex(h => h.includes('date') || h === 'rdate');
-const valueIdx = headers.findIndex(h => h.includes('kwh') || ...);
-
-// AFTER (uses wizard config):
-const dateIdx = config.dateColumnIndex ?? headers.findIndex(h => h.includes('date'));
-const timeIdx = config.timeColumnIndex ?? headers.findIndex(h => h.includes('time'));
-const valueIdx = config.valueColumnIndex ?? headers.findIndex(h => h.includes('kwh'));
-```
-
-#### 2. Fix `BulkCsvDropzone.tsx` - Store pre-processed data points, not raw CSV
-
-When the bulk import wizard processes files, instead of storing `[{ csvContent: rawCsv }]`, store the already-parsed data points as `[{ timestamp, value }]` arrays. This means the user's column selections are baked into the stored data and never need to be re-detected.
-
-#### 3. Clean up `useDailyConsumption.ts` and `useMonthlyConsumption.ts`
-
-- Remove the `"from"` and `"periods"` patterns from header detection (these were incorrectly added).
-- Keep the `parseEmbeddedCSV` function as a fallback for legacy data, but ensure new imports store pre-processed data that bypasses re-detection entirely.
-
-### Files to Modify
+### Changes
 
 | File | Change |
 |------|--------|
-| `src/components/loadprofiles/MeterReimportDialog.tsx` | Use `config.dateColumnIndex` / `config.valueColumnIndex` / `config.timeColumnIndex` for raw_data construction |
-| `src/components/loadprofiles/BulkCsvDropzone.tsx` | Store processed `[{timestamp, value}]` instead of `[{csvContent}]` after wizard column selection |
-| `src/components/loadprofiles/hooks/useDailyConsumption.ts` | Remove "from" and "periods" from header detection patterns |
-| `src/components/loadprofiles/hooks/useMonthlyConsumption.ts` | Remove "from" and "periods" from header detection patterns (if present) |
+| `src/components/loadprofiles/BulkMeterImport.tsx` | **Delete entirely** -- unused dead code |
+| `src/components/loadprofiles/SitesTab.tsx` | Remove the unused `import { BulkMeterImport }` line |
+| `src/components/code-review/ProjectFileBrowser.tsx` | Remove the `BulkMeterImport.tsx` entry from the file tree listing |
 
-### Impact
+### What Stays
 
-- Existing meters with `csvContent` in `raw_data` will continue to work via the legacy `parseEmbeddedCSV` fallback.
-- New imports and re-imports will store clean `{timestamp, value}` arrays that reflect your exact column choices.
-- The "from" column will no longer hijack the date detection.
+`BulkCsvDropzone.tsx` remains as the single bulk import component. It already:
+- Auto-detects delimiters, PnP SCADA format, and column types
+- Stores pre-processed `[{timestamp, value}]` arrays (your column selections are baked in)
+- Matches files to existing meters using fuzzy matching
+- Supports drag-and-drop for multiple files
+
+No parsing logic changes needed -- this is purely removing 814 lines of dead code.
 
