@@ -221,6 +221,13 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
     load();
   }, [schematicId, projectId]);
 
+  // Re-fetch tenant profile map when window regains focus (e.g. after switching tabs)
+  useEffect(() => {
+    const handleFocus = () => { fetchTenantProfileMap(); };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [projectId]);
+
   const fetchMeters = async () => {
     const { data } = await supabase.from("scada_imports").select("*").eq("project_id", projectId).order("site_name");
     setMeters(data || []);
