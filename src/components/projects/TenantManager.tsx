@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ChevronsUpDown, Check, Layers, MoreVertical, Eye, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ChevronsUpDown, Check, Layers, MoreVertical, Eye, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -287,6 +287,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   // Table sorting state
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [autoMatching, setAutoMatching] = useState(false);
 
   // Fetch multi-meter counts for all tenants
   const { data: tenantMeterCounts = {} } = useQuery({
@@ -428,6 +429,113 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       setSortDirection('asc');
     }
   };
+
+  // Auto-match unassigned tenants to best SCADA profiles
+  const autoMatchProfiles = async () => {
+    if (!scadaImports || scadaImports.length === 0) {
+      toast.error("No profiles available to match");
+      return;
+    }
+
+    setAutoMatching(true);
+    try {
+      const unassigned = tenants.filter(t => !t.scada_import_id);
+      if (unassigned.length === 0) {
+        toast.info("All tenants already have profiles assigned");
+        return;
+      }
+
+      const availableProfiles = [...scadaImports];
+      const usedProfileIds = new Set<string>();
+      
+      // Also track profiles already assigned to other tenants (for local scope)
+      if (profileScope === 'local') {
+        for (const t of tenants) {
+          if (t.scada_import_id) usedProfileIds.add(t.scada_import_id);
+        }
+      }
+
+      // Build scored candidates for all unassigned tenants
+      const candidates: { tenantId: string; profileId: string; score: number }[] = [];
+
+      for (const tenant of unassigned) {
+        const tenantName = tenant.shop_name || tenant.name || '';
+        const pool = profileScope === 'local'
+          ? availableProfiles.filter(p => !usedProfileIds.has(p.id))
+          : availableProfiles;
+
+        // Check shop_number exact match first
+        let bestScore = 0;
+        let bestProfileId: string | null = null;
+
+        for (const profile of pool) {
+          let score = 0;
+
+          // Shop number exact match → 95
+          if (tenant.shop_number && profile.shop_number &&
+              tenant.shop_number.trim().toLowerCase() === profile.shop_number.trim().toLowerCase()) {
+            score = 95;
+          } else {
+            // Name-based matching via existing logic
+            const suggestions = getProfileSuggestions(tenantName, [profile]);
+            score = suggestions[0]?.score || 0;
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestProfileId = profile.id;
+          }
+        }
+
+        if (bestProfileId && bestScore >= 60) {
+          candidates.push({ tenantId: tenant.id, profileId: bestProfileId, score: bestScore });
+          if (profileScope === 'local') {
+            usedProfileIds.add(bestProfileId);
+          }
+        }
+      }
+
+      // Sort by score desc for greedy assignment (local scope benefits most)
+      candidates.sort((a, b) => b.score - a.score);
+
+      // For local scope, re-run deduplication after sorting
+      if (profileScope === 'local') {
+        const finalUsed = new Set<string>();
+        // Re-add already-assigned profiles
+        for (const t of tenants) {
+          if (t.scada_import_id) finalUsed.add(t.scada_import_id);
+        }
+        
+        const dedupedCandidates: typeof candidates = [];
+        for (const c of candidates) {
+          if (!finalUsed.has(c.profileId)) {
+            dedupedCandidates.push(c);
+            finalUsed.add(c.profileId);
+          }
+        }
+        candidates.length = 0;
+        candidates.push(...dedupedCandidates);
+      }
+
+      // Execute updates
+      let matched = 0;
+      for (const { tenantId, profileId } of candidates) {
+        const { error } = await supabase
+          .from("project_tenants")
+          .update({ scada_import_id: profileId })
+          .eq("id", tenantId);
+        if (!error) matched++;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
+      toast.success(`Auto-matched ${matched} of ${unassigned.length} unassigned tenants`);
+    } catch (err: any) {
+      toast.error(err.message || "Auto-match failed");
+    } finally {
+      setAutoMatching(false);
+    }
+  };
+  
   
   // Get display name for tenant (shop_name or fallback to name)
   const getTenantDisplayName = (tenant: Tenant): string => {
@@ -897,6 +1005,24 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>{profileScope === 'local' ? "Local data set" : "Global data set"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            disabled={autoMatching}
+                            onClick={autoMatchProfiles}
+                          >
+                            <RefreshCw className={cn("h-3.5 w-3.5", autoMatching && "animate-spin")} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Auto-match profiles to tenants</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
