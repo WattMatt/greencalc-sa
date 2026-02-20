@@ -137,7 +137,7 @@ function parseDateTime(dateStr: string, timeStr: string | null, format: string =
   dateStr = dateStr.trim();
   
   // Try combined datetime format: "31/12/2024 23:30:00" or "2024-12-31 23:30:00"
-  const dtMatch = dateStr.match(/^(\d{1,4})[-\/](\d{1,2})[-\/](\d{1,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  const dtMatch = dateStr.match(/^(\d{1,4})[-\/](\d{1,2})[-\/](\d{1,4})[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (dtMatch) {
     const p1 = parseInt(dtMatch[1]);
     const p2 = parseInt(dtMatch[2]);
