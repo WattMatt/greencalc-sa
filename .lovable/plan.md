@@ -1,54 +1,54 @@
 
-## Add Min/Max/Average Envelope Chart with Year Range Filter
 
-### What You Get
+## Update Load Profile Chart to Use Raw Time-Series Data
 
-A new chart placed below the existing Load Profile chart showing:
-- **Upper line**: Maximum kW per hour across all days in the selected year range
-- **Lower line**: Minimum kW per hour across all days in the selected year range
-- **Dotted middle line**: Average kW per hour
-- **Shaded fill** between the upper and lower boundaries
-- **Year range dropdowns**: `[From] to [To]` -- no labels, just the from dropdown, the word "to", and the to dropdown. Dropdowns are constrained to years present in the dataset.
+### Problem
+The Load Profile chart currently derives its hourly values from pre-computed `load_profile_weekday` / `load_profile_weekend` arrays (averaged during import). The Envelope chart uses the actual raw time-series data (`raw_data`). This causes the two charts to show different values for what should be the same average.
 
-### Architecture
+### Solution
+Modify `useLoadProfileData` so that, when raw SCADA data is available for a tenant, it computes the hourly average from the raw time-series (same source as the envelope), then applies the existing diversity factor, area scaling, day multipliers, and display unit conversion on top.
 
-```text
-src/components/projects/load-profile/
-  hooks/useEnvelopeData.ts       (NEW) - Computes min/max/avg per hour from raw_data
-  charts/EnvelopeChart.tsx       (NEW) - Renders the shaded envelope chart
-  index.tsx                      (EDIT) - Adds the EnvelopeChart below LoadChart
-```
+For tenants without raw data, the existing logic (shop type estimates, pre-computed profiles) remains as a fallback.
 
 ### Technical Details
 
-#### 1. `hooks/useEnvelopeData.ts` (New)
+**File: `src/components/projects/load-profile/hooks/useLoadProfileData.ts`**
 
-- Reuses the existing `parseRawData` function pattern from `useSpecificDateData.ts`
-- Iterates all tenants' `scada_imports.raw_data`, parsing each `RawDataPoint`
-- Extracts available years from `date_range_start` / `date_range_end` (or from the actual data points)
-- For each hour (0-23), across all days within the selected year range:
-  - Sums all tenant kW values for that hour on each day (same as `useSpecificDateData` does for a single date)
-  - Tracks the min, max, and running average of those daily totals per hour
-- Returns: `{ envelopeData, availableYears, yearFrom, setYearFrom, yearTo, setYearTo }`
-- `envelopeData` is an array of 24 objects: `{ hour, min, max, avg }`
+1. Import/reuse the `parseRawData` function from `useEnvelopeData.ts` (extract it to a shared utility or duplicate it).
 
-#### 2. `charts/EnvelopeChart.tsx` (New)
+2. In the `baseChartData` useMemo, for each tenant with `scada_imports.raw_data`:
+   - Parse raw data with `parseRawData()`
+   - Filter by selected days of week (0=Sunday through 6=Saturday) using the date's actual day
+   - Filter by selected months if the `selectedMonthsFilter` is passed through (future-proofing)
+   - Group readings by hour, average sub-hourly intervals (same as envelope)
+   - Apply area scaling (`tenant.area_sqm / scada_imports.area_sqm`)
+   - Apply the day multiplier for the specific day of each reading
+   - Average across all matching days to get a single hourly kW value per tenant
+   - Skip the pre-computed profile path entirely for these tenants
 
-- Uses Recharts `ComposedChart` with `Area` for the shaded region and `Line` for the dotted average
-- The shaded fill uses an `Area` with `dataKey="max"` as upper bound and a second `Area` with `dataKey="min"` subtracted (using the Recharts stacking pattern where min is rendered as a transparent base area, and the gap between min and max is the visible shaded fill)
-- Average line: dashed/dotted stroke style
-- Year range controls rendered inline above the chart: two `<Select>` dropdowns with no labels, separated by the word "to"
-- Follows existing chart styling conventions (same axis formatting, muted grid, 200px height)
+3. Tenants without raw data continue to use the existing `load_profile_weekday`/`load_profile_weekend` + shop type estimate fallback path (no change).
 
-#### 3. `index.tsx` (Edit)
+4. The diversity factor, display unit conversion (kW to kVA), and PV/battery simulation layers remain completely unchanged -- they operate on the output of `baseChartData` as before.
 
-- Import and render `EnvelopeChart` below the existing `LoadChart`, passing `tenants` and `displayUnit`/`powerFactor`
-- The envelope chart is always visible when there is SCADA raw data (it self-hides if no raw data exists)
+5. Apply the same 75 kW minimum threshold used in the envelope chart, so outage days are excluded from the average consistently.
 
-### Files to Create/Modify
+**File: `src/components/projects/load-profile/utils/parseRawData.ts`** (new shared utility)
 
-| File | Action |
-|------|--------|
-| `src/components/projects/load-profile/hooks/useEnvelopeData.ts` | Create |
-| `src/components/projects/load-profile/charts/EnvelopeChart.tsx` | Create |
-| `src/components/projects/load-profile/index.tsx` | Add EnvelopeChart below LoadChart |
+Extract the `parseRawData` function and `MONTH_MAP` constant from `useEnvelopeData.ts` into a shared file so both hooks can import it without duplication.
+
+**File: `src/components/projects/load-profile/hooks/useEnvelopeData.ts`**
+
+Update to import `parseRawData` from the new shared utility instead of defining it locally.
+
+### What stays the same
+- Diversity factor application
+- Area scaling (tenant area / SCADA area ratio)
+- Multi-meter weighted averaging (for tenants using `tenant_meters`)
+- Day multipliers for weekday variation
+- Shop type estimate fallback (for tenants without SCADA data)
+- PV generation, battery simulation, and all downstream calculations
+- Display unit (kW/kVA) conversion
+
+### Expected outcome
+When both charts use the same raw data source, the Load Profile average line and the Envelope average line will show consistent values (with the Load Profile additionally reflecting diversity factor and day multipliers as configured).
+
