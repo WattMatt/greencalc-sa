@@ -1,49 +1,76 @@
 
+## Fix: Delete Button in Bulk Upload Should Fully Clean Up
 
-## Allow Creating Clean (Blank Canvas) Schematics
+### Problem
+The delete button (trash icon) next to "Previously Imported Files" in the SCADA Bulk Upload wizard currently only deletes the `scada_imports` database record. It does **not**:
+1. Remove the actual file from the `scada-csvs` storage bucket
+2. Clear the `scada_import_id` reference on any tenant that was linked to this import
 
-### What Changes
+### Fix
 
-The "Upload Schematic" button and dialog will be updated so that file upload is optional. When no file is attached, the schematic is created as a blank canvas.
+**File: `src/components/projects/ScadaImportWizard.tsx` -- `deleteImportMutation` (around line 285)**
 
-### UI Changes
+Update the mutation to perform three cleanup steps before deleting the DB record:
 
-1. **Top-right button**: Stays as "+ Upload Schematic" (this opens the dialog).
-2. **Empty state button**: Same -- opens the dialog.
-3. **Dialog title**: Changes from "Upload Schematic Diagram" to "Create Schematic Diagram" with updated subtitle "Create a blank canvas or upload a diagram (PDF, PNG, JPG, SVG)".
-4. **Submit button text** (bottom of dialog):
-   - No file selected: **"Clean Schematic"**
-   - File selected: **"Upload Schematic"**
-5. **File upload area**: Remains as-is but is no longer required. The `disabled={!selectedFile}` guard on the submit button is removed.
+1. **Null out tenant references**: Update any `project_tenants` rows where `scada_import_id` matches the import being deleted, setting it to `null`.
 
-### Database Change
+2. **Remove storage file**: List files in `scada-csvs` bucket under the project prefix (`{projectId}/`), find any file whose name ends with `_{file_name}`, and delete it.
 
-A migration to make `file_path` and `file_type` nullable on `project_schematics`, since clean schematics have no uploaded file:
+3. **Delete the DB record**: Same as current -- delete from `scada_imports`.
 
-```sql
-ALTER TABLE public.project_schematics
-  ALTER COLUMN file_path DROP NOT NULL,
-  ALTER COLUMN file_type DROP NOT NULL;
+The updated mutation:
+
+```typescript
+const deleteImportMutation = useMutation({
+  mutationFn: async (importId: string) => {
+    // Get the import record first (need file_name for storage cleanup)
+    const { data: imp } = await supabase
+      .from("scada_imports")
+      .select("file_name")
+      .eq("id", importId)
+      .single();
+
+    // 1. Clear tenant references
+    await supabase
+      .from("project_tenants")
+      .update({ scada_import_id: null })
+      .eq("scada_import_id", importId);
+
+    // 2. Remove file from storage
+    if (imp?.file_name) {
+      const { data: files } = await supabase.storage
+        .from("scada-csvs")
+        .list(projectId);
+      const matches = (files || []).filter(f =>
+        f.name.endsWith(`_${imp.file_name}`)
+      );
+      if (matches.length > 0) {
+        await supabase.storage
+          .from("scada-csvs")
+          .remove(matches.map(f => `${projectId}/${f.name}`));
+      }
+    }
+
+    // 3. Delete the DB record
+    const { error } = await supabase
+      .from("scada_imports")
+      .delete()
+      .eq("id", importId);
+    if (error) throw error;
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["existing-scada-imports", projectId] });
+    queryClient.invalidateQueries({ queryKey: ["project-tenants"] });
+    toast.success("Import and associated data deleted");
+  },
+  onError: (err: Error) => {
+    toast.error(`Failed to delete: ${err.message}`);
+  },
+});
 ```
 
-### Logic Changes (SchematicsTab.tsx)
+### Add Confirmation Dialog
+Currently the wizard delete button has no confirmation. Add a `confirm()` prompt before mutating (the `ScadaImportsList` version already does this).
 
-1. **`handleSubmit`**: If `selectedFile` is null, insert a record with `file_path: null` and `file_type: 'canvas'` (or null). Skip the storage upload and PDF conversion steps.
-2. **Delete logic**: Guard the storage delete calls -- only attempt to remove files from storage when `file_path` is not null.
-3. **Table display**: For clean schematics, show a canvas icon (e.g. `PenTool` from lucide) instead of calling `getFileTypeIcon`. The Status column shows "Canvas" instead of conversion status.
-
-### Technical Details
-
-**File: `src/components/projects/SchematicsTab.tsx`**
-- Remove `disabled={isLoading || !selectedFile}` from submit button; replace with `disabled={isLoading}`.
-- Change button text: `{isLoading ? "Creating..." : selectedFile ? "Upload Schematic" : "Clean Schematic"}`.
-- In `handleSubmit`: wrap the storage upload + PDF conversion in `if (selectedFile) { ... }` and set `file_path`/`file_type` to `null`/`'canvas'` when no file.
-- In `handleConfirmDelete` and `handleBulkDelete`: wrap `supabase.storage.from(...).remove(...)` in `if (schematic.file_path) { ... }`.
-- In the table row rendering: handle `file_type === 'canvas'` or `!file_path` for the icon and status columns.
-
-**File: `src/types/schematic.ts`**
-- Update `file_path` and `file_type` to allow `null`: `file_path: string | null`.
-
-**File: `src/integrations/supabase/types.ts`**
-- This will auto-update after the migration.
-
+### Files Modified
+- `src/components/projects/ScadaImportWizard.tsx` -- enhanced `deleteImportMutation` with full cleanup
