@@ -1,74 +1,39 @@
 
 
-## Fix: Support Text Month Date Formats ("01 Nov 2022 00:00")
+## Add Auto-Match Refresh Button to Tenant Table
 
-### Root Cause
+### Overview
+A small refresh icon will be added immediately to the right of the Load Profile toggle switch. Clicking it will automatically scan all unassigned tenants and match them to the best available SCADA profile based on the current toggle scope (global vs local).
 
-The uploaded Excel file (`AC_Shop_2.xlsx`) stores dates as **text strings** like:
-```
-01 Nov 2022 00:00
-02 Nov 2022 01:00
-```
+### Matching Rules
 
-The `cellDates: true` fix from the previous change only converts **numeric Excel date serial numbers** into readable dates. Text-based dates pass through unchanged.
+**Global scope** (toggle off): For each unassigned tenant, find the SCADA import with the highest name-match confidence (using the existing `getProfileSuggestions` logic). Multiple tenants can share the same global profile, so no deduplication is needed -- just pick the best match per tenant.
 
-The `parseDateTime` function in `csvToLoadProfile.ts` has two regex patterns, both expecting **numeric-only** date parts separated by `/` or `-`:
+**Local scope** (toggle on): Each local SCADA import (project-scoped) can only be assigned to **one** tenant. The matcher will greedily assign the highest-confidence matches first and remove used profiles from the pool to prevent double-assignment.
 
-```text
-/^(\d{1,4})[-\/](\d{1,2})[-\/](\d{1,4})[\sT]+...   -- fails on "01 Nov 2022"
-/^(\d{1,4})[-\/](\d{1,2})[-\/](\d{1,4})/            -- fails on "01 Nov 2022"
-```
+In both modes, only matches with a confidence score of 60 or above will be auto-assigned. Additionally, `shop_number` will be checked as a secondary match signal (exact match on `shop_number` yields a score of 95).
 
-Neither matches a 3-letter month abbreviation like "Nov", so all 50 rows are rejected.
+### UI Change
+- Add a `RefreshCw` icon (from lucide-react) as a ghost button, placed right after the `</TooltipProvider>` inside the existing `<div className="flex items-center gap-3">` wrapper on the Load Profile header column.
+- Wrapped in a Tooltip showing "Auto-match profiles to tenants".
+- While running, the icon gets the `animate-spin` class.
 
-### Fix
+### Technical Details
 
-**File: `src/components/loadprofiles/utils/csvToLoadProfile.ts` -- `parseDateTime` function (around line 135)**
+**File: `src/components/projects/TenantManager.tsx`**
 
-Add a new regex branch **before** the existing patterns to catch the "DD MMM YYYY HH:MM" format (and variations like "DD-MMM-YYYY HH:MM:SS"):
-
-```text
-Pattern: /^(\d{1,2})[\s\-\/]([A-Za-z]{3,9})[\s\-\/](\d{2,4})(?:[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/
-```
-
-This matches:
-- `01 Nov 2022 00:00`
-- `1-Nov-2022 00:00:00`
-- `15 September 2023 14:30`
-
-The month name is resolved using a lookup map (Jan=0, Feb=1, ..., Dec=11). Two-digit years are expanded (e.g. 22 becomes 2022).
-
-### Technical Detail
-
-The new code block to add inside `parseDateTime`, before the existing numeric-format regex:
-
-```typescript
-// Try "DD MMM YYYY HH:MM" or "DD-MMM-YYYY HH:MM:SS" (text month names)
-const monthNames: Record<string, number> = {
-  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
-};
-const textMonthMatch = dateStr.match(
-  /^(\d{1,2})[\s\-\/]([A-Za-z]{3,9})[\s\-\/](\d{2,4})(?:[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/
-);
-if (textMonthMatch) {
-  const day = parseInt(textMonthMatch[1]);
-  const monthKey = textMonthMatch[2].toLowerCase().substring(0, 3);
-  const monthNum = monthNames[monthKey];
-  let year = parseInt(textMonthMatch[3]);
-  if (textMonthMatch[3].length === 2) year += year > 50 ? 1900 : 2000;
-
-  if (monthNum !== undefined && day >= 1 && day <= 31) {
-    const date = new Date(year, monthNum, day);
-    if (!isNaN(date.getTime())) {
-      const hour = textMonthMatch[4] ? parseInt(textMonthMatch[4]) : 0;
-      const minute = textMonthMatch[5] ? parseInt(textMonthMatch[5]) : 0;
-      return { date, hour, minute };
-    }
-  }
-}
-```
+1. **Import**: Add `RefreshCw` to the lucide-react import on line 10.
+2. **State**: Add `const [autoMatching, setAutoMatching] = useState(false);`.
+3. **Auto-match function** (`autoMatchProfiles`):
+   - Filter tenants to only those with `scada_import_id === null`.
+   - For each unassigned tenant, call `getProfileSuggestions(tenantName, availableProfiles)` and also check `shop_number` match.
+   - Pick the top match with score >= 60.
+   - **If local scope**: track used profile IDs and exclude them from subsequent matching (one-to-one).
+   - **If global scope**: no deduplication needed (many-to-one is fine).
+   - Batch-update all matched tenants via individual `supabase.from("project_tenants").update({ scada_import_id }).eq("id", tenantId)` calls.
+   - Invalidate query cache and show a summary toast: "Auto-matched X of Y unassigned tenants".
+4. **UI insertion** (around line 902): Add the refresh button right after the closing `</TooltipProvider>` tag, inside the existing flex wrapper.
 
 ### Files Modified
-- `src/components/loadprofiles/utils/csvToLoadProfile.ts` -- add text-month regex branch in `parseDateTime`
+- `src/components/projects/TenantManager.tsx` -- add RefreshCw button, auto-match state, and matching logic
 
