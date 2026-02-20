@@ -1,54 +1,49 @@
 
 
-## Minimal Dropbox Test Edge Function
+## Replace System Type Dropdown with Multi-Select Toggle Buttons
 
-### What Gets Built
+### What Changes
 
-**1. Edge function: `supabase/functions/dropbox-proxy/index.ts`**
+Replace the single "System Type" dropdown (Solar / Solar + Battery / Hybrid) with individual toggle buttons for each energy generation component: **Solar PV**, **Battery**, and **Generator**. Each can be independently toggled on/off, giving more flexible system configuration.
 
-A single edge function that accepts a POST with an `action` parameter. For this test phase, it supports one action:
+### UI Design
 
-- **`list_folder`**: Takes an optional `path` (defaults to `""` for root) and an `access_token`, then calls the Dropbox API `POST https://api.dropboxapi.com/2/files/list_folder` and returns the results.
+The current dropdown gets replaced with a row of toggle-style checkboxes/buttons:
 
-The access token is passed in the request body for now (since the short-lived token you generated expires in ~4 hours, this keeps things simple for testing). Once we confirm connectivity, we will implement the full OAuth refresh token flow.
+```text
+System Configuration
+[x] Solar PV    [x] Battery    [ ] Generator
+```
 
-**2. Config: `supabase/config.toml`** (auto-managed)
+Each button shows an icon (Sun, Battery, Zap) and can be toggled independently. The combination is saved to the database as a comma-separated string in the existing `system_type` column (e.g. "Solar PV,Battery").
 
-Registers `[functions.dropbox-proxy]` with `verify_jwt = false`.
+### Files Modified
 
-### Testing Plan
+**1. `src/pages/ProjectDetail.tsx`**
+- Change `systemType` in `DashboardParams` from a single string union to an object: `{ solarPV: boolean; battery: boolean; generator: boolean }`
+- Replace the `<Select>` dropdown (lines 421-444) with three toggle buttons using Shadcn's `Toggle` component or styled checkboxes with icons
+- Update the save logic to serialise the selected components into the `system_type` DB column (e.g. "Solar PV,Battery")
+- Update the load logic to parse the `system_type` string back into the boolean flags
+- Update `systemIncludesBattery` and `systemIncludesSolar` derivations (line 806-809) to use the new flags
 
-After deployment:
-1. I will call the edge function with `action: "list_folder"`, `path: ""`, and your access token
-2. The response will show your root Dropbox folder structure
-3. We can then navigate into subfolders to confirm you can see the shared folders
-4. Based on what we see, we decide how to scope the browser in the UI
+**2. `src/pages/ProjectDashboard.tsx`** (if still used)
+- Same pattern: replace the System Type `<Select>` with toggle buttons for consistency
+
+**3. `src/hooks/useProjectStore.ts`**
+- Update the `SystemType` type and default values to reflect the new multi-select model
+
+### Database
+
+No schema changes needed -- the existing `system_type` column (text, nullable) can store the serialised value like `"Solar PV,Battery"` or `"Solar PV,Battery,Generator"`.
+
+### How It Connects Downstream
+
+The existing `systemIncludesBattery` and `systemIncludesSolar` boolean flags (used by load profile charts, financial analysis, energy flow) will be derived directly from the new toggle states, making downstream logic simpler and more accurate. A new `systemIncludesGenerator` flag will be added for future generator-related features.
 
 ### Technical Details
 
-The edge function implementation:
-
-```text
-POST /dropbox-proxy
-Body: {
-  "action": "list_folder",
-  "path": "",           // "" = root, or "/Some Folder"
-  "access_token": "sl.u.xxx..."
-}
-
-Response: {
-  "entries": [
-    { ".tag": "folder", "name": "Projects", "path_lower": "/projects" },
-    { ".tag": "file", "name": "readme.txt", "path_lower": "/readme.txt", "size": 1234 }
-  ],
-  "has_more": false
-}
-```
-
-The function proxies to `https://api.dropboxapi.com/2/files/list_folder` with the provided token, includes standard CORS headers, and returns the Dropbox API response directly.
-
-### Files
-- **New**: `supabase/functions/dropbox-proxy/index.ts`
-
-No database changes needed for this test phase.
-
+- Toggle UI uses the existing Shadcn `Toggle` component with `variant="outline"` for a clean pressed/unpressed look
+- Icons: `Sun` for Solar PV, `Battery` for Battery, `Zap` for Generator (all from lucide-react)
+- Serialisation format: comma-separated string stored in `system_type` (e.g. `"Solar PV,Battery"`)
+- Parsing on load: `system_type?.split(",").map(s => s.trim())` to restore toggle states
+- Auto-save triggers on each toggle change (same pattern as the current select `onValueChange`)
