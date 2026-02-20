@@ -617,6 +617,8 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
           });
           img.setControlVisible('mtr', false);
           img.set('data', { meterId: pos.meter_id, positionId: pos.id });
+          (img as any).isMeterCard = true;
+          (img as any).meterId = pos.meter_id;
           fabricCanvas.add(img);
           fabricCanvas.bringObjectToFront(img);
           fabricCanvas.renderAll();
@@ -770,11 +772,33 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
   };
 
   const handleSave = async () => {
+    if (!fabricCanvas) return;
     setIsSaving(true);
-    toast.success("Schematic saved");
-    setIsSaving(false);
-    setIsEditMode(false);
-    setActiveTool("select");
+    try {
+      // Collect current positions from canvas objects
+      const updates: PromiseLike<any>[] = [];
+      fabricCanvas.getObjects().forEach((obj: any) => {
+        if (obj.isMeterCard && obj.data?.positionId) {
+          const cw = fabricCanvas.getWidth();
+          const ch = fabricCanvas.getHeight();
+          const xPct = ((obj.left || 0) / cw) * 100;
+          const yPct = ((obj.top || 0) / ch) * 100;
+          updates.push(
+            supabase.from('project_schematic_meter_positions')
+              .update({ x_position: xPct, y_position: yPct })
+              .eq('id', obj.data.positionId)
+          );
+        }
+      });
+      await Promise.all(updates);
+      toast.success("Schematic saved");
+    } catch (err) {
+      toast.error("Failed to save schematic");
+    } finally {
+      setIsSaving(false);
+      setIsEditMode(false);
+      setActiveTool("select");
+    }
   };
 
   const handleRefresh = async () => {
