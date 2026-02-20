@@ -180,8 +180,8 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor }: UseEnvelo
 
       dateHourlyTotals.forEach((dayArr) => {
         const val = dayArr[h];
-        // Skip values below 50 kW threshold (power-off / outage days skew the min)
-        if (val < 50) return;
+        // Skip values below 75 kW threshold (power-off / outage days skew the min)
+        if (val < 75) return;
         if (val < min) min = val;
         if (val > max) max = val;
         sum += val;
