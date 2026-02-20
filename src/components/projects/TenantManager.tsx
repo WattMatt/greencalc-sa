@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -231,6 +231,28 @@ type SortDirection = 'asc' | 'desc';
 
 export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerProps) {
   const queryClient = useQueryClient();
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCsvFileSelected = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) {
+        toast.error("CSV file must have a header row and at least one data row");
+        return;
+      }
+      const headers = lines[0].split(",").map(h => h.trim());
+      const rows = lines.slice(1).map(l => l.split(",").map(c => c.trim()));
+      setDialogOpen(false);
+      setColumnMapperData({ headers, rows });
+      setColumnMapperOpen(true);
+    };
+    reader.readAsText(file);
+    if (csvInputRef.current) csvInputRef.current.value = "";
+  }, []);
   
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newTenant, setNewTenant] = useState({ shop_number: "", shop_name: "", area_sqm: "", scada_import_id: "" });
@@ -510,6 +532,13 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
 
   return (
     <div className="space-y-6">
+      <input
+        ref={csvInputRef}
+        type="file"
+        accept=".csv"
+        className="hidden"
+        onChange={handleCsvFileSelected}
+      />
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Tenant Schedule</h2>
@@ -535,7 +564,17 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add Tenant</DialogTitle>
+                <div className="flex items-center justify-between w-full">
+                  <DialogTitle>Add Tenant</DialogTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => csvInputRef.current?.click()}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import CSV
+                  </Button>
+                </div>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
