@@ -534,7 +534,8 @@ export function ScadaImportWizard({
       try {
         // Uploading
         setUploadStatuses(prev => ({ ...prev, [i]: { status: 'uploading' } }));
-        const path = `${projectId}/${Date.now()}_${f.name}`;
+        const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `${projectId}/${Date.now()}_${safeName}`;
         const { error: uploadError } = await supabase.storage
           .from("scada-csvs")
           .upload(path, f.file, { upsert: true });
