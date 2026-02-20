@@ -334,6 +334,48 @@ export function ScadaImportWizard({
     },
   });
 
+  const deleteAllImportsMutation = useMutation({
+    mutationFn: async () => {
+      for (const imp of existingImports) {
+        // 1. Clear tenant references
+        await supabase
+          .from("project_tenants")
+          .update({ scada_import_id: null })
+          .eq("scada_import_id", imp.id);
+
+        // 2. Remove file from storage
+        if (imp.file_name) {
+          const { data: files } = await supabase.storage
+            .from("scada-csvs")
+            .list(projectId);
+          const matches = (files || []).filter(f =>
+            f.name.endsWith(`_${imp.file_name}`)
+          );
+          if (matches.length > 0) {
+            await supabase.storage
+              .from("scada-csvs")
+              .remove(matches.map(f => `${projectId}/${f.name}`));
+          }
+        }
+
+        // 3. Delete the DB record
+        const { error } = await supabase
+          .from("scada_imports")
+          .delete()
+          .eq("id", imp.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["existing-scada-imports", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project-tenants"] });
+      toast.success(`All ${existingImports.length} imports deleted`);
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to delete all: ${err.message}`);
+    },
+  });
+
   // ── Step 1: File handling ────────────────────────────────────
 
   const handleFilesSelected = useCallback(
@@ -663,7 +705,21 @@ export function ScadaImportWizard({
                           <TableHead className="text-xs h-8 text-right">Points</TableHead>
                           <TableHead className="text-xs h-8">Date Range</TableHead>
                           <TableHead className="text-xs h-8">Imported</TableHead>
-                          <TableHead className="text-xs h-8 w-10" />
+                          <TableHead className="text-xs h-8 w-10">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => {
+                                if (confirm(`Delete all ${existingImports.length} imports? This will also remove uploaded files and unlink any assigned tenants.`)) {
+                                  deleteAllImportsMutation.mutate();
+                                }
+                              }}
+                              disabled={deleteAllImportsMutation.isPending || deleteImportMutation.isPending}
+                            >
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </Button>
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
