@@ -11,7 +11,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet, CheckCircle2, AlertCircle, Lock, Circle, CalendarIcon, Save, TrendingUp, Leaf, Battery, Building2, MapPin, CalendarDays, FolderOpen } from "lucide-react";
+import { ArrowLeft, Users, BarChart3, DollarSign, Zap, Plug, Sun, CloudSun, FileText, LayoutDashboard, ScrollText, Wallet, CheckCircle2, AlertCircle, Lock, Circle, CalendarIcon, Save, TrendingUp, Leaf, Battery, Building2, MapPin, CalendarDays, FolderOpen, Cpu } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { TenantManager } from "@/components/projects/TenantManager";
@@ -20,6 +20,7 @@ import { TariffSelector } from "@/components/projects/TariffSelector";
 import { SimulationModes, SimulationModesRef } from "@/components/projects/SimulationModes";
 import { FloorPlanMarkup } from "@/components/floor-plan/FloorPlanMarkup";
 import { SolarForecastCard } from "@/components/projects/SolarForecastCard";
+import SchematicsTab from "@/components/projects/SchematicsTab";
 
 import { ProjectOverview } from "@/components/projects/ProjectOverview";
 import { ProjectLocationMap } from "@/components/projects/ProjectLocationMap";
@@ -1064,6 +1065,10 @@ export default function ProjectDetail() {
           ? `${assignedCount}/${tenantCount} tenants have load profiles`
           : `${tenantCount} tenants configured`
     },
+    schematics: {
+      status: "pending" as TabStatus,
+      tooltip: "Upload electrical distribution schematics"
+    },
     "load-profile": {
       status: assignedCount === 0 ? "blocked" 
         : assignedCount === tenantCount ? "complete" 
@@ -1179,6 +1184,10 @@ export default function ProjectDetail() {
               <Users className="h-4 w-4 mr-2" />
               Tenants
             </TabWithStatus>
+            <TabWithStatus value="schematics" status={tabStatuses.schematics.status} tooltip={tabStatuses.schematics.tooltip}>
+              <Cpu className="h-4 w-4 mr-2" />
+              Schematics
+            </TabWithStatus>
             <TabWithStatus value="load-profile" status={tabStatuses["load-profile"].status} tooltip={tabStatuses["load-profile"].tooltip}>
               <BarChart3 className="h-4 w-4 mr-2" />
               Load Profile
@@ -1243,6 +1252,10 @@ export default function ProjectDetail() {
             tenants={tenants || []}
             shopTypes={shopTypes || []}
           />
+        </TabsContent>
+
+        <TabsContent value="schematics" className="mt-6">
+          <SchematicsTab projectId={id!} />
         </TabsContent>
 
         <TabsContent value="load-profile" className="mt-6">

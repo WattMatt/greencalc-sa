@@ -940,6 +940,106 @@ export type Database = {
           },
         ]
       }
+      project_schematic_meter_positions: {
+        Row: {
+          created_at: string
+          id: string
+          label: string | null
+          meter_id: string
+          scale_x: number | null
+          scale_y: number | null
+          schematic_id: string
+          updated_at: string
+          x_position: number
+          y_position: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          meter_id: string
+          scale_x?: number | null
+          scale_y?: number | null
+          schematic_id: string
+          updated_at?: string
+          x_position?: number
+          y_position?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          meter_id?: string
+          scale_x?: number | null
+          scale_y?: number | null
+          schematic_id?: string
+          updated_at?: string
+          x_position?: number
+          y_position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_schematic_meter_positions_schematic_id_fkey"
+            columns: ["schematic_id"]
+            isOneToOne: false
+            referencedRelation: "project_schematics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_schematics: {
+        Row: {
+          converted_image_path: string | null
+          created_at: string
+          description: string | null
+          file_path: string
+          file_type: string
+          id: string
+          name: string
+          page_number: number
+          project_id: string
+          total_pages: number
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          converted_image_path?: string | null
+          created_at?: string
+          description?: string | null
+          file_path: string
+          file_type: string
+          id?: string
+          name: string
+          page_number?: number
+          project_id: string
+          total_pages?: number
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          converted_image_path?: string | null
+          created_at?: string
+          description?: string | null
+          file_path?: string
+          file_type?: string
+          id?: string
+          name?: string
+          page_number?: number
+          project_id?: string
+          total_pages?: number
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_schematics_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_simulations: {
         Row: {
           annual_battery_savings: number | null
