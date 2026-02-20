@@ -1,40 +1,50 @@
 
 
-## Defer All Uploads to the Preview Tab
+## Show Existing Uploads in the Bulk Upload Wizard
 
 ### Problem
-Currently, clicking "Upload All" in the **Upload Files** tab immediately uploads files to the storage bucket (`scada-csvs`). While the database insert only happens on "Complete Import" in the Preview tab, the user expects **nothing** to leave the browser until they are satisfied with the parsed preview and explicitly confirm.
+When opening the Bulk Upload dialog, there is no indication of what CSV data has already been imported for this project. The user has no way of confirming that previous imports exist without checking the database directly.
 
 ### Solution
-Restructure the wizard so that:
-- **Tab 1 ("Select Files")**: Only selects files from disk and reads their content locally in the browser. No network calls. The "Upload All" button becomes "Read All" or simply auto-reads on selection. Tenant assignment stays here.
-- **Tab 2 ("Parse & Configure")**: Same as today -- configure separator, header row, column interpretation.
-- **Tab 3 ("Preview & Import")**: Shows the parsed preview. The "Complete Import" button now does **both** the storage upload and the database insert in one go.
+Add an "Existing Imports" section at the top of **Tab 1 (Select Files)** that queries the `scada_imports` table for all records matching the current `project_id` and displays them in a compact list/table. This gives the user immediate visibility into what has already been uploaded.
 
-### Changes in `src/components/projects/ScadaImportWizard.tsx`
+### What Changes
 
-1. **Rename Tab 1** from "Upload Files" to "Select Files" and update the description to clarify no upload happens yet.
+**File: `src/components/projects/ScadaImportWizard.tsx`**
 
-2. **Refactor `handleUploadAll`** to only read file content locally (no `supabase.storage.upload` call). Rename it to `handleReadAll`. It will:
-   - Call `readFileAsText()` for each file (already done today)
-   - Set status to `"uploaded"` (rename to `"ready"` for clarity)
-   - Auto-detect separator and load preview
-   - Advance to Tab 2
-   - **Remove** the `supabase.storage.from("scada-csvs").upload(...)` call entirely from this function
+1. **Add a new query** using TanStack Query to fetch existing `scada_imports` for this project:
+   - Fields: `id`, `file_name`, `site_name`, `shop_name`, `data_points`, `date_range_start`, `date_range_end`, `created_at`
+   - Filtered by `project_id`, enabled when the dialog is `open`
 
-3. **Move storage upload into `handleComplete`**: Before the `onComplete(results)` call, loop through files and upload each to `scada-csvs` storage. This means the storage upload and database insert (done by the parent `TenantManager.tsx`) both happen at the same moment -- when the user clicks "Complete Import".
+2. **Render an "Existing Imports" card** above the "Select CSV Files" section in Tab 1:
+   - If no existing imports: show a subtle message like "No files have been imported yet."
+   - If imports exist: show a compact table with columns for file name, site/shop name, data points, date range, and import date
+   - Each row will have a small delete button (Trash2 icon) to allow removing individual existing imports from the database and storage
+   - The section will have a clear heading like "Previously Imported Files" with a count badge
 
-4. **Update button labels and toasts**:
-   - "Upload All" becomes "Continue" or "Read Files" (since it just reads locally)
-   - Success toast changes from "Files uploaded successfully" to "Files loaded successfully"
-   - Tab 3 button "Complete Import" stays the same but now also handles the storage upload
+3. **Delete handler** for existing imports:
+   - Removes the record from `scada_imports` table
+   - Invalidates the query to refresh the list
+   - Shows a success/error toast
 
-### File Modified
-- `src/components/projects/ScadaImportWizard.tsx`
+### Technical Detail
 
-### What Stays the Same
-- Tab 2 (Parse & Configure) -- no changes
-- Tab 3 preview table -- no changes
-- `TenantManager.tsx` `handleWizardComplete` -- no changes (it already handles the DB insert on complete)
-- The upsert dedup logic added previously -- no changes
+```text
+New query:
+  SELECT id, file_name, site_name, shop_name, data_points, 
+         date_range_start, date_range_end, created_at
+  FROM scada_imports
+  WHERE project_id = <projectId>
+  ORDER BY created_at DESC
 
+UI structure in Tab 1:
+  [Previously Imported Files (3)]        <-- collapsible card
+    file_name | site_name | points | date range | imported | [delete]
+    ...
+  ──────────────────────────────────
+  [Select CSV Files]                     <-- existing UI unchanged
+    Choose Files ...
+```
+
+### Files Modified
+- `src/components/projects/ScadaImportWizard.tsx` -- add existing imports query and display section in Tab 1
