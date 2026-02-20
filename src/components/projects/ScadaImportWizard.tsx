@@ -747,10 +747,14 @@ export function ScadaImportWizard({
                             <div className="space-y-1">
                               <Label className="text-xs">DateTime Format</Label>
                               <Select
-                                value={col.dateTimeFormat}
-                                onValueChange={(v) =>
-                                  updateColumnDateFormat(idx, v)
-                                }
+                                value={DATETIME_FORMATS.includes(col.dateTimeFormat) ? col.dateTimeFormat : "__custom__"}
+                                onValueChange={(v) => {
+                                  if (v === "__custom__") {
+                                    updateColumnDateFormat(idx, "");
+                                  } else {
+                                    updateColumnDateFormat(idx, v);
+                                  }
+                                }}
                               >
                                 <SelectTrigger className="h-8">
                                   <SelectValue />
@@ -761,8 +765,17 @@ export function ScadaImportWizard({
                                       {fmt}
                                     </SelectItem>
                                   ))}
+                                  <SelectItem value="__custom__">Custom Format</SelectItem>
                                 </SelectContent>
                               </Select>
+                              {!DATETIME_FORMATS.includes(col.dateTimeFormat) && (
+                                <Input
+                                  value={col.dateTimeFormat}
+                                  onChange={(e) => updateColumnDateFormat(idx, e.target.value)}
+                                  placeholder="e.g. DD/MMM/YY HH:mm"
+                                  className="h-8 mt-1"
+                                />
+                              )}
                             </div>
                           )}
                         </div>
