@@ -717,7 +717,9 @@ export function ScadaImportWizard({
                               }}
                               disabled={deleteAllImportsMutation.isPending || deleteImportMutation.isPending}
                             >
-                              <Trash2 className="h-3 w-3 text-destructive" />
+                              {deleteAllImportsMutation.isPending 
+                                ? <Loader2 className="h-3 w-3 animate-spin text-destructive" />
+                                : <Trash2 className="h-3 w-3 text-destructive" />}
                             </Button>
                           </TableHead>
                         </TableRow>
