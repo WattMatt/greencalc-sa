@@ -683,10 +683,31 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         const fileName = result.fileName || `Meter ${importedCount + updatedCount + 1}`;
         const shopName = fileName.replace(/\.(csv|xlsx?)$/i, "");
 
-        // Build raw_data JSONB payload from original CSV content
-        const rawData = result.rawContent
-          ? [{ csvContent: result.rawContent }]
-          : null;
+        // Build raw_data from user's column configuration instead of raw CSV
+        const dateColIdx = result.columns.findIndex(c =>
+          c.dataType === 'DateTime' ||
+          c.originalName.toLowerCase().includes('date') ||
+          c.originalName.toLowerCase() === 'from' ||
+          c.originalName.toLowerCase() === 'time'
+        );
+        const timeColIdx = result.columns.findIndex((c, i) =>
+          i !== dateColIdx && (
+            c.originalName.toLowerCase().includes('time') ||
+            c.originalName.toLowerCase() === 'to'
+          )
+        );
+        const valueColIdx = result.columns.findIndex(c =>
+          c.dataType === 'Float' || c.dataType === 'Int' ||
+          c.originalName.toLowerCase().includes('kwh') ||
+          c.originalName.toLowerCase().includes('kw')
+        );
+
+        const rawData = (dateColIdx >= 0 && valueColIdx >= 0)
+          ? result.rows.map(row => ({
+              timestamp: `${row[dateColIdx] || ''} ${timeColIdx >= 0 ? (row[timeColIdx] || '') : ''}`.trim(),
+              value: parseFloat(row[valueColIdx]?.replace(/[^\d.-]/g, '') || '0') || 0
+            })).filter(d => d.timestamp)
+          : result.rawContent ? [{ csvContent: result.rawContent }] : null;
 
         // Look up tenant area_sqm if assigned
         const assignedTenant = result.tenantId
