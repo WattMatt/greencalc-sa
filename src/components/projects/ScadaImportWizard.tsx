@@ -197,7 +197,7 @@ function readFileAsText(file: File): Promise<string> {
       const reader = new FileReader();
       reader.onload = (e) => {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const wb = XLSX.read(data, { type: "array" });
+        const wb = XLSX.read(data, { type: "array", cellDates: true });
         const csv = XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]);
         resolve(csv);
       };
