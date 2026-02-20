@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Upload, FileText, Trash2, Settings2, Eye, ChevronDown, Check, ChevronsUpDown } from "lucide-react";
+import { Upload, FileText, Trash2, Settings2, Eye, ChevronDown, Check, ChevronsUpDown, Database, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
@@ -220,6 +220,7 @@ export function ScadaImportWizard({
   projectId,
   onComplete,
 }: ScadaImportWizardProps) {
+  const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState("upload");
 
@@ -265,6 +266,35 @@ export function ScadaImportWizard({
     () => tenants.filter((t) => !assignedTenantIds.has(t.id)),
     [tenants, assignedTenantIds]
   );
+
+  // Fetch existing imports for this project
+  const { data: existingImports = [], isLoading: isLoadingExisting } = useQuery({
+    queryKey: ["existing-scada-imports", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("scada_imports")
+        .select("id, file_name, site_name, shop_name, data_points, date_range_start, date_range_end, created_at")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: open,
+  });
+
+  const deleteImportMutation = useMutation({
+    mutationFn: async (importId: string) => {
+      const { error } = await supabase.from("scada_imports").delete().eq("id", importId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["existing-scada-imports", projectId] });
+      toast.success("Import record deleted");
+    },
+    onError: (err: Error) => {
+      toast.error(`Failed to delete: ${err.message}`);
+    },
+  });
 
   // ── Step 1: File handling ────────────────────────────────────
 
@@ -528,6 +558,82 @@ export function ScadaImportWizard({
             value="upload"
             className="flex-1 flex flex-col min-h-0 overflow-auto space-y-4"
           >
+            {/* Existing Imports Section */}
+            <Card>
+              <CardHeader className="py-3 px-4">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-semibold">
+                    Previously Imported Files
+                  </CardTitle>
+                  <Badge variant="secondary" className="text-xs">
+                    {isLoadingExisting ? "…" : existingImports.length}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-3 pt-0">
+                {isLoadingExisting ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading…
+                  </div>
+                ) : existingImports.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-1">
+                    No files have been imported yet.
+                  </p>
+                ) : (
+                  <div className="overflow-auto max-h-48">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs h-8">File</TableHead>
+                          <TableHead className="text-xs h-8">Site / Shop</TableHead>
+                          <TableHead className="text-xs h-8 text-right">Points</TableHead>
+                          <TableHead className="text-xs h-8">Date Range</TableHead>
+                          <TableHead className="text-xs h-8">Imported</TableHead>
+                          <TableHead className="text-xs h-8 w-10" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {existingImports.map((imp) => (
+                          <TableRow key={imp.id}>
+                            <TableCell className="text-xs py-1.5 max-w-[150px] truncate">
+                              {imp.file_name || "—"}
+                            </TableCell>
+                            <TableCell className="text-xs py-1.5">
+                              {imp.shop_name || imp.site_name}
+                            </TableCell>
+                            <TableCell className="text-xs py-1.5 text-right">
+                              {imp.data_points ?? "—"}
+                            </TableCell>
+                            <TableCell className="text-xs py-1.5">
+                              {imp.date_range_start && imp.date_range_end
+                                ? `${imp.date_range_start} → ${imp.date_range_end}`
+                                : "—"}
+                            </TableCell>
+                            <TableCell className="text-xs py-1.5">
+                              {new Date(imp.created_at).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="py-1.5">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => deleteImportMutation.mutate(imp.id)}
+                                disabled={deleteImportMutation.isPending}
+                              >
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <div>
               <Label className="font-semibold">Select CSV Files</Label>
               <div className="flex items-center gap-3 mt-2">
