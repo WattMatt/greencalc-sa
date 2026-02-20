@@ -17,9 +17,10 @@ import SchematicEditor from "@/components/schematic/SchematicEditor";
 
 interface SchematicsTabProps {
   projectId: string;
+  isActive?: boolean;
 }
 
-export default function SchematicsTab({ projectId }: SchematicsTabProps) {
+export default function SchematicsTab({ projectId, isActive }: SchematicsTabProps) {
   const [activeSchematic, setActiveSchematic] = useState<Schematic | null>(null);
   const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
   const [schematics, setSchematics] = useState<Schematic[]>([]);
@@ -455,6 +456,7 @@ export default function SchematicsTab({ projectId }: SchematicsTabProps) {
           schematicId={activeSchematic.id}
           schematicUrl={activeImageUrl}
           projectId={projectId}
+          isActive={isActive}
         />
       </div>
     );

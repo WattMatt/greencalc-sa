@@ -1255,7 +1255,7 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="schematics" className="mt-6">
-          <SchematicsTab projectId={id!} />
+          <SchematicsTab projectId={id!} isActive={activeTab === "schematics"} />
         </TabsContent>
 
         <TabsContent value="load-profile" className="mt-6">
