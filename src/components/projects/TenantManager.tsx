@@ -25,6 +25,7 @@ import { AccuracyBadge, AccuracySummary, getAccuracyLevel } from "@/components/s
 import { CsvImportWizard, WizardParseConfig } from "@/components/loadprofiles/CsvImportWizard";
 import { detectCsvType, buildMismatchErrorMessage } from "@/components/loadprofiles/utils/csvTypeDetection";
 import { ScaledMeterPreview } from "./ScaledMeterPreview";
+import { TenantColumnMapper, type TenantMappedData } from "./TenantColumnMapper";
 
 interface Tenant {
   id: string;
@@ -242,6 +243,10 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   const [wizardFile, setWizardFile] = useState<{ name: string; content: string } | null>(null);
   const [isProcessingWizard, setIsProcessingWizard] = useState(false);
   
+  // Column mapper state
+  const [columnMapperOpen, setColumnMapperOpen] = useState(false);
+  const [columnMapperData, setColumnMapperData] = useState<{ headers: string[]; rows: string[][] } | null>(null);
+  
   // Multi-meter selector state
   const [multiMeterTenant, setMultiMeterTenant] = useState<{ id: string; name: string; area: number } | null>(null);
   
@@ -450,11 +455,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     config: WizardParseConfig, 
     parsedData: { headers: string[]; rows: string[][] }
   ) => {
-    setIsProcessingWizard(true);
-    
     try {
-      const headers = parsedData.headers.map(h => h.toLowerCase().trim());
-      
       // Detect CSV type and check for mismatch
       const detection = detectCsvType(parsedData.headers);
       if (detection.detectedType !== "tenant-list" && detection.detectedType !== "unknown") {
@@ -462,58 +463,13 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         throw new Error(errorMsg);
       }
       
-      // Find shop_number, shop_name/name, and area columns
-      const shopNumberIdx = headers.findIndex((h) => 
-        h.includes("shop_number") || h.includes("shop number") || h.includes("unit") || 
-        (h.includes("number") && !h.includes("phone"))
-      );
-      const shopNameIdx = headers.findIndex((h) => 
-        h.includes("shop_name") || h.includes("shop name") || h.includes("tenant") || 
-        h.includes("name") || h.includes("shop")
-      );
-      const areaIdx = headers.findIndex((h) => 
-        h.includes("area") || h.includes("sqm") || h.includes("size") || h.includes("m2") || h.includes("m²")
-      );
-
-      if (shopNameIdx === -1 || areaIdx === -1) {
-        const detection = detectCsvType(parsedData.headers);
-        const errorMsg = buildMismatchErrorMessage("tenant-list", detection, parsedData.headers);
-        throw new Error(errorMsg || `Missing required columns. Need 'name' and 'area' columns.\nFound: ${parsedData.headers.join(", ")}`);
-      }
-
-      const tenantsToInsert = [];
-      for (const row of parsedData.rows) {
-        const shopNumber = shopNumberIdx !== -1 ? row[shopNumberIdx]?.trim() || null : null;
-        const shopName = row[shopNameIdx]?.trim();
-        const areaStr = row[areaIdx]?.replace(/[^\d.]/g, "");
-        const area = parseFloat(areaStr);
-        
-        if (shopName && !isNaN(area) && area > 0) {
-          tenantsToInsert.push({
-            project_id: projectId,
-            name: shopName, // Keep for backwards compatibility
-            shop_number: shopNumber,
-            shop_name: shopName,
-            area_sqm: area,
-          });
-        }
-      }
-
-      if (tenantsToInsert.length === 0) {
-        throw new Error("No valid tenants found in file");
-      }
-
-      const { error } = await supabase.from("project_tenants").insert(tenantsToInsert);
-      if (error) throw error;
-
-      queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
-      toast.success(`Imported ${tenantsToInsert.length} tenants`);
-      
+      // Close wizard and open column mapper
       setWizardOpen(false);
       setWizardFile(null);
+      setColumnMapperData({ headers: parsedData.headers, rows: parsedData.rows });
+      setColumnMapperOpen(true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to import tenants";
-      // Show longer messages with description
+      const message = error instanceof Error ? error.message : "Failed to process file";
       if (message.includes("\n")) {
         const [title, ...rest] = message.split("\n\n");
         toast.error(title, { 
@@ -523,9 +479,33 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
       } else {
         toast.error(message);
       }
-    } finally {
-      setIsProcessingWizard(false);
     }
+  }, []);
+
+  const handleMappedImport = useCallback(async (tenants: TenantMappedData[]) => {
+    if (tenants.length === 0) {
+      toast.error("No valid tenants found");
+      return;
+    }
+
+    const tenantsToInsert = tenants.map(t => ({
+      project_id: projectId,
+      name: t.shop_name,
+      shop_number: t.shop_number,
+      shop_name: t.shop_name,
+      area_sqm: t.area_sqm,
+    }));
+
+    const { error } = await supabase.from("project_tenants").insert(tenantsToInsert);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
+    toast.success(`Imported ${tenantsToInsert.length} tenants`);
+    setColumnMapperOpen(false);
+    setColumnMapperData(null);
   }, [projectId, queryClient]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1112,6 +1092,20 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         onProcess={processWizardData}
         isProcessing={isProcessingWizard}
       />
+
+      {/* Tenant Column Mapper */}
+      {columnMapperData && (
+        <TenantColumnMapper
+          open={columnMapperOpen}
+          onClose={() => {
+            setColumnMapperOpen(false);
+            setColumnMapperData(null);
+          }}
+          headers={columnMapperData.headers}
+          rows={columnMapperData.rows}
+          onImport={handleMappedImport}
+        />
+      )}
       
       {/* Multi-Meter Selector Dialog */}
       {multiMeterTenant && (
