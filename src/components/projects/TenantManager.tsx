@@ -454,10 +454,21 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         .eq("id", tenantId);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onMutate: async ({ tenantId, include }) => {
+      await queryClient.cancelQueries({ queryKey: ["project-tenants", projectId] });
+      const previous = queryClient.getQueryData(["project-tenants", projectId]);
+      queryClient.setQueryData(["project-tenants", projectId], (old: any) =>
+        old?.map((t: any) => t.id === tenantId ? { ...t, include_in_load_profile: include } : t)
+      );
+      return { previous };
+    },
+    onError: (error, _vars, context) => {
+      queryClient.setQueryData(["project-tenants", projectId], context?.previous);
+      toast.error(error.message);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
     },
-    onError: (error) => toast.error(error.message),
   });
 
   // Toggle sort column
