@@ -15,7 +15,7 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit }: LoadChartProp
       <p className="text-xs font-medium text-muted-foreground">Load Profile</p>
       <div className="h-[200px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync">
             <defs>
               <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
