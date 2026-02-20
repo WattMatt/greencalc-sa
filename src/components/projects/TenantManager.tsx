@@ -854,16 +854,17 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                   </button>
                 </TableHead>
                 <TableHead>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <span>Load Profile</span>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Switch
-                            checked={profileScope === 'local'}
-                            onCheckedChange={(checked) => setProfileScope(checked ? 'local' : 'global')}
-                            className="scale-75"
-                          />
+                          <div className="inline-flex">
+                            <Switch
+                              checked={profileScope === 'local'}
+                              onCheckedChange={(checked) => setProfileScope(checked ? 'local' : 'global')}
+                            />
+                          </div>
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>{profileScope === 'local' 
