@@ -5,6 +5,8 @@ import { useLoadProfileData } from "./hooks/useLoadProfileData";
 import { useExportHandlers } from "./hooks/useExportHandlers";
 import { useSolcastPVProfile } from "./hooks/useSolcastPVProfile";
 import { LoadChart } from "./charts/LoadChart";
+import { EnvelopeChart } from "./charts/EnvelopeChart";
+import { useEnvelopeData } from "./hooks/useEnvelopeData";
 import { SolarChart } from "./charts/SolarChart";
 import { GridFlowChart } from "./charts/GridFlowChart";
 import { BatteryChart } from "./charts/BatteryChart";
@@ -200,6 +202,16 @@ export function LoadProfileChart({
     diversityFactor,
   });
 
+  // Envelope chart data (min/max/avg per hour across all days)
+  const {
+    envelopeData,
+    availableYears,
+    yearFrom: envelopeYearFrom,
+    yearTo: envelopeYearTo,
+    setYearFrom: setEnvelopeYearFrom,
+    setYearTo: setEnvelopeYearTo,
+  } = useEnvelopeData({ tenants, displayUnit, powerFactor });
+
   const { exportToCSV, exportToPDF, exportToPNG, exportToSVG } = useExportHandlers({
     chartData,
     unit,
@@ -303,6 +315,19 @@ export function LoadProfileChart({
 
           {/* Load Profile Chart */}
           <LoadChart chartData={chartData} showTOU={showTOU} isWeekend={isWeekend} unit={unit} />
+
+          {/* Min/Max/Average Envelope Chart */}
+          {envelopeData.length > 0 && (
+            <EnvelopeChart
+              envelopeData={envelopeData}
+              availableYears={availableYears}
+              yearFrom={envelopeYearFrom}
+              yearTo={envelopeYearTo}
+              setYearFrom={setEnvelopeYearFrom}
+              setYearTo={setEnvelopeYearTo}
+              unit={unit}
+            />
+          )}
 
           {/* PV Generation Chart */}
           {showPVProfile && maxPvAcKva && chartData && (
