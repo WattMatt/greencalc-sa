@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Toggle } from "@/components/ui/toggle";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
@@ -34,12 +35,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+interface SystemConfig {
+  solarPV: boolean;
+  battery: boolean;
+  generator: boolean;
+}
+
 interface DashboardParams {
   name: string;
   location: string;
   totalArea: number;
   capacity: number;
-  systemType: "Solar" | "Solar + Battery" | "Hybrid" | "";
+  systemConfig: SystemConfig;
   clientName: string;
   budget: number;
   targetDate: Date | undefined;
@@ -157,12 +164,31 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
 }, ref) => {
   const queryClient = useQueryClient();
 
+  // Helper to parse system_type string into SystemConfig
+  const parseSystemConfig = (systemType: string | null): SystemConfig => {
+    const parts = (systemType || '').split(',').map(s => s.trim().toLowerCase());
+    return {
+      solarPV: parts.includes('solar pv') || (!systemType || systemType === 'Solar' || systemType === 'Solar + Battery' || systemType === 'Hybrid'),
+      battery: parts.includes('battery') || systemType === 'Solar + Battery' || systemType === 'Hybrid',
+      generator: parts.includes('generator'),
+    };
+  };
+
+  // Helper to serialise SystemConfig to string for DB
+  const serialiseSystemConfig = (config: SystemConfig): string => {
+    const parts: string[] = [];
+    if (config.solarPV) parts.push('Solar PV');
+    if (config.battery) parts.push('Battery');
+    if (config.generator) parts.push('Generator');
+    return parts.join(',') || 'Solar PV';
+  };
+
   const [params, setParams] = useState<DashboardParams>({
     name: project.name || "",
     location: project.location || "",
     totalArea: project.total_area_sqm || tenants.reduce((sum, t) => sum + Number(t.area_sqm || 0), 0),
     capacity: project.connection_size_kva || 0,
-    systemType: (project.system_type as DashboardParams['systemType']) || "Solar",
+    systemConfig: parseSystemConfig(project.system_type),
     clientName: project.client_name || "",
     budget: project.budget || 0,
     targetDate: project.target_date ? new Date(project.target_date) : undefined,
@@ -176,7 +202,7 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
       location: project.location || prev.location,
       totalArea: project.total_area_sqm || prev.totalArea,
       capacity: project.connection_size_kva || prev.capacity,
-      systemType: (project.system_type as DashboardParams['systemType']) || prev.systemType,
+      systemConfig: parseSystemConfig(project.system_type),
       clientName: project.client_name || prev.clientName,
       budget: project.budget || prev.budget,
       targetDate: project.target_date ? new Date(project.target_date) : prev.targetDate,
@@ -206,7 +232,7 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
           location: params.location,
           connection_size_kva: params.capacity || null,
           total_area_sqm: params.totalArea || null,
-          system_type: params.systemType || "Solar",
+          system_type: serialiseSystemConfig(params.systemConfig),
           client_name: params.clientName || null,
           budget: params.budget || null,
           target_date: params.targetDate?.toISOString().split('T')[0] || null,
@@ -291,7 +317,7 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
 
   const completedSteps = workflowSteps.filter(s => s.status === "complete").length;
 
-  const handleParamChange = (key: keyof DashboardParams, value: string | number | Date | undefined) => {
+  const handleParamChange = (key: keyof DashboardParams, value: string | number | Date | SystemConfig | undefined) => {
     setParams(prev => ({ ...prev, [key]: value }));
   };
 
@@ -419,29 +445,48 @@ const DashboardTabContent = forwardRef<DashboardTabContentRef, DashboardTabConte
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs">System Type</Label>
-              <Select
-                value={params.systemType}
-                onValueChange={(value) => {
-                  handleParamChange("systemType", value);
-                  // Save immediately for select changes
-                  setTimeout(() => saveParams(), 0);
-                }}
-              >
-                <SelectTrigger className="h-8">
-                  <SelectValue placeholder="Select system type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Solar">Solar (Grid-tied)</SelectItem>
-                  <SelectItem value="Solar + Battery">Solar + Battery</SelectItem>
-                  <SelectItem value="Hybrid">Hybrid (Solar/Wind + Battery)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground">
-                {params.systemType === "Solar" && "Grid-tied solar without battery storage"}
-                {params.systemType === "Solar + Battery" && "Solar with battery backup/load shifting"}
-                {params.systemType === "Hybrid" && "Combined renewable sources with storage"}
-              </p>
+              <Label className="text-xs">System Configuration</Label>
+              <div className="flex flex-wrap gap-2">
+                <Toggle
+                  variant="outline"
+                  size="sm"
+                  pressed={params.systemConfig.solarPV}
+                  onPressedChange={(pressed) => {
+                    handleParamChange("systemConfig", { ...params.systemConfig, solarPV: pressed });
+                    setTimeout(() => saveParams(), 0);
+                  }}
+                  className="gap-1.5 data-[state=on]:bg-accent data-[state=on]:text-accent-foreground"
+                >
+                  <Sun className="h-3.5 w-3.5" />
+                  Solar PV
+                </Toggle>
+                <Toggle
+                  variant="outline"
+                  size="sm"
+                  pressed={params.systemConfig.battery}
+                  onPressedChange={(pressed) => {
+                    handleParamChange("systemConfig", { ...params.systemConfig, battery: pressed });
+                    setTimeout(() => saveParams(), 0);
+                  }}
+                  className="gap-1.5 data-[state=on]:bg-accent data-[state=on]:text-accent-foreground"
+                >
+                  <Battery className="h-3.5 w-3.5" />
+                  Battery
+                </Toggle>
+                <Toggle
+                  variant="outline"
+                  size="sm"
+                  pressed={params.systemConfig.generator}
+                  onPressedChange={(pressed) => {
+                    handleParamChange("systemConfig", { ...params.systemConfig, generator: pressed });
+                    setTimeout(() => saveParams(), 0);
+                  }}
+                  className="gap-1.5 data-[state=on]:bg-accent data-[state=on]:text-accent-foreground"
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  Generator
+                </Toggle>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -802,11 +847,19 @@ export default function ProjectDetail() {
     enabled: !!id,
   });
 
-  // Get system type from project
-  const projectSystemType = project?.system_type || "Solar";
+  // Parse system config from project
+  const projectSystemConfig = (() => {
+    const st = project?.system_type || '';
+    const parts = st.split(',').map((s: string) => s.trim().toLowerCase());
+    return {
+      solarPV: parts.includes('solar pv') || st === 'Solar' || st === 'Solar + Battery' || st === 'Hybrid' || !st,
+      battery: parts.includes('battery') || st === 'Solar + Battery' || st === 'Hybrid',
+      generator: parts.includes('generator'),
+    };
+  })();
 
   // Check if system includes battery
-  const systemIncludesBattery = projectSystemType === "Solar + Battery" || projectSystemType === "Hybrid";
+  const systemIncludesBattery = projectSystemConfig.battery;
 
   const { data: tenants, isLoading: isLoadingTenants } = useQuery({
     queryKey: ["project-tenants", id],
@@ -1203,7 +1256,7 @@ export default function ProjectDetail() {
             simulatedBatteryCapacityKwh={latestSimulation?.battery_capacity_kwh}
             simulatedBatteryPowerKw={latestSimulation?.battery_power_kw}
             simulatedDcAcRatio={(latestSimulation?.results_json as any)?.pvConfig?.dcAcRatio}
-            systemIncludesSolar={projectSystemType !== "Grid Only"}
+            systemIncludesSolar={projectSystemConfig.solarPV}
             systemIncludesBattery={systemIncludesBattery}
           />
         </TabsContent>

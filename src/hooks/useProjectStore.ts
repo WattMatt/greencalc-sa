@@ -3,7 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 // Types
-export type SystemType = 'Solar' | 'Wind' | 'Hybrid' | null;
+export interface SystemConfig {
+  solarPV: boolean;
+  battery: boolean;
+  generator: boolean;
+}
+
+export type SystemType = string | null; // Legacy - use SystemConfig for new code
 
 export type WorkflowStepStatus = 'complete' | 'partial' | 'pending' | 'blocked';
 
