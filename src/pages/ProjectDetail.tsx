@@ -1177,7 +1177,7 @@ export default function ProjectDetail() {
             </TabWithStatus>
             <TabWithStatus value="tenants" status={tabStatuses.tenants.status} tooltip={tabStatuses.tenants.tooltip}>
               <Users className="h-4 w-4 mr-2" />
-              Tenants & Profiles
+              Tenants
             </TabWithStatus>
             <TabWithStatus value="load-profile" status={tabStatuses["load-profile"].status} tooltip={tabStatuses["load-profile"].tooltip}>
               <BarChart3 className="h-4 w-4 mr-2" />
