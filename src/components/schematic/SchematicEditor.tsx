@@ -66,6 +66,36 @@ const snapToAngle = (from: { x: number; y: number }, to: { x: number; y: number 
   return { x: from.x + Math.cos(snapped) * distance, y: from.y + Math.sin(snapped) * distance };
 };
 
+// Helper: snap pointer to nearest meter's vertical or horizontal axis
+const snapToNearestMeterAxis = (
+  canvas: FabricCanvas,
+  pointer: { x: number; y: number },
+  excludeMeterId?: string
+): { x: number; y: number } => {
+  let bestX = pointer.x;
+  let bestY = pointer.y;
+  let minDx = Infinity;
+  let minDy = Infinity;
+
+  canvas.getObjects().forEach((obj: any) => {
+    if (!obj.isMeterCard) return;
+    if (excludeMeterId && obj.meterId === excludeMeterId) return;
+    const cx = obj.left + (obj.width * (obj.scaleX || 1)) / 2;
+    const cy = obj.top + (obj.height * (obj.scaleY || 1)) / 2;
+    const dx = Math.abs(pointer.x - cx);
+    const dy = Math.abs(pointer.y - cy);
+    if (dx < minDx) { minDx = dx; bestX = cx; }
+    if (dy < minDy) { minDy = dy; bestY = cy; }
+  });
+
+  // Only snap if within a reasonable threshold (80px)
+  const threshold = 80;
+  return {
+    x: minDx < threshold ? bestX : pointer.x,
+    y: minDy < threshold ? bestY : pointer.y,
+  };
+};
+
 // Helper: create meter card as canvas image
 async function createMeterCardImage(
   fields: Array<{ label: string; value: string }>,
@@ -381,6 +411,7 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
           // Cleanup
           connectionNodesRef.current.forEach(n => canvas.remove(n));
           connectionNodesRef.current = [];
+          canvas.getObjects().filter((o: any) => o.isAxisGuide).forEach(o => canvas.remove(o));
           if (connectionLineRef.current) { canvas.remove(connectionLineRef.current); connectionLineRef.current = null; }
           if (connectionStartNodeRef.current) { canvas.remove(connectionStartNodeRef.current); connectionStartNodeRef.current = null; }
           setConnectionStart(null);
@@ -389,11 +420,9 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
         } else if (!snappedPoint) {
           // Intermediate node
           if (evt.shiftKey) {
-            const last = connectionPointsRef.current.length > 0
-              ? connectionPointsRef.current[connectionPointsRef.current.length - 1].position
-              : connectionStartRef.current.position;
-            const snapped = snapToAngle(last, pointer);
-            pointer = new Point(snapped.x, snapped.y);
+            // Snap to nearest meter's vertical/horizontal axis
+            const axisSnapped = snapToNearestMeterAxis(canvas, pointer, connectionStartRef.current.meterId);
+            pointer = new Point(axisSnapped.x, axisSnapped.y);
           }
           setConnectionPoints([...connectionPointsRef.current, { meterId: '', position: pointer }]);
           const node = new Circle({
@@ -422,6 +451,10 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
         // Remove old highlight
         const oldHL = canvas.getObjects().find((o: any) => o.isSnapHighlight);
         if (oldHL) canvas.remove(oldHL);
+
+        // Remove old axis guide lines
+        canvas.getObjects().filter((o: any) => o.isAxisGuide).forEach(o => canvas.remove(o));
+
         if (snapped) {
           pointer = new Point(snapped.x, snapped.y);
           const hl = new Circle({
@@ -430,6 +463,28 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
           });
           (hl as any).isSnapHighlight = true;
           canvas.add(hl);
+        } else if (evt.shiftKey) {
+          // Snap to nearest meter's vertical/horizontal axis
+          const axisSnapped = snapToNearestMeterAxis(canvas, pointer, connectionStartRef.current.meterId);
+          pointer = new Point(axisSnapped.x, axisSnapped.y);
+
+          // Draw visual guide lines for axis alignment
+          const canvasWidth = canvas.getWidth() / (canvas.getZoom() || 1);
+          const canvasHeight = canvas.getHeight() / (canvas.getZoom() || 1);
+          if (axisSnapped.x !== pointer.x || Math.abs(axisSnapped.x - pointer.x) < 1) {
+            const vLine = new Line([axisSnapped.x, 0, axisSnapped.x, canvasHeight], {
+              stroke: '#3b82f6', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.5,
+            });
+            (vLine as any).isAxisGuide = true;
+            canvas.add(vLine);
+          }
+          if (axisSnapped.y !== pointer.y || Math.abs(axisSnapped.y - pointer.y) < 1) {
+            const hLine = new Line([0, axisSnapped.y, canvasWidth, axisSnapped.y], {
+              stroke: '#3b82f6', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.5,
+            });
+            (hLine as any).isAxisGuide = true;
+            canvas.add(hLine);
+          }
         }
         // Update preview line
         if (connectionLineRef.current) canvas.remove(connectionLineRef.current);
