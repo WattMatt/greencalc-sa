@@ -28,6 +28,11 @@ interface UseMonthlyConsumptionResult {
   availableMonths: { value: string; label: string }[];
 }
 
+const MONTH_NAMES: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+};
+
 // Parse various date formats
 function parseDateTime(timestamp?: string, date?: string, time?: string): Date | null {
   // Try timestamp first
@@ -36,6 +41,16 @@ function parseDateTime(timestamp?: string, date?: string, time?: string): Date |
     if (timestamp.includes('T')) {
       const d = parseISO(timestamp);
       if (isValid(d)) return d;
+    }
+    
+    // Try "DD Mon YYYY HH:mm" format (e.g. "09 Nov 2022 11:00")
+    const textMonthMatch = timestamp.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (textMonthMatch) {
+      const [, dayStr, monStr, yearStr, hourStr, minStr] = textMonthMatch;
+      const monthIdx = MONTH_NAMES[monStr.toLowerCase()];
+      if (monthIdx !== undefined) {
+        return new Date(parseInt(yearStr), monthIdx, parseInt(dayStr), parseInt(hourStr || '0'), parseInt(minStr || '0'));
+      }
     }
     
     // Try DD/MM/YYYY HH:mm:ss format
@@ -56,6 +71,17 @@ function parseDateTime(timestamp?: string, date?: string, time?: string): Date |
   // Try date + time
   if (date) {
     const dateTimeStr = time ? `${date} ${time}` : date;
+    
+    // Try "DD Mon YYYY" format
+    const textMonthMatch = dateTimeStr.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (textMonthMatch) {
+      const [, dayStr, monStr, yearStr, hourStr, minStr] = textMonthMatch;
+      const monthIdx = MONTH_NAMES[monStr.toLowerCase()];
+      if (monthIdx !== undefined) {
+        return new Date(parseInt(yearStr), monthIdx, parseInt(dayStr), parseInt(hourStr || '0'), parseInt(minStr || '0'));
+      }
+    }
+    
     const d = new Date(dateTimeStr);
     if (isValid(d)) return d;
     
@@ -81,7 +107,7 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
   if (headerIdx >= lines.length) return [];
   
   const headers = lines[headerIdx].split(',').map(h => h.trim().toLowerCase());
-  const dateCol = headers.findIndex(h => h.includes('date') || h === 'timestamp');
+  const dateCol = headers.findIndex(h => h.includes('date') || h === 'timestamp' || h === 'from' || h.includes('periods'));
   const valueCol = headers.findIndex(h => h.includes('kwh') || h.includes('p14') || h.includes('value') || h.includes('active'));
   
   if (dateCol === -1) return [];
