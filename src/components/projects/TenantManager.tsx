@@ -859,21 +859,16 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <div className="flex items-center gap-1 ml-auto">
-                            <span className="text-[10px] text-muted-foreground uppercase">
-                              {profileScope === 'local' ? 'Local' : 'Global'}
-                            </span>
-                            <Switch
-                              checked={profileScope === 'local'}
-                              onCheckedChange={(checked) => setProfileScope(checked ? 'local' : 'global')}
-                              className="scale-75"
-                            />
-                          </div>
+                          <Switch
+                            checked={profileScope === 'local'}
+                            onCheckedChange={(checked) => setProfileScope(checked ? 'local' : 'global')}
+                            className="scale-75"
+                          />
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>{profileScope === 'local' 
-                            ? "Showing only meters imported for this project" 
-                            : "Showing all meters from the global library"}</p>
+                            ? "Local: Showing only meters imported for this project" 
+                            : "Global: Showing all meters from the global library"}</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
