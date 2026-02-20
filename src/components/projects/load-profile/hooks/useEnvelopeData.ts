@@ -18,6 +18,8 @@ interface UseEnvelopeDataProps {
 }
 
 export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap }: UseEnvelopeDataProps) {
+  const includedTenants = tenants.filter(t => t.include_in_load_profile !== false);
+
   // Helper: get raw data for a tenant from on-demand map or inline field
   const getRawData = (tenant: Tenant): unknown =>
     (rawDataMap && tenant.scada_import_id ? rawDataMap[tenant.scada_import_id] : undefined)
@@ -26,7 +28,7 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
   const availableYears = useMemo(() => {
     const yearsSet = new Set<number>();
 
-    tenants.forEach((tenant) => {
+    includedTenants.forEach((tenant) => {
       const rawData = parseRawData(getRawData(tenant));
       rawData.forEach((point) => {
         if (point.date) {
@@ -37,7 +39,7 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
     });
 
     return Array.from(yearsSet).sort((a, b) => a - b);
-  }, [tenants, rawDataMap]);
+  }, [includedTenants, rawDataMap]);
 
   const [yearFrom, setYearFrom] = useState<number | null>(null);
   const [yearTo, setYearTo] = useState<number | null>(null);
@@ -50,7 +52,7 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
 
     const dateHourlyTotals: Map<string, number[]> = new Map();
 
-    tenants.forEach((tenant) => {
+    includedTenants.forEach((tenant) => {
       const rawData = parseRawData(getRawData(tenant));
       if (!rawData.length) return;
 
@@ -130,7 +132,7 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
     }
 
     return result;
-  }, [tenants, availableYears, effectiveFrom, effectiveTo, displayUnit, powerFactor, rawDataMap]);
+  }, [includedTenants, availableYears, effectiveFrom, effectiveTo, displayUnit, powerFactor, rawDataMap]);
 
   return {
     envelopeData,
