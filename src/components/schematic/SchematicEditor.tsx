@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Canvas as FabricCanvas, Circle, Line, FabricImage, Rect, Point, Polyline, FabricText } from "fabric";
-import { useQueryClient } from "@tanstack/react-query";
+
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -154,7 +154,7 @@ async function createMeterCardImage(
 }
 
 export default function SchematicEditor({ schematicId, schematicUrl, projectId, isActive }: SchematicEditorProps) {
-  const queryClient = useQueryClient();
+  
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
@@ -757,43 +757,6 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId, 
     return () => clearTimeout(timeout);
   }, [fabricCanvas, isInitialDataLoaded, isCanvasReady, showMeterCards, meterPositions, tenantProfileMap]);
 
-  // Handle click on profile checkbox overlay
-  useEffect(() => {
-    if (!fabricCanvas) return;
-    const handler = (opt: any) => {
-      const target = opt.target;
-      if (!target || !(target as any).isProfileCheckbox || !(target as any).linkedMeterId) return;
-      const meterId = (target as any).linkedMeterId;
-      const tenantInfo = tenantProfileMap[meterId];
-      if (!tenantInfo) return;
-
-      const newValue = !tenantInfo.include;
-      // Optimistic update
-      setTenantProfileMap(prev => ({
-        ...prev,
-        [meterId]: { ...prev[meterId], include: newValue },
-      }));
-
-      supabase
-        .from("project_tenants")
-        .update({ include_in_load_profile: newValue } as any)
-        .eq("id", tenantInfo.tenantId)
-        .then(({ error }) => {
-          if (error) {
-            toast.error('Failed to update');
-            setTenantProfileMap(prev => ({
-              ...prev,
-              [meterId]: { ...prev[meterId], include: !newValue },
-            }));
-          } else {
-            // Invalidate tenant query so Tenants tab picks up the change
-            queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
-          }
-        });
-    };
-    fabricCanvas.on('mouse:down', handler);
-    return () => { fabricCanvas.off('mouse:down', handler); };
-  }, [fabricCanvas, tenantProfileMap]);
 
   // Render connection lines
   useEffect(() => {
