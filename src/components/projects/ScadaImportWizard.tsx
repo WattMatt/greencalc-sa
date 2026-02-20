@@ -22,6 +22,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   Table,
   TableBody,
   TableCell,
@@ -31,9 +44,10 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Upload, FileText, Trash2, Settings2, Eye, ChevronDown } from "lucide-react";
+import { Upload, FileText, Trash2, Settings2, Eye, ChevronDown, Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -480,9 +494,9 @@ export function ScadaImportWizard({
     <Dialog open={open} onOpenChange={(v) => !v && handleDialogClose()}>
       <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
-          <DialogTitle>CSV Bulk Ingestion Tool</DialogTitle>
+          <DialogTitle>Bulk Upload</DialogTitle>
           <DialogDescription>
-            Upload multiple CSV files, preview and transform your data, and ingest with a single click
+            Upload multiple files, preview and transform your data, and ingest with a single click
           </DialogDescription>
         </DialogHeader>
 
@@ -588,32 +602,57 @@ export function ScadaImportWizard({
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <Select
-                            value={entry.tenantId || "none"}
-                            onValueChange={(v) =>
-                              assignTenant(idx, v === "none" ? null : v)
-                            }
-                          >
-                            <SelectTrigger className="w-[200px] h-8">
-                              <SelectValue placeholder="Assign tenant..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">No tenant</SelectItem>
-                              {/* Show current assignment + available */}
-                              {tenants
-                                .filter(
-                                  (t) =>
-                                    t.id === entry.tenantId ||
-                                    !assignedTenantIds.has(t.id)
-                                )
-                                .map((t) => (
-                                  <SelectItem key={t.id} value={t.id}>
-                                    {t.shop_name || t.name}
-                                    {t.shop_number ? ` (${t.shop_number})` : ""}
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                className="w-[200px] h-8 justify-between text-sm font-normal"
+                              >
+                                {entry.tenantId
+                                  ? (() => {
+                                      const t = tenants.find((t) => t.id === entry.tenantId);
+                                      return t ? `${t.shop_name || t.name}${t.shop_number ? ` (${t.shop_number})` : ""}` : "No tenant";
+                                    })()
+                                  : "No tenant"}
+                                <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[250px] p-0" align="end">
+                              <Command>
+                                <CommandInput placeholder="Search tenants..." />
+                                <CommandList>
+                                  <CommandEmpty>No tenant found.</CommandEmpty>
+                                  <CommandGroup>
+                                    <CommandItem
+                                      value="no-tenant"
+                                      onSelect={() => assignTenant(idx, null)}
+                                    >
+                                      <Check className={cn("mr-2 h-4 w-4", !entry.tenantId ? "opacity-100" : "opacity-0")} />
+                                      No tenant
+                                    </CommandItem>
+                                    {tenants
+                                      .filter(
+                                        (t) =>
+                                          t.id === entry.tenantId ||
+                                          !assignedTenantIds.has(t.id)
+                                      )
+                                      .map((t) => (
+                                        <CommandItem
+                                          key={t.id}
+                                          value={`${t.shop_name || t.name} ${t.shop_number || ""}`}
+                                          onSelect={() => assignTenant(idx, t.id)}
+                                        >
+                                          <Check className={cn("mr-2 h-4 w-4", entry.tenantId === t.id ? "opacity-100" : "opacity-0")} />
+                                          {t.shop_name || t.name}
+                                          {t.shop_number ? ` (${t.shop_number})` : ""}
+                                        </CommandItem>
+                                      ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
 
                           <Button
                             variant="ghost"
