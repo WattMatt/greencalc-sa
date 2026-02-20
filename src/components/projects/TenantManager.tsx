@@ -471,11 +471,18 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
         for (const profile of pool) {
           let score = 0;
 
-          // Shop number exact match → 95
-          if (tenant.shop_number && profile.shop_number &&
-              tenant.shop_number.trim().toLowerCase() === profile.shop_number.trim().toLowerCase()) {
-            score = 95;
-          } else {
+          // Shop number match: parse both as numbers for numeric comparison, fall back to exact string
+          if (tenant.shop_number && profile.shop_number) {
+            const tenantNum = parseFloat(tenant.shop_number.trim());
+            const profileNum = parseFloat(profile.shop_number.trim());
+            if (!isNaN(tenantNum) && !isNaN(profileNum) && tenantNum === profileNum) {
+              score = 95;
+            } else if (tenant.shop_number.trim().toLowerCase() === profile.shop_number.trim().toLowerCase()) {
+              score = 95;
+            }
+          }
+          
+          if (score === 0) {
             // Name-based matching via existing logic
             const suggestions = getProfileSuggestions(tenantName, [profile]);
             score = suggestions[0]?.score || 0;
@@ -565,16 +572,28 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     
     let comparison = 0;
     switch (sortColumn) {
-      case 'shop_number':
-        // Parse as numbers for numeric sorting, fallback to text comparison
-        const numA = parseFloat(a.shop_number || '') || 0;
-        const numB = parseFloat(b.shop_number || '') || 0;
-        if (numA !== 0 || numB !== 0) {
-          comparison = numA - numB;
+      case 'shop_number': {
+        const rawA = a.shop_number || '';
+        const rawB = b.shop_number || '';
+        const parsedA = parseFloat(rawA);
+        const parsedB = parseFloat(rawB);
+        const isNumA = rawA !== '' && !isNaN(parsedA);
+        const isNumB = rawB !== '' && !isNaN(parsedB);
+        
+        if (isNumA && isNumB) {
+          // Both numeric → sort numerically
+          comparison = parsedA - parsedB;
+        } else if (isNumA) {
+          // Numeric before non-numeric
+          comparison = -1;
+        } else if (isNumB) {
+          comparison = 1;
         } else {
-          comparison = (a.shop_number || '').localeCompare(b.shop_number || '');
+          // Both non-numeric → alphabetical
+          comparison = rawA.localeCompare(rawB);
         }
         break;
+      }
       case 'shop_name':
         comparison = getTenantDisplayName(a).localeCompare(getTenantDisplayName(b));
         break;
