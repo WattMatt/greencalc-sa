@@ -51,10 +51,16 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
     if (availableYears.length === 0) return [];
 
     const dateHourlyTotals: Map<string, number[]> = new Map();
+    // Track which tenants contributed data to each date so we can filter
+    // out dates with partial coverage (which create artificial lows/highs)
+    const dateContributors: Map<string, Set<string>> = new Map();
+    const tenantsWithData = new Set<string>();
 
     includedTenants.forEach((tenant) => {
       const rawData = parseRawData(getRawData(tenant));
       if (!rawData.length) return;
+
+      tenantsWithData.add(tenant.id);
 
       const tenantArea = Number(tenant.area_sqm) || 0;
       const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
@@ -90,12 +96,30 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
         }
         const dayArr = dateHourlyTotals.get(dateKey)!;
 
+        // Track this tenant's contribution to this date
+        if (!dateContributors.has(dateKey)) {
+          dateContributors.set(dateKey, new Set());
+        }
+        dateContributors.get(dateKey)!.add(tenant.id);
+
         hourMap.forEach((entry, hour) => {
           const avgKw = entry.sum / entry.count;
           dayArr[hour] += avgKw;
         });
       });
     });
+
+    // Remove dates with incomplete tenant coverage to prevent artificial
+    // lows from partial data (e.g. only 2 of 5 tenants have data on a date)
+    const requiredCount = tenantsWithData.size;
+    if (requiredCount > 1) {
+      dateHourlyTotals.forEach((_, dateKey) => {
+        const contributors = dateContributors.get(dateKey);
+        if (!contributors || contributors.size < requiredCount) {
+          dateHourlyTotals.delete(dateKey);
+        }
+      });
+    }
 
     if (dateHourlyTotals.size === 0) return [];
 
