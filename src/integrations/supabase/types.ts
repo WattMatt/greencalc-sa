@@ -1278,6 +1278,8 @@ export type Database = {
           area_sqm: number
           created_at: string
           id: string
+          include_in_load_profile: boolean
+          is_virtual: boolean
           monthly_kwh_override: number | null
           name: string
           project_id: string
@@ -1291,6 +1293,8 @@ export type Database = {
           area_sqm: number
           created_at?: string
           id?: string
+          include_in_load_profile?: boolean
+          is_virtual?: boolean
           monthly_kwh_override?: number | null
           name: string
           project_id: string
@@ -1304,6 +1308,8 @@ export type Database = {
           area_sqm?: number
           created_at?: string
           id?: string
+          include_in_load_profile?: boolean
+          is_virtual?: boolean
           monthly_kwh_override?: number | null
           name?: string
           project_id?: string

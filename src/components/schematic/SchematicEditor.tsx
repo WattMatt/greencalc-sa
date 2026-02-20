@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Canvas as FabricCanvas, Circle, Line, FabricImage, Rect, Point, Polyline } from "fabric";
+import { Canvas as FabricCanvas, Circle, Line, FabricImage, Rect, Point, Polyline, FabricText } from "fabric";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -166,6 +166,7 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
   const [meterPositions, setMeterPositions] = useState<any[]>([]);
   const [meterConnections, setMeterConnections] = useState<any[]>([]);
   const [schematicLines, setSchematicLines] = useState<any[]>([]);
+  const [tenantProfileMap, setTenantProfileMap] = useState<Record<string, { tenantId: string; include: boolean }>>({}); 
   const [isSaving, setIsSaving] = useState(false);
   const [isInitialDataLoaded, setIsInitialDataLoaded] = useState(false);
   const [isCanvasReady, setIsCanvasReady] = useState(false);
@@ -212,9 +213,9 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
 
   // Load data
   useEffect(() => {
-    const load = async () => {
+  const load = async () => {
       setIsInitialDataLoaded(false);
-      await Promise.all([fetchMeters(), fetchMeterPositions(), fetchMeterConnections(), fetchSchematicLines()]);
+      await Promise.all([fetchMeters(), fetchMeterPositions(), fetchMeterConnections(), fetchSchematicLines(), fetchTenantProfileMap()]);
       setIsInitialDataLoaded(true);
     };
     load();
@@ -238,6 +239,21 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
   const fetchSchematicLines = async () => {
     const { data } = await supabase.from("project_schematic_lines").select("*").eq("schematic_id", schematicId).eq("line_type", "connection");
     setSchematicLines(data || []);
+  };
+
+  const fetchTenantProfileMap = async () => {
+    const { data } = await supabase
+      .from("project_tenants")
+      .select("id, scada_import_id, include_in_load_profile")
+      .eq("project_id", projectId)
+      .not("scada_import_id", "is", null);
+    const map: Record<string, { tenantId: string; include: boolean }> = {};
+    (data || []).forEach((t: any) => {
+      if (t.scada_import_id) {
+        map[t.scada_import_id] = { tenantId: t.id, include: t.include_in_load_profile !== false };
+      }
+    });
+    setTenantProfileMap(map);
   };
 
   // Container resize
@@ -676,6 +692,96 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
     });
   }, [fabricCanvas, isInitialDataLoaded, isCanvasReady, meterPositions, meters, showMeterCards, isEditMode]);
 
+  // Render load profile inclusion checkboxes on meter cards
+  useEffect(() => {
+    if (!fabricCanvas || !isInitialDataLoaded || !isCanvasReady || !showMeterCards) return;
+
+    // Clear old checkbox indicators
+    fabricCanvas.getObjects().filter((o: any) => o.isProfileCheckbox).forEach(o => fabricCanvas.remove(o));
+
+    // Wait for meter card images to load
+    const timeout = setTimeout(() => {
+      fabricCanvas.getObjects().forEach((obj: any) => {
+        if (!obj.isMeterCard || !obj.data?.meterId) return;
+        const meterId = obj.data.meterId;
+        const tenantInfo = tenantProfileMap[meterId];
+        const isIncluded = tenantInfo ? tenantInfo.include : true;
+
+        const bounds = obj.getBoundingRect();
+        const checkX = bounds.left + bounds.width - 10;
+        const checkY = bounds.top + 10;
+
+        // Background circle
+        const bg = new Circle({
+          left: checkX, top: checkY, radius: 9,
+          fill: isIncluded ? '#22c55e' : '#94a3b8',
+          stroke: '#ffffff', strokeWidth: 2,
+          originX: 'center', originY: 'center',
+          selectable: false, evented: true,
+          hoverCursor: 'pointer',
+        });
+        (bg as any).isProfileCheckbox = true;
+        (bg as any).linkedMeterId = meterId;
+
+        // Tick mark for included
+        if (isIncluded) {
+          const tick = new FabricText('✓', {
+            left: checkX, top: checkY,
+            fontSize: 12, fill: '#ffffff', fontWeight: 'bold',
+            originX: 'center', originY: 'center',
+            selectable: false, evented: false,
+          });
+          (tick as any).isProfileCheckbox = true;
+          fabricCanvas.add(bg);
+          fabricCanvas.add(tick);
+          fabricCanvas.bringObjectToFront(bg);
+          fabricCanvas.bringObjectToFront(tick);
+        } else {
+          fabricCanvas.add(bg);
+          fabricCanvas.bringObjectToFront(bg);
+        }
+      });
+      fabricCanvas.renderAll();
+    }, 200);
+
+    return () => clearTimeout(timeout);
+  }, [fabricCanvas, isInitialDataLoaded, isCanvasReady, showMeterCards, meterPositions, tenantProfileMap]);
+
+  // Handle click on profile checkbox overlay
+  useEffect(() => {
+    if (!fabricCanvas) return;
+    const handler = (opt: any) => {
+      const target = opt.target;
+      if (!target || !(target as any).isProfileCheckbox || !(target as any).linkedMeterId) return;
+      const meterId = (target as any).linkedMeterId;
+      const tenantInfo = tenantProfileMap[meterId];
+      if (!tenantInfo) return;
+
+      const newValue = !tenantInfo.include;
+      // Optimistic update
+      setTenantProfileMap(prev => ({
+        ...prev,
+        [meterId]: { ...prev[meterId], include: newValue },
+      }));
+
+      supabase
+        .from("project_tenants")
+        .update({ include_in_load_profile: newValue } as any)
+        .eq("id", tenantInfo.tenantId)
+        .then(({ error }) => {
+          if (error) {
+            toast.error('Failed to update');
+            setTenantProfileMap(prev => ({
+              ...prev,
+              [meterId]: { ...prev[meterId], include: !newValue },
+            }));
+          }
+        });
+    };
+    fabricCanvas.on('mouse:down', handler);
+    return () => { fabricCanvas.off('mouse:down', handler); };
+  }, [fabricCanvas, tenantProfileMap]);
+
   // Render connection lines
   useEffect(() => {
     if (!fabricCanvas || !isInitialDataLoaded || !isCanvasReady) return;
@@ -896,7 +1002,7 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
   const handleRefresh = async () => {
     toast.info("Refreshing...");
     setIsInitialDataLoaded(false);
-    await Promise.all([fetchMeters(), fetchMeterPositions(), fetchMeterConnections(), fetchSchematicLines()]);
+    await Promise.all([fetchMeters(), fetchMeterPositions(), fetchMeterConnections(), fetchSchematicLines(), fetchTenantProfileMap()]);
     setIsInitialDataLoaded(true);
     toast.success("Refreshed");
   };
@@ -993,7 +1099,7 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
         projectId={projectId}
         position={pendingMeterPosition}
         schematicId={schematicId}
-        onMeterPlaced={() => { fetchMeters(); fetchMeterPositions(); }}
+        onMeterPlaced={() => { fetchMeters(); fetchMeterPositions(); fetchTenantProfileMap(); }}
       />
 
       {/* Meter Connections Manager */}

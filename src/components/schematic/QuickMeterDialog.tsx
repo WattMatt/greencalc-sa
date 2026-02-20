@@ -133,7 +133,8 @@ export const QuickMeterDialog = ({
           shop_number: virtualShopNumber.trim() || null,
           area_sqm: 0,
           scada_import_id: newMeter.id,
-        });
+          is_virtual: true,
+        } as any);
 
       if (tenantError) throw tenantError;
 
