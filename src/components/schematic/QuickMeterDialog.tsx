@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, Plus, ChevronDown } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface QuickMeterDialogProps {
   open: boolean;
@@ -24,6 +26,10 @@ export const QuickMeterDialog = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [virtualOpen, setVirtualOpen] = useState(false);
+  const [virtualLabel, setVirtualLabel] = useState("");
+  const [virtualShopName, setVirtualShopName] = useState("");
+  const [virtualShopNumber, setVirtualShopNumber] = useState("");
 
   useEffect(() => {
     if (open) fetchMeters();
@@ -91,8 +97,56 @@ export const QuickMeterDialog = ({
     }
   };
 
+  const handleCreateVirtualMeter = async () => {
+    if (!virtualLabel.trim()) {
+      toast.error("Meter Label is required");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const { data: newMeter, error: insertError } = await supabase
+        .from("scada_imports")
+        .insert({
+          site_name: virtualLabel.trim(),
+          meter_label: virtualLabel.trim(),
+          project_id: projectId,
+          shop_name: virtualShopName.trim() || null,
+          shop_number: virtualShopNumber.trim() || null,
+        })
+        .select("id")
+        .single();
+
+      if (insertError || !newMeter) throw insertError || new Error("No data returned");
+
+      const { error: posError } = await supabase
+        .from("project_schematic_meter_positions")
+        .insert({
+          schematic_id: schematicId,
+          meter_id: newMeter.id,
+          x_position: position.x,
+          y_position: position.y,
+          label: virtualLabel.trim(),
+        });
+
+      if (posError) throw posError;
+
+      toast.success("Virtual meter created and placed");
+      onMeterPlaced();
+      handleClose();
+    } catch (error) {
+      console.error("Error creating virtual meter:", error);
+      toast.error("Failed to create virtual meter");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleClose = () => {
     setSearchTerm("");
+    setVirtualLabel("");
+    setVirtualShopName("");
+    setVirtualShopNumber("");
+    setVirtualOpen(false);
     onClose();
   };
 
@@ -101,8 +155,59 @@ export const QuickMeterDialog = ({
       <DialogContent className="max-w-2xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle>Place Meter at ({position.x.toFixed(1)}%, {position.y.toFixed(1)}%)</DialogTitle>
-          <DialogDescription>Select a SCADA meter to place on the schematic at this position.</DialogDescription>
+          <DialogDescription>Select a SCADA meter or create a virtual meter to place on the schematic.</DialogDescription>
         </DialogHeader>
+
+        <Collapsible open={virtualOpen} onOpenChange={setVirtualOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" className="w-full justify-between">
+              <span className="flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                Create Virtual Meter
+              </span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${virtualOpen ? "rotate-180" : ""}`} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pt-4 pb-2">
+            <div className="space-y-2">
+              <Label htmlFor="virtual_label">Meter Label *</Label>
+              <Input
+                id="virtual_label"
+                placeholder="e.g. Main Board"
+                value={virtualLabel}
+                onChange={(e) => setVirtualLabel(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="virtual_shop_name">Shop Name</Label>
+                <Input
+                  id="virtual_shop_name"
+                  placeholder="e.g. Woolworths"
+                  value={virtualShopName}
+                  onChange={(e) => setVirtualShopName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="virtual_shop_number">Shop Number</Label>
+                <Input
+                  id="virtual_shop_number"
+                  placeholder="e.g. G12"
+                  value={virtualShopNumber}
+                  onChange={(e) => setVirtualShopNumber(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              onClick={handleCreateVirtualMeter}
+              disabled={isSaving || !virtualLabel.trim()}
+              className="w-full"
+            >
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              Create and Place
+            </Button>
+          </CollapsibleContent>
+        </Collapsible>
 
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
