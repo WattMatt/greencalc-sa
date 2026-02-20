@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
+import * as XLSX from 'xlsx';
 import { TenantProfileMatcher } from "./TenantProfileMatcher";
 import { MultiMeterSelector } from "./MultiMeterSelector";
 import { AccuracyBadge, AccuracySummary, getAccuracyLevel } from "@/components/simulation/AccuracyBadge";
@@ -530,13 +531,27 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const content = event.target?.result as string;
-        setWizardFile({ name: file.name, content });
-        setWizardOpen(true);
-      };
-      reader.readAsText(file);
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (ext === 'xlsx' || ext === 'xls') {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const csvContent = XLSX.utils.sheet_to_csv(firstSheet);
+          setWizardFile({ name: file.name, content: csvContent });
+          setWizardOpen(true);
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const content = event.target?.result as string;
+          setWizardFile({ name: file.name, content });
+          setWizardOpen(true);
+        };
+        reader.readAsText(file);
+      }
     }
     e.target.value = "";
   };
@@ -583,14 +598,14 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
           </Button>
           <input
             type="file"
-            accept=".csv"
+            accept=".csv,.xlsx,.xls"
             ref={fileInputRef}
             onChange={handleFileUpload}
             className="hidden"
           />
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-4 w-4 mr-2" />
-            Import CSV
+            Import
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
