@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Plus, Upload, Trash2, Download, Pencil, RotateCcw, Settings2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { processCSVToLoadProfile } from "@/components/loadprofiles/utils/csvToLoadProfile";
+import type { WizardParseConfig } from "@/components/loadprofiles/types/csvImportTypes";
 
 
 import { TenantProfileMatcher } from "./TenantProfileMatcher";
@@ -259,6 +262,9 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
   const [profilePopoverOpen, setProfilePopoverOpen] = useState(false);
   const [addDialogSortByArea, setAddDialogSortByArea] = useState(false);
   
+  // Profile scope toggle: global vs local
+  const [profileScope, setProfileScope] = useState<'global' | 'local'>('global');
+  
   // Scada Import Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
   
@@ -306,14 +312,19 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     enabled: tenants.length > 0,
   });
 
-  // Fetch SCADA imports for profile assignment
+  // Fetch SCADA imports for profile assignment (filtered by scope)
   const { data: scadaImports } = useQuery({
-    queryKey: ["scada-imports-for-assignment"],
+    queryKey: ["scada-imports-for-assignment", profileScope, projectId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("scada_imports")
-        .select("id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend, meter_label, meter_color, date_range_start, date_range_end, weekday_days, weekend_days, processed_at, shop_number")
-        .order("shop_name");
+        .select("id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend, meter_label, meter_color, date_range_start, date_range_end, weekday_days, weekend_days, processed_at, shop_number");
+      
+      if (profileScope === 'local') {
+        query = query.eq('project_id', projectId);
+      }
+      
+      const { data, error } = await query.order("shop_name");
       if (error) throw error;
       return data as ScadaImport[];
     },
@@ -470,13 +481,67 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
     return sortDirection === 'asc' ? comparison : -comparison;
   });
 
-  const handleWizardComplete = useCallback((results: ParsedFileResult[]) => {
+  const handleWizardComplete = useCallback(async (results: ParsedFileResult[]) => {
     if (results.length === 0) return;
-    // Use the first file result for tenant column mapping
-    const first = results[0];
-    setColumnMapperData({ headers: first.headers, rows: first.rows });
-    setColumnMapperOpen(true);
-  }, []);
+    
+    // Process each file as a meter and insert into scada_imports with project_id
+    const defaultConfig: WizardParseConfig = {
+      fileType: "delimited",
+      startRow: 1,
+      delimiters: { tab: false, semicolon: false, comma: true, space: false, other: false, otherChar: "" },
+      treatConsecutiveAsOne: false,
+      textQualifier: '"',
+      columns: [],
+      valueUnit: "auto",
+    };
+
+    let importedCount = 0;
+    for (const result of results) {
+      try {
+        const processed = processCSVToLoadProfile(result.headers, result.rows, defaultConfig);
+        
+        if (processed.dataPoints === 0) {
+          console.warn(`[handleWizardComplete] No data points for file, skipping`);
+          continue;
+        }
+
+        const fileName = result.fileName || `Meter ${importedCount + 1}`;
+        const shopName = fileName.replace(/\.(csv|xlsx?)$/i, "");
+
+        const { error } = await supabase.from("scada_imports").insert({
+          project_id: projectId,
+          site_name: shopName,
+          shop_name: shopName,
+          load_profile_weekday: processed.weekdayProfile,
+          load_profile_weekend: processed.weekendProfile,
+          data_points: processed.dataPoints,
+          date_range_start: processed.dateRangeStart,
+          date_range_end: processed.dateRangeEnd,
+          weekday_days: processed.weekdayDays,
+          weekend_days: processed.weekendDays,
+          detected_interval_minutes: processed.detectedInterval,
+          processed_at: new Date().toISOString(),
+          file_name: fileName,
+        });
+
+        if (error) {
+          console.error(`[handleWizardComplete] Insert error for ${shopName}:`, error);
+          continue;
+        }
+        importedCount++;
+      } catch (err) {
+        console.error(`[handleWizardComplete] Processing error:`, err);
+      }
+    }
+
+    if (importedCount > 0) {
+      queryClient.invalidateQueries({ queryKey: ["scada-imports-for-assignment"] });
+      toast.success(`Imported ${importedCount} meter profile${importedCount > 1 ? 's' : ''} for this project`);
+      setProfileScope('local'); // Auto-switch to local view
+    } else {
+      toast.error("No meter profiles could be processed from the uploaded files");
+    }
+  }, [projectId, queryClient]);
 
   const handleMappedImport = useCallback(async (mappedTenants: TenantMappedData[]) => {
     if (mappedTenants.length === 0) {
@@ -551,7 +616,7 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
             <Download className="h-4 w-4 mr-2" />
             Template
           </Button>
-          <Button variant="outline" disabled onClick={() => setWizardOpen(true)}>
+          <Button variant="outline" onClick={() => setWizardOpen(true)}>
             <Upload className="h-4 w-4 mr-2" />
             Import
           </Button>
@@ -788,7 +853,32 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                     )}
                   </button>
                 </TableHead>
-                <TableHead>Load Profile</TableHead>
+                <TableHead>
+                  <div className="flex items-center gap-2">
+                    <span>Load Profile</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center gap-1 ml-auto">
+                            <span className="text-[10px] text-muted-foreground uppercase">
+                              {profileScope === 'local' ? 'Local' : 'Global'}
+                            </span>
+                            <Switch
+                              checked={profileScope === 'local'}
+                              onCheckedChange={(checked) => setProfileScope(checked ? 'local' : 'global')}
+                              className="scale-75"
+                            />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{profileScope === 'local' 
+                            ? "Showing only meters imported for this project" 
+                            : "Showing all meters from the global library"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                </TableHead>
                 <TableHead className="text-center">Scale</TableHead>
                 <TableHead className="text-right">
                   <button 
