@@ -88,9 +88,33 @@ export function ProjectLocationMap({
   // Save location mutation
   const saveLocation = useMutation({
     mutationFn: async ({ lat, lng }: { lat: number; lng: number }) => {
+      // Reverse geocode to get location text
+      let locationText: string | null = null;
+      try {
+        const response = await supabase.functions.invoke('geocode-location', {
+          body: { latitude: lat, longitude: lng, reverse: true }
+        });
+        if (!response.error && response.data) {
+          const { municipality, province } = response.data;
+          const parts = [municipality, province, 'South Africa'].filter(Boolean);
+          locationText = parts.join(', ');
+        }
+      } catch (err) {
+        console.error('Reverse geocoding for location text failed:', err);
+      }
+
+      const updateData: Record<string, any> = {
+        latitude: lat,
+        longitude: lng,
+        updated_at: new Date().toISOString(),
+      };
+      if (locationText) {
+        updateData.location = locationText;
+      }
+
       const { error } = await supabase
         .from("projects")
-        .update({ latitude: lat, longitude: lng, updated_at: new Date().toISOString() })
+        .update(updateData)
         .eq("id", projectId);
       if (error) throw error;
       return { lat, lng };
