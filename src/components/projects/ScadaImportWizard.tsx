@@ -83,6 +83,7 @@ export interface ParsedFileResult {
   headers: string[];
   rows: string[][];
   columns: ColumnInterpretation[];
+  rawContent?: string;
 }
 
 // ── Separator helpers ──────────────────────────────────────────
@@ -470,6 +471,7 @@ export function ScadaImportWizard({
           visibleColIndices.map((ci) => r[ci] || "")
         ),
         columns: visibleColumns,
+        rawContent: f.content,
       });
     }
 
