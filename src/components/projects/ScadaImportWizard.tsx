@@ -90,6 +90,7 @@ const DATETIME_FORMATS = [
   "YYYY/MM/DD HH:mm:ss",
   "DD-MM-YYYY HH:mm:ss",
   "DD-MM-YYYY",
+  "DD MMM YYYY HH:mm",
 ];
 
 function detectSeparator(content: string): string {
@@ -291,10 +292,10 @@ export function ScadaImportWizard({
         const content = await readFileAsText(entry.file);
         const path = `${projectId}/${Date.now()}_${entry.name}`;
 
-        // Upload to storage
+        // Upload to storage (upsert to replace existing)
         const { error } = await supabase.storage
           .from("scada-csvs")
-          .upload(path, entry.file);
+          .upload(path, entry.file, { upsert: true });
 
         if (error) {
           updated[i] = { ...entry, status: "error" };
@@ -798,65 +799,19 @@ export function ScadaImportWizard({
               </Card>
             )}
 
-            {/* File list summary */}
-            <Card>
-              <CardContent className="pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium">
-                    All Files ({files.length} total)
-                  </span>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setActiveTab("preview");
-                    }}
-                    disabled={columns.length === 0 || !someVisible}
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    Preview Data
-                  </Button>
-                </div>
-
-                <div className="space-y-2">
-                  {files.map((entry, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between border rounded-md p-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">{entry.name}</span>
-                        {entry.tenantId && (
-                          <Badge variant="outline" className="text-xs">
-                            {tenants.find((t) => t.id === entry.tenantId)
-                              ?.shop_name ||
-                              tenants.find((t) => t.id === entry.tenantId)
-                                ?.name ||
-                              "Assigned"}
-                          </Badge>
-                        )}
-                      </div>
-                      <Badge
-                        variant={
-                          entry.status === "uploaded"
-                            ? "default"
-                            : entry.status === "error"
-                            ? "destructive"
-                            : "secondary"
-                        }
-                        className="text-xs"
-                      >
-                        {entry.status === "uploaded"
-                          ? "Ready to Parse"
-                          : entry.status === "error"
-                          ? "Error"
-                          : "Pending"}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            {/* Preview Data button */}
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setActiveTab("preview");
+                }}
+                disabled={columns.length === 0 || !someVisible}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                Preview Data
+              </Button>
+            </div>
           </TabsContent>
 
           {/* ── Tab 3: Preview ───────────────────────────────── */}
