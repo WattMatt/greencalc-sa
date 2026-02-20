@@ -101,20 +101,13 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
   const lines = csvContent.split('\n').filter(l => l.trim() && !l.toLowerCase().startsWith('sep='));
   if (lines.length < 2) return [];
   
-  // Find header row by keyword search
-  let headerIdx = -1;
-  for (let i = 0; i < Math.min(lines.length, 10); i++) {
-    const line = lines[i].toLowerCase();
-    if (line.includes('time') || line.includes('date') || line.includes('rdate') || 
-        line.includes('kwh') || line.includes('timestamp') || line.includes('from')) {
-      headerIdx = i;
-      break;
-    }
-  }
-  if (headerIdx === -1) return [];
+  // Find header row (skip empty lines)
+  let headerIdx = 0;
+  while (headerIdx < lines.length && !lines[headerIdx].includes(',')) headerIdx++;
+  if (headerIdx >= lines.length) return [];
   
   const headers = lines[headerIdx].split(',').map(h => h.trim().toLowerCase());
-  const dateCol = headers.findIndex(h => h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate') || h === 'from');
+  const dateCol = headers.findIndex(h => h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate'));
   const valueCol = headers.findIndex(h => h.includes('kwh') || h.includes('p14') || h.includes('value') || h.includes('active'));
   
   if (dateCol === -1) return [];

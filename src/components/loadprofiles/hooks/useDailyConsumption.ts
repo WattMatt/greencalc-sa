@@ -144,7 +144,7 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
   
   // Look for date/time column - include 'time' as a valid column name
   const dateCol = headers.findIndex(h => 
-    h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate') || h === 'from'
+    h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate')
   );
   // Look for kWh value column - prioritize "p1 (kwh)" or just "kwh" or first value after time
   const valueCol = headers.findIndex(h => 
