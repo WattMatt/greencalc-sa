@@ -238,6 +238,8 @@ export function ScadaImportWizard({
   // Step 3 state
   const [previewActive, setPreviewActive] = useState(false);
   const [openSection, setOpenSection] = useState<"parsing" | "columns">("parsing");
+  // Track which file's tenant popover is open
+  const [openTenantPopover, setOpenTenantPopover] = useState<number | null>(null);
 
   // Fetch tenants for assignment
   const { data: tenants = [] } = useQuery({
@@ -604,7 +606,10 @@ export function ScadaImportWizard({
                         </div>
 
                         <div className="flex items-center gap-2">
-                          <Popover>
+                          <Popover
+                            open={openTenantPopover === idx}
+                            onOpenChange={(v) => setOpenTenantPopover(v ? idx : null)}
+                          >
                             <PopoverTrigger asChild>
                               <Button
                                 variant="outline"
@@ -628,7 +633,10 @@ export function ScadaImportWizard({
                                   <CommandGroup>
                                     <CommandItem
                                       value="no-tenant"
-                                      onSelect={() => assignTenant(idx, null)}
+                                      onSelect={() => {
+                                        assignTenant(idx, null);
+                                        setOpenTenantPopover(null);
+                                      }}
                                     >
                                       <Check className={cn("mr-2 h-4 w-4", !entry.tenantId ? "opacity-100" : "opacity-0")} />
                                       No tenant
@@ -643,7 +651,10 @@ export function ScadaImportWizard({
                                         <CommandItem
                                           key={t.id}
                                           value={`${t.shop_name || t.name} ${t.shop_number || ""}`}
-                                          onSelect={() => assignTenant(idx, t.id)}
+                                          onSelect={() => {
+                                            assignTenant(idx, t.id);
+                                            setOpenTenantPopover(null);
+                                          }}
                                         >
                                           <Check className={cn("mr-2 h-4 w-4", entry.tenantId === t.id ? "opacity-100" : "opacity-0")} />
                                           {t.shop_name || t.name}
