@@ -7,6 +7,7 @@ import { useSolcastPVProfile } from "./hooks/useSolcastPVProfile";
 import { LoadChart } from "./charts/LoadChart";
 import { EnvelopeChart } from "./charts/EnvelopeChart";
 import { useEnvelopeData } from "./hooks/useEnvelopeData";
+import { useRawScadaData } from "./hooks/useRawScadaData";
 import { SolarChart } from "./charts/SolarChart";
 import { GridFlowChart } from "./charts/GridFlowChart";
 import { BatteryChart } from "./charts/BatteryChart";
@@ -24,6 +25,7 @@ import { useDiversitySettings } from "@/hooks/useDiversitySettings";
 interface LoadProfileChartProps {
   tenants: Tenant[];
   shopTypes: ShopType[];
+  projectId?: string;
   connectionSizeKva?: number | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -40,6 +42,7 @@ interface LoadProfileChartProps {
 export function LoadProfileChart({ 
   tenants, 
   shopTypes, 
+  projectId,
   connectionSizeKva, 
   latitude, 
   longitude,
@@ -50,6 +53,9 @@ export function LoadProfileChart({
   systemIncludesSolar = true,
   systemIncludesBattery = false,
 }: LoadProfileChartProps) {
+  // Fetch raw SCADA data on demand (only when this component is mounted/visible)
+  const { rawDataMap } = useRawScadaData({ projectId });
+
   // Get global settings as defaults - Diversity for load profiles, Derating for PV simulations
   const { settings: globalDeratingSettings } = useDeratingSettings();
   const { settings: globalDiversitySettings } = useDiversitySettings();
@@ -200,6 +206,7 @@ export function LoadProfileChart({
     solcastProfile: useSolcast ? solcastProfile : undefined,
     systemLosses,
     diversityFactor,
+    rawDataMap,
   });
 
   // Envelope chart data (min/max/avg per hour across all days)
@@ -210,7 +217,7 @@ export function LoadProfileChart({
     yearTo: envelopeYearTo,
     setYearFrom: setEnvelopeYearFrom,
     setYearTo: setEnvelopeYearTo,
-  } = useEnvelopeData({ tenants, displayUnit, powerFactor });
+  } = useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap });
 
   const { exportToCSV, exportToPDF, exportToPNG, exportToSVG } = useExportHandlers({
     chartData,

@@ -13,15 +13,21 @@ interface UseEnvelopeDataProps {
   tenants: Tenant[];
   displayUnit: DisplayUnit;
   powerFactor: number;
+  /** Map of scada_import_id -> raw_data, fetched on demand by useRawScadaData */
+  rawDataMap?: Record<string, unknown>;
 }
 
-export function useEnvelopeData({ tenants, displayUnit, powerFactor }: UseEnvelopeDataProps) {
+export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap }: UseEnvelopeDataProps) {
+  // Helper: get raw data for a tenant from on-demand map or inline field
+  const getRawData = (tenant: Tenant): unknown =>
+    (rawDataMap && tenant.scada_import_id ? rawDataMap[tenant.scada_import_id] : undefined)
+    || tenant.scada_imports?.raw_data;
   // Extract available years from all tenants' raw data
   const availableYears = useMemo(() => {
     const yearsSet = new Set<number>();
 
     tenants.forEach((tenant) => {
-      const rawData = parseRawData(tenant.scada_imports?.raw_data);
+      const rawData = parseRawData(getRawData(tenant));
       rawData.forEach((point) => {
         if (point.date) {
           const year = parseInt(point.date.split("-")[0], 10);
@@ -31,7 +37,7 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor }: UseEnvelo
     });
 
     return Array.from(yearsSet).sort((a, b) => a - b);
-  }, [tenants]);
+  }, [tenants, rawDataMap]);
 
   const [yearFrom, setYearFrom] = useState<number | null>(null);
   const [yearTo, setYearTo] = useState<number | null>(null);
@@ -45,7 +51,7 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor }: UseEnvelo
     const dateHourlyTotals: Map<string, number[]> = new Map();
 
     tenants.forEach((tenant) => {
-      const rawData = parseRawData(tenant.scada_imports?.raw_data);
+      const rawData = parseRawData(getRawData(tenant));
       if (!rawData.length) return;
 
       const tenantArea = Number(tenant.area_sqm) || 0;
@@ -124,7 +130,7 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor }: UseEnvelo
     }
 
     return result;
-  }, [tenants, availableYears, effectiveFrom, effectiveTo, displayUnit, powerFactor]);
+  }, [tenants, availableYears, effectiveFrom, effectiveTo, displayUnit, powerFactor, rawDataMap]);
 
   return {
     envelopeData,

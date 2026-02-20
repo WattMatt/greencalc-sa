@@ -868,7 +868,7 @@ export default function ProjectDetail() {
       // Fetch tenants with their direct scada_imports relation
       const { data: tenantsData, error: tenantsError } = await supabase
         .from("project_tenants")
-        .select(`*, shop_types(*), scada_imports(shop_name, area_sqm, load_profile_weekday, load_profile_weekend, raw_data, date_range_start, date_range_end, detected_interval_minutes)`)
+        .select(`*, shop_types(*), scada_imports(shop_name, area_sqm, load_profile_weekday, load_profile_weekend, date_range_start, date_range_end, detected_interval_minutes)`)
         .eq("project_id", id)
         .order("name");
       if (tenantsError) throw tenantsError;
@@ -1262,6 +1262,7 @@ export default function ProjectDetail() {
           <LoadProfileChart
             tenants={tenants || []}
             shopTypes={shopTypes || []}
+            projectId={id}
             connectionSizeKva={project.connection_size_kva}
             latitude={project.latitude ?? -33.9249}
             longitude={project.longitude ?? 18.4241}
