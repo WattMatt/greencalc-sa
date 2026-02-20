@@ -940,6 +940,88 @@ export type Database = {
           },
         ]
       }
+      project_meter_connections: {
+        Row: {
+          child_meter_id: string
+          created_at: string
+          id: string
+          parent_meter_id: string
+          project_id: string
+        }
+        Insert: {
+          child_meter_id: string
+          created_at?: string
+          id?: string
+          parent_meter_id: string
+          project_id: string
+        }
+        Update: {
+          child_meter_id?: string
+          created_at?: string
+          id?: string
+          parent_meter_id?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_meter_connections_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_schematic_lines: {
+        Row: {
+          color: string | null
+          created_at: string
+          from_x: number
+          from_y: number
+          id: string
+          line_type: string
+          metadata: Json | null
+          schematic_id: string
+          stroke_width: number | null
+          to_x: number
+          to_y: number
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          from_x?: number
+          from_y?: number
+          id?: string
+          line_type?: string
+          metadata?: Json | null
+          schematic_id: string
+          stroke_width?: number | null
+          to_x?: number
+          to_y?: number
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          from_x?: number
+          from_y?: number
+          id?: string
+          line_type?: string
+          metadata?: Json | null
+          schematic_id?: string
+          stroke_width?: number | null
+          to_x?: number
+          to_y?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_schematic_lines_schematic_id_fkey"
+            columns: ["schematic_id"]
+            isOneToOne: false
+            referencedRelation: "project_schematics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_schematic_meter_positions: {
         Row: {
           created_at: string
