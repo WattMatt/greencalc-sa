@@ -475,6 +475,26 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
             }
           }
           
+          // If profile has no shop_number, try extracting a number from the profile name
+          // e.g. "AC Shop 2" -> "2", "Shop 23A" -> "23A"
+          if (score === 0 && tenant.shop_number) {
+            const profileLabel = profile.shop_name || profile.site_name || '';
+            const profileTrailingMatch = profileLabel.match(/[\s_\-](\d+[A-Za-z]?)$/);
+            if (profileTrailingMatch) {
+              const extractedId = profileTrailingMatch[1];
+              const tenantShopTrimmed = tenant.shop_number.trim();
+              if (extractedId.toLowerCase() === tenantShopTrimmed.toLowerCase()) {
+                score = 93;
+              } else {
+                const extractedNum = parseFloat(extractedId);
+                const tenantNum = parseFloat(tenantShopTrimmed);
+                if (!isNaN(extractedNum) && !isNaN(tenantNum) && extractedNum === tenantNum) {
+                  score = 93;
+                }
+              }
+            }
+          }
+
           if (score === 0) {
             const suggestions = getProfileSuggestions(tenantName, [profile]);
             score = suggestions[0]?.score || 0;
