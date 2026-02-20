@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Canvas as FabricCanvas, Circle, Line, FabricImage, Rect, Point, Polyline, FabricText } from "fabric";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ interface SchematicEditorProps {
   schematicId: string;
   schematicUrl: string | null;
   projectId: string;
+  isActive?: boolean;
 }
 
 // Helper: calculate snap points on meter card edges
@@ -151,7 +153,8 @@ async function createMeterCardImage(
   return canvas.toDataURL();
 }
 
-export default function SchematicEditor({ schematicId, schematicUrl, projectId }: SchematicEditorProps) {
+export default function SchematicEditor({ schematicId, schematicUrl, projectId, isActive }: SchematicEditorProps) {
+  const queryClient = useQueryClient();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
@@ -221,12 +224,12 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
     load();
   }, [schematicId, projectId]);
 
-  // Re-fetch tenant profile map when window regains focus (e.g. after switching tabs)
+  // Re-fetch tenant profile map when the schematics tab becomes active
   useEffect(() => {
-    const handleFocus = () => { fetchTenantProfileMap(); };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [projectId]);
+    if (isActive && isInitialDataLoaded) {
+      fetchTenantProfileMap();
+    }
+  }, [isActive]);
 
   const fetchMeters = async () => {
     const { data } = await supabase.from("scada_imports").select("*").eq("project_id", projectId).order("site_name");
@@ -782,6 +785,9 @@ export default function SchematicEditor({ schematicId, schematicUrl, projectId }
               ...prev,
               [meterId]: { ...prev[meterId], include: !newValue },
             }));
+          } else {
+            // Invalidate tenant query so Tenants tab picks up the change
+            queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
           }
         });
     };
