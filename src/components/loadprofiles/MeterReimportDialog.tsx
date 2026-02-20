@@ -72,14 +72,14 @@ export function MeterReimportDialog({
       // Process CSV data into load profiles using our utility
       const profile = processCSVToLoadProfile(parsedData.headers, parsedData.rows, config);
       
-      // Build raw data from parsed rows for storage
+      // Build raw data from parsed rows using wizard config indices (not header detection)
       const headers = parsedData.headers.map(h => h.toLowerCase());
-      const dateIdx = headers.findIndex(h => h.includes('date') || h === 'rdate');
-      const timeIdx = headers.findIndex(h => h.includes('time') || h === 'rtime');
-      const valueIdx = headers.findIndex(h => h.includes('kwh') || h.includes('value') || h.includes('active'));
+      const dateIdx = config.dateColumnIndex ?? headers.findIndex(h => h.includes('date') || h === 'rdate');
+      const timeIdx = config.timeColumnIndex ?? headers.findIndex(h => h.includes('time') || h === 'rtime');
+      const valueIdx = config.valueColumnIndex ?? headers.findIndex(h => h.includes('kwh') || h.includes('value') || h.includes('active'));
       
       const rawData = parsedData.rows.map(row => ({
-        timestamp: `${row[dateIdx] || ''} ${row[timeIdx] || ''}`.trim(),
+        timestamp: `${row[dateIdx] || ''} ${timeIdx >= 0 ? (row[timeIdx] || '') : ''}`.trim(),
         value: parseFloat(row[valueIdx]?.replace(/[^\d.-]/g, '') || '0') || 0
       })).filter(d => d.value !== 0 || d.timestamp);
 

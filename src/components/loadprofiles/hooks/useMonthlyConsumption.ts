@@ -107,7 +107,7 @@ function parseEmbeddedCSV(csvContent: string): RawDataPoint[] {
   if (headerIdx >= lines.length) return [];
   
   const headers = lines[headerIdx].split(',').map(h => h.trim().toLowerCase());
-  const dateCol = headers.findIndex(h => h.includes('date') || h === 'timestamp' || h === 'from' || h.includes('periods'));
+  const dateCol = headers.findIndex(h => h.includes('date') || h === 'timestamp' || h === 'time' || h.includes('rdate'));
   const valueCol = headers.findIndex(h => h.includes('kwh') || h.includes('p14') || h.includes('value') || h.includes('active'));
   
   if (dateCol === -1) return [];
