@@ -6,7 +6,7 @@ import { useExportHandlers } from "./hooks/useExportHandlers";
 import { useSolcastPVProfile } from "./hooks/useSolcastPVProfile";
 import { LoadEnvelopeChart, ChartViewMode } from "./charts/LoadEnvelopeChart";
 import { useEnvelopeData } from "./hooks/useEnvelopeData";
-import { useStackedMeterData } from "./hooks/useStackedMeterData";
+import { useStackedMeterData, StackedMode } from "./hooks/useStackedMeterData";
 import { useRawScadaData } from "./hooks/useRawScadaData";
 import { useValidatedSiteData } from "./hooks/useValidatedSiteData";
 import { SolarChart } from "./charts/SolarChart";
@@ -99,6 +99,7 @@ export function LoadProfileChart({
   useEffect(() => { if (simulatedBatteryPowerKw != null) setBatteryPower(simulatedBatteryPowerKw); }, [simulatedBatteryPowerKw]);
 
   const [chartViewMode, setChartViewMode] = useState<ChartViewMode>("envelope");
+  const [stackedMode, setStackedMode] = useState<StackedMode>("avg");
   const [show1to1Comparison, setShow1to1Comparison] = useState(true);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
@@ -196,6 +197,8 @@ export function LoadProfileChart({
     diversityFactor,
     yearFrom: envelopeYearFrom,
     yearTo: envelopeYearTo,
+    mode: stackedMode,
+    shopTypes,
   });
 
   const { exportToCSV, exportToPDF, exportToPNG, exportToSVG } = useExportHandlers({
@@ -311,6 +314,8 @@ export function LoadProfileChart({
             stackedData={stackedData}
             stackedTenantKeys={stackedTenantKeys}
             onNavigateToTenant={onNavigateToTenant}
+            stackedMode={stackedMode}
+            onStackedModeChange={setStackedMode}
           />
 
           {showPVProfile && maxPvAcKva && chartData && (
