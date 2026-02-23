@@ -862,6 +862,32 @@ export default function ProjectDetail() {
 
   // Check if system includes battery
   const systemIncludesBattery = projectSystemConfig.battery;
+  const systemIncludesSolar = projectSystemConfig.solarPV;
+
+  // Handle enable feature request from carousel
+  const handleRequestEnableFeature = useCallback(async (feature: string) => {
+    const newConfig = { ...projectSystemConfig };
+    if (feature === 'solarPV' || feature === 'inverters') {
+      newConfig.solarPV = true;
+    } else if (feature === 'battery') {
+      newConfig.battery = true;
+    }
+    const parts: string[] = [];
+    if (newConfig.solarPV) parts.push('Solar PV');
+    if (newConfig.battery) parts.push('Battery');
+    if (newConfig.generator) parts.push('Generator');
+    const newSystemType = parts.join(',') || 'Solar PV';
+    const { error } = await supabase
+      .from("projects")
+      .update({ system_type: newSystemType })
+      .eq("id", id);
+    if (error) {
+      toast.error("Failed to enable feature");
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ["project", id] });
+    toast.success(`${feature === 'battery' ? 'Battery' : 'Solar PV'} enabled`);
+  }, [projectSystemConfig, id, queryClient]);
 
   const { data: tenants, isLoading: isLoadingTenants } = useQuery({
     queryKey: ["project-tenants", id],
@@ -1321,6 +1347,8 @@ export default function ProjectDetail() {
             systemCosts={systemCosts}
             onSystemCostsChange={setSystemCosts}
             includesBattery={systemIncludesBattery}
+            includesSolar={systemIncludesSolar}
+            onRequestEnableFeature={handleRequestEnableFeature}
             blendedRateType={blendedRateType}
             onBlendedRateTypeChange={setBlendedRateType}
           />
