@@ -1,6 +1,15 @@
 import { useMemo } from "react";
 import { Tenant } from "../types";
 import { parseRawData } from "../utils/parseRawData";
+import { RawDataMap, RawDataEntry } from "./useRawScadaData";
+
+/** Energy units where sub-hourly readings should be SUMMED to get hourly kW */
+const ENERGY_UNITS = new Set(["kwh", "wh", "mwh", "kvah"]);
+
+function isEnergyUnit(unit?: string | null): boolean {
+  if (!unit) return true; // default to kWh (energy) for backwards compatibility
+  return ENERGY_UNITS.has(unit.toLowerCase());
+}
 
 /** Minimum kW daily total at the SITE level to exclude outage/power-off days */
 const SITE_OUTAGE_THRESHOLD_KW = 75;
@@ -30,7 +39,7 @@ export interface ValidatedSiteData {
 
 interface UseValidatedSiteDataProps {
   tenants: Tenant[];
-  rawDataMap?: Record<string, unknown>;
+  rawDataMap?: RawDataMap;
 }
 
 export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDataProps): ValidatedSiteData {
@@ -38,9 +47,16 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
     const includedTenants = tenants.filter(t => t.include_in_load_profile !== false);
 
     // Helper: get raw data for a tenant
-    const getRawData = (tenant: Tenant): unknown =>
-      (rawDataMap && tenant.scada_import_id ? rawDataMap[tenant.scada_import_id] : undefined)
-      || tenant.scada_imports?.raw_data;
+    // Helper: get raw data entry (with value_unit) for a tenant
+    const getRawEntry = (tenant: Tenant): RawDataEntry | undefined => {
+      if (rawDataMap && tenant.scada_import_id && rawDataMap[tenant.scada_import_id]) {
+        return rawDataMap[tenant.scada_import_id];
+      }
+      if (tenant.scada_imports?.raw_data) {
+        return { raw_data: tenant.scada_imports.raw_data, value_unit: null };
+      }
+      return undefined;
+    };
 
     // === Pass 1: Build per-tenant, per-date hourly maps ===
     const tenantDateMaps = new Map<string, Map<string, number[]>>();
@@ -53,8 +69,11 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
       const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
       tenantKeyMap.set(tenant.id, key);
 
-      const points = parseRawData(getRawData(tenant));
+      const entry = getRawEntry(tenant);
+      if (!entry) continue;
+      const points = parseRawData(entry.raw_data);
       if (points.length === 0) continue;
+      const useSum = isEnergyUnit(entry.value_unit);
 
       const areaScale =
         tenant.scada_imports?.area_sqm && tenant.scada_imports.area_sqm > 0 && tenantArea > 0
@@ -93,10 +112,12 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
       dateHourMap.forEach((hourMap, dateKey) => {
         const hourlyKw = Array(24).fill(0);
         let dailyTotal = 0;
-        hourMap.forEach((entry, hour) => {
-          const avgKw = entry.sum / entry.count;
-          hourlyKw[hour] = avgKw;
-          dailyTotal += avgKw;
+        hourMap.forEach((hourEntry, hour) => {
+          // For energy units (kWh): sum sub-hourly readings (total kWh in 1h = avg kW)
+          // For power units (kW): average the readings
+          const hourlyValue = useSum ? hourEntry.sum : hourEntry.sum / hourEntry.count;
+          hourlyKw[hour] = hourlyValue;
+          dailyTotal += hourlyValue;
         });
 
         dateMap.set(dateKey, hourlyKw);

@@ -662,7 +662,8 @@ export function SitesTab() {
           data_points: rawDataArray.length,
           processed_at: new Date().toISOString(),
           detected_interval_minutes: detectedInterval,
-        })
+          value_unit: unit,
+        } as Record<string, unknown>)
         .eq("id", meter.id);
 
       if (updateError) throw updateError;
