@@ -157,6 +157,7 @@ export function LoadProfileChart({
     tenants,
     shopTypes,
     selectedDays,
+    selectedMonths: selectedMonthsFilter,
     displayUnit,
     powerFactor,
     showPVProfile,
@@ -180,7 +181,7 @@ export function LoadProfileChart({
     yearTo: envelopeYearTo,
     setYearFrom: setEnvelopeYearFrom,
     setYearTo: setEnvelopeYearTo,
-  } = useEnvelopeData({ displayUnit, powerFactor, validatedSiteData, selectedDays });
+  } = useEnvelopeData({ displayUnit, powerFactor, validatedSiteData, selectedDays, selectedMonths: selectedMonthsFilter });
 
   const { exportToCSV, exportToPDF, exportToPNG, exportToSVG } = useExportHandlers({
     chartData,
