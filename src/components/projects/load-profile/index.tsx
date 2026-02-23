@@ -58,6 +58,7 @@ export function LoadProfileChart({
 
   // Shared validated site data — single parse, single validation
   const validatedSiteData = useValidatedSiteData({ tenants, rawDataMap });
+  const { outlierCount } = validatedSiteData;
 
   // Get global settings as defaults
   const { settings: globalDeratingSettings } = useDeratingSettings();
@@ -289,6 +290,7 @@ export function LoadProfileChart({
             isWeekend={isWeekend}
             unit={unit}
             isLoading={chartsLoading}
+            outlierCount={outlierCount}
           />
 
           {showPVProfile && maxPvAcKva && chartData && (

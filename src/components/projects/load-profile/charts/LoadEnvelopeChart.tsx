@@ -16,6 +16,7 @@ interface LoadEnvelopeChartProps {
   isWeekend: boolean;
   unit: string;
   isLoading?: boolean;
+  outlierCount?: number;
 }
 
 export function LoadEnvelopeChart({
@@ -29,6 +30,7 @@ export function LoadEnvelopeChart({
   isWeekend,
   unit,
   isLoading,
+  outlierCount = 0,
 }: LoadEnvelopeChartProps) {
   if (isLoading) {
     return (
@@ -56,6 +58,11 @@ export function LoadEnvelopeChart({
     <div className="space-y-1">
       <div className="flex items-center gap-2">
         <p className="text-xs font-medium text-muted-foreground">Load Envelope</p>
+        {outlierCount > 0 && (
+          <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+            {outlierCount} outlier day{outlierCount !== 1 ? "s" : ""} excluded
+          </Badge>
+        )}
         <div className="flex items-center gap-1.5 ml-auto">
           <Select value={String(yearFrom)} onValueChange={(v) => setYearFrom(Number(v))}>
             <SelectTrigger className="h-7 w-[72px] text-xs">
