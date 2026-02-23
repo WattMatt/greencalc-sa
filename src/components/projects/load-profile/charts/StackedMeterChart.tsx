@@ -1,6 +1,8 @@
 import { useState, useCallback } from "react";
 import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip as UITooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { ExternalLink } from "lucide-react";
 import { getTOUPeriod, TOU_COLORS } from "../types";
 import { StackedMeterPoint } from "../hooks/useStackedMeterData";
 
@@ -10,9 +12,10 @@ interface StackedMeterChartProps {
   showTOU: boolean;
   isWeekend: boolean;
   unit: string;
+  onNavigateToTenant?: (tenantId: string) => void;
 }
 
-export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit }: StackedMeterChartProps) {
+export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, onNavigateToTenant }: StackedMeterChartProps) {
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
 
   const toggleKey = useCallback((id: string) => {
@@ -131,27 +134,45 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit }
         </ResponsiveContainer>
       </div>
 
-      {/* Legend – click to toggle */}
-      <div className="flex flex-wrap gap-x-3 gap-y-1 px-1">
-        {tenantKeys.map((tk) => {
-          const hidden = hiddenKeys.has(tk.id);
-          return (
-            <button
-              key={tk.id}
-              type="button"
-              onClick={() => toggleKey(tk.id)}
-              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              style={{ opacity: hidden ? 0.35 : 1 }}
-            >
-              <div
-                className="w-2.5 h-2.5 rounded-sm shrink-0"
-                style={{ backgroundColor: hidden ? "hsl(var(--muted-foreground))" : tk.color }}
-              />
-              <span className={`truncate max-w-[100px] ${hidden ? "line-through" : ""}`}>{tk.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Legend – click to toggle, tooltip to navigate */}
+      <TooltipProvider delayDuration={300}>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 px-1">
+          {tenantKeys.map((tk) => {
+            const hidden = hiddenKeys.has(tk.id);
+            return (
+              <UITooltip key={tk.id}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => toggleKey(tk.id)}
+                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    style={{ opacity: hidden ? 0.35 : 1 }}
+                  >
+                    <div
+                      className="w-2.5 h-2.5 rounded-sm shrink-0"
+                      style={{ backgroundColor: hidden ? "hsl(var(--muted-foreground))" : tk.color }}
+                    />
+                    <span className={`truncate max-w-[100px] ${hidden ? "line-through" : ""}`}>{tk.label}</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="flex items-center gap-2 text-xs">
+                  <span>{tk.label}</span>
+                  {onNavigateToTenant && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onNavigateToTenant(tk.id); }}
+                      className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      View in Tenants
+                    </button>
+                  )}
+                </TooltipContent>
+              </UITooltip>
+            );
+          })}
+        </div>
+      </TooltipProvider>
     </div>
   );
 }
