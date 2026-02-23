@@ -24,6 +24,8 @@ export interface ValidatedSiteData {
   estimatedCount: number;
   /** Available years across all raw data */
   availableYears: number[];
+  /** Number of outlier days removed across all tenants */
+  outlierCount: number;
 }
 
 interface UseValidatedSiteDataProps {
@@ -103,6 +105,34 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
       if (dateMap.size > 0) {
         tenantDateMaps.set(tenant.id, dateMap);
         tenantsWithRawData.push(tenant.id);
+      }
+    }
+
+    // === Pass 1.5: Per-tenant IQR-based outlier removal ===
+    let outlierCount = 0;
+    for (const tenantId of tenantsWithRawData) {
+      const dateMap = tenantDateMaps.get(tenantId)!;
+      if (dateMap.size < 8) continue; // need enough data for meaningful IQR
+
+      // Collect daily totals
+      const dailyTotals: { date: string; total: number }[] = [];
+      dateMap.forEach((hourly, dateKey) => {
+        dailyTotals.push({ date: dateKey, total: hourly.reduce((a, b) => a + b, 0) });
+      });
+
+      // Sort by total
+      const sorted = dailyTotals.map(d => d.total).sort((a, b) => a - b);
+      const q1 = sorted[Math.floor(sorted.length * 0.25)];
+      const q3 = sorted[Math.floor(sorted.length * 0.75)];
+      const iqr = q3 - q1;
+      const upperFence = q3 + 3 * iqr;
+
+      // Remove outlier dates
+      for (const { date, total } of dailyTotals) {
+        if (total > upperFence) {
+          dateMap.delete(date);
+          outlierCount++;
+        }
       }
     }
 
@@ -192,6 +222,7 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
       scadaCount,
       estimatedCount,
       availableYears,
+      outlierCount,
     };
   }, [tenants, rawDataMap]);
 }

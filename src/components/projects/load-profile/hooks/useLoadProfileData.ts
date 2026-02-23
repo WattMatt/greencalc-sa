@@ -153,6 +153,7 @@ export function useLoadProfileData({
     scadaCount: 0,
     estimatedCount: includedTenants.length,
     availableYears: [],
+    outlierCount: 0,
   };
   const {
     siteDataByDate,
