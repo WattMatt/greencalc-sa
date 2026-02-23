@@ -223,7 +223,9 @@ export function TenantProfileMatcher({ projectId, tenants }: TenantProfileMatche
                                                     </Button>
                                                 </PopoverTrigger>
                                                 <PopoverContent className="w-[280px] p-0" align="start">
-                                                    <Command>
+                                                    <Command filter={(value, search) => {
+                                                        return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
+                                                    }}>
                                                         <CommandInput placeholder="Search profiles..." className="h-9" />
                                                         <CommandList>
                                                             <CommandEmpty>No profile found.</CommandEmpty>
