@@ -36,7 +36,6 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading }: Lo
               </linearGradient>
             </defs>
 
-            {/* TOU Background */}
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getTOUPeriod(h, isWeekend);
@@ -54,20 +53,8 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading }: Lo
               })}
 
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
-            <XAxis
-              dataKey="hour"
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              tickLine={false}
-              axisLine={{ stroke: "hsl(var(--border))" }}
-              interval={2}
-            />
-            <YAxis
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())}
-              width={45}
-            />
+            <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} interval={2} />
+            <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} width={45} />
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
@@ -78,31 +65,16 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading }: Lo
                   <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="text-xs font-medium">{label}</p>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] px-1.5 py-0"
-                        style={{ borderColor: TOU_COLORS[period].stroke, color: TOU_COLORS[period].stroke }}
-                      >
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0" style={{ borderColor: TOU_COLORS[period].stroke, color: TOU_COLORS[period].stroke }}>
                         {TOU_COLORS[period].label}
                       </Badge>
                     </div>
-                    <p className="text-lg font-bold">
-                      {loadValue.toFixed(1)} {unit}
-                    </p>
+                    <p className="text-lg font-bold">{loadValue.toFixed(1)} {unit}</p>
                   </div>
                 );
               }}
             />
-
-            <Area
-              type="monotone"
-              dataKey="total"
-              stroke="hsl(var(--primary))"
-              strokeWidth={2}
-              fill="url(#totalGradient)"
-              dot={false}
-              activeDot={{ r: 5, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }}
-            />
+            <Area type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#totalGradient)" dot={false} activeDot={{ r: 5, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
