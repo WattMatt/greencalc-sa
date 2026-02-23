@@ -180,7 +180,7 @@ export function LoadProfileChart({
     yearTo: envelopeYearTo,
     setYearFrom: setEnvelopeYearFrom,
     setYearTo: setEnvelopeYearTo,
-  } = useEnvelopeData({ displayUnit, powerFactor, validatedSiteData });
+  } = useEnvelopeData({ displayUnit, powerFactor, validatedSiteData, selectedDays });
 
   const { exportToCSV, exportToPDF, exportToPNG, exportToSVG } = useExportHandlers({
     chartData,
@@ -208,19 +208,7 @@ export function LoadProfileChart({
     );
   }
 
-  if (isLoadingRawData && projectId) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-16">
-          <div className="animate-pulse space-y-4 w-full">
-            <div className="h-6 bg-muted rounded w-1/3" />
-            <div className="h-[300px] bg-muted rounded w-full" />
-            <div className="h-[200px] bg-muted rounded w-full" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const chartsLoading = isLoadingRawData && !!projectId;
 
   return (
     <div className="space-y-4">
@@ -290,19 +278,18 @@ export function LoadProfileChart({
             setUseSolcast={toggleSolcast}
           />
 
-          <LoadChart chartData={chartData} showTOU={showTOU} isWeekend={isWeekend} unit={unit} />
+          <LoadChart chartData={chartData} showTOU={showTOU} isWeekend={isWeekend} unit={unit} isLoading={chartsLoading} />
 
-          {envelopeData.length > 0 && (
-            <EnvelopeChart
-              envelopeData={envelopeData}
-              availableYears={availableYears}
-              yearFrom={envelopeYearFrom}
-              yearTo={envelopeYearTo}
-              setYearFrom={setEnvelopeYearFrom}
-              setYearTo={setEnvelopeYearTo}
-              unit={unit}
-            />
-          )}
+          <EnvelopeChart
+            envelopeData={envelopeData}
+            availableYears={availableYears}
+            yearFrom={envelopeYearFrom}
+            yearTo={envelopeYearTo}
+            setYearFrom={setEnvelopeYearFrom}
+            setYearTo={setEnvelopeYearTo}
+            unit={unit}
+            isLoading={chartsLoading}
+          />
 
           {showPVProfile && maxPvAcKva && chartData && (
             <SolarChart

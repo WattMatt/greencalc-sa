@@ -14,9 +14,11 @@ interface UseEnvelopeDataProps {
   powerFactor: number;
   /** Shared validated site data from useValidatedSiteData */
   validatedSiteData: ValidatedSiteData;
+  /** Day-of-week filter to match load profile (JS day: 0=Sun … 6=Sat) */
+  selectedDays: Set<number>;
 }
 
-export function useEnvelopeData({ displayUnit, powerFactor, validatedSiteData }: UseEnvelopeDataProps) {
+export function useEnvelopeData({ displayUnit, powerFactor, validatedSiteData, selectedDays }: UseEnvelopeDataProps) {
   const { siteDataByDate, availableYears } = validatedSiteData;
 
   const [yearFrom, setYearFrom] = useState<number | null>(null);
@@ -31,8 +33,14 @@ export function useEnvelopeData({ displayUnit, powerFactor, validatedSiteData }:
     const filteredEntries: number[][] = [];
 
     siteDataByDate.forEach((hourlyArr, dateKey) => {
-      const year = parseInt(dateKey.split("-")[0], 10);
+      const [yearStr, monthStr, dayStr] = dateKey.split("-");
+      const year = parseInt(yearStr, 10);
       if (year < effectiveFrom || year > effectiveTo) return;
+
+      // Day-of-week filter to match load profile
+      const jsDate = new Date(year, parseInt(monthStr, 10) - 1, parseInt(dayStr, 10));
+      if (!selectedDays.has(jsDate.getDay())) return;
+
       filteredEntries.push(hourlyArr);
     });
 
@@ -69,7 +77,7 @@ export function useEnvelopeData({ displayUnit, powerFactor, validatedSiteData }:
     }
 
     return result;
-  }, [siteDataByDate, effectiveFrom, effectiveTo, displayUnit, powerFactor]);
+  }, [siteDataByDate, effectiveFrom, effectiveTo, displayUnit, powerFactor, selectedDays]);
 
   return {
     envelopeData,

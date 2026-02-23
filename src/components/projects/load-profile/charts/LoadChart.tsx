@@ -1,5 +1,6 @@
 import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import { Loader2 } from "lucide-react";
 import { ChartDataPoint, getTOUPeriod, TOU_COLORS } from "../types";
 
 interface LoadChartProps {
@@ -7,9 +8,21 @@ interface LoadChartProps {
   showTOU: boolean;
   isWeekend: boolean;
   unit: string;
+  isLoading?: boolean;
 }
 
-export function LoadChart({ chartData, showTOU, isWeekend, unit }: LoadChartProps) {
+export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading }: LoadChartProps) {
+  if (isLoading) {
+    return (
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-muted-foreground">Load Profile</p>
+        <div className="h-[200px] flex items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-1">
       <p className="text-xs font-medium text-muted-foreground">Load Profile</p>
