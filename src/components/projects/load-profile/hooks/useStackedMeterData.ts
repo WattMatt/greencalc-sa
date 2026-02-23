@@ -190,9 +190,8 @@ export function useStackedMeterData({
         tenantProfiles.set(tenantId, sumHourly.map(v => v / filteredDateKeys.length));
       }
     } else {
-      // max or min: find the single day with the highest/lowest total site demand
-      let bestDateKey: string | null = null;
-      let bestTotal = mode === "max" ? -Infinity : Infinity;
+      // max or min: find the 95th or 5th percentile day by total site demand
+      const dateWithTotals: { dateKey: string; total: number }[] = [];
 
       for (const dateKey of filteredDateKeys) {
         const siteHourly = siteDataByDate.get(dateKey);
@@ -201,11 +200,14 @@ export function useStackedMeterData({
         for (let h = 0; h < 24; h++) {
           dayTotal += (siteHourly[h] + fallbackHourly[h]) * diversityFactor;
         }
-        if (mode === "max" ? dayTotal > bestTotal : dayTotal < bestTotal) {
-          bestTotal = dayTotal;
-          bestDateKey = dateKey;
-        }
+        dateWithTotals.push({ dateKey, total: dayTotal });
       }
+
+      dateWithTotals.sort((a, b) => a.total - b.total);
+      const targetIndex = mode === "max"
+        ? Math.min(dateWithTotals.length - 1, Math.floor(dateWithTotals.length * 0.95))
+        : Math.max(0, Math.floor(dateWithTotals.length * 0.05));
+      const bestDateKey = dateWithTotals.length > 0 ? dateWithTotals[targetIndex].dateKey : null;
 
       // Use that single day's data for all tenants
       if (bestDateKey) {

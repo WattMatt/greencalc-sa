@@ -165,11 +165,8 @@ export function useEnvelopeData({
 
     const unitMultiplier = displayUnit === "kw" ? 1 : 1 / powerFactor;
 
-    // Step 1: Find the single day with the highest and lowest total site demand
-    let maxDayArr: number[] | null = null;
-    let minDayArr: number[] | null = null;
-    let maxDayTotal = -Infinity;
-    let minDayTotal = Infinity;
+    // Step 1: Compute daily totals and collect all day arrays with their totals
+    const dayEntries: { arr: number[]; total: number }[] = [];
     const sumHourly = Array(24).fill(0);
     let count = 0;
 
@@ -181,18 +178,24 @@ export function useEnvelopeData({
         sumHourly[h] += compositeVal;
       }
       count++;
-      if (dayTotal > maxDayTotal) { maxDayTotal = dayTotal; maxDayArr = dayArr; }
-      if (dayTotal < minDayTotal) { minDayTotal = dayTotal; minDayArr = dayArr; }
+      dayEntries.push({ arr: dayArr, total: dayTotal });
     }
 
     if (count === 0) return [];
 
-    // Step 2: Build result using those specific days for max/min, average across all days
+    // Step 2: Sort by daily total and pick 5th/95th percentile days
+    dayEntries.sort((a, b) => a.total - b.total);
+    const p5Index = Math.max(0, Math.floor(dayEntries.length * 0.05));
+    const p95Index = Math.min(dayEntries.length - 1, Math.floor(dayEntries.length * 0.95));
+    const minDayArr = dayEntries[p5Index].arr;
+    const maxDayArr = dayEntries[p95Index].arr;
+
+    // Step 3: Build result using percentile days for max/min, average across all days
     const result: EnvelopePoint[] = [];
     for (let h = 0; h < 24; h++) {
       const fallbackH = fallbackHourlyTotal[h];
-      const maxVal = maxDayArr ? ((maxDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier : 0;
-      const minVal = minDayArr ? ((minDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier : 0;
+      const maxVal = ((maxDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier;
+      const minVal = ((minDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier;
       const avgVal = (sumHourly[h] / count) * unitMultiplier;
 
       result.push({
