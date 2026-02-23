@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react";
 import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { getTOUPeriod, TOU_COLORS } from "../types";
@@ -12,6 +13,18 @@ interface StackedMeterChartProps {
 }
 
 export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit }: StackedMeterChartProps) {
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
+
+  const toggleKey = useCallback((id: string) => {
+    setHiddenKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const visibleKeys = tenantKeys.filter(tk => !hiddenKeys.has(tk.id));
+
   if (!data.length || !tenantKeys.length) return null;
 
   return (
@@ -101,7 +114,7 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit }
               }}
             />
 
-            {tenantKeys.map((tk) => (
+            {visibleKeys.map((tk) => (
               <Area
                 key={tk.id}
                 type="monotone"
@@ -118,14 +131,26 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit }
         </ResponsiveContainer>
       </div>
 
-      {/* Legend */}
+      {/* Legend – click to toggle */}
       <div className="flex flex-wrap gap-x-3 gap-y-1 px-1">
-        {tenantKeys.map((tk) => (
-          <div key={tk.id} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-            <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: tk.color }} />
-            <span className="truncate max-w-[100px]">{tk.label}</span>
-          </div>
-        ))}
+        {tenantKeys.map((tk) => {
+          const hidden = hiddenKeys.has(tk.id);
+          return (
+            <button
+              key={tk.id}
+              type="button"
+              onClick={() => toggleKey(tk.id)}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              style={{ opacity: hidden ? 0.35 : 1 }}
+            >
+              <div
+                className="w-2.5 h-2.5 rounded-sm shrink-0"
+                style={{ backgroundColor: hidden ? "hsl(var(--muted-foreground))" : tk.color }}
+              />
+              <span className={`truncate max-w-[100px] ${hidden ? "line-through" : ""}`}>{tk.label}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
