@@ -1,54 +1,52 @@
 
 
-## Fix Inline Loading and Envelope Day-of-Week Filter
+## Combine Load Profile and Envelope into a Single "Load Envelope" Chart
 
-### Problem 1: Full-Page Loading Blocker
-The `isLoadingRawData` check on line 211 of `index.tsx` returns a full-page skeleton, preventing the user from seeing any controls or layout while data loads.
+### What Changes
 
-**Fix (index.tsx):**
-- Remove the early-return skeleton block (lines 211-223)
-- Pass `isLoadingRawData` down to `LoadChart` and `EnvelopeChart` as a prop
-- Each chart renders a small spinning loader (Lucide `Loader2` with `animate-spin`) centred in its chart area when loading, instead of blocking the whole page
-- The header, settings, and other controls remain visible and interactive
+Replace the two separate charts (Load Profile + Envelope) with a single combined chart called **Load Envelope** that shows:
+- The min/max shaded band (envelope area)
+- The min and max boundary lines
+- The average dashed line
+- TOU colour bars in the background
+- A unified tooltip showing Max, Avg, Min values plus the TOU period badge
 
-### Problem 2: Envelope Average Does Not Match Load Profile
-The Load Profile filters `siteDataByDate` by `selectedDays` (day-of-week filter, e.g. only Wednesdays). The Envelope uses ALL dates from `siteDataByDate` without any day-of-week filter. This means the envelope "avg" line represents the average across all 7 days, while the load profile shows Wednesday only -- they will never match.
+### File Changes
 
-**Fix (useEnvelopeData.ts):**
-- Accept `selectedDays: Set<number>` as a new prop
-- When filtering entries from `siteDataByDate`, also check the JS day-of-week matches the selected days (same logic as `useLoadProfileData`)
-- This ensures the envelope min/max/avg is computed from the same subset of dates as the load profile
+**1. New file: `src/components/projects/load-profile/charts/LoadEnvelopeChart.tsx`**
+- A single `ComposedChart` combining elements from both `LoadChart` and `EnvelopeChart`
+- TOU `ReferenceArea` bands from `LoadChart` (conditional on `showTOU` prop)
+- Stacked area trick (transparent base + filled band) from `EnvelopeChart`
+- Min/Max solid lines and Avg dashed line from `EnvelopeChart`
+- Combined tooltip: hour label, TOU badge, Max/Avg/Min values
+- Year range selectors in the header (from `EnvelopeChart`)
+- Loading spinner state
+- Title: "Load Envelope"
 
-**Fix (index.tsx):**
-- Pass `selectedDays` to the `useEnvelopeData` hook
+**2. Edit: `src/components/projects/load-profile/index.tsx`**
+- Remove the `<LoadChart>` render (line 282)
+- Remove the `<EnvelopeChart>` render (lines 284-293)
+- Replace with a single `<LoadEnvelopeChart>` that receives:
+  - `envelopeData`, `availableYears`, `yearFrom`, `yearTo`, `setYearFrom`, `setYearTo` (from envelope hook)
+  - `showTOU`, `isWeekend`, `unit`, `isLoading` (from existing state)
+- Update imports accordingly
+
+**3. Delete or leave unused: `LoadChart.tsx` and `EnvelopeChart.tsx`**
+- These become unused after the merge. They can be removed to keep the codebase clean.
 
 ### Technical Details
 
-**File: `src/components/projects/load-profile/index.tsx`**
-- Remove early return block for `isLoadingRawData` (lines 211-223)
-- Pass `isLoadingRawData` to `LoadChart` and the envelope section
-- Pass `selectedDays` to `useEnvelopeData`
-- Wrap each chart in a conditional: if loading, show a centred `Loader2` spinner; otherwise show the chart
-
-**File: `src/components/projects/load-profile/hooks/useEnvelopeData.ts`**
-- Add `selectedDays: Set<number>` to the props interface
-- In the `useMemo`, after the year filter, also filter by day-of-week:
-```
-const jsDate = new Date(year, month - 1, day);
-if (!selectedDays.has(jsDate.getDay())) return;
-```
-
-**File: `src/components/projects/load-profile/charts/LoadChart.tsx`**
-- Add optional `isLoading?: boolean` prop
-- When `isLoading` is true, render a `Loader2` spinner centred in the 200px chart area instead of the Recharts chart
-
-**File: `src/components/projects/load-profile/charts/EnvelopeChart.tsx`**
-- Add optional `isLoading?: boolean` prop
-- Same spinner treatment when loading
+The combined chart component will:
+- Use the envelope data (24 hourly points with min/max/avg) as its primary dataset
+- Transform it into `{ hour, base, band, avg, min, max }` (same as current EnvelopeChart)
+- Render TOU `ReferenceArea` blocks behind the data (same logic as current LoadChart)
+- The tooltip will show the TOU period badge alongside Max/Avg/Min values
+- The `syncId="loadProfileSync"` is preserved for synchronisation with Solar/Grid/Battery charts
+- Year range selectors remain in the chart header area
 
 ### What Stays the Same
-- All calculation logic in `useLoadProfileData` remains untouched
-- The envelope computation logic (min/max/avg sweep) stays the same, just with a tighter date filter
-- Export handlers, PV, battery, grid flow charts are unaffected
-- Year range selectors on the envelope still work as before
+- All data hooks (`useEnvelopeData`, `useLoadProfileData`) remain untouched
+- Solar, Grid Flow, and Battery charts are unaffected
+- ChartStats, export handlers, and all other UI components unchanged
+- TOULegend component continues to work as before
 
