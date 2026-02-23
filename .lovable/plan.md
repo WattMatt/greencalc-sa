@@ -1,50 +1,53 @@
 
 
-## Ingest Tenant CSV with Rating Column and Semicolon Delimiter
+## Fix: Load Envelope Chart Not Rendering (0 Validated Days)
 
-### Problem
+### The Problem
 
-Two issues prevent your `MINI_SUB_5.csv` from importing correctly:
+With 81 SCADA meters, the current overlap algorithm requires **ALL** meters to share at least one common date. It calculates `[max of all start dates, min of all end dates]`. If even one meter has a date range that doesn't overlap with the rest (e.g., Meter A has data Jan-Mar 2024, Meter B has data Jun-Dec 2024), the overlap window collapses to zero -- producing no chart data and "Validated Days: 0".
 
-1. **Semicolon delimiter**: The file uses `;` as a separator, but the CSV parser only splits on commas. All four columns get merged into one.
-2. **Missing RATING column**: The column mapper only supports Shop Number, Shop Name, and Area. The RATING column (e.g. "80A TP") is ignored, and the database has no field to store it.
+Your stats (Daily kW: 163,226) still show values because those come from pre-computed profile fallbacks, not the raw data pipeline.
 
-### Solution
+### The Fix
 
-**1. Auto-detect CSV delimiter**
+Replace the strict "all meters must overlap" logic with a **union-based approach**: use every date where **any** meter has data, summing whichever meters are available on each date. This is the correct behaviour for a site with many independently-metered tenants.
 
-Update `handleCsvFileSelected` in `TenantManager.tsx` to detect whether the first line uses `;`, `\t`, or `,` as a delimiter, and split all rows accordingly.
+**File: `src/components/projects/load-profile/hooks/useValidatedSiteData.ts`**
 
-**2. Add `cb_rating` column to `project_tenants` table**
+Change Pass 2 (lines 153-186) from:
 
-```sql
-ALTER TABLE project_tenants ADD COLUMN cb_rating text;
+```
+// OLD: Find [max start, min end] across ALL meters -- too strict
+let rangeStart = "", rangeEnd = "9999-12-31";
+for (const tenantId of tenantsWithRawData) { ... }
 ```
 
-This stores values like "80A TP", "150A TP", etc.
+To:
 
-**3. Add "Rating" role to TenantColumnMapper**
+```
+// NEW: Union of ALL dates from ALL meters
+const dateSet = new Set<string>();
+for (const tenantId of tenantsWithRawData) {
+  const dateMap = tenantDateMaps.get(tenantId)!;
+  dateMap.forEach((_, dateKey) => dateSet.add(dateKey));
+}
+allValidatedDates = Array.from(dateSet).sort();
+```
 
-- Add `"rating"` to the `TenantColumnRole` type
-- Add a `cb_rating` field to `TenantMappedData`
-- Add auto-detection for headers containing "rating", "breaker", "cb", or "amps"
-- Add a menu item with a `Zap` icon for the Rating role
-- Parse and pass through the rating string during import
+Pass 3 (lines 188-206) already handles missing meters gracefully -- it skips tenants that don't have a given date (`if (!tenantHourly) continue`), so no changes needed there.
 
-**4. Update `handleMappedImport` to save `cb_rating`**
+The site-level outage filter (`SITE_OUTAGE_THRESHOLD_KW = 75`) remains in place to discard dates where the aggregated total is negligible.
 
-Include `cb_rating: t.cb_rating` in the insert payload.
+### Impact
 
-**5. Display Rating in the Tenants table**
-
-Add a "Rating" column to the tenant table rows showing the stored value (e.g. "80A TP").
+- All 81 meters will contribute data on the dates they have readings
+- The envelope chart will render immediately
+- "Validated Days" will show the actual count of dates with data
+- No changes to any other file
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| Database migration | Add `cb_rating text` column to `project_tenants` |
-| `src/components/projects/TenantManager.tsx` | Auto-detect delimiter; save `cb_rating` on import; display rating column |
-| `src/components/projects/TenantColumnMapper.tsx` | Add `rating` role with auto-detection, icon, and badge |
-| `src/components/projects/load-profile/types.ts` | Add `cb_rating` to `Tenant` interface |
+| `useValidatedSiteData.ts` | Replace strict overlap (Pass 2) with union of all dates |
 
