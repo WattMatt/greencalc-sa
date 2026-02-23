@@ -1,40 +1,62 @@
 
-## Add Tooltip with Navigation Link to Stacked Meter Legend
 
-### Overview
-Each tenant label in the "By Meter" legend will get a tooltip saying "View in Tenants tab". Clicking the tooltip (or a small link icon) will navigate the user to the Tenants tab where that meter's data is managed.
+## Fix: kWh vs kW Handling in Load Profile Charts
 
-### Changes
+### The Problem
 
-**1. `src/components/projects/load-profile/charts/StackedMeterChart.tsx`**
-- Accept a new optional prop: `onNavigateToTenant?: (tenantId: string) => void`
-- Wrap each legend button in a `Tooltip` (from shadcn/ui) that shows "Click to view in Tenants tab"
-- Add a right-click or secondary action: left-click still toggles visibility, but the tooltip will contain a small clickable link/icon (e.g. an ExternalLink icon) that calls `onNavigateToTenant(tk.id)`
-- Alternative simpler UX: double-click navigates, single-click toggles. Or: add a small arrow icon next to each label that navigates on click, while the label itself still toggles.
-- Recommended approach: Add a `TooltipProvider` + `Tooltip` around each legend item. The tooltip content includes the tenant name and a "Go to Tenants" link button. Single-click on the label still toggles visibility. The tooltip's link button triggers navigation.
+Your meter data is in **kWh** (energy per interval), but the load profile charts treat all values as if they are **kW** (instantaneous power). This causes incorrect readings:
 
-**2. `src/components/projects/load-profile/charts/LoadEnvelopeChart.tsx`**
-- Accept and pass through `onNavigateToTenant` prop to `StackedMeterChart`
+- For 30-minute interval data: the chart shows roughly **half** the actual demand
+- For 15-minute interval data: the chart shows roughly **one quarter** of the actual demand
 
-**3. `src/components/projects/load-profile/index.tsx`**
-- Accept and pass through `onNavigateToTenant` prop to `LoadEnvelopeChart`
+The core issue is that when multiple readings fall within the same hour, the system **averages** them. For kW data, averaging is correct. For kWh data, you need to **sum** the values to get total kWh for the hour (which numerically equals the average kW for that hour).
 
-**4. `src/pages/ProjectDetail.tsx`**
-- Pass `onNavigateToTenant` to `LoadProfileChart` that calls `setActiveTab("tenants")` (and optionally scrolls/highlights the tenant row)
+### How It Will Be Fixed
 
-### Technical Details
+**1. Store the unit type alongside raw data**
 
-The legend item interaction model:
-- **Single click**: Toggles meter visibility (existing behaviour, preserved)
-- **Tooltip on hover**: Shows tenant name + a small "Go to Tenants" link
-- **Click the link in the tooltip**: Navigates to the Tenants tab
+Add a `value_unit` column to the `scada_imports` table so the system knows whether stored values are kWh, kW, or another unit. This preserves the information that is already captured during import but currently discarded after processing.
 
-Props threaded through the component chain:
-```
-ProjectDetail (setActiveTab) 
-  -> LoadProfileChart (onNavigateToTenant)
-    -> LoadEnvelopeChart (onNavigateToTenant)
-      -> StackedMeterChart (onNavigateToTenant)
+Database migration:
+```sql
+ALTER TABLE scada_imports ADD COLUMN value_unit text DEFAULT 'kWh';
 ```
 
-The tooltip will use the existing shadcn `Tooltip` component (`@/components/ui/tooltip`) and a small `ExternalLink` or `ArrowRight` icon from `lucide-react` to indicate it is a navigation action.
+**2. Pass the unit through during import**
+
+Update `SitesTab.tsx` to save the selected `valueUnit` to the new `value_unit` column when processing meter data.
+
+**3. Fix `useValidatedSiteData.ts` — the main calculation engine**
+
+Currently (line 97):
+```
+avgKw = entry.sum / entry.count
+```
+
+Updated logic:
+- If `value_unit` is an energy unit (kWh, Wh, MWh, kVAh): **sum** readings in the hour (total kWh in 1 hour = average kW)
+- If `value_unit` is a power unit (kW, W, MW, kVA): **average** readings in the hour (as currently done)
+
+For existing data without a stored unit, **default to kWh** (since that is the most common format for SA SCADA exports).
+
+**4. Fix `useStackedMeterData.ts` — the "By Meter" chart**
+
+This hook also needs the same logic. Currently it takes the **max** of raw values per hour. For kWh data, it should first sum sub-hourly readings into hourly kW, then take the max across days.
+
+### Files to Change
+
+| File | Change |
+|------|--------|
+| `scada_imports` table | Add `value_unit` column (default `'kWh'`) |
+| `src/components/loadprofiles/SitesTab.tsx` | Save `valueUnit` to DB during processing |
+| `src/components/projects/load-profile/types.ts` | Add `value_unit` to the Tenant/scada_imports type |
+| `src/components/projects/load-profile/hooks/useValidatedSiteData.ts` | Sum kWh readings instead of averaging; pass unit info through |
+| `src/components/projects/load-profile/hooks/useStackedMeterData.ts` | Same correction for the stacked meter view |
+| `src/components/projects/load-profile/hooks/useLoadProfileData.ts` | Align the `correctProfileForInterval` function with the new logic |
+
+### Backwards Compatibility
+
+- Existing meters without `value_unit` will default to `'kWh'`, which matches most SA SCADA exports
+- The fix will immediately correct the chart values for all existing data
+- No re-import of data is required
+
