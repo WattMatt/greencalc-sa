@@ -259,7 +259,9 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
       const commas = (headerLine.match(/,/g) || []).length;
       const delimiter = semicolons > commas && semicolons > tabs ? ";" : tabs > commas ? "\t" : ",";
       const headers = headerLine.split(delimiter).map(h => h.trim());
-      const rows = lines.slice(1).map(l => l.split(delimiter).map(c => c.trim()));
+      const rows = lines.slice(1)
+        .map(l => l.split(delimiter).map(c => c.trim()))
+        .filter(r => r.some(c => c.length > 0)); // Skip blank rows
       setDialogOpen(false);
       setColumnMapperData({ headers, rows });
       setColumnMapperOpen(true);

@@ -54,8 +54,8 @@ function autoDetectRoles(headers: string[]): Map<number, TenantColumnRole> {
   const lower = headers.map(h => h.toLowerCase().trim());
 
   const shopNumIdx = lower.findIndex(h =>
-    h.includes("shop_number") || h.includes("shop number") || h.includes("unit") ||
-    (h.includes("number") && !h.includes("phone"))
+    h.includes("shop_number") || h.includes("shop number") || h.includes("shop nr") || h.includes("unit") ||
+    (h.includes("number") && !h.includes("phone")) || (h === "nr" || h === "no" || h === "no.")
   );
   const shopNameIdx = lower.findIndex(h =>
     h.includes("shop_name") || h.includes("shop name") || h.includes("tenant") ||
