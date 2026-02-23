@@ -1,0 +1,1 @@
+ALTER TABLE public.scada_imports ADD COLUMN value_unit text DEFAULT 'kWh';

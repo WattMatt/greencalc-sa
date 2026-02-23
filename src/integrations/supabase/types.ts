@@ -1857,6 +1857,7 @@ export type Database = {
           site_id: string | null
           site_name: string
           updated_at: string
+          value_unit: string | null
           weekday_days: number | null
           weekend_days: number | null
         }
@@ -1882,6 +1883,7 @@ export type Database = {
           site_id?: string | null
           site_name: string
           updated_at?: string
+          value_unit?: string | null
           weekday_days?: number | null
           weekend_days?: number | null
         }
@@ -1907,6 +1909,7 @@ export type Database = {
           site_id?: string | null
           site_name?: string
           updated_at?: string
+          value_unit?: string | null
           weekday_days?: number | null
           weekend_days?: number | null
         }
