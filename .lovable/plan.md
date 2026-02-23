@@ -1,52 +1,54 @@
 
+## Add Outlier Detection to SCADA Data Validation
 
-## Combine Load Profile and Envelope into a Single "Load Envelope" Chart
+### Problem
+Individual tenant meters can have faulty readings (e.g., stuck meters reporting 1,200 kW flat for an entire day). These single-day anomalies inflate the envelope "Max" line and distort averages.
 
-### What Changes
+### Approach: Per-Tenant IQR-Based Outlier Removal
 
-Replace the two separate charts (Load Profile + Envelope) with a single combined chart called **Load Envelope** that shows:
-- The min/max shaded band (envelope area)
-- The min and max boundary lines
-- The average dashed line
-- TOU colour bars in the background
-- A unified tooltip showing Max, Avg, Min values plus the TOU period badge
+Outlier detection will be applied **per tenant** in `useValidatedSiteData.ts` (Pass 2.5, between building per-tenant date maps and computing site-level totals). This catches bad data at the source before it propagates.
+
+**Algorithm:**
+1. For each tenant, compute the **median daily total kWh** across all their dates
+2. Compute the **IQR** (interquartile range) of daily totals
+3. Flag any date where the daily total exceeds **Q3 + 3x IQR** as an outlier (a generous threshold to only catch truly anomalous days like the 1,200 kW spike)
+4. Remove flagged dates from that tenant's date map
+5. Expose an `outlierCount` in the return value so the UI can inform the user
 
 ### File Changes
 
-**1. New file: `src/components/projects/load-profile/charts/LoadEnvelopeChart.tsx`**
-- A single `ComposedChart` combining elements from both `LoadChart` and `EnvelopeChart`
-- TOU `ReferenceArea` bands from `LoadChart` (conditional on `showTOU` prop)
-- Stacked area trick (transparent base + filled band) from `EnvelopeChart`
-- Min/Max solid lines and Avg dashed line from `EnvelopeChart`
-- Combined tooltip: hour label, TOU badge, Max/Avg/Min values
-- Year range selectors in the header (from `EnvelopeChart`)
-- Loading spinner state
-- Title: "Load Envelope"
+**1. Edit: `src/components/projects/load-profile/hooks/useValidatedSiteData.ts`**
+- After Pass 1 (building per-tenant date maps), add a new **Pass 1.5: Outlier Removal**
+- For each tenant in `tenantDateMaps`:
+  - Collect daily totals (sum of 24 hourly values) for all dates
+  - Sort and compute Q1, Q3, IQR
+  - Calculate upper fence = Q3 + 3 * IQR
+  - Delete any date entry where the daily total exceeds the upper fence
+- Track total outlier dates removed across all tenants
+- Add `outlierCount: number` to the `ValidatedSiteData` interface and return value
 
 **2. Edit: `src/components/projects/load-profile/index.tsx`**
-- Remove the `<LoadChart>` render (line 282)
-- Remove the `<EnvelopeChart>` render (lines 284-293)
-- Replace with a single `<LoadEnvelopeChart>` that receives:
-  - `envelopeData`, `availableYears`, `yearFrom`, `yearTo`, `setYearFrom`, `setYearTo` (from envelope hook)
-  - `showTOU`, `isWeekend`, `unit`, `isLoading` (from existing state)
-- Update imports accordingly
+- Destructure `outlierCount` from `useValidatedSiteData`
+- Display a small info badge near the chart header when outliers were removed (e.g., "2 outlier days excluded")
 
-**3. Delete or leave unused: `LoadChart.tsx` and `EnvelopeChart.tsx`**
-- These become unused after the merge. They can be removed to keep the codebase clean.
+### Technical Detail
 
-### Technical Details
+```text
+Per-tenant outlier detection (IQR method):
 
-The combined chart component will:
-- Use the envelope data (24 hourly points with min/max/avg) as its primary dataset
-- Transform it into `{ hour, base, band, avg, min, max }` (same as current EnvelopeChart)
-- Render TOU `ReferenceArea` blocks behind the data (same logic as current LoadChart)
-- The tooltip will show the TOU period badge alongside Max/Avg/Min values
-- The `syncId="loadProfileSync"` is preserved for synchronisation with Solar/Grid/Battery charts
-- Year range selectors remain in the chart header area
+  dailyTotals = [sum of 24h for each date]
+  sorted = dailyTotals.sort()
+  Q1 = sorted[25th percentile]
+  Q3 = sorted[75th percentile]
+  IQR = Q3 - Q1
+  upperFence = Q3 + 3 * IQR
+
+  If dailyTotal > upperFence --> remove that date for this tenant
+```
+
+The 3x IQR multiplier is deliberately generous -- it will only catch extreme spikes (like a 1,200 kW reading on a 20 kW meter) while preserving normal seasonal variation.
 
 ### What Stays the Same
-- All data hooks (`useEnvelopeData`, `useLoadProfileData`) remain untouched
-- Solar, Grid Flow, and Battery charts are unaffected
-- ChartStats, export handlers, and all other UI components unchanged
-- TOULegend component continues to work as before
-
+- All downstream hooks (`useLoadProfileData`, `useEnvelopeData`) are unaffected -- they consume the already-cleaned `siteDataByDate`
+- The site-level outage threshold (75 kW) remains as a separate filter
+- Chart components, export handlers, and PV/battery logic are untouched
