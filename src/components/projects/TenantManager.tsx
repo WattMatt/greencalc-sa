@@ -328,21 +328,35 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
     enabled: tenants.length > 0,
   });
 
-  // Fetch SCADA imports for profile assignment (filtered by scope)
+  // Fetch SCADA imports for profile assignment (filtered by scope) - paginated to avoid 1000-row limit
   const { data: scadaImports } = useQuery({
     queryKey: ["scada-imports-for-assignment", profileScope, projectId],
     queryFn: async () => {
-      let query = supabase
-        .from("scada_imports")
-        .select("id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend, meter_label, meter_color, date_range_start, date_range_end, weekday_days, weekend_days, processed_at, shop_number");
-      
-      if (profileScope === 'local') {
-        query = query.eq('project_id', projectId);
+      const PAGE_SIZE = 1000;
+      let allData: ScadaImport[] = [];
+      let from = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase
+          .from("scada_imports")
+          .select("id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend, meter_label, meter_color, date_range_start, date_range_end, weekday_days, weekend_days, processed_at, shop_number")
+          .order("shop_name")
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (profileScope === 'local') {
+          query = query.eq('project_id', projectId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        allData = allData.concat(data as ScadaImport[]);
+        hasMore = (data?.length ?? 0) === PAGE_SIZE;
+        from += PAGE_SIZE;
       }
-      
-      const { data, error } = await query.order("shop_name");
-      if (error) throw error;
-      return data as ScadaImport[];
+
+      return allData;
     },
   });
 
