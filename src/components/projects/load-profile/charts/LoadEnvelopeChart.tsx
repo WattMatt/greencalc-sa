@@ -206,6 +206,8 @@ export function LoadEnvelopeChart({
                   if (!d) return null;
                   const hourNum = parseInt(label?.toString() || "0");
                   const period = getTOUPeriod(hourNum, isWeekend);
+                  const modeLabel = stackedMode === "max" ? "Max" : stackedMode === "min" ? "Min" : "Avg";
+                  const modeValue = stackedMode === "max" ? d.max : stackedMode === "min" ? d.min : d.avg;
                   return (
                     <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
                       <div className="flex items-center gap-2 mb-1">
@@ -218,20 +220,10 @@ export function LoadEnvelopeChart({
                           {TOU_COLORS[period].label}
                         </Badge>
                       </div>
-                      <div className="space-y-0.5 text-sm">
-                        <p>
-                          <span className="text-muted-foreground">Max:</span>{" "}
-                          <span className="font-semibold">{d.max.toFixed(1)} {unit}</span>
-                        </p>
-                        <p>
-                          <span className="text-muted-foreground">Avg:</span>{" "}
-                          <span className="font-semibold">{d.avg.toFixed(1)} {unit}</span>
-                        </p>
-                        <p>
-                          <span className="text-muted-foreground">Min:</span>{" "}
-                          <span className="font-semibold">{d.min.toFixed(1)} {unit}</span>
-                        </p>
-                      </div>
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">{modeLabel}:</span>{" "}
+                        <span className="font-semibold">{modeValue.toFixed(1)} {unit}</span>
+                      </p>
                     </div>
                   );
                 }}
