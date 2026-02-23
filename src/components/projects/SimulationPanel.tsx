@@ -162,6 +162,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [solarCapacity, setSolarCapacity] = useState(100);
   const [batteryCapacity, setBatteryCapacity] = useState(includesBattery ? 50 : 0);
   const [batteryPower, setBatteryPower] = useState(includesBattery ? 25 : 0);
+  const [batteryDoD, setBatteryDoD] = useState(85); // Depth of Discharge %
   const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [solarDataSource, setSolarDataSource] = useState<SolarDataSource>("pvgis_monthly");
@@ -1476,10 +1477,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Row 1: Capacity, Power */}
+                  {/* Row 1: DC Capacity, Power */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-xs">Capacity (kWh)</Label>
+                      <Label className="text-xs">DC Capacity (kWh)</Label>
                       <Input
                         type="number"
                         value={batteryCapacity}
@@ -1504,10 +1505,22 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     </div>
                   </div>
 
-                  {/* Row 2: Charge Rate, Discharge Rate, Usable Capacity (read-only) */}
+                  {/* Row 2: DoD, C-Rate, AC Capacity (computed) */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-xs">Charge Rate (C)</Label>
+                      <Label className="text-xs">Depth of Discharge (%)</Label>
+                      <Input
+                        type="number"
+                        value={batteryDoD}
+                        onChange={(e) => setBatteryDoD(Math.max(10, Math.min(100, parseInt(e.target.value) || 85)))}
+                        className="h-8"
+                        min={10}
+                        max={100}
+                        step={5}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">C-Rate</Label>
                       <Input
                         type="number"
                         value={batteryCapacity > 0 ? (batteryPower / batteryCapacity).toFixed(2) : '0.00'}
@@ -1516,30 +1529,21 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Max SoC (%)</Label>
+                      <Label className="text-xs">AC Capacity (kWh)</Label>
                       <Input
                         type="number"
-                        value={95}
-                        disabled
-                        className="h-8 bg-muted"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Min SoC (%)</Label>
-                      <Input
-                        type="number"
-                        value={10}
+                        value={(batteryCapacity * batteryDoD / 100).toFixed(1)}
                         disabled
                         className="h-8 bg-muted"
                       />
                     </div>
                   </div>
 
-                  {/* Row 3: Usable capacity and cycle info */}
+                  {/* Summary stats */}
                   <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
                     <div className="flex justify-between">
                       <span>Usable capacity</span>
-                      <span className="text-foreground">{(batteryCapacity * 0.85).toFixed(0)} kWh</span>
+                      <span className="text-foreground">{(batteryCapacity * batteryDoD / 100).toFixed(0)} kWh</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Daily cycles</span>
