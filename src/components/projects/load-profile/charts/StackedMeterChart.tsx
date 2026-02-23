@@ -34,7 +34,7 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, 
     <div className="space-y-1.5">
       <div className="h-[200px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync">
+          <ComposedChart data={[...data, { ...data[data.length - 1], hour: "24:00" }]} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} syncId="loadProfileSync">
             <defs>
               {tenantKeys.map((tk) => (
                 <linearGradient key={tk.id} id={`stackFill-${tk.id}`} x1="0" y1="0" x2="0" y2="1">
@@ -47,7 +47,7 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, 
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getTOUPeriod(h, isWeekend);
-                const nextHour = h === 23 ? 23 : h + 1;
+                const nextHour = h + 1;
                 return (
                   <ReferenceArea
                     key={h}

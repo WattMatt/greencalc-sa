@@ -73,6 +73,12 @@ export function LoadEnvelopeChart({
     max: d.max,
   }));
 
+  // Add endpoint so TOU band covers hour 23-24
+  const lastPoint = chartData[chartData.length - 1];
+  if (lastPoint) {
+    chartData.push({ ...lastPoint, hour: "24:00" });
+  }
+
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
@@ -171,7 +177,7 @@ export function LoadEnvelopeChart({
               {showTOU &&
                 Array.from({ length: 24 }, (_, h) => {
                   const period = getTOUPeriod(h, isWeekend);
-                  const nextHour = h === 23 ? 23 : h + 1;
+                  const nextHour = h + 1;
                   return (
                     <ReferenceArea
                       key={h}
