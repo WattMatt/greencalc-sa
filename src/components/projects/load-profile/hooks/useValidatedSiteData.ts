@@ -109,10 +109,13 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
     }
 
     // === Pass 1.5: Per-tenant IQR-based outlier removal ===
+    // Only removes extreme spikes (stuck meters etc.) — requires BOTH:
+    //   1. Daily total > Q3 + 3*IQR  (statistical outlier)
+    //   2. Daily total > 5x median   (sanity check to avoid over-filtering)
     let outlierCount = 0;
     for (const tenantId of tenantsWithRawData) {
       const dateMap = tenantDateMaps.get(tenantId)!;
-      if (dateMap.size < 8) continue; // need enough data for meaningful IQR
+      if (dateMap.size < 20) continue; // need enough data for meaningful statistics
 
       // Collect daily totals
       const dailyTotals: { date: string; total: number }[] = [];
@@ -122,14 +125,16 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
 
       // Sort by total
       const sorted = dailyTotals.map(d => d.total).sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length * 0.5)];
       const q1 = sorted[Math.floor(sorted.length * 0.25)];
       const q3 = sorted[Math.floor(sorted.length * 0.75)];
       const iqr = q3 - q1;
       const upperFence = q3 + 3 * iqr;
+      const medianGate = median * 5;
 
-      // Remove outlier dates
+      // Remove outlier dates — must exceed BOTH thresholds
       for (const { date, total } of dailyTotals) {
-        if (total > upperFence) {
+        if (total > upperFence && total > medianGate) {
           dateMap.delete(date);
           outlierCount++;
         }
