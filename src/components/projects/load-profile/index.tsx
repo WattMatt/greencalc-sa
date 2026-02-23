@@ -55,7 +55,7 @@ export function LoadProfileChart({
   systemIncludesBattery = false,
 }: LoadProfileChartProps) {
   // Fetch raw SCADA data on demand
-  const { rawDataMap } = useRawScadaData({ projectId });
+  const { rawDataMap, isLoadingRawData } = useRawScadaData({ projectId });
 
   // Shared validated site data — single parse, single validation
   const validatedSiteData = useValidatedSiteData({ tenants, rawDataMap });
@@ -203,6 +203,20 @@ export function LoadProfileChart({
       <Card className="border-dashed">
         <CardContent className="flex flex-col items-center justify-center py-12">
           <p className="text-muted-foreground text-center">Add tenants to see the combined load profile</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isLoadingRawData && projectId) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-16">
+          <div className="animate-pulse space-y-4 w-full">
+            <div className="h-6 bg-muted rounded w-1/3" />
+            <div className="h-[300px] bg-muted rounded w-full" />
+            <div className="h-[200px] bg-muted rounded w-full" />
+          </div>
         </CardContent>
       </Card>
     );
