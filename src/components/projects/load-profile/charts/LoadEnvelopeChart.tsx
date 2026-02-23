@@ -6,7 +6,7 @@ import { Loader2, Layers, BarChart3 } from "lucide-react";
 import { getTOUPeriod, TOU_COLORS } from "../types";
 import { EnvelopePoint } from "../hooks/useEnvelopeData";
 import { StackedMeterChart } from "./StackedMeterChart";
-import { StackedMeterPoint } from "../hooks/useStackedMeterData";
+import { StackedMeterPoint, StackedMode } from "../hooks/useStackedMeterData";
 
 export type ChartViewMode = "envelope" | "stacked";
 
@@ -27,6 +27,8 @@ interface LoadEnvelopeChartProps {
   stackedData?: StackedMeterPoint[];
   stackedTenantKeys?: { id: string; label: string; color: string }[];
   onNavigateToTenant?: (tenantId: string) => void;
+  stackedMode?: StackedMode;
+  onStackedModeChange?: (mode: StackedMode) => void;
 }
 
 export function LoadEnvelopeChart({
@@ -46,6 +48,8 @@ export function LoadEnvelopeChart({
   stackedData,
   stackedTenantKeys,
   onNavigateToTenant,
+  stackedMode = "avg",
+  onStackedModeChange,
 }: LoadEnvelopeChartProps) {
   if (isLoading) {
     return (
@@ -90,6 +94,26 @@ export function LoadEnvelopeChart({
             By Meter
           </ToggleGroupItem>
         </ToggleGroup>
+        {viewMode === "stacked" && onStackedModeChange && (
+          <ToggleGroup
+            type="single"
+            value={stackedMode}
+            onValueChange={(v) => { if (v) onStackedModeChange(v as StackedMode); }}
+            size="sm"
+            variant="outline"
+            className="h-6"
+          >
+            <ToggleGroupItem value="avg" aria-label="Average mode" className="h-6 px-2 text-[10px]">
+              Avg
+            </ToggleGroupItem>
+            <ToggleGroupItem value="max" aria-label="Max mode" className="h-6 px-2 text-[10px]">
+              Max
+            </ToggleGroupItem>
+            <ToggleGroupItem value="min" aria-label="Min mode" className="h-6 px-2 text-[10px]">
+              Min
+            </ToggleGroupItem>
+          </ToggleGroup>
+        )}
         {outlierCount > 0 && (
           <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
             {outlierCount} outlier day{outlierCount !== 1 ? "s" : ""} excluded
