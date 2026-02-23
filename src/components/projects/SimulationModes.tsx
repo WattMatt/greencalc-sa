@@ -22,6 +22,8 @@ interface SimulationModesProps {
   systemCosts: SystemCostsData;
   onSystemCostsChange: (costs: SystemCostsData) => void;
   includesBattery?: boolean;
+  includesSolar?: boolean;
+  onRequestEnableFeature?: (feature: string) => void;
   blendedRateType?: BlendedRateType;
   onBlendedRateTypeChange?: (type: BlendedRateType) => void;
 }
@@ -30,7 +32,7 @@ export interface SimulationModesRef {
   saveIfNeeded: () => Promise<void>;
 }
 
-export const SimulationModes = forwardRef<SimulationModesRef, SimulationModesProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, blendedRateType, onBlendedRateTypeChange }, ref) => {
+export const SimulationModes = forwardRef<SimulationModesRef, SimulationModesProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, includesSolar = true, onRequestEnableFeature, blendedRateType, onBlendedRateTypeChange }, ref) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeMode, setActiveMode] = useState("profile-builder");
@@ -114,6 +116,8 @@ export const SimulationModes = forwardRef<SimulationModesRef, SimulationModesPro
           systemCosts={systemCosts}
           onSystemCostsChange={onSystemCostsChange}
           includesBattery={includesBattery}
+          includesSolar={includesSolar}
+          onRequestEnableFeature={onRequestEnableFeature}
           blendedRateType={blendedRateType}
           onBlendedRateTypeChange={onBlendedRateTypeChange}
         />

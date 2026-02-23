@@ -75,6 +75,7 @@ import { PVsystLossChainConfig as PVsystLossChainConfigPanel } from "./PVsystLos
 import { useLoadProfileData } from "./load-profile/hooks/useLoadProfileData";
 import { useSolcastPVProfile } from "./load-profile/hooks/useSolcastPVProfile";
 import { Tenant as FullTenant, ShopType as FullShopType } from "./load-profile/types";
+import { ConfigCarousel, CarouselPane } from "./simulation/ConfigCarousel";
 
 // Solar data source type
 type SolarDataSource = "solcast" | "pvgis_monthly" | "pvgis_tmy";
@@ -89,6 +90,8 @@ interface SimulationPanelProps {
   systemCosts: SystemCostsData;
   onSystemCostsChange: (costs: SystemCostsData) => void;
   includesBattery?: boolean;
+  includesSolar?: boolean;
+  onRequestEnableFeature?: (feature: string) => void;
   blendedRateType?: BlendedRateType;
   onBlendedRateTypeChange?: (type: BlendedRateType) => void;
 }
@@ -133,7 +136,7 @@ function DifferenceIndicator({ baseValue, compareValue, suffix = "", invert = fa
   );
 }
 
-export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, blendedRateType = 'solarHours', onBlendedRateTypeChange }, ref) => {
+export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, includesSolar = true, onRequestEnableFeature, blendedRateType = 'solarHours', onBlendedRateTypeChange }, ref) => {
   const queryClient = useQueryClient();
   
   // Fetch the most recent saved simulation FIRST
@@ -1308,462 +1311,463 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
       {/* Note: System Costs are now configured exclusively in the Costs tab */}
 
-      {/* System Configuration */}
-      <div className="grid gap-4 lg:gap-6 grid-cols-1 lg:grid-cols-3">
-        {/* Solar PV System - includes capacity slider + inverter size & module config */}
-        <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Sun className="h-4 w-4" />
-              Solar PV System
-              {maxSolarKva && (
-                <span className="text-xs font-normal text-muted-foreground ml-auto">
-                  Max: {maxSolarKva.toFixed(0)} kVA
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Solar Capacity Slider */}
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <Label className="text-xs">Capacity</Label>
-                <span className={`text-xs ${solarExceedsLimit ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                  {solarCapacity} kWp
-                </span>
-              </div>
-              <Slider
-                value={[solarCapacity]}
-                onValueChange={([v]) => setSolarCapacity(v)}
-                min={10}
-                max={maxSolarKva ? Math.max(maxSolarKva * 1.5, 500) : 500}
-                step={10}
-                className={solarExceedsLimit ? "[&_[role=slider]]:border-destructive [&_[role=slider]]:bg-destructive" : ""}
-              />
-              {maxSolarKva && (
-                <div className="flex justify-between text-[10px] text-muted-foreground">
-                  <span>10 kWp</span>
-                  <span className="text-warning">70% limit: {maxSolarKva.toFixed(0)}</span>
-                  <span>{Math.round(maxSolarKva * 1.5)} kWp</span>
-                </div>
-              )}
-            </div>
-
-            {/* Inverter Size & Module Config - below the slider */}
-            <div className="pt-2 border-t">
-              <InverterSizeModuleConfig
-                config={inverterConfig}
-                onChange={setInverterConfig}
-                onSolarCapacityChange={setSolarCapacity}
-              />
-            </div>
-            
-            {/* Energy output estimate (tariff-independent) - editable with reset */}
-            <div className="pt-2 border-t space-y-2 text-[10px]">
-              <div className="flex items-center justify-between gap-2">
-                <Label className="text-muted-foreground text-[10px]">Expected daily output</Label>
-                <div className="flex items-center gap-1">
-                  <Input
-                    type="number"
-                    value={dailyOutputOverride ?? (annualPVsystResult 
-                      ? Math.round(annualPVsystResult.eGrid / 365)
-                      : Math.round(energyResults.totalDailySolar))}
-                    onChange={(e) => setDailyOutputOverride(parseInt(e.target.value) || 0)}
-                    className="h-6 w-20 text-right text-xs"
+      {/* System Configuration Carousel */}
+      <ConfigCarousel
+        panes={[
+          {
+            id: 'solarPV',
+            label: 'Solar Modules',
+            icon: <Sun className="h-4 w-4" />,
+            enabled: includesSolar,
+            disabledMessage: 'Solar PV is not enabled for this project',
+            content: (
+              <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Sun className="h-4 w-4" />
+                    Solar PV System
+                    {maxSolarKva && (
+                      <span className="text-xs font-normal text-muted-foreground ml-auto">
+                        Max: {maxSolarKva.toFixed(0)} kVA
+                      </span>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Solar Capacity Slider */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <Label className="text-xs">Capacity</Label>
+                      <span className={`text-xs ${solarExceedsLimit ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                        {solarCapacity} kWp
+                      </span>
+                    </div>
+                    <Slider
+                      value={[solarCapacity]}
+                      onValueChange={([v]) => setSolarCapacity(v)}
+                      min={10}
+                      max={maxSolarKva ? Math.max(maxSolarKva * 1.5, 500) : 500}
+                      step={10}
+                      className={solarExceedsLimit ? "[&_[role=slider]]:border-destructive [&_[role=slider]]:bg-destructive" : ""}
+                    />
+                    {maxSolarKva && (
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>10 kWp</span>
+                        <span className="text-warning">70% limit: {maxSolarKva.toFixed(0)}</span>
+                        <span>{Math.round(maxSolarKva * 1.5)} kWp</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Inverter Size & Module Config */}
+                  <div className="pt-2 border-t">
+                    <InverterSizeModuleConfig
+                      config={inverterConfig}
+                      onChange={setInverterConfig}
+                      onSolarCapacityChange={setSolarCapacity}
+                    />
+                  </div>
+                  {/* Energy output estimate */}
+                  <div className="pt-2 border-t space-y-2 text-[10px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-muted-foreground text-[10px]">Expected daily output</Label>
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          value={dailyOutputOverride ?? (annualPVsystResult 
+                            ? Math.round(annualPVsystResult.eGrid / 365)
+                            : Math.round(energyResults.totalDailySolar))}
+                          onChange={(e) => setDailyOutputOverride(parseInt(e.target.value) || 0)}
+                          className="h-6 w-20 text-right text-xs"
+                        />
+                        <span className="text-xs text-muted-foreground">kWh</span>
+                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setDailyOutputOverride(null)} title="Reset to calculated value">
+                          <RefreshCw className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-muted-foreground text-[10px]">Specific yield</Label>
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          value={specificYieldOverride ?? (annualPVsystResult 
+                            ? Math.round(annualPVsystResult.specificYield)
+                            : Math.round((energyResults.totalDailySolar * 365) / solarCapacity))}
+                          onChange={(e) => setSpecificYieldOverride(parseInt(e.target.value) || 0)}
+                          className="h-6 w-20 text-right text-xs"
+                        />
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">kWh/kWp/yr</span>
+                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setSpecificYieldOverride(null)} title="Reset to calculated value">
+                          <RefreshCw className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Production Reduction */}
+                  <div className="pt-2 border-t">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-muted-foreground text-[10px]">Production reduction</Label>
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          value={productionReductionPercent}
+                          onChange={(e) => setProductionReductionPercent(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                          className="h-6 w-16 text-right text-xs"
+                          min={0}
+                          max={100}
+                        />
+                        <span className="text-xs text-muted-foreground">%</span>
+                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setProductionReductionPercent(15)} title="Reset to default (15%)">
+                          <RefreshCw className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    {productionReductionPercent > 0 && (
+                      <p className="text-[9px] text-muted-foreground mt-1">
+                        Output reduced by {productionReductionPercent}% for conservative estimate
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ),
+          },
+          {
+            id: 'inverters',
+            label: 'Inverters',
+            icon: <Zap className="h-4 w-4" />,
+            enabled: includesSolar,
+            disabledMessage: 'Enable Solar PV to configure inverters',
+            content: (
+              <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Zap className="h-4 w-4" />
+                    Inverter-Based Sizing
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Size system based on inverter capacity and grouping
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <InverterSliderPanel
+                    config={inverterConfig}
+                    onChange={setInverterConfig}
+                    currentSolarCapacity={solarCapacity}
+                    onSolarCapacityChange={setSolarCapacity}
+                    maxSolarKva={maxSolarKva}
                   />
-                  <span className="text-xs text-muted-foreground">kWh</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5"
-                    onClick={() => setDailyOutputOverride(null)}
-                    title="Reset to calculated value"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label className="text-muted-foreground text-[10px]">Specific yield</Label>
-                <div className="flex items-center gap-1">
-                  <Input
-                    type="number"
-                    value={specificYieldOverride ?? (annualPVsystResult 
-                      ? Math.round(annualPVsystResult.specificYield)
-                      : Math.round((energyResults.totalDailySolar * 365) / solarCapacity))}
-                    onChange={(e) => setSpecificYieldOverride(parseInt(e.target.value) || 0)}
-                    className="h-6 w-20 text-right text-xs"
-                  />
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">kWh/kWp/yr</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5"
-                    onClick={() => setSpecificYieldOverride(null)}
-                    title="Reset to calculated value"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-            
-            {/* Production Reduction - conservative safety margin */}
-            <div className="pt-2 border-t">
-              <div className="flex items-center justify-between gap-2">
-                <Label className="text-muted-foreground text-[10px]">Production reduction</Label>
-                <div className="flex items-center gap-1">
-                  <Input
-                    type="number"
-                    value={productionReductionPercent}
-                    onChange={(e) => setProductionReductionPercent(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
-                    className="h-6 w-16 text-right text-xs"
-                    min={0}
-                    max={100}
-                  />
-                  <span className="text-xs text-muted-foreground">%</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5"
-                    onClick={() => setProductionReductionPercent(15)}
-                    title="Reset to default (15%)"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-              {productionReductionPercent > 0 && (
-                <p className="text-[9px] text-muted-foreground mt-1">
-                  Output reduced by {productionReductionPercent}% for conservative estimate
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Inverter-Based Sizing - sliders, metrics, quick select */}
-        <Card className={solarExceedsLimit ? "border-destructive/50" : ""}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Zap className="h-4 w-4" />
-              Inverter-Based Sizing
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Size system based on inverter capacity and grouping
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <InverterSliderPanel
-              config={inverterConfig}
-              onChange={setInverterConfig}
-              currentSolarCapacity={solarCapacity}
-              onSolarCapacityChange={setSolarCapacity}
-              maxSolarKva={maxSolarKva}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Third column: Tariff Selector + Financial Returns (stacked) */}
-        <div className="flex flex-col gap-4">
-          {/* Simulation Tariff Rate Selector - compact pane */}
-          {hasFinancialData && annualBlendedRates && (
-            <Card className="border-primary/30">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Calculator className="h-4 w-4" />
-                  Simulation Tariff Rate
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex items-center gap-3">
-                  <Select 
-                    value={blendedRateType} 
-                    onValueChange={(value: BlendedRateType) => onBlendedRateTypeChange?.(value)}
-                  >
-                    <SelectTrigger className="w-56">
-                      <SelectValue placeholder="Select rate type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {/* Solar Hours options */}
-                      <SelectItem value="solarHours">
-                        <div className="flex items-center gap-2">
-                          <Sun className="h-4 w-4 text-amber-500" />
-                          <span>Solar Hours - Annual</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="solarHoursHigh">
-                        <div className="flex items-center gap-2">
-                          <Sun className="h-4 w-4 text-orange-500" />
-                          <span>Solar Hours - High (Winter)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="solarHoursLow">
-                        <div className="flex items-center gap-2">
-                          <Sun className="h-4 w-4 text-yellow-500" />
-                          <span>Solar Hours - Low (Summer)</span>
-                        </div>
-                      </SelectItem>
-                      {/* All Hours options */}
-                      <SelectItem value="allHours">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          <span>All Hours - Annual</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="allHoursHigh">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-orange-500" />
-                          <span>All Hours - High (Winter)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="allHoursLow">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-yellow-500" />
-                          <span>All Hours - Low (Summer)</span>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  
-                  <span className={`text-lg font-bold ml-auto ${blendedRateType?.startsWith('solarHours') ? 'text-amber-600' : ''}`}>
-                    R{(() => {
-                      switch (blendedRateType) {
-                        case 'solarHours': return annualBlendedRates.solarHours.annual;
-                        case 'solarHoursHigh': return annualBlendedRates.solarHours.high;
-                        case 'solarHoursLow': return annualBlendedRates.solarHours.low;
-                        case 'allHours': return annualBlendedRates.allHours.annual;
-                        case 'allHoursHigh': return annualBlendedRates.allHours.high;
-                        case 'allHoursLow': return annualBlendedRates.allHours.low;
-                        default: return annualBlendedRates.solarHours.annual;
-                      }
-                    })().toFixed(4)}/kWh
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Financial Return Outputs - now below the tariff selector */}
-          {hasFinancialData ? (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  Financial Return Outputs
-                  <span className="text-xs font-normal text-muted-foreground ml-auto">
-                    {project?.location || 'Site'}
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                {/* Table Rows */}
-                <div className="divide-y divide-border text-sm">
-                  <FinancialMetricRow
-                    label="ZAR / kWh (Incl. 3-Yr O&M)"
-                    value={((financialResults.systemCost + threeYearOM) / ((annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365) * reductionFactor)).toFixed(2)}
-                    breakdown={{
-                      formula: "(System Cost + 3-Yr O&M) ÷ (Annual Production × Reduction)",
-                      inputs: [
-                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
-                        { label: "3-Yr O&M Total", value: `R ${Math.round(threeYearOM).toLocaleString()}` },
-                        { label: "Annual Production", value: `${Math.round(annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365).toLocaleString()} kWh` },
-                        { label: "Reduction Factor", value: `${(reductionFactor * 100).toFixed(0)}%` },
-                      ],
-                    }}
-                  />
-                  <FinancialMetricRow
-                    label="ZAR / Wp (DC)"
-                    value={((financialResults.systemCost + threeYearOM) / (solarCapacity * inverterConfig.dcAcRatio * 1000)).toFixed(2)}
-                    breakdown={{
-                      formula: "(System Cost + 3-Yr O&M) ÷ (DC Capacity in Wp)",
-                      inputs: [
-                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
-                        { label: "3-Yr O&M Total", value: `R ${Math.round(threeYearOM).toLocaleString()}` },
-                        { label: "AC Capacity", value: `${solarCapacity} kW` },
-                        { label: "DC/AC Ratio", value: inverterConfig.dcAcRatio.toFixed(2) },
-                        { label: "DC Capacity", value: `${(solarCapacity * inverterConfig.dcAcRatio).toFixed(1)} kWp` },
-                      ],
-                    }}
-                  />
-                  <FinancialMetricRow
-                    label="ZAR / Wp (AC)"
-                    value={((financialResults.systemCost + threeYearOM) / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
-                    breakdown={{
-                      formula: "(System Cost + 3-Yr O&M) ÷ (AC Capacity in Wp)",
-                      inputs: [
-                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
-                        { label: "3-Yr O&M Total", value: `R ${Math.round(threeYearOM).toLocaleString()}` },
-                        { label: "AC Capacity", value: `${inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity} kW` },
-                      ],
-                    }}
-                  />
-                  <FinancialMetricRow
-                    label="LCOE (ZAR/kWh)"
-                    value={(advancedResults?.lcoe ?? basicFinancialMetrics.lcoe).toFixed(2)}
-                    breakdown={{
-                      formula: "Undiscounted Total Costs ÷ NPV of Energy Yield",
-                      inputs: [
-                        { label: "Initial Capital", value: `R ${financialResults.systemCost.toLocaleString()}` },
-                        { label: "20-Yr O&M (CPI escalated)", value: advancedResults?.columnTotals ? `R ${Math.round(advancedResults.columnTotals.totalOM).toLocaleString()}` : 'N/A' },
-                        { label: "20-Yr Insurance (CPI escalated)", value: advancedResults?.columnTotals ? `R ${Math.round(advancedResults.columnTotals.totalInsurance).toLocaleString()}` : 'N/A' },
-                        { label: "Replacements (Yr 10)", value: advancedResults?.columnTotals ? `R ${Math.round(advancedResults.columnTotals.totalReplacements).toLocaleString()}` : 'N/A' },
-                        { label: "NPV of Energy Yield", value: advancedResults?.columnTotals ? `${Math.round(advancedResults.columnTotals.npvEnergyYield).toLocaleString()} kWh` : 'N/A' },
-                        { label: "LCOE Discount Rate", value: `${systemCosts.lcoeDiscountRate ?? 10}%` },
-                      ],
-                    }}
-                  />
-                  {(() => {
-                    // Calculate Initial Yield using net cashflow: (Income Y1 - O&M Y1 - Insurance Y1) / Total Cost
-                    const year1Projection = advancedResults?.yearlyProjections?.[0];
-                    const totalIncomeY1 = year1Projection?.totalIncomeR ?? financialResults.annualSavings;
-                    const omCostY1 = year1Projection?.maintenanceCost ?? (systemCosts.maintenancePerYear ?? 0);
-                    // Insurance Rate is monthly - multiply by 12 for annual fallback
-                    const insuranceY1 = year1Projection?.insuranceCostR ?? (financialResults.systemCost * (systemCosts.insuranceRatePercent ?? 1) / 100 * 12);
-                    const netCashflowY1 = totalIncomeY1 - omCostY1 - insuranceY1;
-                    const initialYield = (netCashflowY1 / financialResults.systemCost) * 100;
-                    
-                    return (
-                      <FinancialMetricRow
-                        label="Initial Yield"
-                        value={`${initialYield.toFixed(2)}%`}
-                        breakdown={{
-                          formula: "((Total Income Y1 - O&M Y1 - Insurance Y1) ÷ Total Project Cost) × 100",
-                          inputs: [
-                            { label: "Total Income Y1", value: `R ${Math.round(totalIncomeY1).toLocaleString()}` },
-                            { label: "O&M Cost Y1", value: `R ${Math.round(omCostY1).toLocaleString()}` },
-                            { label: "Insurance Y1", value: `R ${Math.round(insuranceY1).toLocaleString()}` },
-                            { label: "Net Cashflow Y1", value: `R ${Math.round(netCashflowY1).toLocaleString()}` },
-                            { label: "Total Project Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
-                          ],
-                        }}
+                </CardContent>
+              </Card>
+            ),
+          },
+          {
+            id: 'battery',
+            label: 'Battery',
+            icon: <Battery className="h-4 w-4" />,
+            enabled: includesBattery,
+            disabledMessage: 'Battery storage is not enabled for this project',
+            content: (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Battery className="h-4 w-4" />
+                    Battery Storage
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <Label className="text-xs">Capacity</Label>
+                        <span className="text-xs text-muted-foreground">{batteryCapacity} kWh</span>
+                      </div>
+                      <Slider
+                        value={[batteryCapacity]}
+                        onValueChange={([v]) => setBatteryCapacity(v)}
+                        min={0}
+                        max={200}
+                        step={10}
                       />
-                    );
-                  })()}
-                  <FinancialMetricRow
-                    label="IRR"
-                    value={`${(advancedResults?.irr ?? basicFinancialMetrics.irr).toFixed(2)}%`}
-                    breakdown={{
-                      formula: "Rate where NPV of cashflows = 0",
-                      inputs: [
-                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
-                        { label: "Annual Savings (Yr 1)", value: `R ${Math.round(financialResults.annualSavings).toLocaleString()}` },
-                        { label: "Project Lifetime", value: `${advancedConfig.financial.projectLifetimeYears ?? 20} years` },
-                        { label: "Tariff Escalation", value: `${advancedConfig.financial.tariffEscalationRate ?? 10}%` },
-                      ],
-                    }}
-                  />
-                  <FinancialMetricRow
-                    label="MIRR"
-                    value={`${(advancedResults?.mirr ?? basicFinancialMetrics.mirr).toFixed(2)}%`}
-                    breakdown={{
-                      formula: "[(FV Positives / PV Negatives)^(1/n)] - 1",
-                      inputs: [
-                        { label: "Finance Rate", value: `${systemCosts.mirrFinanceRate ?? 10}%` },
-                        { label: "Reinvestment Rate", value: `${systemCosts.mirrReinvestmentRate ?? 12}%` },
-                        { label: "Project Lifetime", value: `${advancedConfig.financial.projectLifetimeYears ?? 20} years` },
-                      ],
-                    }}
-                  />
-                  <FinancialMetricRow
-                    label="Payback Period"
-                    value={formatPaybackPeriod(unifiedPaybackPeriod ?? financialResults.paybackYears)}
-                    breakdown={{
-                      formula: "Year when cumulative cashflow ≥ 0",
-                      inputs: [
-                        { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
-                        { label: "Year 1 Savings", value: `R ${Math.round(financialResults.annualSavings).toLocaleString()}` },
-                        { label: "Tariff Escalation", value: `${advancedConfig.financial.tariffEscalationRate ?? 10}%` },
-                      ],
-                    }}
-                  />
-                  <FinancialMetricRow
-                    label="NPV"
-                    value={Math.round(advancedResults?.npv ?? basicFinancialMetrics.npv).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    valueClassName={(advancedResults?.npv ?? basicFinancialMetrics.npv) >= 0 ? 'text-green-600' : 'text-red-600'}
-                    breakdown={{
-                      formula: "Σ (Cashflow_t ÷ (1 + r)^t)",
-                      inputs: [
-                        { label: "System Cost (Year 0)", value: `-R ${financialResults.systemCost.toLocaleString()}` },
-                        { label: "Annual Savings (Yr 1)", value: `R ${Math.round(financialResults.annualSavings).toLocaleString()}` },
-                        { label: "Discount Rate", value: `${advancedConfig.financial.discountRate ?? 10}%` },
-                        { label: "Project Lifetime", value: `${advancedConfig.financial.projectLifetimeYears ?? 20} years` },
-                      ],
-                    }}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="border-dashed">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-                  <TrendingUp className="h-4 w-4" />
-                  Financial Analysis
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">
-                  Select a tariff to enable cost analysis and ROI calculations.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-
-      {/* Battery Storage - separate row when enabled */}
-      {includesBattery && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Battery className="h-4 w-4" />
-              Battery Storage
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <Label className="text-xs">Capacity</Label>
-                  <span className="text-xs text-muted-foreground">{batteryCapacity} kWh</span>
-                </div>
-                <Slider
-                  value={[batteryCapacity]}
-                  onValueChange={([v]) => setBatteryCapacity(v)}
-                  min={0}
-                  max={200}
-                  step={10}
-                />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <Label className="text-xs">Power</Label>
+                        <span className="text-xs text-muted-foreground">{batteryPower} kW</span>
+                      </div>
+                      <Slider
+                        value={[batteryPower]}
+                        onValueChange={([v]) => setBatteryPower(v)}
+                        min={5}
+                        max={100}
+                        step={5}
+                      />
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
+                    <div className="flex justify-between">
+                      <span>Daily cycles</span>
+                      <span className="text-foreground">{energyResults.batteryCycles.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Energy throughput</span>
+                      <span className="text-foreground">{energyResults.totalBatteryDischarge.toFixed(0)} kWh</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ),
+          },
+          {
+            id: 'financial',
+            label: 'Financial',
+            icon: <TrendingUp className="h-4 w-4" />,
+            enabled: hasFinancialData,
+            cannotToggle: true,
+            disabledMessage: 'Select a tariff to enable financial analysis',
+            content: (
+              <div className="flex flex-col gap-4">
+                {/* Simulation Tariff Rate Selector */}
+                {hasFinancialData && annualBlendedRates && (
+                  <Card className="border-primary/30">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Calculator className="h-4 w-4" />
+                        Simulation Tariff Rate
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="flex items-center gap-3">
+                        <Select 
+                          value={blendedRateType} 
+                          onValueChange={(value: BlendedRateType) => onBlendedRateTypeChange?.(value)}
+                        >
+                          <SelectTrigger className="w-56">
+                            <SelectValue placeholder="Select rate type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="solarHours">
+                              <div className="flex items-center gap-2">
+                                <Sun className="h-4 w-4 text-amber-500" />
+                                <span>Solar Hours - Annual</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="solarHoursHigh">
+                              <div className="flex items-center gap-2">
+                                <Sun className="h-4 w-4 text-orange-500" />
+                                <span>Solar Hours - High (Winter)</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="solarHoursLow">
+                              <div className="flex items-center gap-2">
+                                <Sun className="h-4 w-4 text-yellow-500" />
+                                <span>Solar Hours - Low (Summer)</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="allHours">
+                              <div className="flex items-center gap-2">
+                                <Clock className="h-4 w-4" />
+                                <span>All Hours - Annual</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="allHoursHigh">
+                              <div className="flex items-center gap-2">
+                                <Clock className="h-4 w-4 text-orange-500" />
+                                <span>All Hours - High (Winter)</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="allHoursLow">
+                              <div className="flex items-center gap-2">
+                                <Clock className="h-4 w-4 text-yellow-500" />
+                                <span>All Hours - Low (Summer)</span>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <span className={`text-lg font-bold ml-auto ${blendedRateType?.startsWith('solarHours') ? 'text-amber-600' : ''}`}>
+                          R{(() => {
+                            switch (blendedRateType) {
+                              case 'solarHours': return annualBlendedRates.solarHours.annual;
+                              case 'solarHoursHigh': return annualBlendedRates.solarHours.high;
+                              case 'solarHoursLow': return annualBlendedRates.solarHours.low;
+                              case 'allHours': return annualBlendedRates.allHours.annual;
+                              case 'allHoursHigh': return annualBlendedRates.allHours.high;
+                              case 'allHoursLow': return annualBlendedRates.allHours.low;
+                              default: return annualBlendedRates.solarHours.annual;
+                            }
+                          })().toFixed(4)}/kWh
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                {/* Financial Return Outputs */}
+                {hasFinancialData ? (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        Financial Return Outputs
+                        <span className="text-xs font-normal text-muted-foreground ml-auto">
+                          {project?.location || 'Site'}
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="divide-y divide-border text-sm">
+                        <FinancialMetricRow
+                          label="ZAR / kWh (Incl. 3-Yr O&M)"
+                          value={((financialResults.systemCost + threeYearOM) / ((annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365) * reductionFactor)).toFixed(2)}
+                          breakdown={{
+                            formula: "(System Cost + 3-Yr O&M) ÷ (Annual Production × Reduction)",
+                            inputs: [
+                              { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                              { label: "3-Yr O&M Total", value: `R ${Math.round(threeYearOM).toLocaleString()}` },
+                              { label: "Annual Production", value: `${Math.round(annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365).toLocaleString()} kWh` },
+                              { label: "Reduction Factor", value: `${(reductionFactor * 100).toFixed(0)}%` },
+                            ],
+                          }}
+                        />
+                        <FinancialMetricRow
+                          label="ZAR / Wp (DC)"
+                          value={((financialResults.systemCost + threeYearOM) / (solarCapacity * inverterConfig.dcAcRatio * 1000)).toFixed(2)}
+                          breakdown={{
+                            formula: "(System Cost + 3-Yr O&M) ÷ (DC Capacity in Wp)",
+                            inputs: [
+                              { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                              { label: "3-Yr O&M Total", value: `R ${Math.round(threeYearOM).toLocaleString()}` },
+                              { label: "AC Capacity", value: `${solarCapacity} kW` },
+                              { label: "DC/AC Ratio", value: inverterConfig.dcAcRatio.toFixed(2) },
+                              { label: "DC Capacity", value: `${(solarCapacity * inverterConfig.dcAcRatio).toFixed(1)} kWp` },
+                            ],
+                          }}
+                        />
+                        <FinancialMetricRow
+                          label="ZAR / Wp (AC)"
+                          value={((financialResults.systemCost + threeYearOM) / ((inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity) * 1000)).toFixed(2)}
+                          breakdown={{
+                            formula: "(System Cost + 3-Yr O&M) ÷ (AC Capacity in Wp)",
+                            inputs: [
+                              { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                              { label: "3-Yr O&M Total", value: `R ${Math.round(threeYearOM).toLocaleString()}` },
+                              { label: "AC Capacity", value: `${inverterConfig.inverterSize * inverterConfig.inverterCount || solarCapacity} kW` },
+                            ],
+                          }}
+                        />
+                        <FinancialMetricRow
+                          label="LCOE (ZAR/kWh)"
+                          value={(advancedResults?.lcoe ?? basicFinancialMetrics.lcoe).toFixed(2)}
+                          breakdown={{
+                            formula: "Undiscounted Total Costs ÷ NPV of Energy Yield",
+                            inputs: [
+                              { label: "Initial Capital", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                              { label: "20-Yr O&M (CPI escalated)", value: advancedResults?.columnTotals ? `R ${Math.round(advancedResults.columnTotals.totalOM).toLocaleString()}` : 'N/A' },
+                              { label: "20-Yr Insurance (CPI escalated)", value: advancedResults?.columnTotals ? `R ${Math.round(advancedResults.columnTotals.totalInsurance).toLocaleString()}` : 'N/A' },
+                              { label: "Replacements (Yr 10)", value: advancedResults?.columnTotals ? `R ${Math.round(advancedResults.columnTotals.totalReplacements).toLocaleString()}` : 'N/A' },
+                              { label: "NPV of Energy Yield", value: advancedResults?.columnTotals ? `${Math.round(advancedResults.columnTotals.npvEnergyYield).toLocaleString()} kWh` : 'N/A' },
+                              { label: "LCOE Discount Rate", value: `${systemCosts.lcoeDiscountRate ?? 10}%` },
+                            ],
+                          }}
+                        />
+                        {(() => {
+                          const year1Projection = advancedResults?.yearlyProjections?.[0];
+                          const totalIncomeY1 = year1Projection?.totalIncomeR ?? financialResults.annualSavings;
+                          const omCostY1 = year1Projection?.maintenanceCost ?? (systemCosts.maintenancePerYear ?? 0);
+                          const insuranceY1 = year1Projection?.insuranceCostR ?? (financialResults.systemCost * (systemCosts.insuranceRatePercent ?? 1) / 100 * 12);
+                          const netCashflowY1 = totalIncomeY1 - omCostY1 - insuranceY1;
+                          const initialYield = (netCashflowY1 / financialResults.systemCost) * 100;
+                          return (
+                            <FinancialMetricRow
+                              label="Initial Yield"
+                              value={`${initialYield.toFixed(2)}%`}
+                              breakdown={{
+                                formula: "((Total Income Y1 - O&M Y1 - Insurance Y1) ÷ Total Project Cost) × 100",
+                                inputs: [
+                                  { label: "Total Income Y1", value: `R ${Math.round(totalIncomeY1).toLocaleString()}` },
+                                  { label: "O&M Cost Y1", value: `R ${Math.round(omCostY1).toLocaleString()}` },
+                                  { label: "Insurance Y1", value: `R ${Math.round(insuranceY1).toLocaleString()}` },
+                                  { label: "Net Cashflow Y1", value: `R ${Math.round(netCashflowY1).toLocaleString()}` },
+                                  { label: "Total Project Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                                ],
+                              }}
+                            />
+                          );
+                        })()}
+                        <FinancialMetricRow
+                          label="IRR"
+                          value={`${(advancedResults?.irr ?? basicFinancialMetrics.irr).toFixed(2)}%`}
+                          breakdown={{
+                            formula: "Rate where NPV of cashflows = 0",
+                            inputs: [
+                              { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                              { label: "Annual Savings (Yr 1)", value: `R ${Math.round(financialResults.annualSavings).toLocaleString()}` },
+                              { label: "Project Lifetime", value: `${advancedConfig.financial.projectLifetimeYears ?? 20} years` },
+                              { label: "Tariff Escalation", value: `${advancedConfig.financial.tariffEscalationRate ?? 10}%` },
+                            ],
+                          }}
+                        />
+                        <FinancialMetricRow
+                          label="MIRR"
+                          value={`${(advancedResults?.mirr ?? basicFinancialMetrics.mirr).toFixed(2)}%`}
+                          breakdown={{
+                            formula: "[(FV Positives / PV Negatives)^(1/n)] - 1",
+                            inputs: [
+                              { label: "Finance Rate", value: `${systemCosts.mirrFinanceRate ?? 10}%` },
+                              { label: "Reinvestment Rate", value: `${systemCosts.mirrReinvestmentRate ?? 12}%` },
+                              { label: "Project Lifetime", value: `${advancedConfig.financial.projectLifetimeYears ?? 20} years` },
+                            ],
+                          }}
+                        />
+                        <FinancialMetricRow
+                          label="Payback Period"
+                          value={formatPaybackPeriod(unifiedPaybackPeriod ?? financialResults.paybackYears)}
+                          breakdown={{
+                            formula: "Year when cumulative cashflow ≥ 0",
+                            inputs: [
+                              { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
+                              { label: "Year 1 Savings", value: `R ${Math.round(financialResults.annualSavings).toLocaleString()}` },
+                              { label: "Tariff Escalation", value: `${advancedConfig.financial.tariffEscalationRate ?? 10}%` },
+                            ],
+                          }}
+                        />
+                        <FinancialMetricRow
+                          label="NPV"
+                          value={Math.round(advancedResults?.npv ?? basicFinancialMetrics.npv).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          valueClassName={(advancedResults?.npv ?? basicFinancialMetrics.npv) >= 0 ? 'text-green-600' : 'text-red-600'}
+                          breakdown={{
+                            formula: "Σ (Cashflow_t ÷ (1 + r)^t)",
+                            inputs: [
+                              { label: "System Cost (Year 0)", value: `-R ${financialResults.systemCost.toLocaleString()}` },
+                              { label: "Annual Savings (Yr 1)", value: `R ${Math.round(financialResults.annualSavings).toLocaleString()}` },
+                              { label: "Discount Rate", value: `${advancedConfig.financial.discountRate ?? 10}%` },
+                              { label: "Project Lifetime", value: `${advancedConfig.financial.projectLifetimeYears ?? 20} years` },
+                            ],
+                          }}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="border-dashed">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                        <TrendingUp className="h-4 w-4" />
+                        Financial Analysis
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xs text-muted-foreground">
+                        Select a tariff to enable cost analysis and ROI calculations.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <Label className="text-xs">Power</Label>
-                  <span className="text-xs text-muted-foreground">{batteryPower} kW</span>
-                </div>
-                <Slider
-                  value={[batteryPower]}
-                  onValueChange={([v]) => setBatteryPower(v)}
-                  min={5}
-                  max={100}
-                  step={5}
-                />
-              </div>
-            </div>
-            {/* Battery utilization (tariff-independent) */}
-            <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
-              <div className="flex justify-between">
-                <span>Daily cycles</span>
-                <span className="text-foreground">{energyResults.batteryCycles.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Energy throughput</span>
-                <span className="text-foreground">{energyResults.totalBatteryDischarge.toFixed(0)} kWh</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            ),
+          },
+        ] as CarouselPane[]}
+        onRequestEnable={onRequestEnableFeature}
+      />
 
       {/* Energy Results Summary (always visible - tariff-independent) */}
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
