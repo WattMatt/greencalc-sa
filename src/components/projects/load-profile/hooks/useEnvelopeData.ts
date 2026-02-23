@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Tenant, DisplayUnit, RawDataPoint } from "../types";
 import { parseRawData } from "../utils/parseRawData";
 
@@ -47,12 +47,14 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
   const effectiveFrom = yearFrom ?? availableYears[0] ?? 2020;
   const effectiveTo = yearTo ?? availableYears[availableYears.length - 1] ?? 2030;
 
-  const envelopeData = useMemo((): EnvelopePoint[] => {
+  const [envelopeData, setEnvelopeData] = useState<EnvelopePoint[]>([]);
+  const [isComputing, setIsComputing] = useState(false);
+
+  // Stable computation function
+  const computeEnvelope = useCallback(() => {
     if (availableYears.length === 0) return [];
 
     const dateHourlyTotals: Map<string, number[]> = new Map();
-    // Track which tenants contributed data to each date so we can filter
-    // out dates with partial coverage (which create artificial lows/highs)
     const dateContributors: Map<string, Set<string>> = new Map();
     const tenantsWithData = new Set<string>();
 
@@ -96,7 +98,6 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
         }
         const dayArr = dateHourlyTotals.get(dateKey)!;
 
-        // Track this tenant's contribution to this date
         if (!dateContributors.has(dateKey)) {
           dateContributors.set(dateKey, new Set());
         }
@@ -109,8 +110,6 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
       });
     });
 
-    // Remove dates with incomplete tenant coverage to prevent artificial
-    // lows from partial data (e.g. only 2 of 5 tenants have data on a date)
     const requiredCount = tenantsWithData.size;
     if (requiredCount > 1) {
       dateHourlyTotals.forEach((_, dateKey) => {
@@ -158,8 +157,20 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
     return result;
   }, [includedTenants, availableYears, effectiveFrom, effectiveTo, displayUnit, powerFactor, rawDataMap]);
 
+  // Defer heavy computation to avoid blocking the main thread
+  useEffect(() => {
+    setIsComputing(true);
+    const timeoutId = setTimeout(() => {
+      const result = computeEnvelope();
+      setEnvelopeData(result);
+      setIsComputing(false);
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [computeEnvelope]);
+
   return {
     envelopeData,
+    isComputing,
     availableYears,
     yearFrom: effectiveFrom,
     yearTo: effectiveTo,
