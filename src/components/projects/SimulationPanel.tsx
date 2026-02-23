@@ -1476,35 +1476,71 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-6 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <Label className="text-xs">Capacity</Label>
-                        <span className="text-xs text-muted-foreground">{batteryCapacity} kWh</span>
-                      </div>
-                      <Slider
-                        value={[batteryCapacity]}
-                        onValueChange={([v]) => setBatteryCapacity(v)}
+                  {/* Row 1: Capacity, Power */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Capacity (kWh)</Label>
+                      <Input
+                        type="number"
+                        value={batteryCapacity}
+                        onChange={(e) => setBatteryCapacity(Math.max(0, parseInt(e.target.value) || 0))}
+                        className="h-8"
                         min={0}
-                        max={200}
+                        max={500}
                         step={10}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <Label className="text-xs">Power</Label>
-                        <span className="text-xs text-muted-foreground">{batteryPower} kW</span>
-                      </div>
-                      <Slider
-                        value={[batteryPower]}
-                        onValueChange={([v]) => setBatteryPower(v)}
-                        min={5}
-                        max={100}
+                    <div className="space-y-1">
+                      <Label className="text-xs">Power (kW)</Label>
+                      <Input
+                        type="number"
+                        value={batteryPower}
+                        onChange={(e) => setBatteryPower(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="h-8"
+                        min={1}
+                        max={200}
                         step={5}
                       />
                     </div>
                   </div>
+
+                  {/* Row 2: Charge Rate, Discharge Rate, Usable Capacity (read-only) */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Charge Rate (C)</Label>
+                      <Input
+                        type="number"
+                        value={batteryCapacity > 0 ? (batteryPower / batteryCapacity).toFixed(2) : '0.00'}
+                        disabled
+                        className="h-8 bg-muted"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Max SoC (%)</Label>
+                      <Input
+                        type="number"
+                        value={95}
+                        disabled
+                        className="h-8 bg-muted"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Min SoC (%)</Label>
+                      <Input
+                        type="number"
+                        value={10}
+                        disabled
+                        className="h-8 bg-muted"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Usable capacity and cycle info */}
                   <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
+                    <div className="flex justify-between">
+                      <span>Usable capacity</span>
+                      <span className="text-foreground">{(batteryCapacity * 0.85).toFixed(0)} kWh</span>
+                    </div>
                     <div className="flex justify-between">
                       <span>Daily cycles</span>
                       <span className="text-foreground">{energyResults.batteryCycles.toFixed(2)}</span>
