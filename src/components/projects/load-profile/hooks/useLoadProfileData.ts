@@ -1,6 +1,11 @@
 import { useMemo } from "react";
 import {
   Tenant,
+  TenantMeter,
+  ShopType,
+  DAYS_OF_WEEK,
+  DAY_MULTIPLIERS,
+  DEFAULT_PROFILE_PERCENT,
   getTOUPeriod,
   ChartDataPoint,
   DisplayUnit,
@@ -10,13 +15,78 @@ import {
 import { SolcastPVProfile } from "./useSolcastPVProfile";
 import { parseRawData } from "../utils/parseRawData";
 
+// Correct profile for interval and ensure proper averaging
+function correctProfileForInterval(
+  profile: number[], 
+  detectedIntervalMinutes?: number | null
+): number[] {
+  if (profile.length === 48) {
+    const hourlyProfile: number[] = Array(24).fill(0);
+    for (let h = 0; h < 24; h++) {
+      const idx = h * 2;
+      hourlyProfile[h] = (profile[idx] + profile[idx + 1]) / 2;
+    }
+    return hourlyProfile;
+  } else if (profile.length === 96) {
+    const hourlyProfile: number[] = Array(24).fill(0);
+    for (let h = 0; h < 24; h++) {
+      const idx = h * 4;
+      hourlyProfile[h] = (profile[idx] + profile[idx + 1] + profile[idx + 2] + profile[idx + 3]) / 4;
+    }
+    return hourlyProfile;
+  } else if (profile.length === 24) {
+    if (detectedIntervalMinutes === 30) return profile.map(v => v / 2);
+    if (detectedIntervalMinutes === 15) return profile.map(v => v / 4);
+    return profile;
+  } else {
+    const hourlyProfile: number[] = Array(24).fill(0);
+    const ratio = profile.length / 24;
+    for (let h = 0; h < 24; h++) {
+      const startIdx = Math.floor(h * ratio);
+      const endIdx = Math.floor((h + 1) * ratio);
+      let sum = 0, count = 0;
+      for (let i = startIdx; i < endIdx; i++) { sum += profile[i]; count++; }
+      hourlyProfile[h] = count > 0 ? sum / count : 0;
+    }
+    return hourlyProfile;
+  }
+}
+
+// Calculate averaged kW profile from multiple meters
+function getAveragedProfileKw(
+  meters: TenantMeter[] | undefined,
+  profileKey: 'load_profile_weekday' | 'load_profile_weekend'
+): { profileKw: number[] | null; avgKwPerSqm: number[] | null } {
+  if (!meters || meters.length === 0) return { profileKw: null, avgKwPerSqm: null };
+  const validMeters = meters.filter(m => {
+    const profile = m.scada_imports?.[profileKey];
+    if (!profile || ![24, 48, 96].includes(profile.length)) return false;
+    return (m.scada_imports?.area_sqm || 0) > 0;
+  });
+  if (validMeters.length === 0) return { profileKw: null, avgKwPerSqm: null };
+  const totalWeight = validMeters.reduce((sum, m) => sum + (m.weight || 1), 0);
+  const avgKwPerHour: number[] = Array(24).fill(0);
+  const avgKwPerSqmPerHour: number[] = Array(24).fill(0);
+  for (const meter of validMeters) {
+    const rawProfile = meter.scada_imports![profileKey]!;
+    const detectedInterval = meter.scada_imports?.detected_interval_minutes;
+    const profile = correctProfileForInterval(rawProfile, detectedInterval);
+    const meterWeight = (meter.weight || 1) / totalWeight;
+    const meterArea = meter.scada_imports!.area_sqm!;
+    for (let h = 0; h < 24; h++) {
+      avgKwPerHour[h] += profile[h] * meterWeight;
+      avgKwPerSqmPerHour[h] += (profile[h] / meterArea) * meterWeight;
+    }
+  }
+  return { profileKw: avgKwPerHour, avgKwPerSqm: avgKwPerSqmPerHour };
+}
 
 // Minimum kW threshold to exclude outage/power-off data (same as envelope chart)
 const OUTAGE_THRESHOLD_KW = 75;
 
 interface UseLoadProfileDataProps {
   tenants: Tenant[];
-  shopTypes: unknown[];
+  shopTypes: ShopType[];
   selectedDays: Set<number>;
   displayUnit: DisplayUnit;
   powerFactor: number;
@@ -157,27 +227,37 @@ export function useLoadProfileData({
       }
     }
 
-    const scadaCount = tenantsWithRawData.length;
-    const estimatedCount = includedTenants.length - scadaCount;
+    // Identify non-SCADA tenants for fallback handling
+    const rawDataTenantIds = new Set(tenantsWithRawData);
+    const nonScadaTenants = includedTenants.filter(t => !rawDataTenantIds.has(t.id));
+
+    // Count tenants with any form of profile data vs pure estimates
+    let scadaCount = tenantsWithRawData.length;
+    let estimatedCount = 0;
+    for (const t of nonScadaTenants) {
+      const tenantArea = Number(t.area_sqm) || 0;
+      const hasMultiMeter = (t.tenant_meters?.length || 0) > 0 &&
+        t.tenant_meters?.some(m => {
+          const len = m.scada_imports?.load_profile_weekday?.length;
+          return len && [24, 48, 96].includes(len);
+        });
+      const hasSingleScada = t.scada_imports?.load_profile_weekday &&
+        [24, 48, 96].includes(t.scada_imports.load_profile_weekday.length);
+      if (hasMultiMeter || hasSingleScada) scadaCount++;
+      else estimatedCount++;
+    }
 
     // --- Pass 2: Find validated dates (all SCADA tenants have data) ---
-    // Helper to get validated dates filtered by day-of-week set
     function getValidatedDates(dayFilter: Set<number>): string[] {
       if (tenantsWithRawData.length === 0) return [];
-
-      // Start with dates from the first tenant
       const firstMap = tenantDateMaps.get(tenantsWithRawData[0])!;
       const candidateDates = Array.from(firstMap.keys());
-
       return candidateDates.filter((dateKey) => {
-        // Check day-of-week filter
         const parts = dateKey.split("-");
         if (parts.length !== 3) return false;
         const jsDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-        const jsDay = jsDate.getDay(); // 0=Sun
+        const jsDay = jsDate.getDay();
         if (!dayFilter.has(jsDay)) return false;
-
-        // Check all other tenants have this date
         for (let i = 1; i < tenantsWithRawData.length; i++) {
           const otherMap = tenantDateMaps.get(tenantsWithRawData[i])!;
           if (!otherMap.has(dateKey)) return false;
@@ -186,39 +266,99 @@ export function useLoadProfileData({
       });
     }
 
-    // Get validated dates for the user's selected days
     const validatedDates = getValidatedDates(selectedDays);
     const validatedDateCount = validatedDates.length;
 
-    // --- Build the 24-hour composite profile from validated dates ---
+    // --- Fallback: compute hourly kW for non-SCADA tenants ---
+    // Returns 24-hour profile in kW for a single tenant using fallback logic
+    function getFallbackHourlyKw(tenant: Tenant): number[] | null {
+      const tenantArea = Number(tenant.area_sqm) || 0;
+      const allWeekend = daysArray.every(d => d === 0 || d === 6);
+      const avgDayMultiplier = daysArray.reduce((sum, dayIndex) => {
+        const dayOfWeek = DAYS_OF_WEEK[(dayIndex + 6) % 7];
+        return sum + DAY_MULTIPLIERS[dayOfWeek];
+      }, 0) / daysArray.length;
+
+      // Priority 2: Multi-meter averaged profile
+      if (tenantArea > 0) {
+        const profileKey = allWeekend ? 'load_profile_weekend' : 'load_profile_weekday';
+        const profileData = getAveragedProfileKw(tenant.tenant_meters, profileKey);
+        const fallbackProfile = allWeekend && !profileData.avgKwPerSqm
+          ? getAveragedProfileKw(tenant.tenant_meters, 'load_profile_weekday')
+          : profileData;
+        if (fallbackProfile.avgKwPerSqm) {
+          return fallbackProfile.avgKwPerSqm.map(v => tenantArea * v * avgDayMultiplier);
+        }
+      }
+
+      // Priority 3: Single SCADA pre-computed profile
+      const scadaWeekdayRaw = tenant.scada_imports?.load_profile_weekday;
+      const scadaWeekendRaw = tenant.scada_imports?.load_profile_weekend;
+      const scadaProfileRaw = allWeekend ? scadaWeekendRaw || scadaWeekdayRaw : scadaWeekdayRaw;
+      const detectedInterval = tenant.scada_imports?.detected_interval_minutes;
+
+      if (scadaProfileRaw && [24, 48, 96].includes(scadaProfileRaw.length)) {
+        const scadaProfile = correctProfileForInterval(scadaProfileRaw, detectedInterval);
+        if (tenantArea > 0) {
+          const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
+          const areaScale = scadaArea > 0 ? tenantArea / scadaArea : 1;
+          return scadaProfile.map(v => v * areaScale * avgDayMultiplier);
+        }
+        return scadaProfile.map(v => v * avgDayMultiplier);
+      }
+
+      // Priority 4: Shop type estimate
+      if (tenantArea <= 0) return null;
+      const shopType = tenant.shop_type_id ? shopTypes.find((st) => st.id === tenant.shop_type_id) : null;
+      const monthlyKwh = tenant.monthly_kwh_override || (shopType?.kwh_per_sqm_month || 50) * tenantArea;
+      const dailyKwh = monthlyKwh / 30;
+      const shopTypeProfile = allWeekend
+        ? shopType?.load_profile_weekend || shopType?.load_profile_weekday
+        : shopType?.load_profile_weekday;
+      const profile = shopTypeProfile?.length === 24 ? shopTypeProfile.map(Number) : DEFAULT_PROFILE_PERCENT;
+      return profile.map(p => dailyKwh * (p / 100) * avgDayMultiplier);
+    }
+
+    // --- Build the 24-hour composite profile ---
     const hourlyData: { hour: string; total: number; [key: string]: number | string }[] = [];
+
+    // Pre-compute fallback profiles for non-SCADA tenants
+    const fallbackProfiles: { key: string; profile: number[] }[] = [];
+    for (const tenant of nonScadaTenants) {
+      const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
+      const profile = getFallbackHourlyKw(tenant);
+      if (profile) fallbackProfiles.push({ key, profile });
+    }
 
     for (let h = 0; h < 24; h++) {
       const hourLabel = `${h.toString().padStart(2, "0")}:00`;
       const hourData: { hour: string; total: number; [key: string]: number | string } = { hour: hourLabel, total: 0 };
 
+      // Validated-date SCADA contributions
       if (validatedDates.length > 0) {
-        // For each tenant, average their hourly value across validated dates
         for (const tenantId of tenantsWithRawData) {
           const dateMap = tenantDateMaps.get(tenantId)!;
           const key = tenantKeyMap.get(tenantId) || tenantId;
-
           let sum = 0;
           for (const dateKey of validatedDates) {
-            const hourlyKw = dateMap.get(dateKey)!;
-            sum += hourlyKw[h];
+            sum += dateMap.get(dateKey)![h];
           }
           const avg = sum / validatedDates.length;
-
           hourData[key] = (hourData[key] as number || 0) + avg;
           hourData.total += avg;
         }
       }
 
+      // Fallback tenant contributions
+      for (const { key, profile } of fallbackProfiles) {
+        hourData[key] = (hourData[key] as number || 0) + profile[h];
+        hourData.total += profile[h];
+      }
+
       hourlyData.push(hourData);
     }
 
-    // --- Weekday/Weekend daily kWh using validated dates ---
+    // --- Weekday/Weekend daily kWh ---
     const weekdaySet = new Set([1, 2, 3, 4, 5]);
     const weekendSet = new Set([0, 6]);
     const validatedWeekdays = getValidatedDates(weekdaySet);
@@ -227,30 +367,77 @@ export function useLoadProfileData({
     let weekdayTotal = 0;
     let weekendTotal = 0;
 
+    // SCADA contributions from validated dates
     if (validatedWeekdays.length > 0) {
       for (let h = 0; h < 24; h++) {
         for (const tenantId of tenantsWithRawData) {
           const dateMap = tenantDateMaps.get(tenantId)!;
           let sum = 0;
-          for (const dateKey of validatedWeekdays) {
-            sum += dateMap.get(dateKey)![h];
-          }
+          for (const dateKey of validatedWeekdays) sum += dateMap.get(dateKey)![h];
           weekdayTotal += sum / validatedWeekdays.length;
         }
       }
     }
-
     if (validatedWeekends.length > 0) {
       for (let h = 0; h < 24; h++) {
         for (const tenantId of tenantsWithRawData) {
           const dateMap = tenantDateMaps.get(tenantId)!;
           let sum = 0;
-          for (const dateKey of validatedWeekends) {
-            sum += dateMap.get(dateKey)![h];
-          }
+          for (const dateKey of validatedWeekends) sum += dateMap.get(dateKey)![h];
           weekendTotal += sum / validatedWeekends.length;
         }
       }
+    }
+
+    // Fallback tenant contributions for weekday/weekend
+    for (const tenant of nonScadaTenants) {
+      const tenantArea = Number(tenant.area_sqm) || 0;
+
+      // Multi-meter
+      if (tenantArea > 0) {
+        const wdProfile = getAveragedProfileKw(tenant.tenant_meters, 'load_profile_weekday');
+        const weProfile = getAveragedProfileKw(tenant.tenant_meters, 'load_profile_weekend');
+        if (wdProfile.avgKwPerSqm) {
+          weekdayTotal += wdProfile.avgKwPerSqm.reduce((s, v) => s + v, 0) * tenantArea;
+          weekendTotal += (weProfile.avgKwPerSqm || wdProfile.avgKwPerSqm).reduce((s, v) => s + v, 0) * tenantArea;
+          continue;
+        }
+      }
+
+      // Single SCADA
+      const scadaWeekdayRaw = tenant.scada_imports?.load_profile_weekday;
+      const scadaWeekendRaw = tenant.scada_imports?.load_profile_weekend || scadaWeekdayRaw;
+      const detectedInterval = tenant.scada_imports?.detected_interval_minutes;
+      if (scadaWeekdayRaw && [24, 48, 96].includes(scadaWeekdayRaw.length)) {
+        const scadaWeekday = correctProfileForInterval(scadaWeekdayRaw, detectedInterval);
+        const dailyKwh = scadaWeekday.reduce((s, v) => s + v, 0);
+        if (tenantArea > 0) {
+          const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
+          const kwhPerSqm = scadaArea > 0 ? dailyKwh / scadaArea : 0;
+          weekdayTotal += tenantArea * kwhPerSqm;
+        } else {
+          weekdayTotal += dailyKwh;
+        }
+        if (scadaWeekendRaw && [24, 48, 96].includes(scadaWeekendRaw.length)) {
+          const scadaWeekend = correctProfileForInterval(scadaWeekendRaw, detectedInterval);
+          const weDailyKwh = scadaWeekend.reduce((s, v) => s + v, 0);
+          if (tenantArea > 0) {
+            const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
+            weekendTotal += tenantArea * (scadaArea > 0 ? weDailyKwh / scadaArea : 0);
+          } else {
+            weekendTotal += weDailyKwh;
+          }
+        }
+        continue;
+      }
+
+      // Shop type estimate
+      if (tenantArea <= 0) continue;
+      const shopType = tenant.shop_type_id ? shopTypes.find((st) => st.id === tenant.shop_type_id) : null;
+      const monthlyKwh = tenant.monthly_kwh_override || (shopType?.kwh_per_sqm_month || 50) * tenantArea;
+      const dailyKwh = monthlyKwh / 30;
+      weekdayTotal += dailyKwh;
+      weekendTotal += dailyKwh * 0.85;
     }
 
     return {
@@ -261,7 +448,7 @@ export function useLoadProfileData({
       weekendDailyKwh: weekendTotal,
       validatedDateCount,
     };
-  }, [includedTenants, daysArray, selectedDays, rawDataMap]);
+  }, [includedTenants, shopTypes, daysArray, selectedDays, rawDataMap]);
 
   // Apply diversity factor and convert to kVA if needed
   const chartData = useMemo((): ChartDataPoint[] => {
