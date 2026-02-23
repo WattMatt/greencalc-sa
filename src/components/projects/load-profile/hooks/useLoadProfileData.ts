@@ -87,6 +87,7 @@ interface UseLoadProfileDataProps {
   tenants: Tenant[];
   shopTypes: ShopType[];
   selectedDays: Set<number>;
+  selectedMonths?: Set<number>;
   displayUnit: DisplayUnit;
   powerFactor: number;
   showPVProfile: boolean;
@@ -107,6 +108,7 @@ export function useLoadProfileData({
   tenants,
   shopTypes,
   selectedDays,
+  selectedMonths,
   displayUnit,
   powerFactor,
   showPVProfile,
@@ -169,20 +171,24 @@ export function useLoadProfileData({
     weekendDailyKwh,
     validatedDateCount,
   } = useMemo(() => {
-    // Filter siteDataByDate by selectedDays (day-of-week filter)
-    function filterByDays(dayFilter: Set<number>): string[] {
+    // Filter siteDataByDate by selectedDays (day-of-week) and selectedMonths
+    function filterByDaysAndMonths(dayFilter: Set<number>, monthFilter?: Set<number>): string[] {
       const result: string[] = [];
       siteDataByDate.forEach((_, dateKey) => {
         const parts = dateKey.split("-");
         if (parts.length !== 3) return;
-        const jsDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        const year = parseInt(parts[0]);
+        const month = parseInt(parts[1]) - 1; // 0-indexed
+        const day = parseInt(parts[2]);
+        if (monthFilter && !monthFilter.has(month)) return;
+        const jsDate = new Date(year, month, day);
         const jsDay = jsDate.getDay();
         if (dayFilter.has(jsDay)) result.push(dateKey);
       });
       return result;
     }
 
-    const validatedDates = filterByDays(selectedDays);
+    const validatedDates = filterByDaysAndMonths(selectedDays, selectedMonths);
     const validatedDateCount = validatedDates.length;
 
     // --- Fallback: compute hourly kW for non-SCADA tenants ---
@@ -278,8 +284,8 @@ export function useLoadProfileData({
     // --- Weekday/Weekend daily kWh ---
     const weekdaySet = new Set([1, 2, 3, 4, 5]);
     const weekendSet = new Set([0, 6]);
-    const validatedWeekdays = filterByDays(weekdaySet);
-    const validatedWeekends = filterByDays(weekendSet);
+    const validatedWeekdays = filterByDaysAndMonths(weekdaySet, selectedMonths);
+    const validatedWeekends = filterByDaysAndMonths(weekendSet, selectedMonths);
 
     let weekdayTotal = 0;
     let weekendTotal = 0;
@@ -357,7 +363,7 @@ export function useLoadProfileData({
       weekendDailyKwh: weekendTotal,
       validatedDateCount,
     };
-  }, [siteDataByDate, tenantDateMaps, tenantKeyMap, tenantsWithRawData, nonScadaTenants, selectedDays, daysArray, shopTypes, includedTenants]);
+  }, [siteDataByDate, tenantDateMaps, tenantKeyMap, tenantsWithRawData, nonScadaTenants, selectedDays, selectedMonths, daysArray, shopTypes, includedTenants]);
 
   // Apply diversity factor and convert to kVA if needed
   const chartData = useMemo((): ChartDataPoint[] => {
