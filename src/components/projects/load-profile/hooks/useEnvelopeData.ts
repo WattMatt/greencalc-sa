@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { DisplayUnit } from "../types";
 import { ValidatedSiteData } from "./useValidatedSiteData";
 
@@ -25,14 +25,9 @@ export function useEnvelopeData({ displayUnit, powerFactor, validatedSiteData }:
   const effectiveFrom = yearFrom ?? availableYears[0] ?? 2020;
   const effectiveTo = yearTo ?? availableYears[availableYears.length - 1] ?? 2030;
 
-  const [envelopeData, setEnvelopeData] = useState<EnvelopePoint[]>([]);
-  const [isComputing, setIsComputing] = useState(false);
-
-  // Stable computation function using shared siteDataByDate
-  const computeEnvelope = useCallback(() => {
+  const envelopeData = useMemo(() => {
     if (siteDataByDate.size === 0) return [];
 
-    // Filter siteDataByDate by year range
     const filteredEntries: number[][] = [];
 
     siteDataByDate.forEach((hourlyArr, dateKey) => {
@@ -54,7 +49,6 @@ export function useEnvelopeData({ displayUnit, powerFactor, validatedSiteData }:
 
       for (const dayArr of filteredEntries) {
         const val = dayArr[h];
-        // Keep the 75 kW filter for individual hour values consistency
         if (val < 75) continue;
         if (val < min) min = val;
         if (val > max) max = val;
@@ -78,20 +72,9 @@ export function useEnvelopeData({ displayUnit, powerFactor, validatedSiteData }:
     return result;
   }, [siteDataByDate, effectiveFrom, effectiveTo, displayUnit, powerFactor]);
 
-  // Defer heavy computation to avoid blocking the main thread
-  useEffect(() => {
-    setIsComputing(true);
-    const timeoutId = setTimeout(() => {
-      const result = computeEnvelope();
-      setEnvelopeData(result);
-      setIsComputing(false);
-    }, 0);
-    return () => clearTimeout(timeoutId);
-  }, [computeEnvelope]);
-
   return {
     envelopeData,
-    isComputing,
+    isComputing: false,
     availableYears,
     yearFrom: effectiveFrom,
     yearTo: effectiveTo,
