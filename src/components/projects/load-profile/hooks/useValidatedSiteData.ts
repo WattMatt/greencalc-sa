@@ -150,39 +150,19 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
       else estimatedCount++;
     }
 
-    // === Pass 2: Find overlapping DATE RANGE across all SCADA tenants ===
-    // For each meter, find its earliest and latest valid date.
-    // The overlap is [max of all starts, min of all ends].
-    // Within that range, sum whatever meters have data on each date.
+    // === Pass 2: Union of ALL dates from ALL SCADA tenants ===
+    // Use every date where ANY meter has data, summing whichever meters
+    // are available on each date. This is correct for sites with many
+    // independently-metered tenants whose date ranges may not overlap.
     let allValidatedDates: string[] = [];
 
     if (tenantsWithRawData.length > 0) {
-      let rangeStart = "";
-      let rangeEnd = "9999-12-31";
-
+      const dateSet = new Set<string>();
       for (const tenantId of tenantsWithRawData) {
         const dateMap = tenantDateMaps.get(tenantId)!;
-        const dates = Array.from(dateMap.keys()).sort();
-        if (dates.length === 0) continue;
-        const first = dates[0];
-        const last = dates[dates.length - 1];
-        if (first > rangeStart) rangeStart = first;
-        if (last < rangeEnd) rangeEnd = last;
+        dateMap.forEach((_, dateKey) => dateSet.add(dateKey));
       }
-
-      // Collect all unique dates from any meter that fall within the overlap range
-      if (rangeStart <= rangeEnd) {
-        const dateSet = new Set<string>();
-        for (const tenantId of tenantsWithRawData) {
-          const dateMap = tenantDateMaps.get(tenantId)!;
-          dateMap.forEach((_, dateKey) => {
-            if (dateKey >= rangeStart && dateKey <= rangeEnd) {
-              dateSet.add(dateKey);
-            }
-          });
-        }
-        allValidatedDates = Array.from(dateSet).sort();
-      }
+      allValidatedDates = Array.from(dateSet).sort();
     }
 
     // === Pass 3: Sum all tenants at each interval to produce site-level data ===
