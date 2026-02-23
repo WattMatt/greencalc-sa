@@ -1,62 +1,50 @@
 
 
-## Fix: kWh vs kW Handling in Load Profile Charts
+## Ingest Tenant CSV with Rating Column and Semicolon Delimiter
 
-### The Problem
+### Problem
 
-Your meter data is in **kWh** (energy per interval), but the load profile charts treat all values as if they are **kW** (instantaneous power). This causes incorrect readings:
+Two issues prevent your `MINI_SUB_5.csv` from importing correctly:
 
-- For 30-minute interval data: the chart shows roughly **half** the actual demand
-- For 15-minute interval data: the chart shows roughly **one quarter** of the actual demand
+1. **Semicolon delimiter**: The file uses `;` as a separator, but the CSV parser only splits on commas. All four columns get merged into one.
+2. **Missing RATING column**: The column mapper only supports Shop Number, Shop Name, and Area. The RATING column (e.g. "80A TP") is ignored, and the database has no field to store it.
 
-The core issue is that when multiple readings fall within the same hour, the system **averages** them. For kW data, averaging is correct. For kWh data, you need to **sum** the values to get total kWh for the hour (which numerically equals the average kW for that hour).
+### Solution
 
-### How It Will Be Fixed
+**1. Auto-detect CSV delimiter**
 
-**1. Store the unit type alongside raw data**
+Update `handleCsvFileSelected` in `TenantManager.tsx` to detect whether the first line uses `;`, `\t`, or `,` as a delimiter, and split all rows accordingly.
 
-Add a `value_unit` column to the `scada_imports` table so the system knows whether stored values are kWh, kW, or another unit. This preserves the information that is already captured during import but currently discarded after processing.
+**2. Add `cb_rating` column to `project_tenants` table**
 
-Database migration:
 ```sql
-ALTER TABLE scada_imports ADD COLUMN value_unit text DEFAULT 'kWh';
+ALTER TABLE project_tenants ADD COLUMN cb_rating text;
 ```
 
-**2. Pass the unit through during import**
+This stores values like "80A TP", "150A TP", etc.
 
-Update `SitesTab.tsx` to save the selected `valueUnit` to the new `value_unit` column when processing meter data.
+**3. Add "Rating" role to TenantColumnMapper**
 
-**3. Fix `useValidatedSiteData.ts` — the main calculation engine**
+- Add `"rating"` to the `TenantColumnRole` type
+- Add a `cb_rating` field to `TenantMappedData`
+- Add auto-detection for headers containing "rating", "breaker", "cb", or "amps"
+- Add a menu item with a `Zap` icon for the Rating role
+- Parse and pass through the rating string during import
 
-Currently (line 97):
-```
-avgKw = entry.sum / entry.count
-```
+**4. Update `handleMappedImport` to save `cb_rating`**
 
-Updated logic:
-- If `value_unit` is an energy unit (kWh, Wh, MWh, kVAh): **sum** readings in the hour (total kWh in 1 hour = average kW)
-- If `value_unit` is a power unit (kW, W, MW, kVA): **average** readings in the hour (as currently done)
+Include `cb_rating: t.cb_rating` in the insert payload.
 
-For existing data without a stored unit, **default to kWh** (since that is the most common format for SA SCADA exports).
+**5. Display Rating in the Tenants table**
 
-**4. Fix `useStackedMeterData.ts` — the "By Meter" chart**
-
-This hook also needs the same logic. Currently it takes the **max** of raw values per hour. For kWh data, it should first sum sub-hourly readings into hourly kW, then take the max across days.
+Add a "Rating" column to the tenant table rows showing the stored value (e.g. "80A TP").
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `scada_imports` table | Add `value_unit` column (default `'kWh'`) |
-| `src/components/loadprofiles/SitesTab.tsx` | Save `valueUnit` to DB during processing |
-| `src/components/projects/load-profile/types.ts` | Add `value_unit` to the Tenant/scada_imports type |
-| `src/components/projects/load-profile/hooks/useValidatedSiteData.ts` | Sum kWh readings instead of averaging; pass unit info through |
-| `src/components/projects/load-profile/hooks/useStackedMeterData.ts` | Same correction for the stacked meter view |
-| `src/components/projects/load-profile/hooks/useLoadProfileData.ts` | Align the `correctProfileForInterval` function with the new logic |
-
-### Backwards Compatibility
-
-- Existing meters without `value_unit` will default to `'kWh'`, which matches most SA SCADA exports
-- The fix will immediately correct the chart values for all existing data
-- No re-import of data is required
+| Database migration | Add `cb_rating text` column to `project_tenants` |
+| `src/components/projects/TenantManager.tsx` | Auto-detect delimiter; save `cb_rating` on import; display rating column |
+| `src/components/projects/TenantColumnMapper.tsx` | Add `rating` role with auto-detection, icon, and badge |
+| `src/components/projects/load-profile/types.ts` | Add `cb_rating` to `Tenant` interface |
 
