@@ -239,7 +239,9 @@ export function LoadProfileChart({
             displayUnit={displayUnit}
             setDisplayUnit={setDisplayUnit}
             navigateDay={navigateDay}
-            peakHour={peakHour}
+            peakHour={envelopeData.length > 0
+              ? envelopeData.reduce((best, d, i) => d.max > best.val ? { val: d.max, hour: i } : best, { val: 0, hour: 0 })
+              : peakHour}
             unit={unit}
             showTOU={showTOU}
             setShowTOU={setShowTOU}
