@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Tenant, DisplayUnit, RawDataPoint } from "../types";
-import { parseRawData } from "../utils/parseRawData";
+import { DisplayUnit } from "../types";
+import { ValidatedSiteData } from "./useValidatedSiteData";
 
 export interface EnvelopePoint {
   hour: string;
@@ -10,36 +10,14 @@ export interface EnvelopePoint {
 }
 
 interface UseEnvelopeDataProps {
-  tenants: Tenant[];
   displayUnit: DisplayUnit;
   powerFactor: number;
-  /** Map of scada_import_id -> raw_data, fetched on demand by useRawScadaData */
-  rawDataMap?: Record<string, unknown>;
+  /** Shared validated site data from useValidatedSiteData */
+  validatedSiteData: ValidatedSiteData;
 }
 
-export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap }: UseEnvelopeDataProps) {
-  const includedTenants = tenants.filter(t => t.include_in_load_profile !== false);
-
-  // Helper: get raw data for a tenant from on-demand map or inline field
-  const getRawData = (tenant: Tenant): unknown =>
-    (rawDataMap && tenant.scada_import_id ? rawDataMap[tenant.scada_import_id] : undefined)
-    || tenant.scada_imports?.raw_data;
-  // Extract available years from all tenants' raw data
-  const availableYears = useMemo(() => {
-    const yearsSet = new Set<number>();
-
-    includedTenants.forEach((tenant) => {
-      const rawData = parseRawData(getRawData(tenant));
-      rawData.forEach((point) => {
-        if (point.date) {
-          const year = parseInt(point.date.split("-")[0], 10);
-          if (!isNaN(year)) yearsSet.add(year);
-        }
-      });
-    });
-
-    return Array.from(yearsSet).sort((a, b) => a - b);
-  }, [includedTenants, rawDataMap]);
+export function useEnvelopeData({ displayUnit, powerFactor, validatedSiteData }: UseEnvelopeDataProps) {
+  const { siteDataByDate, availableYears } = validatedSiteData;
 
   const [yearFrom, setYearFrom] = useState<number | null>(null);
   const [yearTo, setYearTo] = useState<number | null>(null);
@@ -50,79 +28,23 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
   const [envelopeData, setEnvelopeData] = useState<EnvelopePoint[]>([]);
   const [isComputing, setIsComputing] = useState(false);
 
-  // Stable computation function
+  // Stable computation function using shared siteDataByDate
   const computeEnvelope = useCallback(() => {
-    if (availableYears.length === 0) return [];
+    if (siteDataByDate.size === 0) return [];
 
-    const dateHourlyTotals: Map<string, number[]> = new Map();
-    const dateContributors: Map<string, Set<string>> = new Map();
-    const tenantsWithData = new Set<string>();
+    // Filter siteDataByDate by year range
+    const filteredEntries: number[][] = [];
 
-    includedTenants.forEach((tenant) => {
-      const rawData = parseRawData(getRawData(tenant));
-      if (!rawData.length) return;
-
-      tenantsWithData.add(tenant.id);
-
-      const tenantArea = Number(tenant.area_sqm) || 0;
-      const scadaArea = tenant.scada_imports?.area_sqm || tenantArea;
-      const areaScaleFactor = scadaArea > 0 ? tenantArea / scadaArea : 1;
-
-      const tenantDateHour: Map<string, Map<number, { sum: number; count: number }>> = new Map();
-
-      rawData.forEach((point) => {
-        if (!point.date) return;
-        const year = parseInt(point.date.split("-")[0], 10);
-        if (year < effectiveFrom || year > effectiveTo) return;
-
-        const hour = parseInt(point.time?.split(":")[0] || "0", 10);
-        if (hour < 0 || hour >= 24) return;
-
-        const kwValue = (point.value || 0) * areaScaleFactor;
-
-        if (!tenantDateHour.has(point.date)) {
-          tenantDateHour.set(point.date, new Map());
-        }
-        const hourMap = tenantDateHour.get(point.date)!;
-        if (!hourMap.has(hour)) {
-          hourMap.set(hour, { sum: 0, count: 0 });
-        }
-        const entry = hourMap.get(hour)!;
-        entry.sum += kwValue;
-        entry.count += 1;
-      });
-
-      tenantDateHour.forEach((hourMap, dateKey) => {
-        if (!dateHourlyTotals.has(dateKey)) {
-          dateHourlyTotals.set(dateKey, new Array(24).fill(0));
-        }
-        const dayArr = dateHourlyTotals.get(dateKey)!;
-
-        if (!dateContributors.has(dateKey)) {
-          dateContributors.set(dateKey, new Set());
-        }
-        dateContributors.get(dateKey)!.add(tenant.id);
-
-        hourMap.forEach((entry, hour) => {
-          const avgKw = entry.sum / entry.count;
-          dayArr[hour] += avgKw;
-        });
-      });
+    siteDataByDate.forEach((hourlyArr, dateKey) => {
+      const year = parseInt(dateKey.split("-")[0], 10);
+      if (year < effectiveFrom || year > effectiveTo) return;
+      filteredEntries.push(hourlyArr);
     });
 
-    const requiredCount = tenantsWithData.size;
-    if (requiredCount > 1) {
-      dateHourlyTotals.forEach((_, dateKey) => {
-        const contributors = dateContributors.get(dateKey);
-        if (!contributors || contributors.size < requiredCount) {
-          dateHourlyTotals.delete(dateKey);
-        }
-      });
-    }
-
-    if (dateHourlyTotals.size === 0) return [];
+    if (filteredEntries.length === 0) return [];
 
     const result: EnvelopePoint[] = [];
+    const unitMultiplier = displayUnit === "kw" ? 1 : 1 / powerFactor;
 
     for (let h = 0; h < 24; h++) {
       let min = Infinity;
@@ -130,21 +52,20 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
       let sum = 0;
       let count = 0;
 
-      dateHourlyTotals.forEach((dayArr) => {
+      for (const dayArr of filteredEntries) {
         const val = dayArr[h];
-        if (val < 75) return;
+        // Keep the 75 kW filter for individual hour values consistency
+        if (val < 75) continue;
         if (val < min) min = val;
         if (val > max) max = val;
         sum += val;
         count += 1;
-      });
+      }
 
       if (count === 0) {
         result.push({ hour: `${h.toString().padStart(2, "0")}:00`, min: 0, max: 0, avg: 0 });
         continue;
       }
-
-      const unitMultiplier = displayUnit === "kw" ? 1 : 1 / powerFactor;
 
       result.push({
         hour: `${h.toString().padStart(2, "0")}:00`,
@@ -155,7 +76,7 @@ export function useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap 
     }
 
     return result;
-  }, [includedTenants, availableYears, effectiveFrom, effectiveTo, displayUnit, powerFactor, rawDataMap]);
+  }, [siteDataByDate, effectiveFrom, effectiveTo, displayUnit, powerFactor]);
 
   // Defer heavy computation to avoid blocking the main thread
   useEffect(() => {

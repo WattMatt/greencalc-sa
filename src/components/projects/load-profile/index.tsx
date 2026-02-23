@@ -9,6 +9,7 @@ import { LoadChart } from "./charts/LoadChart";
 import { EnvelopeChart } from "./charts/EnvelopeChart";
 import { useEnvelopeData } from "./hooks/useEnvelopeData";
 import { useRawScadaData } from "./hooks/useRawScadaData";
+import { useValidatedSiteData } from "./hooks/useValidatedSiteData";
 import { SolarChart } from "./charts/SolarChart";
 import { GridFlowChart } from "./charts/GridFlowChart";
 import { BatteryChart } from "./charts/BatteryChart";
@@ -54,18 +55,19 @@ export function LoadProfileChart({
   systemIncludesSolar = true,
   systemIncludesBattery = false,
 }: LoadProfileChartProps) {
-  // Fetch raw SCADA data on demand (only when this component is mounted/visible)
+  // Fetch raw SCADA data on demand
   const { rawDataMap } = useRawScadaData({ projectId });
 
-  // Get global settings as defaults - Diversity for load profiles, Derating for PV simulations
+  // Shared validated site data — single parse, single validation
+  const validatedSiteData = useValidatedSiteData({ tenants, rawDataMap });
+
+  // Get global settings as defaults
   const { settings: globalDeratingSettings } = useDeratingSettings();
   const { settings: globalDiversitySettings } = useDiversitySettings();
   
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kw");
   const [powerFactor, setPowerFactor] = useState(() => globalDeratingSettings.powerFactor);
-  // Multi-day selection for average mode (default: Wednesday only)
-  const [selectedDays, setSelectedDays] = useState<Set<number>>(() => new Set([3])); // 3 = Wednesday (0=Sun)
-  // Keep legacy selectedDay for compatibility with other components
+  const [selectedDays, setSelectedDays] = useState<Set<number>>(() => new Set([3]));
   const selectedDay: DayOfWeek = DAYS_OF_WEEK[(Array.from(selectedDays)[0] + 6) % 7] || "Wednesday";
   
   // Toggle states with localStorage persistence
@@ -82,80 +84,42 @@ export function LoadProfileChart({
     return saved !== null ? saved === 'true' : systemIncludesBattery;
   });
   
-  // Persist toggle states to localStorage
-  useEffect(() => {
-    localStorage.setItem('loadProfile_showTOU', String(showTOU));
-  }, [showTOU]);
-  
-  useEffect(() => {
-    localStorage.setItem('loadProfile_showPV', String(showPVProfile));
-  }, [showPVProfile]);
-  
-  useEffect(() => {
-    localStorage.setItem('loadProfile_showBattery', String(showBattery));
-  }, [showBattery]);
-  // Use simulated battery values if available, otherwise defaults
+  useEffect(() => { localStorage.setItem('loadProfile_showTOU', String(showTOU)); }, [showTOU]);
+  useEffect(() => { localStorage.setItem('loadProfile_showPV', String(showPVProfile)); }, [showPVProfile]);
+  useEffect(() => { localStorage.setItem('loadProfile_showBattery', String(showBattery)); }, [showBattery]);
+
   const [batteryCapacity, setBatteryCapacity] = useState(() => simulatedBatteryCapacityKwh || 500);
   const [batteryPower, setBatteryPower] = useState(() => simulatedBatteryPowerKw || 250);
-  // Use simulated DC/AC ratio if available, otherwise fall back to global settings
   const [dcAcRatio, setDcAcRatio] = useState(() => simulatedDcAcRatio || globalDeratingSettings.dcAcRatio);
   
-  // Sync simulated values when they become available (after query loads)
-  useEffect(() => {
-    if (simulatedDcAcRatio !== undefined && simulatedDcAcRatio !== null) {
-      setDcAcRatio(simulatedDcAcRatio);
-    }
-  }, [simulatedDcAcRatio]);
-  
-  useEffect(() => {
-    if (simulatedBatteryCapacityKwh !== undefined && simulatedBatteryCapacityKwh !== null) {
-      setBatteryCapacity(simulatedBatteryCapacityKwh);
-    }
-  }, [simulatedBatteryCapacityKwh]);
-  
-  useEffect(() => {
-    if (simulatedBatteryPowerKw !== undefined && simulatedBatteryPowerKw !== null) {
-      setBatteryPower(simulatedBatteryPowerKw);
-    }
-  }, [simulatedBatteryPowerKw]);
+  useEffect(() => { if (simulatedDcAcRatio != null) setDcAcRatio(simulatedDcAcRatio); }, [simulatedDcAcRatio]);
+  useEffect(() => { if (simulatedBatteryCapacityKwh != null) setBatteryCapacity(simulatedBatteryCapacityKwh); }, [simulatedBatteryCapacityKwh]);
+  useEffect(() => { if (simulatedBatteryPowerKw != null) setBatteryPower(simulatedBatteryPowerKw); }, [simulatedBatteryPowerKw]);
+
   const [show1to1Comparison, setShow1to1Comparison] = useState(true);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [systemLosses, setSystemLosses] = useState(() => globalDeratingSettings.systemLosses);
-  // Use diversity settings for load profile diversity factor
   const [diversityFactor, setDiversityFactor] = useState(() => globalDiversitySettings.diversityFactor);
-  // Month multi-select for average mode filtering (default: all months)
   const [selectedMonthsFilter, setSelectedMonthsFilter] = useState<Set<number>>(
     () => new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
   );
   const chartRef = useRef<HTMLDivElement>(null);
 
-  // Maximum possible PV based on connection (for reference)
   const maxPossiblePvKva = connectionSizeKva ? connectionSizeKva * 0.7 : null;
-  
-  // Use simulated solar capacity if available, otherwise fall back to maximum possible
   const maxPvAcKva = simulatedSolarCapacityKwp ?? maxPossiblePvKva;
-  
-  // Get effective DC/AC ratio - prefer simulated value if available
   const effectiveDcAcRatio = simulatedDcAcRatio ?? dcAcRatio;
-  
-  // Calculate DC capacity using effective ratio
-  const dcCapacityKwp = useMemo(() => {
-    return maxPvAcKva ? maxPvAcKva * effectiveDcAcRatio : null;
-  }, [maxPvAcKva, effectiveDcAcRatio]);
+  const dcCapacityKwp = useMemo(() => maxPvAcKva ? maxPvAcKva * effectiveDcAcRatio : null, [maxPvAcKva, effectiveDcAcRatio]);
 
-  // Determine if current selection includes only weekend days
   const isWeekendSelection = useMemo(() => {
     const days = Array.from(selectedDays);
     return days.every(d => d === 0 || d === 6);
   }, [selectedDays]);
 
-  // Legacy day index for compatibility
   const dayIndex = DAYS_OF_WEEK.indexOf(selectedDay);
   const unit = displayUnit === "kw" ? "kW" : "kVA";
 
-  // Navigate day for legacy compatibility (not used in multi-select mode)
   const navigateDay = (direction: "prev" | "next") => {
     const currentDays = Array.from(selectedDays);
     if (currentDays.length === 1) {
@@ -164,7 +128,6 @@ export function LoadProfileChart({
     }
   };
 
-  // Solcast PV profile hook
   const {
     pvProfile: solcastProfile,
     isLoading: solcastLoading,
@@ -177,7 +140,6 @@ export function LoadProfileChart({
     longitude: longitude || null,
   });
 
-  // Averaged data hook (always used now - no more month/specific modes)
   const {
     chartData,
     totalDaily,
@@ -208,10 +170,10 @@ export function LoadProfileChart({
     solcastProfile: useSolcast ? solcastProfile : undefined,
     systemLosses,
     diversityFactor,
-    rawDataMap,
+    validatedSiteData,
   });
 
-  // Envelope chart data (min/max/avg per hour across all days)
+  // Envelope chart data — consumes the same shared dataset
   const {
     envelopeData,
     isComputing: envelopeComputing,
@@ -220,7 +182,7 @@ export function LoadProfileChart({
     yearTo: envelopeYearTo,
     setYearFrom: setEnvelopeYearFrom,
     setYearTo: setEnvelopeYearTo,
-  } = useEnvelopeData({ tenants, displayUnit, powerFactor, rawDataMap });
+  } = useEnvelopeData({ displayUnit, powerFactor, validatedSiteData });
 
   const { exportToCSV, exportToPDF, exportToPNG, exportToSVG } = useExportHandlers({
     chartData,
@@ -250,7 +212,6 @@ export function LoadProfileChart({
 
   return (
     <div className="space-y-4">
-      {/* Main Chart Card */}
       <Card>
         <CardHeader className="pb-3">
           <ChartHeader
@@ -276,10 +237,8 @@ export function LoadProfileChart({
             exportToPDF={exportToPDF}
             exportToPNG={exportToPNG}
             exportToSVG={exportToSVG}
-            // Weekday multi-select props
             selectedDays={selectedDays}
             onDaysChange={setSelectedDays}
-            // Month multi-select props for filtering
             selectedMonthsFilter={selectedMonthsFilter}
             onMonthsFilterChange={setSelectedMonthsFilter}
           />
@@ -304,29 +263,23 @@ export function LoadProfileChart({
             setBatteryCapacity={setBatteryCapacity}
             batteryPower={batteryPower}
             setBatteryPower={setBatteryPower}
-            // Solcast props
             solcastProfile={solcastProfile}
             useSolcast={useSolcast}
             toggleSolcast={toggleSolcast}
             solcastLoading={solcastLoading}
             refetchSolcast={refetchSolcast}
             hasLocation={hasLocation}
-            // System losses
             systemLosses={systemLosses}
             setSystemLosses={setSystemLosses}
-            // Diversity factor
             diversityFactor={diversityFactor}
             setDiversityFactor={setDiversityFactor}
-            // Preset application callbacks
             setShowPVProfile={setShowPVProfile}
             setShowBattery={setShowBattery}
             setUseSolcast={toggleSolcast}
           />
 
-          {/* Load Profile Chart */}
           <LoadChart chartData={chartData} showTOU={showTOU} isWeekend={isWeekend} unit={unit} />
 
-          {/* Min/Max/Average Envelope Chart */}
           {envelopeComputing ? (
             <div className="mt-6 space-y-3">
               <Skeleton className="h-6 w-48" />
@@ -344,7 +297,6 @@ export function LoadProfileChart({
             />
           ) : null}
 
-          {/* PV Generation Chart */}
           {showPVProfile && maxPvAcKva && chartData && (
             <SolarChart
               chartData={chartData}
@@ -357,7 +309,6 @@ export function LoadProfileChart({
             />
           )}
 
-          {/* Grid Flow Chart */}
           {showPVProfile && maxPvAcKva && chartData && (
             <GridFlowChart
               chartData={chartData}
@@ -367,26 +318,19 @@ export function LoadProfileChart({
             />
           )}
 
-
-          {/* Over-Paneling Summary */}
           {showPVProfile && maxPvAcKva && overPanelingStats && effectiveDcAcRatio > 1 && (
             <OverPanelingAnalysis stats={overPanelingStats} dcAcRatio={effectiveDcAcRatio} />
           )}
 
-          {/* Battery Chart */}
           {showBattery && showPVProfile && maxPvAcKva && chartData && (
             <BatteryChart chartData={chartData} batteryCapacity={batteryCapacity} batteryPower={batteryPower} />
           )}
 
-          {/* TOU Legend */}
           {showTOU && <TOULegend />}
-
-          {/* Annotations Panel */}
           {showAnnotations && <AnnotationsPanel annotations={annotations} setAnnotations={setAnnotations} />}
         </CardContent>
       </Card>
 
-      {/* Compact Stats Row */}
       <ChartStats 
         totalDaily={totalDaily} 
         avgHourly={avgHourly} 
@@ -398,10 +342,8 @@ export function LoadProfileChart({
         validatedDateCount={validatedDateCount}
       />
 
-      {/* Top Contributors */}
       <TopContributors tenants={tenants} chartData={chartData} />
 
-      {/* Methodology Section */}
       <MethodologySection 
         items={[
           solarMethodology,
