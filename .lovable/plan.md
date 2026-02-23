@@ -1,42 +1,63 @@
 
 
-## Fix: Deferred Envelope Chart Loading
+## Validated-Date Load Profile (No Fallbacks)
 
-### Problem
-The envelope calculation processes ~28,000+ raw data points per tenant synchronously in a `useMemo`, blocking the main thread. The load profile chart (which is much lighter) can't render until the envelope finishes, making the entire page freeze.
+### What Changes
+Refactor the `baseChartData` computation in `useLoadProfileData.ts` to use a cross-tenant validated-date approach, matching how the envelope chart works. Remove all fallback logic (pre-computed profiles, shop-type estimates).
 
-### Why the Load Profile Is Fast
-The load profile hook calls `computeHourlyFromRawData()` once per tenant, producing 24 values. The envelope iterates every single raw data point, groups them into a Map of (date x hour), then sweeps all dates per hour for min/max/avg -- orders of magnitude more work, all synchronous.
+### File: `src/components/projects/load-profile/hooks/useLoadProfileData.ts`
 
-### Solution: Deferred Async Computation
+**Replace the `baseChartData` useMemo (lines 387-496) with a two-pass approach:**
 
-Move the envelope calculation off the main thread by deferring it with `useState` + `useEffect` + `setTimeout(0)` (or `requestIdleCallback`). This lets the load profile chart render immediately while the envelope computes in the background with a loading spinner.
+**Pass 1 -- Collect per-tenant, per-date hourly data:**
+- For each included tenant, call `parseRawData(getRawData(tenant))` to get raw points
+- Group into a structure: `Map<tenantId, Map<dateKey, number[24]>>` where each entry is the hourly kW for that tenant on that date
+- Apply area scaling (`tenantArea / scadaArea`) during grouping
+- Average sub-hourly readings (e.g. 30-min intervals) into hourly values
+- Apply the existing outage threshold (75 kW daily total) to discard outage days per tenant
+- Track which tenants produced valid raw data in a `tenantsWithRawData` set
 
-### Technical Details
+**Pass 2 -- Filter to full-coverage dates and aggregate:**
+- Build a set of "validated dates" -- dates where every tenant in `tenantsWithRawData` has a valid (non-outage) entry
+- Also filter by `selectedDays` (day-of-week filter) and optionally `selectedMonthsFilter`
+- For each validated date, sum all tenants' hourly values to get 24 hourly site totals
+- Average across all validated dates to produce the final 24-hour composite profile
+- No day multipliers needed since we're averaging real data from specific days
 
-**File: `src/components/projects/load-profile/hooks/useEnvelopeData.ts`**
+**Remove fallback logic:**
+- Remove Priority 2 (multi-meter averaged profiles)
+- Remove Priority 3 (single SCADA pre-computed profiles)
+- Remove Priority 4 (shop-type estimates)
+- Tenants without raw SCADA data simply contribute 0 (they are excluded from `tenantsWithRawData` and don't affect the validated-date filter)
 
-1. Replace the `useMemo` for `envelopeData` with a `useState` + `useEffect` pattern:
-   - State: `envelopeData` (starts empty) + `isComputing` (loading flag)
-   - Effect: When inputs change, set `isComputing = true`, then use `setTimeout(fn, 0)` to defer the heavy computation to the next event loop tick
-   - The computation logic itself stays the same, just moves into the deferred callback
-   - On completion, set the result into state and `isComputing = false`
+**Additional hook return:**
+- Add `validatedDateCount: number` so the UI can display how many dates underpin the profile
 
-2. Return `isComputing` from the hook so the UI can show a loading indicator.
+**Update `weekdayDailyKwh` / `weekendDailyKwh` (lines 293-384):**
+- Apply the same validated-date logic for consistency
+- Remove fallback paths (multi-meter, single SCADA, shop-type)
 
-**File: `src/components/projects/load-profile/index.tsx`**
+**Update `tenantsWithScada` / `tenantsEstimated` (lines 278-290):**
+- Simplify: a tenant "has SCADA" if `parseRawData(getRawData(tenant)).length > 0`
+- Everything else is "estimated" (and contributes nothing to the profile)
 
-3. Consume the new `isComputing` flag from `useEnvelopeData`.
-4. When `isComputing` is true, show a small loading skeleton/spinner in place of the `EnvelopeChart`.
-5. When false, render the chart as before.
+### File: `src/components/projects/load-profile/index.tsx`
 
-**File: `src/components/projects/load-profile/charts/EnvelopeChart.tsx`**
+- Consume the new `validatedDateCount` from `useLoadProfileData`
+- Display it in the `ChartStats` component or header area (e.g. "Based on 127 validated days")
 
-No changes needed to the chart itself -- it already handles empty data gracefully.
+### File: `src/components/projects/load-profile/components/ChartStats.tsx`
 
-### Result
-- The Load Profile chart renders immediately when the tab opens
-- The Envelope chart shows a "Computing..." indicator briefly, then appears once done
-- The page remains fully interactive throughout
-- No data or accuracy changes -- same calculation, just deferred
+- Add an optional `validatedDateCount` prop
+- Display it as a small badge or stat card alongside existing stats
+
+### What Stays the Same
+- The envelope chart is untouched
+- PV, battery, grid flow calculations downstream are unchanged
+- Export functions, annotations, TOU colouring remain
+- The outage threshold (75 kW) stays
+- `parseRawData` utility is reused as-is
+
+### Performance
+This approach is comparable to the current per-tenant cache since it still collapses to 24 values. The cross-tenant date validation adds one extra sweep but is negligible compared to the envelope's min/max tracking.
 
