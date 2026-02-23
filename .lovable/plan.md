@@ -1,62 +1,71 @@
 
-## Fix: SCADA Profile Search Truncated at 1,000 Rows
+
+## Fix: Align Stacked Meter Chart with Site-Level Envelope Values
 
 ### Problem
 
-There are **1,919** meter profiles in the database, but the query fetching profiles for assignment in `TenantManager.tsx` (line 343) relies on Supabase's default limit of **1,000 rows**. This means ~900 profiles are silently missing from the assignment dropdown -- you literally cannot find them.
+The "By Meter" stacked chart currently computes each tenant's **maximum** independently across all filtered days, then stacks them. Because each tenant can peak on a different day, the stacked total ("sum of peaks") is always higher than the envelope's "Max" line ("peak of sums"). The two charts show inconsistent totals, which is confusing.
 
-### Solution
+The correct approach: compute statistics at the **site level first**, then decompose into tenant contributions.
 
-Paginate the query to fetch all results. Since the dataset is under 2,000 rows, we can safely fetch in two batches of 1,000 using `.range()`, then merge.
+### How It Should Work
+
+**Average view (default):** For each tenant, compute the average hourly value across all filtered days. Since averages are additive, the stacked total will exactly equal the envelope's "Avg" (dashed) line.
+
+**Max view:** For each hour, find the specific **day** where the site-wide total is highest. Then show each tenant's actual value on that same day. The stacked total will exactly equal the envelope's "Max" line.
+
+**Min view:** Same logic -- find the day with the lowest site total per hour, show each tenant's value on that day.
 
 ### Technical Details
 
-**File: `src/components/projects/TenantManager.tsx`** (lines 331-347)
+**File: `src/components/projects/load-profile/hooks/useStackedMeterData.ts`**
 
-Replace the single query with a paginated fetch that retrieves all rows:
+1. Accept `siteDataByDate` from validated site data (needed to identify which day is the max/min at each hour)
+2. Add a `mode` prop: `"avg" | "max" | "min"` (default `"avg"`)
+3. Replace the current per-tenant MAX logic with three modes:
 
-```typescript
-// Fetch SCADA imports for profile assignment (filtered by scope)
-const { data: scadaImports } = useQuery({
-  queryKey: ["scada-imports-for-assignment", profileScope, projectId],
-  queryFn: async () => {
-    const PAGE_SIZE = 1000;
-    let allData: ScadaImport[] = [];
-    let from = 0;
-    let hasMore = true;
+```text
+Mode "avg" (default):
+  For each tenant, sum their hourly values across filtered days and divide by count.
+  Stacked total = site average (matches envelope avg line).
 
-    while (hasMore) {
-      let query = supabase
-        .from("scada_imports")
-        .select("id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend, meter_label, meter_color, date_range_start, date_range_end, weekday_days, weekend_days, processed_at, shop_number")
-        .order("shop_name")
-        .range(from, from + PAGE_SIZE - 1);
+Mode "max":
+  For each hour h, scan siteDataByDate to find the dateKey with the highest site total at hour h.
+  Then for each tenant, use their value on THAT specific date at hour h.
+  Stacked total = site max (matches envelope max line).
 
-      if (profileScope === 'local') {
-        query = query.eq('project_id', projectId);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      allData = allData.concat(data as ScadaImport[]);
-      hasMore = (data?.length ?? 0) === PAGE_SIZE;
-      from += PAGE_SIZE;
-    }
-
-    return allData;
-  },
-});
+Mode "min":
+  Same as max but find the date with the lowest site total at hour h.
+  Stacked total = site min (matches envelope min line).
 ```
+
+4. Include non-SCADA fallback tenants as an "Estimated" bar (using the same fallback logic from the envelope hook), so the full site load is represented.
+
+**File: `src/components/projects/load-profile/charts/LoadEnvelopeChart.tsx`**
+
+- Add a small mode selector (e.g. three toggle buttons: Avg / Max / Min) next to the existing Envelope/By Meter toggle, visible only in "stacked" view mode.
+- Pass the selected mode down to the hook.
+
+**File: `src/components/projects/load-profile/index.tsx`**
+
+- Add state for the stacked mode (`useState<"avg" | "max" | "min">("avg")`)
+- Pass `siteDataByDate`, `nonScadaTenants`, `shopTypes`, and the mode to `useStackedMeterData`
+- Pass the mode and setter to `LoadEnvelopeChart`
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `TenantManager.tsx` | Paginate the SCADA imports query to fetch all 1,919 rows |
+| `hooks/useStackedMeterData.ts` | Rewrite aggregation: avg/max/min modes computed at site level, decomposed per tenant; add fallback bar |
+| `charts/LoadEnvelopeChart.tsx` | Add Avg/Max/Min mode toggle visible in stacked view |
+| `charts/StackedMeterChart.tsx` | No changes needed (it just renders what it receives) |
+| `load-profile/index.tsx` | Add stacked mode state; pass new props to hook and chart |
 
-### Impact
+### Result
 
-- All meter profiles will appear in the assignment dropdown
-- Search will work across the full dataset
-- No UI changes needed -- the dropdown and search remain identical
+- In "Avg" mode: stacked total matches the envelope dashed average line exactly
+- In "Max" mode: stacked total matches the envelope solid max line exactly
+- In "Min" mode: stacked total matches the envelope solid min line exactly
+- Non-SCADA tenants appear as an "Estimated" bar so the full site is represented
+- Users can toggle between views to understand which tenants drive peak, average, or minimum demand
+
