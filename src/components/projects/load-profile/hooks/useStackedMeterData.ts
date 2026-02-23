@@ -205,8 +205,8 @@ export function useStackedMeterData({
 
       dateWithTotals.sort((a, b) => a.total - b.total);
       const targetIndex = mode === "max"
-        ? Math.min(dateWithTotals.length - 1, Math.floor(dateWithTotals.length * 0.95))
-        : Math.max(0, Math.floor(dateWithTotals.length * 0.05));
+        ? Math.min(dateWithTotals.length - 1, Math.floor(dateWithTotals.length * 0.97))
+        : Math.max(0, Math.floor(dateWithTotals.length * 0.03));
       const bestDateKey = dateWithTotals.length > 0 ? dateWithTotals[targetIndex].dateKey : null;
 
       // Use that single day's data for all tenants
