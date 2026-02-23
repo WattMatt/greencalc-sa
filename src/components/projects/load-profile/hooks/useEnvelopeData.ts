@@ -185,8 +185,8 @@ export function useEnvelopeData({
 
     // Step 2: Sort by daily total and pick 5th/95th percentile days
     dayEntries.sort((a, b) => a.total - b.total);
-    const p5Index = Math.max(0, Math.floor(dayEntries.length * 0.03));
-    const p95Index = Math.min(dayEntries.length - 1, Math.floor(dayEntries.length * 0.97));
+    const p5Index = Math.max(0, Math.floor(dayEntries.length * 0.01));
+    const p95Index = Math.min(dayEntries.length - 1, Math.floor(dayEntries.length * 0.99));
     const minDayArr = dayEntries[p5Index].arr;
     const maxDayArr = dayEntries[p95Index].arr;
 
