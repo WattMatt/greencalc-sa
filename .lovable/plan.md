@@ -1,61 +1,46 @@
 
 
-## Fix: Ensure Stacked Meter Averaging Matches Envelope
+## Remove Envelope Clamping and Add Mode Toggle
 
-### Current State
+### Problem
+The `useEnvelopeData` hook currently clamps max/min values so they never cross the average line (`Math.max(rawMax, avgVal)` / `Math.min(rawMin, avgVal)`). This masks data issues rather than showing actual percentile values. Instead, the Envelope view should expose the same **Avg / Max / Min** toggle that exists on the "By Meter" view, allowing users to select which profile to display.
 
-All three hooks (useLoadProfileData, useEnvelopeData, useStackedMeterData) correctly filter dates by selected months and days-of-week. The month/day toggles DO affect the charts.
+### Changes
 
-### Issue Found
+#### 1. Remove clamping in `useEnvelopeData.ts`
+- Revert the `Math.min` / `Math.max` clamping on lines 198-199 back to raw values:
+  - `min: rawMin` (not `Math.min(rawMin, avgVal)`)
+  - `max: rawMax` (not `Math.max(rawMax, avgVal)`)
 
-In `useStackedMeterData`, the "avg" mode counts days **per tenant** (only days where that tenant has data). The envelope averages by the **total number of filtered days** (treating missing tenant data as 0). This means:
+#### 2. Show mode toggle for Envelope view in `LoadEnvelopeChart.tsx`
+- Move the **Avg / Max / Min** `ToggleGroup` so it also appears when `viewMode === "envelope"` (currently it only renders when `viewMode === "stacked"`)
+- Position it to the right of the Envelope / By Meter toggle, matching the existing layout
 
-- Envelope avg: `tenantA_total / 100_days + tenantB_total / 100_days`
-- Stacked avg: `tenantA_total / 100_days + tenantB_total / 50_days` (if B only has 50 days of data)
-
-The stacked total can be higher than the envelope avg because tenants with sparse data get averaged by fewer days.
-
-### Fix
-
-In `useStackedMeterData`, change the avg mode to divide by the total count of filtered dates (not per-tenant count). This ensures mathematical alignment with both the envelope and the main load profile.
+#### 3. Wire the mode toggle to the Envelope chart rendering
+- When in **Avg** mode: show the full envelope (band + max/min lines + dashed avg) as it works today
+- When in **Max** mode: show only the max (99th percentile) line as a solid line
+- When in **Min** mode: show only the min (1st percentile) line as a solid line
+- This mirrors how the "By Meter" stacked chart already switches between avg/max/min
 
 ### Technical Details
 
-**File: `src/components/projects/load-profile/hooks/useStackedMeterData.ts`** (lines 177-195)
+**`useEnvelopeData.ts`** (line ~198-199):
+```typescript
+// Before (clamped):
+min: Math.min(rawMin, avgVal),
+max: Math.max(rawMax, avgVal),
 
-Change from per-tenant `dayCount` to using `filteredDateKeys.length` as the divisor:
-
-```text
-Current:
-  for (const dateKey of filteredDateKeys) {
-    const hourlyArr = dateMap.get(dateKey);
-    if (!hourlyArr) continue;
-    dayCount++;                               // <-- per-tenant count
-    ...
-  }
-  tenantProfiles.set(tenantId, sumHourly.map(v => v / dayCount));
-
-Fixed:
-  for (const dateKey of filteredDateKeys) {
-    const hourlyArr = dateMap.get(dateKey);
-    if (!hourlyArr) continue;
-    for (let h = 0; h < 24; h++) {
-      sumHourly[h] += hourlyArr[h] * diversityFactor * unitMultiplier;
-    }
-  }
-  // Divide by TOTAL filtered date count (same as envelope)
-  tenantProfiles.set(tenantId, sumHourly.map(v => v / filteredDateKeys.length));
+// After (raw values):
+min: rawMin,
+max: rawMax,
 ```
 
-### Files to Change
+**`LoadEnvelopeChart.tsx`** (line ~97):
+- Change the condition `viewMode === "stacked"` to `true` (or remove the condition) so the Avg/Max/Min toggle is always visible
+- Conditionally render chart series based on the active mode:
+  - `avg`: render Area band + max line + min line + avg dashed line (current default)
+  - `max`: render only max solid line
+  - `min`: render only min solid line
 
-| File | Change |
-|------|--------|
-| `hooks/useStackedMeterData.ts` | Use `filteredDateKeys.length` as divisor instead of per-tenant day count in avg mode |
-
-### Result
-
-- Stacked "Avg" total will exactly match the envelope "Avg" line
-- Tenants with missing data on certain days will show proportionally lower bars (as they should)
-- Month and day selection filtering continues working correctly across all views
+**`index.tsx`**: No changes needed -- `stackedMode` and `onStackedModeChange` are already passed through.
 
