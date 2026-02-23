@@ -1,54 +1,57 @@
 
-## Add Outlier Detection to SCADA Data Validation
+## Add Chart View Toggle: Load Envelope vs Individual Meters
 
-### Problem
-Individual tenant meters can have faulty readings (e.g., stuck meters reporting 1,200 kW flat for an entire day). These single-day anomalies inflate the envelope "Max" line and distort averages.
+### Overview
+Add a toggle bar above the chart area that switches between two views:
+1. **Load Envelope** (default) -- the existing min/max/avg band chart
+2. **Individual Meters** -- a stacked area chart where each tenant with SCADA data gets its own coloured band, visually decomposing the "Max" line into per-tenant contributions
 
-### Approach: Per-Tenant IQR-Based Outlier Removal
+### How It Works
 
-Outlier detection will be applied **per tenant** in `useValidatedSiteData.ts` (Pass 2.5, between building per-tenant date maps and computing site-level totals). This catches bad data at the source before it propagates.
-
-**Algorithm:**
-1. For each tenant, compute the **median daily total kWh** across all their dates
-2. Compute the **IQR** (interquartile range) of daily totals
-3. Flag any date where the daily total exceeds **Q3 + 3x IQR** as an outlier (a generous threshold to only catch truly anomalous days like the 1,200 kW spike)
-4. Remove flagged dates from that tenant's date map
-5. Expose an `outlierCount` in the return value so the UI can inform the user
+The per-tenant data already exists in `validatedSiteData.tenantDateMaps`. For the "Individual Meters" view, a new hook will compute the **maximum daily profile** for each tenant (the hourly values from the date with the highest daily total for that tenant, matching the selected day/month filters). These per-tenant max profiles are then stacked in the chart, so the top of the stack equals the site maximum.
 
 ### File Changes
 
-**1. Edit: `src/components/projects/load-profile/hooks/useValidatedSiteData.ts`**
-- After Pass 1 (building per-tenant date maps), add a new **Pass 1.5: Outlier Removal**
+**1. New file: `src/components/projects/load-profile/hooks/useStackedMeterData.ts`**
+- Takes `validatedSiteData`, `selectedDays`, `selectedMonths`, `displayUnit`, `powerFactor`, `diversityFactor`, and year range as inputs
 - For each tenant in `tenantDateMaps`:
-  - Collect daily totals (sum of 24 hourly values) for all dates
-  - Sort and compute Q1, Q3, IQR
-  - Calculate upper fence = Q3 + 3 * IQR
-  - Delete any date entry where the daily total exceeds the upper fence
-- Track total outlier dates removed across all tenants
-- Add `outlierCount: number` to the `ValidatedSiteData` interface and return value
+  - Filter dates by selected days, months, and year range
+  - For each hour, find the **maximum** value across all filtered dates (mirrors the envelope "Max" logic but per tenant)
+- Returns an array of 24 data points, each containing `hour` and a key per tenant ID with that tenant's max value
+- Also returns a colour map (tenant ID to a colour from a predefined palette)
 
-**2. Edit: `src/components/projects/load-profile/index.tsx`**
-- Destructure `outlierCount` from `useValidatedSiteData`
-- Display a small info badge near the chart header when outliers were removed (e.g., "2 outlier days excluded")
+**2. New file: `src/components/projects/load-profile/charts/StackedMeterChart.tsx`**
+- Renders a Recharts `ComposedChart` with stacked `Area` components, one per tenant
+- Each area uses a unique colour from the palette
+- Includes TOU background bands (same as envelope chart)
+- Tooltip shows each tenant's contribution at the hovered hour
+- Reuses the same `syncId="loadProfileSync"` for cursor sync with other charts
+- Includes a small legend showing tenant name + colour
 
-### Technical Detail
+**3. Edit: `src/components/projects/load-profile/charts/LoadEnvelopeChart.tsx`**
+- Add a `viewMode` prop: `"envelope" | "stacked"`
+- Add a segmented toggle (two small buttons) in the header row next to "Load Envelope" label
+- When `viewMode === "stacked"`, render the new `StackedMeterChart` instead of the envelope chart
+- Pass through all shared props (TOU, unit, year selectors, loading state)
 
+**4. Edit: `src/components/projects/load-profile/index.tsx`**
+- Add state: `const [chartViewMode, setChartViewMode] = useState<"envelope" | "stacked">("envelope")`
+- Call `useStackedMeterData` hook (only computes when needed)
+- Pass `chartViewMode`, stacked data, tenant key map, and colour map to `LoadEnvelopeChart`
+
+### Technical Details
+
+**Colour palette** -- a set of 20 distinguishable colours cycled for tenants:
 ```text
-Per-tenant outlier detection (IQR method):
-
-  dailyTotals = [sum of 24h for each date]
-  sorted = dailyTotals.sort()
-  Q1 = sorted[25th percentile]
-  Q3 = sorted[75th percentile]
-  IQR = Q3 - Q1
-  upperFence = Q3 + 3 * IQR
-
-  If dailyTotal > upperFence --> remove that date for this tenant
+["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#3b82f6", "#84cc16", ...]
 ```
 
-The 3x IQR multiplier is deliberately generous -- it will only catch extreme spikes (like a 1,200 kW reading on a 20 kW meter) while preserving normal seasonal variation.
+**Max profile calculation per tenant:**
+```text
+For tenant T, hour H:
+  stackedValue[T][H] = max( T.dateMap[date][H] ) for all filtered dates
+```
 
-### What Stays the Same
-- All downstream hooks (`useLoadProfileData`, `useEnvelopeData`) are unaffected -- they consume the already-cleaned `siteDataByDate`
-- The site-level outage threshold (75 kW) remains as a separate filter
-- Chart components, export handlers, and PV/battery logic are untouched
+This mirrors how the envelope Max line works, but broken down by tenant so the stacked areas visually explain the composition of the peak.
+
+**Toggle UI** -- two compact buttons ("Envelope" / "By Meter") placed in the chart header row, styled consistently with the existing kW/kVA toggle.
