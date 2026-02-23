@@ -108,31 +108,30 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
       }
     }
 
-    // === Pass 1.5: Per-tenant IQR-based outlier removal ===
-    // Only removes extreme spikes (stuck meters etc.) — requires BOTH:
-    //   1. Daily total > Q3 + 3*IQR  (statistical outlier)
-    //   2. Daily total > 5x median   (sanity check to avoid over-filtering)
+    // === Pass 1.5: Per-tenant outlier removal (extreme spikes only) ===
+    // Only removes catastrophic meter faults (e.g. stuck at 1,200 kW on a 20 kW meter).
+    // Requires ALL of:
+    //   1. Daily total > Q3 + 6*IQR   (very conservative statistical outlier)
+    //   2. Daily total > 10x median   (must be an order of magnitude above normal)
+    //   3. At least 30 days of data for the tenant
     let outlierCount = 0;
     for (const tenantId of tenantsWithRawData) {
       const dateMap = tenantDateMaps.get(tenantId)!;
-      if (dateMap.size < 20) continue; // need enough data for meaningful statistics
+      if (dateMap.size < 30) continue;
 
-      // Collect daily totals
       const dailyTotals: { date: string; total: number }[] = [];
       dateMap.forEach((hourly, dateKey) => {
         dailyTotals.push({ date: dateKey, total: hourly.reduce((a, b) => a + b, 0) });
       });
 
-      // Sort by total
       const sorted = dailyTotals.map(d => d.total).sort((a, b) => a - b);
       const median = sorted[Math.floor(sorted.length * 0.5)];
       const q1 = sorted[Math.floor(sorted.length * 0.25)];
       const q3 = sorted[Math.floor(sorted.length * 0.75)];
       const iqr = q3 - q1;
-      const upperFence = q3 + 3 * iqr;
-      const medianGate = median * 5;
+      const upperFence = q3 + 6 * iqr;
+      const medianGate = median * 10;
 
-      // Remove outlier dates — must exceed BOTH thresholds
       for (const { date, total } of dailyTotals) {
         if (total > upperFence && total > medianGate) {
           dateMap.delete(date);
