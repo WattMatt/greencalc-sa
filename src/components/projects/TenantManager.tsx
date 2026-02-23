@@ -302,6 +302,7 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [autoMatching, setAutoMatching] = useState(false);
+  const [selectedTenantIds, setSelectedTenantIds] = useState<Set<string>>(new Set());
 
   // Fetch multi-meter counts for all tenants
   const { data: tenantMeterCounts = {} } = useQuery({
@@ -393,6 +394,20 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
       toast.success("Tenant removed");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const bulkDeleteTenants = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from("project_tenants").delete().in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: (_data, ids) => {
+      queryClient.invalidateQueries({ queryKey: ["project-tenants", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["tenant-meter-counts", projectId] });
+      setSelectedTenantIds(new Set());
+      toast.success(`Deleted ${ids.length} tenants`);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -1074,9 +1089,38 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
 
       {tenants.length > 0 ? (
         <Card>
+          {selectedTenantIds.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2 border-b bg-muted/50">
+              <span className="text-sm font-medium">{selectedTenantIds.size} selected</span>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={bulkDeleteTenants.isPending}
+                onClick={() => bulkDeleteTenants.mutate(Array.from(selectedTenantIds))}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                {bulkDeleteTenants.isPending ? "Deleting..." : `Delete ${selectedTenantIds.size}`}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedTenantIds(new Set())}>
+                Clear
+              </Button>
+            </div>
+          )}
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[40px]">
+                  <Checkbox
+                    checked={tenants.length > 0 && selectedTenantIds.size === tenants.length}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedTenantIds(new Set(tenants.map(t => t.id)));
+                      } else {
+                        setSelectedTenantIds(new Set());
+                      }
+                    }}
+                  />
+                </TableHead>
                 <TableHead className="w-[100px]">
                   <button 
                     className="flex items-center gap-1 hover:text-foreground transition-colors"
@@ -1241,8 +1285,24 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
                         el.scrollIntoView({ behavior: "smooth", block: "center" });
                       }
                     }}
-                    className={highlightTenantId === tenant.id ? "bg-primary/10 animate-pulse" : ""}
+                    className={cn(
+                      highlightTenantId === tenant.id && "bg-primary/10 animate-pulse",
+                      selectedTenantIds.has(tenant.id) && "bg-muted/50"
+                    )}
                   >
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedTenantIds.has(tenant.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedTenantIds(prev => {
+                            const next = new Set(prev);
+                            if (checked) next.add(tenant.id);
+                            else next.delete(tenant.id);
+                            return next;
+                          });
+                        }}
+                      />
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{tenant.shop_number || '-'}</TableCell>
                     <TableCell className="font-medium">{getTenantDisplayName(tenant)}</TableCell>
                     <TableCell>{tenantArea.toLocaleString()}</TableCell>
