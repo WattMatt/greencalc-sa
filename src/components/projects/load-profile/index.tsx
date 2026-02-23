@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tenant, ShopType, DAYS_OF_WEEK, DayOfWeek, DisplayUnit, Annotation } from "./types";
 import { useLoadProfileData } from "./hooks/useLoadProfileData";
 import { useExportHandlers } from "./hooks/useExportHandlers";
@@ -176,7 +175,6 @@ export function LoadProfileChart({
   // Envelope chart data — consumes the same shared dataset
   const {
     envelopeData,
-    isComputing: envelopeComputing,
     availableYears,
     yearFrom: envelopeYearFrom,
     yearTo: envelopeYearTo,
@@ -280,12 +278,7 @@ export function LoadProfileChart({
 
           <LoadChart chartData={chartData} showTOU={showTOU} isWeekend={isWeekend} unit={unit} />
 
-          {envelopeComputing ? (
-            <div className="mt-6 space-y-3">
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-[300px] w-full" />
-            </div>
-          ) : envelopeData.length > 0 ? (
+          {envelopeData.length > 0 && (
             <EnvelopeChart
               envelopeData={envelopeData}
               availableYears={availableYears}
@@ -295,7 +288,7 @@ export function LoadProfileChart({
               setYearTo={setEnvelopeYearTo}
               unit={unit}
             />
-          ) : null}
+          )}
 
           {showPVProfile && maxPvAcKva && chartData && (
             <SolarChart

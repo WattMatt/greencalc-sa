@@ -128,19 +128,39 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
       else estimatedCount++;
     }
 
-    // === Pass 2: Find validated dates (all SCADA tenants have data) ===
+    // === Pass 2: Find overlapping DATE RANGE across all SCADA tenants ===
+    // For each meter, find its earliest and latest valid date.
+    // The overlap is [max of all starts, min of all ends].
+    // Within that range, sum whatever meters have data on each date.
     let allValidatedDates: string[] = [];
 
     if (tenantsWithRawData.length > 0) {
-      const firstMap = tenantDateMaps.get(tenantsWithRawData[0])!;
-      const candidateDates = Array.from(firstMap.keys());
-      allValidatedDates = candidateDates.filter((dateKey) => {
-        for (let i = 1; i < tenantsWithRawData.length; i++) {
-          const otherMap = tenantDateMaps.get(tenantsWithRawData[i])!;
-          if (!otherMap.has(dateKey)) return false;
+      let rangeStart = "";
+      let rangeEnd = "9999-12-31";
+
+      for (const tenantId of tenantsWithRawData) {
+        const dateMap = tenantDateMaps.get(tenantId)!;
+        const dates = Array.from(dateMap.keys()).sort();
+        if (dates.length === 0) continue;
+        const first = dates[0];
+        const last = dates[dates.length - 1];
+        if (first > rangeStart) rangeStart = first;
+        if (last < rangeEnd) rangeEnd = last;
+      }
+
+      // Collect all unique dates from any meter that fall within the overlap range
+      if (rangeStart <= rangeEnd) {
+        const dateSet = new Set<string>();
+        for (const tenantId of tenantsWithRawData) {
+          const dateMap = tenantDateMaps.get(tenantId)!;
+          dateMap.forEach((_, dateKey) => {
+            if (dateKey >= rangeStart && dateKey <= rangeEnd) {
+              dateSet.add(dateKey);
+            }
+          });
         }
-        return true;
-      });
+        allValidatedDates = Array.from(dateSet).sort();
+      }
     }
 
     // === Pass 3: Sum all tenants at each interval to produce site-level data ===
@@ -150,7 +170,8 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
       const siteHourly = Array(24).fill(0);
       for (const tenantId of tenantsWithRawData) {
         const dateMap = tenantDateMaps.get(tenantId)!;
-        const tenantHourly = dateMap.get(dateKey)!;
+        const tenantHourly = dateMap.get(dateKey);
+        if (!tenantHourly) continue; // meter may not have this specific date
         for (let h = 0; h < 24; h++) {
           siteHourly[h] += tenantHourly[h];
         }
