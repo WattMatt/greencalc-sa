@@ -94,7 +94,7 @@ export function LoadEnvelopeChart({
             By Meter
           </ToggleGroupItem>
         </ToggleGroup>
-        {viewMode === "stacked" && onStackedModeChange && (
+        {onStackedModeChange && (
           <ToggleGroup
             type="single"
             value={stackedMode}
@@ -237,19 +237,29 @@ export function LoadEnvelopeChart({
                 }}
               />
 
-              <Area type="monotone" dataKey="base" stackId="envelope" stroke="none" fill="transparent" dot={false} activeDot={false} />
-              <Area type="monotone" dataKey="band" stackId="envelope" stroke="none" fill="url(#envelopeFill)" dot={false} activeDot={false} />
-              <Line type="monotone" dataKey="max" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} activeDot={false} />
-              <Line type="monotone" dataKey="min" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} activeDot={false} />
-              <Line
-                type="monotone"
-                dataKey="avg"
-                stroke="hsl(var(--muted-foreground))"
-                strokeWidth={1.5}
-                strokeDasharray="5 3"
-                dot={false}
-                activeDot={{ r: 4, stroke: "hsl(var(--muted-foreground))", strokeWidth: 2, fill: "hsl(var(--background))" }}
-              />
+              {stackedMode === "avg" && (
+                <>
+                  <Area type="monotone" dataKey="base" stackId="envelope" stroke="none" fill="transparent" dot={false} activeDot={false} />
+                  <Area type="monotone" dataKey="band" stackId="envelope" stroke="none" fill="url(#envelopeFill)" dot={false} activeDot={false} />
+                  <Line type="monotone" dataKey="max" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} activeDot={false} />
+                  <Line type="monotone" dataKey="min" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} activeDot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="avg"
+                    stroke="hsl(var(--muted-foreground))"
+                    strokeWidth={1.5}
+                    strokeDasharray="5 3"
+                    dot={false}
+                    activeDot={{ r: 4, stroke: "hsl(var(--muted-foreground))", strokeWidth: 2, fill: "hsl(var(--background))" }}
+                  />
+                </>
+              )}
+              {stackedMode === "max" && (
+                <Line type="monotone" dataKey="max" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }} />
+              )}
+              {stackedMode === "min" && (
+                <Line type="monotone" dataKey="min" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }} />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
