@@ -1,5 +1,6 @@
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2 } from "lucide-react";
 import { EnvelopePoint } from "../hooks/useEnvelopeData";
 
 interface EnvelopeChartProps {
@@ -10,6 +11,7 @@ interface EnvelopeChartProps {
   setYearFrom: (y: number | null) => void;
   setYearTo: (y: number | null) => void;
   unit: string;
+  isLoading?: boolean;
 }
 
 export function EnvelopeChart({
@@ -20,7 +22,19 @@ export function EnvelopeChart({
   setYearFrom,
   setYearTo,
   unit,
+  isLoading,
 }: EnvelopeChartProps) {
+  if (isLoading) {
+    return (
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-muted-foreground">Min / Max / Average Envelope</p>
+        <div className="h-[200px] flex items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
   if (!envelopeData.length) return null;
 
   // Transform data for the stacked area trick:
