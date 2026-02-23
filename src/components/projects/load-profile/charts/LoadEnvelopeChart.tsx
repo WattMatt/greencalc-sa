@@ -1,33 +1,39 @@
-import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
+import { getTOUPeriod, TOU_COLORS } from "../types";
 import { EnvelopePoint } from "../hooks/useEnvelopeData";
 
-interface EnvelopeChartProps {
+interface LoadEnvelopeChartProps {
   envelopeData: EnvelopePoint[];
   availableYears: number[];
   yearFrom: number;
   yearTo: number;
   setYearFrom: (y: number | null) => void;
   setYearTo: (y: number | null) => void;
+  showTOU: boolean;
+  isWeekend: boolean;
   unit: string;
   isLoading?: boolean;
 }
 
-export function EnvelopeChart({
+export function LoadEnvelopeChart({
   envelopeData,
   availableYears,
   yearFrom,
   yearTo,
   setYearFrom,
   setYearTo,
+  showTOU,
+  isWeekend,
   unit,
   isLoading,
-}: EnvelopeChartProps) {
+}: LoadEnvelopeChartProps) {
   if (isLoading) {
     return (
       <div className="space-y-1">
-        <p className="text-xs font-medium text-muted-foreground">Min / Max / Average Envelope</p>
+        <p className="text-xs font-medium text-muted-foreground">Load Envelope</p>
         <div className="h-[200px] flex items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -37,8 +43,6 @@ export function EnvelopeChart({
 
   if (!envelopeData.length) return null;
 
-  // Transform data for the stacked area trick:
-  // "base" = min value (rendered transparent), "band" = max - min (rendered with fill)
   const chartData = envelopeData.map((d) => ({
     hour: d.hour,
     base: d.min,
@@ -51,12 +55,9 @@ export function EnvelopeChart({
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <p className="text-xs font-medium text-muted-foreground">Min / Max / Average Envelope</p>
+        <p className="text-xs font-medium text-muted-foreground">Load Envelope</p>
         <div className="flex items-center gap-1.5 ml-auto">
-          <Select
-            value={String(yearFrom)}
-            onValueChange={(v) => setYearFrom(Number(v))}
-          >
+          <Select value={String(yearFrom)} onValueChange={(v) => setYearFrom(Number(v))}>
             <SelectTrigger className="h-7 w-[72px] text-xs">
               <SelectValue />
             </SelectTrigger>
@@ -69,10 +70,7 @@ export function EnvelopeChart({
             </SelectContent>
           </Select>
           <span className="text-xs text-muted-foreground">to</span>
-          <Select
-            value={String(yearTo)}
-            onValueChange={(v) => setYearTo(Number(v))}
-          >
+          <Select value={String(yearTo)} onValueChange={(v) => setYearTo(Number(v))}>
             <SelectTrigger className="h-7 w-[72px] text-xs">
               <SelectValue />
             </SelectTrigger>
@@ -97,6 +95,23 @@ export function EnvelopeChart({
               </linearGradient>
             </defs>
 
+            {/* TOU Background */}
+            {showTOU &&
+              Array.from({ length: 24 }, (_, h) => {
+                const period = getTOUPeriod(h, isWeekend);
+                const nextHour = h === 23 ? 23 : h + 1;
+                return (
+                  <ReferenceArea
+                    key={h}
+                    x1={`${h.toString().padStart(2, "0")}:00`}
+                    x2={`${nextHour.toString().padStart(2, "0")}:00`}
+                    fill={TOU_COLORS[period].fill}
+                    fillOpacity={0.12}
+                    stroke="none"
+                  />
+                );
+              })}
+
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
             <XAxis
               dataKey="hour"
@@ -117,9 +132,20 @@ export function EnvelopeChart({
                 if (!active || !payload?.length) return null;
                 const d = payload[0]?.payload;
                 if (!d) return null;
+                const hourNum = parseInt(label?.toString() || "0");
+                const period = getTOUPeriod(hourNum, isWeekend);
                 return (
                   <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
-                    <p className="text-xs font-medium mb-1">{label}</p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-xs font-medium">{label}</p>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0"
+                        style={{ borderColor: TOU_COLORS[period].stroke, color: TOU_COLORS[period].stroke }}
+                      >
+                        {TOU_COLORS[period].label}
+                      </Badge>
+                    </div>
                     <div className="space-y-0.5 text-sm">
                       <p>
                         <span className="text-muted-foreground">Max:</span>{" "}
@@ -161,24 +187,10 @@ export function EnvelopeChart({
             />
 
             {/* Max line */}
-            <Line
-              type="monotone"
-              dataKey="max"
-              stroke="hsl(var(--primary))"
-              strokeWidth={1.5}
-              dot={false}
-              activeDot={false}
-            />
+            <Line type="monotone" dataKey="max" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} activeDot={false} />
             {/* Min line */}
-            <Line
-              type="monotone"
-              dataKey="min"
-              stroke="hsl(var(--primary))"
-              strokeWidth={1.5}
-              dot={false}
-              activeDot={false}
-            />
-            {/* Average dotted line */}
+            <Line type="monotone" dataKey="min" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} activeDot={false} />
+            {/* Average dashed line */}
             <Line
               type="monotone"
               dataKey="avg"

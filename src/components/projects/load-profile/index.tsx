@@ -4,8 +4,7 @@ import { Tenant, ShopType, DAYS_OF_WEEK, DayOfWeek, DisplayUnit, Annotation } fr
 import { useLoadProfileData } from "./hooks/useLoadProfileData";
 import { useExportHandlers } from "./hooks/useExportHandlers";
 import { useSolcastPVProfile } from "./hooks/useSolcastPVProfile";
-import { LoadChart } from "./charts/LoadChart";
-import { EnvelopeChart } from "./charts/EnvelopeChart";
+import { LoadEnvelopeChart } from "./charts/LoadEnvelopeChart";
 import { useEnvelopeData } from "./hooks/useEnvelopeData";
 import { useRawScadaData } from "./hooks/useRawScadaData";
 import { useValidatedSiteData } from "./hooks/useValidatedSiteData";
@@ -279,15 +278,15 @@ export function LoadProfileChart({
             setUseSolcast={toggleSolcast}
           />
 
-          <LoadChart chartData={chartData} showTOU={showTOU} isWeekend={isWeekend} unit={unit} isLoading={chartsLoading} />
-
-          <EnvelopeChart
+          <LoadEnvelopeChart
             envelopeData={envelopeData}
             availableYears={availableYears}
             yearFrom={envelopeYearFrom}
             yearTo={envelopeYearTo}
             setYearFrom={setEnvelopeYearFrom}
             setYearTo={setEnvelopeYearTo}
+            showTOU={showTOU}
+            isWeekend={isWeekend}
             unit={unit}
             isLoading={chartsLoading}
           />
