@@ -100,7 +100,7 @@ export function LoadEnvelopeChart({
             By Meter
           </ToggleGroupItem>
         </ToggleGroup>
-        {onStackedModeChange && (
+        {viewMode === "stacked" && onStackedModeChange && (
           <ToggleGroup
             type="single"
             value={stackedMode}
@@ -212,8 +212,6 @@ export function LoadEnvelopeChart({
                   if (!d) return null;
                   const hourNum = parseInt(label?.toString() || "0");
                   const period = getTOUPeriod(hourNum, isWeekend);
-                  const modeLabel = stackedMode === "max" ? "Max" : stackedMode === "min" ? "Min" : "Avg";
-                  const modeValue = stackedMode === "max" ? d.max : stackedMode === "min" ? d.min : d.avg;
                   return (
                     <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
                       <div className="flex items-center gap-2 mb-1">
@@ -227,23 +225,27 @@ export function LoadEnvelopeChart({
                         </Badge>
                       </div>
                       <p className="text-sm">
-                        <span className="text-muted-foreground">{modeLabel}:</span>{" "}
-                        <span className="font-semibold">{modeValue.toFixed(1)} {unit}</span>
+                        <span className="text-muted-foreground">Max:</span>{" "}
+                        <span className="font-semibold">{d.max.toFixed(1)} {unit}</span>
+                      </p>
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Avg:</span>{" "}
+                        <span className="font-semibold">{d.avg.toFixed(1)} {unit}</span>
+                      </p>
+                      <p className="text-sm">
+                        <span className="text-muted-foreground">Min:</span>{" "}
+                        <span className="font-semibold">{d.min.toFixed(1)} {unit}</span>
                       </p>
                     </div>
                   );
                 }}
               />
 
-              {stackedMode === "avg" && (
-                <Line type="monotone" dataKey="avg" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }} />
-              )}
-              {stackedMode === "max" && (
-                <Line type="monotone" dataKey="max" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }} />
-              )}
-              {stackedMode === "min" && (
-                <Line type="monotone" dataKey="min" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }} />
-              )}
+              <Area type="monotone" dataKey="base" stackId="envelope" stroke="none" fill="none" />
+              <Area type="monotone" dataKey="band" stackId="envelope" stroke="none" fill="url(#envelopeFill)" />
+              <Line type="monotone" dataKey="max" stroke="hsl(var(--primary))" strokeWidth={1} dot={false} />
+              <Line type="monotone" dataKey="min" stroke="hsl(var(--primary))" strokeWidth={1} dot={false} />
+              <Line type="monotone" dataKey="avg" stroke="hsl(var(--primary))" strokeWidth={2} strokeDasharray="5 3" dot={false} activeDot={{ r: 4, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
