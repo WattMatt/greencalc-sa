@@ -201,8 +201,8 @@ export function useEnvelopeData({
 
       result.push({
         hour: `${h.toString().padStart(2, "0")}:00`,
-        min: Math.min(rawMin, avgVal),
-        max: Math.max(rawMax, avgVal),
+        min: rawMin,
+        max: rawMax,
         avg: avgVal,
       });
     }
