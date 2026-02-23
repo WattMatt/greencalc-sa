@@ -694,6 +694,7 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("overview");
+  const [highlightTenantId, setHighlightTenantId] = useState<string | null>(null);
   const [blendedRateType, setBlendedRateType] = useState<
     'allHours' | 'allHoursHigh' | 'allHoursLow' | 'solarHours' | 'solarHoursHigh' | 'solarHoursLow'
   >('solarHours');
@@ -1251,6 +1252,7 @@ export default function ProjectDetail() {
             projectId={id!}
             tenants={tenants || []}
             shopTypes={shopTypes || []}
+            highlightTenantId={highlightTenantId}
           />
         </TabsContent>
 
@@ -1272,7 +1274,12 @@ export default function ProjectDetail() {
             simulatedDcAcRatio={(latestSimulation?.results_json as any)?.pvConfig?.dcAcRatio}
             systemIncludesSolar={projectSystemConfig.solarPV}
             systemIncludesBattery={systemIncludesBattery}
-            onNavigateToTenant={() => handleTabChange("tenants")}
+            onNavigateToTenant={(tenantId) => {
+              setHighlightTenantId(tenantId);
+              handleTabChange("tenants");
+              // Clear highlight after animation
+              setTimeout(() => setHighlightTenantId(null), 3000);
+            }}
           />
         </TabsContent>
 
