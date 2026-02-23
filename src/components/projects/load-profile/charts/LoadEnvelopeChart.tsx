@@ -238,21 +238,7 @@ export function LoadEnvelopeChart({
               />
 
               {stackedMode === "avg" && (
-                <>
-                  <Area type="monotone" dataKey="base" stackId="envelope" stroke="none" fill="transparent" dot={false} activeDot={false} />
-                  <Area type="monotone" dataKey="band" stackId="envelope" stroke="none" fill="url(#envelopeFill)" dot={false} activeDot={false} />
-                  <Line type="monotone" dataKey="max" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} activeDot={false} />
-                  <Line type="monotone" dataKey="min" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} activeDot={false} />
-                  <Line
-                    type="monotone"
-                    dataKey="avg"
-                    stroke="hsl(var(--muted-foreground))"
-                    strokeWidth={1.5}
-                    strokeDasharray="5 3"
-                    dot={false}
-                    activeDot={{ r: 4, stroke: "hsl(var(--muted-foreground))", strokeWidth: 2, fill: "hsl(var(--background))" }}
-                  />
-                </>
+                <Line type="monotone" dataKey="avg" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }} />
               )}
               {stackedMode === "max" && (
                 <Line type="monotone" dataKey="max" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4, stroke: "hsl(var(--primary))", strokeWidth: 2, fill: "hsl(var(--background))" }} />
