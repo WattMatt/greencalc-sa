@@ -57,7 +57,7 @@ export function LoadProfileChart({
   onNavigateToTenant,
 }: LoadProfileChartProps) {
   // Fetch raw SCADA data on demand
-  const { rawDataMap, isLoadingRawData } = useRawScadaData({ projectId });
+  const { rawDataMap, isLoadingRawData } = useRawScadaData({ tenants });
 
   // Shared validated site data — single parse, single validation
   const validatedSiteData = useValidatedSiteData({ tenants, rawDataMap });
@@ -224,7 +224,7 @@ export function LoadProfileChart({
     );
   }
 
-  const chartsLoading = isLoadingRawData && !!projectId;
+  const chartsLoading = isLoadingRawData;
 
   return (
     <div className="space-y-4">
