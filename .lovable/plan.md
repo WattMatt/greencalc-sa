@@ -1,71 +1,101 @@
 
 
-## Fix: Align Stacked Meter Chart with Site-Level Envelope Values
+## Fix: Max/Min Should Use the Single Peak/Trough Day, Not Per-Hour Cherry-Picking
 
 ### Problem
 
-The "By Meter" stacked chart currently computes each tenant's **maximum** independently across all filtered days, then stacks them. Because each tenant can peak on a different day, the stacked total ("sum of peaks") is always higher than the envelope's "Max" line ("peak of sums"). The two charts show inconsistent totals, which is confusing.
+Both the Envelope and Stacked Meter hooks currently find the best day **independently for each hour**. This means the "Max" line might use Monday's value at 09:00, Tuesday's at 10:00, Wednesday's at 11:00, etc. -- creating an artificial profile that never actually occurred. The same issue applies to the "Min" line.
 
-The correct approach: compute statistics at the **site level first**, then decompose into tenant contributions.
+### Correct Behaviour
 
-### How It Should Work
+- **Max**: Find the single day (within the filtered period) that has the **highest total site demand** (sum across all 24 hours). Use that day's full 24-hour profile as the max line.
+- **Min**: Find the single day with the **lowest total site demand**. Use that day's full 24-hour profile as the min line.
+- **Avg**: No change -- remains the average across all filtered days.
 
-**Average view (default):** For each tenant, compute the average hourly value across all filtered days. Since averages are additive, the stacked total will exactly equal the envelope's "Avg" (dashed) line.
-
-**Max view:** For each hour, find the specific **day** where the site-wide total is highest. Then show each tenant's actual value on that same day. The stacked total will exactly equal the envelope's "Max" line.
-
-**Min view:** Same logic -- find the day with the lowest site total per hour, show each tenant's value on that day.
+This means the Max and Min lines represent **real days that actually occurred**, not theoretical composites.
 
 ### Technical Details
 
-**File: `src/components/projects/load-profile/hooks/useStackedMeterData.ts`**
+**File: `src/components/projects/load-profile/hooks/useEnvelopeData.ts`**
 
-1. Accept `siteDataByDate` from validated site data (needed to identify which day is the max/min at each hour)
-2. Add a `mode` prop: `"avg" | "max" | "min"` (default `"avg"`)
-3. Replace the current per-tenant MAX logic with three modes:
+Replace the per-hour min/max scan (lines 169-197) with:
+
+1. First pass: iterate all filtered day arrays to find the day with the highest total (sum of 24 hours) and the day with the lowest total.
+2. Second pass: build the result using those two specific days for min/max, and the existing average calculation.
 
 ```text
-Mode "avg" (default):
-  For each tenant, sum their hourly values across filtered days and divide by count.
-  Stacked total = site average (matches envelope avg line).
+// Step 1: Find peak and trough days
+let maxDayArr = null, minDayArr = null;
+let maxDayTotal = -Infinity, minDayTotal = Infinity;
 
-Mode "max":
-  For each hour h, scan siteDataByDate to find the dateKey with the highest site total at hour h.
-  Then for each tenant, use their value on THAT specific date at hour h.
-  Stacked total = site max (matches envelope max line).
+for (const dayArr of filteredEntries) {
+  let dayTotal = 0;
+  for (let h = 0; h < 24; h++) {
+    dayTotal += (dayArr[h] + fallbackH[h]) * diversityFactor;
+  }
+  if (dayTotal > maxDayTotal) { maxDayTotal = dayTotal; maxDayArr = dayArr; }
+  if (dayTotal < minDayTotal) { minDayTotal = dayTotal; minDayArr = dayArr; }
+}
 
-Mode "min":
-  Same as max but find the date with the lowest site total at hour h.
-  Stacked total = site min (matches envelope min line).
+// Step 2: Build result using those specific days
+for (let h = 0; h < 24; h++) {
+  const fallbackH = fallbackHourlyTotal[h];
+  const maxVal = ((maxDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier;
+  const minVal = ((minDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier;
+  // avg stays the same (sum across all days / count)
+  ...
+}
 ```
 
-4. Include non-SCADA fallback tenants as an "Estimated" bar (using the same fallback logic from the envelope hook), so the full site load is represented.
+**File: `src/components/projects/load-profile/hooks/useStackedMeterData.ts`**
 
-**File: `src/components/projects/load-profile/charts/LoadEnvelopeChart.tsx`**
+Replace the per-hour day selection (lines 196-226) with:
 
-- Add a small mode selector (e.g. three toggle buttons: Avg / Max / Min) next to the existing Envelope/By Meter toggle, visible only in "stacked" view mode.
-- Pass the selected mode down to the hook.
+1. First pass: find the single dateKey with the highest (or lowest) site-wide daily total across all 24 hours.
+2. Second pass: extract each tenant's full 24-hour profile from that specific day.
 
-**File: `src/components/projects/load-profile/index.tsx`**
+```text
+// Find the single best day for the entire 24-hour profile
+let bestDateKey = null;
+let bestTotal = mode === "max" ? -Infinity : Infinity;
 
-- Add state for the stacked mode (`useState<"avg" | "max" | "min">("avg")`)
-- Pass `siteDataByDate`, `nonScadaTenants`, `shopTypes`, and the mode to `useStackedMeterData`
-- Pass the mode and setter to `LoadEnvelopeChart`
+for (const dateKey of filteredDateKeys) {
+  const siteHourly = siteDataByDate.get(dateKey);
+  if (!siteHourly) continue;
+  let dayTotal = 0;
+  for (let h = 0; h < 24; h++) {
+    dayTotal += (siteHourly[h] + fallbackHourly[h]) * diversityFactor;
+  }
+  if (mode === "max" ? dayTotal > bestTotal : dayTotal < bestTotal) {
+    bestTotal = dayTotal;
+    bestDateKey = dateKey;
+  }
+}
+
+// Use that single day's data for all tenants
+if (bestDateKey) {
+  for (const tenantId of tenantsWithRawData) {
+    const dateMap = tenantDateMaps.get(tenantId);
+    const hourlyArr = dateMap?.get(bestDateKey);
+    const profile = Array(24).fill(0);
+    for (let h = 0; h < 24; h++) {
+      profile[h] = (hourlyArr?.[h] ?? 0) * diversityFactor * unitMultiplier;
+    }
+    tenantProfiles.set(tenantId, profile);
+  }
+}
+```
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `hooks/useStackedMeterData.ts` | Rewrite aggregation: avg/max/min modes computed at site level, decomposed per tenant; add fallback bar |
-| `charts/LoadEnvelopeChart.tsx` | Add Avg/Max/Min mode toggle visible in stacked view |
-| `charts/StackedMeterChart.tsx` | No changes needed (it just renders what it receives) |
-| `load-profile/index.tsx` | Add stacked mode state; pass new props to hook and chart |
+| `hooks/useEnvelopeData.ts` | Find single peak/trough day by daily total, use its full profile for max/min lines |
+| `hooks/useStackedMeterData.ts` | Same logic -- find single best day, extract all tenant values from that day |
 
 ### Result
 
-- In "Avg" mode: stacked total matches the envelope dashed average line exactly
-- In "Max" mode: stacked total matches the envelope solid max line exactly
-- In "Min" mode: stacked total matches the envelope solid min line exactly
-- Non-SCADA tenants appear as an "Estimated" bar so the full site is represented
-- Users can toggle between views to understand which tenants drive peak, average, or minimum demand
-
+- The Max line represents the actual 24-hour profile of the day with the highest total demand
+- The Min line represents the actual 24-hour profile of the day with the lowest total demand
+- Both charts (Envelope and By Meter) will show the same real-day profiles
+- The stacked tenant breakdown will show exactly how each tenant contributed on that specific peak/trough day
