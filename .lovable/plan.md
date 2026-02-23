@@ -1,80 +1,62 @@
 
-
-## Fix: Raw SCADA Data Query Returns Empty (Root Cause of Missing Graph)
+## Fix: SCADA Profile Search Truncated at 1,000 Rows
 
 ### Problem
 
-The `useRawScadaData` hook queries `scada_imports` with `.eq("project_id", projectId)`, but the `scada_imports` records linked to this project's tenants have `project_id = NULL`. The relationship is indirect: `project_tenants.scada_import_id -> scada_imports.id`. Since the filter matches nothing, the `rawDataMap` is always empty, so `useValidatedSiteData` finds zero raw entries for every tenant, producing 0 validated days and no graph.
-
-Database evidence:
-- `scada_imports WHERE project_id = '984ce...'` returns **0 rows**
-- `scada_imports` joined via `project_tenants.scada_import_id` returns **24 rows with raw_data**
+There are **1,919** meter profiles in the database, but the query fetching profiles for assignment in `TenantManager.tsx` (line 343) relies on Supabase's default limit of **1,000 rows**. This means ~900 profiles are silently missing from the assignment dropdown -- you literally cannot find them.
 
 ### Solution
 
-Change the `useRawScadaData` hook to collect all `scada_import_id` values from the tenants (both direct and multi-meter) and fetch those specific IDs, rather than filtering by `project_id`.
+Paginate the query to fetch all results. Since the dataset is under 2,000 rows, we can safely fetch in two batches of 1,000 using `.range()`, then merge.
 
 ### Technical Details
 
-**File: `src/components/projects/load-profile/hooks/useRawScadaData.ts`**
+**File: `src/components/projects/TenantManager.tsx`** (lines 331-347)
 
-1. Accept `tenants` as a prop instead of (or in addition to) `projectId`
-2. Collect all unique `scada_import_id` values from:
-   - `tenant.scada_import_id` (direct link)
-   - `tenant.tenant_meters[].scada_import_id` (multi-meter)
-3. Query `scada_imports` using `.in("id", allIds)` instead of `.eq("project_id", ...)`
-4. Paginate if needed (the set is ~24 IDs for this project, well under 1000)
+Replace the single query with a paginated fetch that retrieves all rows:
 
 ```typescript
-// Before
-const { data, error } = await supabase
-  .from("scada_imports")
-  .select("id, raw_data, value_unit")
-  .eq("project_id", projectId)
-  .not("raw_data", "is", null);
+// Fetch SCADA imports for profile assignment (filtered by scope)
+const { data: scadaImports } = useQuery({
+  queryKey: ["scada-imports-for-assignment", profileScope, projectId],
+  queryFn: async () => {
+    const PAGE_SIZE = 1000;
+    let allData: ScadaImport[] = [];
+    let from = 0;
+    let hasMore = true;
 
-// After: collect IDs from tenants, then fetch by ID
-const scadaIds = new Set<string>();
-for (const t of tenants) {
-  if (t.scada_import_id) scadaIds.add(t.scada_import_id);
-  if (t.tenant_meters) {
-    for (const m of t.tenant_meters) {
-      if (m.scada_import_id) scadaIds.add(m.scada_import_id);
+    while (hasMore) {
+      let query = supabase
+        .from("scada_imports")
+        .select("id, shop_name, site_name, area_sqm, data_points, load_profile_weekday, load_profile_weekend, meter_label, meter_color, date_range_start, date_range_end, weekday_days, weekend_days, processed_at, shop_number")
+        .order("shop_name")
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (profileScope === 'local') {
+        query = query.eq('project_id', projectId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      allData = allData.concat(data as ScadaImport[]);
+      hasMore = (data?.length ?? 0) === PAGE_SIZE;
+      from += PAGE_SIZE;
     }
-  }
-}
-const ids = Array.from(scadaIds);
-if (ids.length === 0) return {};
 
-const { data, error } = await supabase
-  .from("scada_imports")
-  .select("id, raw_data, value_unit")
-  .in("id", ids)
-  .not("raw_data", "is", null);
-```
-
-**File: `src/components/projects/load-profile/index.tsx`**
-
-Update the call site to pass `tenants` to the hook:
-
-```typescript
-// Before
-const { rawDataMap, isLoadingRawData } = useRawScadaData({ projectId });
-
-// After
-const { rawDataMap, isLoadingRawData } = useRawScadaData({ tenants });
+    return allData;
+  },
+});
 ```
 
 ### Files to Change
 
 | File | Change |
 |------|--------|
-| `useRawScadaData.ts` | Replace `project_id` filter with tenant-derived ID lookup |
-| `index.tsx` (load-profile) | Pass `tenants` prop to the hook |
+| `TenantManager.tsx` | Paginate the SCADA imports query to fetch all 1,919 rows |
 
 ### Impact
 
-- The 24 scada_imports with raw data will be fetched correctly
-- `useValidatedSiteData` will process them into validated days
-- The Load Envelope chart will render with actual data
-
+- All meter profiles will appear in the assignment dropdown
+- Search will work across the full dataset
+- No UI changes needed -- the dropdown and search remain identical
