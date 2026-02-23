@@ -23,14 +23,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Hash, Store, Ruler, ChevronDown } from "lucide-react";
+import { Hash, Store, Ruler, Zap, ChevronDown } from "lucide-react";
 
-export type TenantColumnRole = "shop_number" | "shop_name" | "area";
+export type TenantColumnRole = "shop_number" | "shop_name" | "area" | "rating";
 
 export interface TenantMappedData {
   shop_number: string | null;
   shop_name: string;
   area_sqm: number;
+  cb_rating: string | null;
 }
 
 interface TenantColumnMapperProps {
@@ -45,6 +46,7 @@ const ROLE_CONFIG: Record<TenantColumnRole, { label: string; icon: typeof Hash; 
   shop_number: { label: "Shop Number", icon: Hash, badgeVariant: "outline" },
   shop_name: { label: "Shop Name", icon: Store, badgeVariant: "default" },
   area: { label: "Area (m²)", icon: Ruler, badgeVariant: "secondary" },
+  rating: { label: "Rating", icon: Zap, badgeVariant: "outline" },
 };
 
 function autoDetectRoles(headers: string[]): Map<number, TenantColumnRole> {
@@ -62,12 +64,16 @@ function autoDetectRoles(headers: string[]): Map<number, TenantColumnRole> {
   const areaIdx = lower.findIndex(h =>
     h.includes("area") || h.includes("sqm") || h.includes("size") || h.includes("m2") || h.includes("m²")
   );
+  const ratingIdx = lower.findIndex(h =>
+    h.includes("rating") || h.includes("breaker") || h.includes("cb") || h.includes("amps")
+  );
 
   // Avoid assigning same column to multiple roles
   const used = new Set<number>();
   if (shopNameIdx !== -1) { roles.set(shopNameIdx, "shop_name"); used.add(shopNameIdx); }
   if (areaIdx !== -1 && !used.has(areaIdx)) { roles.set(areaIdx, "area"); used.add(areaIdx); }
   if (shopNumIdx !== -1 && !used.has(shopNumIdx)) { roles.set(shopNumIdx, "shop_number"); used.add(shopNumIdx); }
+  if (ratingIdx !== -1 && !used.has(ratingIdx)) { roles.set(ratingIdx, "rating"); used.add(ratingIdx); }
 
   return roles;
 }
@@ -79,7 +85,7 @@ export function TenantColumnMapper({ open, onClose, headers, rows, onImport }: T
   const previewRows = useMemo(() => rows.slice(0, 50), [rows]);
 
   const roleColumns = useMemo(() => {
-    const result: Record<TenantColumnRole, number | null> = { shop_number: null, shop_name: null, area: null };
+    const result: Record<TenantColumnRole, number | null> = { shop_number: null, shop_name: null, area: null, rating: null };
     for (const [idx, role] of columnRoles) {
       result[role] = idx;
     }
@@ -113,6 +119,7 @@ export function TenantColumnMapper({ open, onClose, headers, rows, onImport }: T
     if (role === "shop_name") return "bg-primary/10";
     if (role === "area") return "bg-secondary/20";
     if (role === "shop_number") return "bg-muted/40";
+    if (role === "rating") return "bg-accent/20";
     return "";
   };
 
@@ -135,6 +142,7 @@ export function TenantColumnMapper({ open, onClose, headers, rows, onImport }: T
     const nameIdx = roleColumns.shop_name!;
     const areaIdx = roleColumns.area;
     const numIdx = roleColumns.shop_number;
+    const ratingIdx = roleColumns.rating;
 
     const tenants: TenantMappedData[] = [];
     for (const row of rows) {
@@ -146,9 +154,10 @@ export function TenantColumnMapper({ open, onClose, headers, rows, onImport }: T
         if (!isNaN(parsed) && parsed > 0) area = parsed;
       }
       const shopNumber = numIdx !== null ? row[numIdx]?.trim() || null : null;
+      const cbRating = ratingIdx !== null ? row[ratingIdx]?.trim() || null : null;
 
       if (shopName) {
-        tenants.push({ shop_number: shopNumber, shop_name: shopName, area_sqm: area });
+        tenants.push({ shop_number: shopNumber, shop_name: shopName, area_sqm: area, cb_rating: cbRating });
       }
     }
 
@@ -200,6 +209,9 @@ export function TenantColumnMapper({ open, onClose, headers, rows, onImport }: T
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => assignRole(i, "area")}>
                           <Ruler className="h-4 w-4 mr-2" /> Area (m²)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => assignRole(i, "rating")}>
+                          <Zap className="h-4 w-4 mr-2" /> Rating (CB)
                         </DropdownMenuItem>
                         {columnRoles.has(i) && (
                           <DropdownMenuItem onClick={() => clearRole(i)} className="text-destructive">

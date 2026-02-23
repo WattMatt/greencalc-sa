@@ -36,6 +36,7 @@ interface Tenant {
   shop_number: string | null;
   shop_name: string | null;
   area_sqm: number;
+  cb_rating?: string | null;
   shop_type_id: string | null;
   scada_import_id: string | null;
   monthly_kwh_override: number | null;
@@ -251,8 +252,14 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
         toast.error("CSV file must have a header row and at least one data row");
         return;
       }
-      const headers = lines[0].split(",").map(h => h.trim());
-      const rows = lines.slice(1).map(l => l.split(",").map(c => c.trim()));
+      // Auto-detect delimiter from the header line
+      const headerLine = lines[0];
+      const semicolons = (headerLine.match(/;/g) || []).length;
+      const tabs = (headerLine.match(/\t/g) || []).length;
+      const commas = (headerLine.match(/,/g) || []).length;
+      const delimiter = semicolons > commas && semicolons > tabs ? ";" : tabs > commas ? "\t" : ",";
+      const headers = headerLine.split(delimiter).map(h => h.trim());
+      const rows = lines.slice(1).map(l => l.split(delimiter).map(c => c.trim()));
       setDialogOpen(false);
       setColumnMapperData({ headers, rows });
       setColumnMapperOpen(true);
@@ -822,6 +829,7 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
       shop_number: t.shop_number,
       shop_name: t.shop_name,
       area_sqm: t.area_sqm,
+      cb_rating: t.cb_rating,
     }));
 
     const { error } = await supabase.from("project_tenants").insert(tenantsToInsert);
@@ -1106,6 +1114,7 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
                     )}
                   </button>
                 </TableHead>
+                <TableHead>Rating</TableHead>
                 <TableHead>
                   <div className="flex items-center gap-3">
                     <span>Load Profile</span>
@@ -1235,6 +1244,7 @@ export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId
                     <TableCell className="text-muted-foreground">{tenant.shop_number || '-'}</TableCell>
                     <TableCell className="font-medium">{getTenantDisplayName(tenant)}</TableCell>
                     <TableCell>{tenantArea.toLocaleString()}</TableCell>
+                    <TableCell className="text-muted-foreground">{tenant.cb_rating || '-'}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Popover open={popoverOpenMap[tenant.id] ?? false} onOpenChange={(open) => setPopoverOpenMap(prev => ({ ...prev, [tenant.id]: open }))}>

@@ -1,0 +1,1 @@
+ALTER TABLE public.project_tenants ADD COLUMN cb_rating text;
