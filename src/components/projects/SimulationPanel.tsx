@@ -160,9 +160,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const savedResultsJson = lastSavedSimulation?.results_json as any;
   
   const [solarCapacity, setSolarCapacity] = useState(100);
-  const [batteryCapacity, setBatteryCapacity] = useState(includesBattery ? 50 : 0);
-  const [batteryPower, setBatteryPower] = useState(includesBattery ? 25 : 0);
+  const [batteryAcCapacity, setBatteryAcCapacity] = useState(includesBattery ? 42 : 0); // AC (usable) kWh
+  const [batteryCRate, setBatteryCRate] = useState(0.5); // C-Rate
   const [batteryDoD, setBatteryDoD] = useState(85); // Depth of Discharge %
+
+  // Derived DC values used by all downstream calculations
+  const batteryCapacity = batteryDoD > 0 ? Math.round(batteryAcCapacity / (batteryDoD / 100)) : 0; // DC kWh
+  const batteryPower = Math.round(batteryAcCapacity * batteryCRate * 10) / 10; // kW
   const [pvConfig, setPvConfig] = useState<PVSystemConfigData>(getDefaultPVConfig);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [solarDataSource, setSolarDataSource] = useState<SolarDataSource>("pvgis_monthly");
@@ -228,8 +232,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       
       // Load configuration values
       setSolarCapacity(lastSavedSimulation.solar_capacity_kwp || 100);
-      setBatteryCapacity(includesBattery ? (lastSavedSimulation.battery_capacity_kwh || 50) : 0);
-      setBatteryPower(includesBattery ? (lastSavedSimulation.battery_power_kw || 25) : 0);
+      const savedDcCap = includesBattery ? (lastSavedSimulation.battery_capacity_kwh || 50) : 0;
+      const savedPower = includesBattery ? (lastSavedSimulation.battery_power_kw || 25) : 0;
+      const savedDoD = batteryDoD || 85;
+      const derivedAc = Math.round(savedDcCap * savedDoD / 100);
+      setBatteryAcCapacity(derivedAc);
+      setBatteryCRate(derivedAc > 0 ? Math.round(savedPower / derivedAc * 100) / 100 : 0.5);
       
       // Load PV config if saved
       if (savedResultsJson?.pvConfig) {
@@ -1477,35 +1485,35 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Row 1: DC Capacity, Power */}
+                  {/* Row 1: AC Capacity (user input), C-Rate (user input) */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-xs">DC Capacity (kWh)</Label>
+                      <Label className="text-xs">AC Capacity (kWh)</Label>
                       <Input
                         type="number"
-                        value={batteryCapacity}
-                        onChange={(e) => setBatteryCapacity(Math.max(0, parseInt(e.target.value) || 0))}
+                        value={batteryAcCapacity}
+                        onChange={(e) => setBatteryAcCapacity(Math.max(0, parseInt(e.target.value) || 0))}
                         className="h-8"
                         min={0}
-                        max={500}
+                        max={5000}
                         step={10}
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Power (kW)</Label>
+                      <Label className="text-xs">C-Rate</Label>
                       <Input
                         type="number"
-                        value={batteryPower}
-                        onChange={(e) => setBatteryPower(Math.max(1, parseInt(e.target.value) || 1))}
+                        value={batteryCRate}
+                        onChange={(e) => setBatteryCRate(Math.max(0.1, Math.min(5, parseFloat(e.target.value) || 0.5)))}
                         className="h-8"
-                        min={1}
-                        max={200}
-                        step={5}
+                        min={0.1}
+                        max={5}
+                        step={0.1}
                       />
                     </div>
                   </div>
 
-                  {/* Row 2: DoD, C-Rate, AC Capacity (computed) */}
+                  {/* Row 2: DoD (editable), Power (computed), DC Capacity (computed) */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1">
                       <Label className="text-xs">Depth of Discharge (%)</Label>
@@ -1520,19 +1528,19 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">C-Rate</Label>
+                      <Label className="text-xs">Power (kW)</Label>
                       <Input
                         type="number"
-                        value={batteryCapacity > 0 ? (batteryPower / batteryCapacity).toFixed(2) : '0.00'}
+                        value={batteryPower.toFixed(1)}
                         disabled
                         className="h-8 bg-muted"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">AC Capacity (kWh)</Label>
+                      <Label className="text-xs">DC Capacity (kWh)</Label>
                       <Input
                         type="number"
-                        value={(batteryCapacity * batteryDoD / 100).toFixed(1)}
+                        value={batteryCapacity}
                         disabled
                         className="h-8 bg-muted"
                       />
@@ -1543,7 +1551,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
                     <div className="flex justify-between">
                       <span>Usable capacity</span>
-                      <span className="text-foreground">{(batteryCapacity * batteryDoD / 100).toFixed(0)} kWh</span>
+                      <span className="text-foreground">{batteryAcCapacity} kWh</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Daily cycles</span>
@@ -1897,8 +1905,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         onLoadSimulation={(config) => {
           setSolarCapacity(config.solarCapacity);
           if (includesBattery) {
-            setBatteryCapacity(config.batteryCapacity);
-            setBatteryPower(config.batteryPower);
+            const dcCap = config.batteryCapacity || 0;
+            const pwr = config.batteryPower || 0;
+            const dod = batteryDoD || 85;
+            const ac = Math.round(dcCap * dod / 100);
+            setBatteryAcCapacity(ac);
+            setBatteryCRate(ac > 0 ? Math.round(pwr / ac * 100) / 100 : 0.5);
           }
           if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
             setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
