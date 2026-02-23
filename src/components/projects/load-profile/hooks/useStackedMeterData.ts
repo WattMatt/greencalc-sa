@@ -179,19 +179,15 @@ export function useStackedMeterData({
       for (const tenantId of tenantsWithRawData) {
         const dateMap = tenantDateMaps.get(tenantId);
         if (!dateMap) continue;
-        const sumHourly = Array(24).fill(0);
-        let dayCount = 0;
+      const sumHourly = Array(24).fill(0);
         for (const dateKey of filteredDateKeys) {
           const hourlyArr = dateMap.get(dateKey);
           if (!hourlyArr) continue;
-          dayCount++;
           for (let h = 0; h < 24; h++) {
             sumHourly[h] += hourlyArr[h] * diversityFactor * unitMultiplier;
           }
         }
-        if (dayCount > 0) {
-          tenantProfiles.set(tenantId, sumHourly.map(v => v / dayCount));
-        }
+        tenantProfiles.set(tenantId, sumHourly.map(v => v / filteredDateKeys.length));
       }
     } else {
       // max or min: find the single day with the highest/lowest total site demand
