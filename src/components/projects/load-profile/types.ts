@@ -23,6 +23,7 @@ export interface Tenant {
   id: string;
   name: string;
   area_sqm: number;
+  cb_rating?: string | null;
   shop_type_id: string | null;
   scada_import_id: string | null;
   monthly_kwh_override: number | null;

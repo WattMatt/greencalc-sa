@@ -1276,6 +1276,7 @@ export type Database = {
       project_tenants: {
         Row: {
           area_sqm: number
+          cb_rating: string | null
           created_at: string
           id: string
           include_in_load_profile: boolean
@@ -1291,6 +1292,7 @@ export type Database = {
         }
         Insert: {
           area_sqm: number
+          cb_rating?: string | null
           created_at?: string
           id?: string
           include_in_load_profile?: boolean
@@ -1306,6 +1308,7 @@ export type Database = {
         }
         Update: {
           area_sqm?: number
+          cb_rating?: string | null
           created_at?: string
           id?: string
           include_in_load_profile?: boolean
