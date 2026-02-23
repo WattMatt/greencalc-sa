@@ -38,6 +38,7 @@ interface LoadProfileChartProps {
   // System type flags to control initial toggle states
   systemIncludesSolar?: boolean;
   systemIncludesBattery?: boolean;
+  onNavigateToTenant?: (tenantId: string) => void;
 }
 
 export function LoadProfileChart({ 
@@ -53,6 +54,7 @@ export function LoadProfileChart({
   simulatedDcAcRatio,
   systemIncludesSolar = true,
   systemIncludesBattery = false,
+  onNavigateToTenant,
 }: LoadProfileChartProps) {
   // Fetch raw SCADA data on demand
   const { rawDataMap, isLoadingRawData } = useRawScadaData({ projectId });
@@ -308,6 +310,7 @@ export function LoadProfileChart({
             onViewModeChange={setChartViewMode}
             stackedData={stackedData}
             stackedTenantKeys={stackedTenantKeys}
+            onNavigateToTenant={onNavigateToTenant}
           />
 
           {showPVProfile && maxPvAcKva && chartData && (

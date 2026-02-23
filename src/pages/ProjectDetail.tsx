@@ -1272,6 +1272,7 @@ export default function ProjectDetail() {
             simulatedDcAcRatio={(latestSimulation?.results_json as any)?.pvConfig?.dcAcRatio}
             systemIncludesSolar={projectSystemConfig.solarPV}
             systemIncludesBattery={systemIncludesBattery}
+            onNavigateToTenant={() => handleTabChange("tenants")}
           />
         </TabsContent>
 

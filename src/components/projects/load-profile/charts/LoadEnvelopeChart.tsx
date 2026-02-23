@@ -26,6 +26,7 @@ interface LoadEnvelopeChartProps {
   onViewModeChange: (mode: ChartViewMode) => void;
   stackedData?: StackedMeterPoint[];
   stackedTenantKeys?: { id: string; label: string; color: string }[];
+  onNavigateToTenant?: (tenantId: string) => void;
 }
 
 export function LoadEnvelopeChart({
@@ -44,6 +45,7 @@ export function LoadEnvelopeChart({
   onViewModeChange,
   stackedData,
   stackedTenantKeys,
+  onNavigateToTenant,
 }: LoadEnvelopeChartProps) {
   if (isLoading) {
     return (
@@ -129,6 +131,7 @@ export function LoadEnvelopeChart({
           showTOU={showTOU}
           isWeekend={isWeekend}
           unit={unit}
+          onNavigateToTenant={onNavigateToTenant}
         />
       ) : (
         <div className="h-[200px]">
