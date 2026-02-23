@@ -4,8 +4,9 @@ import { Tenant, ShopType, DAYS_OF_WEEK, DayOfWeek, DisplayUnit, Annotation } fr
 import { useLoadProfileData } from "./hooks/useLoadProfileData";
 import { useExportHandlers } from "./hooks/useExportHandlers";
 import { useSolcastPVProfile } from "./hooks/useSolcastPVProfile";
-import { LoadEnvelopeChart } from "./charts/LoadEnvelopeChart";
+import { LoadEnvelopeChart, ChartViewMode } from "./charts/LoadEnvelopeChart";
 import { useEnvelopeData } from "./hooks/useEnvelopeData";
+import { useStackedMeterData } from "./hooks/useStackedMeterData";
 import { useRawScadaData } from "./hooks/useRawScadaData";
 import { useValidatedSiteData } from "./hooks/useValidatedSiteData";
 import { SolarChart } from "./charts/SolarChart";
@@ -95,6 +96,7 @@ export function LoadProfileChart({
   useEffect(() => { if (simulatedBatteryCapacityKwh != null) setBatteryCapacity(simulatedBatteryCapacityKwh); }, [simulatedBatteryCapacityKwh]);
   useEffect(() => { if (simulatedBatteryPowerKw != null) setBatteryPower(simulatedBatteryPowerKw); }, [simulatedBatteryPowerKw]);
 
+  const [chartViewMode, setChartViewMode] = useState<ChartViewMode>("envelope");
   const [show1to1Comparison, setShow1to1Comparison] = useState(true);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
@@ -182,6 +184,17 @@ export function LoadProfileChart({
     setYearFrom: setEnvelopeYearFrom,
     setYearTo: setEnvelopeYearTo,
   } = useEnvelopeData({ displayUnit, powerFactor, validatedSiteData, selectedDays, selectedMonths: selectedMonthsFilter, shopTypes, diversityFactor });
+
+  const { data: stackedData, tenantKeys: stackedTenantKeys } = useStackedMeterData({
+    validatedSiteData,
+    selectedDays,
+    selectedMonths: selectedMonthsFilter,
+    displayUnit,
+    powerFactor,
+    diversityFactor,
+    yearFrom: envelopeYearFrom,
+    yearTo: envelopeYearTo,
+  });
 
   const { exportToCSV, exportToPDF, exportToPNG, exportToSVG } = useExportHandlers({
     chartData,
@@ -291,6 +304,10 @@ export function LoadProfileChart({
             unit={unit}
             isLoading={chartsLoading}
             outlierCount={outlierCount}
+            viewMode={chartViewMode}
+            onViewModeChange={setChartViewMode}
+            stackedData={stackedData}
+            stackedTenantKeys={stackedTenantKeys}
           />
 
           {showPVProfile && maxPvAcKva && chartData && (
