@@ -181,7 +181,7 @@ export function LoadProfileChart({
     yearTo: envelopeYearTo,
     setYearFrom: setEnvelopeYearFrom,
     setYearTo: setEnvelopeYearTo,
-  } = useEnvelopeData({ displayUnit, powerFactor, validatedSiteData, selectedDays, selectedMonths: selectedMonthsFilter });
+  } = useEnvelopeData({ displayUnit, powerFactor, validatedSiteData, selectedDays, selectedMonths: selectedMonthsFilter, shopTypes, diversityFactor });
 
   const { exportToCSV, exportToPDF, exportToPNG, exportToSVG } = useExportHandlers({
     chartData,
