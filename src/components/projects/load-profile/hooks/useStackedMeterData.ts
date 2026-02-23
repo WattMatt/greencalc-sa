@@ -194,33 +194,33 @@ export function useStackedMeterData({
         }
       }
     } else {
-      // max or min: for each hour, find the day with highest/lowest SITE total, then use tenant values from that day
-      for (let h = 0; h < 24; h++) {
-        let bestDateKey: string | null = null;
-        let bestSiteVal = mode === "max" ? -Infinity : Infinity;
+      // max or min: find the single day with the highest/lowest total site demand
+      let bestDateKey: string | null = null;
+      let bestTotal = mode === "max" ? -Infinity : Infinity;
 
-        for (const dateKey of filteredDateKeys) {
-          const siteHourly = siteDataByDate.get(dateKey);
-          if (!siteHourly) continue;
-          // Composite = SCADA site + fallback, same as envelope
-          const compositeVal = (siteHourly[h] + fallbackHourly[h]) * diversityFactor;
-          if (mode === "max" ? compositeVal > bestSiteVal : compositeVal < bestSiteVal) {
-            bestSiteVal = compositeVal;
-            bestDateKey = dateKey;
-          }
+      for (const dateKey of filteredDateKeys) {
+        const siteHourly = siteDataByDate.get(dateKey);
+        if (!siteHourly) continue;
+        let dayTotal = 0;
+        for (let h = 0; h < 24; h++) {
+          dayTotal += (siteHourly[h] + fallbackHourly[h]) * diversityFactor;
         }
+        if (mode === "max" ? dayTotal > bestTotal : dayTotal < bestTotal) {
+          bestTotal = dayTotal;
+          bestDateKey = dateKey;
+        }
+      }
 
-        if (!bestDateKey) continue;
-
-        // Extract each tenant's value on that specific day at hour h
+      // Use that single day's data for all tenants
+      if (bestDateKey) {
         for (const tenantId of tenantsWithRawData) {
-          if (!tenantProfiles.has(tenantId)) {
-            tenantProfiles.set(tenantId, Array(24).fill(0));
-          }
           const dateMap = tenantDateMaps.get(tenantId);
           const hourlyArr = dateMap?.get(bestDateKey);
-          const val = (hourlyArr?.[h] ?? 0) * diversityFactor * unitMultiplier;
-          tenantProfiles.get(tenantId)![h] = val;
+          const profile = Array(24).fill(0);
+          for (let h = 0; h < 24; h++) {
+            profile[h] = (hourlyArr?.[h] ?? 0) * diversityFactor * unitMultiplier;
+          }
+          tenantProfiles.set(tenantId, profile);
         }
       }
     }

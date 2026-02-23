@@ -163,36 +163,43 @@ export function useEnvelopeData({
 
     if (filteredEntries.length === 0) return [];
 
-    const result: EnvelopePoint[] = [];
     const unitMultiplier = displayUnit === "kw" ? 1 : 1 / powerFactor;
 
+    // Step 1: Find the single day with the highest and lowest total site demand
+    let maxDayArr: number[] | null = null;
+    let minDayArr: number[] | null = null;
+    let maxDayTotal = -Infinity;
+    let minDayTotal = Infinity;
+    const sumHourly = Array(24).fill(0);
+    let count = 0;
+
+    for (const dayArr of filteredEntries) {
+      let dayTotal = 0;
+      for (let h = 0; h < 24; h++) {
+        const compositeVal = (dayArr[h] + fallbackHourlyTotal[h]) * diversityFactor;
+        dayTotal += compositeVal;
+        sumHourly[h] += compositeVal;
+      }
+      count++;
+      if (dayTotal > maxDayTotal) { maxDayTotal = dayTotal; maxDayArr = dayArr; }
+      if (dayTotal < minDayTotal) { minDayTotal = dayTotal; minDayArr = dayArr; }
+    }
+
+    if (count === 0) return [];
+
+    // Step 2: Build result using those specific days for max/min, average across all days
+    const result: EnvelopePoint[] = [];
     for (let h = 0; h < 24; h++) {
-      let min = Infinity;
-      let max = -Infinity;
-      let sum = 0;
-      let count = 0;
-
       const fallbackH = fallbackHourlyTotal[h];
-
-      for (const dayArr of filteredEntries) {
-        // Add SCADA site value + constant fallback for non-SCADA tenants
-        const compositeVal = (dayArr[h] + fallbackH) * diversityFactor;
-        if (compositeVal < min) min = compositeVal;
-        if (compositeVal > max) max = compositeVal;
-        sum += compositeVal;
-        count += 1;
-      }
-
-      if (count === 0) {
-        result.push({ hour: `${h.toString().padStart(2, "0")}:00`, min: 0, max: 0, avg: 0 });
-        continue;
-      }
+      const maxVal = maxDayArr ? ((maxDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier : 0;
+      const minVal = minDayArr ? ((minDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier : 0;
+      const avgVal = (sumHourly[h] / count) * unitMultiplier;
 
       result.push({
         hour: `${h.toString().padStart(2, "0")}:00`,
-        min: min * unitMultiplier,
-        max: max * unitMultiplier,
-        avg: (sum / count) * unitMultiplier,
+        min: minVal,
+        max: maxVal,
+        avg: avgVal,
       });
     }
 
