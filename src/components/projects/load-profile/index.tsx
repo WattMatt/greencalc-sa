@@ -69,7 +69,7 @@ export function LoadProfileChart({
   
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>("kw");
   const [powerFactor, setPowerFactor] = useState(() => globalDeratingSettings.powerFactor);
-  const [selectedDays, setSelectedDays] = useState<Set<number>>(() => new Set([3]));
+  const [selectedDays, setSelectedDays] = useState<Set<number>>(() => new Set([0, 1, 2, 3, 4, 5, 6]));
   const selectedDay: DayOfWeek = DAYS_OF_WEEK[(Array.from(selectedDays)[0] + 6) % 7] || "Wednesday";
   
   // Toggle states with localStorage persistence
