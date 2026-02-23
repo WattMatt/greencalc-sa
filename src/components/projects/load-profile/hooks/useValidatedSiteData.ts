@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { Tenant } from "../types";
 import { parseRawData } from "../utils/parseRawData";
 
-/** Minimum kW daily total to exclude outage/power-off days */
-const OUTAGE_THRESHOLD_KW = 75;
+/** Minimum kW daily total at the SITE level to exclude outage/power-off days */
+const SITE_OUTAGE_THRESHOLD_KW = 75;
 
 export interface ValidatedSiteData {
   /** Unified site-level hourly kW totals per validated date */
@@ -97,9 +97,6 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
           dailyTotal += avgKw;
         });
 
-        // Skip outage days
-        if (dailyTotal < OUTAGE_THRESHOLD_KW) return;
-
         dateMap.set(dateKey, hourlyKw);
       });
 
@@ -176,6 +173,10 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
           siteHourly[h] += tenantHourly[h];
         }
       }
+      // Site-level outage filter: skip dates where total site consumption is negligible
+      const siteDailyTotal = siteHourly.reduce((a, b) => a + b, 0);
+      if (siteDailyTotal < SITE_OUTAGE_THRESHOLD_KW) continue;
+
       siteDataByDate.set(dateKey, siteHourly);
     }
 

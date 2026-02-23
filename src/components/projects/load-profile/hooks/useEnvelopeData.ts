@@ -49,7 +49,6 @@ export function useEnvelopeData({ displayUnit, powerFactor, validatedSiteData }:
 
       for (const dayArr of filteredEntries) {
         const val = dayArr[h];
-        if (val < 75) continue;
         if (val < min) min = val;
         if (val > max) max = val;
         sum += val;
