@@ -10,6 +10,7 @@ interface ChartStatsProps {
   pvStats: PVStats | null;
   weekdayDailyKwh?: number;
   weekendDailyKwh?: number;
+  validatedDateCount?: number;
 }
 
 export function ChartStats({ 
@@ -20,6 +21,7 @@ export function ChartStats({
   pvStats,
   weekdayDailyKwh,
   weekendDailyKwh,
+  validatedDateCount,
 }: ChartStatsProps) {
   // Calculate monthly based on actual weekday/weekend breakdown if available
   // Typical month: 22 weekdays + 8 weekend days
@@ -71,6 +73,13 @@ export function ChartStats({
           {monthlyLabel}
         </p>
       </Card>
+      {validatedDateCount !== undefined && (
+        <Card className="p-3 border-blue-500/30">
+          <p className="text-xs text-muted-foreground">Validated Days</p>
+          <p className="text-xl font-semibold text-blue-500">{validatedDateCount}</p>
+          <p className="text-[10px] text-muted-foreground">full-coverage dates</p>
+        </Card>
+      )}
       {pvStats && (
         <>
           <Card className="p-3 border-amber-500/30">

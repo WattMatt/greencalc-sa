@@ -191,6 +191,7 @@ export function LoadProfileChart({
     isWeekend,
     weekdayDailyKwh,
     weekendDailyKwh,
+    validatedDateCount,
   } = useLoadProfileData({
     tenants,
     shopTypes,
@@ -394,6 +395,7 @@ export function LoadProfileChart({
         pvStats={pvStats}
         weekdayDailyKwh={weekdayDailyKwh}
         weekendDailyKwh={weekendDailyKwh}
+        validatedDateCount={validatedDateCount}
       />
 
       {/* Top Contributors */}
