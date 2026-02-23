@@ -46,16 +46,41 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
   return useMemo(() => {
     const includedTenants = tenants.filter(t => t.include_in_load_profile !== false);
 
-    // Helper: get raw data for a tenant
-    // Helper: get raw data entry (with value_unit) for a tenant
-    const getRawEntry = (tenant: Tenant): RawDataEntry | undefined => {
+    // Helper: get all raw data entries for a tenant (supports multi-meter)
+    const getRawEntries = (tenant: Tenant): { entry: RawDataEntry; areaScale: number }[] => {
+      const results: { entry: RawDataEntry; areaScale: number }[] = [];
+      const tenantArea = Number(tenant.area_sqm) || 0;
+
+      // 1. Direct scada_import_id link (single-meter)
       if (rawDataMap && tenant.scada_import_id && rawDataMap[tenant.scada_import_id]) {
-        return rawDataMap[tenant.scada_import_id];
+        const areaScale =
+          tenant.scada_imports?.area_sqm && tenant.scada_imports.area_sqm > 0 && tenantArea > 0
+            ? tenantArea / tenant.scada_imports.area_sqm
+            : 1;
+        results.push({ entry: rawDataMap[tenant.scada_import_id], areaScale });
       }
-      if (tenant.scada_imports?.raw_data) {
-        return { raw_data: tenant.scada_imports.raw_data, value_unit: null };
+      // 2. Inline raw_data on tenant.scada_imports
+      else if (tenant.scada_imports?.raw_data) {
+        const areaScale =
+          tenant.scada_imports?.area_sqm && tenant.scada_imports.area_sqm > 0 && tenantArea > 0
+            ? tenantArea / tenant.scada_imports.area_sqm
+            : 1;
+        results.push({ entry: { raw_data: tenant.scada_imports.raw_data, value_unit: null }, areaScale });
       }
-      return undefined;
+      // 3. Multi-meter: iterate tenant_meters
+      else if (tenant.tenant_meters && tenant.tenant_meters.length > 0 && rawDataMap) {
+        for (const meter of tenant.tenant_meters) {
+          if (meter.scada_import_id && rawDataMap[meter.scada_import_id]) {
+            const meterArea = meter.scada_imports?.area_sqm;
+            const areaScale =
+              meterArea && meterArea > 0 && tenantArea > 0
+                ? tenantArea / meterArea
+                : 1;
+            results.push({ entry: rawDataMap[meter.scada_import_id], areaScale });
+          }
+        }
+      }
+      return results;
     };
 
     // === Pass 1: Build per-tenant, per-date hourly maps ===
@@ -65,61 +90,58 @@ export function useValidatedSiteData({ tenants, rawDataMap }: UseValidatedSiteDa
     const yearsSet = new Set<number>();
 
     for (const tenant of includedTenants) {
-      const tenantArea = Number(tenant.area_sqm) || 0;
       const key = tenant.name.length > 15 ? tenant.name.slice(0, 15) + "…" : tenant.name;
       tenantKeyMap.set(tenant.id, key);
 
-      const entry = getRawEntry(tenant);
-      if (!entry) continue;
-      const points = parseRawData(entry.raw_data);
-      if (points.length === 0) continue;
-      const useSum = isEnergyUnit(entry.value_unit);
+      const rawEntries = getRawEntries(tenant);
+      if (rawEntries.length === 0) continue;
 
-      const areaScale =
-        tenant.scada_imports?.area_sqm && tenant.scada_imports.area_sqm > 0 && tenantArea > 0
-          ? tenantArea / tenant.scada_imports.area_sqm
-          : 1;
-
-      // Group by date -> hour -> { sum, count }
+      // Group by date -> hour -> { sum, count } across ALL meters for this tenant
       const dateHourMap = new Map<string, Map<number, { sum: number; count: number }>>();
 
-      for (const point of points) {
-        if (!point.date || !point.time) continue;
-        const hour = parseInt(point.time.split(":")[0] || "0", 10);
-        if (hour < 0 || hour >= 24) continue;
+      for (const { entry, areaScale } of rawEntries) {
+        const points = parseRawData(entry.raw_data);
+        if (points.length === 0) continue;
+        const useSum = isEnergyUnit(entry.value_unit);
 
-        const kwValue = (point.value || 0) * areaScale;
+        for (const point of points) {
+          if (!point.date || !point.time) continue;
+          const hour = parseInt(point.time.split(":")[0] || "0", 10);
+          if (hour < 0 || hour >= 24) continue;
 
-        // Track years
-        const year = parseInt(point.date.split("-")[0], 10);
-        if (!isNaN(year)) yearsSet.add(year);
+          const kwValue = (point.value || 0) * areaScale;
 
-        if (!dateHourMap.has(point.date)) {
-          dateHourMap.set(point.date, new Map());
+          const year = parseInt(point.date.split("-")[0], 10);
+          if (!isNaN(year)) yearsSet.add(year);
+
+          if (!dateHourMap.has(point.date)) {
+            dateHourMap.set(point.date, new Map());
+          }
+          const hourMap = dateHourMap.get(point.date)!;
+          if (!hourMap.has(hour)) {
+            hourMap.set(hour, { sum: 0, count: 0 });
+          }
+          const hourEntry = hourMap.get(hour)!;
+          // For multi-meter: sum across meters (each meter contributes its value)
+          hourEntry.sum += useSum ? kwValue : kwValue;
+          hourEntry.count += 1;
         }
-        const hourMap = dateHourMap.get(point.date)!;
-        if (!hourMap.has(hour)) {
-          hourMap.set(hour, { sum: 0, count: 0 });
-        }
-        const entry = hourMap.get(hour)!;
-        entry.sum += kwValue;
-        entry.count += 1;
       }
 
-      // Convert to per-date hourly kW arrays, filtering outage days
+      // Convert to per-date hourly kW arrays
       const dateMap = new Map<string, number[]>();
+      // Track whether this tenant has mixed energy/power units (unlikely but safe)
+      const firstEntry = rawEntries[0];
+      const useSum = isEnergyUnit(firstEntry.entry.value_unit);
 
       dateHourMap.forEach((hourMap, dateKey) => {
         const hourlyKw = Array(24).fill(0);
-        let dailyTotal = 0;
         hourMap.forEach((hourEntry, hour) => {
-          // For energy units (kWh): sum sub-hourly readings (total kWh in 1h = avg kW)
-          // For power units (kW): average the readings
+          // For energy units: sum gives total kWh in the hour = avg kW
+          // For power units: average the readings
           const hourlyValue = useSum ? hourEntry.sum : hourEntry.sum / hourEntry.count;
           hourlyKw[hour] = hourlyValue;
-          dailyTotal += hourlyValue;
         });
-
         dateMap.set(dateKey, hourlyKw);
       });
 
