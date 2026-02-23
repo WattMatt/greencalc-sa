@@ -191,17 +191,18 @@ export function useEnvelopeData({
     const maxDayArr = dayEntries[p95Index].arr;
 
     // Step 3: Build result using percentile days for max/min, average across all days
+    // Clamp max/min so they never cross the average line
     const result: EnvelopePoint[] = [];
     for (let h = 0; h < 24; h++) {
       const fallbackH = fallbackHourlyTotal[h];
-      const maxVal = ((maxDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier;
-      const minVal = ((minDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier;
+      const rawMax = ((maxDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier;
+      const rawMin = ((minDayArr[h] + fallbackH) * diversityFactor) * unitMultiplier;
       const avgVal = (sumHourly[h] / count) * unitMultiplier;
 
       result.push({
         hour: `${h.toString().padStart(2, "0")}:00`,
-        min: minVal,
-        max: maxVal,
+        min: Math.min(rawMin, avgVal),
+        max: Math.max(rawMax, avgVal),
         avg: avgVal,
       });
     }
