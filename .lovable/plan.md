@@ -1,46 +1,44 @@
 
-
-## Remove Envelope Clamping and Add Mode Toggle
+## Fix TOU Period Background Colour Alignment
 
 ### Problem
-The `useEnvelopeData` hook currently clamps max/min values so they never cross the average line (`Math.max(rawMax, avgVal)` / `Math.min(rawMin, avgVal)`). This masks data issues rather than showing actual percentile values. Instead, the Envelope view should expose the same **Avg / Max / Min** toggle that exists on the "By Meter" view, allowing users to select which profile to display.
+The TOU (Time-of-Use) colour bands don't fully cover the chart area. Specifically:
+- **Hour 23** has zero width because `x1="23:00"` and `x2="23:00"` (same value)
+- The bands may not extend to the full edges of the chart area
 
-### Changes
-
-#### 1. Remove clamping in `useEnvelopeData.ts`
-- Revert the `Math.min` / `Math.max` clamping on lines 198-199 back to raw values:
-  - `min: rawMin` (not `Math.min(rawMin, avgVal)`)
-  - `max: rawMax` (not `Math.max(rawMax, avgVal)`)
-
-#### 2. Show mode toggle for Envelope view in `LoadEnvelopeChart.tsx`
-- Move the **Avg / Max / Min** `ToggleGroup` so it also appears when `viewMode === "envelope"` (currently it only renders when `viewMode === "stacked"`)
-- Position it to the right of the Envelope / By Meter toggle, matching the existing layout
-
-#### 3. Wire the mode toggle to the Envelope chart rendering
-- When in **Avg** mode: show the full envelope (band + max/min lines + dashed avg) as it works today
-- When in **Max** mode: show only the max (99th percentile) line as a solid line
-- When in **Min** mode: show only the min (1st percentile) line as a solid line
-- This mirrors how the "By Meter" stacked chart already switches between avg/max/min
+### Solution
+Add a 25th data point (`"24:00"`) to the chart data so the last ReferenceArea can span from `"23:00"` to `"24:00"`. Update the `nextHour` calculation to use `24` instead of clamping to `23`.
 
 ### Technical Details
 
-**`useEnvelopeData.ts`** (line ~198-199):
-```typescript
-// Before (clamped):
-min: Math.min(rawMin, avgVal),
-max: Math.max(rawMax, avgVal),
+**`LoadEnvelopeChart.tsx`** — two changes:
 
-// After (raw values):
-min: rawMin,
-max: rawMax,
+1. **Chart data**: append a duplicate of the last point with hour `"24:00"` so the x-axis extends to cover the full 24-hour range:
+```typescript
+const chartData = envelopeData.map((d) => ({
+  hour: d.hour,
+  base: d.min,
+  band: d.max - d.min,
+  avg: d.avg,
+  min: d.min,
+  max: d.max,
+}));
+
+// Add endpoint so TOU band covers hour 23-24
+const lastPoint = chartData[chartData.length - 1];
+if (lastPoint) {
+  chartData.push({ ...lastPoint, hour: "24:00" });
+}
 ```
 
-**`LoadEnvelopeChart.tsx`** (line ~97):
-- Change the condition `viewMode === "stacked"` to `true` (or remove the condition) so the Avg/Max/Min toggle is always visible
-- Conditionally render chart series based on the active mode:
-  - `avg`: render Area band + max line + min line + avg dashed line (current default)
-  - `max`: render only max solid line
-  - `min`: render only min solid line
+2. **ReferenceArea loop**: remove the `h === 23 ? 23 : h + 1` clamping so hour 23 maps to `"24:00"`:
+```typescript
+const nextHour = h + 1; // was: h === 23 ? 23 : h + 1
+```
 
-**`index.tsx`**: No changes needed -- `stackedMode` and `onStackedModeChange` are already passed through.
-
+This same fix pattern exists in **5 chart files** — all will be updated consistently:
+- `LoadEnvelopeChart.tsx`
+- `LoadChart.tsx`
+- `GridFlowChart.tsx`
+- `StackedMeterChart.tsx`
+- `SolarChart.tsx`
