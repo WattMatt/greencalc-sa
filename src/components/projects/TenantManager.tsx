@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -75,6 +75,7 @@ interface TenantManagerProps {
   projectId: string;
   tenants: Tenant[];
   shopTypes: ShopType[];
+  highlightTenantId?: string | null;
 }
 
 // KwhOverrideCell component for inline editing
@@ -235,7 +236,7 @@ function getSortedProfilesWithSuggestions(
 type SortColumn = 'shop_number' | 'shop_name' | 'area' | 'kwh';
 type SortDirection = 'asc' | 'desc';
 
-export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerProps) {
+export function TenantManager({ projectId, tenants, shopTypes, highlightTenantId }: TenantManagerProps) {
   const queryClient = useQueryClient();
   const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -1222,7 +1223,15 @@ export function TenantManager({ projectId, tenants, shopTypes }: TenantManagerPr
                 );
 
                 return (
-                  <TableRow key={tenant.id}>
+                  <TableRow
+                    key={tenant.id}
+                    ref={(el) => {
+                      if (highlightTenantId === tenant.id && el) {
+                        el.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }
+                    }}
+                    className={highlightTenantId === tenant.id ? "bg-primary/10 animate-pulse" : ""}
+                  >
                     <TableCell className="text-muted-foreground">{tenant.shop_number || '-'}</TableCell>
                     <TableCell className="font-medium">{getTenantDisplayName(tenant)}</TableCell>
                     <TableCell>{tenantArea.toLocaleString()}</TableCell>
