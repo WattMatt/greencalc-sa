@@ -1,73 +1,137 @@
 
-## Rotating Configuration Carousel for Simulation Panel
 
-### What Changes
-Replace the current 3-column grid layout (Solar PV | Inverter Sizing | Financial Analysis) and the separate Battery row with a **single rotating carousel** in the centre of the simulation panel. The carousel cycles between four configuration panes:
+## Battery Dispatch Strategy -- Charge/Discharge Scheduling
 
-1. **Solar Modules** (Solar PV System card content)
-2. **Inverters** (Inverter-Based Sizing card content)
-3. **Battery Storage** (Battery card content)
-4. **Financial Analysis** (Financial returns card content)
+### The Problem
+The current `EnergySimulationEngine` uses a **passive strategy**: the battery only charges from excess solar and discharges when load exceeds solar. This means:
 
-If a feature is not enabled (e.g. Solar PV is off, Battery is off), that carousel item appears **greyed out and disabled**. Clicking a disabled item triggers a confirmation dialog asking the user if they want to enable the feature.
+- A **battery-only project** (no solar) will **never charge** -- so it never discharges, producing zero financial return
+- Even with solar, there's no **TOU arbitrage** -- the battery doesn't know to charge during cheap off-peak hours and discharge during expensive peak hours
+- There's no **peak shaving** logic to reduce demand charges
+- The user has no way to configure *when* the battery should operate
 
-### User Experience
+### The Solution
+Add a **Battery Dispatch Strategy** selector to the Battery pane in the carousel, and extend the `EnergySimulationEngine` to support multiple dispatch modes.
+
+---
+
+### Battery Dispatch Strategies
+
+| Strategy | Description | When Battery Charges | When Battery Discharges |
+|----------|-------------|---------------------|------------------------|
+| **Self-Consumption** (current default) | Absorb excess solar, discharge when load > solar | Excess solar hours | Deficit hours (load > solar) |
+| **TOU Arbitrage** | Buy cheap grid power off-peak, sell/use during peak | Off-peak hours (22:00-06:00) from grid + solar | Peak hours (07:00-10:00, 18:00-20:00) |
+| **Peak Shaving** | Reduce maximum grid demand to lower demand charges | Off-peak hours (from grid) + solar excess | When load exceeds a configurable threshold |
+| **Scheduled** | User-defined charge/discharge windows | User-specified hours | User-specified hours |
+
+---
+
+### UI Changes (Battery Pane in ConfigCarousel)
+
+Add a **Strategy** selector below the existing AC Capacity / C-Rate / DoD fields:
 
 ```text
-   [< Prev]   [ Solar Modules | Inverters | Battery | Financial ]   [Next >]
-              ┌────────────────────────────────────────────────────┐
-              │                                                    │
-              │          Active pane content goes here             │
-              │                                                    │
-              └────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│  AC Capacity (kWh)  [42]  |  C-Rate  [0.5] │
+│  DoD (%)  [85]  |  Power (kW) [21]  | DC [49] │
+├─────────────────────────────────────────────┤
+│  Dispatch Strategy: [Self-Consumption ▼]    │
+│                                             │
+│  (Strategy-specific options appear here)    │
+│  TOU Arbitrage:                             │
+│    Charge window:  [22:00] - [06:00]        │
+│    Discharge window: [07:00] - [10:00]      │
+│                      [18:00] - [20:00]      │
+│    Grid charging: [✓] Allow                 │
+│                                             │
+│  Peak Shaving:                              │
+│    Target peak (kW): [150]                  │
+│    Grid charging: [✓] Allow                 │
+├─────────────────────────────────────────────┤
+│  Usable capacity: 42 kWh                   │
+│  Daily cycles: 0.85                         │
+│  Energy throughput: 36 kWh                  │
+└─────────────────────────────────────────────┘
 ```
 
-- Navigation via left/right chevron buttons and clickable tab indicators
-- Active tab shown with a primary colour indicator; disabled tabs shown greyed out
-- Clicking a disabled tab opens an `AlertDialog` asking: "Enable [Feature]?" with Enable/Cancel buttons
-- The Enable action calls back to `ProjectDetail` to toggle the system config
+---
 
-### Technical Details
+### Technical Changes
 
-**New file: `src/components/projects/simulation/ConfigCarousel.tsx`**
-- A self-contained component that wraps the four configuration panes
-- Props:
-  - `activeIndex` / `onActiveIndexChange` for controlled navigation
-  - `solarEnabled`, `batteryEnabled`, `financialEnabled` (boolean flags)
-  - `onRequestEnable: (feature: 'solarPV' | 'battery') => void` callback for the enable dialog
-  - `children` or render props for each pane's content
-- Uses Shadcn `AlertDialog` for the enable confirmation popup
-- Chevron left/right buttons cycle through the 4 panes (skipping or landing on disabled ones with the grey overlay)
-- Tab indicators at the top showing all four options with active/disabled styling
+#### 1. `src/components/projects/simulation/EnergySimulationEngine.ts`
 
-**Modified file: `src/components/projects/SimulationPanel.tsx`**
-- Add `includesSolar` prop (passed from `ProjectDetail`)
-- Add `onRequestEnableFeature` callback prop
-- Replace the `grid-cols-3` div (lines ~1311-1713) and the battery row (lines ~1715-1800) with a single `<ConfigCarousel>` component
-- Move each card's content into the carousel as named slots/children
-- Conditionally render pane content vs disabled overlay based on `includesSolar` / `includesBattery` / `hasFinancialData`
+**Add new types:**
+- `BatteryDispatchStrategy` -- `'self-consumption' | 'tou-arbitrage' | 'peak-shaving' | 'scheduled'`
+- `DispatchConfig` -- strategy-specific parameters (charge/discharge windows, peak target, grid charging flag)
 
-**Modified file: `src/pages/ProjectDetail.tsx`**
-- Pass `includesSolar={projectSystemConfig.solarPV}` to `SimulationPanel`
-- Pass `onRequestEnableFeature` callback that toggles the system config and saves
+**Extend `EnergySimulationConfig`:**
+- Add `dispatchStrategy?: BatteryDispatchStrategy`
+- Add `dispatchConfig?: DispatchConfig`
 
-### Carousel Pane Details
+**Update `runEnergySimulation` loop logic:**
+- Current logic becomes the `self-consumption` path (default, backward-compatible)
+- `tou-arbitrage`: During charge window hours, charge battery from grid (up to power limit); during discharge window hours, discharge battery to offset load regardless of solar
+- `peak-shaving`: When load exceeds target peak, discharge battery to bring grid import down to the target; charge from grid during off-peak or from excess solar
+- `scheduled`: Simple hour-based rules from user-defined windows
 
-| Pane | Enabled When | Content |
-|------|-------------|---------|
-| Solar Modules | `includesSolar` | Current Solar PV System card (capacity slider, inverter size selector, module config, production reduction) |
-| Inverters | `includesSolar` | Current Inverter-Based Sizing card (slider panel, quick select) |
-| Battery Storage | `includesBattery` | Current Battery Storage card (capacity/power sliders, daily cycles, throughput) |
-| Financial Analysis | `hasFinancialData` (tariff assigned) | Current Financial Return Outputs card; disabled state shows "Select a tariff to enable" |
+**Key change in the loop (hour 0-23):**
 
-### Disabled State Behaviour
-- Greyed-out card with reduced opacity (`opacity-40`) and a lock/disabled overlay
-- Tab indicator uses `text-muted-foreground` with a subtle strikethrough or badge
-- On click: `AlertDialog` with title "Enable [Feature Name]?", description explaining the feature, and "Enable" / "Cancel" buttons
-- Financial Analysis disabled state does NOT offer an enable button (it requires tariff selection, not a toggle)
+```text
+For each hour:
+  1. Calculate net load (load - solar) as before
+  2. Check dispatch strategy:
+     - self-consumption: existing logic (no change)
+     - tou-arbitrage:
+         if hour in charge_window AND battery not full:
+           charge from grid (gridImport increases)
+         if hour in discharge_window AND battery not empty:
+           discharge to offset load (gridImport decreases)
+         else: fall back to self-consumption logic
+     - peak-shaving:
+         if gridImport would exceed target_peak:
+           discharge battery to cap gridImport at target
+         if hour in off-peak AND battery not full:
+           charge from grid
+     - scheduled: similar to TOU but with user-defined windows
+```
 
-### Styling
-- Carousel container uses `max-w-2xl mx-auto` for centred placement
-- Smooth CSS transition between panes (slide left/right)
-- Active tab indicator with primary colour underline
-- Touch-friendly navigation buttons (min 44px)
+#### 2. `src/components/projects/SimulationPanel.tsx`
+
+**New state variables:**
+- `batteryStrategy: BatteryDispatchStrategy` (default: `'self-consumption'`)
+- `chargeWindowStart / chargeWindowEnd` (default: 22, 6)
+- `dischargeWindowStart / dischargeWindowEnd` (default: 7, 20 -- covering both peak windows)
+- `allowGridCharging: boolean` (default: false for self-consumption, true for TOU)
+- `peakShavingTarget: number` (default: derived from load profile peak)
+
+**Pass to `energyConfig`:**
+- Include `dispatchStrategy` and `dispatchConfig` in the config memo
+
+**UI in Battery pane:**
+- Add a `Select` dropdown for strategy after the existing input grid
+- Conditionally render strategy-specific options based on selection
+- Use the existing grid layout pattern (matching Solar Modules style)
+
+#### 3. `src/components/projects/load-profile/types.ts`
+
+**Leverage existing TOU definitions:**
+- The `getTOUPeriod()` function already defines SA peak/standard/off-peak hours
+- The TOU Arbitrage strategy will use these same hour definitions as defaults
+
+---
+
+### Financial Impact
+Once the battery has a proper dispatch strategy:
+- The `calculateFinancials` function already accounts for `totalGridImport` and `peakGridImport` from energy results
+- TOU arbitrage will reduce `totalGridImport` during expensive peak hours (lowering energy costs)
+- Peak shaving will reduce `peakGridImport` (lowering demand charges)
+- No changes needed to `FinancialAnalysis.ts` -- the financial layer already works correctly with whatever energy results it receives
+
+### Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| `src/components/projects/simulation/EnergySimulationEngine.ts` | Add dispatch strategy types and multi-strategy loop logic |
+| `src/components/projects/SimulationPanel.tsx` | Add strategy selector UI and state, pass config to engine |
+
+No new files needed. No new dependencies.
