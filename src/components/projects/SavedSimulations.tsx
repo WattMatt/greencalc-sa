@@ -95,6 +95,8 @@ interface SavedSimulationsProps {
     advancedConfig?: any;
     lossCalculationMode?: "simplified" | "pvsyst";
     productionReductionPercent?: number;
+    batteryCRate?: number;
+    batteryDoD?: number;
   }) => void;
   includesBattery?: boolean;
 }
@@ -278,6 +280,8 @@ export function SavedSimulations({
       advancedConfig: resultsJson?.advancedConfig,
       lossCalculationMode: resultsJson?.lossCalculationMode,
       productionReductionPercent: resultsJson?.productionReductionPercent,
+      batteryCRate: resultsJson?.batteryCRate,
+      batteryDoD: resultsJson?.batteryDoD,
     };
 
     onLoadSimulation(configToLoad);
