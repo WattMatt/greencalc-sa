@@ -257,12 +257,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       
       // Load configuration values
       setSolarCapacity(lastSavedSimulation.solar_capacity_kwp || 100);
+      const savedDoD = savedResultsJson?.batteryDoD || 85;
+      const savedCRate = savedResultsJson?.batteryCRate;
+      setBatteryDoD(savedDoD);
       const savedDcCap = includesBattery ? (lastSavedSimulation.battery_capacity_kwh || 50) : 0;
       const savedPower = includesBattery ? (lastSavedSimulation.battery_power_kw || 25) : 0;
-      const savedDoD = batteryDoD || 85;
       const derivedAc = Math.round(savedDcCap * savedDoD / 100);
       setBatteryAcCapacity(derivedAc);
-      setBatteryCRate(derivedAc > 0 ? Math.round(savedPower / derivedAc * 100) / 100 : 0.5);
+      setBatteryCRate(savedCRate ?? (derivedAc > 0 ? Math.round(savedPower / derivedAc * 100) / 100 : 0.5));
       
       // Load PV config if saved
       if (savedResultsJson?.pvConfig) {
@@ -999,6 +1001,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           dispatchConfig,
           chargeTouPeriod,
           dischargeTouPeriod,
+          // Save battery characteristics
+          batteryCRate,
+          batteryDoD,
         })),
       };
 
@@ -2116,10 +2121,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           if (includesBattery) {
             const dcCap = config.batteryCapacity || 0;
             const pwr = config.batteryPower || 0;
-            const dod = batteryDoD || 85;
+            const dod = config.batteryDoD || batteryDoD || 85;
+            const savedCRate = config.batteryCRate;
+            setBatteryDoD(dod);
             const ac = Math.round(dcCap * dod / 100);
             setBatteryAcCapacity(ac);
-            setBatteryCRate(ac > 0 ? Math.round(pwr / ac * 100) / 100 : 0.5);
+            setBatteryCRate(savedCRate ?? (ac > 0 ? Math.round(pwr / ac * 100) / 100 : 0.5));
           }
           if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
             setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
