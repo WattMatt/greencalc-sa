@@ -1,43 +1,93 @@
 
 
-## Add Building Profile and Grid Profile Tabs to Simulation Results
+## Update Tab Descriptions and Align Charts to Their Definitions
 
-### What Changes
+### Problem
 
-Reorganise the chart tabs from the current 4-tab layout to a 6-tab layout:
+Currently, Building Profile and Load Profile render the **exact same chart** (both use `LoadChart` with the `total` data series). They need to be differentiated to match their intended purposes.
 
-```text
-Current:  Load Profile | PV Profile | Battery Profile | Load Shedding
+### Definitions Recap
 
-New:      Building Profile | Load Profile | Grid Profile | PV Profile | Battery Profile | Load Shedding
-```
+| Tab | Purpose | Chart Content |
+|-----|---------|---------------|
+| Building Profile | Cumulative view of all energy flows | Composite chart: load + solar + grid + battery overlaid |
+| Load Profile | Tenant consumption | Raw demand (`total` series) -- the existing `LoadChart` |
+| Grid Profile | Network operator's perspective | Import/export (`gridImport`/`gridExport`) -- already correct |
+| PV Profile | PV production output | Solar generation -- already correct |
+| Battery Profile | Charge and discharge power | Charge/discharge areas + SoC line -- already correct |
+| Load Shedding | Unchanged | Unchanged |
 
-### Tab Definitions
+### Changes
 
-1. **Building Profile** (new) -- Shows the raw building consumption (the `total` data series) without any solar/battery overlay. This is the pure demand profile of the building before any renewable intervention. Uses the existing `LoadChart` component with the same day navigation and TOU toggle.
+**1. Remove icon from Grid Profile tab trigger**
 
-2. **Load Profile** -- Keeps the existing net-load chart showing how consumption looks after solar generation is applied. Removes the embedded Grid Flow chart (which moves to its own tab).
+Remove the `ArrowDownToLine` icon and `className="gap-1"` from the Grid Profile `TabsTrigger` so it reads as plain text.
 
-3. **Grid Profile** (new) -- The `GridFlowChart` component (import/export) gets its own dedicated tab with its own card wrapper, day navigation header, and TOU toggle. Currently this chart is embedded inside the Load Profile tab.
+**2. Update all tab descriptions**
 
-4. **PV Profile** -- No change.
+| Tab | Old Description | New Description |
+|-----|----------------|-----------------|
+| Building Profile | "Building consumption before renewable intervention" | "Cumulative profile: load, grid, PV, and battery combined" |
+| Load Profile | "Hourly site consumption" | "Tenant load and estimated downstream tenant consumption" |
+| Grid Profile | "Grid import & export flows" | "kW and kWh as perceived by the network operator" |
+| PV Profile | "Solar output with DC/AC ratio and clipping analysis" | "PV production output" |
+| Battery Profile | "Charge/discharge cycles and state of charge" | "Charging power and discharging power" |
 
-5. **Battery Profile** -- No change (still conditional on battery being enabled).
+**3. Create a new `BuildingProfileChart` component**
 
-6. **Load Shedding** -- No change.
+A new chart component at `src/components/projects/load-profile/charts/BuildingProfileChart.tsx` that overlays all four energy flows on a single `ComposedChart`:
+
+- **Load** (primary colour area) -- the `total` data series representing building demand
+- **PV Generation** (amber area) -- the `pvGeneration` series
+- **Grid Import** (red area) -- the `gridImport` series
+- **Grid Export** (green area, shown as negative or separate) -- the `gridExport` series
+- **Battery Charge** (green line) -- `batteryCharge` series (conditional on battery being enabled)
+- **Battery Discharge** (orange line) -- `batteryDischarge` series (conditional on battery being enabled)
+
+The chart will include:
+- A shared legend at the top showing all active series
+- TOU background shading (reusing the existing pattern)
+- Tooltip showing all values at the hovered hour
+- The 25th-hour data point for visual continuity
+
+**4. Update Building Profile tab to use the new chart**
+
+Replace the `LoadChart` in the Building Profile `TabsContent` with the new `BuildingProfileChart`, passing the existing `simulationChartData` and flags for whether battery is included.
+
+**5. Update the `SolarChart` component styling**
+
+Remove the top border and margin (`border-t`, `mt-4`, `pt-4`) from `SolarChart` since it now lives in its own dedicated tab (same cleanup previously done for `GridFlowChart`).
+
+**6. Update the `BatteryChart` component styling**
+
+Remove the top border and margin (`border-t`, `mt-4`, `pt-4`) from `BatteryChart` for the same reason.
 
 ### Technical Details
 
-**File:** `src/components/projects/SimulationPanel.tsx`
+**New file:** `src/components/projects/load-profile/charts/BuildingProfileChart.tsx`
 
-1. **Add two new `TabsTrigger` entries** -- `building` before `load`, and `grid` between `load` and `pv`. Use `Building2` and `ArrowDownToLine` icons from lucide-react (already imported or available).
+- Accepts `ChartDataPoint[]`, `showTOU`, `isWeekend`, `unit`, and `includesBattery` props
+- Uses `ComposedChart` from recharts with multiple `Area` and `Line` elements
+- Each series uses a distinct colour with gradient fills for areas
+- TOU `ReferenceArea` blocks rendered when `showTOU` is true
+- Custom tooltip displaying all active series values
 
-2. **Add `TabsContent value="building"`** -- Render a Card with the same day-navigation header (prev/next day, TOU toggle) and the `LoadChart` component. The chart label inside can read "Building Consumption" instead of "Load Profile".
+**Modified files:**
 
-3. **Move `GridFlowChart` out of the Load Profile tab** -- Remove `<GridFlowChart>` from inside `TabsContent value="load"`. Create a new `TabsContent value="grid"` with its own Card, day-navigation header, TOU toggle, and the `GridFlowChart` component.
+- `src/components/projects/SimulationPanel.tsx`
+  - Lines 2254-2256: Remove Building2 icon from Building Profile trigger (keep text only, matching other tabs)
+  - Lines 2259-2262: Remove ArrowDownToLine icon from Grid Profile trigger
+  - Line 2290: Update Building Profile `CardDescription`
+  - Lines 2304-2310: Replace `LoadChart` with `BuildingProfileChart`
+  - Line 2327: Update Load Profile `CardDescription`
+  - Line 2364: Update Grid Profile `CardDescription`
+  - Line 2397: Update PV Profile `CardDescription`
+  - Line 2429: Update Battery Profile `CardDescription`
 
-4. **Update default tab** -- Change `defaultValue="load"` to `defaultValue="building"` so the first visible tab matches the first position.
+- `src/components/projects/load-profile/charts/SolarChart.tsx`
+  - Line 36: Remove `mt-4 pt-4 border-t` classes from the wrapper div
 
-5. **Ensure the `TabsList` wraps gracefully** -- Add `flex-wrap` class to `TabsList` so the 6 tabs don't overflow on smaller screens.
+- `src/components/projects/load-profile/charts/BatteryChart.tsx`
+  - Line 13: Remove `mt-4 pt-4 border-t` classes from the wrapper div
 
-No new files, components, or dependencies needed. All charts and data already exist -- this is purely a tab reorganisation.
+No new dependencies required. All data series already exist in `ChartDataPoint`.
