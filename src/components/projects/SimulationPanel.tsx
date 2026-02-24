@@ -48,8 +48,20 @@ import {
 import {
   type BatteryDispatchStrategy,
   type DispatchConfig,
+  type TimeWindow,
   getDefaultDispatchConfig,
 } from "./simulation/EnergySimulationEngine";
+
+type TOUPeriod = 'off-peak' | 'standard' | 'peak';
+
+/** Convert a SA TOU period name to hour windows */
+function touPeriodToWindows(period: TOUPeriod): TimeWindow[] {
+  switch (period) {
+    case 'off-peak': return [{ start: 22, end: 6 }];
+    case 'standard': return [{ start: 6, end: 7 }, { start: 10, end: 18 }, { start: 20, end: 22 }];
+    case 'peak': return [{ start: 7, end: 10 }, { start: 18, end: 20 }];
+  }
+}
 import {
   AdvancedSimulationConfig,
   DEFAULT_ADVANCED_CONFIG,
@@ -168,10 +180,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [batteryAcCapacity, setBatteryAcCapacity] = useState(includesBattery ? 42 : 0); // AC (usable) kWh
   const [batteryCRate, setBatteryCRate] = useState(0.5); // C-Rate
   const [batteryDoD, setBatteryDoD] = useState(85); // Depth of Discharge %
-  
-  // Battery dispatch strategy
-  const [batteryStrategy, setBatteryStrategy] = useState<BatteryDispatchStrategy>('self-consumption');
-  const [dispatchConfig, setDispatchConfig] = useState<DispatchConfig>(getDefaultDispatchConfig('self-consumption'));
+   
+   // Battery dispatch strategy
+   const [batteryStrategy, setBatteryStrategy] = useState<BatteryDispatchStrategy>('self-consumption');
+   const [dispatchConfig, setDispatchConfig] = useState<DispatchConfig>(getDefaultDispatchConfig('self-consumption'));
+   
+   // TOU period selections for TOU Arbitrage mode
+   const [chargeTouPeriod, setChargeTouPeriod] = useState<TOUPeriod>('off-peak');
+   const [dischargeTouPeriod, setDischargeTouPeriod] = useState<TOUPeriod>('peak');
 
   // Derived DC values used by all downstream calculations
   const batteryCapacity = batteryDoD > 0 ? Math.round(batteryAcCapacity / (batteryDoD / 100)) : 0; // DC kWh
@@ -342,6 +358,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         setBatteryStrategy(savedResultsJson.batteryStrategy);
         setDispatchConfig(savedResultsJson.dispatchConfig ?? getDefaultDispatchConfig(savedResultsJson.batteryStrategy));
       }
+      if (savedResultsJson?.chargeTouPeriod) setChargeTouPeriod(savedResultsJson.chargeTouPeriod);
+      if (savedResultsJson?.dischargeTouPeriod) setDischargeTouPeriod(savedResultsJson.dischargeTouPeriod);
 
       // Track what we loaded for UI feedback
       setLoadedSimulationName(lastSavedSimulation.name);
@@ -979,6 +997,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           // Save battery dispatch strategy
           batteryStrategy,
           dispatchConfig,
+          chargeTouPeriod,
+          dischargeTouPeriod,
         })),
       };
 
@@ -1535,28 +1555,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     </div>
                   </div>
 
-                  {/* Dispatch Strategy - between Row 1 and Row 2 */}
-                  <div className="space-y-1">
-                    <Label className="text-xs">Dispatch Strategy</Label>
-                    <Select
-                      value={batteryStrategy}
-                      onValueChange={(v: BatteryDispatchStrategy) => {
-                        setBatteryStrategy(v);
-                        setDispatchConfig(getDefaultDispatchConfig(v));
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="self-consumption">Self-Consumption</SelectItem>
-                        <SelectItem value="tou-arbitrage">TOU Arbitrage</SelectItem>
-                        <SelectItem value="peak-shaving">Peak Shaving</SelectItem>
-                        <SelectItem value="scheduled">Scheduled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
                   {/* Row 2: DoD (editable), Power (computed), DC Capacity (computed) */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1">
@@ -1591,8 +1589,100 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     </div>
                   </div>
 
-                  {/* Strategy-specific options */}
-                  {(batteryStrategy === 'tou-arbitrage' || batteryStrategy === 'scheduled') && (
+                  {/* Dispatch Strategy */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Dispatch Strategy</Label>
+                    <Select
+                      value={batteryStrategy}
+                      onValueChange={(v: BatteryDispatchStrategy) => {
+                        setBatteryStrategy(v);
+                        const newConfig = getDefaultDispatchConfig(v);
+                        if (v === 'tou-arbitrage') {
+                          // Apply TOU period selections
+                          setDispatchConfig({
+                            ...newConfig,
+                            chargeWindows: touPeriodToWindows(chargeTouPeriod),
+                            dischargeWindows: touPeriodToWindows(dischargeTouPeriod),
+                          });
+                        } else {
+                          setDispatchConfig(newConfig);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="self-consumption">Self-Consumption</SelectItem>
+                        <SelectItem value="tou-arbitrage">TOU Arbitrage</SelectItem>
+                        <SelectItem value="peak-shaving">Peak Shaving</SelectItem>
+                        <SelectItem value="scheduled">Scheduled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* TOU Arbitrage: period selectors */}
+                  {batteryStrategy === 'tou-arbitrage' && (
+                    <div className="space-y-2 text-xs">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Charge from</Label>
+                          <Select
+                            value={chargeTouPeriod}
+                            onValueChange={(v: TOUPeriod) => {
+                              setChargeTouPeriod(v);
+                              setDispatchConfig(prev => ({
+                                ...prev,
+                                chargeWindows: touPeriodToWindows(v),
+                              }));
+                            }}
+                          >
+                            <SelectTrigger className="h-7 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
+                              <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
+                              <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Discharge from</Label>
+                          <Select
+                            value={dischargeTouPeriod}
+                            onValueChange={(v: TOUPeriod) => {
+                              setDischargeTouPeriod(v);
+                              setDispatchConfig(prev => ({
+                                ...prev,
+                                dischargeWindows: touPeriodToWindows(v),
+                              }));
+                            }}
+                          >
+                            <SelectTrigger className="h-7 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
+                              <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
+                              <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={dispatchConfig.allowGridCharging}
+                          onCheckedChange={(v) => setDispatchConfig(prev => ({ ...prev, allowGridCharging: v }))}
+                          className="h-4 w-7"
+                        />
+                        <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Scheduled: raw hour inputs */}
+                  {batteryStrategy === 'scheduled' && (
                     <div className="space-y-2 text-xs">
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
