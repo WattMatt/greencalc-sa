@@ -1,49 +1,43 @@
 
 
-## Restructure Battery Pane Layout and Add TOU Period Selector
+## Add Building Profile and Grid Profile Tabs to Simulation Results
 
 ### What Changes
 
-**1. Reorder the Battery pane layout**
-
-Move the DoD / Power / DC Capacity row **above** the Dispatch Strategy dropdown. The new order becomes:
+Reorganise the chart tabs from the current 4-tab layout to a 6-tab layout:
 
 ```text
-AC Capacity (kWh)  |  C-Rate
-DoD (%)  |  Power (kW)  |  DC Capacity (kWh)
-Dispatch Strategy: [Self-Consumption v]
-(strategy-specific options below)
+Current:  Load Profile | PV Profile | Battery Profile | Load Shedding
+
+New:      Building Profile | Load Profile | Grid Profile | PV Profile | Battery Profile | Load Shedding
 ```
 
-**2. Replace hour-number inputs with TOU Period selectors**
+### Tab Definitions
 
-When **TOU Arbitrage** is selected, instead of typing raw hour numbers (22-6, 7-10), the Charge and Discharge fields become dropdowns that let you select a TOU period:
+1. **Building Profile** (new) -- Shows the raw building consumption (the `total` data series) without any solar/battery overlay. This is the pure demand profile of the building before any renewable intervention. Uses the existing `LoadChart` component with the same day navigation and TOU toggle.
 
-- **Off-Peak** (22:00 - 06:00)
-- **Standard** (06:00 - 07:00, 10:00 - 18:00, 20:00 - 22:00)
-- **Peak** (07:00 - 10:00, 18:00 - 20:00)
+2. **Load Profile** -- Keeps the existing net-load chart showing how consumption looks after solar generation is applied. Removes the embedded Grid Flow chart (which moves to its own tab).
 
-The charge/discharge windows are then auto-derived from the selected TOU period. This is simpler and aligns with SA tariff structures.
+3. **Grid Profile** (new) -- The `GridFlowChart` component (import/export) gets its own dedicated tab with its own card wrapper, day navigation header, and TOU toggle. Currently this chart is embedded inside the Load Profile tab.
 
-For **Scheduled** mode, the raw hour inputs remain (user-defined windows).
+4. **PV Profile** -- No change.
+
+5. **Battery Profile** -- No change (still conditional on battery being enabled).
+
+6. **Load Shedding** -- No change.
 
 ### Technical Details
 
 **File:** `src/components/projects/SimulationPanel.tsx`
 
-1. **Cut** lines 1560-1592 (the DoD/Power/DC grid) and **paste** them before line 1538 (above Dispatch Strategy)
-2. **Add state** for `chargeTouPeriod` and `dischargeTouPeriod` (type `TOUPeriod`, defaults: `'off-peak'` and `'peak'`)
-3. **Add a helper** to convert a TOU period name into hour windows using the existing `getTOUPeriod` definitions:
-   - `off-peak`: `{start: 22, end: 6}`
-   - `standard`: `{start: 6, end: 7}` + `{start: 10, end: 18}` + `{start: 20, end: 22}` (multiple windows)
-   - `peak`: `{start: 7, end: 10}` + `{start: 18, end: 20}` (multiple windows)
-4. **For TOU Arbitrage**: Replace the two pairs of hour inputs with two `Select` dropdowns (Charge from: Off-Peak/Standard/Peak, Discharge from: Off-Peak/Standard/Peak). When the user picks a period, auto-update `dispatchConfig.chargeWindows` and `dischargeWindows` with the correct hour ranges
-5. **For Scheduled**: Keep the existing raw hour number inputs unchanged
-6. **Update persistence** to save/load `chargeTouPeriod` and `dischargeTouPeriod` in `results_json`
+1. **Add two new `TabsTrigger` entries** -- `building` before `load`, and `grid` between `load` and `pv`. Use `Building2` and `ArrowDownToLine` icons from lucide-react (already imported or available).
 
-**File:** `src/components/projects/simulation/EnergySimulationEngine.ts`
+2. **Add `TabsContent value="building"`** -- Render a Card with the same day-navigation header (prev/next day, TOU toggle) and the `LoadChart` component. The chart label inside can read "Building Consumption" instead of "Load Profile".
 
-- Update the `isInWindow` logic to support **multiple windows** per charge/discharge config (e.g., peak has two windows: 07-10 and 18-20). Change `chargeWindows` and `dischargeWindows` from single-item arrays to proper multi-window arrays
+3. **Move `GridFlowChart` out of the Load Profile tab** -- Remove `<GridFlowChart>` from inside `TabsContent value="load"`. Create a new `TabsContent value="grid"` with its own Card, day-navigation header, TOU toggle, and the `GridFlowChart` component.
 
-No new files or dependencies needed.
+4. **Update default tab** -- Change `defaultValue="load"` to `defaultValue="building"` so the first visible tab matches the first position.
 
+5. **Ensure the `TabsList` wraps gracefully** -- Add `flex-wrap` class to `TabsList` so the 6 tabs don't overflow on smaller screens.
+
+No new files, components, or dependencies needed. All charts and data already exist -- this is purely a tab reorganisation.
