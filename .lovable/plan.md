@@ -1,93 +1,75 @@
 
 
-## Update Tab Descriptions and Align Charts to Their Definitions
+## Fix Grid Profile, Battery Simulation, and Show 12-Month Average
 
-### Problem
+### Issues Identified
 
-Currently, Building Profile and Load Profile render the **exact same chart** (both use `LoadChart` with the `total` data series). They need to be differentiated to match their intended purposes.
+1. **Grid Profile is empty when solar is off**: The `gridImport` and `gridExport` fields in `useLoadProfileData` are only computed inside an `if (showPVProfile && maxPvAcKva)` block. When solar is disabled, these are never set, so the Grid Flow chart renders blank. The fix: always compute grid import/export -- when there is no solar or battery, grid import equals total load and export is zero.
 
-### Definitions Recap
+2. **Battery not charging/discharging**: The battery simulation block is gated behind `showPVProfile && maxPvAcKva`. This means battery does nothing when solar is off. The fix: run the battery simulation whenever `showBattery` is true, independent of solar. This also enables TOU Arbitrage (grid-charging) scenarios without solar.
 
-| Tab | Purpose | Chart Content |
-|-----|---------|---------------|
-| Building Profile | Cumulative view of all energy flows | Composite chart: load + solar + grid + battery overlaid |
-| Load Profile | Tenant consumption | Raw demand (`total` series) -- the existing `LoadChart` |
-| Grid Profile | Network operator's perspective | Import/export (`gridImport`/`gridExport`) -- already correct |
-| PV Profile | PV production output | Solar generation -- already correct |
-| Battery Profile | Charge and discharge power | Charge/discharge areas + SoC line -- already correct |
-| Load Shedding | Unchanged | Unchanged |
+3. **Profiles should show average over first 12 months**: Currently the charts show a single selected day. The user wants these to represent the average daily profile across the first 12 months of operation. This requires computing a monthly-averaged profile using month-specific solar yield data (from Solcast monthly factors if available) and averaging across all 12 months.
 
-### Changes
+### Technical Changes
 
-**1. Remove icon from Grid Profile tab trigger**
+**File: `src/components/projects/load-profile/hooks/useLoadProfileData.ts`**
 
-Remove the `ArrowDownToLine` icon and `className="gap-1"` from the Grid Profile `TabsTrigger` so it reads as plain text.
+1. **Always compute grid fields** -- Move the `gridImport`/`gridExport`/`netLoad` calculation outside the `showPVProfile` conditional. When PV is off, set:
+   - `gridImport = total` (full load comes from grid)
+   - `gridExport = 0`
+   - `netLoad = total`
 
-**2. Update all tab descriptions**
+2. **Decouple battery simulation from solar** -- Change the battery simulation gate from `if (showBattery && showPVProfile && maxPvAcKva)` to `if (showBattery)`. The battery logic already uses `gridExport` (excess PV) and `gridImport` (grid need), which will now always be populated. This enables:
+   - Solar + Battery: charges from excess PV, discharges during peak/standard
+   - Battery only (no solar): charges from grid during off-peak (TOU arbitrage), discharges during peak
 
-| Tab | Old Description | New Description |
-|-----|----------------|-----------------|
-| Building Profile | "Building consumption before renewable intervention" | "Cumulative profile: load, grid, PV, and battery combined" |
-| Load Profile | "Hourly site consumption" | "Tenant load and estimated downstream tenant consumption" |
-| Grid Profile | "Grid import & export flows" | "kW and kWh as perceived by the network operator" |
-| PV Profile | "Solar output with DC/AC ratio and clipping analysis" | "PV production output" |
-| Battery Profile | "Charge/discharge cycles and state of charge" | "Charging power and discharging power" |
+3. **Update `gridImportWithBattery`** -- Ensure this field is also computed when battery runs without solar.
 
-**3. Create a new `BuildingProfileChart` component**
+**File: `src/components/projects/SimulationPanel.tsx`**
 
-A new chart component at `src/components/projects/load-profile/charts/BuildingProfileChart.tsx` that overlays all four energy flows on a single `ComposedChart`:
+4. **12-month average profile** -- Update the simulation chart data computation to average across 12 monthly profiles rather than showing a single day:
+   - For load: use the existing daily profile (already an average for the selected day type)
+   - For PV: if Solcast monthly data is available, compute 12 monthly PV profiles using each month's irradiance factor, then average them. If no Solcast data, use the single generic profile (already a yearly average)
+   - For battery: simulate battery dispatch for each monthly profile, then average the results
+   - Display the card title as "Average Daily Profile (Year 1)" instead of the day name
+   - Remove the day navigation arrows (prev/next) since this is now a 12-month composite, not a single day view
 
-- **Load** (primary colour area) -- the `total` data series representing building demand
-- **PV Generation** (amber area) -- the `pvGeneration` series
-- **Grid Import** (red area) -- the `gridImport` series
-- **Grid Export** (green area, shown as negative or separate) -- the `gridExport` series
-- **Battery Charge** (green line) -- `batteryCharge` series (conditional on battery being enabled)
-- **Battery Discharge** (orange line) -- `batteryDischarge` series (conditional on battery being enabled)
+   Alternatively, if Solcast per-month data is not readily available, a simpler approach: keep the current day-based navigation but add a toggle or default mode that shows the weighted average across all 7 days of the week for the first year. This preserves the existing architecture while meeting the "average over 12 months" requirement.
 
-The chart will include:
-- A shared legend at the top showing all active series
-- TOU background shading (reusing the existing pattern)
-- Tooltip showing all values at the hovered hour
-- The 25th-hour data point for visual continuity
+### Approach for 12-Month Average
 
-**4. Update Building Profile tab to use the new chart**
+The simplest correct approach that fits the existing architecture:
 
-Replace the `LoadChart` in the Building Profile `TabsContent` with the new `BuildingProfileChart`, passing the existing `simulationChartData` and flags for whether battery is included.
+- Add a boolean state `showAnnualAverage` (default: true) to SimulationPanel
+- When true, call `useLoadProfileData` with `selectedDays` containing all 7 days (Mon-Sun) and `selectedMonths` containing all 12 months -- this already produces a weighted average profile across the full year from the validated SCADA data
+- The PV profile is already computed as a yearly average from Solcast normalised profile data
+- The day navigation header changes to show "Annual Average (Year 1)" with no prev/next arrows
+- A toggle allows switching back to per-day view
 
-**5. Update the `SolarChart` component styling**
+### Summary of Data Flow After Fix
 
-Remove the top border and margin (`border-t`, `mt-4`, `pt-4`) from `SolarChart` since it now lives in its own dedicated tab (same cleanup previously done for `GridFlowChart`).
+```text
+Without Solar, Without Battery:
+  gridImport = total load
+  gridExport = 0
 
-**6. Update the `BatteryChart` component styling**
+With Solar, Without Battery:
+  gridImport = max(0, total - pvGeneration)
+  gridExport = max(0, pvGeneration - total)
 
-Remove the top border and margin (`border-t`, `mt-4`, `pt-4`) from `BatteryChart` for the same reason.
+Without Solar, With Battery:
+  gridImport = total load (before battery)
+  battery charges from grid during off-peak
+  battery discharges during peak/standard
+  gridImportWithBattery = gridImport - discharge
 
-### Technical Details
+With Solar, With Battery:
+  (existing behaviour, now correctly decoupled)
+```
 
-**New file:** `src/components/projects/load-profile/charts/BuildingProfileChart.tsx`
+### Files Modified
 
-- Accepts `ChartDataPoint[]`, `showTOU`, `isWeekend`, `unit`, and `includesBattery` props
-- Uses `ComposedChart` from recharts with multiple `Area` and `Line` elements
-- Each series uses a distinct colour with gradient fills for areas
-- TOU `ReferenceArea` blocks rendered when `showTOU` is true
-- Custom tooltip displaying all active series values
-
-**Modified files:**
-
-- `src/components/projects/SimulationPanel.tsx`
-  - Lines 2254-2256: Remove Building2 icon from Building Profile trigger (keep text only, matching other tabs)
-  - Lines 2259-2262: Remove ArrowDownToLine icon from Grid Profile trigger
-  - Line 2290: Update Building Profile `CardDescription`
-  - Lines 2304-2310: Replace `LoadChart` with `BuildingProfileChart`
-  - Line 2327: Update Load Profile `CardDescription`
-  - Line 2364: Update Grid Profile `CardDescription`
-  - Line 2397: Update PV Profile `CardDescription`
-  - Line 2429: Update Battery Profile `CardDescription`
-
-- `src/components/projects/load-profile/charts/SolarChart.tsx`
-  - Line 36: Remove `mt-4 pt-4 border-t` classes from the wrapper div
-
-- `src/components/projects/load-profile/charts/BatteryChart.tsx`
-  - Line 13: Remove `mt-4 pt-4 border-t` classes from the wrapper div
-
-No new dependencies required. All data series already exist in `ChartDataPoint`.
+| File | Change |
+|------|--------|
+| `src/components/projects/load-profile/hooks/useLoadProfileData.ts` | Always compute grid fields; decouple battery from solar gate |
+| `src/components/projects/SimulationPanel.tsx` | Add annual average mode; update chart header; pass all days/months when in average mode |
