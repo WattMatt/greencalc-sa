@@ -96,7 +96,8 @@ interface UseLoadProfileDataProps {
   dcAcRatio: number;
   showBattery: boolean;
   batteryCapacity: number;
-  batteryPower: number;
+  batteryPower: number; // charge power
+  batteryDischargePower?: number; // discharge power (defaults to batteryPower if not set)
   solcastProfile?: SolcastPVProfile;
   systemLosses?: number;
   diversityFactor?: number;
@@ -118,6 +119,7 @@ export function useLoadProfileData({
   showBattery,
   batteryCapacity,
   batteryPower,
+  batteryDischargePower,
   solcastProfile,
   systemLosses = 0.14,
   diversityFactor = 1.0,
@@ -425,7 +427,8 @@ export function useLoadProfileData({
           soc += charge;
         } else if (gridNeed > 0 && (period === "peak" || period === "standard")) {
           const availableEnergy = soc - minSoC;
-          discharge = Math.min(batteryPower, gridNeed, availableEnergy);
+          const effectiveDischargePower = batteryDischargePower ?? batteryPower;
+          discharge = Math.min(effectiveDischargePower, gridNeed, availableEnergy);
           soc -= discharge;
         }
 
@@ -448,6 +451,7 @@ export function useLoadProfileData({
     showBattery,
     batteryCapacity,
     batteryPower,
+    batteryDischargePower,
     isWeekend,
     pvNormalizedProfile,
     hourlyTemps,
