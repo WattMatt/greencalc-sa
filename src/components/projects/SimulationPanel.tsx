@@ -13,6 +13,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
 import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw, Calculator, Clock, Info, Save, ChevronLeft, ChevronRight, Building2, ArrowDownToLine } from "lucide-react";
 import { LoadChart } from "./load-profile/charts/LoadChart";
+import { BuildingProfileChart } from "./load-profile/charts/BuildingProfileChart";
 import { SolarChart } from "./load-profile/charts/SolarChart";
 import { GridFlowChart } from "./load-profile/charts/GridFlowChart";
 import { BatteryChart } from "./load-profile/charts/BatteryChart";
@@ -2251,15 +2252,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       {/* Charts */}
       <Tabs defaultValue="building">
         <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="building" className="gap-1">
-            <Building2 className="h-3 w-3" />
-            Building Profile
-          </TabsTrigger>
+          <TabsTrigger value="building">Building Profile</TabsTrigger>
           <TabsTrigger value="load">Load Profile</TabsTrigger>
-          <TabsTrigger value="grid" className="gap-1">
-            <ArrowDownToLine className="h-3 w-3" />
-            Grid Profile
-          </TabsTrigger>
+          <TabsTrigger value="grid">Grid Profile</TabsTrigger>
           <TabsTrigger value="pv">PV Profile</TabsTrigger>
           {includesBattery && batteryCapacity > 0 && (
             <TabsTrigger value="battery">Battery Profile</TabsTrigger>
@@ -2287,7 +2282,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   </Button>
                   <div>
                     <CardTitle className="text-base">{selectedDay}</CardTitle>
-                    <CardDescription className="text-xs">Building consumption before renewable intervention</CardDescription>
+                    <CardDescription className="text-xs">Cumulative profile: load, grid, PV, and battery combined</CardDescription>
                   </div>
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
                     <ChevronRight className="h-4 w-4" />
@@ -2302,11 +2297,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <LoadChart 
+              <BuildingProfileChart 
                 chartData={simulationChartData} 
                 showTOU={showTOU} 
                 isWeekend={loadProfileIsWeekend} 
-                unit="kW" 
+                unit="kW"
+                includesBattery={includesBattery && batteryCapacity > 0}
               />
               {showTOU && <TOULegend />}
             </CardContent>
@@ -2324,7 +2320,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   </Button>
                   <div>
                     <CardTitle className="text-base">{selectedDay}</CardTitle>
-                    <CardDescription className="text-xs">Hourly site consumption</CardDescription>
+                    <CardDescription className="text-xs">Tenant load and estimated downstream tenant consumption</CardDescription>
                   </div>
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
                     <ChevronRight className="h-4 w-4" />
@@ -2361,7 +2357,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   </Button>
                   <div>
                     <CardTitle className="text-base">{selectedDay}</CardTitle>
-                    <CardDescription className="text-xs">Grid import &amp; export flows</CardDescription>
+                    <CardDescription className="text-xs">kW and kWh as perceived by the network operator</CardDescription>
                   </div>
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
                     <ChevronRight className="h-4 w-4" />
@@ -2394,7 +2390,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>PV Generation</CardTitle>
-                  <CardDescription>Solar output with DC/AC ratio and clipping analysis</CardDescription>
+                  <CardDescription>PV production output</CardDescription>
                 </div>
                 <div className="flex items-center gap-3">
                   <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
@@ -2426,7 +2422,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               <CardHeader className="pb-3">
                 <div>
                   <CardTitle>Battery Storage</CardTitle>
-                  <CardDescription>Charge/discharge cycles and state of charge</CardDescription>
+                  <CardDescription>Charging power and discharging power</CardDescription>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
