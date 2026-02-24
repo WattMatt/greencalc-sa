@@ -1535,6 +1535,28 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     </div>
                   </div>
 
+                  {/* Dispatch Strategy - between Row 1 and Row 2 */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Dispatch Strategy</Label>
+                    <Select
+                      value={batteryStrategy}
+                      onValueChange={(v: BatteryDispatchStrategy) => {
+                        setBatteryStrategy(v);
+                        setDispatchConfig(getDefaultDispatchConfig(v));
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="self-consumption">Self-Consumption</SelectItem>
+                        <SelectItem value="tou-arbitrage">TOU Arbitrage</SelectItem>
+                        <SelectItem value="peak-shaving">Peak Shaving</SelectItem>
+                        <SelectItem value="scheduled">Scheduled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   {/* Row 2: DoD (editable), Power (computed), DC Capacity (computed) */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1">
@@ -1569,126 +1591,102 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     </div>
                   </div>
 
-                  {/* Dispatch Strategy */}
-                  <div className="pt-2 border-t space-y-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Dispatch Strategy</Label>
-                      <Select
-                        value={batteryStrategy}
-                        onValueChange={(v: BatteryDispatchStrategy) => {
-                          setBatteryStrategy(v);
-                          setDispatchConfig(getDefaultDispatchConfig(v));
-                        }}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="self-consumption">Self-Consumption</SelectItem>
-                          <SelectItem value="tou-arbitrage">TOU Arbitrage</SelectItem>
-                          <SelectItem value="peak-shaving">Peak Shaving</SelectItem>
-                          <SelectItem value="scheduled">Scheduled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Strategy-specific options */}
-                    {(batteryStrategy === 'tou-arbitrage' || batteryStrategy === 'scheduled') && (
-                      <div className="space-y-2 text-xs">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] text-muted-foreground">Charge from</Label>
-                            <div className="flex items-center gap-1">
-                              <Input
-                                type="number"
-                                value={dispatchConfig.chargeWindows[0]?.start ?? 22}
-                                onChange={(e) => setDispatchConfig(prev => ({
-                                  ...prev,
-                                  chargeWindows: [{ start: parseInt(e.target.value) || 0, end: prev.chargeWindows[0]?.end ?? 6 }],
-                                }))}
-                                className="h-7 w-14 text-xs"
-                                min={0} max={23}
-                              />
-                              <span className="text-muted-foreground">–</span>
-                              <Input
-                                type="number"
-                                value={dispatchConfig.chargeWindows[0]?.end ?? 6}
-                                onChange={(e) => setDispatchConfig(prev => ({
-                                  ...prev,
-                                  chargeWindows: [{ start: prev.chargeWindows[0]?.start ?? 22, end: parseInt(e.target.value) || 0 }],
-                                }))}
-                                className="h-7 w-14 text-xs"
-                                min={0} max={23}
-                              />
-                              <span className="text-[10px] text-muted-foreground">h</span>
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] text-muted-foreground">Discharge from</Label>
-                            <div className="flex items-center gap-1">
-                              <Input
-                                type="number"
-                                value={dispatchConfig.dischargeWindows[0]?.start ?? 7}
-                                onChange={(e) => setDispatchConfig(prev => ({
-                                  ...prev,
-                                  dischargeWindows: [{ start: parseInt(e.target.value) || 0, end: prev.dischargeWindows[0]?.end ?? 20 }],
-                                }))}
-                                className="h-7 w-14 text-xs"
-                                min={0} max={23}
-                              />
-                              <span className="text-muted-foreground">–</span>
-                              <Input
-                                type="number"
-                                value={dispatchConfig.dischargeWindows[0]?.end ?? 20}
-                                onChange={(e) => setDispatchConfig(prev => ({
-                                  ...prev,
-                                  dischargeWindows: [{ start: prev.dischargeWindows[0]?.start ?? 7, end: parseInt(e.target.value) || 0 }],
-                                }))}
-                                className="h-7 w-14 text-xs"
-                                min={0} max={23}
-                              />
-                              <span className="text-[10px] text-muted-foreground">h</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={dispatchConfig.allowGridCharging}
-                            onCheckedChange={(v) => setDispatchConfig(prev => ({ ...prev, allowGridCharging: v }))}
-                            className="h-4 w-7"
-                          />
-                          <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
-                        </div>
-                      </div>
-                    )}
-
-                    {batteryStrategy === 'peak-shaving' && (
-                      <div className="space-y-2 text-xs">
+                  {/* Strategy-specific options */}
+                  {(batteryStrategy === 'tou-arbitrage' || batteryStrategy === 'scheduled') && (
+                    <div className="space-y-2 text-xs">
+                      <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Target peak (kW)</Label>
-                          <Input
-                            type="number"
-                            value={dispatchConfig.peakShavingTarget ?? 150}
-                            onChange={(e) => setDispatchConfig(prev => ({
-                              ...prev,
-                              peakShavingTarget: Math.max(0, parseFloat(e.target.value) || 0),
-                            }))}
-                            className="h-7 text-xs"
-                            min={0}
-                            step={10}
-                          />
+                          <Label className="text-[10px] text-muted-foreground">Charge from</Label>
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              value={dispatchConfig.chargeWindows[0]?.start ?? 22}
+                              onChange={(e) => setDispatchConfig(prev => ({
+                                ...prev,
+                                chargeWindows: [{ start: parseInt(e.target.value) || 0, end: prev.chargeWindows[0]?.end ?? 6 }],
+                              }))}
+                              className="h-7 w-14 text-xs"
+                              min={0} max={23}
+                            />
+                            <span className="text-muted-foreground">–</span>
+                            <Input
+                              type="number"
+                              value={dispatchConfig.chargeWindows[0]?.end ?? 6}
+                              onChange={(e) => setDispatchConfig(prev => ({
+                                ...prev,
+                                chargeWindows: [{ start: prev.chargeWindows[0]?.start ?? 22, end: parseInt(e.target.value) || 0 }],
+                              }))}
+                              className="h-7 w-14 text-xs"
+                              min={0} max={23}
+                            />
+                            <span className="text-[10px] text-muted-foreground">h</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={dispatchConfig.allowGridCharging}
-                            onCheckedChange={(v) => setDispatchConfig(prev => ({ ...prev, allowGridCharging: v }))}
-                            className="h-4 w-7"
-                          />
-                          <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Discharge from</Label>
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              value={dispatchConfig.dischargeWindows[0]?.start ?? 7}
+                              onChange={(e) => setDispatchConfig(prev => ({
+                                ...prev,
+                                dischargeWindows: [{ start: parseInt(e.target.value) || 0, end: prev.dischargeWindows[0]?.end ?? 20 }],
+                              }))}
+                              className="h-7 w-14 text-xs"
+                              min={0} max={23}
+                            />
+                            <span className="text-muted-foreground">–</span>
+                            <Input
+                              type="number"
+                              value={dispatchConfig.dischargeWindows[0]?.end ?? 20}
+                              onChange={(e) => setDispatchConfig(prev => ({
+                                ...prev,
+                                dischargeWindows: [{ start: prev.dischargeWindows[0]?.start ?? 7, end: parseInt(e.target.value) || 0 }],
+                              }))}
+                              className="h-7 w-14 text-xs"
+                              min={0} max={23}
+                            />
+                            <span className="text-[10px] text-muted-foreground">h</span>
+                          </div>
                         </div>
                       </div>
-                    )}
-                  </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={dispatchConfig.allowGridCharging}
+                          onCheckedChange={(v) => setDispatchConfig(prev => ({ ...prev, allowGridCharging: v }))}
+                          className="h-4 w-7"
+                        />
+                        <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
+                      </div>
+                    </div>
+                  )}
+
+                  {batteryStrategy === 'peak-shaving' && (
+                    <div className="space-y-2 text-xs">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Target peak (kW)</Label>
+                        <Input
+                          type="number"
+                          value={dispatchConfig.peakShavingTarget ?? 150}
+                          onChange={(e) => setDispatchConfig(prev => ({
+                            ...prev,
+                            peakShavingTarget: Math.max(0, parseFloat(e.target.value) || 0),
+                          }))}
+                          className="h-7 text-xs"
+                          min={0}
+                          step={10}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={dispatchConfig.allowGridCharging}
+                          onCheckedChange={(v) => setDispatchConfig(prev => ({ ...prev, allowGridCharging: v }))}
+                          className="h-4 w-7"
+                        />
+                        <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Summary stats */}
                   <div className="pt-2 border-t space-y-1 text-[10px] text-muted-foreground">
