@@ -30,8 +30,10 @@ interface AdvancedSimulationConfigProps {
   config: AdvancedSimulationConfig;
   onChange: (config: AdvancedSimulationConfig) => void;
   includesBattery?: boolean;
-  batteryCRate?: number;
-  onBatteryCRateChange?: (value: number) => void;
+  batteryChargeCRate?: number;
+  onBatteryChargeCRateChange?: (value: number) => void;
+  batteryDischargeCRate?: number;
+  onBatteryDischargeCRateChange?: (value: number) => void;
   batteryDoD?: number;
   onBatteryDoDChange?: (value: number) => void;
 }
@@ -40,8 +42,10 @@ export function AdvancedSimulationConfigPanel({
   config, 
   onChange,
   includesBattery = false,
-  batteryCRate = 0.5,
-  onBatteryCRateChange,
+  batteryChargeCRate = 0.5,
+  onBatteryChargeCRateChange,
+  batteryDischargeCRate = 0.5,
+  onBatteryDischargeCRateChange,
   batteryDoD = 85,
   onBatteryDoDChange,
 }: AdvancedSimulationConfigProps) {
@@ -250,8 +254,10 @@ export function AdvancedSimulationConfigPanel({
             {/* Battery Characteristics */}
             {includesBattery && (
               <BatteryCharacteristicsSection
-                cRate={batteryCRate}
-                onCRateChange={onBatteryCRateChange}
+                chargeCRate={batteryChargeCRate}
+                onChargeCRateChange={onBatteryChargeCRateChange}
+                dischargeCRate={batteryDischargeCRate}
+                onDischargeCRateChange={onBatteryDischargeCRateChange}
                 doD={batteryDoD}
                 onDoDChange={onBatteryDoDChange}
               />
@@ -878,13 +884,17 @@ function LoadGrowthSection({
 // ============= Battery Characteristics Section =============
 
 function BatteryCharacteristicsSection({
-  cRate,
-  onCRateChange,
+  chargeCRate,
+  onChargeCRateChange,
+  dischargeCRate,
+  onDischargeCRateChange,
   doD,
   onDoDChange,
 }: {
-  cRate: number;
-  onCRateChange?: (value: number) => void;
+  chargeCRate: number;
+  onChargeCRateChange?: (value: number) => void;
+  dischargeCRate: number;
+  onDischargeCRateChange?: (value: number) => void;
   doD: number;
   onDoDChange?: (value: number) => void;
 }) {
@@ -894,13 +904,25 @@ function BatteryCharacteristicsSection({
         <Battery className="h-4 w-4 text-primary" />
         <Label className="text-sm font-medium">Battery Characteristics</Label>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1">
-          <Label className="text-xs">C-Rate</Label>
+          <Label className="text-xs">Charging C-Rate</Label>
           <Input
             type="number"
-            value={cRate}
-            onChange={(e) => onCRateChange?.(Math.max(0.1, Math.min(5, parseFloat(e.target.value) || 0.5)))}
+            value={chargeCRate}
+            onChange={(e) => onChargeCRateChange?.(Math.max(0.1, Math.min(5, parseFloat(e.target.value) || 0.5)))}
+            className="h-8 text-xs"
+            min={0.1}
+            max={5}
+            step={0.1}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Discharging C-Rate</Label>
+          <Input
+            type="number"
+            value={dischargeCRate}
+            onChange={(e) => onDischargeCRateChange?.(Math.max(0.1, Math.min(5, parseFloat(e.target.value) || 0.5)))}
             className="h-8 text-xs"
             min={0.1}
             max={5}

@@ -95,7 +95,9 @@ interface SavedSimulationsProps {
     advancedConfig?: any;
     lossCalculationMode?: "simplified" | "pvsyst";
     productionReductionPercent?: number;
-    batteryCRate?: number;
+    batteryChargeCRate?: number;
+    batteryDischargeCRate?: number;
+    batteryCRate?: number; // Legacy fallback
     batteryDoD?: number;
   }) => void;
   includesBattery?: boolean;
@@ -280,6 +282,8 @@ export function SavedSimulations({
       advancedConfig: resultsJson?.advancedConfig,
       lossCalculationMode: resultsJson?.lossCalculationMode,
       productionReductionPercent: resultsJson?.productionReductionPercent,
+      batteryChargeCRate: resultsJson?.batteryChargeCRate,
+      batteryDischargeCRate: resultsJson?.batteryDischargeCRate,
       batteryCRate: resultsJson?.batteryCRate,
       batteryDoD: resultsJson?.batteryDoD,
     };
