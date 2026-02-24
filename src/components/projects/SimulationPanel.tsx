@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
-import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw, Calculator, Clock, Info, Save, ChevronLeft, ChevronRight } from "lucide-react";
+import { Sun, Battery, Zap, TrendingUp, AlertCircle, ChevronDown, ChevronUp, Cloud, Loader2, CheckCircle2, Database, Activity, RefreshCw, Calculator, Clock, Info, Save, ChevronLeft, ChevronRight, Building2, ArrowDownToLine } from "lucide-react";
 import { LoadChart } from "./load-profile/charts/LoadChart";
 import { SolarChart } from "./load-profile/charts/SolarChart";
 import { GridFlowChart } from "./load-profile/charts/GridFlowChart";
@@ -2249,9 +2249,17 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       )}
 
       {/* Charts */}
-      <Tabs defaultValue="load">
-        <TabsList>
+      <Tabs defaultValue="building">
+        <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="building" className="gap-1">
+            <Building2 className="h-3 w-3" />
+            Building Profile
+          </TabsTrigger>
           <TabsTrigger value="load">Load Profile</TabsTrigger>
+          <TabsTrigger value="grid" className="gap-1">
+            <ArrowDownToLine className="h-3 w-3" />
+            Grid Profile
+          </TabsTrigger>
           <TabsTrigger value="pv">PV Profile</TabsTrigger>
           {includesBattery && batteryCapacity > 0 && (
             <TabsTrigger value="battery">Battery Profile</TabsTrigger>
@@ -2267,6 +2275,43 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             </TabsTrigger>
           )}
         </TabsList>
+
+        {/* Building Profile Tab */}
+        <TabsContent value="building" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div>
+                    <CardTitle className="text-base">{selectedDay}</CardTitle>
+                    <CardDescription className="text-xs">Building consumption before renewable intervention</CardDescription>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
+                    TOU
+                  </Label>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <LoadChart 
+                chartData={simulationChartData} 
+                showTOU={showTOU} 
+                isWeekend={loadProfileIsWeekend} 
+                unit="kW" 
+              />
+              {showTOU && <TOULegend />}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Load Profile Tab */}
         <TabsContent value="load" className="mt-4">
@@ -2300,14 +2345,43 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 isWeekend={loadProfileIsWeekend} 
                 unit="kW" 
               />
-              {solarCapacity > 0 && (
-                <GridFlowChart
-                  chartData={simulationChartData}
-                  showTOU={showTOU}
-                  isWeekend={loadProfileIsWeekend}
-                  unit="kW"
-                />
-              )}
+              {showTOU && <TOULegend />}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Grid Profile Tab */}
+        <TabsContent value="grid" className="mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div>
+                    <CardTitle className="text-base">{selectedDay}</CardTitle>
+                    <CardDescription className="text-xs">Grid import &amp; export flows</CardDescription>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
+                    TOU
+                  </Label>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <GridFlowChart
+                chartData={simulationChartData}
+                showTOU={showTOU}
+                isWeekend={loadProfileIsWeekend}
+                unit="kW"
+              />
               {showTOU && <TOULegend />}
             </CardContent>
           </Card>
