@@ -1345,6 +1345,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         config={advancedConfig}
         onChange={setAdvancedConfig}
         includesBattery={includesBattery}
+        batteryCRate={batteryCRate}
+        onBatteryCRateChange={setBatteryCRate}
+        batteryDoD={batteryDoD}
+        onBatteryDoDChange={setBatteryDoD}
       />
 
       {/* Scenario Comparison */}
@@ -1527,48 +1531,22 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Row 1: AC Capacity (user input), C-Rate (user input) */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">AC Capacity (kWh)</Label>
-                      <Input
-                        type="number"
-                        value={batteryAcCapacity}
-                        onChange={(e) => setBatteryAcCapacity(Math.max(0, parseInt(e.target.value) || 0))}
-                        className="h-8"
-                        min={0}
-                        max={5000}
-                        step={10}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">C-Rate</Label>
-                      <Input
-                        type="number"
-                        value={batteryCRate}
-                        onChange={(e) => setBatteryCRate(Math.max(0.1, Math.min(5, parseFloat(e.target.value) || 0.5)))}
-                        className="h-8"
-                        min={0.1}
-                        max={5}
-                        step={0.1}
-                      />
-                    </div>
+                  {/* Row 1: AC Capacity (user input) */}
+                  <div className="space-y-1">
+                    <Label className="text-xs">AC Capacity (kWh)</Label>
+                    <Input
+                      type="number"
+                      value={batteryAcCapacity}
+                      onChange={(e) => setBatteryAcCapacity(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="h-8"
+                      min={0}
+                      max={5000}
+                      step={10}
+                    />
                   </div>
 
-                  {/* Row 2: DoD (editable), Power (computed), DC Capacity (computed) */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Depth of Discharge (%)</Label>
-                      <Input
-                        type="number"
-                        value={batteryDoD}
-                        onChange={(e) => setBatteryDoD(Math.max(10, Math.min(100, parseInt(e.target.value) || 85)))}
-                        className="h-8"
-                        min={10}
-                        max={100}
-                        step={5}
-                      />
-                    </div>
+                  {/* Row 2: Power (computed), DC Capacity (computed) */}
+                  <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label className="text-xs">Power (kW)</Label>
                       <Input

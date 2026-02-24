@@ -30,12 +30,20 @@ interface AdvancedSimulationConfigProps {
   config: AdvancedSimulationConfig;
   onChange: (config: AdvancedSimulationConfig) => void;
   includesBattery?: boolean;
+  batteryCRate?: number;
+  onBatteryCRateChange?: (value: number) => void;
+  batteryDoD?: number;
+  onBatteryDoDChange?: (value: number) => void;
 }
 
 export function AdvancedSimulationConfigPanel({ 
   config, 
   onChange,
-  includesBattery = false
+  includesBattery = false,
+  batteryCRate = 0.5,
+  onBatteryCRateChange,
+  batteryDoD = 85,
+  onBatteryDoDChange,
 }: AdvancedSimulationConfigProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -237,6 +245,16 @@ export function AdvancedSimulationConfigPanel({
                   </DialogContent>
                 </Dialog>
               </div>
+            )}
+
+            {/* Battery Characteristics */}
+            {includesBattery && (
+              <BatteryCharacteristicsSection
+                cRate={batteryCRate}
+                onCRateChange={onBatteryCRateChange}
+                doD={batteryDoD}
+                onDoDChange={onBatteryDoDChange}
+              />
             )}
 
             <Separator />
@@ -853,6 +871,55 @@ function LoadGrowthSection({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============= Battery Characteristics Section =============
+
+function BatteryCharacteristicsSection({
+  cRate,
+  onCRateChange,
+  doD,
+  onDoDChange,
+}: {
+  cRate: number;
+  onCRateChange?: (value: number) => void;
+  doD: number;
+  onDoDChange?: (value: number) => void;
+}) {
+  return (
+    <div className="space-y-3 p-3 rounded-lg border bg-card">
+      <div className="flex items-center gap-2">
+        <Battery className="h-4 w-4 text-primary" />
+        <Label className="text-sm font-medium">Battery Characteristics</Label>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs">C-Rate</Label>
+          <Input
+            type="number"
+            value={cRate}
+            onChange={(e) => onCRateChange?.(Math.max(0.1, Math.min(5, parseFloat(e.target.value) || 0.5)))}
+            className="h-8 text-xs"
+            min={0.1}
+            max={5}
+            step={0.1}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Depth of Discharge (%)</Label>
+          <Input
+            type="number"
+            value={doD}
+            onChange={(e) => onDoDChange?.(Math.max(10, Math.min(100, parseInt(e.target.value) || 85)))}
+            className="h-8 text-xs"
+            min={10}
+            max={100}
+            step={5}
+          />
+        </div>
+      </div>
     </div>
   );
 }
