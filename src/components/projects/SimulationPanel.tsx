@@ -46,6 +46,11 @@ import {
   type TariffData,
 } from "./simulation";
 import {
+  type BatteryDispatchStrategy,
+  type DispatchConfig,
+  getDefaultDispatchConfig,
+} from "./simulation/EnergySimulationEngine";
+import {
   AdvancedSimulationConfig,
   DEFAULT_ADVANCED_CONFIG,
   AdvancedFinancialResults,
@@ -163,6 +168,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [batteryAcCapacity, setBatteryAcCapacity] = useState(includesBattery ? 42 : 0); // AC (usable) kWh
   const [batteryCRate, setBatteryCRate] = useState(0.5); // C-Rate
   const [batteryDoD, setBatteryDoD] = useState(85); // Depth of Discharge %
+  
+  // Battery dispatch strategy
+  const [batteryStrategy, setBatteryStrategy] = useState<BatteryDispatchStrategy>('self-consumption');
+  const [dispatchConfig, setDispatchConfig] = useState<DispatchConfig>(getDefaultDispatchConfig('self-consumption'));
 
   // Derived DC values used by all downstream calculations
   const batteryCapacity = batteryDoD > 0 ? Math.round(batteryAcCapacity / (batteryDoD / 100)) : 0; // DC kWh
@@ -328,6 +337,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         });
       }
       
+      // Load battery dispatch strategy if saved
+      if (savedResultsJson?.batteryStrategy) {
+        setBatteryStrategy(savedResultsJson.batteryStrategy);
+        setDispatchConfig(savedResultsJson.dispatchConfig ?? getDefaultDispatchConfig(savedResultsJson.batteryStrategy));
+      }
+
       // Track what we loaded for UI feedback
       setLoadedSimulationName(lastSavedSimulation.name);
       setLoadedSimulationDate(lastSavedSimulation.created_at);
@@ -699,7 +714,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     solarCapacity,
     batteryCapacity,
     batteryPower,
-  }), [solarCapacity, batteryCapacity, batteryPower]);
+    dispatchStrategy: batteryStrategy,
+    dispatchConfig,
+  }), [solarCapacity, batteryCapacity, batteryPower, batteryStrategy, dispatchConfig]);
 
   const energyResults = useMemo(() =>
     runEnergySimulation(loadProfile, solarProfile, energyConfig),
@@ -959,6 +976,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           // Save module and inverter counts for layout comparison
           moduleCount: moduleMetrics.moduleCount,
           inverterCount: inverterConfig.inverterCount,
+          // Save battery dispatch strategy
+          batteryStrategy,
+          dispatchConfig,
         })),
       };
 
@@ -1034,6 +1054,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     solarDataSource,
     JSON.stringify(systemCosts),
     blendedRateType,
+    batteryStrategy,
+    JSON.stringify(dispatchConfig),
   ]);
 
   // Expose autoSave method to parent
@@ -1545,6 +1567,127 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                         className="h-8 bg-muted"
                       />
                     </div>
+                  </div>
+
+                  {/* Dispatch Strategy */}
+                  <div className="pt-2 border-t space-y-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Dispatch Strategy</Label>
+                      <Select
+                        value={batteryStrategy}
+                        onValueChange={(v: BatteryDispatchStrategy) => {
+                          setBatteryStrategy(v);
+                          setDispatchConfig(getDefaultDispatchConfig(v));
+                        }}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="self-consumption">Self-Consumption</SelectItem>
+                          <SelectItem value="tou-arbitrage">TOU Arbitrage</SelectItem>
+                          <SelectItem value="peak-shaving">Peak Shaving</SelectItem>
+                          <SelectItem value="scheduled">Scheduled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Strategy-specific options */}
+                    {(batteryStrategy === 'tou-arbitrage' || batteryStrategy === 'scheduled') && (
+                      <div className="space-y-2 text-xs">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground">Charge from</Label>
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                value={dispatchConfig.chargeWindows[0]?.start ?? 22}
+                                onChange={(e) => setDispatchConfig(prev => ({
+                                  ...prev,
+                                  chargeWindows: [{ start: parseInt(e.target.value) || 0, end: prev.chargeWindows[0]?.end ?? 6 }],
+                                }))}
+                                className="h-7 w-14 text-xs"
+                                min={0} max={23}
+                              />
+                              <span className="text-muted-foreground">–</span>
+                              <Input
+                                type="number"
+                                value={dispatchConfig.chargeWindows[0]?.end ?? 6}
+                                onChange={(e) => setDispatchConfig(prev => ({
+                                  ...prev,
+                                  chargeWindows: [{ start: prev.chargeWindows[0]?.start ?? 22, end: parseInt(e.target.value) || 0 }],
+                                }))}
+                                className="h-7 w-14 text-xs"
+                                min={0} max={23}
+                              />
+                              <span className="text-[10px] text-muted-foreground">h</span>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground">Discharge from</Label>
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                value={dispatchConfig.dischargeWindows[0]?.start ?? 7}
+                                onChange={(e) => setDispatchConfig(prev => ({
+                                  ...prev,
+                                  dischargeWindows: [{ start: parseInt(e.target.value) || 0, end: prev.dischargeWindows[0]?.end ?? 20 }],
+                                }))}
+                                className="h-7 w-14 text-xs"
+                                min={0} max={23}
+                              />
+                              <span className="text-muted-foreground">–</span>
+                              <Input
+                                type="number"
+                                value={dispatchConfig.dischargeWindows[0]?.end ?? 20}
+                                onChange={(e) => setDispatchConfig(prev => ({
+                                  ...prev,
+                                  dischargeWindows: [{ start: prev.dischargeWindows[0]?.start ?? 7, end: parseInt(e.target.value) || 0 }],
+                                }))}
+                                className="h-7 w-14 text-xs"
+                                min={0} max={23}
+                              />
+                              <span className="text-[10px] text-muted-foreground">h</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={dispatchConfig.allowGridCharging}
+                            onCheckedChange={(v) => setDispatchConfig(prev => ({ ...prev, allowGridCharging: v }))}
+                            className="h-4 w-7"
+                          />
+                          <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
+                        </div>
+                      </div>
+                    )}
+
+                    {batteryStrategy === 'peak-shaving' && (
+                      <div className="space-y-2 text-xs">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Target peak (kW)</Label>
+                          <Input
+                            type="number"
+                            value={dispatchConfig.peakShavingTarget ?? 150}
+                            onChange={(e) => setDispatchConfig(prev => ({
+                              ...prev,
+                              peakShavingTarget: Math.max(0, parseFloat(e.target.value) || 0),
+                            }))}
+                            className="h-7 text-xs"
+                            min={0}
+                            step={10}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={dispatchConfig.allowGridCharging}
+                            onCheckedChange={(v) => setDispatchConfig(prev => ({ ...prev, allowGridCharging: v }))}
+                            className="h-4 w-7"
+                          />
+                          <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Summary stats */}
