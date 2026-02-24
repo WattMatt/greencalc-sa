@@ -1,57 +1,49 @@
 
 
-## Fix: Make Battery Dispatch Strategy Visible
+## Restructure Battery Pane Layout and Add TOU Period Selector
 
-### What's Happening
-The Dispatch Strategy dropdown **is already in the code** (lines 1572-1691 of `SimulationPanel.tsx`). It sits below the DC Capacity row, separated by a border. The issue is that it's not visible without scrolling -- the Battery card is tall and the strategy section is below the fold.
+### What Changes
 
-### The Fix
-Move the Dispatch Strategy section **higher up** in the Battery pane so it's immediately visible, and tighten the layout so everything fits in one view.
+**1. Reorder the Battery pane layout**
 
-### Changes to `src/components/projects/SimulationPanel.tsx`
-
-**Restructure the Battery pane content order:**
+Move the DoD / Power / DC Capacity row **above** the Dispatch Strategy dropdown. The new order becomes:
 
 ```text
-Current layout:                     New layout:
-┌───────────────────────┐           ┌───────────────────────┐
-│ AC Capacity | C-Rate  │           │ AC Capacity | C-Rate  │
-│ DoD | Power | DC Cap  │           │ DoD | Power | DC Cap  │
-│ ───────────────────── │           │ ───────────────────── │
-│ Dispatch Strategy [v] │  <-- move │ Dispatch Strategy [v] │
-│ (strategy options)    │  UP and   │ (strategy options)    │
-│ ───────────────────── │  combine  │ ───────────────────── │
-│ Usable / Cycles / etc │           │ Usable / Cycles / etc │
-└───────────────────────┘           └───────────────────────┘
+AC Capacity (kWh)  |  C-Rate
+DoD (%)  |  Power (kW)  |  DC Capacity (kWh)
+Dispatch Strategy: [Self-Consumption v]
+(strategy-specific options below)
 ```
 
-The layout order is actually already correct -- the strategy dropdown comes right after the input grid. The real issue is likely that the **parent container** of the carousel or the page itself has limited visible height and the user isn't scrolling.
+**2. Replace hour-number inputs with TOU Period selectors**
 
-**Proposed solution -- make the strategy dropdown more prominent:**
+When **TOU Arbitrage** is selected, instead of typing raw hour numbers (22-6, 7-10), the Charge and Discharge fields become dropdowns that let you select a TOU period:
 
-1. Move the Dispatch Strategy **into the same grid** as Row 2 (DoD / Power / DC), making it a third row rather than a separate bordered section -- this reduces vertical space and ensures it's visible
-2. Alternatively, add it as a **full-width select** directly after Row 1 (AC Capacity / C-Rate), before DoD/Power/DC, so it's one of the first things visible
+- **Off-Peak** (22:00 - 06:00)
+- **Standard** (06:00 - 07:00, 10:00 - 18:00, 20:00 - 22:00)
+- **Peak** (07:00 - 10:00, 18:00 - 20:00)
 
-**Recommended approach** -- Add strategy as a full-width row between Row 1 and Row 2:
+The charge/discharge windows are then auto-derived from the selected TOU period. This is simpler and aligns with SA tariff structures.
 
-```text
-┌─────────────────────────────────────┐
-│  AC Capacity (kWh) [1063] | C-Rate [0.94] │
-│  Dispatch Strategy: [Self-Consumption v]   │  <-- NEW position
-│  DoD [85] | Power [999] | DC Cap [1251]    │
-│  (strategy-specific options if needed)     │
-│  ─────────────────────────────────────     │
-│  Usable: 1063 kWh | Cycles: 0.40          │
-└─────────────────────────────────────┘
-```
+For **Scheduled** mode, the raw hour inputs remain (user-defined windows).
 
 ### Technical Details
 
 **File:** `src/components/projects/SimulationPanel.tsx`
 
-- Cut the Dispatch Strategy `<div>` block (lines 1572-1691) from its current position after the input grid
-- Paste it between Row 1 (AC Capacity / C-Rate grid, line 1536) and Row 2 (DoD / Power / DC grid, line 1538)
-- Remove the `pt-2 border-t` classes from the strategy section since it will flow naturally between the input rows
-- Keep all the conditional strategy-specific options (TOU windows, peak shaving target, grid charging switch) in place
+1. **Cut** lines 1560-1592 (the DoD/Power/DC grid) and **paste** them before line 1538 (above Dispatch Strategy)
+2. **Add state** for `chargeTouPeriod` and `dischargeTouPeriod` (type `TOUPeriod`, defaults: `'off-peak'` and `'peak'`)
+3. **Add a helper** to convert a TOU period name into hour windows using the existing `getTOUPeriod` definitions:
+   - `off-peak`: `{start: 22, end: 6}`
+   - `standard`: `{start: 6, end: 7}` + `{start: 10, end: 18}` + `{start: 20, end: 22}` (multiple windows)
+   - `peak`: `{start: 7, end: 10}` + `{start: 18, end: 20}` (multiple windows)
+4. **For TOU Arbitrage**: Replace the two pairs of hour inputs with two `Select` dropdowns (Charge from: Off-Peak/Standard/Peak, Discharge from: Off-Peak/Standard/Peak). When the user picks a period, auto-update `dispatchConfig.chargeWindows` and `dischargeWindows` with the correct hour ranges
+5. **For Scheduled**: Keep the existing raw hour number inputs unchanged
+6. **Update persistence** to save/load `chargeTouPeriod` and `dischargeTouPeriod` in `results_json`
 
-No other files need to change. The engine logic and types are already correct.
+**File:** `src/components/projects/simulation/EnergySimulationEngine.ts`
+
+- Update the `isInWindow` logic to support **multiple windows** per charge/discharge config (e.g., peak has two windows: 07-10 and 18-20). Change `chargeWindows` and `dischargeWindows` from single-item arrays to proper multi-window arrays
+
+No new files or dependencies needed.
+
