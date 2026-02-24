@@ -24,9 +24,13 @@ export {
   runEnergySimulation,
   scaleToAnnual,
   scaleToMonthly,
+  getDefaultDispatchConfig,
   type EnergySimulationConfig,
   type EnergySimulationResults,
   type HourlyEnergyData,
+  type BatteryDispatchStrategy,
+  type DispatchConfig,
+  type TimeWindow,
 } from "./EnergySimulationEngine";
 
 export {
