@@ -10,7 +10,7 @@ interface BatteryChartProps {
 
 export function BatteryChart({ chartData, batteryCapacity, batteryPower }: BatteryChartProps) {
   return (
-    <div className="space-y-1 mt-4 pt-4 border-t">
+    <div className="space-y-1">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
           <Battery className="h-3 w-3 text-green-500" />
