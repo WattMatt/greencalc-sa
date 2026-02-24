@@ -231,6 +231,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   // Day-of-week selection for load profile visualization (matches Load Profile tab)
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Wednesday");
+  const [showAnnualAverage, setShowAnnualAverage] = useState(true);
 
   useEffect(() => {
     localStorage.setItem('simulation_showTOU', String(showTOU));
@@ -486,7 +487,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   } = useLoadProfileData({
     tenants,
     shopTypes,
-    selectedDays: new Set([DAYS_OF_WEEK.indexOf(selectedDay) === -1 ? 3 : (DAYS_OF_WEEK.indexOf(selectedDay) + 1) % 7]),
+    selectedDays: showAnnualAverage 
+      ? new Set([0, 1, 2, 3, 4, 5, 6]) 
+      : new Set([DAYS_OF_WEEK.indexOf(selectedDay) === -1 ? 3 : (DAYS_OF_WEEK.indexOf(selectedDay) + 1) % 7]),
+    selectedMonths: showAnnualAverage ? new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) : undefined,
     displayUnit: "kw",
     powerFactor: 0.9,
     showPVProfile: includesSolar && solarCapacity > 0,
@@ -2299,18 +2303,26 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
+                  {!showAnnualAverage && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                  )}
                   <div>
-                    <CardTitle className="text-base">{selectedDay}</CardTitle>
+                    <CardTitle className="text-base">{showAnnualAverage ? "Annual Average (Year 1)" : selectedDay}</CardTitle>
                     <CardDescription className="text-xs">Cumulative profile: load, grid, PV, and battery combined</CardDescription>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+                  {!showAnnualAverage && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
+                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
+                    Annual Avg
+                  </Label>
                   <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
                     <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
                     TOU
@@ -2337,18 +2349,26 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
+                  {!showAnnualAverage && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                  )}
                   <div>
-                    <CardTitle className="text-base">{selectedDay}</CardTitle>
+                    <CardTitle className="text-base">{showAnnualAverage ? "Annual Average (Year 1)" : selectedDay}</CardTitle>
                     <CardDescription className="text-xs">Tenant load and estimated downstream tenant consumption</CardDescription>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+                  {!showAnnualAverage && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
+                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
+                    Annual Avg
+                  </Label>
                   <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
                     <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
                     TOU
@@ -2374,18 +2394,26 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
+                  {!showAnnualAverage && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                  )}
                   <div>
-                    <CardTitle className="text-base">{selectedDay}</CardTitle>
+                    <CardTitle className="text-base">{showAnnualAverage ? "Annual Average (Year 1)" : selectedDay}</CardTitle>
                     <CardDescription className="text-xs">kW and kWh as perceived by the network operator</CardDescription>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+                  {!showAnnualAverage && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
+                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
+                    Annual Avg
+                  </Label>
                   <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
                     <Switch checked={showTOU} onCheckedChange={setShowTOU} className="scale-75" />
                     TOU
@@ -2411,7 +2439,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>PV Generation</CardTitle>
+                  <CardTitle>{showAnnualAverage ? "Annual Average (Year 1)" : "PV Generation"}</CardTitle>
                   <CardDescription>PV production output</CardDescription>
                 </div>
                 <div className="flex items-center gap-3">
@@ -2443,7 +2471,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <Card>
               <CardHeader className="pb-3">
                 <div>
-                  <CardTitle>Battery Storage</CardTitle>
+                  <CardTitle>{showAnnualAverage ? "Annual Average (Year 1)" : "Battery Storage"}</CardTitle>
                   <CardDescription>Charging power and discharging power</CardDescription>
                 </div>
               </CardHeader>

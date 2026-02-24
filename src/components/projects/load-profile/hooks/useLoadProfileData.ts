@@ -382,13 +382,15 @@ export function useLoadProfileData({
         if (key === "total") result.total = value;
       });
 
+      // PV generation (only when solar is enabled)
+      let pvValue = 0;
       if (showPVProfile && maxPvAcKva && dcCapacityKwp) {
         const temp = hourlyTemps[index];
         const tempDerating = temp > 25 ? 1 - TEMP_COEFFICIENT * (temp - 25) : 1;
         const effectiveEfficiency = (1 - systemLosses) * tempDerating;
         const dcOutputRaw = pvNormalizedProfile[index] * dcCapacityKwp;
         const dcOutput = dcOutputRaw * effectiveEfficiency;
-        const pvValue = Math.min(dcOutput, maxPvAcKva);
+        pvValue = Math.min(dcOutput, maxPvAcKva);
 
         result.pvGeneration = pvValue;
         result.pvDcOutput = dcOutput;
@@ -398,18 +400,19 @@ export function useLoadProfileData({
         const baseline1to1 = baseline1to1Raw * effectiveEfficiency;
         result.pv1to1Baseline = baseline1to1;
         result.temperature = temp;
-
-        const netLoad = result.total - pvValue;
-        result.netLoad = netLoad;
-        result.gridImport = netLoad > 0 ? netLoad : 0;
-        result.gridExport = netLoad < 0 ? Math.abs(netLoad) : 0;
       }
+
+      // Always compute grid fields
+      const netLoad = result.total - pvValue;
+      result.netLoad = netLoad;
+      result.gridImport = netLoad > 0 ? netLoad : 0;
+      result.gridExport = netLoad < 0 ? Math.abs(netLoad) : 0;
 
       return result;
     });
 
-    // Battery simulation
-    if (showBattery && showPVProfile && maxPvAcKva) {
+    // Battery simulation (runs independently of solar)
+    if (showBattery && batteryCapacity > 0) {
       let soc = batteryCapacity * 0.2;
       const minSoC = batteryCapacity * 0.1;
       const maxSoC = batteryCapacity * 0.95;
