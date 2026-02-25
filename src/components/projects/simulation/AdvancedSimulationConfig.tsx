@@ -1,5 +1,9 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles, Save, Trash2, User } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { BatteryDispatchStrategy, DispatchConfig, TimeWindow } from "./EnergySimulationEngine";
+import { getDefaultDispatchConfig } from "./EnergySimulationEngine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -26,6 +30,8 @@ import {
 } from "./AdvancedSimulationTypes";
 import { useSimulationPresets, SimulationPreset } from "@/hooks/useSimulationPresets";
 
+type TOUPeriod = 'off-peak' | 'standard' | 'peak';
+
 interface AdvancedSimulationConfigProps {
   config: AdvancedSimulationConfig;
   onChange: (config: AdvancedSimulationConfig) => void;
@@ -40,6 +46,16 @@ interface AdvancedSimulationConfigProps {
   onBatteryMinSoCChange?: (value: number) => void;
   batteryMaxSoC?: number;
   onBatteryMaxSoCChange?: (value: number) => void;
+  // Dispatch strategy props
+  batteryStrategy?: BatteryDispatchStrategy;
+  onBatteryStrategyChange?: (strategy: BatteryDispatchStrategy) => void;
+  dispatchConfig?: DispatchConfig;
+  onDispatchConfigChange?: (config: DispatchConfig) => void;
+  chargeTouPeriod?: TOUPeriod;
+  onChargeTouPeriodChange?: (period: TOUPeriod) => void;
+  dischargeTouPeriod?: TOUPeriod;
+  onDischargeTouPeriodChange?: (period: TOUPeriod) => void;
+  touPeriodToWindows?: (period: TOUPeriod) => TimeWindow[];
 }
 
 export function AdvancedSimulationConfigPanel({ 
@@ -56,6 +72,15 @@ export function AdvancedSimulationConfigPanel({
   onBatteryMinSoCChange,
   batteryMaxSoC = 95,
   onBatteryMaxSoCChange,
+  batteryStrategy = 'self-consumption',
+  onBatteryStrategyChange,
+  dispatchConfig,
+  onDispatchConfigChange,
+  chargeTouPeriod = 'off-peak',
+  onChargeTouPeriodChange,
+  dischargeTouPeriod = 'peak',
+  onDischargeTouPeriodChange,
+  touPeriodToWindows,
 }: AdvancedSimulationConfigProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -273,6 +298,15 @@ export function AdvancedSimulationConfigPanel({
                   onMinSoCChange={onBatteryMinSoCChange}
                   maxSoC={batteryMaxSoC}
                   onMaxSoCChange={onBatteryMaxSoCChange}
+                  batteryStrategy={batteryStrategy}
+                  onBatteryStrategyChange={onBatteryStrategyChange}
+                  dispatchConfig={dispatchConfig}
+                  onDispatchConfigChange={onDispatchConfigChange}
+                  chargeTouPeriod={chargeTouPeriod}
+                  onChargeTouPeriodChange={onChargeTouPeriodChange}
+                  dischargeTouPeriod={dischargeTouPeriod}
+                  onDischargeTouPeriodChange={onDischargeTouPeriodChange}
+                  touPeriodToWindows={touPeriodToWindows}
                 />
               </CollapsibleSection>
             )}
@@ -911,6 +945,15 @@ function BatteryCharacteristicsSection({
   onMinSoCChange,
   maxSoC,
   onMaxSoCChange,
+  batteryStrategy = 'self-consumption',
+  onBatteryStrategyChange,
+  dispatchConfig,
+  onDispatchConfigChange,
+  chargeTouPeriod = 'off-peak',
+  onChargeTouPeriodChange,
+  dischargeTouPeriod = 'peak',
+  onDischargeTouPeriodChange,
+  touPeriodToWindows,
 }: {
   chargeCRate: number;
   onChargeCRateChange?: (value: number) => void;
@@ -922,7 +965,18 @@ function BatteryCharacteristicsSection({
   onMinSoCChange?: (value: number) => void;
   maxSoC: number;
   onMaxSoCChange?: (value: number) => void;
+  batteryStrategy?: BatteryDispatchStrategy;
+  onBatteryStrategyChange?: (strategy: BatteryDispatchStrategy) => void;
+  dispatchConfig?: DispatchConfig;
+  onDispatchConfigChange?: (config: DispatchConfig) => void;
+  chargeTouPeriod?: TOUPeriod;
+  onChargeTouPeriodChange?: (period: TOUPeriod) => void;
+  dischargeTouPeriod?: TOUPeriod;
+  onDischargeTouPeriodChange?: (period: TOUPeriod) => void;
+  touPeriodToWindows?: (period: TOUPeriod) => TimeWindow[];
 }) {
+  const effectiveDispatchConfig = dispatchConfig ?? getDefaultDispatchConfig(batteryStrategy);
+
   return (
     <div className="space-y-3 p-3 rounded-lg border bg-card">
       <div className="flex items-center gap-2">
@@ -1000,6 +1054,211 @@ function BatteryCharacteristicsSection({
             step={5}
           />
         </div>
+      </div>
+
+      {/* Dispatch Strategy */}
+      <Separator className="my-2" />
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Dispatch Strategy</Label>
+          <Select
+            value={batteryStrategy}
+            onValueChange={(v: BatteryDispatchStrategy) => {
+              onBatteryStrategyChange?.(v);
+              const newConfig = getDefaultDispatchConfig(v);
+              if (v === 'tou-arbitrage' && touPeriodToWindows) {
+                onDispatchConfigChange?.({
+                  ...newConfig,
+                  chargeWindows: touPeriodToWindows(chargeTouPeriod),
+                  dischargeWindows: touPeriodToWindows(dischargeTouPeriod),
+                });
+              } else {
+                onDispatchConfigChange?.(newConfig);
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="self-consumption">Self-Consumption</SelectItem>
+              <SelectItem value="tou-arbitrage">TOU Arbitrage</SelectItem>
+              <SelectItem value="peak-shaving">Peak Shaving</SelectItem>
+              <SelectItem value="scheduled">Scheduled</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* TOU Arbitrage: period selectors */}
+        {batteryStrategy === 'tou-arbitrage' && (
+          <div className="space-y-2 text-xs">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Charge from</Label>
+                <div className="space-y-1.5 p-2 rounded border bg-muted/30">
+                  <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <Checkbox checked={true} disabled className="h-3.5 w-3.5" />
+                    <span>PV (Solar)</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <Checkbox
+                      checked={effectiveDispatchConfig.allowGridCharging}
+                      onCheckedChange={(v) => onDispatchConfigChange?.({ ...effectiveDispatchConfig, allowGridCharging: !!v })}
+                      className="h-3.5 w-3.5"
+                    />
+                    <span>Grid</span>
+                  </label>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Discharge during</Label>
+                <Select
+                  value={dischargeTouPeriod}
+                  onValueChange={(v: TOUPeriod) => {
+                    onDischargeTouPeriodChange?.(v);
+                    if (touPeriodToWindows) {
+                      onDispatchConfigChange?.({
+                        ...effectiveDispatchConfig,
+                        dischargeWindows: touPeriodToWindows(v),
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-7 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
+                    <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
+                    <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Charge during</Label>
+              <Select
+                value={chargeTouPeriod}
+                onValueChange={(v: TOUPeriod) => {
+                  onChargeTouPeriodChange?.(v);
+                  if (touPeriodToWindows) {
+                    onDispatchConfigChange?.({
+                      ...effectiveDispatchConfig,
+                      chargeWindows: touPeriodToWindows(v),
+                    });
+                  }
+                }}
+              >
+                <SelectTrigger className="h-7 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
+                  <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
+                  <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
+        {/* Scheduled: raw hour inputs */}
+        {batteryStrategy === 'scheduled' && (
+          <div className="space-y-2 text-xs">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Charge from</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={effectiveDispatchConfig.chargeWindows[0]?.start ?? 22}
+                    onChange={(e) => onDispatchConfigChange?.({
+                      ...effectiveDispatchConfig,
+                      chargeWindows: [{ start: parseInt(e.target.value) || 0, end: effectiveDispatchConfig.chargeWindows[0]?.end ?? 6 }],
+                    })}
+                    className="h-7 w-14 text-xs"
+                    min={0} max={23}
+                  />
+                  <span className="text-muted-foreground">–</span>
+                  <Input
+                    type="number"
+                    value={effectiveDispatchConfig.chargeWindows[0]?.end ?? 6}
+                    onChange={(e) => onDispatchConfigChange?.({
+                      ...effectiveDispatchConfig,
+                      chargeWindows: [{ start: effectiveDispatchConfig.chargeWindows[0]?.start ?? 22, end: parseInt(e.target.value) || 0 }],
+                    })}
+                    className="h-7 w-14 text-xs"
+                    min={0} max={23}
+                  />
+                  <span className="text-[10px] text-muted-foreground">h</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Discharge from</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    value={effectiveDispatchConfig.dischargeWindows[0]?.start ?? 7}
+                    onChange={(e) => onDispatchConfigChange?.({
+                      ...effectiveDispatchConfig,
+                      dischargeWindows: [{ start: parseInt(e.target.value) || 0, end: effectiveDispatchConfig.dischargeWindows[0]?.end ?? 20 }],
+                    })}
+                    className="h-7 w-14 text-xs"
+                    min={0} max={23}
+                  />
+                  <span className="text-muted-foreground">–</span>
+                  <Input
+                    type="number"
+                    value={effectiveDispatchConfig.dischargeWindows[0]?.end ?? 20}
+                    onChange={(e) => onDispatchConfigChange?.({
+                      ...effectiveDispatchConfig,
+                      dischargeWindows: [{ start: effectiveDispatchConfig.dischargeWindows[0]?.start ?? 7, end: parseInt(e.target.value) || 0 }],
+                    })}
+                    className="h-7 w-14 text-xs"
+                    min={0} max={23}
+                  />
+                  <span className="text-[10px] text-muted-foreground">h</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={effectiveDispatchConfig.allowGridCharging}
+                onCheckedChange={(v) => onDispatchConfigChange?.({ ...effectiveDispatchConfig, allowGridCharging: v })}
+                className="h-4 w-7"
+              />
+              <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
+            </div>
+          </div>
+        )}
+
+        {/* Peak Shaving */}
+        {batteryStrategy === 'peak-shaving' && (
+          <div className="space-y-2 text-xs">
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Target peak (kW)</Label>
+              <Input
+                type="number"
+                value={effectiveDispatchConfig.peakShavingTarget ?? 150}
+                onChange={(e) => onDispatchConfigChange?.({
+                  ...effectiveDispatchConfig,
+                  peakShavingTarget: Math.max(0, parseFloat(e.target.value) || 0),
+                })}
+                className="h-7 text-xs"
+                min={0}
+                step={10}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={effectiveDispatchConfig.allowGridCharging}
+                onCheckedChange={(v) => onDispatchConfigChange?.({ ...effectiveDispatchConfig, allowGridCharging: v })}
+                className="h-4 w-7"
+              />
+              <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
