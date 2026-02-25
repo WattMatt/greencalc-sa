@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Lock, Unlock, Clock } from "lucide-react";
@@ -153,27 +153,25 @@ export function TOUSettingsCard() {
           </p>
         </div>
 
-        {/* Season Tabs */}
-        <Tabs defaultValue="high" className="space-y-4">
-          <TabsList className="bg-muted/50">
-            <TabsTrigger value="high">High-Demand Season</TabsTrigger>
-            <TabsTrigger value="low">Low-Demand Season</TabsTrigger>
-          </TabsList>
+        {/* High-Demand Season */}
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-foreground">High-Demand Season</p>
+          <HourGrid
+            seasonConfig={touSettings.highSeason}
+            onCellClick={(dayType, hour) => handleCellClick("highSeason", dayType, hour)}
+          />
+        </div>
 
-          <TabsContent value="high">
-            <HourGrid
-              seasonConfig={touSettings.highSeason}
-              onCellClick={(dayType, hour) => handleCellClick("highSeason", dayType, hour)}
-            />
-          </TabsContent>
+        <Separator />
 
-          <TabsContent value="low">
-            <HourGrid
-              seasonConfig={touSettings.lowSeason}
-              onCellClick={(dayType, hour) => handleCellClick("lowSeason", dayType, hour)}
-            />
-          </TabsContent>
-        </Tabs>
+        {/* Low-Demand Season */}
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-foreground">Low-Demand Season</p>
+          <HourGrid
+            seasonConfig={touSettings.lowSeason}
+            onCellClick={(dayType, hour) => handleCellClick("lowSeason", dayType, hour)}
+          />
+        </div>
       </CardContent>
     </Card>
   );
