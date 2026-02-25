@@ -1205,11 +1205,7 @@ function BatteryCharacteristicsSection({
   const effectiveDispatchConfig = dispatchConfig ?? getDefaultDispatchConfig(batteryStrategy);
 
   return (
-    <div className="space-y-3 p-3 rounded-lg border bg-card">
-      <div className="flex items-center gap-2">
-        <Battery className="h-4 w-4 text-primary" />
-        <Label className="text-sm font-medium">Battery Characteristics</Label>
-      </div>
+    <div className="space-y-3">
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1">
           <Label className="text-xs">Charging C-Rate</Label>
