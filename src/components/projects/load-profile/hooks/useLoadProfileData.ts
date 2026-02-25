@@ -411,37 +411,6 @@ export function useLoadProfileData({
       return result;
     });
 
-    // Battery simulation (runs independently of solar)
-    if (showBattery && batteryCapacity > 0) {
-      let soc = batteryCapacity * 0.2;
-      const minSoC = batteryCapacity * 0.1;
-      const maxSoC = batteryCapacity * 0.95;
-
-      baseData.forEach((hourData, index) => {
-        const period = getTOUPeriod(index, isWeekend);
-        const excessPV = hourData.gridExport || 0;
-        const gridNeed = hourData.gridImport || 0;
-        let charge = 0,
-          discharge = 0;
-
-        if (excessPV > 0) {
-          const availableCapacity = maxSoC - soc;
-          charge = Math.min(batteryPower, excessPV, availableCapacity);
-          soc += charge;
-        } else if (gridNeed > 0 && (period === "peak" || period === "standard")) {
-          const availableEnergy = soc - minSoC;
-          const effectiveDischargePower = batteryDischargePower ?? batteryPower;
-          discharge = Math.min(effectiveDischargePower, gridNeed, availableEnergy);
-          soc -= discharge;
-        }
-
-        hourData.batteryCharge = charge;
-        hourData.batteryDischarge = discharge;
-        hourData.batterySoC = soc;
-        hourData.gridImportWithBattery = Math.max(0, gridNeed - discharge);
-      });
-    }
-
     return baseData;
   }, [
     baseChartData,
