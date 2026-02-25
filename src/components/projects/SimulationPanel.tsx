@@ -774,6 +774,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     batteryMaxSoC: batteryMaxSoC / 100,
     dispatchStrategy: batteryStrategy,
     dispatchConfig,
+    touPeriodToWindows,
   }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig]);
 
   const effectiveSolarProfile = includesSolar ? solarProfile : loadProfile.map(() => 0);
