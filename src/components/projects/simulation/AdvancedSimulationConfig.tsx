@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles, Save, Trash2, User } from "lucide-react";
+import { useState, useCallback } from "react";
+import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles, Save, Trash2, User, GripVertical } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { BatteryDispatchStrategy, DispatchConfig, TimeWindow } from "./EnergySimulationEngine";
-import { getDefaultDispatchConfig } from "./EnergySimulationEngine";
+import type { BatteryDispatchStrategy, DispatchConfig, TimeWindow, ChargeSource } from "./EnergySimulationEngine";
+import { getDefaultDispatchConfig, DEFAULT_CHARGE_SOURCES } from "./EnergySimulationEngine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -932,6 +932,71 @@ function LoadGrowthSection({
   );
 }
 
+// ============= Charge Sources List (drag-to-reorder) =============
+
+const CHARGE_SOURCE_LABELS: Record<string, string> = {
+  pv: 'PV (Solar)',
+  grid: 'Grid',
+  generator: 'Generator',
+};
+
+function ChargeSourcesList({
+  sources,
+  onChange,
+}: {
+  sources: ChargeSource[];
+  onChange: (sources: ChargeSource[]) => void;
+}) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+
+  const moveItem = (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx) return;
+    const next = [...sources];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs font-medium">Charge Sources</Label>
+        <span className="text-[10px] text-muted-foreground">Top = highest priority</span>
+      </div>
+      <div className="rounded border bg-muted/30 divide-y divide-border">
+        {sources.map((source, idx) => (
+          <div
+            key={source.id}
+            draggable
+            onDragStart={() => setDragIdx(idx)}
+            onDragOver={(e) => { e.preventDefault(); }}
+            onDrop={() => {
+              if (dragIdx !== null) moveItem(dragIdx, idx);
+              setDragIdx(null);
+            }}
+            onDragEnd={() => setDragIdx(null)}
+            className={`flex items-center gap-2 px-2 py-1.5 text-xs cursor-grab active:cursor-grabbing transition-opacity ${
+              dragIdx === idx ? 'opacity-50' : ''
+            }`}
+          >
+            <GripVertical className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+            <Checkbox
+              checked={source.enabled}
+              onCheckedChange={(v) => {
+                const next = sources.map((s, i) => i === idx ? { ...s, enabled: !!v } : s);
+                onChange(next);
+              }}
+              className="h-3.5 w-3.5"
+            />
+            <span className={source.enabled ? '' : 'text-muted-foreground'}>{CHARGE_SOURCE_LABELS[source.id] || source.id}</span>
+            <Badge variant="outline" className="ml-auto text-[9px] px-1 py-0">{idx + 1}</Badge>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ============= Battery Characteristics Section =============
 
 function BatteryCharacteristicsSection({
@@ -1056,25 +1121,15 @@ function BatteryCharacteristicsSection({
         </div>
       </div>
 
-      {/* Charge Sources – independent of dispatch strategy */}
+      {/* Charge Sources – independent of dispatch strategy, reorderable */}
       <Separator className="my-2" />
-      <div className="space-y-2">
-        <Label className="text-xs font-medium">Charge Sources</Label>
-        <div className="space-y-1.5 p-2 rounded border bg-muted/30">
-          <label className="flex items-center gap-2 text-xs cursor-pointer">
-            <Checkbox checked={true} disabled className="h-3.5 w-3.5" />
-            <span>PV (Solar)</span>
-          </label>
-          <label className="flex items-center gap-2 text-xs cursor-pointer">
-            <Checkbox
-              checked={effectiveDispatchConfig.allowGridCharging}
-              onCheckedChange={(v) => onDispatchConfigChange?.({ ...effectiveDispatchConfig, allowGridCharging: !!v })}
-              className="h-3.5 w-3.5"
-            />
-            <span>Grid</span>
-          </label>
-        </div>
-      </div>
+      <ChargeSourcesList
+        sources={effectiveDispatchConfig.chargeSources ?? DEFAULT_CHARGE_SOURCES}
+        onChange={(sources) => {
+          const allowGrid = sources.find(s => s.id === 'grid')?.enabled ?? false;
+          onDispatchConfigChange?.({ ...effectiveDispatchConfig, chargeSources: sources, allowGridCharging: allowGrid });
+        }}
+      />
 
       {/* Dispatch Strategy */}
       <Separator className="my-2" />
