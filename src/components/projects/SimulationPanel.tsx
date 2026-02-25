@@ -820,7 +820,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     touPeriodToWindows,
   }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig]);
 
-  const effectiveSolarProfile = includesSolar ? solarProfile : loadProfile.map(() => 0);
+  // Extract solar from chart data (same source as pvGeneration) for engine input
+  // This ensures the engine receives exactly the same solar values that appear in the charts
+  const chartSolarProfile = useMemo(() => {
+    return loadProfileChartData.map(d => d.pvGeneration || 0);
+  }, [loadProfileChartData]);
+
+  const effectiveSolarProfile = includesSolar ? chartSolarProfile : loadProfile.map(() => 0);
 
   const energyResults = useMemo(() =>
     runEnergySimulation(loadProfile, effectiveSolarProfile, energyConfig),
