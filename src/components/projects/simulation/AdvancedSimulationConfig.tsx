@@ -1309,55 +1309,29 @@ function BatteryCharacteristicsSection({
         {/* TOU Arbitrage: period selectors (no more "Charge from" here) */}
         {batteryStrategy === 'tou-arbitrage' && (
           <div className="space-y-2 text-xs">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Discharge during</Label>
-                <Select
-                  value={dischargeTouPeriod}
-                  onValueChange={(v: TOUPeriod) => {
-                    onDischargeTouPeriodChange?.(v);
-                    if (touPeriodToWindows) {
-                      onDispatchConfigChange?.({
-                        ...effectiveDispatchConfig,
-                        dischargeWindows: touPeriodToWindows(v),
-                      });
-                    }
-                  }}
-                >
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
-                    <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
-                    <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Charge during</Label>
-                <Select
-                  value={chargeTouPeriod}
-                  onValueChange={(v: TOUPeriod) => {
-                    onChargeTouPeriodChange?.(v);
-                    if (touPeriodToWindows) {
-                      onDispatchConfigChange?.({
-                        ...effectiveDispatchConfig,
-                        chargeWindows: touPeriodToWindows(v),
-                      });
-                    }
-                  }}
-                >
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
-                    <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
-                    <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">Discharge during</Label>
+              <Select
+                value={dischargeTouPeriod}
+                onValueChange={(v: TOUPeriod) => {
+                  onDischargeTouPeriodChange?.(v);
+                  if (touPeriodToWindows) {
+                    onDispatchConfigChange?.({
+                      ...effectiveDispatchConfig,
+                      dischargeWindows: touPeriodToWindows(v),
+                    });
+                  }
+                }}
+              >
+                <SelectTrigger className="h-7 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
+                  <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
+                  <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         )}
