@@ -935,11 +935,11 @@ function BatteryCharacteristicsSection({
           <Input
             type="number"
             value={chargeCRate}
-            onChange={(e) => onChargeCRateChange?.(Math.max(0.1, Math.min(5, parseFloat(e.target.value) || 0.5)))}
+            onChange={(e) => onChargeCRateChange?.(Math.max(0.01, Math.min(5, parseFloat(e.target.value) || 0.5)))}
             className="h-8 text-xs"
-            min={0.1}
+            min={0.01}
             max={5}
-            step={0.1}
+            step={0.01}
           />
         </div>
         <div className="space-y-1">
@@ -947,11 +947,11 @@ function BatteryCharacteristicsSection({
           <Input
             type="number"
             value={dischargeCRate}
-            onChange={(e) => onDischargeCRateChange?.(Math.max(0.1, Math.min(5, parseFloat(e.target.value) || 0.5)))}
+            onChange={(e) => onDischargeCRateChange?.(Math.max(0.01, Math.min(5, parseFloat(e.target.value) || 0.5)))}
             className="h-8 text-xs"
-            min={0.1}
+            min={0.01}
             max={5}
-            step={0.1}
+            step={0.01}
           />
         </div>
         <div className="space-y-1">
