@@ -14,21 +14,16 @@ import {
 import { toast } from "sonner";
 import { LoadProfileEditor } from "./LoadProfileEditor";
 
-// TOU period helpers
+import { getTOUPeriod as getTOUPeriodShared } from "@/components/projects/load-profile/types";
+
+// TOU period helpers - uses shared configurable getTOUPeriod
 const getTOUPeriod = (hour: number, isWeekend: boolean): { name: string; color: string } => {
-  if (isWeekend) {
-    return { name: "Off-Peak", color: "bg-green-500/70" };
+  const period = getTOUPeriodShared(hour, isWeekend);
+  switch (period) {
+    case 'peak': return { name: "Peak", color: "bg-red-500/70" };
+    case 'standard': return { name: "Standard", color: "bg-yellow-500/70" };
+    case 'off-peak': return { name: "Off-Peak", color: "bg-green-500/70" };
   }
-  // Peak: 7-10am, 6-8pm
-  if ((hour >= 7 && hour < 10) || (hour >= 18 && hour < 20)) {
-    return { name: "Peak", color: "bg-red-500/70" };
-  }
-  // Standard: 6-7am, 10am-6pm, 8-10pm
-  if ((hour >= 6 && hour < 7) || (hour >= 10 && hour < 18) || (hour >= 20 && hour < 22)) {
-    return { name: "Standard", color: "bg-yellow-500/70" };
-  }
-  // Off-peak: 10pm-6am
-  return { name: "Off-Peak", color: "bg-green-500/70" };
 };
 
 interface RawDataPoint {

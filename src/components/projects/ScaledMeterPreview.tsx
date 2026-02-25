@@ -39,23 +39,17 @@ interface ScaledMeterPreviewProps {
   shopTypeIntensity?: number; // kWh/m²/month for the shop type
 }
 
-// TOU periods for coloring (South African standard)
+import { getTOUPeriod as getTOUPeriodShared, TOU_COLORS as SHARED_TOU_COLORS } from "./load-profile/types";
+
+// Use shared getTOUPeriod
 function getTOUPeriod(hour: number, isWeekend: boolean): 'peak' | 'standard' | 'off-peak' {
-  if (isWeekend) {
-    if (hour >= 7 && hour < 12) return 'standard';
-    if (hour >= 18 && hour < 20) return 'standard';
-    return 'off-peak';
-  }
-  // Weekday
-  if ((hour >= 7 && hour < 10) || (hour >= 18 && hour < 20)) return 'peak';
-  if ((hour >= 6 && hour < 7) || (hour >= 10 && hour < 18) || (hour >= 20 && hour < 22)) return 'standard';
-  return 'off-peak';
+  return getTOUPeriodShared(hour, isWeekend);
 }
 
 const TOU_COLORS = {
-  'peak': 'hsl(0, 72%, 51%)', // red
-  'standard': 'hsl(45, 93%, 47%)', // amber
-  'off-peak': 'hsl(142, 71%, 45%)', // green
+  'peak': SHARED_TOU_COLORS.peak.fill,
+  'standard': SHARED_TOU_COLORS.standard.fill,
+  'off-peak': SHARED_TOU_COLORS["off-peak"].fill,
 };
 
 export function ScaledMeterPreview({ 
