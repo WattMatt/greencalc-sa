@@ -101,6 +101,10 @@ interface SavedSimulationsProps {
     batteryDoD?: number;
     batteryMinSoC?: number;
     batteryMaxSoC?: number;
+    batteryStrategy?: string;
+    dispatchConfig?: any;
+    chargeTouPeriod?: string;
+    dischargeTouPeriod?: string;
   }) => void;
   includesBattery?: boolean;
 }
@@ -290,6 +294,10 @@ export function SavedSimulations({
       batteryDoD: resultsJson?.batteryDoD,
       batteryMinSoC: resultsJson?.batteryMinSoC,
       batteryMaxSoC: resultsJson?.batteryMaxSoC,
+      batteryStrategy: resultsJson?.batteryStrategy,
+      dispatchConfig: resultsJson?.dispatchConfig,
+      chargeTouPeriod: resultsJson?.chargeTouPeriod,
+      dischargeTouPeriod: resultsJson?.dischargeTouPeriod,
     };
 
     onLoadSimulation(configToLoad);
