@@ -183,6 +183,11 @@ export const TOU_COLORS: Record<TOUPeriod, { fill: string; stroke: string; label
   "off-peak": { fill: "hsl(160 84% 39%)", stroke: "hsl(160 84% 30%)", label: "Off-Peak" }
 };
 
+export const SEASON_COLORS: Record<"high" | "low", { fill: string; label: string }> = {
+  high: { fill: "hsl(230 70% 50%)", label: "High-Demand" },
+  low: { fill: "hsl(270 50% 60%)", label: "Low-Demand" },
+};
+
 export interface Annotation {
   id: string;
   hour: number;

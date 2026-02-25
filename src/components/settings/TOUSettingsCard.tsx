@@ -11,6 +11,7 @@ import {
   TOUSeasonConfig,
   TOUSettings,
   TOU_COLORS,
+  SEASON_COLORS,
   MONTH_NAMES,
 } from "@/components/projects/load-profile/types";
 
@@ -118,7 +119,16 @@ export function TOUSettingsCard() {
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Legend */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          {(["high", "low"] as const).map((season) => (
+            <div key={season} className="flex items-center gap-1.5 text-xs">
+              <div
+                className="w-4 h-4 rounded-sm"
+                style={{ backgroundColor: SEASON_COLORS[season].fill }}
+              />
+              <span className="text-foreground">{SEASON_COLORS[season].label}</span>
+            </div>
+          ))}
           {PERIOD_CYCLE.map((period) => (
             <div key={period} className="flex items-center gap-1.5 text-xs">
               <div
@@ -130,17 +140,19 @@ export function TOUSettingsCard() {
           ))}
         </div>
 
-        {/* High-Season Month Selector */}
+        {/* Demand Season Month Selector */}
         <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">High-Demand Season Months</p>
+          <p className="text-sm font-medium text-foreground">Demand Season Months</p>
           <div className="flex flex-wrap gap-1.5">
             {MONTH_NAMES.map((name, idx) => {
               const isHigh = touSettings.highSeasonMonths.includes(idx);
+              const color = isHigh ? SEASON_COLORS.high.fill : SEASON_COLORS.low.fill;
               return (
                 <Badge
                   key={idx}
-                  variant={isHigh ? "default" : "outline"}
-                  className="cursor-pointer select-none"
+                  variant="outline"
+                  className="cursor-pointer select-none border-transparent text-white hover:opacity-80"
+                  style={{ backgroundColor: color }}
                   onClick={() => toggleMonth(idx)}
                 >
                   {name}
@@ -148,9 +160,6 @@ export function TOUSettingsCard() {
               );
             })}
           </div>
-          <p className="text-xs text-muted-foreground">
-            Selected months use High-Demand Season periods. All other months use Low-Demand.
-          </p>
         </div>
 
         {/* High-Demand Season */}
