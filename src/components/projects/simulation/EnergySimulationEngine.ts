@@ -115,6 +115,8 @@ export interface EnergySimulationConfig {
   batteryInitialSoC?: number; // Starting SoC (default 50%)
   dispatchStrategy?: BatteryDispatchStrategy;
   dispatchConfig?: DispatchConfig;
+  /** Resolve a TOU period name ('off-peak'|'standard'|'peak') to TimeWindows */
+  touPeriodToWindows?: (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[];
 }
 
 export interface HourlyEnergyData {
@@ -156,6 +158,68 @@ export interface EnergySimulationResults {
   batteryUtilization: number; // % of capacity used
 }
 
+// ── Source-aware helpers ──
+
+/** Check if a given hour falls within any of a source's TOU periods */
+function isSourceActiveAtHour(
+  hour: number,
+  touPeriods: ('off-peak' | 'standard' | 'peak')[] | undefined,
+  defaultPeriods: ('off-peak' | 'standard' | 'peak')[],
+  touPeriodToWindowsFn?: (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[],
+): boolean {
+  const periods = touPeriods ?? defaultPeriods;
+  if (!touPeriodToWindowsFn) return true; // No resolver = always active (backwards compat)
+  for (const p of periods) {
+    const windows = touPeriodToWindowsFn(p);
+    if (windows.some(w => isInWindow(hour, w))) return true;
+  }
+  return false;
+}
+
+/** Determine charging permissions for a given hour based on chargeSources config */
+function getChargePermissions(
+  hour: number,
+  config: DispatchConfig,
+  touPeriodToWindowsFn?: (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[],
+): { pvChargeAllowed: boolean; gridChargeAllowed: boolean } {
+  const sources = config.chargeSources;
+  if (!sources || sources.length === 0) {
+    // Legacy: fall back to old behaviour
+    return { pvChargeAllowed: true, gridChargeAllowed: config.allowGridCharging };
+  }
+
+  let pvChargeAllowed = false;
+  let gridChargeAllowed = false;
+
+  for (const src of sources) {
+    if (!src.enabled) continue;
+    const active = isSourceActiveAtHour(hour, src.chargeTouPeriods, ['off-peak'], touPeriodToWindowsFn);
+    if (src.id === 'pv' && active) pvChargeAllowed = true;
+    if (src.id === 'grid' && active) gridChargeAllowed = true;
+  }
+
+  return { pvChargeAllowed, gridChargeAllowed };
+}
+
+/** Determine discharge permissions for a given hour based on dischargeSources config */
+function getDischargePermissions(
+  hour: number,
+  config: DispatchConfig,
+  touPeriodToWindowsFn?: (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[],
+): { batteryDischargeAllowed: boolean } {
+  const sources = config.dischargeSources;
+  if (!sources || sources.length === 0) {
+    return { batteryDischargeAllowed: true }; // Legacy
+  }
+
+  // Check if the 'battery' discharge source is enabled and active at this hour
+  const batterySrc = sources.find(s => s.id === 'battery');
+  if (!batterySrc || !batterySrc.enabled) return { batteryDischargeAllowed: false };
+
+  const active = isSourceActiveAtHour(hour, batterySrc.dischargeTouPeriods, ['peak'], touPeriodToWindowsFn);
+  return { batteryDischargeAllowed: active };
+}
+
 // ── Dispatch strategy implementations ──
 
 interface HourState {
@@ -178,8 +242,14 @@ interface HourResult {
   newBatteryState: number;
 }
 
-function dispatchSelfConsumption(s: HourState): HourResult {
+function dispatchSelfConsumption(
+  s: HourState,
+  permissions?: { pvChargeAllowed: boolean; gridChargeAllowed: boolean; batteryDischargeAllowed: boolean },
+): HourResult {
   const { load, solar, netLoad, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
+  const pvOk = permissions?.pvChargeAllowed ?? true;
+  const dischargeOk = permissions?.batteryDischargeAllowed ?? true;
+
   let gridImport = 0;
   let gridExport = 0;
   const solarUsed = Math.min(solar, load);
@@ -188,15 +258,19 @@ function dispatchSelfConsumption(s: HourState): HourResult {
   let newBatteryState = batteryState;
 
   if (netLoad > 0) {
-    const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryDischargePower);
-    batteryDischarge = Math.min(netLoad, Math.max(0, batteryAvailable));
-    newBatteryState -= batteryDischarge;
+    if (dischargeOk) {
+      const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryDischargePower);
+      batteryDischarge = Math.min(netLoad, Math.max(0, batteryAvailable));
+      newBatteryState -= batteryDischarge;
+    }
     gridImport = netLoad - batteryDischarge;
   } else {
     const excess = -netLoad;
-    const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryChargePower);
-    batteryCharge = Math.min(excess, Math.max(0, batterySpace));
-    newBatteryState += batteryCharge;
+    if (pvOk) {
+      const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryChargePower);
+      batteryCharge = Math.min(excess, Math.max(0, batterySpace));
+      newBatteryState += batteryCharge;
+    }
     gridExport = excess - batteryCharge;
   }
 
@@ -335,6 +409,7 @@ export function runEnergySimulation(
     batteryInitialSoC = 0.50,
     dispatchStrategy = 'self-consumption',
     dispatchConfig,
+    touPeriodToWindows: touPeriodToWindowsFn,
   } = config;
 
   // Use explicit charge/discharge power if provided, otherwise fall back to legacy batteryPower
@@ -367,6 +442,11 @@ export function runEnergySimulation(
       minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower,
     };
 
+    // Compute source-aware permissions for this hour
+    const chargePerms = getChargePermissions(h, effectiveDispatchConfig, touPeriodToWindowsFn);
+    const dischargePerms = getDischargePermissions(h, effectiveDispatchConfig, touPeriodToWindowsFn);
+    const permissions = { ...chargePerms, ...dischargePerms };
+
     let result: HourResult;
     switch (dispatchStrategy) {
       case 'tou-arbitrage':
@@ -380,7 +460,7 @@ export function runEnergySimulation(
         break;
       case 'self-consumption':
       default:
-        result = dispatchSelfConsumption(hourState);
+        result = dispatchSelfConsumption(hourState, permissions);
         break;
     }
 
