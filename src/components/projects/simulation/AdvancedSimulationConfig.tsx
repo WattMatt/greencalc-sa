@@ -261,56 +261,150 @@ export function AdvancedSimulationConfigPanel({
 
             {/* Battery Characteristics */}
             {includesBattery && (
-              <BatteryCharacteristicsSection
-                chargeCRate={batteryChargeCRate}
-                onChargeCRateChange={onBatteryChargeCRateChange}
-                dischargeCRate={batteryDischargeCRate}
-                onDischargeCRateChange={onBatteryDischargeCRateChange}
-                doD={batteryDoD}
-                onDoDChange={onBatteryDoDChange}
-                minSoC={batteryMinSoC}
-                onMinSoCChange={onBatteryMinSoCChange}
-                maxSoC={batteryMaxSoC}
-                onMaxSoCChange={onBatteryMaxSoCChange}
-              />
+              <CollapsibleSection icon={<Battery className="h-4 w-4 text-primary" />} title="Battery Characteristics">
+                <BatteryCharacteristicsSection
+                  chargeCRate={batteryChargeCRate}
+                  onChargeCRateChange={onBatteryChargeCRateChange}
+                  dischargeCRate={batteryDischargeCRate}
+                  onDischargeCRateChange={onBatteryDischargeCRateChange}
+                  doD={batteryDoD}
+                  onDoDChange={onBatteryDoDChange}
+                  minSoC={batteryMinSoC}
+                  onMinSoCChange={onBatteryMinSoCChange}
+                  maxSoC={batteryMaxSoC}
+                  onMaxSoCChange={onBatteryMaxSoCChange}
+                />
+              </CollapsibleSection>
             )}
 
-            <Separator />
-
             {/* Seasonal Variation */}
-            <SeasonalSection 
-              config={config.seasonal}
-              onChange={(seasonal) => onChange({ ...config, seasonal })}
-            />
+            <CollapsibleSection 
+              icon={<Sun className="h-4 w-4 text-amber-500" />} 
+              title="Seasonal Variation"
+              toggleEnabled={config.seasonal.enabled}
+              onToggleEnabled={(enabled) => onChange({ ...config, seasonal: { ...config.seasonal, enabled } })}
+            >
+              {config.seasonal.enabled && (
+                <SeasonalSection 
+                  config={config.seasonal}
+                  onChange={(seasonal) => onChange({ ...config, seasonal })}
+                />
+              )}
+            </CollapsibleSection>
             
             {/* Degradation Modeling */}
-            <DegradationSection
-              config={config.degradation}
-              onChange={(degradation) => onChange({ ...config, degradation })}
-              projectLifetime={config.financial.projectLifetimeYears || 20}
-              includesBattery={includesBattery}
-            />
+            <CollapsibleSection 
+              icon={<Battery className="h-4 w-4 text-primary" />} 
+              title="Degradation Modeling"
+              toggleEnabled={config.degradation.enabled}
+              onToggleEnabled={(enabled) => onChange({ ...config, degradation: { ...config.degradation, enabled } })}
+            >
+              {config.degradation.enabled && (
+                <DegradationSection
+                  config={config.degradation}
+                  onChange={(degradation) => onChange({ ...config, degradation })}
+                  projectLifetime={config.financial.projectLifetimeYears || 20}
+                  includesBattery={includesBattery}
+                />
+              )}
+            </CollapsibleSection>
             
             {/* Financial Sophistication */}
-            <FinancialSection
-              config={config.financial}
-              onChange={(financial) => onChange({ ...config, financial })}
-            />
+            <CollapsibleSection 
+              icon={<TrendingUp className="h-4 w-4 text-primary" />} 
+              title="Financial Sophistication"
+              toggleEnabled={config.financial.enabled}
+              onToggleEnabled={(enabled) => onChange({ ...config, financial: { ...config.financial, enabled } })}
+            >
+              {config.financial.enabled && (
+                <FinancialSection
+                  config={config.financial}
+                  onChange={(financial) => onChange({ ...config, financial })}
+                />
+              )}
+            </CollapsibleSection>
             
             {/* Grid Constraints */}
-            <GridConstraintsSection
-              config={config.gridConstraints}
-              onChange={(gridConstraints) => onChange({ ...config, gridConstraints })}
-            />
+            <CollapsibleSection 
+              icon={<Zap className="h-4 w-4 text-yellow-500" />} 
+              title="Grid Constraints"
+              toggleEnabled={config.gridConstraints.enabled}
+              onToggleEnabled={(enabled) => onChange({ ...config, gridConstraints: { ...config.gridConstraints, enabled } })}
+            >
+              {config.gridConstraints.enabled && (
+                <GridConstraintsSection
+                  config={config.gridConstraints}
+                  onChange={(gridConstraints) => onChange({ ...config, gridConstraints })}
+                />
+              )}
+            </CollapsibleSection>
             
             {/* Load Growth */}
-            <LoadGrowthSection
-              config={config.loadGrowth}
-              onChange={(loadGrowth) => onChange({ ...config, loadGrowth })}
-            />
+            <CollapsibleSection 
+              icon={<Building2 className="h-4 w-4 text-purple-500" />} 
+              title="Load Growth"
+              toggleEnabled={config.loadGrowth.enabled}
+              onToggleEnabled={(enabled) => onChange({ ...config, loadGrowth: { ...config.loadGrowth, enabled } })}
+            >
+              {config.loadGrowth.enabled && (
+                <LoadGrowthSection
+                  config={config.loadGrowth}
+                  onChange={(loadGrowth) => onChange({ ...config, loadGrowth })}
+                />
+              )}
+            </CollapsibleSection>
           </CardContent>
         </CollapsibleContent>
       </Card>
+    </Collapsible>
+  );
+}
+
+// ============= Collapsible Section Wrapper =============
+
+function CollapsibleSection({ 
+  icon, 
+  title, 
+  badge,
+  toggleEnabled,
+  onToggleEnabled,
+  children,
+  defaultOpen = false,
+}: { 
+  icon: React.ReactNode;
+  title: string;
+  badge?: boolean;
+  toggleEnabled?: boolean;
+  onToggleEnabled?: (enabled: boolean) => void;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="rounded-lg border bg-card">
+        <div className="flex items-center justify-between p-3">
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-2 hover:opacity-80 transition-opacity flex-1">
+              {icon}
+              <Label className="text-sm font-medium cursor-pointer">{title}</Label>
+              {badge && <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Active</Badge>}
+              {isOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+            </button>
+          </CollapsibleTrigger>
+          {onToggleEnabled !== undefined && (
+            <Switch
+              checked={toggleEnabled}
+              onCheckedChange={onToggleEnabled}
+            />
+          )}
+        </div>
+        <CollapsibleContent>
+          <div className="px-3 pb-3">
+            {children}
+          </div>
+        </CollapsibleContent>
+      </div>
     </Collapsible>
   );
 }
@@ -325,57 +419,40 @@ function SeasonalSection({
   onChange: (config: SeasonalConfig) => void;
 }) {
   return (
-    <div className="space-y-3 p-3 rounded-lg border bg-card">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Sun className="h-4 w-4 text-amber-500" />
-          <Label className="text-sm font-medium">Seasonal Variation</Label>
-        </div>
-        <Switch
-          checked={config.enabled}
-          onCheckedChange={(enabled) => onChange({ ...config, enabled })}
-        />
+    <div className="space-y-3">
+      <div className="text-xs text-muted-foreground">
+        Monthly irradiance factors adjust solar generation throughout the year
       </div>
-      
-      {config.enabled && (
-        <div className="space-y-3 pt-2">
-          <div className="text-xs text-muted-foreground">
-            Monthly irradiance factors adjust solar generation throughout the year
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">High Demand Load Factor</Label>
-              <div className="flex items-center gap-2">
-                <Slider
-                  value={[config.highDemandLoadMultiplier * 100]}
-                  onValueChange={([v]) => onChange({ ...config, highDemandLoadMultiplier: v / 100 })}
-                  min={90}
-                  max={130}
-                  step={1}
-                  className="flex-1"
-                />
-                <span className="text-xs w-12 text-right">{(config.highDemandLoadMultiplier * 100).toFixed(0)}%</span>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <Label className="text-xs">Low Demand Load Factor</Label>
-              <div className="flex items-center gap-2">
-                <Slider
-                  value={[config.lowDemandLoadMultiplier * 100]}
-                  onValueChange={([v]) => onChange({ ...config, lowDemandLoadMultiplier: v / 100 })}
-                  min={70}
-                  max={110}
-                  step={1}
-                  className="flex-1"
-                />
-                <span className="text-xs w-12 text-right">{(config.lowDemandLoadMultiplier * 100).toFixed(0)}%</span>
-              </div>
-            </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs">High Demand Load Factor</Label>
+          <div className="flex items-center gap-2">
+            <Slider
+              value={[config.highDemandLoadMultiplier * 100]}
+              onValueChange={([v]) => onChange({ ...config, highDemandLoadMultiplier: v / 100 })}
+              min={90}
+              max={130}
+              step={1}
+              className="flex-1"
+            />
+            <span className="text-xs w-12 text-right">{(config.highDemandLoadMultiplier * 100).toFixed(0)}%</span>
           </div>
         </div>
-      )}
+        <div className="space-y-1">
+          <Label className="text-xs">Low Demand Load Factor</Label>
+          <div className="flex items-center gap-2">
+            <Slider
+              value={[config.lowDemandLoadMultiplier * 100]}
+              onValueChange={([v]) => onChange({ ...config, lowDemandLoadMultiplier: v / 100 })}
+              min={70}
+              max={110}
+              step={1}
+              className="flex-1"
+            />
+            <span className="text-xs w-12 text-right">{(config.lowDemandLoadMultiplier * 100).toFixed(0)}%</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -425,22 +502,9 @@ function DegradationSection({
   };
 
   return (
-    <div className="space-y-3 p-3 rounded-lg border bg-card">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Battery className="h-4 w-4 text-green-500" />
-          <Label className="text-sm font-medium">Degradation Modeling</Label>
-        </div>
-        <Switch
-          checked={config.enabled}
-          onCheckedChange={(enabled) => onChange({ ...config, enabled })}
-        />
-      </div>
-      
-      {config.enabled && (
-        <div className="space-y-4 pt-2">
-          {/* Side-by-side layout: Panel (left) and Battery (right) - or full width if no battery */}
-          <div className={includesBattery ? "grid grid-cols-2 gap-4" : ""}>
+    <div className="space-y-4">
+      {/* Side-by-side layout: Panel (left) and Battery (right) - or full width if no battery */}
+      <div className={includesBattery ? "grid grid-cols-2 gap-4" : ""}>
             {/* Panel Degradation - LEFT (or full width) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -630,8 +694,6 @@ function DegradationSection({
               <span className="text-xs text-muted-foreground">%</span>
             </div>
           )}
-        </div>
-      )}
     </div>
   );
 }
@@ -644,100 +706,79 @@ function FinancialSection({
   onChange: (config: AdvancedFinancialConfig) => void;
 }) {
   return (
-    <div className="space-y-3 p-3 rounded-lg border bg-card">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-4 w-4 text-blue-500" />
-          <Label className="text-sm font-medium">Financial Sophistication</Label>
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Tariff Escalation (%/yr)</Label>
+          <Input
+            type="number"
+            value={config.tariffEscalationRate}
+            onChange={(e) => onChange({ ...config, tariffEscalationRate: parseFloat(e.target.value) || 0 })}
+            min={0}
+            max={25}
+            step={0.5}
+            className="h-8 text-xs"
+          />
         </div>
-        <Switch
-          checked={config.enabled}
-          onCheckedChange={(enabled) => onChange({ ...config, enabled })}
-        />
+        <div className="space-y-1">
+          <Label className="text-xs">Inflation Rate (%)</Label>
+          <Input
+            type="number"
+            value={config.inflationRate}
+            onChange={(e) => onChange({ ...config, inflationRate: parseFloat(e.target.value) || 0 })}
+            min={0}
+            max={15}
+            step={0.5}
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Discount Rate (%)</Label>
+          <Input
+            type="number"
+            value={config.discountRate}
+            onChange={(e) => onChange({ ...config, discountRate: parseFloat(e.target.value) || 0 })}
+            min={0}
+            max={20}
+            step={0.5}
+            className="h-8 text-xs"
+          />
+        </div>
       </div>
-      
-      {config.enabled && (
-        <div className="space-y-3 pt-2">
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Tariff Escalation (%/yr)</Label>
-              <Input
-                type="number"
-                value={config.tariffEscalationRate}
-                onChange={(e) => onChange({ ...config, tariffEscalationRate: parseFloat(e.target.value) || 0 })}
-                min={0}
-                max={25}
-                step={0.5}
-                className="h-8 text-xs"
-              />
-            </div>
-            
-            <div className="space-y-1">
-              <Label className="text-xs">Inflation Rate (%)</Label>
-              <Input
-                type="number"
-                value={config.inflationRate}
-                onChange={(e) => onChange({ ...config, inflationRate: parseFloat(e.target.value) || 0 })}
-                min={0}
-                max={15}
-                step={0.5}
-                className="h-8 text-xs"
-              />
-            </div>
-            
-            <div className="space-y-1">
-              <Label className="text-xs">Discount Rate (%)</Label>
-              <Input
-                type="number"
-                value={config.discountRate}
-                onChange={(e) => onChange({ ...config, discountRate: parseFloat(e.target.value) || 0 })}
-                min={0}
-                max={20}
-                step={0.5}
-                className="h-8 text-xs"
-              />
-            </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Project Lifetime (years)</Label>
+          <Input
+            type="number"
+            value={config.projectLifetimeYears}
+            onChange={(e) => onChange({ ...config, projectLifetimeYears: parseInt(e.target.value) || 25 })}
+            min={10}
+            max={30}
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="flex items-center justify-between pt-4">
+          <Label className="text-xs">Sensitivity Analysis</Label>
+          <Switch
+            checked={config.sensitivityEnabled}
+            onCheckedChange={(sensitivityEnabled) => onChange({ ...config, sensitivityEnabled })}
+          />
+        </div>
+      </div>
+      {config.sensitivityEnabled && (
+        <div className="space-y-1">
+          <Label className="text-xs">Variation Range (%)</Label>
+          <div className="flex items-center gap-2">
+            <Slider
+              value={[config.sensitivityVariation]}
+              onValueChange={([v]) => onChange({ ...config, sensitivityVariation: v })}
+              min={5}
+              max={40}
+              step={5}
+              className="flex-1"
+            />
+            <span className="text-xs w-12 text-right">±{config.sensitivityVariation}%</span>
           </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Project Lifetime (years)</Label>
-              <Input
-                type="number"
-                value={config.projectLifetimeYears}
-                onChange={(e) => onChange({ ...config, projectLifetimeYears: parseInt(e.target.value) || 25 })}
-                min={10}
-                max={30}
-                className="h-8 text-xs"
-              />
-            </div>
-            
-            <div className="flex items-center justify-between pt-4">
-              <Label className="text-xs">Sensitivity Analysis</Label>
-              <Switch
-                checked={config.sensitivityEnabled}
-                onCheckedChange={(sensitivityEnabled) => onChange({ ...config, sensitivityEnabled })}
-              />
-            </div>
-          </div>
-          
-          
-          {config.sensitivityEnabled && (
-            <div className="space-y-1">
-              <Label className="text-xs">Variation Range (%)</Label>
-              <div className="flex items-center gap-2">
-                <Slider
-                  value={[config.sensitivityVariation]}
-                  onValueChange={([v]) => onChange({ ...config, sensitivityVariation: v })}
-                  min={5}
-                  max={40}
-                  step={5}
-                  className="flex-1"
-                />
-                <span className="text-xs w-12 text-right">±{config.sensitivityVariation}%</span>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -752,63 +793,45 @@ function GridConstraintsSection({
   onChange: (config: GridConstraintsConfig) => void;
 }) {
   return (
-    <div className="space-y-3 p-3 rounded-lg border bg-card">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Zap className="h-4 w-4 text-yellow-500" />
-          <Label className="text-sm font-medium">Grid Constraints</Label>
-        </div>
+        <Label className="text-xs">Export Limit</Label>
         <Switch
-          checked={config.enabled}
-          onCheckedChange={(enabled) => onChange({ ...config, enabled })}
+          checked={config.exportLimitEnabled}
+          onCheckedChange={(exportLimitEnabled) => onChange({ ...config, exportLimitEnabled })}
         />
       </div>
-      
-      {config.enabled && (
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs">Export Limit</Label>
-            <Switch
-              checked={config.exportLimitEnabled}
-              onCheckedChange={(exportLimitEnabled) => onChange({ ...config, exportLimitEnabled })}
-            />
-          </div>
-          
-          {config.exportLimitEnabled && (
-            <div className="space-y-1">
-              <Label className="text-xs">Max Export (kW)</Label>
-              <Input
-                type="number"
-                value={config.maxExportKw}
-                onChange={(e) => onChange({ ...config, maxExportKw: parseFloat(e.target.value) || 0 })}
-                min={0}
-                step={10}
-                className="h-8 text-xs"
-              />
-            </div>
-          )}
-          
-          <div className="flex items-center justify-between">
-            <Label className="text-xs">Wheeling Charges</Label>
-            <Switch
-              checked={config.wheelingEnabled}
-              onCheckedChange={(wheelingEnabled) => onChange({ ...config, wheelingEnabled })}
-            />
-          </div>
-          
-          {config.wheelingEnabled && (
-            <div className="space-y-1">
-              <Label className="text-xs">Wheeling Charge (R/kWh)</Label>
-              <Input
-                type="number"
-                value={config.wheelingChargePerKwh}
-                onChange={(e) => onChange({ ...config, wheelingChargePerKwh: parseFloat(e.target.value) || 0 })}
-                min={0}
-                step={0.05}
-                className="h-8 text-xs"
-              />
-            </div>
-          )}
+      {config.exportLimitEnabled && (
+        <div className="space-y-1">
+          <Label className="text-xs">Max Export (kW)</Label>
+          <Input
+            type="number"
+            value={config.maxExportKw}
+            onChange={(e) => onChange({ ...config, maxExportKw: parseFloat(e.target.value) || 0 })}
+            min={0}
+            step={10}
+            className="h-8 text-xs"
+          />
+        </div>
+      )}
+      <div className="flex items-center justify-between">
+        <Label className="text-xs">Wheeling Charges</Label>
+        <Switch
+          checked={config.wheelingEnabled}
+          onCheckedChange={(wheelingEnabled) => onChange({ ...config, wheelingEnabled })}
+        />
+      </div>
+      {config.wheelingEnabled && (
+        <div className="space-y-1">
+          <Label className="text-xs">Wheeling Charge (R/kWh)</Label>
+          <Input
+            type="number"
+            value={config.wheelingChargePerKwh}
+            onChange={(e) => onChange({ ...config, wheelingChargePerKwh: parseFloat(e.target.value) || 0 })}
+            min={0}
+            step={0.05}
+            className="h-8 text-xs"
+          />
         </div>
       )}
     </div>
@@ -823,70 +846,52 @@ function LoadGrowthSection({
   onChange: (config: LoadGrowthConfig) => void;
 }) {
   return (
-    <div className="space-y-3 p-3 rounded-lg border bg-card">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <Label className="text-xs">Annual Growth Rate (%)</Label>
         <div className="flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-purple-500" />
-          <Label className="text-sm font-medium">Load Growth</Label>
+          <Slider
+            value={[config.annualGrowthRate * 10]}
+            onValueChange={([v]) => onChange({ ...config, annualGrowthRate: v / 10 })}
+            min={0}
+            max={100}
+            step={5}
+            className="flex-1"
+          />
+          <span className="text-xs w-12 text-right">{config.annualGrowthRate.toFixed(1)}%</span>
         </div>
+      </div>
+      <div className="flex items-center justify-between">
+        <Label className="text-xs">New Tenant Projection</Label>
         <Switch
-          checked={config.enabled}
-          onCheckedChange={(enabled) => onChange({ ...config, enabled })}
+          checked={config.newTenantEnabled}
+          onCheckedChange={(newTenantEnabled) => onChange({ ...config, newTenantEnabled })}
         />
       </div>
-      
-      {config.enabled && (
-        <div className="space-y-3 pt-2">
+      {config.newTenantEnabled && (
+        <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <Label className="text-xs">Annual Growth Rate (%)</Label>
-            <div className="flex items-center gap-2">
-              <Slider
-                value={[config.annualGrowthRate * 10]}
-                onValueChange={([v]) => onChange({ ...config, annualGrowthRate: v / 10 })}
-                min={0}
-                max={100}
-                step={5}
-                className="flex-1"
-              />
-              <span className="text-xs w-12 text-right">{config.annualGrowthRate.toFixed(1)}%</span>
-            </div>
-          </div>
-          
-          <div className="flex items-center justify-between">
-            <Label className="text-xs">New Tenant Projection</Label>
-            <Switch
-              checked={config.newTenantEnabled}
-              onCheckedChange={(newTenantEnabled) => onChange({ ...config, newTenantEnabled })}
+            <Label className="text-xs">Year Joining</Label>
+            <Input
+              type="number"
+              value={config.newTenantYear}
+              onChange={(e) => onChange({ ...config, newTenantYear: parseInt(e.target.value) || 1 })}
+              min={1}
+              max={25}
+              className="h-8 text-xs"
             />
           </div>
-          
-          {config.newTenantEnabled && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Year Joining</Label>
-                <Input
-                  type="number"
-                  value={config.newTenantYear}
-                  onChange={(e) => onChange({ ...config, newTenantYear: parseInt(e.target.value) || 1 })}
-                  min={1}
-                  max={25}
-                  className="h-8 text-xs"
-                />
-              </div>
-              
-              <div className="space-y-1">
-                <Label className="text-xs">Monthly Load (kWh)</Label>
-                <Input
-                  type="number"
-                  value={config.newTenantLoadKwh}
-                  onChange={(e) => onChange({ ...config, newTenantLoadKwh: parseFloat(e.target.value) || 0 })}
-                  min={0}
-                  step={500}
-                  className="h-8 text-xs"
-                />
-              </div>
-            </div>
-          )}
+          <div className="space-y-1">
+            <Label className="text-xs">Monthly Load (kWh)</Label>
+            <Input
+              type="number"
+              value={config.newTenantLoadKwh}
+              onChange={(e) => onChange({ ...config, newTenantLoadKwh: parseFloat(e.target.value) || 0 })}
+              min={0}
+              step={500}
+              className="h-8 text-xs"
+            />
+          </div>
         </div>
       )}
     </div>
