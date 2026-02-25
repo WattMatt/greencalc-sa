@@ -1003,38 +1003,36 @@ function ChargeSourcesList({
               <Badge variant="outline" className="ml-auto text-[9px] px-1 py-0">{idx + 1}</Badge>
             </div>
             {source.enabled && (
-              <div className="mt-1.5 ml-8">
-                <Label className="text-[9px] text-muted-foreground mb-1 block">Charge during</Label>
-                <div className="flex items-center gap-3">
-                  {([
-                    { value: 'off-peak' as const, label: 'Off-Peak' },
-                    { value: 'standard' as const, label: 'Standard' },
-                    { value: 'peak' as const, label: 'Peak' },
-                  ]).map((period) => {
-                    const periods = source.chargeTouPeriods ?? (source.chargeTouPeriod ? [source.chargeTouPeriod] : ['off-peak']);
-                    const checked = periods.includes(period.value);
-                    return (
-                      <label key={period.value} className="flex items-center gap-1 text-[10px] cursor-pointer">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(v) => {
-                            let next: ('off-peak' | 'standard' | 'peak')[];
-                            if (v) {
-                              next = [...periods, period.value];
-                            } else {
-                              next = periods.filter(p => p !== period.value);
-                              if (next.length === 0) return; // Must have at least one
-                            }
-                            const updated = sources.map((s, i) => i === idx ? { ...s, chargeTouPeriods: next } : s);
-                            onChange(updated);
-                          }}
-                          className="h-3 w-3"
-                        />
-                        {period.label}
-                      </label>
-                    );
-                  })}
-                </div>
+              <div className="flex items-center gap-2 mt-1 ml-8">
+                <Label className="text-[9px] text-muted-foreground shrink-0">Charge during</Label>
+                {([
+                  { value: 'off-peak' as const, label: 'Off-Peak' },
+                  { value: 'standard' as const, label: 'Standard' },
+                  { value: 'peak' as const, label: 'Peak' },
+                ]).map((period) => {
+                  const periods = source.chargeTouPeriods ?? (source.chargeTouPeriod ? [source.chargeTouPeriod] : ['off-peak']);
+                  const checked = periods.includes(period.value);
+                  return (
+                    <label key={period.value} className="flex items-center gap-1 text-[10px] cursor-pointer">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(v) => {
+                          let next: ('off-peak' | 'standard' | 'peak')[];
+                          if (v) {
+                            next = [...periods, period.value];
+                          } else {
+                            next = periods.filter(p => p !== period.value);
+                            if (next.length === 0) return;
+                          }
+                          const updated = sources.map((s, i) => i === idx ? { ...s, chargeTouPeriods: next } : s);
+                          onChange(updated);
+                        }}
+                        className="h-3 w-3"
+                      />
+                      {period.label}
+                    </label>
+                  );
+                })}
               </div>
             )}
           </div>
