@@ -15,7 +15,8 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
   const extendedData = [...chartData, { ...chartData[chartData.length - 1], hour: "24:00" }];
 
   const totalLoad = chartData.reduce((sum, d) => sum + (d.total || 0), 0);
-  const totalPv = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);
+  const totalSolarUsed = chartData.reduce((sum, d) => sum + (d.solarUsed ?? d.pvGeneration ?? 0), 0);
+  const totalPvRaw = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);
   const totalImport = chartData.reduce((sum, d) => sum + (d.gridImport || 0), 0);
   const totalExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
   const totalCharge = chartData.reduce((sum, d) => sum + (d.batteryCharge || 0), 0);
@@ -31,7 +32,10 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
         </span>
         <span className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: "hsl(38 92% 50%)", opacity: 0.7 }} />
-          PV: {totalPv.toFixed(0)} {unit}h
+          PV to Load: {totalSolarUsed.toFixed(0)} {unit}h
+          {totalPvRaw > 0 && totalSolarUsed < totalPvRaw && (
+            <span className="text-muted-foreground ml-0.5">({totalPvRaw.toFixed(0)} gen.)</span>
+          )}
         </span>
         <span className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: "hsl(0 72% 51%)", opacity: 0.7 }} />
@@ -126,7 +130,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
                       </Badge>
                     </div>
                     <p style={{ color: "hsl(var(--primary))" }}>Load: {(dp.total || 0).toFixed(1)} {unit}</p>
-                    <p className="text-amber-500">PV: {(dp.pvGeneration || 0).toFixed(1)} {unit}</p>
+                    <p className="text-amber-500">PV to Load: {(dp.solarUsed ?? dp.pvGeneration ?? 0).toFixed(1)} {unit}</p>
                     <p className="text-red-500">Grid Import: {(dp.gridImport || 0).toFixed(1)} {unit}</p>
                     <p className="text-emerald-600">Grid Export: {(dp.gridExport || 0).toFixed(1)} {unit}</p>
                     {includesBattery && (
@@ -142,7 +146,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
 
             {/* Areas */}
             <Area type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#bpLoadGradient)" dot={false} name="Load" />
-            <Area type="monotone" dataKey="pvGeneration" stroke="hsl(38 92% 50%)" strokeWidth={1.5} fill="url(#bpPvGradient)" dot={false} name="PV Generation" />
+            <Area type="monotone" dataKey="solarUsed" stroke="hsl(38 92% 50%)" strokeWidth={1.5} fill="url(#bpPvGradient)" dot={false} name="PV to Load" />
             <Area type="monotone" dataKey="gridImport" stroke="hsl(0 72% 51%)" strokeWidth={1.5} fill="url(#bpImportGradient)" dot={false} name="Grid Import" />
             <Area type="monotone" dataKey="gridExport" stroke="hsl(142 76% 36%)" strokeWidth={1.5} fill="url(#bpExportGradient)" dot={false} name="Grid Export" />
 

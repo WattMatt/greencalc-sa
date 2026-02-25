@@ -976,6 +976,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         gridExport: engineHour.gridExport,
         gridImportWithBattery: engineHour.gridImport,
         netLoad: engineHour.netLoad,
+        solarUsed: engineHour.solarUsed,
       };
     });
   }, [loadProfileChartData, energyResults]);
