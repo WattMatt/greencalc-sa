@@ -1152,7 +1152,7 @@ function SolarCharacteristicsSection({
   onDischargeSourcesChange?: (sources: DischargeSource[]) => void;
 }) {
   return (
-    <div className="space-y-3 p-3 rounded-lg border bg-card">
+    <div className="space-y-3">
       <DischargeSourcesList
         sources={dischargeSources}
         onChange={onDischargeSourcesChange}
