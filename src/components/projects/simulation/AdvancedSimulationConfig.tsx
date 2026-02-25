@@ -1153,13 +1153,6 @@ function SolarCharacteristicsSection({
 }) {
   return (
     <div className="space-y-3 p-3 rounded-lg border bg-card">
-      <div className="flex items-center gap-2">
-        <Sun className="h-4 w-4 text-amber-500" />
-        <Label className="text-sm font-medium">Solar PV Dispatch</Label>
-      </div>
-      <div className="text-xs text-muted-foreground">
-        Define where solar PV energy is dispatched, in priority order.
-      </div>
       <DischargeSourcesList
         sources={dischargeSources}
         onChange={onDischargeSourcesChange}
