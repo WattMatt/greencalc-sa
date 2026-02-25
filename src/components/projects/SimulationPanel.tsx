@@ -893,9 +893,24 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // Annual scaling
   const annualEnergy = useMemo(() => scaleToAnnual(energyResults), [energyResults]);
 
-  // Use chart data from useLoadProfileData hook for consistent visualization with Load Profile tab
-  // This replaces the simplified simulationChartData based on energyResults
-  const simulationChartData = loadProfileChartData;
+  // Merge authoritative battery + grid data from EnergySimulationEngine onto load profile chart data
+  const simulationChartData = useMemo(() => {
+    if (!loadProfileChartData || !energyResults?.hourlyData) return loadProfileChartData;
+    return loadProfileChartData.map((hour, i) => {
+      const engineHour = energyResults.hourlyData[i];
+      if (!engineHour) return hour;
+      return {
+        ...hour,
+        batteryCharge: engineHour.batteryCharge,
+        batteryDischarge: engineHour.batteryDischarge,
+        batterySoC: engineHour.batterySOC,
+        gridImport: engineHour.gridImport,
+        gridExport: engineHour.gridExport,
+        gridImportWithBattery: engineHour.gridImport,
+        netLoad: engineHour.netLoad,
+      };
+    });
+  }, [loadProfileChartData, energyResults]);
 
   // Check if financial analysis is available (moved up for use in advanced simulation)
   const hasFinancialData = !!project.tariff_id;
