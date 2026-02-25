@@ -151,6 +151,15 @@ export const DEFAULT_TOU_SETTINGS: TOUSettings = {
  * @param month optional 0-indexed month to determine season (defaults to low season behaviour)
  * @param dayOfWeek optional 0=Sun..6=Sat for distinguishing Saturday vs Sunday on weekends
  */
+/** Read TOU settings from localStorage (inline to avoid circular deps) */
+function readStoredTOUSettings(): TOUSettings {
+  try {
+    const raw = localStorage.getItem("tou-settings");
+    if (raw) return JSON.parse(raw) as TOUSettings;
+  } catch { /* ignore */ }
+  return DEFAULT_TOU_SETTINGS;
+}
+
 export const getTOUPeriod = (
   hour: number,
   isWeekend: boolean,
@@ -158,7 +167,7 @@ export const getTOUPeriod = (
   month?: number,
   dayOfWeek?: number,
 ): TOUPeriod => {
-  const settings = touSettings || DEFAULT_TOU_SETTINGS;
+  const settings = touSettings || readStoredTOUSettings();
   const isHighSeason = month !== undefined ? settings.highSeasonMonths.includes(month) : false;
   const season = isHighSeason ? settings.highSeason : settings.lowSeason;
 
