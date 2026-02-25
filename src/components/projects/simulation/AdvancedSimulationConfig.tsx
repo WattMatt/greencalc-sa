@@ -942,7 +942,7 @@ function LoadGrowthSection({
   );
 }
 
-// ============= Charge Sources List (drag-to-reorder) =============
+// ============= Charge Strategy List (drag-to-reorder) =============
 
 const CHARGE_SOURCE_LABELS: Record<string, string> = {
   pv: 'PV (Solar)',
@@ -970,7 +970,7 @@ function ChargeSourcesList({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label className="text-xs font-medium">Charge Sources</Label>
+        <Label className="text-xs font-medium">Charge Strategy</Label>
         <span className="text-[10px] text-muted-foreground">Top = highest priority</span>
       </div>
       <div className="rounded border bg-muted/30 divide-y divide-border">
@@ -1243,7 +1243,7 @@ function BatteryCharacteristicsSection({
         </div>
       </div>
 
-      {/* Charge Sources – independent of dispatch strategy, reorderable */}
+      {/* Charge Strategy – independent of dispatch strategy, reorderable */}
       <Separator className="my-2" />
       <ChargeSourcesList
         sources={effectiveDispatchConfig.chargeSources ?? DEFAULT_CHARGE_SOURCES}
