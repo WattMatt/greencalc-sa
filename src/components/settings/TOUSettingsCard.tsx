@@ -59,10 +59,13 @@ function HourGrid({ seasonConfig, onCellClick }: HourGridProps) {
           </div>
         </div>
       ))}
-      {/* Hour axis labels */}
+      {/* Hour axis labels with tick marks */}
       <div className="flex gap-0.5">
         {Array.from({ length: 24 }, (_, h) => (
-          <div key={h} className="flex-1 text-[7px] text-center text-muted-foreground">
+          <div
+            key={h}
+            className={`flex-1 text-[7px] text-center text-muted-foreground pt-1 ${h % 3 === 0 ? "border-t border-dashed border-muted-foreground/30" : ""}`}
+          >
             {h % 3 === 0 ? `${h}:00` : ""}
           </div>
         ))}
@@ -161,6 +164,8 @@ export function TOUSettingsCard() {
             })}
           </div>
         </div>
+
+        <Separator />
 
         {/* High-Demand Season */}
         <div className="space-y-2">
