@@ -194,7 +194,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [batteryAcCapacity, setBatteryAcCapacity] = useState(includesBattery ? 42 : 0); // AC (usable) kWh
   const [batteryChargeCRate, setBatteryChargeCRate] = useState(0.5); // Charging C-Rate
   const [batteryDischargeCRate, setBatteryDischargeCRate] = useState(0.5); // Discharging C-Rate
-  const [batteryDoD, setBatteryDoD] = useState(85); // Depth of Discharge %
   const [batteryMinSoC, setBatteryMinSoC] = useState(10); // Min SoC %
   const [batteryMaxSoC, setBatteryMaxSoC] = useState(95); // Max SoC %
    
@@ -205,6 +204,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
    // TOU period selections for TOU Arbitrage mode
    const [chargeTouPeriod, setChargeTouPeriod] = useState<TOUPeriod>('off-peak');
    const [dischargeTouPeriod, setDischargeTouPeriod] = useState<TOUPeriod>('peak');
+
+  // DoD is derived from SoC limits
+  const batteryDoD = batteryMaxSoC - batteryMinSoC;
 
   // Derived DC values used by all downstream calculations
   const batteryCapacity = batteryDoD > 0 ? Math.round(batteryAcCapacity / (batteryDoD / 100)) : 0; // DC kWh
@@ -277,12 +279,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       
       // Load configuration values
       setSolarCapacity(lastSavedSimulation.solar_capacity_kwp || 100);
-      const savedDoD = savedResultsJson?.batteryDoD || 85;
+      const savedMinSoC = savedResultsJson?.batteryMinSoC ?? 10;
+      const savedMaxSoC = savedResultsJson?.batteryMaxSoC ?? 95;
+      const savedDoD = savedMaxSoC - savedMinSoC;
       const savedChargeCRate = savedResultsJson?.batteryChargeCRate ?? savedResultsJson?.batteryCRate;
       const savedDischargeCRate = savedResultsJson?.batteryDischargeCRate ?? savedResultsJson?.batteryCRate;
-      setBatteryDoD(savedDoD);
-      setBatteryMinSoC(savedResultsJson?.batteryMinSoC ?? 10);
-      setBatteryMaxSoC(savedResultsJson?.batteryMaxSoC ?? 95);
+      setBatteryMinSoC(savedMinSoC);
+      setBatteryMaxSoC(savedMaxSoC);
       const savedDcCap = includesBattery ? (lastSavedSimulation.battery_capacity_kwh || 50) : 0;
       const savedPower = includesBattery ? (lastSavedSimulation.battery_power_kw || 25) : 0;
       const derivedAc = Math.round(savedDcCap * savedDoD / 100);
@@ -1410,7 +1413,6 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         batteryDischargeCRate={batteryDischargeCRate}
         onBatteryDischargeCRateChange={setBatteryDischargeCRate}
         batteryDoD={batteryDoD}
-        onBatteryDoDChange={setBatteryDoD}
         batteryMinSoC={batteryMinSoC}
         onBatteryMinSoCChange={setBatteryMinSoC}
         batteryMaxSoC={batteryMaxSoC}
@@ -2020,7 +2022,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             const dod = config.batteryDoD || batteryDoD || 85;
             const savedChargeCRate = config.batteryChargeCRate ?? config.batteryCRate;
             const savedDischargeCRate = config.batteryDischargeCRate ?? config.batteryCRate;
-            setBatteryDoD(dod);
+            // Derive minSoC/maxSoC from saved DoD if no explicit values
+            const loadedMinSoC = config.batteryMinSoC ?? Math.round((100 - dod) / 2);
+            const loadedMaxSoC = config.batteryMaxSoC ?? Math.round(loadedMinSoC + dod);
+            setBatteryMinSoC(loadedMinSoC);
+            setBatteryMaxSoC(loadedMaxSoC);
             const ac = Math.round(dcCap * dod / 100);
             setBatteryAcCapacity(ac);
             const fallbackCRate = ac > 0 ? Math.round(pwr / ac * 100) / 100 : 0.5;
