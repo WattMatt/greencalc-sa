@@ -985,21 +985,65 @@ function ChargeSourcesList({
               setDragIdx(null);
             }}
             onDragEnd={() => setDragIdx(null)}
-            className={`flex items-center gap-2 px-2 py-1.5 text-xs cursor-grab active:cursor-grabbing transition-opacity ${
+            className={`px-2 py-1.5 text-xs cursor-grab active:cursor-grabbing transition-opacity ${
               dragIdx === idx ? 'opacity-50' : ''
             }`}
           >
-            <GripVertical className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-            <Checkbox
-              checked={source.enabled}
-              onCheckedChange={(v) => {
-                const next = sources.map((s, i) => i === idx ? { ...s, enabled: !!v } : s);
-                onChange(next);
-              }}
-              className="h-3.5 w-3.5"
-            />
-            <span className={source.enabled ? '' : 'text-muted-foreground'}>{CHARGE_SOURCE_LABELS[source.id] || source.id}</span>
-            <Badge variant="outline" className="ml-auto text-[9px] px-1 py-0">{idx + 1}</Badge>
+            <div className="flex items-center gap-2">
+              <GripVertical className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <Checkbox
+                checked={source.enabled}
+                onCheckedChange={(v) => {
+                  const next = sources.map((s, i) => i === idx ? { ...s, enabled: !!v } : s);
+                  onChange(next);
+                }}
+                className="h-3.5 w-3.5"
+              />
+              <span className={source.enabled ? '' : 'text-muted-foreground'}>{CHARGE_SOURCE_LABELS[source.id] || source.id}</span>
+              <Badge variant="outline" className="ml-auto text-[9px] px-1 py-0">{idx + 1}</Badge>
+            </div>
+            {source.enabled && (
+              <div className="grid grid-cols-2 gap-2 mt-1.5 ml-8">
+                <div className="space-y-0.5">
+                  <Label className="text-[9px] text-muted-foreground">Discharge during</Label>
+                  <Select
+                    value={source.dischargeTouPeriod ?? 'peak'}
+                    onValueChange={(v) => {
+                      const next = sources.map((s, i) => i === idx ? { ...s, dischargeTouPeriod: v as 'off-peak' | 'standard' | 'peak' } : s);
+                      onChange(next);
+                    }}
+                  >
+                    <SelectTrigger className="h-6 text-[10px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
+                      <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
+                      <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="text-[9px] text-muted-foreground">Charge during</Label>
+                  <Select
+                    value={source.chargeTouPeriod ?? 'off-peak'}
+                    onValueChange={(v) => {
+                      const next = sources.map((s, i) => i === idx ? { ...s, chargeTouPeriod: v as 'off-peak' | 'standard' | 'peak' } : s);
+                      onChange(next);
+                    }}
+                  >
+                    <SelectTrigger className="h-6 text-[10px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
+                      <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
+                      <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

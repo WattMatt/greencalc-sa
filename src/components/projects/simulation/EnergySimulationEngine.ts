@@ -22,6 +22,8 @@ export type ChargeSourceId = 'pv' | 'grid' | 'generator';
 export interface ChargeSource {
   id: ChargeSourceId;
   enabled: boolean;
+  chargeTouPeriod?: 'off-peak' | 'standard' | 'peak';
+  dischargeTouPeriod?: 'off-peak' | 'standard' | 'peak';
 }
 
 export const DEFAULT_CHARGE_SOURCES: ChargeSource[] = [
