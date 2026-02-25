@@ -5,16 +5,18 @@ import { ChartDataPoint } from "../types";
 interface BatteryChartProps {
   chartData: ChartDataPoint[];
   batteryCapacity: number;
+  batteryAcCapacity?: number;
   batteryPower: number;
 }
 
-export function BatteryChart({ chartData, batteryCapacity, batteryPower }: BatteryChartProps) {
+export function BatteryChart({ chartData, batteryCapacity, batteryAcCapacity, batteryPower }: BatteryChartProps) {
+  const displayCapacity = batteryAcCapacity ?? batteryCapacity;
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
           <Battery className="h-3 w-3 text-green-500" />
-          Battery Storage ({batteryCapacity} kWh / {batteryPower} kW)
+          Battery Storage ({displayCapacity} kWh / {batteryPower} kW)
         </p>
         <div className="flex items-center gap-3 text-[10px]">
           <span className="flex items-center gap-1">
