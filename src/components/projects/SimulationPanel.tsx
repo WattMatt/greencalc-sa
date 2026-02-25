@@ -903,7 +903,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         ...hour,
         batteryCharge: engineHour.batteryCharge,
         batteryDischarge: engineHour.batteryDischarge,
-        batterySoC: engineHour.batterySOC,
+        batterySoC: (engineHour.batterySOC / 100) * batteryCapacity,
         gridImport: engineHour.gridImport,
         gridExport: engineHour.gridExport,
         gridImportWithBattery: engineHour.gridImport,
