@@ -2504,7 +2504,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 <BatteryChart
                   chartData={simulationChartData}
                   batteryCapacity={batteryCapacity}
-                  batteryPower={batteryPower}
+                  batteryAcCapacity={batteryAcCapacity}
+                  batteryPower={batteryChargePower}
                 />
               </CardContent>
             </Card>
