@@ -99,6 +99,8 @@ interface SavedSimulationsProps {
     batteryDischargeCRate?: number;
     batteryCRate?: number; // Legacy fallback
     batteryDoD?: number;
+    batteryMinSoC?: number;
+    batteryMaxSoC?: number;
   }) => void;
   includesBattery?: boolean;
 }
@@ -286,6 +288,8 @@ export function SavedSimulations({
       batteryDischargeCRate: resultsJson?.batteryDischargeCRate,
       batteryCRate: resultsJson?.batteryCRate,
       batteryDoD: resultsJson?.batteryDoD,
+      batteryMinSoC: resultsJson?.batteryMinSoC,
+      batteryMaxSoC: resultsJson?.batteryMaxSoC,
     };
 
     onLoadSimulation(configToLoad);

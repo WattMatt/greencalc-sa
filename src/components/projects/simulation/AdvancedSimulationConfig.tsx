@@ -36,6 +36,10 @@ interface AdvancedSimulationConfigProps {
   onBatteryDischargeCRateChange?: (value: number) => void;
   batteryDoD?: number;
   onBatteryDoDChange?: (value: number) => void;
+  batteryMinSoC?: number;
+  onBatteryMinSoCChange?: (value: number) => void;
+  batteryMaxSoC?: number;
+  onBatteryMaxSoCChange?: (value: number) => void;
 }
 
 export function AdvancedSimulationConfigPanel({ 
@@ -48,6 +52,10 @@ export function AdvancedSimulationConfigPanel({
   onBatteryDischargeCRateChange,
   batteryDoD = 85,
   onBatteryDoDChange,
+  batteryMinSoC = 10,
+  onBatteryMinSoCChange,
+  batteryMaxSoC = 95,
+  onBatteryMaxSoCChange,
 }: AdvancedSimulationConfigProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -260,6 +268,10 @@ export function AdvancedSimulationConfigPanel({
                 onDischargeCRateChange={onBatteryDischargeCRateChange}
                 doD={batteryDoD}
                 onDoDChange={onBatteryDoDChange}
+                minSoC={batteryMinSoC}
+                onMinSoCChange={onBatteryMinSoCChange}
+                maxSoC={batteryMaxSoC}
+                onMaxSoCChange={onBatteryMaxSoCChange}
               />
             )}
 
@@ -890,6 +902,10 @@ function BatteryCharacteristicsSection({
   onDischargeCRateChange,
   doD,
   onDoDChange,
+  minSoC,
+  onMinSoCChange,
+  maxSoC,
+  onMaxSoCChange,
 }: {
   chargeCRate: number;
   onChargeCRateChange?: (value: number) => void;
@@ -897,6 +913,10 @@ function BatteryCharacteristicsSection({
   onDischargeCRateChange?: (value: number) => void;
   doD: number;
   onDoDChange?: (value: number) => void;
+  minSoC: number;
+  onMinSoCChange?: (value: number) => void;
+  maxSoC: number;
+  onMaxSoCChange?: (value: number) => void;
 }) {
   return (
     <div className="space-y-3 p-3 rounded-lg border bg-card">
@@ -937,6 +957,32 @@ function BatteryCharacteristicsSection({
             onChange={(e) => onDoDChange?.(Math.max(10, Math.min(100, parseInt(e.target.value) || 85)))}
             className="h-8 text-xs"
             min={10}
+            max={100}
+            step={5}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Min SoC (%)</Label>
+          <Input
+            type="number"
+            value={minSoC}
+            onChange={(e) => onMinSoCChange?.(Math.max(0, Math.min(maxSoC - 5, parseInt(e.target.value) || 10)))}
+            className="h-8 text-xs"
+            min={0}
+            max={50}
+            step={5}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Max SoC (%)</Label>
+          <Input
+            type="number"
+            value={maxSoC}
+            onChange={(e) => onMaxSoCChange?.(Math.max(minSoC + 5, Math.min(100, parseInt(e.target.value) || 95)))}
+            className="h-8 text-xs"
+            min={50}
             max={100}
             step={5}
           />
