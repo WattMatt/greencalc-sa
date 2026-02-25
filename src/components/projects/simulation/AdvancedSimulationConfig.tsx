@@ -1313,6 +1313,7 @@ function BatteryCharacteristicsSection({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="none">None</SelectItem>
               <SelectItem value="self-consumption">Self-Consumption</SelectItem>
               <SelectItem value="tou-arbitrage">TOU Arbitrage</SelectItem>
               <SelectItem value="peak-shaving">Peak Shaving</SelectItem>

@@ -10,7 +10,7 @@
 
 // ── Dispatch Strategy Types ──
 
-export type BatteryDispatchStrategy = 'self-consumption' | 'tou-arbitrage' | 'peak-shaving' | 'scheduled';
+export type BatteryDispatchStrategy = 'none' | 'self-consumption' | 'tou-arbitrage' | 'peak-shaving' | 'scheduled';
 
 export interface TimeWindow {
   start: number; // Hour (0-23)
@@ -74,6 +74,12 @@ function isInAnyWindow(hour: number, windows: TimeWindow[]): boolean {
 
 export function getDefaultDispatchConfig(strategy: BatteryDispatchStrategy): DispatchConfig {
   switch (strategy) {
+    case 'none':
+      return {
+        chargeWindows: [],
+        dischargeWindows: [],
+        allowGridCharging: false,
+      };
     case 'self-consumption':
       return {
         chargeWindows: [],
@@ -483,6 +489,10 @@ export function runEnergySimulation(
 
     let result: HourResult;
     switch (dispatchStrategy) {
+      case 'none':
+        // Battery never discharges; override permission
+        result = dispatchSelfConsumption(hourState, { ...permissions, batteryDischargeAllowed: false });
+        break;
       case 'tou-arbitrage':
         result = dispatchTouArbitrage(hourState, h, effectiveDispatchConfig, permissions);
         break;
