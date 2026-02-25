@@ -182,6 +182,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const [batteryChargeCRate, setBatteryChargeCRate] = useState(0.5); // Charging C-Rate
   const [batteryDischargeCRate, setBatteryDischargeCRate] = useState(0.5); // Discharging C-Rate
   const [batteryDoD, setBatteryDoD] = useState(85); // Depth of Discharge %
+  const [batteryMinSoC, setBatteryMinSoC] = useState(10); // Min SoC %
+  const [batteryMaxSoC, setBatteryMaxSoC] = useState(95); // Max SoC %
    
    // Battery dispatch strategy
    const [batteryStrategy, setBatteryStrategy] = useState<BatteryDispatchStrategy>('self-consumption');
@@ -266,6 +268,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       const savedChargeCRate = savedResultsJson?.batteryChargeCRate ?? savedResultsJson?.batteryCRate;
       const savedDischargeCRate = savedResultsJson?.batteryDischargeCRate ?? savedResultsJson?.batteryCRate;
       setBatteryDoD(savedDoD);
+      setBatteryMinSoC(savedResultsJson?.batteryMinSoC ?? 10);
+      setBatteryMaxSoC(savedResultsJson?.batteryMaxSoC ?? 95);
       const savedDcCap = includesBattery ? (lastSavedSimulation.battery_capacity_kwh || 50) : 0;
       const savedPower = includesBattery ? (lastSavedSimulation.battery_power_kw || 25) : 0;
       const derivedAc = Math.round(savedDcCap * savedDoD / 100);
@@ -750,9 +754,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     batteryPower,
     batteryChargePower,
     batteryDischargePower,
+    batteryMinSoC: batteryMinSoC / 100,
+    batteryMaxSoC: batteryMaxSoC / 100,
     dispatchStrategy: batteryStrategy,
     dispatchConfig,
-  }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryStrategy, dispatchConfig]);
+  }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig]);
 
   const effectiveSolarProfile = includesSolar ? solarProfile : loadProfile.map(() => 0);
 
@@ -1038,6 +1044,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           batteryChargeCRate,
           batteryDischargeCRate,
           batteryDoD,
+          batteryMinSoC,
+          batteryMaxSoC,
         })),
       };
 
@@ -1390,6 +1398,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         onBatteryDischargeCRateChange={setBatteryDischargeCRate}
         batteryDoD={batteryDoD}
         onBatteryDoDChange={setBatteryDoD}
+        batteryMinSoC={batteryMinSoC}
+        onBatteryMinSoCChange={setBatteryMinSoC}
+        batteryMaxSoC={batteryMaxSoC}
+        onBatteryMaxSoCChange={setBatteryMaxSoC}
       />
 
       {/* Scenario Comparison */}
@@ -2179,6 +2191,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             const fallbackCRate = ac > 0 ? Math.round(pwr / ac * 100) / 100 : 0.5;
             setBatteryChargeCRate(savedChargeCRate ?? fallbackCRate);
             setBatteryDischargeCRate(savedDischargeCRate ?? fallbackCRate);
+            setBatteryMinSoC(config.batteryMinSoC ?? 10);
+            setBatteryMaxSoC(config.batteryMaxSoC ?? 95);
           }
           if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
             setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
