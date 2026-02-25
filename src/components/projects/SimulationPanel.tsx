@@ -742,17 +742,21 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   // ========================================
   // PHASE 1: Energy Simulation (tariff-independent)
   // ========================================
+  const effectiveSolarCapacity = includesSolar ? solarCapacity : 0;
+
   const energyConfig = useMemo(() => ({
-    solarCapacity,
+    solarCapacity: effectiveSolarCapacity,
     batteryCapacity,
     batteryPower,
     dispatchStrategy: batteryStrategy,
     dispatchConfig,
-  }), [solarCapacity, batteryCapacity, batteryPower, batteryStrategy, dispatchConfig]);
+  }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryStrategy, dispatchConfig]);
+
+  const effectiveSolarProfile = includesSolar ? solarProfile : loadProfile.map(() => 0);
 
   const energyResults = useMemo(() =>
-    runEnergySimulation(loadProfile, solarProfile, energyConfig),
-    [loadProfile, solarProfile, energyConfig]
+    runEnergySimulation(loadProfile, effectiveSolarProfile, energyConfig),
+    [loadProfile, effectiveSolarProfile, energyConfig]
   );
 
   const energyResultsGeneric = useMemo(() =>
@@ -2063,29 +2067,33 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardTitle className="text-2xl">{Math.round(energyResults.totalDailyLoad)} kWh</CardTitle>
           </CardHeader>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Solar Generated</CardDescription>
-            <CardTitle className="text-2xl text-amber-500">
-              {Math.round(energyResults.totalDailySolar)} kWh
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Annual Production</CardDescription>
-            <CardTitle className="text-2xl text-chart-2">
-              {annualPVsystResult 
-                ? Math.round(annualPVsystResult.eGrid * reductionFactor).toLocaleString()
-                : Math.round(energyResults.totalDailySolar * 365).toLocaleString()} kWh
-            </CardTitle>
-            {annualPVsystResult && (
-              <p className="text-xs text-muted-foreground">
-                {Math.round(annualPVsystResult.specificYield * reductionFactor).toLocaleString()} kWh/kWp • PR: {annualPVsystResult.performanceRatio.toFixed(1)}%
-              </p>
-            )}
-          </CardHeader>
-        </Card>
+        {includesSolar && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Solar Generated</CardDescription>
+              <CardTitle className="text-2xl text-amber-500">
+                {Math.round(energyResults.totalDailySolar)} kWh
+              </CardTitle>
+            </CardHeader>
+          </Card>
+        )}
+        {includesSolar && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Annual Production</CardDescription>
+              <CardTitle className="text-2xl text-chart-2">
+                {annualPVsystResult 
+                  ? Math.round(annualPVsystResult.eGrid * reductionFactor).toLocaleString()
+                  : Math.round(energyResults.totalDailySolar * 365).toLocaleString()} kWh
+              </CardTitle>
+              {annualPVsystResult && (
+                <p className="text-xs text-muted-foreground">
+                  {Math.round(annualPVsystResult.specificYield * reductionFactor).toLocaleString()} kWh/kWp • PR: {annualPVsystResult.performanceRatio.toFixed(1)}%
+                </p>
+              )}
+            </CardHeader>
+          </Card>
+        )}
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Grid Import</CardDescription>
