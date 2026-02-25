@@ -1,84 +1,64 @@
 
+# Fix: Wire Discharge/Charge Source Settings into ALL Dispatch Strategies
 
-# Wire Charge/Discharge Strategy Settings into the Simulation Engine
+## Root Cause (3 Bugs)
 
-## Problem
-The Charge Strategy and Discharge Strategy UI panels allow users to:
-- Enable/disable charge sources (PV, Grid, Generator) with per-source TOU period checkboxes
-- Enable/disable discharge destinations (Load, Battery, Grid Export) with per-source TOU period checkboxes
-- Reorder sources by priority
+1. **`solarUsed` is hardcoded**: Line 255 always sets `solarUsed = Math.min(solar, load)`. The engine always sends solar directly to the load -- there is no check for whether "Load" is enabled/disabled as a discharge destination.
 
-However, none of these settings flow into the `EnergySimulationEngine`. The engine only reads `chargeWindows`, `dischargeWindows`, and `allowGridCharging` from the `DispatchConfig`, which are either hardcoded defaults or derived from the legacy single-period TOU selectors.
+2. **Permissions ignored by 3 of 4 strategies**: The `permissions` object (charge/discharge source settings) is computed every hour but only passed to `dispatchSelfConsumption`. The `dispatchTouArbitrage`, `dispatchPeakShaving`, and `dispatchScheduled` functions never receive it, so they ignore all source configs.
 
-## Solution
+3. **`getDischargePermissions` is incomplete**: It only checks the `battery` discharge source. It never checks the `load` or `grid-export` discharge sources, so disabling "Load" in the UI has zero effect.
 
-### 1. Derive `chargeWindows` and `dischargeWindows` from per-source TOU periods
+## Fix Plan
 
-In `SimulationPanel.tsx`, when the `dispatchConfig.chargeSources` or `dispatchConfig.dischargeSources` change, automatically compute merged `chargeWindows` and `dischargeWindows` by unioning all enabled sources' TOU periods via the existing `touPeriodToWindows()` helper.
+### File: `src/components/projects/simulation/EnergySimulationEngine.ts`
 
-**File: `src/components/projects/SimulationPanel.tsx`**
-- Add a `useMemo` or `useEffect` that watches `dispatchConfig.chargeSources` and `dispatchConfig.dischargeSources`
-- For charge: collect all unique TOU periods from enabled charge sources, convert each to windows via `touPeriodToWindows()`, merge into `chargeWindows`
-- For discharge: same logic for enabled discharge sources into `dischargeWindows`
-- Set `allowGridCharging` = whether the 'grid' charge source is enabled
-- Update `dispatchConfig` with these derived windows
+**A. Expand `getDischargePermissions` to return all three flags**
 
-### 2. Update `AdvancedSimulationConfig.tsx` to propagate TOU changes
-
-When a user toggles a TOU period checkbox on any charge or discharge source, the `onChange` handler must also recompute and update the parent's `chargeWindows`/`dischargeWindows` on the `dispatchConfig`.
-
-**File: `src/components/projects/simulation/AdvancedSimulationConfig.tsx`**
-- In `ChargeSourcesList` `onChange`: after updating `chargeSources`, also recompute `chargeWindows` from merged TOU periods
-- In `DischargeSourcesList` `onChange`: after updating `dischargeSources`, also recompute `dischargeWindows`
-- Pass `touPeriodToWindows` function down to these list components
-
-### 3. Enhance the Engine to respect source-level granularity
-
-**File: `src/components/projects/simulation/EnergySimulationEngine.ts`**
-
-Modify the dispatch functions to use `chargeSources` and `dischargeSources` from the config:
-
-- **Charging logic**: For each hour, check which charge sources are enabled AND have TOU periods matching the current hour. PV always charges from excess solar regardless. Grid charging only occurs if the grid source is enabled and the current hour falls within its TOU periods.
-- **Discharging logic**: Battery only discharges during hours matching the enabled discharge sources' TOU periods.
-- **Source priority**: Process sources in priority order (array index). Higher-priority sources are used first.
-
-Key engine changes:
-- Add a helper `isHourInSourceTouPeriods(hour, source, touPeriodToWindowsFn)` that checks if the current hour matches any of a source's enabled TOU periods
-- Modify `dispatchSelfConsumption` to check charge/discharge source configs
-- Modify `dispatchTouArbitrage`, `dispatchPeakShaving`, `dispatchScheduled` similarly
-- Pass `chargeSources` and `dischargeSources` through the `DispatchConfig` (already defined, just unused)
-
-### 4. Pass `touPeriodToWindows` into the engine config
-
-**File: `src/components/projects/simulation/EnergySimulationEngine.ts`**
-
-Add an optional `touPeriodToWindows` function to `EnergySimulationConfig` so the engine can resolve TOU period names to hour windows at simulation time.
-
-**File: `src/components/projects/SimulationPanel.tsx`**
-
-Pass `touPeriodToWindows` into the `energyConfig` object.
-
-## Technical Details
-
-### Window Merging Logic
 ```text
-For each enabled source:
-  For each selected TOU period (e.g. ['off-peak', 'standard']):
-    windows += touPeriodToWindows(period)
-Deduplicate overlapping windows
-Set on dispatchConfig.chargeWindows / dischargeWindows
+Current return: { batteryDischargeAllowed: boolean }
+New return:     { loadDischargeAllowed: boolean; batteryDischargeAllowed: boolean; gridExportAllowed: boolean }
 ```
 
-### Engine Hour Check
+Check each discharge source (`load`, `battery`, `grid-export`) for enabled status and TOU period match at the given hour.
+
+**B. Add permissions parameter to all dispatch functions**
+
+- `dispatchTouArbitrage(s, hour, config)` --> `dispatchTouArbitrage(s, hour, config, permissions)`
+- `dispatchPeakShaving(s, hour, config)` --> `dispatchPeakShaving(s, hour, config, permissions)`
+- `dispatchScheduled(s, hour, config)` --> `dispatchScheduled(s, hour, config, permissions)`
+
+**C. Respect `loadDischargeAllowed` in solar dispatch**
+
+In every dispatch function, change:
 ```text
-For hour h:
-  canCharge = any enabled charge source has a TOU period whose window contains h
-  canDischarge = any enabled discharge source has a TOU period whose window contains h
-  gridChargeAllowed = grid source enabled AND h is in grid source's TOU windows
+Before: solarUsed = Math.min(solar, load)       // always feeds load
+After:  solarUsed = loadDischargeAllowed ? Math.min(solar, load) : 0
 ```
+
+When `loadDischargeAllowed = false`:
+- Solar does NOT offset load; the full load is met by grid (or battery if allowed)
+- All solar generation goes to battery (if charge allowed) or grid export (if allowed)
+- `netLoad` effectively equals `load` (solar is ignored for load purposes)
+
+**D. Respect `gridExportAllowed` in export logic**
+
+When `gridExportAllowed = false`, any excess solar that cannot go to battery is curtailed (set to 0) instead of exported.
+
+**E. Pass permissions from the main loop**
+
+Update the switch statement (lines 451-465) to pass `permissions` to all four dispatch functions, not just self-consumption.
+
+## Summary of Behavioural Changes
+
+| Discharge Source | Enabled | Effect |
+|---|---|---|
+| Load | OFF | Solar does not offset load. Load is met by grid/battery only. Solar goes to battery or export. |
+| Load | ON  | Solar offsets load first (current behaviour). |
+| Battery | OFF | Battery never discharges to cover load shortfall. |
+| Battery | ON  | Battery discharges during matching TOU periods. |
+| Grid Export | OFF | Excess solar that can't go to battery is curtailed. |
+| Grid Export | ON  | Excess solar exported to grid. |
 
 ### Files Modified
-1. `src/components/projects/simulation/EnergySimulationEngine.ts` -- Engine uses `chargeSources`/`dischargeSources` and their TOU periods
-2. `src/components/projects/SimulationPanel.tsx` -- Pass `touPeriodToWindows` to engine config; derive windows from sources
-3. `src/components/projects/simulation/AdvancedSimulationConfig.tsx` -- Propagate TOU checkbox changes to `chargeWindows`/`dischargeWindows` on `dispatchConfig`
-
+1. `src/components/projects/simulation/EnergySimulationEngine.ts` -- All changes are in this single file
