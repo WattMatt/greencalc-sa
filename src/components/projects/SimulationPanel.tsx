@@ -2037,6 +2037,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             setBatteryMinSoC(config.batteryMinSoC ?? 10);
             setBatteryMaxSoC(config.batteryMaxSoC ?? 95);
           }
+          // Load battery dispatch strategy if present
+          if (config.batteryStrategy) {
+            setBatteryStrategy(config.batteryStrategy as BatteryDispatchStrategy);
+            setDispatchConfig(config.dispatchConfig ?? getDefaultDispatchConfig(config.batteryStrategy as BatteryDispatchStrategy));
+          }
+          if (config.chargeTouPeriod) setChargeTouPeriod(config.chargeTouPeriod as TOUPeriod);
+          if (config.dischargeTouPeriod) setDischargeTouPeriod(config.dischargeTouPeriod as TOUPeriod);
           if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
             setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
           }
