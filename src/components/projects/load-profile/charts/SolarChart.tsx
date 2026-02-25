@@ -23,6 +23,8 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
   const totalBatteryCharge = chartData.reduce((sum, d) => sum + (d.batteryCharge || 0), 0);
   const totalGridExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
   const hasSolarUsedData = chartData.some(d => d.solarUsed !== undefined);
+  // Effective generation = what was actually consumed/used (solarUsed when engine data available)
+  const effectiveGeneration = hasSolarUsedData ? totalSolarUsed : totalPv;
   const energyGained = totalPv - total1to1;
   const netBenefit = energyGained - totalClipping;
 
@@ -52,7 +54,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
               </span>
               <span className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-sm bg-amber-500/60" />
-                AC: {totalPv.toFixed(0)} {unit}
+                AC: {effectiveGeneration.toFixed(0)} {unit}
               </span>
               {totalClipping > 0 && (
                 <span className="text-orange-500">
@@ -61,10 +63,10 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
               )}
             </>
           )}
-          {!dcAcRatio || dcAcRatio <= 1 ? (
+          {(!dcAcRatio || dcAcRatio <= 1) ? (
             <span className="flex items-center gap-1">
               <div className="w-2 h-2 rounded-sm bg-amber-500/60" />
-              Total: {totalPv.toFixed(0)} {unit}
+              Total: {effectiveGeneration.toFixed(0)} {unit}
             </span>
           ) : null}
           {show1to1Comparison && dcAcRatio > 1 && (
@@ -236,7 +238,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
                       </p>
                     )}
                     <p className="text-amber-600">
-                      AC Inverter Output: {pv.toFixed(1)} {unit}
+                      {hasSolarUsedData ? "Consumed" : "AC Inverter Output"}: {(dataPoint?.solarUsed ?? pv).toFixed(1)} {unit}
                     </p>
                     {dcAcRatio > 1 && clipping > 0 && (
                       <p className="text-orange-500">Clipping Loss: {clipping.toFixed(1)} {unit}</p>
@@ -291,10 +293,10 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
               />
             )}
 
-            {/* AC Output Area (amber - clips flat at inverter limit) */}
+            {/* AC Output Area - use solarUsed (dispatched) when engine data available, else raw pvGeneration */}
             <Area 
               type="monotone" 
-              dataKey="pvGeneration" 
+              dataKey={hasSolarUsedData ? "solarUsed" : "pvGeneration"}
               stroke="hsl(38 92% 50%)" 
               strokeWidth={2} 
               fill="url(#pvAcGradient)" 
