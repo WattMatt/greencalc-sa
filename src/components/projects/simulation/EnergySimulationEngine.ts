@@ -39,6 +39,7 @@ export type DischargeSourceId = 'load' | 'battery' | 'grid-export';
 export interface DischargeSource {
   id: DischargeSourceId;
   enabled: boolean;
+  dischargeTouPeriods?: ('off-peak' | 'standard' | 'peak')[];
 }
 
 export const DEFAULT_DISCHARGE_SOURCES: DischargeSource[] = [
