@@ -1,25 +1,71 @@
 
 
-# Add Vertical Dashed Tick Lines to TOU Hour Grid
+## Add "Solar Characteristics" Section with Discharge Sources
 
-## What
-Replace the current horizontal dashed tick marks (on the hour-axis labels row) with **vertical dashed lines** that span the full height of each season's grid -- crossing through all three day-type rows (Weekday, Saturday, Sunday) and the label row at every 3-hour interval (0:00, 3:00, 6:00, ... 21:00).
+### Overview
+Add a new collapsible section called **"Solar Characteristics"** above the existing "Battery Characteristics" section. It will contain a **"Discharge Sources"** reorderable list -- similar in design to the existing "Charge Sources" list -- that defines the priority order for dispatching solar PV energy (e.g., Load first, then Battery, then Grid Export).
 
-## How
+---
 
-### File: `src/components/settings/TOUSettingsCard.tsx` -- `HourGrid` component
+### Changes
 
-Restructure the grid to use a **CSS Grid with 24 columns** and overlay vertical dashed lines using `position: relative` on the grid container and absolutely-positioned pseudo-elements or thin divider elements at every 3rd column.
+#### 1. Data Model (`EnergySimulationEngine.ts`)
 
-Specifically:
+- Add a new type `DischargeSourceId` with values: `'load'`, `'battery'`, `'grid-export'`
+- Add a new `DischargeSource` interface (same shape as `ChargeSource`: `id` + `enabled`)
+- Add a `DEFAULT_DISCHARGE_SOURCES` constant with default priority order:
+  1. Load (enabled)
+  2. Battery (enabled)
+  3. Grid Export (enabled)
+- Add `dischargeSources?: DischargeSource[]` to the `DispatchConfig` interface
 
-1. **Wrap the entire grid** (all 3 day-type rows + the hour-axis labels) in a single `relative` container.
+#### 2. UI -- New Solar Characteristics Section (`AdvancedSimulationConfig.tsx`)
 
-2. **Overlay vertical tick lines**: Render 8 thin absolutely-positioned `div` elements (at columns 0, 3, 6, 9, 12, 15, 18, 21) that span the full height of the container. Each line uses a dashed border-left style: `border-left: 1px dashed` with `border-muted-foreground/30` colour. They are positioned using `left: calc((h / 24) * 100%)` and `top: 0; bottom: 0`.
+- Add a new `SolarCharacteristicsSection` component containing:
+  - A `DischargeSourcesList` component (reusing the same drag-to-reorder pattern as `ChargeSourcesList`)
+  - Labels: Load, Battery, Grid Export
+  - Each item: drag handle, checkbox toggle, label, priority badge
+- Add a new `CollapsibleSection` with a `Sun` icon titled "Solar Characteristics" placed **above** the Battery Characteristics section (around line 286)
+- This section is always visible (no enable/disable toggle needed -- it's configuration, not a feature toggle)
 
-3. **Remove the existing `border-t border-dashed`** from the hour-axis label cells since the vertical lines now provide the alignment cues.
+#### 3. Props Threading
 
-4. Keep the hour-axis label text (`0:00`, `3:00`, etc.) positioned below each vertical line for readability.
+- Add `dischargeSources` and `onDischargeSourcesChange` props to `AdvancedSimulationConfigPanel`
+- Thread these from `SimulationPanel.tsx` where the dispatch config state lives
+- Store discharge sources within the existing `dispatchConfig` state (as `dispatchConfig.dischargeSources`)
 
-This is a CSS/layout-only change within the `HourGrid` component -- no logic or state changes required.
+#### 4. State Persistence
 
+- Discharge sources will be persisted alongside the existing `dispatchConfig` in `results_json` -- no new state variables needed since it's part of `DispatchConfig`
+
+---
+
+### Technical Details
+
+**New types in `EnergySimulationEngine.ts`:**
+```typescript
+export type DischargeSourceId = 'load' | 'battery' | 'grid-export';
+
+export interface DischargeSource {
+  id: DischargeSourceId;
+  enabled: boolean;
+}
+
+export const DEFAULT_DISCHARGE_SOURCES: DischargeSource[] = [
+  { id: 'load', enabled: true },
+  { id: 'battery', enabled: true },
+  { id: 'grid-export', enabled: true },
+];
+```
+
+**New UI placement order in the Advanced Simulation panel:**
+1. Quick Presets / My Presets (existing)
+2. **Solar Characteristics** (NEW -- with Discharge Sources list)
+3. Battery Characteristics (existing -- with Charge Sources list)
+4. Seasonal Variation (existing)
+5. Degradation Modeling (existing)
+6. Financial Sophistication (existing)
+7. Grid Constraints (existing)
+8. Load Growth (existing)
+
+The `DischargeSourcesList` component will mirror the existing `ChargeSourcesList` drag-and-drop pattern for a consistent user experience.
