@@ -1070,7 +1070,7 @@ function DischargeSourcesList({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label className="text-xs font-medium">Discharge Sources</Label>
+        <Label className="text-xs font-medium">Discharge Strategy</Label>
         <span className="text-[10px] text-muted-foreground">Top = highest priority</span>
       </div>
       <div className="rounded border bg-muted/30 divide-y divide-border">
@@ -1085,21 +1085,56 @@ function DischargeSourcesList({
               setDragIdx(null);
             }}
             onDragEnd={() => setDragIdx(null)}
-            className={`flex items-center gap-2 px-2 py-1.5 text-xs cursor-grab active:cursor-grabbing transition-opacity ${
+            className={`px-2 py-1.5 text-xs cursor-grab active:cursor-grabbing transition-opacity ${
               dragIdx === idx ? 'opacity-50' : ''
             }`}
           >
-            <GripVertical className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-            <Checkbox
-              checked={source.enabled}
-              onCheckedChange={(v) => {
-                const next = sources.map((s, i) => i === idx ? { ...s, enabled: !!v } : s);
-                onChange?.(next);
-              }}
-              className="h-3.5 w-3.5"
-            />
-            <span className={source.enabled ? '' : 'text-muted-foreground'}>{DISCHARGE_SOURCE_LABELS[source.id] || source.id}</span>
-            <Badge variant="outline" className="ml-auto text-[9px] px-1 py-0">{idx + 1}</Badge>
+            <div className="flex items-center gap-2">
+              <GripVertical className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <Checkbox
+                checked={source.enabled}
+                onCheckedChange={(v) => {
+                  const next = sources.map((s, i) => i === idx ? { ...s, enabled: !!v } : s);
+                  onChange?.(next);
+                }}
+                className="h-3.5 w-3.5"
+              />
+              <span className={`shrink-0 ${source.enabled ? '' : 'text-muted-foreground'}`}>{DISCHARGE_SOURCE_LABELS[source.id] || source.id}</span>
+              {source.enabled && (
+                <>
+                  <span className="text-[9px] text-muted-foreground shrink-0 ml-1">Discharge during</span>
+                  {([
+                    { value: 'off-peak' as const, label: 'Off-Peak' },
+                    { value: 'standard' as const, label: 'Standard' },
+                    { value: 'peak' as const, label: 'Peak' },
+                  ]).map((period) => {
+                    const periods = source.dischargeTouPeriods ?? ['peak'];
+                    const checked = periods.includes(period.value);
+                    return (
+                      <label key={period.value} className="flex items-center gap-1 text-[10px] cursor-pointer shrink-0">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) => {
+                            let next: ('off-peak' | 'standard' | 'peak')[];
+                            if (v) {
+                              next = [...periods, period.value];
+                            } else {
+                              next = periods.filter(p => p !== period.value);
+                              if (next.length === 0) return;
+                            }
+                            const updated = sources.map((s, i) => i === idx ? { ...s, dischargeTouPeriods: next } : s);
+                            onChange?.(updated);
+                          }}
+                          className="h-3 w-3"
+                        />
+                        {period.label}
+                      </label>
+                    );
+                  })}
+                </>
+              )}
+              <Badge variant="outline" className="ml-auto text-[9px] px-1 py-0">{idx + 1}</Badge>
+            </div>
           </div>
         ))}
       </div>
