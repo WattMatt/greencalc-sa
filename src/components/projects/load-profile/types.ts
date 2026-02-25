@@ -211,6 +211,7 @@ export interface ChartDataPoint {
   pvDcOutput?: number;
   pvClipping?: number;
   pv1to1Baseline?: number;
+  solarUsed?: number;
   netLoad?: number;
   gridImport?: number;
   gridExport?: number;

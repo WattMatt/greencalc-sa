@@ -19,6 +19,10 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
   const total1to1 = chartData.reduce((sum, d) => sum + (d.pv1to1Baseline || 0), 0);
   const peakDc = Math.max(...chartData.map((d) => d.pvDcOutput || 0));
   const totalClipping = chartData.reduce((sum, d) => sum + (d.pvClipping || 0), 0);
+  const totalSolarUsed = chartData.reduce((sum, d) => sum + (d.solarUsed ?? d.pvGeneration ?? 0), 0);
+  const totalBatteryCharge = chartData.reduce((sum, d) => sum + (d.batteryCharge || 0), 0);
+  const totalGridExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
+  const hasSolarUsedData = chartData.some(d => d.solarUsed !== undefined);
   const energyGained = totalPv - total1to1;
   const netBenefit = energyGained - totalClipping;
 
@@ -78,34 +82,59 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
         </div>
       </div>
       
-      {/* Stats badges for DC/AC comparison */}
-      {dcAcRatio > 1 && (
-        <div className="flex flex-wrap gap-2 text-[10px]">
-          {energyGained > 0 && (
-            <Badge variant="outline" className="text-emerald-600 border-emerald-600/30 bg-emerald-500/10">
-              +{energyGained.toFixed(0)} {unit} gained vs 1:1
+      {/* Stats badges */}
+      <div className="flex flex-wrap gap-2 text-[10px]">
+        {/* Dispatch breakdown badges - show when engine data is available */}
+        {hasSolarUsedData && (
+          <>
+            <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-500/10">
+              To Load: {totalSolarUsed.toFixed(0)} {unit}
             </Badge>
-          )}
-          {totalClipping > 0 && (
-            <Badge variant="outline" className="text-orange-600 border-orange-600/30 bg-orange-500/10">
-              -{totalClipping.toFixed(0)} {unit} clipped ({((totalClipping / totalDc) * 100).toFixed(1)}%)
-            </Badge>
-          )}
-          {/* Net benefit annotation */}
-          {(energyGained > 0 || totalClipping > 0) && (
-            <Badge 
-              variant="outline" 
-              className={`font-semibold ${
-                netBenefit >= 0 
-                  ? "text-blue-600 border-blue-600/30 bg-blue-500/10" 
-                  : "text-red-600 border-red-600/30 bg-red-500/10"
-              }`}
-            >
-              Net: {netBenefit >= 0 ? "+" : ""}{netBenefit.toFixed(0)} {unit} ({netBenefit >= 0 ? "✓" : "✗"} oversizing {netBenefit >= 0 ? "beneficial" : "not beneficial"})
-            </Badge>
-          )}
-        </div>
-      )}
+            {totalBatteryCharge > 0 && (
+              <Badge variant="outline" className="text-blue-600 border-blue-600/30 bg-blue-500/10">
+                To Battery: {totalBatteryCharge.toFixed(0)} {unit}
+              </Badge>
+            )}
+            {totalGridExport > 0 && (
+              <Badge variant="outline" className="text-emerald-600 border-emerald-600/30 bg-emerald-500/10">
+                Exported: {totalGridExport.toFixed(0)} {unit}
+              </Badge>
+            )}
+            {totalPv > 0 && (totalPv - totalSolarUsed - totalBatteryCharge - totalGridExport) > 0.5 && (
+              <Badge variant="outline" className="text-muted-foreground border-border">
+                Curtailed: {(totalPv - totalSolarUsed - totalBatteryCharge - totalGridExport).toFixed(0)} {unit}
+              </Badge>
+            )}
+          </>
+        )}
+        {/* DC/AC comparison badges */}
+        {dcAcRatio > 1 && (
+          <>
+            {energyGained > 0 && (
+              <Badge variant="outline" className="text-emerald-600 border-emerald-600/30 bg-emerald-500/10">
+                +{energyGained.toFixed(0)} {unit} gained vs 1:1
+              </Badge>
+            )}
+            {totalClipping > 0 && (
+              <Badge variant="outline" className="text-orange-600 border-orange-600/30 bg-orange-500/10">
+                -{totalClipping.toFixed(0)} {unit} clipped ({((totalClipping / totalDc) * 100).toFixed(1)}%)
+              </Badge>
+            )}
+            {(energyGained > 0 || totalClipping > 0) && (
+              <Badge 
+                variant="outline" 
+                className={`font-semibold ${
+                  netBenefit >= 0 
+                    ? "text-blue-600 border-blue-600/30 bg-blue-500/10" 
+                    : "text-red-600 border-red-600/30 bg-red-500/10"
+                }`}
+              >
+                Net: {netBenefit >= 0 ? "+" : ""}{netBenefit.toFixed(0)} {unit} ({netBenefit >= 0 ? "✓" : "✗"} oversizing {netBenefit >= 0 ? "beneficial" : "not beneficial"})
+              </Badge>
+            )}
+          </>
+        )}
+      </div>
       
       <div className="h-[180px]">
         <ResponsiveContainer width="100%" height="100%">
