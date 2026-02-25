@@ -1,33 +1,25 @@
 
 
-# TOU Settings Card UI and Legend Updates
+# Add Vertical Dashed Tick Lines to TOU Hour Grid
 
-## Summary
-Update the TOU Settings Card to:
-1. Remove the helper sentence about selected months
-2. Redesign the legend with season colours (High-Demand Indigo, Low-Demand Violet) alongside existing period colours
-3. Rename "High-Demand Season Months" to "Demand Season Months" with month badges toggling between High (Indigo) and Low (Violet) colours
-4. No database schema changes needed -- the existing `tariff_rates` table already has `season` (high/low/all) and `tou` (peak/standard/off_peak/all) columns that align with the TOU settings
+## What
+Replace the current horizontal dashed tick marks (on the hour-axis labels row) with **vertical dashed lines** that span the full height of each season's grid -- crossing through all three day-type rows (Weekday, Saturday, Sunday) and the label row at every 3-hour interval (0:00, 3:00, 6:00, ... 21:00).
 
-## Changes
+## How
 
-### 1. `src/components/projects/load-profile/types.ts`
-- Add `SEASON_COLORS` constant alongside `TOU_COLORS`:
-  - High-Demand: Deep Indigo `hsl(230 70% 50%)`
-  - Low-Demand: Soft Violet `hsl(270 50% 60%)`
+### File: `src/components/settings/TOUSettingsCard.tsx` -- `HourGrid` component
 
-### 2. `src/components/settings/TOUSettingsCard.tsx`
-- **Remove** the paragraph: "Selected months use High-Demand Season periods. All other months use Low-Demand."
-- **Update legend** to show all 5 items in order: High-Demand, Low-Demand, Peak, Standard, Off-Peak (using `SEASON_COLORS` for the first two)
-- **Rename** heading from "High-Demand Season Months" to "Demand Season Months"
-- **Update month badges**: Instead of toggling between `default`/`outline` variants, each badge gets a background colour:
-  - High-season months: Indigo background (from `SEASON_COLORS`)
-  - Low-season months: Violet background (from `SEASON_COLORS`)
-  - Clicking toggles the month between high and low season (no "unselected" state -- every month is always one or the other)
+Restructure the grid to use a **CSS Grid with 24 columns** and overlay vertical dashed lines using `position: relative` on the grid container and absolutely-positioned pseudo-elements or thin divider elements at every 3rd column.
 
-### Technical Details
-- The `highSeasonMonths` array in `TOUSettings` already drives which months are high vs low season
-- `toggleMonth` logic remains the same -- months not in `highSeasonMonths` are implicitly low-demand
-- All simulation consumers (`getTOUPeriod`, `touPeriodToWindows`, chart background shading) already use `highSeasonMonths` to determine the season, so no additional wiring is needed
-- The `tariff_rates` table's `season` enum (high/low/all) already maps correctly to the TOU settings
+Specifically:
+
+1. **Wrap the entire grid** (all 3 day-type rows + the hour-axis labels) in a single `relative` container.
+
+2. **Overlay vertical tick lines**: Render 8 thin absolutely-positioned `div` elements (at columns 0, 3, 6, 9, 12, 15, 18, 21) that span the full height of the container. Each line uses a dashed border-left style: `border-left: 1px dashed` with `border-muted-foreground/30` colour. They are positioned using `left: calc((h / 24) * 100%)` and `top: 0; bottom: 0`.
+
+3. **Remove the existing `border-t border-dashed`** from the hour-axis label cells since the vertical lines now provide the alignment cues.
+
+4. Keep the hour-axis label text (`0:00`, `3:00`, etc.) positioned below each vertical line for readability.
+
+This is a CSS/layout-only change within the `HourGrid` component -- no logic or state changes required.
 
