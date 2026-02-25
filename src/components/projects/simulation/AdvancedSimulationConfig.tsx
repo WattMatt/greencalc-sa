@@ -1265,11 +1265,11 @@ function BatteryCharacteristicsSection({
         }}
       />
 
-      {/* Dispatch Strategy */}
+      {/* Discharge Strategy */}
       <Separator className="my-2" />
       <div className="space-y-3">
         <div className="space-y-1">
-          <Label className="text-xs">Dispatch Strategy</Label>
+          <Label className="text-xs">Discharge Strategy</Label>
           <Select
             value={batteryStrategy}
             onValueChange={(v: BatteryDispatchStrategy) => {
