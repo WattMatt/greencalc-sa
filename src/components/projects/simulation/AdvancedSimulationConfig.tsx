@@ -968,10 +968,14 @@ function BatteryCharacteristicsSection({
           <Input
             type="number"
             value={minSoC}
-            onChange={(e) => onMinSoCChange?.(Math.max(0, Math.min(maxSoC - 5, parseInt(e.target.value) || 10)))}
+            onChange={(e) => {
+              const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+              onMinSoCChange?.(val);
+              if (val >= maxSoC) onMaxSoCChange?.(Math.min(100, val + 5));
+            }}
             className="h-8 text-xs"
             min={0}
-            max={50}
+            max={100}
             step={5}
           />
         </div>
@@ -980,9 +984,13 @@ function BatteryCharacteristicsSection({
           <Input
             type="number"
             value={maxSoC}
-            onChange={(e) => onMaxSoCChange?.(Math.max(minSoC + 5, Math.min(100, parseInt(e.target.value) || 95)))}
+            onChange={(e) => {
+              const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 100));
+              onMaxSoCChange?.(val);
+              if (val <= minSoC) onMinSoCChange?.(Math.max(0, val - 5));
+            }}
             className="h-8 text-xs"
-            min={50}
+            min={0}
             max={100}
             step={5}
           />
