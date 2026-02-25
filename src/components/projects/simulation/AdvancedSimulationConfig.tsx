@@ -1003,26 +1003,7 @@ function ChargeSourcesList({
               <Badge variant="outline" className="ml-auto text-[9px] px-1 py-0">{idx + 1}</Badge>
             </div>
             {source.enabled && (
-              <div className="grid grid-cols-2 gap-2 mt-1.5 ml-8">
-                <div className="space-y-0.5">
-                  <Label className="text-[9px] text-muted-foreground">Discharge during</Label>
-                  <Select
-                    value={source.dischargeTouPeriod ?? 'peak'}
-                    onValueChange={(v) => {
-                      const next = sources.map((s, i) => i === idx ? { ...s, dischargeTouPeriod: v as 'off-peak' | 'standard' | 'peak' } : s);
-                      onChange(next);
-                    }}
-                  >
-                    <SelectTrigger className="h-6 text-[10px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
-                      <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
-                      <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="mt-1.5 ml-8">
                 <div className="space-y-0.5">
                   <Label className="text-[9px] text-muted-foreground">Charge during</Label>
                   <Select
