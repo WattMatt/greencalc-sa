@@ -1,71 +1,40 @@
 
+## Fix: Battery Details Not Persisting on Simulation Reload
 
-## Add "Solar Characteristics" Section with Discharge Sources
+### Problem Identified
 
-### Overview
-Add a new collapsible section called **"Solar Characteristics"** above the existing "Battery Characteristics" section. It will contain a **"Discharge Sources"** reorderable list -- similar in design to the existing "Charge Sources" list -- that defines the priority order for dispatching solar PV energy (e.g., Load first, then Battery, then Grid Export).
+There are two issues with battery detail persistence:
 
----
+1. **`onLoadSimulation` callback is incomplete**: When loading a saved simulation from the history dropdown, the handler (around line 2019) restores solar, PV config, inverter config, advanced config, and system costs -- but **does NOT restore** the battery dispatch settings:
+   - `batteryStrategy` (e.g., "tou-arbitrage")
+   - `dispatchConfig` (including `chargeSources`, `dischargeSources`, `allowGridCharging`, windows)
+   - `chargeTouPeriod`
+   - `dischargeTouPeriod`
 
-### Changes
+   These are only restored during the initial auto-load (lines 386-392), meaning switching between saved simulations loses all battery dispatch configuration.
 
-#### 1. Data Model (`EnergySimulationEngine.ts`)
+2. **New fields not yet persisted**: The recently added `chargeSources` and `dischargeSources` arrays within `dispatchConfig` have not been saved to the database yet (they only exist in memory). Once a save occurs, they will persist correctly since they are part of the `dispatchConfig` object which IS included in the save payload.
 
-- Add a new type `DischargeSourceId` with values: `'load'`, `'battery'`, `'grid-export'`
-- Add a new `DischargeSource` interface (same shape as `ChargeSource`: `id` + `enabled`)
-- Add a `DEFAULT_DISCHARGE_SOURCES` constant with default priority order:
-  1. Load (enabled)
-  2. Battery (enabled)
-  3. Grid Export (enabled)
-- Add `dischargeSources?: DischargeSource[]` to the `DispatchConfig` interface
+### Fix
 
-#### 2. UI -- New Solar Characteristics Section (`AdvancedSimulationConfig.tsx`)
+**File: `src/components/projects/SimulationPanel.tsx`**
 
-- Add a new `SolarCharacteristicsSection` component containing:
-  - A `DischargeSourcesList` component (reusing the same drag-to-reorder pattern as `ChargeSourcesList`)
-  - Labels: Load, Battery, Grid Export
-  - Each item: drag handle, checkbox toggle, label, priority badge
-- Add a new `CollapsibleSection` with a `Sun` icon titled "Solar Characteristics" placed **above** the Battery Characteristics section (around line 286)
-- This section is always visible (no enable/disable toggle needed -- it's configuration, not a feature toggle)
+Add the missing battery dispatch restoration to the `onLoadSimulation` callback (around lines 2038-2039, after the existing battery field restoration):
 
-#### 3. Props Threading
-
-- Add `dischargeSources` and `onDischargeSourcesChange` props to `AdvancedSimulationConfigPanel`
-- Thread these from `SimulationPanel.tsx` where the dispatch config state lives
-- Store discharge sources within the existing `dispatchConfig` state (as `dispatchConfig.dischargeSources`)
-
-#### 4. State Persistence
-
-- Discharge sources will be persisted alongside the existing `dispatchConfig` in `results_json` -- no new state variables needed since it's part of `DispatchConfig`
-
----
-
-### Technical Details
-
-**New types in `EnergySimulationEngine.ts`:**
 ```typescript
-export type DischargeSourceId = 'load' | 'battery' | 'grid-export';
-
-export interface DischargeSource {
-  id: DischargeSourceId;
-  enabled: boolean;
+// Load battery dispatch strategy if present
+if (config.batteryStrategy) {
+  setBatteryStrategy(config.batteryStrategy);
+  setDispatchConfig(config.dispatchConfig ?? getDefaultDispatchConfig(config.batteryStrategy));
 }
-
-export const DEFAULT_DISCHARGE_SOURCES: DischargeSource[] = [
-  { id: 'load', enabled: true },
-  { id: 'battery', enabled: true },
-  { id: 'grid-export', enabled: true },
-];
+if (config.chargeTouPeriod) setChargeTouPeriod(config.chargeTouPeriod);
+if (config.dischargeTouPeriod) setDischargeTouPeriod(config.dischargeTouPeriod);
 ```
 
-**New UI placement order in the Advanced Simulation panel:**
-1. Quick Presets / My Presets (existing)
-2. **Solar Characteristics** (NEW -- with Discharge Sources list)
-3. Battery Characteristics (existing -- with Charge Sources list)
-4. Seasonal Variation (existing)
-5. Degradation Modeling (existing)
-6. Financial Sophistication (existing)
-7. Grid Constraints (existing)
-8. Load Growth (existing)
+This mirrors the exact same pattern already used in the auto-load block (lines 386-392).
 
-The `DischargeSourcesList` component will mirror the existing `ChargeSourcesList` drag-and-drop pattern for a consistent user experience.
+### Summary of Changes
+
+- **1 file edited**: `src/components/projects/SimulationPanel.tsx`
+- **Lines added**: ~6 lines in the `onLoadSimulation` callback
+- **Risk**: Low -- this is additive code following an established pattern
