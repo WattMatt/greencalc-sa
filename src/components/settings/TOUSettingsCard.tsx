@@ -2,8 +2,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RotateCcw, Clock } from "lucide-react";
+import { Lock, Unlock, Clock } from "lucide-react";
 import { useTOUSettings } from "@/hooks/useTOUSettings";
+import { useState } from "react";
 import {
   TOUPeriod,
   TOUHourMap,
@@ -12,7 +13,7 @@ import {
   TOU_COLORS,
   MONTH_NAMES,
 } from "@/components/projects/load-profile/types";
-import { toast } from "sonner";
+
 
 const PERIOD_CYCLE: TOUPeriod[] = ["off-peak", "standard", "peak"];
 const DAY_TYPES = ["weekday", "saturday", "sunday"] as const;
@@ -70,13 +71,15 @@ function HourGrid({ seasonConfig, onCellClick }: HourGridProps) {
 }
 
 export function TOUSettingsCard() {
-  const { touSettings, updateTOUSettings, resetToDefaults } = useTOUSettings();
+  const { touSettings, updateTOUSettings } = useTOUSettings();
+  const [locked, setLocked] = useState(true);
 
   const handleCellClick = (
     seasonKey: "highSeason" | "lowSeason",
     dayType: keyof TOUSeasonConfig,
     hour: number
   ) => {
+    if (locked) return;
     const currentPeriod = touSettings[seasonKey][dayType][hour] || "off-peak";
     const newPeriod = cyclePeriod(currentPeriod);
     const newHourMap: TOUHourMap = { ...touSettings[seasonKey][dayType], [hour]: newPeriod };
@@ -86,16 +89,12 @@ export function TOUSettingsCard() {
   };
 
   const toggleMonth = (monthIndex: number) => {
+    if (locked) return;
     const current = touSettings.highSeasonMonths;
     const newMonths = current.includes(monthIndex)
       ? current.filter((m) => m !== monthIndex)
       : [...current, monthIndex].sort((a, b) => a - b);
     updateTOUSettings({ ...touSettings, highSeasonMonths: newMonths });
-  };
-
-  const handleReset = () => {
-    resetToDefaults();
-    toast.success("TOU periods reset to Megaflex defaults");
   };
 
   return (
@@ -111,9 +110,9 @@ export function TOUSettingsCard() {
               Define Peak, Standard, and Off-Peak windows for each season. Click a cell to cycle through periods.
             </CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={handleReset}>
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Reset to Defaults
+          <Button variant={locked ? "outline" : "default"} size="sm" onClick={() => setLocked(!locked)}>
+            {locked ? <Lock className="h-4 w-4 mr-2" /> : <Unlock className="h-4 w-4 mr-2" />}
+            {locked ? "Locked" : "Unlocked"}
           </Button>
         </div>
       </CardHeader>
