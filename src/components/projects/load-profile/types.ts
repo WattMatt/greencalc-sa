@@ -85,11 +85,96 @@ export const DEFAULT_PROFILE_PERCENT = Array(24).fill(4.17);
 
 export type TOUPeriod = "peak" | "standard" | "off-peak";
 
-export const getTOUPeriod = (hour: number, isWeekend: boolean): TOUPeriod => {
-  if (isWeekend) return "off-peak";
-  if ((hour >= 7 && hour < 10) || (hour >= 18 && hour < 20)) return "peak";
-  if (hour >= 22 || hour < 6) return "off-peak";
-  return "standard";
+// --- Configurable TOU Settings ---
+
+export type TOUHourMap = Record<number, TOUPeriod>; // hours 0-23
+
+export interface TOUSeasonConfig {
+  weekday: TOUHourMap;
+  saturday: TOUHourMap;
+  sunday: TOUHourMap;
+}
+
+export interface TOUSettings {
+  highSeasonMonths: number[]; // 0-indexed months (e.g. [5,6,7] = Jun-Aug)
+  highSeason: TOUSeasonConfig;
+  lowSeason: TOUSeasonConfig;
+}
+
+function buildHourMap(ranges: { start: number; end: number; period: TOUPeriod }[]): TOUHourMap {
+  const map: TOUHourMap = {};
+  for (let h = 0; h < 24; h++) map[h] = "off-peak";
+  for (const { start, end, period } of ranges) {
+    for (let h = start; h < end; h++) map[h] = period;
+  }
+  return map;
+}
+
+export const DEFAULT_TOU_SETTINGS: TOUSettings = {
+  highSeasonMonths: [5, 6, 7], // June, July, August (0-indexed)
+  highSeason: {
+    weekday: buildHourMap([
+      { start: 6, end: 9, period: "peak" },
+      { start: 9, end: 12, period: "standard" },
+      { start: 12, end: 14, period: "off-peak" },
+      { start: 14, end: 17, period: "standard" },
+      { start: 17, end: 19, period: "peak" },
+      { start: 19, end: 22, period: "standard" },
+    ]),
+    saturday: buildHourMap([
+      { start: 7, end: 12, period: "standard" },
+    ]),
+    sunday: buildHourMap([]),
+  },
+  lowSeason: {
+    weekday: buildHourMap([
+      { start: 6, end: 7, period: "standard" },
+      { start: 7, end: 10, period: "peak" },
+      { start: 10, end: 12, period: "standard" },
+      { start: 12, end: 18, period: "standard" },
+      { start: 18, end: 20, period: "peak" },
+      { start: 20, end: 22, period: "standard" },
+    ]),
+    saturday: buildHourMap([
+      { start: 7, end: 12, period: "standard" },
+      { start: 18, end: 20, period: "standard" },
+    ]),
+    sunday: buildHourMap([]),
+  },
+};
+
+/**
+ * Get the TOU period for a given hour.
+ * @param hour 0-23
+ * @param isWeekend true if Saturday or Sunday
+ * @param touSettings optional configurable settings (defaults to DEFAULT_TOU_SETTINGS)
+ * @param month optional 0-indexed month to determine season (defaults to low season behaviour)
+ * @param dayOfWeek optional 0=Sun..6=Sat for distinguishing Saturday vs Sunday on weekends
+ */
+export const getTOUPeriod = (
+  hour: number,
+  isWeekend: boolean,
+  touSettings?: TOUSettings,
+  month?: number,
+  dayOfWeek?: number,
+): TOUPeriod => {
+  const settings = touSettings || DEFAULT_TOU_SETTINGS;
+  const isHighSeason = month !== undefined ? settings.highSeasonMonths.includes(month) : false;
+  const season = isHighSeason ? settings.highSeason : settings.lowSeason;
+
+  let hourMap: TOUHourMap;
+  if (!isWeekend) {
+    hourMap = season.weekday;
+  } else if (dayOfWeek === 0) {
+    hourMap = season.sunday;
+  } else if (dayOfWeek === 6) {
+    hourMap = season.saturday;
+  } else {
+    // Generic weekend: use saturday map as default
+    hourMap = season.saturday;
+  }
+
+  return hourMap[hour] || "off-peak";
 };
 
 export const TOU_COLORS: Record<TOUPeriod, { fill: string; stroke: string; label: string }> = {

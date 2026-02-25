@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Settings as SettingsIcon, Bell, Moon, Sun, Monitor, HelpCircle, RotateCcw, Zap, ExternalLink, Users, Building2, Calculator, FileText } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Moon, Sun, Monitor, HelpCircle, RotateCcw, Zap, ExternalLink, Users, Building2, Calculator, FileText, Clock } from "lucide-react";
 import { NotificationSettings } from "@/components/pwa/NotificationSettings";
 import { ContentEnhancerDemo } from "@/components/onboarding/ContentEnhancerDemo";
 import { APIIntegrationConfigPanel, APIIntegrationStatus } from "@/components/projects/simulation";
@@ -19,8 +19,9 @@ import { useTour } from "@/components/onboarding/TourContext";
 import { SettingsErrorBoundary } from "@/components/settings/SettingsErrorBoundary";
 import { SettingsLoadingSkeleton } from "@/components/settings/SettingsLoadingSkeleton";
 import { ChecklistTemplatesCard } from "@/components/settings/ChecklistTemplatesCard";
+import { TOUSettingsCard } from "@/components/settings/TOUSettingsCard";
 
-const EXPECTED_TAB_COUNT = 9;
+const EXPECTED_TAB_COUNT = 10;
 
 function SettingsContent() {
   const { theme, setTheme } = useTheme();
@@ -95,6 +96,10 @@ function SettingsContent() {
           <TabsTrigger value="templates" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Templates
+          </TabsTrigger>
+          <TabsTrigger value="tou-periods" className="flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            TOU Periods
           </TabsTrigger>
           <TabsTrigger value="integrations" className="flex items-center gap-2">
             <ExternalLink className="h-4 w-4" />
@@ -299,6 +304,10 @@ function SettingsContent() {
 
         <TabsContent value="templates" className="space-y-6">
           <ChecklistTemplatesCard />
+        </TabsContent>
+
+        <TabsContent value="tou-periods" className="space-y-6">
+          <TOUSettingsCard />
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-6">

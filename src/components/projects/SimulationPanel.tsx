@@ -56,13 +56,25 @@ import {
 
 type TOUPeriod = 'off-peak' | 'standard' | 'peak';
 
-/** Convert a SA TOU period name to hour windows */
+import { getTOUSettingsFromStorage } from "@/hooks/useTOUSettings";
+
+/** Convert a TOU period name to hour windows, derived from stored TOU settings */
 function touPeriodToWindows(period: TOUPeriod): TimeWindow[] {
-  switch (period) {
-    case 'off-peak': return [{ start: 22, end: 6 }];
-    case 'standard': return [{ start: 6, end: 7 }, { start: 10, end: 18 }, { start: 20, end: 22 }];
-    case 'peak': return [{ start: 7, end: 10 }, { start: 18, end: 20 }];
+  const settings = getTOUSettingsFromStorage();
+  // Derive windows from the low-season weekday map (primary reference)
+  const hourMap = settings.lowSeason.weekday;
+  const windows: TimeWindow[] = [];
+  let start: number | null = null;
+  for (let h = 0; h <= 24; h++) {
+    const p = h < 24 ? hourMap[h] : undefined;
+    if (p === period && start === null) {
+      start = h;
+    } else if (p !== period && start !== null) {
+      windows.push({ start, end: h });
+      start = null;
+    }
   }
+  return windows.length > 0 ? windows : [{ start: 0, end: 0 }];
 }
 import {
   AdvancedSimulationConfig,
