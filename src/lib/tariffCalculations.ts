@@ -1,13 +1,27 @@
 /**
  * Tariff Calculations Utility
  * 
- * Provides blended rate calculations for financial modeling based on exact
- * annual hour counts from the 2025/26 Eskom tariff schedule.
+ * Provides blended rate calculations for financial modeling.
+ * TOU hour distributions are now dynamically derived from the user's
+ * TOU Settings (stored in localStorage) instead of being hardcoded.
  * 
  * Two blended rate methodologies:
  * 1. All Hours (24/7/365): 8,760 hours annual
  * 2. Solar Sun Hours (6h window): 2,190 hours annual - Core solar generation window
  */
+
+import { TOUSettings, TOUHourMap, DEFAULT_TOU_SETTINGS } from "@/components/projects/load-profile/types";
+
+// ============================================================================
+// READ STORED TOU SETTINGS (inline to avoid circular deps with hooks)
+// ============================================================================
+function readStoredTOUSettings(): TOUSettings {
+  try {
+    const raw = localStorage.getItem("tou-settings");
+    if (raw) return JSON.parse(raw) as TOUSettings;
+  } catch { /* ignore */ }
+  return DEFAULT_TOU_SETTINGS;
+}
 
 // ============================================================================
 // SEASONAL DAY DISTRIBUTION (from Eskom tariff schedule)
@@ -18,36 +32,131 @@ export const SEASONAL_DAYS = {
 };
 
 // ============================================================================
-// TOU HOURS PER DAY TYPE - 24H WINDOW (Both seasons have same structure)
+// DYNAMIC TOU HOUR COUNTING (derives from stored TOU settings)
 // ============================================================================
+
+/** Count peak/standard/offPeak hours from a TOUHourMap */
+function countTOUHours(hourMap: TOUHourMap): { peak: number; standard: number; offPeak: number } {
+  let peak = 0, standard = 0, offPeak = 0;
+  for (let h = 0; h < 24; h++) {
+    const p = hourMap[h] || 'off-peak';
+    if (p === 'peak') peak++;
+    else if (p === 'standard') standard++;
+    else offPeak++;
+  }
+  return { peak, standard, offPeak };
+}
+
+/** Count TOU hours within a solar window (default 6h: 09:00–15:00) */
+function countSolarTOUHours(hourMap: TOUHourMap, start = 9, end = 15): { peak: number; standard: number; offPeak: number } {
+  let peak = 0, standard = 0, offPeak = 0;
+  for (let h = start; h < end; h++) {
+    const p = hourMap[h] || 'off-peak';
+    if (p === 'peak') peak++;
+    else if (p === 'standard') standard++;
+    else offPeak++;
+  }
+  return { peak, standard, offPeak };
+}
+
+/** Get dynamic TOU hours per day type for 24h window */
+export function getTOUHours24H(settings?: TOUSettings) {
+  const s = settings || readStoredTOUSettings();
+  // Use a representative season (low season is 9/12 months, dominant)
+  // But the actual blended rate functions use per-season hour counts
+  return {
+    weekday: countTOUHours(s.lowSeason.weekday),
+    saturday: countTOUHours(s.lowSeason.saturday),
+    sunday: countTOUHours(s.lowSeason.sunday),
+  };
+}
+
+/** Get dynamic TOU hours per day type for solar window */
+export function getTOUHoursSolar(settings?: TOUSettings) {
+  const s = settings || readStoredTOUSettings();
+  return {
+    weekday: countSolarTOUHours(s.lowSeason.weekday),
+    saturday: countSolarTOUHours(s.lowSeason.saturday),
+    sunday: countSolarTOUHours(s.lowSeason.sunday),
+  };
+}
+
+/** Calculate annual hour totals from TOU settings for a given season */
+function calcSeasonalAnnualHours(
+  seasonConfig: { weekday: TOUHourMap; saturday: TOUHourMap; sunday: TOUHourMap },
+  seasonDays: { weekdays: number; saturdays: number; sundays: number },
+  counter: (map: TOUHourMap) => { peak: number; standard: number; offPeak: number }
+) {
+  const wd = counter(seasonConfig.weekday);
+  const sat = counter(seasonConfig.saturday);
+  const sun = counter(seasonConfig.sunday);
+  return {
+    peak: wd.peak * seasonDays.weekdays + sat.peak * seasonDays.saturdays + sun.peak * seasonDays.sundays,
+    standard: wd.standard * seasonDays.weekdays + sat.standard * seasonDays.saturdays + sun.standard * seasonDays.sundays,
+    offPeak: wd.offPeak * seasonDays.weekdays + sat.offPeak * seasonDays.saturdays + sun.offPeak * seasonDays.sundays,
+    total: (wd.peak + wd.standard + wd.offPeak) * seasonDays.weekdays +
+           (sat.peak + sat.standard + sat.offPeak) * seasonDays.saturdays +
+           (sun.peak + sun.standard + sun.offPeak) * seasonDays.sundays,
+  };
+}
+
+/** Get dynamic annual hour totals for 24h window */
+export function getAnnualHours24H(settings?: TOUSettings) {
+  const s = settings || readStoredTOUSettings();
+  const high = calcSeasonalAnnualHours(s.highSeason, SEASONAL_DAYS.high, countTOUHours);
+  const low = calcSeasonalAnnualHours(s.lowSeason, SEASONAL_DAYS.low, countTOUHours);
+  return {
+    high,
+    low,
+    annual: {
+      peak: high.peak + low.peak,
+      standard: high.standard + low.standard,
+      offPeak: high.offPeak + low.offPeak,
+      total: high.total + low.total,
+    },
+  };
+}
+
+/** Get dynamic annual hour totals for solar window */
+export function getAnnualHoursSolar(settings?: TOUSettings) {
+  const s = settings || readStoredTOUSettings();
+  const high = calcSeasonalAnnualHours(s.highSeason, SEASONAL_DAYS.high, (m) => countSolarTOUHours(m));
+  const low = calcSeasonalAnnualHours(s.lowSeason, SEASONAL_DAYS.low, (m) => countSolarTOUHours(m));
+  return {
+    high,
+    low,
+    annual: {
+      peak: high.peak + low.peak,
+      standard: high.standard + low.standard,
+      offPeak: high.offPeak + low.offPeak,
+      total: high.total + low.total,
+    },
+  };
+}
+
+// Legacy static exports for backward compatibility (now dynamic getters)
 export const TOU_HOURS_24H = {
-  weekday: { peak: 5, standard: 11, offPeak: 8 },   // 24h total
-  saturday: { peak: 0, standard: 7, offPeak: 17 },  // 24h total
-  sunday: { peak: 0, standard: 2, offPeak: 22 },    // 24h total
+  get weekday() { return getTOUHours24H().weekday; },
+  get saturday() { return getTOUHours24H().saturday; },
+  get sunday() { return getTOUHours24H().sunday; },
 };
 
-// ============================================================================
-// TOU HOURS PER DAY TYPE - 6H SOLAR WINDOW (Core generation: ~09:00-15:00)
-// ============================================================================
 export const TOU_HOURS_SOLAR = {
-  weekday: { peak: 0, standard: 6, offPeak: 0 },   // 6h total - no peak in solar window
-  saturday: { peak: 0, standard: 3, offPeak: 3 },  // 6h total
-  sunday: { peak: 0, standard: 6, offPeak: 0 },    // 6h total
+  get weekday() { return getTOUHoursSolar().weekday; },
+  get saturday() { return getTOUHoursSolar().saturday; },
+  get sunday() { return getTOUHoursSolar().sunday; },
 };
 
-// ============================================================================
-// PRE-CALCULATED ANNUAL HOUR TOTALS (from Eskom table)
-// ============================================================================
 export const ANNUAL_HOURS_24H = {
-  high: { peak: 330, standard: 843, offPeak: 1035, total: 2208 },
-  low: { peak: 975, standard: 2496, offPeak: 3081, total: 6552 },
-  annual: { peak: 1305, standard: 3339, offPeak: 4116, total: 8760 },
+  get high() { return getAnnualHours24H().high; },
+  get low() { return getAnnualHours24H().low; },
+  get annual() { return getAnnualHours24H().annual; },
 };
 
 export const ANNUAL_HOURS_SOLAR = {
-  high: { peak: 0, standard: 513, offPeak: 39, total: 552 },
-  low: { peak: 0, standard: 1521, offPeak: 117, total: 1638 },
-  annual: { peak: 0, standard: 2034, offPeak: 156, total: 2190 },
+  get high() { return getAnnualHoursSolar().high; },
+  get low() { return getAnnualHoursSolar().low; },
+  get annual() { return getAnnualHoursSolar().annual; },
 };
 
 // ============================================================================
@@ -262,11 +371,24 @@ export const SUNSHINE_HOURS = {
   winter: { start: 7, end: 17 }, // High/Winter season
 };
 
-// TOU period definitions (SA standard weekday)
+// TOU period definitions - dynamically derived from stored TOU settings
+function buildTOUPeriodArrays(): { peak: number[]; standard: number[]; offPeak: number[] } {
+  const s = readStoredTOUSettings();
+  const hourMap = s.lowSeason.weekday; // Use low-season weekday as primary reference
+  const peak: number[] = [], standard: number[] = [], offPeak: number[] = [];
+  for (let h = 0; h < 24; h++) {
+    const p = hourMap[h] || 'off-peak';
+    if (p === 'peak') peak.push(h);
+    else if (p === 'standard') standard.push(h);
+    else offPeak.push(h);
+  }
+  return { peak, standard, offPeak };
+}
+
 export const TOU_PERIODS = {
-  peak: [7, 8, 9, 18, 19], // 07:00-10:00, 18:00-20:00
-  standard: [6, 10, 11, 12, 13, 14, 15, 16, 17, 20, 21], // 06:00-07:00, 10:00-18:00, 20:00-22:00
-  offPeak: [0, 1, 2, 3, 4, 5, 22, 23], // 22:00-06:00
+  get peak() { return buildTOUPeriodArrays().peak; },
+  get standard() { return buildTOUPeriodArrays().standard; },
+  get offPeak() { return buildTOUPeriodArrays().offPeak; },
 };
 
 // Solar production curve (relative output per hour, peaks at noon)
