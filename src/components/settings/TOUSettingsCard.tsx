@@ -36,7 +36,20 @@ interface HourGridProps {
 
 function HourGrid({ seasonConfig, onCellClick }: HourGridProps) {
   return (
-    <div className="space-y-3">
+    <div className="relative space-y-3">
+      {/* Vertical dashed tick lines at every 3-hour interval */}
+      {Array.from({ length: 8 }, (_, i) => {
+        const hour = i * 3;
+        // Account for 0.5 gap between cells: each cell is ~(100/24)% wide
+        const leftPct = (hour / 24) * 100;
+        return (
+          <div
+            key={hour}
+            className="absolute top-0 bottom-0 border-l border-dashed border-muted-foreground/20 pointer-events-none z-10"
+            style={{ left: `${leftPct}%` }}
+          />
+        );
+      })}
       {DAY_TYPES.map((dayType) => (
         <div key={dayType} className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">{DAY_TYPE_LABELS[dayType]}</p>
@@ -59,12 +72,12 @@ function HourGrid({ seasonConfig, onCellClick }: HourGridProps) {
           </div>
         </div>
       ))}
-      {/* Hour axis labels with tick marks */}
+      {/* Hour axis labels */}
       <div className="flex gap-0.5">
         {Array.from({ length: 24 }, (_, h) => (
           <div
             key={h}
-            className={`flex-1 text-[7px] text-center text-muted-foreground pt-1 ${h % 3 === 0 ? "border-t border-dashed border-muted-foreground/30" : ""}`}
+            className="flex-1 text-[7px] text-center text-muted-foreground pt-1"
           >
             {h % 3 === 0 ? `${h}:00` : ""}
           </div>
