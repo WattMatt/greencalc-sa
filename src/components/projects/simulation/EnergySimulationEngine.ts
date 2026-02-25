@@ -30,12 +30,26 @@ export const DEFAULT_CHARGE_SOURCES: ChargeSource[] = [
   { id: 'generator', enabled: false },
 ];
 
+export type DischargeSourceId = 'load' | 'battery' | 'grid-export';
+
+export interface DischargeSource {
+  id: DischargeSourceId;
+  enabled: boolean;
+}
+
+export const DEFAULT_DISCHARGE_SOURCES: DischargeSource[] = [
+  { id: 'load', enabled: true },
+  { id: 'battery', enabled: true },
+  { id: 'grid-export', enabled: true },
+];
+
 export interface DispatchConfig {
   chargeWindows: TimeWindow[];       // When to charge
   dischargeWindows: TimeWindow[];    // When to discharge
   allowGridCharging: boolean;        // Allow charging from grid (not just solar)
   peakShavingTarget?: number;        // kW target for peak shaving strategy
   chargeSources?: ChargeSource[];    // Ordered list of charge sources (top = highest priority)
+  dischargeSources?: DischargeSource[]; // Ordered list of solar discharge destinations (top = highest priority)
 }
 
 /** Check if an hour falls within a time window (handles midnight wrap) */

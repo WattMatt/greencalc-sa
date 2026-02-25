@@ -2,8 +2,8 @@ import { useState, useCallback } from "react";
 import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles, Save, Trash2, User, GripVertical } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { BatteryDispatchStrategy, DispatchConfig, TimeWindow, ChargeSource } from "./EnergySimulationEngine";
-import { getDefaultDispatchConfig, DEFAULT_CHARGE_SOURCES } from "./EnergySimulationEngine";
+import type { BatteryDispatchStrategy, DispatchConfig, TimeWindow, ChargeSource, DischargeSource } from "./EnergySimulationEngine";
+import { getDefaultDispatchConfig, DEFAULT_CHARGE_SOURCES, DEFAULT_DISCHARGE_SOURCES } from "./EnergySimulationEngine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -55,6 +55,9 @@ interface AdvancedSimulationConfigProps {
   dischargeTouPeriod?: TOUPeriod;
   onDischargeTouPeriodChange?: (period: TOUPeriod) => void;
   touPeriodToWindows?: (period: TOUPeriod) => TimeWindow[];
+  // Discharge sources props
+  dischargeSources?: DischargeSource[];
+  onDischargeSourcesChange?: (sources: DischargeSource[]) => void;
 }
 
 export function AdvancedSimulationConfigPanel({ 
@@ -79,6 +82,8 @@ export function AdvancedSimulationConfigPanel({
   dischargeTouPeriod = 'peak',
   onDischargeTouPeriodChange,
   touPeriodToWindows,
+  dischargeSources,
+  onDischargeSourcesChange,
 }: AdvancedSimulationConfigProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -281,6 +286,14 @@ export function AdvancedSimulationConfigPanel({
                 </Dialog>
               </div>
             )}
+
+            {/* Solar Characteristics - Discharge Sources */}
+            <CollapsibleSection icon={<Sun className="h-4 w-4 text-amber-500" />} title="Solar Characteristics">
+              <SolarCharacteristicsSection
+                dischargeSources={dischargeSources ?? DEFAULT_DISCHARGE_SOURCES}
+                onDischargeSourcesChange={onDischargeSourcesChange}
+              />
+            </CollapsibleSection>
 
             {/* Battery Characteristics */}
             {includesBattery && (
@@ -990,6 +1003,97 @@ function ChargeSourcesList({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ============= Discharge Sources List (drag-to-reorder) =============
+
+const DISCHARGE_SOURCE_LABELS: Record<string, string> = {
+  load: 'Load',
+  battery: 'Battery',
+  'grid-export': 'Grid Export',
+};
+
+function DischargeSourcesList({
+  sources,
+  onChange,
+}: {
+  sources: DischargeSource[];
+  onChange?: (sources: DischargeSource[]) => void;
+}) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+
+  const moveItem = (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx) return;
+    const next = [...sources];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    onChange?.(next);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs font-medium">Discharge Sources</Label>
+        <span className="text-[10px] text-muted-foreground">Top = highest priority</span>
+      </div>
+      <div className="rounded border bg-muted/30 divide-y divide-border">
+        {sources.map((source, idx) => (
+          <div
+            key={source.id}
+            draggable
+            onDragStart={() => setDragIdx(idx)}
+            onDragOver={(e) => { e.preventDefault(); }}
+            onDrop={() => {
+              if (dragIdx !== null) moveItem(dragIdx, idx);
+              setDragIdx(null);
+            }}
+            onDragEnd={() => setDragIdx(null)}
+            className={`flex items-center gap-2 px-2 py-1.5 text-xs cursor-grab active:cursor-grabbing transition-opacity ${
+              dragIdx === idx ? 'opacity-50' : ''
+            }`}
+          >
+            <GripVertical className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+            <Checkbox
+              checked={source.enabled}
+              onCheckedChange={(v) => {
+                const next = sources.map((s, i) => i === idx ? { ...s, enabled: !!v } : s);
+                onChange?.(next);
+              }}
+              className="h-3.5 w-3.5"
+            />
+            <span className={source.enabled ? '' : 'text-muted-foreground'}>{DISCHARGE_SOURCE_LABELS[source.id] || source.id}</span>
+            <Badge variant="outline" className="ml-auto text-[9px] px-1 py-0">{idx + 1}</Badge>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============= Solar Characteristics Section =============
+
+function SolarCharacteristicsSection({
+  dischargeSources,
+  onDischargeSourcesChange,
+}: {
+  dischargeSources: DischargeSource[];
+  onDischargeSourcesChange?: (sources: DischargeSource[]) => void;
+}) {
+  return (
+    <div className="space-y-3 p-3 rounded-lg border bg-card">
+      <div className="flex items-center gap-2">
+        <Sun className="h-4 w-4 text-amber-500" />
+        <Label className="text-sm font-medium">Solar PV Dispatch</Label>
+      </div>
+      <div className="text-xs text-muted-foreground">
+        Define where solar PV energy is dispatched, in priority order.
+      </div>
+      <DischargeSourcesList
+        sources={dischargeSources}
+        onChange={onDischargeSourcesChange}
+      />
     </div>
   );
 }

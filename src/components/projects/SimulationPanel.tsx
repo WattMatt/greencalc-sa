@@ -1426,6 +1426,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         dischargeTouPeriod={dischargeTouPeriod}
         onDischargeTouPeriodChange={setDischargeTouPeriod}
         touPeriodToWindows={touPeriodToWindows}
+        dischargeSources={dispatchConfig.dischargeSources}
+        onDischargeSourcesChange={(sources) => setDispatchConfig(prev => ({ ...prev, dischargeSources: sources }))}
       />
 
       {/* Scenario Comparison */}
