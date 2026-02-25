@@ -17,11 +17,25 @@ export interface TimeWindow {
   end: number;   // Hour (0-23), wraps around midnight if end < start
 }
 
+export type ChargeSourceId = 'pv' | 'grid' | 'generator';
+
+export interface ChargeSource {
+  id: ChargeSourceId;
+  enabled: boolean;
+}
+
+export const DEFAULT_CHARGE_SOURCES: ChargeSource[] = [
+  { id: 'pv', enabled: true },
+  { id: 'grid', enabled: true },
+  { id: 'generator', enabled: false },
+];
+
 export interface DispatchConfig {
   chargeWindows: TimeWindow[];       // When to charge
   dischargeWindows: TimeWindow[];    // When to discharge
   allowGridCharging: boolean;        // Allow charging from grid (not just solar)
   peakShavingTarget?: number;        // kW target for peak shaving strategy
+  chargeSources?: ChargeSource[];    // Ordered list of charge sources (top = highest priority)
 }
 
 /** Check if an hour falls within a time window (handles midnight wrap) */
