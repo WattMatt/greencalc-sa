@@ -206,18 +206,25 @@ function getDischargePermissions(
   hour: number,
   config: DispatchConfig,
   touPeriodToWindowsFn?: (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[],
-): { batteryDischargeAllowed: boolean } {
+): { loadDischargeAllowed: boolean; batteryDischargeAllowed: boolean; gridExportAllowed: boolean } {
   const sources = config.dischargeSources;
   if (!sources || sources.length === 0) {
-    return { batteryDischargeAllowed: true }; // Legacy
+    return { loadDischargeAllowed: true, batteryDischargeAllowed: true, gridExportAllowed: true }; // Legacy
   }
 
-  // Check if the 'battery' discharge source is enabled and active at this hour
-  const batterySrc = sources.find(s => s.id === 'battery');
-  if (!batterySrc || !batterySrc.enabled) return { batteryDischargeAllowed: false };
+  let loadDischargeAllowed = false;
+  let batteryDischargeAllowed = false;
+  let gridExportAllowed = false;
 
-  const active = isSourceActiveAtHour(hour, batterySrc.dischargeTouPeriods, ['peak'], touPeriodToWindowsFn);
-  return { batteryDischargeAllowed: active };
+  for (const src of sources) {
+    if (!src.enabled) continue;
+    const active = isSourceActiveAtHour(hour, src.dischargeTouPeriods, src.id === 'battery' ? ['peak'] : ['off-peak', 'standard', 'peak'], touPeriodToWindowsFn);
+    if (src.id === 'load' && active) loadDischargeAllowed = true;
+    if (src.id === 'battery' && active) batteryDischargeAllowed = true;
+    if (src.id === 'grid-export' && active) gridExportAllowed = true;
+  }
+
+  return { loadDischargeAllowed, batteryDischargeAllowed, gridExportAllowed };
 }
 
 // ── Dispatch strategy implementations ──
@@ -242,78 +249,104 @@ interface HourResult {
   newBatteryState: number;
 }
 
+interface DispatchPermissions {
+  pvChargeAllowed: boolean;
+  gridChargeAllowed: boolean;
+  loadDischargeAllowed: boolean;
+  batteryDischargeAllowed: boolean;
+  gridExportAllowed: boolean;
+}
+
 function dispatchSelfConsumption(
   s: HourState,
-  permissions?: { pvChargeAllowed: boolean; gridChargeAllowed: boolean; batteryDischargeAllowed: boolean },
+  permissions: DispatchPermissions,
 ): HourResult {
-  const { load, solar, netLoad, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
-  const pvOk = permissions?.pvChargeAllowed ?? true;
-  const dischargeOk = permissions?.batteryDischargeAllowed ?? true;
+  const { load, solar, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
+  const { pvChargeAllowed, loadDischargeAllowed, batteryDischargeAllowed, gridExportAllowed } = permissions;
+
+  const solarUsed = loadDischargeAllowed ? Math.min(solar, load) : 0;
+  const effectiveNetLoad = load - solarUsed; // How much load remains after solar
+  const solarExcess = solar - solarUsed; // Solar not used by load
 
   let gridImport = 0;
   let gridExport = 0;
-  const solarUsed = Math.min(solar, load);
   let batteryDischarge = 0;
   let batteryCharge = 0;
   let newBatteryState = batteryState;
 
-  if (netLoad > 0) {
-    if (dischargeOk) {
+  // Handle remaining load deficit
+  if (effectiveNetLoad > 0) {
+    if (batteryDischargeAllowed) {
       const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryDischargePower);
-      batteryDischarge = Math.min(netLoad, Math.max(0, batteryAvailable));
+      batteryDischarge = Math.min(effectiveNetLoad, Math.max(0, batteryAvailable));
       newBatteryState -= batteryDischarge;
     }
-    gridImport = netLoad - batteryDischarge;
-  } else {
-    const excess = -netLoad;
-    if (pvOk) {
+    gridImport = effectiveNetLoad - batteryDischarge;
+  }
+
+  // Handle solar excess (charge battery or export)
+  if (solarExcess > 0) {
+    if (pvChargeAllowed) {
       const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryChargePower);
-      batteryCharge = Math.min(excess, Math.max(0, batterySpace));
+      batteryCharge = Math.min(solarExcess, Math.max(0, batterySpace));
       newBatteryState += batteryCharge;
     }
-    gridExport = excess - batteryCharge;
+    const remainder = solarExcess - batteryCharge;
+    gridExport = gridExportAllowed ? remainder : 0;
   }
 
   return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, newBatteryState };
 }
 
-function dispatchTouArbitrage(s: HourState, hour: number, config: DispatchConfig): HourResult {
-  const { load, solar, netLoad, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
+function dispatchTouArbitrage(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions): HourResult {
+  const { load, solar, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
+  const { pvChargeAllowed, gridChargeAllowed, loadDischargeAllowed, batteryDischargeAllowed, gridExportAllowed } = permissions;
   const isChargeHour = isInAnyWindow(hour, config.chargeWindows);
   const isDischargeHour = isInAnyWindow(hour, config.dischargeWindows);
 
+  const solarUsed = loadDischargeAllowed ? Math.min(solar, load) : 0;
+  const effectiveNetLoad = load - solarUsed;
+  const solarExcess = solar - solarUsed;
+
   let gridImport = 0;
   let gridExport = 0;
-  let solarUsed = Math.min(solar, load);
   let batteryCharge = 0;
   let batteryDischarge = 0;
   let newBatteryState = batteryState;
 
   if (isDischargeHour) {
-    // Discharge to offset load (even if solar covers some)
-    if (netLoad > 0) {
-      const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryDischargePower);
-      batteryDischarge = Math.min(netLoad, Math.max(0, batteryAvailable));
-      newBatteryState -= batteryDischarge;
-      gridImport = netLoad - batteryDischarge;
-    } else {
-      // Solar excess during discharge window – export
-      gridExport = -netLoad;
+    if (effectiveNetLoad > 0) {
+      if (batteryDischargeAllowed) {
+        const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryDischargePower);
+        batteryDischarge = Math.min(effectiveNetLoad, Math.max(0, batteryAvailable));
+        newBatteryState -= batteryDischarge;
+      }
+      gridImport = effectiveNetLoad - batteryDischarge;
+    }
+    // Handle solar excess
+    if (solarExcess > 0) {
+      if (pvChargeAllowed) {
+        const batterySpace = Math.min(maxBatteryLevel - newBatteryState, batteryChargePower);
+        batteryCharge = Math.min(solarExcess, Math.max(0, batterySpace));
+        newBatteryState += batteryCharge;
+      }
+      const remainder = solarExcess - batteryCharge;
+      gridExport = gridExportAllowed ? remainder : 0;
     }
   } else if (isChargeHour) {
-    // First handle load from solar/grid
-    if (netLoad > 0) {
-      gridImport = netLoad;
-    } else {
-      // Use excess solar to charge first
-      const excess = -netLoad;
-      const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryChargePower);
-      batteryCharge = Math.min(excess, Math.max(0, batterySpace));
-      newBatteryState += batteryCharge;
-      gridExport = excess - batteryCharge;
+    if (effectiveNetLoad > 0) {
+      gridImport = effectiveNetLoad;
     }
-    // Charge from grid if allowed and battery has room
-    if (config.allowGridCharging) {
+    // Charge battery from solar excess
+    if (solarExcess > 0 && pvChargeAllowed) {
+      const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryChargePower);
+      batteryCharge = Math.min(solarExcess, Math.max(0, batterySpace));
+      newBatteryState += batteryCharge;
+      const remainder = solarExcess - batteryCharge;
+      gridExport = gridExportAllowed ? remainder : 0;
+    }
+    // Charge from grid if allowed
+    if (gridChargeAllowed) {
       const batterySpace = Math.min(maxBatteryLevel - newBatteryState, batteryChargePower - batteryCharge);
       const gridCharge = Math.max(0, batterySpace);
       if (gridCharge > 0) {
@@ -323,32 +356,33 @@ function dispatchTouArbitrage(s: HourState, hour: number, config: DispatchConfig
       }
     }
   } else {
-    // Non-scheduled hours: fall back to self-consumption
-    return dispatchSelfConsumption(s);
+    return dispatchSelfConsumption(s, permissions);
   }
 
   return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, newBatteryState };
 }
 
-function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig): HourResult {
-  const { load, solar, netLoad, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
+function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions): HourResult {
+  const { load, solar, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
+  const { pvChargeAllowed, gridChargeAllowed, loadDischargeAllowed, batteryDischargeAllowed, gridExportAllowed } = permissions;
   const target = config.peakShavingTarget ?? 150;
   const isChargeHour = config.chargeWindows.length > 0
     ? isInAnyWindow(hour, config.chargeWindows)
-    : (hour >= 22 || hour < 6); // Default off-peak
+    : (hour >= 22 || hour < 6);
+
+  const solarUsed = loadDischargeAllowed ? Math.min(solar, load) : 0;
+  const effectiveNetLoad = load - solarUsed;
+  const solarExcess = solar - solarUsed;
 
   let gridImport = 0;
   let gridExport = 0;
-  let solarUsed = Math.min(solar, load);
   let batteryCharge = 0;
   let batteryDischarge = 0;
   let newBatteryState = batteryState;
 
-  if (netLoad > 0) {
-    // Would-be grid import without battery
-    const wouldImport = netLoad;
-    if (wouldImport > target) {
-      // Discharge to cap grid import at target
+  if (effectiveNetLoad > 0) {
+    const wouldImport = effectiveNetLoad;
+    if (wouldImport > target && batteryDischargeAllowed) {
       const neededDischarge = wouldImport - target;
       const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryDischargePower);
       batteryDischarge = Math.min(neededDischarge, Math.max(0, batteryAvailable));
@@ -357,17 +391,21 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig)
     } else {
       gridImport = wouldImport;
     }
-  } else {
-    // Solar excess – charge battery
-    const excess = -netLoad;
-    const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryChargePower);
-    batteryCharge = Math.min(excess, Math.max(0, batterySpace));
-    newBatteryState += batteryCharge;
-    gridExport = excess - batteryCharge;
+  }
+
+  // Handle solar excess
+  if (solarExcess > 0) {
+    if (pvChargeAllowed) {
+      const batterySpace = Math.min(maxBatteryLevel - newBatteryState, batteryChargePower);
+      batteryCharge = Math.min(solarExcess, Math.max(0, batterySpace));
+      newBatteryState += batteryCharge;
+    }
+    const remainder = solarExcess - batteryCharge;
+    gridExport = gridExportAllowed ? remainder : 0;
   }
 
   // During charge hours, also charge from grid if allowed
-  if (isChargeHour && config.allowGridCharging) {
+  if (isChargeHour && gridChargeAllowed) {
     const batterySpace = Math.min(maxBatteryLevel - newBatteryState, batteryChargePower - batteryCharge);
     const gridCharge = Math.max(0, batterySpace);
     if (gridCharge > 0) {
@@ -380,12 +418,8 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig)
   return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, newBatteryState };
 }
 
-function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig): HourResult {
-  // Same logic as TOU but with user-defined windows
-  const isDischargeHour = isInAnyWindow(hour, config.dischargeWindows);
-
-  // Same logic as TOU but with user-defined windows
-  return dispatchTouArbitrage(s, hour, config);
+function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions): HourResult {
+  return dispatchTouArbitrage(s, hour, config, permissions);
 }
 
 // ── Main simulation function ──
@@ -445,18 +479,18 @@ export function runEnergySimulation(
     // Compute source-aware permissions for this hour
     const chargePerms = getChargePermissions(h, effectiveDispatchConfig, touPeriodToWindowsFn);
     const dischargePerms = getDischargePermissions(h, effectiveDispatchConfig, touPeriodToWindowsFn);
-    const permissions = { ...chargePerms, ...dischargePerms };
+    const permissions: DispatchPermissions = { ...chargePerms, ...dischargePerms };
 
     let result: HourResult;
     switch (dispatchStrategy) {
       case 'tou-arbitrage':
-        result = dispatchTouArbitrage(hourState, h, effectiveDispatchConfig);
+        result = dispatchTouArbitrage(hourState, h, effectiveDispatchConfig, permissions);
         break;
       case 'peak-shaving':
-        result = dispatchPeakShaving(hourState, h, effectiveDispatchConfig);
+        result = dispatchPeakShaving(hourState, h, effectiveDispatchConfig, permissions);
         break;
       case 'scheduled':
-        result = dispatchScheduled(hourState, h, effectiveDispatchConfig);
+        result = dispatchScheduled(hourState, h, effectiveDispatchConfig, permissions);
         break;
       case 'self-consumption':
       default:
