@@ -41,7 +41,6 @@ interface AdvancedSimulationConfigProps {
   batteryDischargeCRate?: number;
   onBatteryDischargeCRateChange?: (value: number) => void;
   batteryDoD?: number;
-  onBatteryDoDChange?: (value: number) => void;
   batteryMinSoC?: number;
   onBatteryMinSoCChange?: (value: number) => void;
   batteryMaxSoC?: number;
@@ -67,7 +66,6 @@ export function AdvancedSimulationConfigPanel({
   batteryDischargeCRate = 0.5,
   onBatteryDischargeCRateChange,
   batteryDoD = 85,
-  onBatteryDoDChange,
   batteryMinSoC = 10,
   onBatteryMinSoCChange,
   batteryMaxSoC = 95,
@@ -293,7 +291,6 @@ export function AdvancedSimulationConfigPanel({
                   dischargeCRate={batteryDischargeCRate}
                   onDischargeCRateChange={onBatteryDischargeCRateChange}
                   doD={batteryDoD}
-                  onDoDChange={onBatteryDoDChange}
                   minSoC={batteryMinSoC}
                   onMinSoCChange={onBatteryMinSoCChange}
                   maxSoC={batteryMaxSoC}
@@ -1005,7 +1002,6 @@ function BatteryCharacteristicsSection({
   dischargeCRate,
   onDischargeCRateChange,
   doD,
-  onDoDChange,
   minSoC,
   onMinSoCChange,
   maxSoC,
@@ -1025,7 +1021,6 @@ function BatteryCharacteristicsSection({
   dischargeCRate: number;
   onDischargeCRateChange?: (value: number) => void;
   doD: number;
-  onDoDChange?: (value: number) => void;
   minSoC: number;
   onMinSoCChange?: (value: number) => void;
   maxSoC: number;
@@ -1077,12 +1072,10 @@ function BatteryCharacteristicsSection({
           <Label className="text-xs">Depth of Discharge (%)</Label>
           <Input
             type="number"
-            value={doD}
-            onChange={(e) => onDoDChange?.(Math.max(10, Math.min(100, parseInt(e.target.value) || 85)))}
-            className="h-8 text-xs"
-            min={10}
-            max={100}
-            step={5}
+            value={maxSoC - minSoC}
+            readOnly
+            disabled
+            className="h-8 text-xs bg-muted"
           />
         </div>
       </div>
