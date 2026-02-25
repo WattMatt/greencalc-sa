@@ -1056,6 +1056,26 @@ function BatteryCharacteristicsSection({
         </div>
       </div>
 
+      {/* Charge Sources – independent of dispatch strategy */}
+      <Separator className="my-2" />
+      <div className="space-y-2">
+        <Label className="text-xs font-medium">Charge Sources</Label>
+        <div className="space-y-1.5 p-2 rounded border bg-muted/30">
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <Checkbox checked={true} disabled className="h-3.5 w-3.5" />
+            <span>PV (Solar)</span>
+          </label>
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <Checkbox
+              checked={effectiveDispatchConfig.allowGridCharging}
+              onCheckedChange={(v) => onDispatchConfigChange?.({ ...effectiveDispatchConfig, allowGridCharging: !!v })}
+              className="h-3.5 w-3.5"
+            />
+            <span>Grid</span>
+          </label>
+        </div>
+      </div>
+
       {/* Dispatch Strategy */}
       <Separator className="my-2" />
       <div className="space-y-3">
@@ -1069,11 +1089,12 @@ function BatteryCharacteristicsSection({
               if (v === 'tou-arbitrage' && touPeriodToWindows) {
                 onDispatchConfigChange?.({
                   ...newConfig,
+                  allowGridCharging: effectiveDispatchConfig.allowGridCharging,
                   chargeWindows: touPeriodToWindows(chargeTouPeriod),
                   dischargeWindows: touPeriodToWindows(dischargeTouPeriod),
                 });
               } else {
-                onDispatchConfigChange?.(newConfig);
+                onDispatchConfigChange?.({ ...newConfig, allowGridCharging: effectiveDispatchConfig.allowGridCharging });
               }
             }}
           >
@@ -1089,27 +1110,10 @@ function BatteryCharacteristicsSection({
           </Select>
         </div>
 
-        {/* TOU Arbitrage: period selectors */}
+        {/* TOU Arbitrage: period selectors (no more "Charge from" here) */}
         {batteryStrategy === 'tou-arbitrage' && (
           <div className="space-y-2 text-xs">
             <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Charge from</Label>
-                <div className="space-y-1.5 p-2 rounded border bg-muted/30">
-                  <label className="flex items-center gap-2 text-xs cursor-pointer">
-                    <Checkbox checked={true} disabled className="h-3.5 w-3.5" />
-                    <span>PV (Solar)</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer">
-                    <Checkbox
-                      checked={effectiveDispatchConfig.allowGridCharging}
-                      onCheckedChange={(v) => onDispatchConfigChange?.({ ...effectiveDispatchConfig, allowGridCharging: !!v })}
-                      className="h-3.5 w-3.5"
-                    />
-                    <span>Grid</span>
-                  </label>
-                </div>
-              </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-muted-foreground">Discharge during</Label>
                 <Select
@@ -1134,40 +1138,40 @@ function BatteryCharacteristicsSection({
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground">Charge during</Label>
-              <Select
-                value={chargeTouPeriod}
-                onValueChange={(v: TOUPeriod) => {
-                  onChargeTouPeriodChange?.(v);
-                  if (touPeriodToWindows) {
-                    onDispatchConfigChange?.({
-                      ...effectiveDispatchConfig,
-                      chargeWindows: touPeriodToWindows(v),
-                    });
-                  }
-                }}
-              >
-                <SelectTrigger className="h-7 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
-                  <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
-                  <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Charge during</Label>
+                <Select
+                  value={chargeTouPeriod}
+                  onValueChange={(v: TOUPeriod) => {
+                    onChargeTouPeriodChange?.(v);
+                    if (touPeriodToWindows) {
+                      onDispatchConfigChange?.({
+                        ...effectiveDispatchConfig,
+                        chargeWindows: touPeriodToWindows(v),
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-7 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
+                    <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
+                    <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Scheduled: raw hour inputs */}
+        {/* Scheduled: raw hour inputs (no more grid charging toggle here) */}
         {batteryStrategy === 'scheduled' && (
           <div className="space-y-2 text-xs">
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Charge from</Label>
+                <Label className="text-[10px] text-muted-foreground">Charge window</Label>
                 <div className="flex items-center gap-1">
                   <Input
                     type="number"
@@ -1194,7 +1198,7 @@ function BatteryCharacteristicsSection({
                 </div>
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Discharge from</Label>
+                <Label className="text-[10px] text-muted-foreground">Discharge window</Label>
                 <div className="flex items-center gap-1">
                   <Input
                     type="number"
@@ -1221,14 +1225,6 @@ function BatteryCharacteristicsSection({
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={effectiveDispatchConfig.allowGridCharging}
-                onCheckedChange={(v) => onDispatchConfigChange?.({ ...effectiveDispatchConfig, allowGridCharging: v })}
-                className="h-4 w-7"
-              />
-              <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
-            </div>
           </div>
         )}
 
@@ -1248,14 +1244,6 @@ function BatteryCharacteristicsSection({
                 min={0}
                 step={10}
               />
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={effectiveDispatchConfig.allowGridCharging}
-                onCheckedChange={(v) => onDispatchConfigChange?.({ ...effectiveDispatchConfig, allowGridCharging: v })}
-                className="h-4 w-7"
-              />
-              <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
             </div>
           </div>
         )}
