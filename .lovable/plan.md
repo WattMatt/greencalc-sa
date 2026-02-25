@@ -1,75 +1,59 @@
 
 
-## Fix Grid Profile, Battery Simulation, and Show 12-Month Average
+## Fix Battery Not Charging/Discharging in Profile Charts
 
-### Issues Identified
+### Root Cause
 
-1. **Grid Profile is empty when solar is off**: The `gridImport` and `gridExport` fields in `useLoadProfileData` are only computed inside an `if (showPVProfile && maxPvAcKva)` block. When solar is disabled, these are never set, so the Grid Flow chart renders blank. The fix: always compute grid import/export -- when there is no solar or battery, grid import equals total load and export is zero.
+The profile charts use data from `useLoadProfileData`, which has a **duplicate, simplified battery simulation** (lines 414-443) that is completely disconnected from the proper `EnergySimulationEngine`. This simplified logic:
 
-2. **Battery not charging/discharging**: The battery simulation block is gated behind `showPVProfile && maxPvAcKva`. This means battery does nothing when solar is off. The fix: run the battery simulation whenever `showBattery` is true, independent of solar. This also enables TOU Arbitrage (grid-charging) scenarios without solar.
+1. **Only charges from excess PV** (`gridExport`) -- when solar is disabled, `gridExport = 0`, so the battery **never charges**
+2. **Ignores the dispatch strategy entirely** -- no TOU arbitrage, no peak shaving, no scheduled dispatch
+3. **Starts SoC at 20%** instead of the configured initial SoC (50%)
 
-3. **Profiles should show average over first 12 months**: Currently the charts show a single selected day. The user wants these to represent the average daily profile across the first 12 months of operation. This requires computing a monthly-averaged profile using month-specific solar yield data (from Solcast monthly factors if available) and averaging across all 12 months.
+Meanwhile, `EnergySimulationEngine.runEnergySimulation()` already produces correct hourly battery data (`energyResults.hourlyData`) with full dispatch strategy support, but this data is **never used** for the charts.
 
-### Technical Changes
+### Solution
 
-**File: `src/components/projects/load-profile/hooks/useLoadProfileData.ts`**
+Replace the broken battery simulation in `useLoadProfileData` with an overlay approach: after `useLoadProfileData` computes load + PV + grid data, `SimulationPanel` merges `energyResults.hourlyData` battery and grid fields onto the chart data. This keeps load/PV computation in the hook but uses the authoritative engine for battery and grid flows.
 
-1. **Always compute grid fields** -- Move the `gridImport`/`gridExport`/`netLoad` calculation outside the `showPVProfile` conditional. When PV is off, set:
-   - `gridImport = total` (full load comes from grid)
-   - `gridExport = 0`
-   - `netLoad = total`
+### Changes
 
-2. **Decouple battery simulation from solar** -- Change the battery simulation gate from `if (showBattery && showPVProfile && maxPvAcKva)` to `if (showBattery)`. The battery logic already uses `gridExport` (excess PV) and `gridImport` (grid need), which will now always be populated. This enables:
-   - Solar + Battery: charges from excess PV, discharges during peak/standard
-   - Battery only (no solar): charges from grid during off-peak (TOU arbitrage), discharges during peak
+**File: `src/components/projects/SimulationPanel.tsx`** (lines ~896-898)
 
-3. **Update `gridImportWithBattery`** -- Ensure this field is also computed when battery runs without solar.
+Replace the direct assignment `simulationChartData = loadProfileChartData` with a `useMemo` that overlays `energyResults.hourlyData` onto `loadProfileChartData`:
 
-**File: `src/components/projects/SimulationPanel.tsx`**
+- For each hour, copy `batteryCharge`, `batteryDischarge`, `batterySoC` from `energyResults.hourlyData`
+- Also copy `gridImport`, `gridExport`, `gridImportWithBattery` from the engine results (since the engine accounts for battery dispatch when computing grid flows)
+- This ensures the charts reflect the actual dispatch strategy (self-consumption, TOU arbitrage, peak shaving, or scheduled)
 
-4. **12-month average profile** -- Update the simulation chart data computation to average across 12 monthly profiles rather than showing a single day:
-   - For load: use the existing daily profile (already an average for the selected day type)
-   - For PV: if Solcast monthly data is available, compute 12 monthly PV profiles using each month's irradiance factor, then average them. If no Solcast data, use the single generic profile (already a yearly average)
-   - For battery: simulate battery dispatch for each monthly profile, then average the results
-   - Display the card title as "Average Daily Profile (Year 1)" instead of the day name
-   - Remove the day navigation arrows (prev/next) since this is now a 12-month composite, not a single day view
+**File: `src/components/projects/load-profile/hooks/useLoadProfileData.ts`** (lines 414-443)
 
-   Alternatively, if Solcast per-month data is not readily available, a simpler approach: keep the current day-based navigation but add a toggle or default mode that shows the weighted average across all 7 days of the week for the first year. This preserves the existing architecture while meeting the "average over 12 months" requirement.
+Remove the duplicate battery simulation block entirely. The hook should only compute load profiles, PV generation, and basic grid fields (without battery). Battery overlay is now handled in `SimulationPanel`.
 
-### Approach for 12-Month Average
-
-The simplest correct approach that fits the existing architecture:
-
-- Add a boolean state `showAnnualAverage` (default: true) to SimulationPanel
-- When true, call `useLoadProfileData` with `selectedDays` containing all 7 days (Mon-Sun) and `selectedMonths` containing all 12 months -- this already produces a weighted average profile across the full year from the validated SCADA data
-- The PV profile is already computed as a yearly average from Solcast normalised profile data
-- The day navigation header changes to show "Annual Average (Year 1)" with no prev/next arrows
-- A toggle allows switching back to per-day view
-
-### Summary of Data Flow After Fix
+### Data Flow After Fix
 
 ```text
-Without Solar, Without Battery:
-  gridImport = total load
-  gridExport = 0
+useLoadProfileData (hook)
+  --> load profiles (total per hour)
+  --> PV generation (if solar enabled)
+  --> grid import/export (without battery)
 
-With Solar, Without Battery:
-  gridImport = max(0, total - pvGeneration)
-  gridExport = max(0, pvGeneration - total)
+EnergySimulationEngine (pure function)
+  --> Uses loadProfile + solarProfile from hook
+  --> Runs proper dispatch strategy
+  --> Produces hourlyData with battery + adjusted grid
 
-Without Solar, With Battery:
-  gridImport = total load (before battery)
-  battery charges from grid during off-peak
-  battery discharges during peak/standard
-  gridImportWithBattery = gridImport - discharge
-
-With Solar, With Battery:
-  (existing behaviour, now correctly decoupled)
+SimulationPanel (merge)
+  --> Takes hook's chartData (load + PV)
+  --> Overlays engine's battery + grid fields
+  --> Result = simulationChartData for all charts
 ```
 
-### Files Modified
+### Why This Approach
 
-| File | Change |
-|------|--------|
-| `src/components/projects/load-profile/hooks/useLoadProfileData.ts` | Always compute grid fields; decouple battery from solar gate |
-| `src/components/projects/SimulationPanel.tsx` | Add annual average mode; update chart header; pass all days/months when in average mode |
+- Keeps load/PV calculation in the hook (shared with Load Profile tab)
+- Uses the battle-tested dispatch engine for battery (no duplicate logic)
+- All four strategies work: self-consumption, TOU arbitrage, peak shaving, scheduled
+- Battery works with or without solar (TOU arbitrage grid-charging)
+- Single source of truth for battery simulation
+
