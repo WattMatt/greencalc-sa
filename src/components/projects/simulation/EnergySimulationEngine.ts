@@ -74,7 +74,9 @@ export function getDefaultDispatchConfig(strategy: BatteryDispatchStrategy): Dis
 export interface EnergySimulationConfig {
   solarCapacity: number; // kWp
   batteryCapacity: number; // kWh
-  batteryPower: number; // kW
+  batteryPower: number; // kW (legacy, used as fallback)
+  batteryChargePower?: number; // kW max charge rate (derived from C-rate)
+  batteryDischargePower?: number; // kW max discharge rate (derived from C-rate)
   batteryMinSoC?: number; // Minimum state of charge (default 10%)
   batteryMaxSoC?: number; // Maximum state of charge (default 95%)
   batteryInitialSoC?: number; // Starting SoC (default 50%)
@@ -130,7 +132,8 @@ interface HourState {
   batteryState: number;
   minBatteryLevel: number;
   maxBatteryLevel: number;
-  batteryPower: number;
+  batteryChargePower: number;
+  batteryDischargePower: number;
 }
 
 interface HourResult {
@@ -143,7 +146,7 @@ interface HourResult {
 }
 
 function dispatchSelfConsumption(s: HourState): HourResult {
-  const { load, solar, netLoad, batteryState, minBatteryLevel, maxBatteryLevel, batteryPower } = s;
+  const { load, solar, netLoad, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
   let gridImport = 0;
   let gridExport = 0;
   const solarUsed = Math.min(solar, load);
@@ -152,15 +155,13 @@ function dispatchSelfConsumption(s: HourState): HourResult {
   let newBatteryState = batteryState;
 
   if (netLoad > 0) {
-    // Load exceeds solar – discharge battery then import
-    const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryPower);
+    const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryDischargePower);
     batteryDischarge = Math.min(netLoad, Math.max(0, batteryAvailable));
     newBatteryState -= batteryDischarge;
     gridImport = netLoad - batteryDischarge;
   } else {
-    // Solar exceeds load – charge battery then export
     const excess = -netLoad;
-    const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryPower);
+    const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryChargePower);
     batteryCharge = Math.min(excess, Math.max(0, batterySpace));
     newBatteryState += batteryCharge;
     gridExport = excess - batteryCharge;
@@ -170,7 +171,7 @@ function dispatchSelfConsumption(s: HourState): HourResult {
 }
 
 function dispatchTouArbitrage(s: HourState, hour: number, config: DispatchConfig): HourResult {
-  const { load, solar, netLoad, batteryState, minBatteryLevel, maxBatteryLevel, batteryPower } = s;
+  const { load, solar, netLoad, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
   const isChargeHour = isInAnyWindow(hour, config.chargeWindows);
   const isDischargeHour = isInAnyWindow(hour, config.dischargeWindows);
 
@@ -184,7 +185,7 @@ function dispatchTouArbitrage(s: HourState, hour: number, config: DispatchConfig
   if (isDischargeHour) {
     // Discharge to offset load (even if solar covers some)
     if (netLoad > 0) {
-      const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryPower);
+      const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryDischargePower);
       batteryDischarge = Math.min(netLoad, Math.max(0, batteryAvailable));
       newBatteryState -= batteryDischarge;
       gridImport = netLoad - batteryDischarge;
@@ -199,14 +200,14 @@ function dispatchTouArbitrage(s: HourState, hour: number, config: DispatchConfig
     } else {
       // Use excess solar to charge first
       const excess = -netLoad;
-      const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryPower);
+      const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryChargePower);
       batteryCharge = Math.min(excess, Math.max(0, batterySpace));
       newBatteryState += batteryCharge;
       gridExport = excess - batteryCharge;
     }
     // Charge from grid if allowed and battery has room
     if (config.allowGridCharging) {
-      const batterySpace = Math.min(maxBatteryLevel - newBatteryState, batteryPower - batteryCharge);
+      const batterySpace = Math.min(maxBatteryLevel - newBatteryState, batteryChargePower - batteryCharge);
       const gridCharge = Math.max(0, batterySpace);
       if (gridCharge > 0) {
         batteryCharge += gridCharge;
@@ -223,7 +224,7 @@ function dispatchTouArbitrage(s: HourState, hour: number, config: DispatchConfig
 }
 
 function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig): HourResult {
-  const { load, solar, netLoad, batteryState, minBatteryLevel, maxBatteryLevel, batteryPower } = s;
+  const { load, solar, netLoad, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
   const target = config.peakShavingTarget ?? 150;
   const isChargeHour = config.chargeWindows.length > 0
     ? isInAnyWindow(hour, config.chargeWindows)
@@ -242,7 +243,7 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig)
     if (wouldImport > target) {
       // Discharge to cap grid import at target
       const neededDischarge = wouldImport - target;
-      const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryPower);
+      const batteryAvailable = Math.min(batteryState - minBatteryLevel, batteryDischargePower);
       batteryDischarge = Math.min(neededDischarge, Math.max(0, batteryAvailable));
       newBatteryState -= batteryDischarge;
       gridImport = wouldImport - batteryDischarge;
@@ -252,7 +253,7 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig)
   } else {
     // Solar excess – charge battery
     const excess = -netLoad;
-    const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryPower);
+    const batterySpace = Math.min(maxBatteryLevel - batteryState, batteryChargePower);
     batteryCharge = Math.min(excess, Math.max(0, batterySpace));
     newBatteryState += batteryCharge;
     gridExport = excess - batteryCharge;
@@ -260,7 +261,7 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig)
 
   // During charge hours, also charge from grid if allowed
   if (isChargeHour && config.allowGridCharging) {
-    const batterySpace = Math.min(maxBatteryLevel - newBatteryState, batteryPower - batteryCharge);
+    const batterySpace = Math.min(maxBatteryLevel - newBatteryState, batteryChargePower - batteryCharge);
     const gridCharge = Math.max(0, batterySpace);
     if (gridCharge > 0) {
       batteryCharge += gridCharge;
@@ -273,8 +274,7 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig)
 }
 
 function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig): HourResult {
-  const { load, solar, netLoad, batteryState, minBatteryLevel, maxBatteryLevel, batteryPower } = s;
-  const isChargeHour = isInAnyWindow(hour, config.chargeWindows);
+  // Same logic as TOU but with user-defined windows
   const isDischargeHour = isInAnyWindow(hour, config.dischargeWindows);
 
   // Same logic as TOU but with user-defined windows
@@ -295,12 +295,18 @@ export function runEnergySimulation(
   const {
     batteryCapacity,
     batteryPower,
+    batteryChargePower: configChargePower,
+    batteryDischargePower: configDischargePower,
     batteryMinSoC = 0.10,
     batteryMaxSoC = 0.95,
     batteryInitialSoC = 0.50,
     dispatchStrategy = 'self-consumption',
     dispatchConfig,
   } = config;
+
+  // Use explicit charge/discharge power if provided, otherwise fall back to legacy batteryPower
+  const batteryChargePower = configChargePower ?? batteryPower;
+  const batteryDischargePower = configDischargePower ?? batteryPower;
 
   const effectiveDispatchConfig = dispatchConfig ?? getDefaultDispatchConfig(dispatchStrategy);
 
@@ -325,7 +331,7 @@ export function runEnergySimulation(
 
     const hourState: HourState = {
       load, solar, netLoad, batteryState,
-      minBatteryLevel, maxBatteryLevel, batteryPower,
+      minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower,
     };
 
     let result: HourResult;
