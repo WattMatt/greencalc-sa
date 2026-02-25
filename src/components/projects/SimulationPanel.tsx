@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, Area, ComposedChart } from "recharts";
@@ -1667,28 +1668,27 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
                           <Label className="text-[10px] text-muted-foreground">Charge from</Label>
-                          <Select
-                            value={chargeTouPeriod}
-                            onValueChange={(v: TOUPeriod) => {
-                              setChargeTouPeriod(v);
-                              setDispatchConfig(prev => ({
-                                ...prev,
-                                chargeWindows: touPeriodToWindows(v),
-                              }));
-                            }}
-                          >
-                            <SelectTrigger className="h-7 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
-                              <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
-                              <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <div className="space-y-1.5 p-2 rounded border bg-muted/30">
+                            <label className="flex items-center gap-2 text-xs cursor-pointer">
+                              <Checkbox
+                                checked={true}
+                                disabled
+                                className="h-3.5 w-3.5"
+                              />
+                              <span>PV (Solar)</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-xs cursor-pointer">
+                              <Checkbox
+                                checked={dispatchConfig.allowGridCharging}
+                                onCheckedChange={(v) => setDispatchConfig(prev => ({ ...prev, allowGridCharging: !!v }))}
+                                className="h-3.5 w-3.5"
+                              />
+                              <span>Grid</span>
+                            </label>
+                          </div>
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Discharge from</Label>
+                          <Label className="text-[10px] text-muted-foreground">Discharge during</Label>
                           <Select
                             value={dischargeTouPeriod}
                             onValueChange={(v: TOUPeriod) => {
@@ -1710,13 +1710,27 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                           </Select>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={dispatchConfig.allowGridCharging}
-                          onCheckedChange={(v) => setDispatchConfig(prev => ({ ...prev, allowGridCharging: v }))}
-                          className="h-4 w-7"
-                        />
-                        <Label className="text-[10px] text-muted-foreground">Allow grid charging</Label>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Charge during</Label>
+                        <Select
+                          value={chargeTouPeriod}
+                          onValueChange={(v: TOUPeriod) => {
+                            setChargeTouPeriod(v);
+                            setDispatchConfig(prev => ({
+                              ...prev,
+                              chargeWindows: touPeriodToWindows(v),
+                            }));
+                          }}
+                        >
+                          <SelectTrigger className="h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
+                            <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
+                            <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   )}
