@@ -1,64 +1,43 @@
 
-# Fix Eskom PDF Tariff Import (Batch Skipping Bug)
+# Fix: Auto-Skip Non-Matching Eskom PDF Batches in Single Call
 
 ## Problem
 
-When you upload an Eskom PDF (like the Miniflex booklet), the import AI skips all batches with "0 tariffs extracted" because the batch-matching logic is designed for Excel files only.
-
-The root cause is in `supabase/functions/process-tariff-file/index.ts`, lines 700-717. For Eskom extractions, the code filters `sheetNames` by batch keywords (e.g. `["miniflex nla", "miniflex"]`). But for PDF uploads, `sheetNames` is always an empty array -- PDFs have no sheets. So `batchSheets` is always empty, and every batch immediately returns with `{ inserted: 0 }` without ever sending the PDF text to the AI.
+When extracting from an Eskom PDF that only contains one tariff family (e.g. Miniflex), the system processes batches one-at-a-time across multiple function calls. The first batch is "Megaflex" (index 0), which isn't in the PDF, so it returns `{inserted: 0}`. The user must click "Extract" repeatedly (up to 15 times) to cycle through all batches until reaching the one that actually matches.
 
 ## Solution
 
-Update the Eskom extraction path in the edge function to handle PDFs differently from Excel files:
+In the `process-tariff-file` edge function, when processing Eskom PDF batches, wrap the batch-skip logic in a **loop**. If the current batch name is not found in the PDF text, mark it as completed and immediately move to the next batch -- all within the same function call. Only return when either:
+1. A matching batch is found (proceed to AI extraction), or
+2. All batches are exhausted (return the "all complete" summary)
 
-1. **For PDF files**: Skip the sheet-matching logic entirely. Instead, check if the PDF text content matches the current batch by searching the extracted text for the batch name (e.g. "Miniflex"). If found, pass the full PDF text to the AI for extraction. If not found, skip that batch gracefully.
-
-2. **Fix the municipalityText assembly for Eskom PDFs**: Currently at line 730-732, when it is a PDF, it overwrites `municipalityText` with just the raw text without the batch context. The fix will prepend the batch focus context so the AI knows which tariff family to extract.
-
-## Technical Changes
+## Technical Change
 
 **File:** `supabase/functions/process-tariff-file/index.ts`
 
-### Change 1: PDF-aware batch matching (lines ~699-732)
-
-Replace the current Eskom batch text building with:
-
+### Current Flow (lines ~663-720)
 ```text
-if (isEskomExtraction) {
-  const currentBatch = eskomBatches[currentBatchIndex];
-  
-  if (fileType === "pdf") {
-    // For PDFs: check if batch name appears in the extracted text
-    const batchNameLower = currentBatch.name.toLowerCase();
-    const textLower = extractedText.toLowerCase();
-    const hasBatchContent = textLower.includes(batchNameLower);
-    
-    if (!hasBatchContent) {
-      // This PDF doesn't contain this batch's tariff family - skip
-      await supabase.from("eskom_batch_status")
-        .update({ status: "completed", tariffs_extracted: 0, ... })
-        ...
-      return ...;
-    }
-    
-    // Pass full PDF text with batch context
-    municipalityText = `BATCH FOCUS: ${currentBatch.name}\n${currentBatch.description}\n\n${extractedText.slice(0, 15000)}`;
-  } else {
-    // Existing Excel sheet-matching logic (unchanged)
-    ...
-  }
-}
+1. Find next pending batch
+2. If PDF doesn't contain batch name → mark complete, return {inserted: 0}
+3. If PDF contains batch name → proceed to AI extraction
 ```
 
-This ensures that:
-- When a Miniflex PDF is uploaded, the "Miniflex" batch finds the text and extracts it
-- Other batches (Megaflex, Nightsave, etc.) are correctly skipped because their names don't appear in the PDF
-- The AI receives the proper batch context prefix so it knows which tariff family to focus on
+### New Flow
+```text
+1. LOOP: Find next pending batch
+2.   If no pending batch → return "all complete" summary
+3.   If PDF doesn't contain batch name → mark complete with 0, CONTINUE LOOP
+4.   If PDF contains batch name → BREAK loop, proceed to AI extraction
+```
 
-### Change 2: Deploy edge function
+Specifically, after the batch status insert (line ~660) and the `nextBatch` query (line ~663), wrap the PDF batch-matching check (lines ~702-718) inside a `while` loop that:
+- Marks non-matching batches as completed (0 tariffs)
+- Queries for the next pending batch
+- Continues until a match is found or all batches are done
 
-Redeploy `process-tariff-file` after the code change.
+This keeps the Excel path unchanged (Excel files typically contain all batch sheets, so single-batch-per-call is fine there).
 
 ## Files Modified
 
-1. **`supabase/functions/process-tariff-file/index.ts`** -- Fix Eskom PDF batch matching logic
+1. **`supabase/functions/process-tariff-file/index.ts`** -- Add loop around PDF batch skipping logic
+2. Redeploy edge function
