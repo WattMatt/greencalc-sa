@@ -391,7 +391,6 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
       if (!province) return;
 
       const municipalityList = muniList
-        .filter(m => m.tariffCount > 0)
         .sort((a, b) => a.name.localeCompare(b.name))
         .map(m => ({ 
           name: m.name,
@@ -399,9 +398,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
           tariffs: municipalityTariffs[m.name] || [] 
         }));
 
-      if (municipalityList.length > 0) {
-        result.push({ province, municipalities: municipalityList });
-      }
+      result.push({ province, municipalities: municipalityList });
     });
 
     return result.sort((a, b) => a.province.name.localeCompare(b.province.name));
@@ -472,17 +469,6 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
 
   const totalTariffCount = Array.from(provinceCounts.values()).reduce((sum, p) => sum + p.tariffs, 0);
   
-  if (!totalTariffCount) {
-    return (
-      <Card className="bg-card border-border">
-        <CardContent className="py-8">
-          <p className="text-muted-foreground text-center">
-            No tariffs configured yet. Use the import tools or Tariff Builder to add tariffs.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -667,7 +653,7 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                           </div>
                         ) : municipality.tariffs.length === 0 ? (
                           <p className="text-sm text-muted-foreground text-center py-4">
-                            No tariffs loaded. Click to expand and load tariffs.
+                            No tariffs uploaded yet
                           </p>
                         ) : (
                         (() => {
