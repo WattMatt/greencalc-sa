@@ -1,39 +1,57 @@
 
-# Fix: Blended Tariff Rate Returns Zero for Flat-Rate Tariffs
 
-## Root Cause
+# Add Grid Battery Charging Cost to Cashflow
 
-The `getCombinedRate()` function in `src/lib/tariffCalculations.ts` uses `rates.find()` to locate a matching rate row by `time_of_use` and `season`. However, **all rate rows** (including `basic`, `demand`, etc.) are passed into this function. Since both the `basic` charge row and the `energy` charge row share the same `time_of_use='Any'` and `season='All Year'`, the `find()` can return the `basic` row first — which has `rate_per_kwh: 0`.
+## Problem
 
-This means the blended rate resolves to **R0.0000/kWh**, causing all revenue columns in the cashflow table to display zero.
+When the battery charges from the grid (e.g., during off-peak TOU arbitrage), those kWh are imported from the grid and must be paid for. Currently, the energy engine correctly adds grid-charge kWh to `gridImport`, but the financial engine does not account for this cost. The `totalCostR` only includes insurance and maintenance, so grid charging appears "free".
 
-## Fix
+## Solution
 
-### 1. `src/lib/tariffCalculations.ts` — Filter to energy rates only
+Track grid-charged battery kWh separately in the energy simulation, then cost them in the financial engine using the applicable tariff rate.
 
-In `getCombinedRate()`, `getFlatRate()`, and `isFlatRateTariff()`, pre-filter the input `rates` array to only include rows where `rate_per_kwh > 0` (energy charges). Alternatively, add a `charge` field to the `TariffRate` interface and filter by `charge === 'energy'`.
+### Step 1: Energy Engine -- Track grid-charge kWh separately
 
-The cleanest approach: update `getCombinedRate` and `getFlatRate` to filter out non-energy rates before calling `.find()`:
+**File:** `src/components/projects/simulation/EnergySimulationEngine.ts`
 
-```typescript
-// Filter to energy-bearing rates only (basic/demand rows have rate_per_kwh = 0)
-const energyRates = rates.filter(r => Number(r.rate_per_kwh) > 0);
-```
+- Add `batteryChargeFromGrid: number` to `HourResult`, `HourlyEnergyData`, and `EnergySimulationResults` (as `totalBatteryChargeFromGrid`).
+- In `dispatchTouArbitrage`, `dispatchPeakShaving`, and `dispatchScheduled`, track the `gridCharge` portion separately (where `gridImport += gridCharge`).
+- In `dispatchSelfConsumption`, grid charging is never allowed, so `batteryChargeFromGrid = 0`.
+- Accumulate the daily total in the simulation loop.
 
-Then use `energyRates.find(...)` instead of `rates.find(...)` in the lookup chain.
+### Step 2: Financial Engine -- Add grid charging cost
 
-### 2. `src/components/projects/simulation/AdvancedSimulationEngine.ts` — Fix double-counting bug
+**File:** `src/components/projects/simulation/AdvancedSimulationEngine.ts`
 
-Line 448: `totalIncomeR = energyIncomeR + exportIncomeR + demandIncomeR`
+- Read `totalBatteryChargeFromGrid` from the base energy results.
+- Annualise it: `baseBatteryChargeFromGridKwh = totalBatteryChargeFromGrid * 365`.
+- Apply degradation proportionally (same as other streams).
+- Calculate cost: `gridChargeCostR = batteryChargeFromGridKwh * baseEnergyRate * energyRateIndex` (charged at the prevailing energy rate).
+- Add to `totalCostR`: `totalCostR = insuranceCostR + maintenanceCost + gridChargeCostR`.
 
-`exportIncomeR` is already included in `energyIncomeR` (line 442). Change to:
+### Step 3: Types -- Add new fields to YearlyProjection
 
-```typescript
-const totalIncomeR = energyIncomeR + demandIncomeR;
-```
+**File:** `src/components/projects/simulation/AdvancedSimulationTypes.ts`
 
-## Impact
+- Add `gridChargeCostR: number` and `batteryChargeFromGridKwh: number` to `YearlyProjection`.
 
-- All rate and income columns in the cashflow table will display correct values
-- LCOE, ROI, Savings, and Payback metrics will reflect the actual tariff rate
-- The double-counting fix prevents export income from being added twice to total income
+### Step 4: Cashflow Table -- Display grid charging cost
+
+**File:** `src/components/projects/simulation/AdvancedResultsDisplay.tsx`
+
+- Add a "Grid Charge Cost (R)" column in the costs section of the cashflow table.
+- Display `gridChargeCostR` for each year.
+- Include in column totals.
+
+### Step 5: Column Totals
+
+**File:** `src/components/projects/simulation/AdvancedSimulationEngine.ts`
+
+- Add `gridChargeCostR` to the `ColumnTotals` interface and accumulate it in the totals loop.
+
+## Technical Notes
+
+- The grid charge rate should use the same `baseEnergyRate * energyRateIndex` as other energy flows. In a future iteration, a separate off-peak rate could be applied for more accuracy.
+- This cost is distinct from the regular grid import cost (which the building pays regardless). It represents the **additional** grid consumption solely for battery charging.
+- Net cashflow formula becomes: `totalIncomeR - totalCostR - replacementCost` (unchanged structure, but `totalCostR` now includes grid charging).
+
