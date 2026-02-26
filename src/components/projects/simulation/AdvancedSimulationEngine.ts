@@ -445,7 +445,7 @@ export function runAdvancedSimulation(
     const demandIncomeR = demandSavingKva * baseDemandRate * 12 * demandRateIndex;
     
     // Total Income (revenue from load displacement + export + demand savings)
-    const totalIncomeR = energyIncomeR + exportIncomeR + demandIncomeR;
+    const totalIncomeR = energyIncomeR + demandIncomeR;
     
     // ===== COST CALCULATIONS =====
     

@@ -207,7 +207,9 @@ export function getFlatRate(
   rates: TariffRate[], 
   tariff?: { legacy_charge_per_kwh?: number }
 ): number {
-  const rate = rates.find(r => 
+  // Filter to energy-bearing rates only (basic/demand rows have rate_per_kwh = 0)
+  const energyRates = rates.filter(r => Number(r.rate_per_kwh) > 0);
+  const rate = energyRates.find(r => 
     (r.time_of_use === 'Any' || !r.time_of_use) &&
     (r.season === 'All Year' || !r.season)
   );
@@ -235,15 +237,18 @@ export function getCombinedRate(
 ): number {
   const seasonFilter = season === 'high' ? 'High/Winter' : 'Low/Summer';
   
+  // Filter to energy-bearing rates only (basic/demand rows have rate_per_kwh = 0)
+  const energyRates = rates.filter(r => Number(r.rate_per_kwh) > 0);
+  
   // 1. First try: TOU-specific rate for the season
-  let rate = rates.find(r => 
+  let rate = energyRates.find(r => 
     r.time_of_use === timeOfUse && 
     (r.season === seasonFilter || r.season?.includes(season === 'high' ? 'High' : 'Low'))
   );
   
   // 2. Fallback to "Any" TOU rate for the same season (seasonal non-TOU tariffs)
   if (!rate) {
-    rate = rates.find(r => 
+    rate = energyRates.find(r => 
       (r.time_of_use === 'Any' || !r.time_of_use) &&
       (r.season === seasonFilter || r.season?.includes(season === 'high' ? 'High' : 'Low'))
     );
@@ -251,7 +256,7 @@ export function getCombinedRate(
   
   // 3. Final fallback: flat rate (All Year + Any TOU)
   if (!rate) {
-    rate = rates.find(r => 
+    rate = energyRates.find(r => 
       (r.time_of_use === 'Any' || !r.time_of_use) &&
       (r.season === 'All Year' || !r.season)
     );
