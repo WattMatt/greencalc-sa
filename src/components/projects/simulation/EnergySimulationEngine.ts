@@ -8,6 +8,8 @@
  * - Self-consumption calculations
  */
 
+import type { DischargeTOUSelection } from "@/components/projects/load-profile/types";
+
 // ── Dispatch Strategy Types ──
 
 export type BatteryDispatchStrategy = 'none' | 'self-consumption' | 'tou-arbitrage' | 'peak-shaving' | 'scheduled';
@@ -55,6 +57,7 @@ export interface DispatchConfig {
   peakShavingTarget?: number;        // kW target for peak shaving strategy
   chargeSources?: ChargeSource[];    // Ordered list of charge sources (top = highest priority)
   dischargeSources?: DischargeSource[]; // Ordered list of solar discharge destinations (top = highest priority)
+  dischargeTouSelection?: DischargeTOUSelection; // Grid-based TOU selection for arbitrage
 }
 
 /** Check if an hour falls within a time window (handles midnight wrap) */

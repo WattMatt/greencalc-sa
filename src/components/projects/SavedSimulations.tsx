@@ -105,6 +105,7 @@ interface SavedSimulationsProps {
     dispatchConfig?: any;
     chargeTouPeriod?: string;
     dischargeTouPeriod?: string;
+    dischargeTouSelection?: any;
   }) => void;
   includesBattery?: boolean;
 }
@@ -298,6 +299,7 @@ export function SavedSimulations({
       dispatchConfig: resultsJson?.dispatchConfig,
       chargeTouPeriod: resultsJson?.chargeTouPeriod,
       dischargeTouPeriod: resultsJson?.dischargeTouPeriod,
+      dischargeTouSelection: resultsJson?.dischargeTouSelection,
     };
 
     onLoadSimulation(configToLoad);

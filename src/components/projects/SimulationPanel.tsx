@@ -19,7 +19,7 @@ import { SolarChart } from "./load-profile/charts/SolarChart";
 import { GridFlowChart } from "./load-profile/charts/GridFlowChart";
 import { BatteryChart } from "./load-profile/charts/BatteryChart";
 import { TOULegend } from "./load-profile/components/TOULegend";
-import { ChartDataPoint, DayOfWeek, DAYS_OF_WEEK } from "./load-profile/types";
+import { ChartDataPoint, DayOfWeek, DAYS_OF_WEEK, DischargeTOUSelection, DEFAULT_DISCHARGE_TOU_SELECTION } from "./load-profile/types";
 import { FinancialMetricRow } from "./simulation/FinancialMetricRow";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ANNUAL_HOURS_24H, ANNUAL_HOURS_SOLAR } from "@/lib/tariffCalculations";
@@ -246,7 +246,24 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
    
    // TOU period selections for TOU Arbitrage mode
    const [chargeTouPeriod, setChargeTouPeriod] = useState<TOUPeriod>('off-peak');
-   const [dischargeTouPeriod, setDischargeTouPeriod] = useState<TOUPeriod>('peak');
+   const [dischargeTouSelection, setDischargeTouSelection] = useState<DischargeTOUSelection>(() => {
+     const c = getCachedSimulation();
+     return c?.json?.dischargeTouSelection ?? DEFAULT_DISCHARGE_TOU_SELECTION;
+   });
+
+   const handleDischargeTouSelectionChange = useCallback((selection: DischargeTOUSelection) => {
+     setDischargeTouSelection(selection);
+     const flags = selection.lowSeason.weekday;
+     const windows: TimeWindow[] = [];
+     if (flags.peak) windows.push(...touPeriodToWindows('peak'));
+     if (flags.standard) windows.push(...touPeriodToWindows('standard'));
+     if (flags.offPeak) windows.push(...touPeriodToWindows('off-peak'));
+     setDispatchConfig(prev => ({
+       ...prev,
+       dischargeWindows: windows.length > 0 ? windows : [{ start: 0, end: 0 }],
+       dischargeTouSelection: selection,
+     }));
+   }, []);
 
   // DoD is derived from SoC limits
   const batteryDoD = batteryMaxSoC - batteryMinSoC;
@@ -432,7 +449,16 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         setDispatchConfig(savedResultsJson.dispatchConfig ?? getDefaultDispatchConfig(savedResultsJson.batteryStrategy));
       }
       if (savedResultsJson?.chargeTouPeriod) setChargeTouPeriod(savedResultsJson.chargeTouPeriod);
-      if (savedResultsJson?.dischargeTouPeriod) setDischargeTouPeriod(savedResultsJson.dischargeTouPeriod);
+      if (savedResultsJson?.dischargeTouSelection) {
+        setDischargeTouSelection(savedResultsJson.dischargeTouSelection);
+      } else if (savedResultsJson?.dischargeTouPeriod) {
+        const period = savedResultsJson.dischargeTouPeriod as TOUPeriod;
+        const flags = { peak: period === 'peak', standard: period === 'standard', offPeak: period === 'off-peak' };
+        setDischargeTouSelection({
+          highSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
+          lowSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
+        });
+      }
 
       // Track what we loaded for UI feedback
       setLoadedSimulationName(lastSavedSimulation.name);
@@ -1101,7 +1127,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           batteryStrategy,
           dispatchConfig,
           chargeTouPeriod,
-          dischargeTouPeriod,
+          dischargeTouSelection,
           // Save battery characteristics
           batteryChargeCRate,
           batteryDischargeCRate,
@@ -1469,8 +1495,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         onDispatchConfigChange={setDispatchConfig}
         chargeTouPeriod={chargeTouPeriod}
         onChargeTouPeriodChange={setChargeTouPeriod}
-        dischargeTouPeriod={dischargeTouPeriod}
-        onDischargeTouPeriodChange={setDischargeTouPeriod}
+        dischargeTouSelection={dischargeTouSelection}
+        onDischargeTouSelectionChange={handleDischargeTouSelectionChange}
         touPeriodToWindows={touPeriodToWindows}
         dischargeSources={dispatchConfig.dischargeSources}
         onDischargeSourcesChange={(sources) => setDispatchConfig(prev => ({ ...prev, dischargeSources: sources }))}
@@ -2056,7 +2082,16 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             setDispatchConfig(config.dispatchConfig ?? getDefaultDispatchConfig(config.batteryStrategy as BatteryDispatchStrategy));
           }
           if (config.chargeTouPeriod) setChargeTouPeriod(config.chargeTouPeriod as TOUPeriod);
-          if (config.dischargeTouPeriod) setDischargeTouPeriod(config.dischargeTouPeriod as TOUPeriod);
+          if (config.dischargeTouSelection) {
+            setDischargeTouSelection(config.dischargeTouSelection);
+          } else if (config.dischargeTouPeriod) {
+            const period = config.dischargeTouPeriod as TOUPeriod;
+            const flags = { peak: period === 'peak', standard: period === 'standard', offPeak: period === 'off-peak' };
+            setDischargeTouSelection({
+              highSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
+              lowSeason: { weekday: { ...flags }, weekend: { peak: false, standard: false, offPeak: false } },
+            });
+          }
           if (config.pvConfig && Object.keys(config.pvConfig).length > 0) {
             setPvConfig((prev) => ({ ...prev, ...config.pvConfig }));
           }
