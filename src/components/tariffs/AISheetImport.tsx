@@ -109,6 +109,8 @@ export function AISheetImport() {
         queryClient.invalidateQueries({ queryKey: ["municipalities"] });
         queryClient.invalidateQueries({ queryKey: ["provinces"] });
         queryClient.invalidateQueries({ queryKey: ["tariff-categories"] });
+        queryClient.invalidateQueries({ queryKey: ["tariff-counts-per-municipality"] });
+        queryClient.invalidateQueries({ queryKey: ["municipalities-with-counts"] });
       }
     } catch (err) {
       console.error("Import error:", err);
