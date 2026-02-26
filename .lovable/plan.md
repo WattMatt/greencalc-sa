@@ -1,103 +1,100 @@
 
-# Remove 24-Hour Simulation Dependency: Annual 8,760-Hour as Single Source of Truth
+
+# Refactor Profile Charts: Daily Day-by-Day Navigation + Annual Average from 8,760-Hour Data
 
 ## Overview
 
-Every kWh figure, financial calculation, summary card, and chart overlay in the Simulation tab will be driven exclusively by the 8,760-hour annual simulation (`runAnnualEnergySimulation`). The 24-hour `runEnergySimulation` calls and `scaleToAnnual` helper will be removed from `SimulationPanel.tsx`. The chart will extract a representative 24-hour slice from the annual data for visualisation.
+Replace the current day-of-week navigation (Mon-Sun) and High/Low Demand toggle with a **day-of-year navigator** (Day 1 = Jan 1 through Day 365 = Dec 31). Each day shows the actual 24-hour slice from the annual simulation's `hourlyData`. The Annual Average mode averages all 365 days into one composite 24-hour profile. The High/Low Demand toggle is removed entirely.
 
-## What Changes
+## Changes
 
-### 1. Remove 24-hour simulation calls from SimulationPanel.tsx
+### 1. SimulationPanel.tsx -- State and Navigation
 
-- Remove `energyResults` (line 858-861), `energyResultsGeneric` (line 869-872), `energyResultsSolcast` (line 874-877)
-- Remove `annualEnergy = scaleToAnnual(energyResults)` (line 1001)
-- Keep only `annualEnergyResults` as the single energy source
+**Remove:**
+- `selectedDay` (DayOfWeek state -- "Wednesday", etc.)
+- `showHighSeason` state and its `localStorage` persistence
+- `navigateDay` callback (prev/next cycling through days of week)
 
-### 2. Add annual simulation variants for Generic and Solcast profiles
+**Add:**
+- `selectedDayIndex` state (number, 0-364) -- the day-of-year index matching `AnnualHourlyEnergyData.dayIndex`
+- `navigateDayIndex` callback: prev/next that clamps to 0-364
+- A date label derived from `dayIndex` (e.g. dayIndex 0 = "1 January", dayIndex 181 = "1 July")
 
-Currently `energyResultsGeneric` and `energyResultsSolcast` run the 24-hour engine with alternative solar profiles. These need to become annual simulations too:
+### 2. SimulationPanel.tsx -- Chart Data Extraction
 
-```text
-annualEnergyResultsGeneric = runAnnualEnergySimulation(loadProfile, solarProfileGeneric, energyConfig, touSettingsData)
-annualEnergyResultsSolcast = runAnnualEnergySimulation(loadProfile, solarProfileSolcast, energyConfig, touSettingsData)
-```
-
-### 3. Update `calculateFinancials` to accept `AnnualEnergySimulationResults`
-
-The `FinancialAnalysis.ts` function currently takes `EnergySimulationResults` (24-hour daily totals). It needs an overload or update to accept `AnnualEnergySimulationResults` directly, using the pre-summed annual totals instead of daily values multiplied by scaling factors.
-
-Key mapping:
-- `totalDailyLoad` becomes `totalAnnualLoad / 365` (for daily cost pro-rating) or direct annual use
-- `totalGridImport` becomes `totalAnnualGridImport / 365`
-- `peakLoad` and `peakGridImport` come directly from the annual results
-- All cost outputs recalculated as annual-first (no `* 365` on daily)
-
-### 4. Extract representative day from annual data for chart overlay
-
-The building profile chart needs 24 hourly data points. Instead of the 24-hour simulation, extract a representative day from the 8,760-hour dataset:
+**Replace `representativeDay` memo** with two new memos:
 
 ```text
-// Filter annual hourly data by current season + weekday, take first matching day
-const representativeDay = annualEnergyResults.hourlyData
-  .filter(h => h.season === currentSeason && h.dayType === 'weekday')
-  .slice(0, 24);
+// Daily: extract the exact 24h slice for selectedDayIndex
+const dailySlice = annualEnergyResults.hourlyData
+  .filter(h => h.dayIndex === selectedDayIndex);
+// Should always return exactly 24 entries
+
+// Annual Average: average all 365 days by hour
+const annualAverageSlice = Array.from({ length: 24 }, (_, h) => {
+  const hourEntries = annualEnergyResults.hourlyData
+    .filter(d => parseInt(d.hour) === h);
+  // Average each numeric field across all 365 entries for that hour
+  return {
+    hour: `${h.toString().padStart(2, '0')}:00`,
+    load: avg(hourEntries, 'load'),
+    solarUsed: avg(hourEntries, 'solarUsed'),
+    gridImport: avg(hourEntries, 'gridImport'),
+    gridExport: avg(hourEntries, 'gridExport'),
+    batteryCharge: avg(hourEntries, 'batteryCharge'),
+    batteryDischarge: avg(hourEntries, 'batteryDischarge'),
+    ...
+  };
+});
 ```
 
-This means the chart will show actual dispatch behaviour from the annual simulation (with carried-over battery SoC) for a representative weekday in the selected season, rather than an isolated 24-hour cycle.
+**Update `simulationChartData`** to use `dailySlice` or `annualAverageSlice` based on `showAnnualAverage`.
 
-### 5. Replace all `energyResults.*` references
+### 3. SimulationPanel.tsx -- TOU Background Context
 
-Every reference to the old 24-hour results in `SimulationPanel.tsx` will be replaced:
+**Daily view:** Each day's 24 hours already have `touPeriod` tagged in the annual data. Pass this per-hour TOU info to the chart so the TOU background colours are derived from the actual data (not from a representative month).
 
-| Old Reference | New Source |
-|---|---|
-| `energyResults.totalDailyLoad` | `annualEnergyResults.totalAnnualLoad / 365` |
-| `energyResults.totalDailySolar` | `annualEnergyResults.totalAnnualSolar / 365` |
-| `energyResults.totalDailySolar * 365` | `annualEnergyResults.totalAnnualSolar` |
-| `energyResults.totalGridImport` | `annualEnergyResults.totalAnnualGridImport / 365` |
-| `energyResults.totalGridImport * 2.5 * 365` | `annualEnergyResults.totalAnnualGridImport * 2.5` |
-| `energyResults.totalSolarUsed` | `annualEnergyResults.totalAnnualSolarUsed / 365` |
-| `energyResults.selfConsumptionRate` | `annualEnergyResults.selfConsumptionRate` |
-| `energyResults.peakLoad` | `annualEnergyResults.peakLoad` |
-| `energyResults.peakGridImport` | `annualEnergyResults.peakGridImport` |
-| `energyResults.peakReduction` | `annualEnergyResults.peakReduction` |
-| `energyResults.batteryCycles` | `annualEnergyResults.batteryCycles` |
-| `energyResults.totalBatteryDischarge` | `annualEnergyResults.totalAnnualBatteryDischarge / 365` |
-| `energyResults.hourlyData` | Representative day slice from annual data |
+**Annual Average view:** Use low-demand season TOU periods for the background (as specified by user).
 
-### 6. Update `runAdvancedSimulation` call
+This requires updating `BuildingProfileChart` (and `LoadChart`, `GridFlowChart`, `SolarChart`) to accept an optional `touPeriodsOverride: TOUPeriod[]` array (24 entries). When provided, use it instead of calling `getTOUPeriod()` with a representative month.
 
-Remove `energyResults` as first argument. The function already supports `annualEnergyResults` and falls back to `baseEnergyResults` only when annual data is missing. With this change, the annual data is always present, so we can simplify the interface or pass a derived `EnergySimulationResults` adapter from the annual totals.
+### 4. SimulationPanel.tsx -- Remove High/Low Demand Toggle
 
-### 7. Update summary cards
+Remove all three instances of the High/Low Demand `Switch` from the Building Profile, Load Profile, and Grid Profile tab headers. Also remove the `isHighSeason` prop from chart components and `TOULegend`.
 
-The "Daily Load", "Solar Generated", "Grid Import" cards (lines 2009-2060) will show annual averages derived from the 8,760-hour totals (dividing by 365), ensuring they reflect the true annual simulation rather than a single representative day.
+### 5. BuildingProfileChart.tsx (and other chart components)
 
-## Technical Details
+**Add optional prop:** `touPeriodsOverride?: string[]` (24 entries, one per hour)
 
-### Files Changed
+When provided:
+- Use `touPeriodsOverride[h]` instead of `getTOUPeriod(h, isWeekend, undefined, representativeMonth)` for ReferenceArea fills and tooltip badges
+- Remove `isHighSeason` prop (no longer needed)
+
+### 6. SimulationPanel.tsx -- Header Display
+
+**Daily mode title:** Show the actual date, e.g. "15 June (Day 166)" with season and day-type badges derived from the annual data (e.g. "High Demand | Weekday")
+
+**Annual Average title:** "Annual Average (Year 1)" (unchanged)
+
+### 7. useLoadProfileData Integration
+
+The `selectedDays` and `selectedMonths` passed to `useLoadProfileData` need updating:
+- **Daily mode:** Pass the specific day-of-week and month for that `dayIndex`
+- **Annual Average:** Pass all days/months (current behaviour)
+
+## Files Changed
 
 | File | Change |
-|---|---|
-| `src/components/projects/simulation/EnergySimulationEngine.ts` | Remove `scaleToAnnual` export (or keep for backwards compat but unused). No other changes needed -- the annual engine is already correct. |
-| `src/components/projects/simulation/FinancialAnalysis.ts` | Add `calculateFinancialsFromAnnual(annualResults, tariff, systemCosts, ...)` that reads pre-summed annual totals directly. |
-| `src/components/projects/SimulationPanel.tsx` | Remove 3 `runEnergySimulation` calls. Add 2 `runAnnualEnergySimulation` variants (Generic, Solcast). Replace all `energyResults.*` references. Extract representative day for chart. Update `calculateFinancials` calls to use new annual function. |
-| `src/components/projects/simulation/index.ts` | Export `calculateFinancialsFromAnnual` if added as new function. |
+|------|--------|
+| `src/components/projects/SimulationPanel.tsx` | Replace day-of-week nav with day-of-year (0-364) nav; remove `showHighSeason`; extract daily slice and annual average from annual data; pass `touPeriodsOverride` to charts; update `useLoadProfileData` params |
+| `src/components/projects/load-profile/charts/BuildingProfileChart.tsx` | Add `touPeriodsOverride` prop; use per-hour TOU from data instead of `getTOUPeriod()` with representative month; remove `isHighSeason` |
+| `src/components/projects/load-profile/charts/LoadChart.tsx` | Same: add `touPeriodsOverride`, remove `isHighSeason` |
+| `src/components/projects/load-profile/charts/GridFlowChart.tsx` | Same pattern |
+| `src/components/projects/load-profile/charts/SolarChart.tsx` | Same pattern |
+| `src/components/projects/load-profile/components/TOULegend.tsx` | Remove `isHighSeason` prop; derive legend from provided TOU periods or default to showing all three period types |
 
-### Chart Representative Day Logic
+## Expected Result
 
-```text
-const chartRepresentativeDay = useMemo(() => {
-  if (!annualEnergyResults?.hourlyData) return [];
-  const season = showHighSeason ? 'high' : 'low';
-  // Find first weekday in selected season
-  const startIdx = annualEnergyResults.hourlyData
-    .findIndex(h => h.season === season && h.dayType === 'weekday');
-  if (startIdx === -1) return [];
-  return annualEnergyResults.hourlyData.slice(startIdx, startIdx + 24);
-}, [annualEnergyResults, showHighSeason]);
-```
-
-### Performance
-
-No performance concern. The annual simulation already runs in sub-millisecond time. Removing the separate 24-hour simulation reduces total computation.
+- User can scroll from Day 1 (1 January) to Day 365 (31 December), seeing the exact simulation output for each day with correct TOU backgrounds
+- Annual Average shows a true 365-day average with low-demand TOU backgrounds
+- No more High/Low Demand toggle -- the TOU context is derived from the actual day's data
