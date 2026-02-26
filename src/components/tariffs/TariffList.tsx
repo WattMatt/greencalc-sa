@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -222,9 +222,19 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
   const [loadingMunicipalities, setLoadingMunicipalities] = useState<Set<string>>(new Set());
   const [isLoading] = useState(false);
 
-  // Load tariffs for a specific municipality on demand
-  const loadTariffsForMunicipality = async (municipalityName: string) => {
-    if (municipalityTariffs[municipalityName] || loadingMunicipalities.has(municipalityName)) return;
+  // Clear cached municipality tariffs when tariff counts change (i.e. after extraction/import)
+  const prevCountsRef = useRef(tariffCountsData);
+  useEffect(() => {
+    if (prevCountsRef.current && tariffCountsData && prevCountsRef.current !== tariffCountsData) {
+      setMunicipalityTariffs({});
+      setTariffRates({});
+    }
+    prevCountsRef.current = tariffCountsData;
+  }, [tariffCountsData]);
+
+  // Load tariffs for a specific municipality on demand (force=true to bypass cache)
+  const loadTariffsForMunicipality = async (municipalityName: string, force = false) => {
+    if (!force && (municipalityTariffs[municipalityName] || loadingMunicipalities.has(municipalityName))) return;
     
     const muni = municipalities?.find(m => m.name === municipalityName);
     if (!muni) return;
