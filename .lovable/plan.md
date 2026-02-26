@@ -1,57 +1,118 @@
 
+# Full 8,760-Hour Energy Simulation and Financial Model
 
-# Add "Hourly Rates" Toggle to Simulation Tariff Rate Card
+## Problem
 
-## Overview
+Currently, the energy simulation runs a **single 24-hour cycle** (one representative day) and the financial engine approximates annual results by multiplying daily totals by 365 or using 6 season/day-type combinations with day counts. This means:
 
-Add a toggle switch labelled "Hourly Rates" to the right of the blended rate dropdown in the Simulation Tariff Rate card. When enabled, it disables the dropdown and forces the financial engine to use granular hourly TOU rates (8,760-hour cycle). When disabled, the selected blended rate from the dropdown is used instead.
+- Battery state-of-charge resets every day (never carries over)
+- Dispatch behaviour is identical for weekdays, Saturdays, and Sundays despite different TOU periods
+- The `* 365` scaling is an approximation, not an exact simulation
 
-## Current Architecture
+The requirement is that **all kWh simulation and financial results are based on actual 1-hour intervals across 365 days (8,760 hours)**, regardless of tariff configuration.
 
-The hourly TOU calculation engine already exists in `AdvancedSimulationEngine.ts`:
-- `calculateAnnualHourlyIncome()` iterates 6 season x day-type combinations across 24 hours, looking up TOU-specific rates per hour
-- The decision to use hourly vs blended is currently automatic: if `tariffRates` are passed to `runAdvancedSimulation()`, it uses hourly TOU; otherwise it uses the single blended rate
-- The toggle will give the user explicit control over this behaviour
+## Solution Overview
 
-## Changes
+### 1. New `runAnnualEnergySimulation` function (EnergySimulationEngine.ts)
 
-### File: `src/pages/ProjectDetail.tsx`
+Create a new function that runs the existing dispatch logic for 8,760 consecutive hours:
 
-1. Add `useHourlyTouRates` state (boolean, default `true` since hourly TOU is the more accurate mode)
-2. Persist it alongside `blendedRateType` in the project settings JSON
-3. Pass the new state and setter down to `SimulationModes`
-
-### File: `src/components/projects/SimulationModes.tsx`
-
-1. Accept `useHourlyTouRates` and `onUseHourlyTouRatesChange` props
-2. Forward them to `SimulationPanel`
-
-### File: `src/components/projects/SimulationPanel.tsx`
-
-1. Accept `useHourlyTouRates` and `onUseHourlyTouRatesChange` props
-2. **UI**: Add a `Switch` toggle with "Hourly Rates" label to the right of the blended rate dropdown in the Simulation Tariff Rate card (line ~1742). When enabled, the `Select` dropdown gets `disabled={true}` styling
-3. **Engine wiring**: In the `runAdvancedSimulation` call (line ~1034), conditionally pass `tariffRates` only when `useHourlyTouRates` is true:
-   ```
-   tariffRates: useHourlyTouRates ? tariffRates : undefined
-   ```
-   When `undefined`, the engine falls back to the `else` branch (legacy single blended rate) at line 640
-
-### UI Layout
-
-The Simulation Tariff Rate card content row will look like:
+- Build a **365-day calendar** where each day is tagged with its season (`high`/`low` from `TOUSettings.highSeasonMonths`) and day-type (`weekday`/`saturday`/`sunday`)
+- For each day, use the same 24-hour load and solar profiles (as currently done implicitly via `* 365`)
+- **Battery SoC carries over** from day to day (no daily reset)
+- Dispatch permissions are resolved per-hour using the correct TOU hour map for that day's season and day-type
+- Output: `AnnualEnergySimulationResults` containing 8,760 `AnnualHourlyEnergyData` entries (each tagged with `dayIndex`, `season`, `dayType`, `touPeriod`)
 
 ```text
-[Dropdown: Solar Hours - Annual v]  [Hourly Rates toggle]  R1.3243/kWh
+Interface: AnnualHourlyEnergyData extends HourlyEnergyData
+  + dayIndex: number (0-364)
+  + season: 'high' | 'low'
+  + dayType: 'weekday' | 'saturday' | 'sunday'
+  + touPeriod: 'peak' | 'standard' | 'off-peak'
 ```
 
-- When toggle is **off**: Dropdown is active, rate display shows the selected blended rate
-- When toggle is **on**: Dropdown is disabled/greyed out, rate display shows "Hourly TOU" or the derived weighted average from the hourly engine
+The existing `runEnergySimulation` (24-hour) is preserved for chart visualisation.
 
-### Files Changed
+### 2. Update financial engine (AdvancedSimulationEngine.ts)
+
+- `runAdvancedSimulation` accepts an optional `AnnualEnergySimulationResults` parameter
+- Replace all `* 365` scaling with direct annual totals from the 8,760-hour results
+- Replace `calculateAnnualHourlyIncome` (6-combo approach) with a direct iteration over the 8,760 tagged hours, looking up the TOU rate per hour from its `season` + `touPeriod`
+- This eliminates the blended-vs-hourly toggle distinction: the financial model always uses the 8,760-hour data with per-hour TOU rates
+- Grid charge cost is calculated exactly per-hour (no more weighted average approximation)
+
+### 3. Update SimulationPanel.tsx
+
+- Call `runAnnualEnergySimulation` alongside the existing 24-hour simulation
+- Pass the annual results to `runAdvancedSimulation`
+- The 24-hour `runEnergySimulation` results continue to power the building/battery profile charts
+- The annual results power all financial calculations
+
+## Technical Details
+
+### Calendar Generation Helper
+
+```text
+function buildAnnualCalendar(touSettings: TOUSettings): DayInfo[]
+  For day 0-364:
+    month = lookup from cumulative month lengths
+    dayOfWeek = (startDay + dayIndex) % 7
+    season = highSeasonMonths.includes(month) ? 'high' : 'low'
+    dayType = dayOfWeek in [1-5] ? 'weekday' : dayOfWeek === 6 ? 'saturday' : 'sunday'
+  Returns 365 entries with { month, dayOfWeek, season, dayType, hourMap }
+```
+
+### Annual Simulation Loop
+
+```text
+function runAnnualEnergySimulation(
+  loadProfile: number[24],
+  solarProfile: number[24],
+  config: EnergySimulationConfig,
+  touSettings: TOUSettings
+): AnnualEnergySimulationResults
+
+  batteryState = initialSoC * capacity
+  for each day (0-364):
+    hourMap = touSettings[season][dayType]
+    for each hour (0-23):
+      touPeriod = hourMap[hour]
+      resolve dispatch permissions using touPeriod context
+      run dispatch (same logic as current)
+      tag result with { dayIndex, season, dayType, touPeriod }
+      carry battery state to next hour
+```
+
+### Financial Engine Changes
+
+```text
+// Before (approximation):
+const baseSolarDirectKwh = baseEnergyResults.totalSolarUsed * 365;
+
+// After (exact):
+const baseSolarDirectKwh = annualResults.totalAnnualSolarUsed;  // pre-summed from 8,760 hours
+```
+
+```text
+// Before (6-combo income):
+for combo in combinations:
+  income += hourData[h].solarUsed * combo.dayCount * rate
+
+// After (direct 8,760 iteration):
+for each of 8,760 tagged hours:
+  rate = getCombinedRate(tariffRates, hour.touPeriod, hour.season)
+  income += hour.solarUsed * rate
+```
+
+### Performance Consideration
+
+8,760 iterations with simple arithmetic is negligible (sub-millisecond). The results are memoised via `useMemo` in `SimulationPanel.tsx` with the same dependency array as the existing 24-hour simulation.
+
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/pages/ProjectDetail.tsx` | Add `useHourlyTouRates` state, persist to settings, pass as prop |
-| `src/components/projects/SimulationModes.tsx` | Forward new props |
-| `src/components/projects/SimulationPanel.tsx` | Add Switch toggle UI, conditionally pass `tariffRates` to engine |
-
+| `src/components/projects/simulation/EnergySimulationEngine.ts` | Add `AnnualHourlyEnergyData` interface, `AnnualEnergySimulationResults` interface, `buildAnnualCalendar` helper, `runAnnualEnergySimulation` function |
+| `src/components/projects/simulation/AdvancedSimulationEngine.ts` | Update `runAdvancedSimulation` to accept annual results, replace all `* 365` scaling with direct totals, replace 6-combo income calculation with direct 8,760-hour iteration |
+| `src/components/projects/SimulationPanel.tsx` | Call `runAnnualEnergySimulation`, pass annual results to financial engine |
+| `src/components/projects/simulation/index.ts` | Export new function and types |
