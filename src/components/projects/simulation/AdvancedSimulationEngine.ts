@@ -455,8 +455,13 @@ export function runAdvancedSimulation(
     // O&M Cost = Base Maintenance × CPI Index
     const maintenanceCost = baseMaintenance * costIndex;
     
+    // Grid Battery Charging Cost = kWh charged from grid × energy rate
+    const baseBatteryChargeFromGridKwh = (baseEnergyResults.totalBatteryChargeFromGrid ?? 0) * 365;
+    const batteryChargeFromGridKwh = baseBatteryChargeFromGridKwh * (panelEfficiency / 100);
+    const gridChargeCostR = batteryChargeFromGridKwh * baseEnergyRate * energyRateIndex;
+    
     // Total Operating Costs
-    const totalCostR = insuranceCostR + maintenanceCost;
+    const totalCostR = insuranceCostR + maintenanceCost + gridChargeCostR;
     
     // Replacement costs - percentage-based calculation
     let replacementCost = 0;
@@ -549,6 +554,8 @@ export function runAdvancedSimulation(
       demandIncomeR,
       totalIncomeR,
       insuranceCostR,
+      gridChargeCostR,
+      batteryChargeFromGridKwh,
       totalCostR,
       pvReductionFactor,
       presentValue,
@@ -647,6 +654,7 @@ export function runAdvancedSimulation(
     totalDemandIncome: yearlyProjections.reduce((s, p) => s + (p.demandIncomeR || 0), 0),
     totalIncome: lifetimeSavings,
     totalInsurance: yearlyProjections.reduce((s, p) => s + (p.insuranceCostR || 0), 0),
+    totalGridChargeCost: yearlyProjections.reduce((s, p) => s + (p.gridChargeCostR || 0), 0),
     totalOM: yearlyProjections.reduce((s, p) => s + p.maintenanceCost, 0),
     totalReplacements: yearlyProjections.reduce((s, p) => s + (p.replacementCost || 0), 0),
     totalCosts: yearlyProjections.reduce((s, p) => s + (p.totalCostR || 0), 0),

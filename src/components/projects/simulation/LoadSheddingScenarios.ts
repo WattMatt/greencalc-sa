@@ -260,6 +260,7 @@ function simulateWithLoadShedding(
       batteryCycles,
       batteryUtilization,
       revenueKwh: totalSolarUsed + totalBatteryDischarge + totalGridExport,
+      totalBatteryChargeFromGrid: 0,
     },
     unmetLoad,
     loadServedDuringOutage,
