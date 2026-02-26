@@ -384,8 +384,15 @@ export const SIMULATION_PRESETS: Record<PresetName, SimulationPreset> = {
 
 // ============= Column Totals for Transparency =============
 export interface ColumnTotals {
-  totalEnergyYield: number;        // Sum of Energy Yield column
-  npvEnergyYield: number;          // Sum of Discounted Energy Yield column (for LCOE)
+  totalEnergyYield: number;        // Sum of Energy Yield column (legacy, kept for charts)
+  npvEnergyYield: number;          // Sum of Discounted Energy Yield column (for LCOE — now uses delivered kWh)
+  totalSolarDirectKwh: number;     // Sum of Solar Direct kWh column
+  totalSolarDirectIncome: number;  // Sum of Solar Direct Income column
+  totalBatteryDischargeKwh: number; // Sum of Battery Discharge kWh column
+  totalBatteryDischargeIncome: number; // Sum of Battery Discharge Income column
+  totalExportKwh: number;          // Sum of Export kWh column
+  totalExportIncome: number;       // Sum of Export Income column
+  totalDemandIncome: number;       // Sum of Demand Income column
   totalIncome: number;             // Sum of Total Income column
   totalInsurance: number;          // Sum of Insurance column
   totalOM: number;                 // Sum of O&M column
@@ -437,21 +444,30 @@ export interface YearlyProjection {
   discountedCashFlow: number; // R (for NPV)
   
   // NEW: Income-based approach (Excel model alignment)
-  energyYield: number; // kWh (total solar production with degradation — for LCOE, not revenue)
-  discountedEnergyYield: number; // kWh discounted by LCOE rate (for LCOE denominator)
-  revenueKwh: number; // kWh that actually earn revenue (solar-to-load + battery-to-load)
+  energyYield: number; // kWh (total solar production with degradation — legacy, kept for charts)
+  discountedEnergyYield: number; // kWh discounted by LCOE rate (LCOE denominator — now uses delivered kWh)
+  revenueKwh: number; // kWh that actually earn revenue (solar-to-load + battery-to-load) — legacy
   exportKwh: number; // kWh exported to grid (earns at export rate)
-  energyRateIndex: number; // Tariff escalation factor (1.0, 1.1, 1.21...)
+  energyRateIndex: number; // Tariff escalation factor (1.0, 1.1, 1.21...) — shared across all sources
   energyRateR: number; // R/kWh (base rate × index) - actual tariff charged
-  energyIncomeR: number; // R = revenueKwh × baseRate × index (load-displacement revenue)
+  energyIncomeR: number; // R = revenueKwh × baseRate × index (load-displacement revenue) — legacy sum
   exportIncomeR: number; // R = exportKwh × exportRate × index (grid export revenue)
+  
+  // Split source columns (new)
+  solarDirectKwh: number; // kWh solar consumed directly by load
+  solarDirectRateR: number; // R/kWh (base energy rate × index)
+  solarDirectIncomeR: number; // R (solarDirectKwh × solarDirectRateR)
+  batteryDischargeKwh: number; // kWh battery discharged to load
+  batteryDischargeRateR: number; // R/kWh (base energy rate × index)
+  batteryDischargeIncomeR: number; // R (batteryDischargeKwh × batteryDischargeRateR)
+  exportRateR: number; // R/kWh (export rate × index)
   
   demandSavingKva: number; // kVA reduction from solar
   demandRateIndex: number; // Demand escalation factor
   demandRateR: number; // R/kVA (base demand rate × index) - actual demand charge
   demandIncomeR: number; // R = kVA × R/kVA × 12 × index
   
-  totalIncomeR: number; // energyIncome + demandIncome
+  totalIncomeR: number; // solarDirectIncome + batteryDischargeIncome + exportIncome + demandIncome
   
   insuranceCostR: number; // Insurance with CPI escalation
   totalCostR: number; // insurance + maintenance
