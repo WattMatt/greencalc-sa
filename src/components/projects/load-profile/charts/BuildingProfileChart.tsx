@@ -8,10 +8,11 @@ interface BuildingProfileChartProps {
   isWeekend: boolean;
   unit: string;
   includesBattery: boolean;
+  isHighSeason?: boolean;
 }
 
-export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, includesBattery }: BuildingProfileChartProps) {
-  // Append 25th data point for visual continuity
+export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, includesBattery, isHighSeason = false }: BuildingProfileChartProps) {
+  const representativeMonth = isHighSeason ? 5 : 0;
   const extendedData = [...chartData, { ...chartData[chartData.length - 1], hour: "24:00" }];
 
   const totalLoad = chartData.reduce((sum, d) => sum + (d.total || 0), 0);
@@ -81,10 +82,9 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
               </linearGradient>
             </defs>
 
-            {/* TOU Background */}
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
-                const period = getTOUPeriod(h, isWeekend);
+                const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
                 return (
                   <ReferenceArea
                     key={h}
@@ -98,20 +98,8 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
               })}
 
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
-            <XAxis
-              dataKey="hour"
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              tickLine={false}
-              axisLine={{ stroke: "hsl(var(--border))" }}
-              interval={2}
-            />
-            <YAxis
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())}
-              width={45}
-            />
+            <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} interval={2} />
+            <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} width={45} />
 
             <Tooltip
               content={({ active, payload, label }) => {
@@ -119,7 +107,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
                 const dp = chartData.find(d => d.hour === label);
                 if (!dp) return null;
                 const hourNum = parseInt(label?.toString() || "0");
-                const period = getTOUPeriod(hourNum, isWeekend);
+                const period = getTOUPeriod(hourNum, isWeekend, undefined, representativeMonth);
 
                 return (
                   <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg text-xs space-y-1">
@@ -144,13 +132,11 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
               }}
             />
 
-            {/* Areas */}
             <Area type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#bpLoadGradient)" dot={false} name="Load" />
             <Area type="monotone" dataKey="solarUsed" stroke="hsl(38 92% 50%)" strokeWidth={1.5} fill="url(#bpPvGradient)" dot={false} name="PV to Load" />
             <Area type="monotone" dataKey="gridImport" stroke="hsl(0 72% 51%)" strokeWidth={1.5} fill="url(#bpImportGradient)" dot={false} name="Grid Import" />
             <Area type="monotone" dataKey="gridExport" stroke="hsl(142 76% 36%)" strokeWidth={1.5} fill="url(#bpExportGradient)" dot={false} name="Grid Export" />
 
-            {/* Battery lines (conditional) */}
             {includesBattery && (
               <Line type="monotone" dataKey="batteryCharge" stroke="hsl(142 76% 36%)" strokeWidth={2} dot={false} name="Battery Charge" />
             )}

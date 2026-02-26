@@ -8,9 +8,11 @@ interface GridFlowChartProps {
   showTOU: boolean;
   isWeekend: boolean;
   unit: string;
+  isHighSeason?: boolean;
 }
 
-export function GridFlowChart({ chartData, showTOU, isWeekend, unit }: GridFlowChartProps) {
+export function GridFlowChart({ chartData, showTOU, isWeekend, unit, isHighSeason = false }: GridFlowChartProps) {
+  const representativeMonth = isHighSeason ? 5 : 0;
   const totalImport = chartData.reduce((sum, d) => sum + (d.gridImport || 0), 0);
   const totalExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
 
@@ -46,10 +48,9 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit }: GridFlowC
               </linearGradient>
             </defs>
 
-            {/* TOU Background */}
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
-                const period = getTOUPeriod(h, isWeekend);
+                const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
                 const nextHour = h + 1;
                 return (
                   <ReferenceArea
@@ -64,20 +65,8 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit }: GridFlowC
               })}
 
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
-            <XAxis
-              dataKey="hour"
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              tickLine={false}
-              axisLine={{ stroke: "hsl(var(--border))" }}
-              interval={2}
-            />
-            <YAxis
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())}
-              width={45}
-            />
+            <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} interval={2} />
+            <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} width={45} />
             <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1} />
             <Tooltip
               content={({ active, payload, label }) => {
@@ -85,17 +74,13 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit }: GridFlowC
                 const gridImport = Number(payload.find((p) => p.dataKey === "gridImport")?.value) || 0;
                 const gridExport = Number(payload.find((p) => p.dataKey === "gridExport")?.value) || 0;
                 const hourNum = parseInt(label?.toString() || "0");
-                const period = getTOUPeriod(hourNum, isWeekend);
+                const period = getTOUPeriod(hourNum, isWeekend, undefined, representativeMonth);
 
                 return (
                   <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg text-xs space-y-1">
                     <div className="flex items-center gap-2">
                       <p className="font-medium">{label}</p>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] px-1.5 py-0"
-                        style={{ borderColor: TOU_COLORS[period].stroke, color: TOU_COLORS[period].stroke }}
-                      >
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0" style={{ borderColor: TOU_COLORS[period].stroke, color: TOU_COLORS[period].stroke }}>
                         {TOU_COLORS[period].label}
                       </Badge>
                     </div>
@@ -119,25 +104,8 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit }: GridFlowC
               }}
             />
 
-            {/* Grid Import */}
-            <Area
-              type="monotone"
-              dataKey="gridImport"
-              stroke="hsl(0 72% 51%)"
-              strokeWidth={1.5}
-              fill="url(#gridImportGradient)"
-              dot={false}
-            />
-
-            {/* Grid Export */}
-            <Area
-              type="monotone"
-              dataKey="gridExport"
-              stroke="hsl(142 76% 36%)"
-              strokeWidth={1.5}
-              fill="url(#gridExportGradient)"
-              dot={false}
-            />
+            <Area type="monotone" dataKey="gridImport" stroke="hsl(0 72% 51%)" strokeWidth={1.5} fill="url(#gridImportGradient)" dot={false} />
+            <Area type="monotone" dataKey="gridExport" stroke="hsl(142 76% 36%)" strokeWidth={1.5} fill="url(#gridExportGradient)" dot={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
