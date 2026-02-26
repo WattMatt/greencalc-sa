@@ -8,7 +8,7 @@
  * - Self-consumption calculations
  */
 
-import type { DischargeTOUSelection } from "@/components/projects/load-profile/types";
+import type { DischargeTOUSelection, TOUPeriod, TOUSettings, TOUHourMap } from "@/components/projects/load-profile/types";
 
 // ── Dispatch Strategy Types ──
 
@@ -314,11 +314,42 @@ function dispatchSelfConsumption(
   return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid: 0, newBatteryState };
 }
 
-function dispatchTouArbitrage(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions): HourResult {
+/** Check whether battery discharge is permitted for the given TOU context using the 12-cell selection matrix */
+function isDischargePermittedByTouSelection(
+  season: 'high' | 'low',
+  dayType: 'weekday' | 'saturday' | 'sunday',
+  touPeriod: TOUPeriod,
+  selection?: DischargeTOUSelection,
+): boolean {
+  if (!selection) return true; // No matrix = always permitted (backwards compat)
+  const seasonKey = season === 'high' ? 'highSeason' : 'lowSeason';
+  const dayTypeKey: 'weekday' | 'weekend' = dayType === 'weekday' ? 'weekday' : 'weekend';
+  const flags = selection[seasonKey][dayTypeKey];
+  switch (touPeriod) {
+    case 'peak': return flags.peak;
+    case 'standard': return flags.standard;
+    case 'off-peak': return flags.offPeak;
+    default: return false;
+  }
+}
+
+interface TouContext {
+  season: 'high' | 'low';
+  dayType: 'weekday' | 'saturday' | 'sunday';
+  touPeriod: TOUPeriod;
+}
+
+function dispatchTouArbitrage(
+  s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions,
+  touContext?: TouContext,
+): HourResult {
   const { load, solar, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
   const { pvChargeAllowed, gridChargeAllowed, loadDischargeAllowed, batteryDischargeAllowed, gridExportAllowed } = permissions;
   const isChargeHour = isInAnyWindow(hour, config.chargeWindows);
-  const isDischargeHour = isInAnyWindow(hour, config.dischargeWindows);
+  // Use TOU selection matrix when context is available; fall back to static windows
+  const isDischargeHour = touContext
+    ? isDischargePermittedByTouSelection(touContext.season, touContext.dayType, touContext.touPeriod, config.dischargeTouSelection)
+    : isInAnyWindow(hour, config.dischargeWindows);
 
   const solarUsed = loadDischargeAllowed ? Math.min(solar, load) : 0;
   const effectiveNetLoad = load - solarUsed;
@@ -438,8 +469,8 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig,
   return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState };
 }
 
-function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions): HourResult {
-  return dispatchTouArbitrage(s, hour, config, permissions);
+function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions, touContext?: TouContext): HourResult {
+  return dispatchTouArbitrage(s, hour, config, permissions, touContext);
 }
 
 // ── Main simulation function ──
@@ -639,7 +670,7 @@ export function scaleToMonthly(dailyResults: EnergySimulationResults): {
 // ANNUAL 8,760-HOUR SIMULATION
 // ══════════════════════════════════════════════════════════════════════════════
 
-import type { TOUSettings, TOUHourMap, TOUPeriod } from "@/components/projects/load-profile/types";
+// Types already imported at top of file
 
 /** Extended hourly data with calendar context */
 export interface AnnualHourlyEnergyData extends HourlyEnergyData {
@@ -817,19 +848,23 @@ export function runAnnualEnergySimulation(
       const dischargePerms = getDischargePermissions(h, effectiveDispatchConfig, dayTouResolver);
       const permissions: DispatchPermissions = { ...chargePerms, ...dischargePerms };
 
+      // Resolve TOU period BEFORE dispatch so it can inform discharge decisions
+      const touPeriod: TOUPeriod = day.hourMap[h] || 'off-peak';
+      const touContext: TouContext = { season: day.season, dayType: day.dayType, touPeriod };
+
       let result: HourResult;
       switch (dispatchStrategy) {
         case 'none':
           result = dispatchSelfConsumption(hourState, { ...permissions, batteryDischargeAllowed: false });
           break;
         case 'tou-arbitrage':
-          result = dispatchTouArbitrage(hourState, h, effectiveDispatchConfig, permissions);
+          result = dispatchTouArbitrage(hourState, h, effectiveDispatchConfig, permissions, touContext);
           break;
         case 'peak-shaving':
           result = dispatchPeakShaving(hourState, h, effectiveDispatchConfig, permissions);
           break;
         case 'scheduled':
-          result = dispatchScheduled(hourState, h, effectiveDispatchConfig, permissions);
+          result = dispatchScheduled(hourState, h, effectiveDispatchConfig, permissions, touContext);
           break;
         case 'self-consumption':
         default:
@@ -838,17 +873,6 @@ export function runAnnualEnergySimulation(
       }
 
       batteryState = result.newBatteryState;
-      totalGridImport += result.gridImport;
-      totalGridExport += result.gridExport;
-      totalSolarUsed += result.solarUsed;
-      totalBatteryCharge += result.batteryCharge;
-      totalBatteryDischarge += result.batteryDischarge;
-      totalBatteryChargeFromGrid += result.batteryChargeFromGrid;
-      totalLoad += load;
-      totalSolar += solar;
-      if (result.gridImport > peakGridImport) peakGridImport = result.gridImport;
-
-      const touPeriod = day.hourMap[h] || 'off-peak';
 
       hourlyData.push({
         hour: `${h.toString().padStart(2, '0')}:00`,
