@@ -879,7 +879,7 @@ Deno.serve(async (req) => {
           console.log(`Extract AI call attempt ${attempt}/${MAX_RETRIES}`);
           
           // Use fastest model to avoid edge function timeout
-          const aiModel = isEskomExtraction ? "google/gemini-2.5-flash-lite" : "google/gemini-2.5-flash";
+          const aiModel = isEskomExtraction ? "google/gemini-2.5-pro" : "google/gemini-2.5-flash";
           console.log(`Using model: ${aiModel}, text length: ${municipalityText.length}`);
           
           const controller = new AbortController();
