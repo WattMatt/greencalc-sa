@@ -78,6 +78,7 @@ export function DayNavigationHeader({
                 selected={selectedDate}
                 onSelect={handleDateSelect}
                 defaultMonth={selectedDate}
+                fixedWeeks
                 fromDate={new Date(2026, 0, 1)}
                 toDate={new Date(2026, 11, 31)}
                 formatters={{
