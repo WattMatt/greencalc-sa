@@ -693,9 +693,40 @@ export function ProvinceFilesManager() {
             await new Promise(r => setTimeout(r, 1000));
           } catch (batchError) {
             console.error(`Eskom batch ${attempts} failed:`, batchError);
-            // Continue to next batch instead of failing completely
-            sonnerToast.error(`Batch ${attempts} failed - continuing to next...`, { duration: 2000 });
-            await new Promise(r => setTimeout(r, 2000));
+            // On timeout/error, check DB for actual batch progress - the function may have succeeded
+            sonnerToast.info(`Batch ${attempts} timed out - checking progress...`, { duration: 2000 });
+            await new Promise(r => setTimeout(r, 3000));
+            
+            // Check if batches were actually completed in the DB despite the timeout
+            const { data: dbBatches } = await (supabase as any)
+              .from("eskom_batch_status")
+              .select("batch_index, batch_name, status, tariffs_extracted")
+              .eq("municipality_id", muni.id)
+              .order("batch_index");
+            
+            if (dbBatches) {
+              const completed = dbBatches.filter((b: any) => b.status === "completed");
+              const pending = dbBatches.filter((b: any) => b.status !== "completed");
+              const dbInserted = completed.reduce((sum: number, b: any) => sum + (b.tariffs_extracted || 0), 0);
+              
+              totalInserted = dbInserted;
+              
+              if (pending.length === 0) {
+                // All batches done despite timeout!
+                sonnerToast.success(`All Eskom batches complete! ${dbInserted} total tariffs extracted`, { duration: 5000 });
+                setEskomBatchStatus(null);
+                break;
+              } else {
+                setEskomBatchStatus({
+                  currentBatch: pending[0].batch_index + 1,
+                  currentBatchName: pending[0].batch_name,
+                  completedBatches: completed.length,
+                  totalBatches: dbBatches.length,
+                  isExtracting: true
+                });
+                sonnerToast.info(`${completed.length}/${dbBatches.length} batches done (${dbInserted} tariffs) - continuing...`, { duration: 3000 });
+              }
+            }
           }
         }
         
