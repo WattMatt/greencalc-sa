@@ -1,86 +1,57 @@
 
-
-# Fix: Battery Not Charging During Daytime Despite User Configuration
+# Fix: Battery Charging Blocked by Empty TOU Period Default
 
 ## Problem
-
-The battery only charges during off-peak weekend hours, even though the user has configured PV charging to be allowed across all TOU periods.
+The battery never charges despite the user configuring PV to charge during Off-Peak and Standard periods. The chart shows 0 charge, 0 discharge, and flat SoC.
 
 ## Root Cause
-
-In `EnergySimulationEngine.ts`, the `getChargePermissions` function (line 216) uses a **hardcoded default of `['off-peak']`** for ALL charge sources when `chargeTouPeriods` is not explicitly set:
+The `isSourceActiveAtHour` function in `EnergySimulationEngine.ts` treats `undefined` TOU periods the same as "explicitly restricted to nothing":
 
 ```text
-const active = isSourceActiveAtHour(hour, src.chargeTouPeriods, ['off-peak'], touPeriodToWindowsFn);
+Line 190: const periods = touPeriods ?? defaultPeriods;
 ```
 
-The `DEFAULT_CHARGE_SOURCES` (line 33-35) do NOT set `chargeTouPeriods`:
-```text
-{ id: 'pv', enabled: true }       // No chargeTouPeriods -> defaults to ['off-peak']
-{ id: 'grid', enabled: true }     // No chargeTouPeriods -> defaults to ['off-peak']
-```
+When `touPeriods` is `undefined` (not configured) and `defaultPeriods` is `[]` (the "no defaults" change), `periods` becomes `[]`. The loop iterates over zero items and returns `false` -- charging is blocked for every hour.
 
-This means even if the user has "PV" enabled as a charge source, the engine only allows PV charging during off-peak hours. Since off-peak on weekdays is typically late night (no solar), the battery never charges from PV on weekdays. On weekends, off-peak spans more hours, which explains the "only off-peak weekend" pattern.
+This breaks because:
+1. `DEFAULT_CHARGE_SOURCES` defines `{ id: 'pv', enabled: true }` with NO `chargeTouPeriods`
+2. Sources exist, so the legacy fallback (`pvChargeAllowed: true`) is skipped (line 206-208)
+3. But each source's `chargeTouPeriods` is `undefined` which maps to `[]` which means "never active"
+4. Even after the user clicks checkboxes, any config restore (cache, strategy change) can lose `chargeTouPeriods` and silently revert to blocking
 
-The default `['off-peak']` makes sense for grid charging (cheap rates), but is wrong for PV -- solar energy is free and should charge the battery whenever available by default.
+## Fix
 
-## Fix (single file: `EnergySimulationEngine.ts`)
+**Single change in `isSourceActiveAtHour`** (line 190-191): When `touPeriods` is `undefined` AND `defaultPeriods` is empty, treat it as "no restriction configured" and return `true` (always active). This distinguishes three states:
 
-### 1. Use source-specific defaults in `getChargePermissions`
-
-Change the default periods to be source-aware:
-- **PV**: Default to `['off-peak', 'standard', 'peak']` (charge from solar whenever available)
-- **Grid**: Keep default at `['off-peak']` (charge from grid during cheap rates)
+- `undefined` + empty default = **unrestricted** (no TOU filtering configured -- always active)
+- `['off-peak', 'standard']` = **restricted** to those specific periods
+- `[]` = **fully blocked** (impossible to reach via UI since at least 1 checkbox is required)
 
 ```text
-// Line 216: Change from a single default to source-specific defaults
-for (const src of sources) {
-  if (!src.enabled) continue;
-  const defaultPeriods: ('off-peak' | 'standard' | 'peak')[] =
-    src.id === 'pv' ? ['off-peak', 'standard', 'peak'] : ['off-peak'];
-  const active = isSourceActiveAtHour(hour, src.chargeTouPeriods, defaultPeriods, touPeriodToWindowsFn);
-  ...
+// EnergySimulationEngine.ts, isSourceActiveAtHour function
+function isSourceActiveAtHour(
+  hour: number,
+  touPeriods: ('off-peak' | 'standard' | 'peak')[] | undefined,
+  defaultPeriods: ('off-peak' | 'standard' | 'peak')[],
+  touPeriodToWindowsFn?: (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[],
+): boolean {
+  // If no TOU periods configured and no defaults provided, source is unrestricted
+  if (touPeriods === undefined && defaultPeriods.length === 0) return true;
+  
+  const periods = touPeriods ?? defaultPeriods;
+  if (!touPeriodToWindowsFn) return true;
+  for (const p of periods) {
+    const windows = touPeriodToWindowsFn(p);
+    if (windows.some(w => isInWindow(hour, w))) return true;
+  }
+  return false;
 }
 ```
 
-### 2. Update `DEFAULT_CHARGE_SOURCES` with explicit `chargeTouPeriods`
-
-Set `chargeTouPeriods` explicitly on defaults so the UI and engine are always in sync:
-
-```text
-export const DEFAULT_CHARGE_SOURCES: ChargeSource[] = [
-  { id: 'pv', enabled: true, chargeTouPeriods: ['off-peak', 'standard', 'peak'] },
-  { id: 'grid', enabled: true, chargeTouPeriods: ['off-peak'] },
-  { id: 'generator', enabled: false },
-];
-```
-
-### 3. Update the UI default fallback in `AdvancedSimulationConfig.tsx`
-
-The `ChargeSourcesList` component (line 1012) also defaults to `['off-peak']` when rendering:
-
-```text
-const periods = source.chargeTouPeriods ?? (source.chargeTouPeriod ? [source.chargeTouPeriod] : ['off-peak']);
-```
-
-Change this to use a source-specific default:
-
-```text
-const defaultPeriods = source.id === 'pv' ? ['off-peak', 'standard', 'peak'] : ['off-peak'];
-const periods = source.chargeTouPeriods ?? (source.chargeTouPeriod ? [source.chargeTouPeriod] : defaultPeriods);
-```
-
-## Expected Result
-
-- PV will charge the battery during **all** TOU periods by default (peak, standard, off-peak)
-- Grid charging remains restricted to off-peak by default (cost-efficient)
-- Users who have already explicitly configured their TOU periods are unaffected (their saved `chargeTouPeriods` overrides defaults)
-- Battery charges from solar excess throughout the day as expected
+No other files need to change. This respects "no defaults" while correctly handling unconfigured sources.
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/projects/simulation/EnergySimulationEngine.ts` | Source-specific default TOU periods in `getChargePermissions`; explicit `chargeTouPeriods` on `DEFAULT_CHARGE_SOURCES` |
-| `src/components/projects/simulation/AdvancedSimulationConfig.tsx` | Source-specific default fallback in `ChargeSourcesList` UI |
-
+| `src/components/projects/simulation/EnergySimulationEngine.ts` | Add early return in `isSourceActiveAtHour` when `touPeriods` is undefined and defaults are empty |
