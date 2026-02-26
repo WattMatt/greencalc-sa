@@ -841,12 +841,12 @@ Deno.serve(async (req) => {
         try {
           console.log(`Extract AI call attempt ${attempt}/${MAX_RETRIES}`);
           
-          // Use faster model for Eskom to avoid timeouts
-          const aiModel = isEskomExtraction ? "google/gemini-2.5-flash" : "google/gemini-2.5-pro";
-          console.log(`Using model: ${aiModel}`);
+          // Use fastest model to avoid edge function timeout
+          const aiModel = isEskomExtraction ? "google/gemini-2.5-flash-lite" : "google/gemini-2.5-flash";
+          console.log(`Using model: ${aiModel}, text length: ${municipalityText.length}`);
           
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 50000); // 50s timeout
+          const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s timeout
           
           const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
@@ -984,7 +984,7 @@ Deno.serve(async (req) => {
         );
       }
       
-      console.log(`AI extracted ${extractedTariffs.length} tariffs for ${municipality}`);
+      console.log(`AI extracted ${extractedTariffs.length} tariffs for ${municipality}. Starting DB writes...`);
 
       // === NERSA SCHEMA: Write to tariff_plans + tariff_rates ===
       const existingTariffMap = new Map(
@@ -1041,6 +1041,7 @@ Deno.serve(async (req) => {
             await supabase.from("tariff_rates").delete().eq("tariff_plan_id", tariffPlanId);
             updated++;
           } else {
+            console.log(`Inserting tariff plan: ${tariff.tariff_name}, category: ${tariffPlanData.category}, structure: ${tariffPlanData.structure}`);
             const { data: newPlan, error: planErr } = await supabase
               .from("tariff_plans")
               .insert(tariffPlanData)
@@ -1048,12 +1049,14 @@ Deno.serve(async (req) => {
               .single();
 
             if (planErr || !newPlan) {
+              console.error(`INSERT FAILED for ${tariff.tariff_name}: ${planErr?.message || "No data returned"}`);
               errors.push(`${tariff.tariff_name}: ${planErr?.message || "Insert failed"}`);
               skipped++;
               continue;
             }
 
             tariffPlanId = newPlan.id;
+            console.log(`Inserted tariff plan ${tariff.tariff_name} with id ${tariffPlanId}`);
             inserted++;
           }
 
@@ -1107,6 +1110,8 @@ Deno.serve(async (req) => {
             const { error: ratesErr } = await supabase.from("tariff_rates").insert(rateRows);
             if (ratesErr) {
               console.error(`Rate insert error for ${tariff.tariff_name}:`, ratesErr.message);
+            } else {
+              console.log(`Inserted ${rateRows.length} rates for ${tariff.tariff_name}`);
             }
           }
         } catch (e) {
@@ -1114,6 +1119,9 @@ Deno.serve(async (req) => {
           skipped++;
         }
       }
+
+      console.log(`DB writes complete: inserted=${inserted}, updated=${updated}, skipped=${skipped}, errors=${errors.length}`);
+      if (errors.length > 0) console.log(`Errors: ${errors.slice(0, 5).join('; ')}`);
 
       // Create extraction run record
       const sourceFileName = filePath.replace(/^\d+-/, '');
