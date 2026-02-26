@@ -1,7 +1,7 @@
 import { ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
-import { ChartDataPoint, getTOUPeriod, TOU_COLORS } from "../types";
+import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 
 interface LoadChartProps {
   chartData: ChartDataPoint[];
@@ -9,12 +9,14 @@ interface LoadChartProps {
   isWeekend: boolean;
   unit: string;
   isLoading?: boolean;
-  isHighSeason?: boolean;
+  touPeriodsOverride?: TOUPeriod[];
 }
 
-export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, isHighSeason = false }: LoadChartProps) {
-  // Use a representative month: high season → June (5), low season → January (0)
-  const representativeMonth = isHighSeason ? 5 : 0;
+export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, touPeriodsOverride }: LoadChartProps) {
+  const getPeriod = (h: number): TOUPeriod => {
+    if (touPeriodsOverride && touPeriodsOverride[h]) return touPeriodsOverride[h];
+    return getTOUPeriod(h, isWeekend);
+  };
 
   if (isLoading) {
     return (
@@ -42,7 +44,7 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, isHi
 
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
-                const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
+                const period = getPeriod(h);
                 const nextHour = h + 1;
                 return (
                   <ReferenceArea
@@ -64,7 +66,7 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, isHi
                 if (!active || !payload?.length) return null;
                 const loadValue = Number(payload.find((p) => p.dataKey === "total")?.value) || 0;
                 const hourNum = parseInt(label?.toString() || "0");
-                const period = getTOUPeriod(hourNum, isWeekend, undefined, representativeMonth);
+                const period = getPeriod(hourNum);
                 return (
                   <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
                     <div className="flex items-center gap-2 mb-1">

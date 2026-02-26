@@ -19,7 +19,7 @@ import { SolarChart } from "./load-profile/charts/SolarChart";
 import { GridFlowChart } from "./load-profile/charts/GridFlowChart";
 import { BatteryChart } from "./load-profile/charts/BatteryChart";
 import { TOULegend } from "./load-profile/components/TOULegend";
-import { ChartDataPoint, DayOfWeek, DAYS_OF_WEEK, DischargeTOUSelection, DEFAULT_DISCHARGE_TOU_SELECTION } from "./load-profile/types";
+import { ChartDataPoint, DayOfWeek, DAYS_OF_WEEK, DischargeTOUSelection, DEFAULT_DISCHARGE_TOU_SELECTION, TOUPeriod as LoadProfileTOUPeriod } from "./load-profile/types";
 import { FinancialMetricRow } from "./simulation/FinancialMetricRow";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ANNUAL_HOURS_24H, ANNUAL_HOURS_SOLAR } from "@/lib/tariffCalculations";
@@ -302,29 +302,27 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const hasInitialLoadComplete = useRef(false);
   const AUTOSAVE_DEBOUNCE_MS = 1500;
 
-  // High/Low demand season toggle for TOU chart backgrounds (with localStorage persistence)
-  const [showHighSeason, setShowHighSeason] = useState(() => {
-    const saved = localStorage.getItem('simulation_showHighSeason');
-    return saved !== null ? saved === 'true' : false;
-  });
-
-  // Day-of-week selection for load profile visualization (matches Load Profile tab)
-  const [selectedDay, setSelectedDay] = useState<DayOfWeek>("Wednesday");
+  // Day-of-year index (0-364) for navigating the 365-day annual simulation
+  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [showAnnualAverage, setShowAnnualAverage] = useState(true);
 
-  useEffect(() => {
-    localStorage.setItem('simulation_showHighSeason', String(showHighSeason));
-  }, [showHighSeason]);
+  // Day-of-year navigation helper
+  const navigateDayIndex = useCallback((direction: "prev" | "next") => {
+    setSelectedDayIndex(prev => {
+      if (direction === "prev") return Math.max(0, prev - 1);
+      return Math.min(364, prev + 1);
+    });
+  }, []);
 
-  // Day navigation helper
-  const navigateDay = useCallback((direction: "prev" | "next") => {
-    const idx = DAYS_OF_WEEK.indexOf(selectedDay);
-    if (direction === "prev") {
-      setSelectedDay(DAYS_OF_WEEK[(idx - 1 + 7) % 7]);
-    } else {
-      setSelectedDay(DAYS_OF_WEEK[(idx + 1) % 7]);
-    }
-  }, [selectedDay]);
+  // Derive date label and metadata from dayIndex
+  const dayDateInfo = useMemo(() => {
+    const date = new Date(2024, 0, 1 + selectedDayIndex); // 2024 is a leap year but we cap at 364
+    const dayOfWeek = date.getDay(); // 0=Sun..6=Sat
+    const month = date.getMonth(); // 0-indexed
+    const dayLabel = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+    const dayTypeName = dayOfWeek === 0 ? 'Sunday' : dayOfWeek === 6 ? 'Saturday' : 'Weekday';
+    return { dayLabel, dayOfWeek, month, dayTypeName, dayNumber: selectedDayIndex + 1 };
+  }, [selectedDayIndex]);
 
   // Auto-load the last saved simulation when data arrives (only once per projectId)
   useEffect(() => {
@@ -575,8 +573,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     shopTypes,
     selectedDays: showAnnualAverage 
       ? new Set([0, 1, 2, 3, 4, 5, 6]) 
-      : new Set([DAYS_OF_WEEK.indexOf(selectedDay) === -1 ? 3 : (DAYS_OF_WEEK.indexOf(selectedDay) + 1) % 7]),
-    selectedMonths: showAnnualAverage ? new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) : undefined,
+      : new Set([dayDateInfo.dayOfWeek]),
+    selectedMonths: showAnnualAverage ? new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) : new Set([dayDateInfo.month]),
     displayUnit: "kw",
     powerFactor: 0.9,
     showPVProfile: includesSolar && solarCapacity > 0,
@@ -842,8 +840,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     dispatchConfig,
     touPeriodToWindows,
     touSettings: touSettingsData,
-    representativeSeason: showHighSeason ? 'high' as const : 'low' as const,
-  }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig, touSettingsData, showHighSeason]);
+    representativeSeason: 'low' as const,
+  }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig, touSettingsData]);
 
   // Extract solar from chart data (same source as pvGeneration) for engine input
   // This ensures the engine receives exactly the same solar values that appear in the charts
@@ -869,16 +867,57 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     [loadProfile, solarProfileSolcast, energyConfig, touSettingsData]
   );
 
-  // Extract a representative 24-hour day from annual data for chart overlay
-  const representativeDay = useMemo(() => {
+  // Extract the specific 24h slice for the selected day index from annual data
+  const dailySlice = useMemo(() => {
     if (!annualEnergyResults?.hourlyData) return [];
-    const season = showHighSeason ? 'high' : 'low';
-    const startIdx = annualEnergyResults.hourlyData.findIndex(
-      h => h.season === season && h.dayType === 'weekday'
-    );
-    if (startIdx === -1) return [];
-    return annualEnergyResults.hourlyData.slice(startIdx, startIdx + 24);
-  }, [annualEnergyResults, showHighSeason]);
+    return annualEnergyResults.hourlyData.filter(h => h.dayIndex === selectedDayIndex);
+  }, [annualEnergyResults, selectedDayIndex]);
+
+  // Annual average: average all 365 days by hour-of-day
+  const annualAverageSlice = useMemo(() => {
+    if (!annualEnergyResults?.hourlyData) return [];
+    // Group by hour (0-23) and average each field
+    return Array.from({ length: 24 }, (_, h) => {
+      const hourEntries = annualEnergyResults.hourlyData.filter(d => parseInt(d.hour) === h);
+      const count = hourEntries.length || 1;
+      const avg = (field: string) => hourEntries.reduce((sum, e) => sum + ((e as any)[field] || 0), 0) / count;
+      return {
+        hour: `${h.toString().padStart(2, '0')}:00`,
+        load: avg('load'),
+        solarUsed: avg('solarUsed'),
+        gridImport: avg('gridImport'),
+        gridExport: avg('gridExport'),
+        batteryCharge: avg('batteryCharge'),
+        batteryDischarge: avg('batteryDischarge'),
+        batterySOC: avg('batterySOC'),
+        netLoad: avg('netLoad'),
+        pvGeneration: avg('pvGeneration'),
+        batteryChargeFromGrid: avg('batteryChargeFromGrid'),
+        touPeriod: 'off-peak' as LoadProfileTOUPeriod, // placeholder for annual avg
+      };
+    });
+  }, [annualEnergyResults]);
+
+  // Build TOU periods override array (24 entries) from the current day's data
+  const touPeriodsForDay = useMemo((): LoadProfileTOUPeriod[] | undefined => {
+    if (showAnnualAverage) {
+      // Use low-demand weekday TOU for annual average
+      return Array.from({ length: 24 }, (_, h) => {
+        const settings = touSettingsData;
+        return settings.lowSeason.weekday[h] || 'off-peak';
+      }) as LoadProfileTOUPeriod[];
+    }
+    if (dailySlice.length === 24) {
+      return dailySlice.map(h => h.touPeriod);
+    }
+    return undefined;
+  }, [showAnnualAverage, dailySlice, touSettingsData]);
+
+  // The representative day data for chart rendering
+  const representativeDay = useMemo(() => {
+    if (showAnnualAverage) return annualAverageSlice;
+    return dailySlice;
+  }, [showAnnualAverage, annualAverageSlice, dailySlice]);
 
   // ========================================
   // PHASE 2: Financial Analysis (tariff-dependent)
@@ -2320,30 +2359,30 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("prev")} disabled={selectedDayIndex === 0}>
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
                   )}
                   <div>
-                    <CardTitle className="text-base">{showAnnualAverage ? "Annual Average (Year 1)" : selectedDay}</CardTitle>
-                    <CardDescription className="text-xs">Cumulative profile: load, grid, PV, and battery combined</CardDescription>
+                    <CardTitle className="text-base">
+                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      {showAnnualAverage
+                        ? "Cumulative profile: load, grid, PV, and battery combined"
+                        : `${dailySlice[0]?.season === 'high' ? 'High Demand' : 'Low Demand'} · ${dayDateInfo.dayTypeName}`}
+                    </CardDescription>
                   </div>
                   {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
-                <div className="flex items-center gap-3">
-                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
-                    Annual Avg
-                  </Label>
-                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showHighSeason} onCheckedChange={setShowHighSeason} className="scale-75" />
-                    {showHighSeason ? "High Demand" : "Low Demand"}
-                  </Label>
-                </div>
+                <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                  <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
+                  Annual Avg
+                </Label>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2353,9 +2392,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 isWeekend={loadProfileIsWeekend} 
                 unit="kW"
                 includesBattery={includesBattery && batteryCapacity > 0}
-                isHighSeason={showHighSeason}
+                touPeriodsOverride={touPeriodsForDay}
               />
-              <TOULegend isHighSeason={showHighSeason} />
+              <TOULegend />
             </CardContent>
           </Card>
         </TabsContent>
@@ -2367,30 +2406,26 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("prev")} disabled={selectedDayIndex === 0}>
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
                   )}
                   <div>
-                    <CardTitle className="text-base">{showAnnualAverage ? "Annual Average (Year 1)" : selectedDay}</CardTitle>
+                    <CardTitle className="text-base">
+                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
+                    </CardTitle>
                     <CardDescription className="text-xs">Tenant load and estimated downstream tenant consumption</CardDescription>
                   </div>
                   {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
-                <div className="flex items-center gap-3">
-                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
-                    Annual Avg
-                  </Label>
-                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showHighSeason} onCheckedChange={setShowHighSeason} className="scale-75" />
-                    {showHighSeason ? "High Demand" : "Low Demand"}
-                  </Label>
-                </div>
+                <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                  <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
+                  Annual Avg
+                </Label>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2399,9 +2434,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 showTOU={true} 
                 isWeekend={loadProfileIsWeekend} 
                 unit="kW"
-                isHighSeason={showHighSeason}
+                touPeriodsOverride={touPeriodsForDay}
               />
-              <TOULegend isHighSeason={showHighSeason} />
+              <TOULegend />
             </CardContent>
           </Card>
         </TabsContent>
@@ -2413,30 +2448,26 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("prev")}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("prev")} disabled={selectedDayIndex === 0}>
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
                   )}
                   <div>
-                    <CardTitle className="text-base">{showAnnualAverage ? "Annual Average (Year 1)" : selectedDay}</CardTitle>
+                    <CardTitle className="text-base">
+                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
+                    </CardTitle>
                     <CardDescription className="text-xs">kW and kWh as perceived by the network operator</CardDescription>
                   </div>
                   {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDay("next")}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
-                <div className="flex items-center gap-3">
-                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
-                    Annual Avg
-                  </Label>
-                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showHighSeason} onCheckedChange={setShowHighSeason} className="scale-75" />
-                    {showHighSeason ? "High Demand" : "Low Demand"}
-                  </Label>
-                </div>
+                <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                  <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
+                  Annual Avg
+                </Label>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2445,9 +2476,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 showTOU={true}
                 isWeekend={loadProfileIsWeekend}
                 unit="kW"
-                isHighSeason={showHighSeason}
+                touPeriodsOverride={touPeriodsForDay}
               />
-              <TOULegend isHighSeason={showHighSeason} />
+              <TOULegend />
             </CardContent>
           </Card>
         </TabsContent>
@@ -2457,16 +2488,28 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>{showAnnualAverage ? "Annual Average (Year 1)" : "PV Generation"}</CardTitle>
-                  <CardDescription>PV production output</CardDescription>
-                </div>
                 <div className="flex items-center gap-3">
-                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showHighSeason} onCheckedChange={setShowHighSeason} className="scale-75" />
-                    {showHighSeason ? "High Demand" : "Low Demand"}
-                  </Label>
+                  {!showAnnualAverage && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("prev")} disabled={selectedDayIndex === 0}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <div>
+                    <CardTitle className="text-base">
+                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
+                    </CardTitle>
+                    <CardDescription>PV production output</CardDescription>
+                  </div>
+                  {!showAnnualAverage && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
+                <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                  <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
+                  Annual Avg
+                </Label>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2478,9 +2521,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 show1to1Comparison={inverterConfig.dcAcRatio > 1}
                 unit="kW"
                 maxPvAcKva={solarCapacity}
-                isHighSeason={showHighSeason}
+                touPeriodsOverride={touPeriodsForDay}
               />
-              <TOULegend isHighSeason={showHighSeason} />
+              <TOULegend />
             </CardContent>
           </Card>
         </TabsContent>

@@ -1,7 +1,7 @@
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Sun } from "lucide-react";
-import { ChartDataPoint, getTOUPeriod, TOU_COLORS } from "../types";
+import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 
 interface SolarChartProps {
   chartData: ChartDataPoint[];
@@ -11,11 +11,15 @@ interface SolarChartProps {
   show1to1Comparison: boolean;
   unit: string;
   maxPvAcKva?: number;
-  isHighSeason?: boolean;
+  touPeriodsOverride?: TOUPeriod[];
 }
 
-export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1Comparison, unit, maxPvAcKva, isHighSeason = false }: SolarChartProps) {
-  const representativeMonth = isHighSeason ? 5 : 0;
+export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1Comparison, unit, maxPvAcKva, touPeriodsOverride }: SolarChartProps) {
+  const getPeriod = (h: number): TOUPeriod => {
+    if (touPeriodsOverride && touPeriodsOverride[h]) return touPeriodsOverride[h];
+    return getTOUPeriod(h, isWeekend);
+  };
+
   const totalPv = chartData.reduce((sum, d) => sum + (d.pvGeneration || 0), 0);
   const totalDc = chartData.reduce((sum, d) => sum + (d.pvDcOutput || 0), 0);
   const total1to1 = chartData.reduce((sum, d) => sum + (d.pv1to1Baseline || 0), 0);
@@ -25,18 +29,13 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
   const totalBatteryCharge = chartData.reduce((sum, d) => sum + (d.batteryCharge || 0), 0);
   const totalGridExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
   const hasSolarUsedData = chartData.some(d => d.solarUsed !== undefined);
-  // Effective generation = what was actually consumed/used (solarUsed when engine data available)
   const effectiveGeneration = hasSolarUsedData ? totalSolarUsed : totalPv;
   const energyGained = totalPv - total1to1;
   const netBenefit = energyGained - totalClipping;
-
-  // Y-axis must accommodate the DC curve going above AC limit
   const yAxisMax = dcAcRatio > 1 ? Math.max(peakDc * 1.1, (maxPvAcKva || 0) * 1.3) : undefined;
 
-  // Compute gain zone data: the difference between AC output and 1:1 baseline (only positive gains)
   const chartDataWithGain = chartData.map(d => ({
     ...d,
-    // Gain is where AC output exceeds 1:1 baseline (morning/evening benefit from oversizing)
     pvGainZone: Math.max(0, (d.pvGeneration || 0) - (d.pv1to1Baseline || 0)),
   }));
 
@@ -88,7 +87,6 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
       
       {/* Stats badges */}
       <div className="flex flex-wrap gap-2 text-[10px]">
-        {/* Dispatch breakdown badges - show when engine data is available */}
         {hasSolarUsedData && (
           <>
             <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-500/10">
@@ -111,7 +109,6 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
             )}
           </>
         )}
-        {/* DC/AC comparison badges */}
         {dcAcRatio > 1 && (
           <>
             {energyGained > 0 && (
@@ -161,7 +158,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
             {/* TOU Background */}
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
-                const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
+                const period = getPeriod(h);
                 const nextHour = h + 1;
                 return (
                   <ReferenceArea
@@ -176,42 +173,16 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
               })}
 
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.5} />
-            <XAxis
-              dataKey="hour"
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              tickLine={false}
-              axisLine={{ stroke: "hsl(var(--border))" }}
-              interval={2}
-            />
-            <YAxis
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())}
-              width={45}
-              domain={yAxisMax ? [0, yAxisMax] : ["auto", "auto"]}
-            />
+            <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={{ stroke: "hsl(var(--border))" }} interval={2} />
+            <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toString())} width={45} domain={yAxisMax ? [0, yAxisMax] : ["auto", "auto"]} />
             
-            {/* Inverter AC limit reference line (dashed horizontal) */}
             {dcAcRatio > 1 && maxPvAcKva && (
-              <ReferenceLine 
-                y={maxPvAcKva} 
-                stroke="hsl(var(--destructive))" 
-                strokeDasharray="6 4" 
-                strokeWidth={1.5}
-                label={{ 
-                  value: `Inverter AC Limit`, 
-                  position: "insideTopRight", 
-                  fontSize: 9,
-                  fill: "hsl(var(--destructive))"
-                }}
-              />
+              <ReferenceLine y={maxPvAcKva} stroke="hsl(var(--destructive))" strokeDasharray="6 4" strokeWidth={1.5} label={{ value: `Inverter AC Limit`, position: "insideTopRight", fontSize: 9, fill: "hsl(var(--destructive))" }} />
             )}
             
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
-                
                 const dataPoint = chartDataWithGain.find(d => d.hour === label);
                 const pv = dataPoint?.pvGeneration || 0;
                 const load = dataPoint?.total || 0;
@@ -220,24 +191,18 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
                 const baseline = dataPoint?.pv1to1Baseline || 0;
                 const gain = dataPoint?.pvGainZone || 0;
                 const hourNum = parseInt(label?.toString() || "0");
-                const period = getTOUPeriod(hourNum, isWeekend, undefined, representativeMonth);
+                const period = getPeriod(hourNum);
 
                 return (
                   <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg text-xs space-y-1">
                     <div className="flex items-center gap-2">
                       <p className="font-medium">{label}</p>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] px-1.5 py-0"
-                        style={{ borderColor: TOU_COLORS[period].stroke, color: TOU_COLORS[period].stroke }}
-                      >
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0" style={{ borderColor: TOU_COLORS[period].stroke, color: TOU_COLORS[period].stroke }}>
                         {TOU_COLORS[period].label}
                       </Badge>
                     </div>
                     {dcAcRatio > 1 && (
-                      <p className="text-blue-500 font-medium">
-                        DC Panel Output: {dcOutput.toFixed(1)} {unit}
-                      </p>
+                      <p className="text-blue-500 font-medium">DC Panel Output: {dcOutput.toFixed(1)} {unit}</p>
                     )}
                     <p className="text-amber-600">
                       {hasSolarUsedData ? "Consumed" : "AC Inverter Output"}: {(dataPoint?.solarUsed ?? pv).toFixed(1)} {unit}
@@ -257,56 +222,16 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
               }}
             />
 
-            {/* 1:1 Baseline Comparison Line (gray dotted - shows what a 1:1 system would produce) */}
             {show1to1Comparison && dcAcRatio > 1 && (
-              <Line 
-                type="monotone" 
-                dataKey="pv1to1Baseline" 
-                stroke="hsl(var(--muted-foreground))" 
-                strokeWidth={2} 
-                strokeDasharray="4 4"
-                dot={false}
-                name="1:1 Baseline"
-              />
+              <Line type="monotone" dataKey="pv1to1Baseline" stroke="hsl(var(--muted-foreground))" strokeWidth={2} strokeDasharray="4 4" dot={false} name="1:1 Baseline" />
             )}
-
-            {/* Gain Zone: shaded area showing energy gained from oversizing (between 1:1 baseline and AC output) */}
             {show1to1Comparison && dcAcRatio > 1 && (
-              <Area
-                type="monotone"
-                dataKey="pvGainZone"
-                stroke="none"
-                fill="url(#pvGainGradient)"
-                stackId="gainStack"
-                baseValue="dataMin"
-                name="Energy Gained"
-              />
+              <Area type="monotone" dataKey="pvGainZone" stroke="none" fill="url(#pvGainGradient)" stackId="gainStack" baseValue="dataMin" name="Energy Gained" />
             )}
-
-            {/* DC Output curve (blue line - the larger bell curve showing panel capability) */}
             {dcAcRatio > 1 && (
-              <Line 
-                type="monotone" 
-                dataKey="pvDcOutput" 
-                stroke="hsl(217 91% 60%)" 
-                strokeWidth={2.5} 
-                dot={false}
-                name="DC Output"
-              />
+              <Line type="monotone" dataKey="pvDcOutput" stroke="hsl(217 91% 60%)" strokeWidth={2.5} dot={false} name="DC Output" />
             )}
-
-            {/* AC Output Area - use solarUsed (dispatched) when engine data available, else raw pvGeneration */}
-            <Area 
-              type="monotone" 
-              dataKey={hasSolarUsedData ? "solarUsed" : "pvGeneration"}
-              stroke="hsl(38 92% 50%)" 
-              strokeWidth={2} 
-              fill="url(#pvAcGradient)" 
-              dot={false}
-              name="AC Output"
-            />
-
-            {/* Load Line (reference) */}
+            <Area type="monotone" dataKey={hasSolarUsedData ? "solarUsed" : "pvGeneration"} stroke="hsl(38 92% 50%)" strokeWidth={2} fill="url(#pvAcGradient)" dot={false} name="AC Output" />
             <Line type="monotone" dataKey="total" stroke="hsl(var(--primary))" strokeWidth={1} strokeDasharray="4 4" dot={false} opacity={0.4} name="Load" />
           </ComposedChart>
         </ResponsiveContainer>

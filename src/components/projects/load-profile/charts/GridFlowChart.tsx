@@ -1,20 +1,24 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
-import { ChartDataPoint, getTOUPeriod, TOU_COLORS } from "../types";
+import { ChartDataPoint, getTOUPeriod, TOU_COLORS, TOUPeriod } from "../types";
 
 interface GridFlowChartProps {
   chartData: ChartDataPoint[];
   showTOU: boolean;
   isWeekend: boolean;
   unit: string;
-  isHighSeason?: boolean;
+  touPeriodsOverride?: TOUPeriod[];
 }
 
-export function GridFlowChart({ chartData, showTOU, isWeekend, unit, isHighSeason = false }: GridFlowChartProps) {
-  const representativeMonth = isHighSeason ? 5 : 0;
+export function GridFlowChart({ chartData, showTOU, isWeekend, unit, touPeriodsOverride }: GridFlowChartProps) {
   const totalImport = chartData.reduce((sum, d) => sum + (d.gridImport || 0), 0);
   const totalExport = chartData.reduce((sum, d) => sum + (d.gridExport || 0), 0);
+
+  const getPeriod = (h: number): TOUPeriod => {
+    if (touPeriodsOverride && touPeriodsOverride[h]) return touPeriodsOverride[h];
+    return getTOUPeriod(h, isWeekend);
+  };
 
   return (
     <div className="space-y-1">
@@ -50,7 +54,7 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit, isHighSeaso
 
             {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
-                const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
+                const period = getPeriod(h);
                 const nextHour = h + 1;
                 return (
                   <ReferenceArea
@@ -74,7 +78,7 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit, isHighSeaso
                 const gridImport = Number(payload.find((p) => p.dataKey === "gridImport")?.value) || 0;
                 const gridExport = Number(payload.find((p) => p.dataKey === "gridExport")?.value) || 0;
                 const hourNum = parseInt(label?.toString() || "0");
-                const period = getTOUPeriod(hourNum, isWeekend, undefined, representativeMonth);
+                const period = getPeriod(hourNum);
 
                 return (
                   <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg text-xs space-y-1">
