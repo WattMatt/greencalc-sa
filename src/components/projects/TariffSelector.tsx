@@ -467,8 +467,8 @@ export function TariffSelector({
   }, [isEskomSelected, municipalities, municipalityId]);
 
   // Auto-select province and municipality based on project coordinates (reverse geocoding)
+  // Only runs when no province is selected yet and no existing tariff to prepopulate from
   useEffect(() => {
-    // Only run if we have coordinates, no province selected yet, provinces are loaded, and haven't auto-selected before
     if (!latitude || !longitude || provinceId || !provinces || hasAutoSelected || currentTariffId) {
       return;
     }
@@ -489,7 +489,6 @@ export function TariffSelector({
         console.log('Reverse geocode result:', { province, municipality });
 
         if (province) {
-          // Find matching province (case-insensitive)
           const matchedProvince = provinces.find(p => 
             p.name.toLowerCase() === province.toLowerCase() ||
             p.name.toLowerCase().includes(province.toLowerCase()) ||
@@ -501,10 +500,7 @@ export function TariffSelector({
             setProvinceId(matchedProvince.id);
             setHasAutoSelected(true);
 
-            // Municipality will be auto-selected once municipalities load
-            // Store the target municipality name for later matching
             if (municipality) {
-              // We'll match municipality in the municipalities query effect
               sessionStorage.setItem(`tariff-selector-municipality-${projectId}`, municipality);
             }
           }
@@ -519,12 +515,26 @@ export function TariffSelector({
     reverseGeocode();
   }, [latitude, longitude, provinceId, provinces, hasAutoSelected, currentTariffId, projectId]);
 
-  // Auto-select municipality after province is selected (from reverse geocoding)
+  // Auto-select municipality after province is selected (from reverse geocoding or existing tariff)
   useEffect(() => {
     if (!municipalities || municipalities.length === 0 || !hasAutoSelected || municipalityId) {
       return;
     }
 
+    // First check for exact municipality ID (from existing tariff)
+    const targetMuniId = sessionStorage.getItem(`tariff-selector-muni-id-${projectId}`);
+    if (targetMuniId) {
+      const exactMatch = municipalities.find(m => m.id === targetMuniId);
+      if (exactMatch) {
+        console.log('Matched municipality by ID:', exactMatch.name);
+        setMunicipalityId(exactMatch.id);
+        sessionStorage.removeItem(`tariff-selector-muni-id-${projectId}`);
+        return;
+      }
+      sessionStorage.removeItem(`tariff-selector-muni-id-${projectId}`);
+    }
+
+    // Then check for name-based match (from reverse geocoding)
     const targetMunicipality = sessionStorage.getItem(`tariff-selector-municipality-${projectId}`);
     if (!targetMunicipality) return;
 
@@ -606,10 +616,14 @@ export function TariffSelector({
     });
   }, [tariffs]);
 
-  // Auto-select the most recent period when tariffs load or municipality changes
+  // Auto-select the period matching the current year, or fall back to most recent
   useEffect(() => {
     if (availablePeriods.length > 0 && !selectedPeriod) {
-      setSelectedPeriod(availablePeriods[0].key);
+      const currentYear = new Date().getFullYear().toString();
+      const currentYearPeriod = availablePeriods.find(p => 
+        p.effectiveFrom?.includes(currentYear)
+      );
+      setSelectedPeriod(currentYearPeriod?.key || availablePeriods[0].key);
     }
   }, [availablePeriods, selectedPeriod]);
 
@@ -635,7 +649,7 @@ export function TariffSelector({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tariff_plans")
-        .select("*, municipalities(name, provinces(name)), tariff_rates(*)")
+        .select("*, municipalities(id, name, province_id, provinces(id, name)), tariff_rates(*)")
         .eq("id", currentTariffId!)
         .single();
       if (error) throw error;
@@ -643,6 +657,18 @@ export function TariffSelector({
     },
     enabled: !!currentTariffId && !isEskomSelected,
   });
+
+  // Prepopulate province and municipality from existing selected tariff
+  useEffect(() => {
+    if (!selectedTariff || provinceId) return;
+    const muni = (selectedTariff as any).municipalities;
+    if (muni?.provinces?.id) {
+      setProvinceId(muni.provinces.id);
+      setHasAutoSelected(true);
+      // Store municipality ID to set once municipalities load
+      sessionStorage.setItem(`tariff-selector-muni-id-${projectId}`, muni.id);
+    }
+  }, [selectedTariff, provinceId, projectId]);
 
   return (
     <div className="space-y-6">
