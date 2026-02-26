@@ -19,6 +19,7 @@ import { SolarChart } from "./load-profile/charts/SolarChart";
 import { GridFlowChart } from "./load-profile/charts/GridFlowChart";
 import { BatteryChart } from "./load-profile/charts/BatteryChart";
 import { TOULegend } from "./load-profile/components/TOULegend";
+import { DayNavigationHeader } from "./simulation/DayNavigationHeader";
 import { ChartDataPoint, DayOfWeek, DAYS_OF_WEEK, DischargeTOUSelection, DEFAULT_DISCHARGE_TOU_SELECTION, TOUPeriod as LoadProfileTOUPeriod } from "./load-profile/types";
 import { FinancialMetricRow } from "./simulation/FinancialMetricRow";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -2357,29 +2358,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         <TabsContent value="building" className="mt-4">
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("prev")} disabled={selectedDayIndex === 0}>
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <div>
-                    <CardTitle className="text-base">
-                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayName}, ${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
-                    </CardTitle>
-                  </div>
-                  {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
-                  Annual Avg
-                </Label>
-              </div>
+              <DayNavigationHeader
+                showAnnualAverage={showAnnualAverage}
+                setShowAnnualAverage={setShowAnnualAverage}
+                selectedDayIndex={selectedDayIndex}
+                setSelectedDayIndex={setSelectedDayIndex}
+                navigateDayIndex={navigateDayIndex}
+                dayDateInfo={dayDateInfo}
+              />
             </CardHeader>
             <CardContent className="space-y-4">
               <BuildingProfileChart 
@@ -2399,29 +2385,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         <TabsContent value="load" className="mt-4">
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("prev")} disabled={selectedDayIndex === 0}>
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <div>
-                    <CardTitle className="text-base">
-                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayName}, ${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
-                    </CardTitle>
-                  </div>
-                  {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
-                  Annual Avg
-                </Label>
-              </div>
+              <DayNavigationHeader
+                showAnnualAverage={showAnnualAverage}
+                setShowAnnualAverage={setShowAnnualAverage}
+                selectedDayIndex={selectedDayIndex}
+                setSelectedDayIndex={setSelectedDayIndex}
+                navigateDayIndex={navigateDayIndex}
+                dayDateInfo={dayDateInfo}
+              />
             </CardHeader>
             <CardContent className="space-y-4">
               <LoadChart 
@@ -2440,29 +2411,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         <TabsContent value="grid" className="mt-4">
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("prev")} disabled={selectedDayIndex === 0}>
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <div>
-                    <CardTitle className="text-base">
-                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayName}, ${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
-                    </CardTitle>
-                  </div>
-                  {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
-                  Annual Avg
-                </Label>
-              </div>
+              <DayNavigationHeader
+                showAnnualAverage={showAnnualAverage}
+                setShowAnnualAverage={setShowAnnualAverage}
+                selectedDayIndex={selectedDayIndex}
+                setSelectedDayIndex={setSelectedDayIndex}
+                navigateDayIndex={navigateDayIndex}
+                dayDateInfo={dayDateInfo}
+              />
             </CardHeader>
             <CardContent className="space-y-4">
               <GridFlowChart
@@ -2481,29 +2437,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         <TabsContent value="pv" className="mt-4">
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("prev")} disabled={selectedDayIndex === 0}>
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <div>
-                    <CardTitle className="text-base">
-                      {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayName}, ${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
-                    </CardTitle>
-                  </div>
-                  {!showAnnualAverage && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
-                  Annual Avg
-                </Label>
-              </div>
+              <DayNavigationHeader
+                showAnnualAverage={showAnnualAverage}
+                setShowAnnualAverage={setShowAnnualAverage}
+                selectedDayIndex={selectedDayIndex}
+                setSelectedDayIndex={setSelectedDayIndex}
+                navigateDayIndex={navigateDayIndex}
+                dayDateInfo={dayDateInfo}
+              />
             </CardHeader>
             <CardContent className="space-y-4">
               <SolarChart
@@ -2526,29 +2467,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           <TabsContent value="battery" className="mt-4">
             <Card>
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {!showAnnualAverage && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("prev")} disabled={selectedDayIndex === 0}>
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <div>
-                      <CardTitle className="text-base">
-                        {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayName}, ${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
-                      </CardTitle>
-                    </div>
-                    {!showAnnualAverage && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                    <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
-                    Annual Avg
-                  </Label>
-                </div>
+                <DayNavigationHeader
+                  showAnnualAverage={showAnnualAverage}
+                  setShowAnnualAverage={setShowAnnualAverage}
+                  selectedDayIndex={selectedDayIndex}
+                  setSelectedDayIndex={setSelectedDayIndex}
+                  navigateDayIndex={navigateDayIndex}
+                  dayDateInfo={dayDateInfo}
+                />
               </CardHeader>
               <CardContent className="space-y-4">
                 <BatteryChart
