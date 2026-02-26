@@ -1,115 +1,62 @@
 
-# Hourly TOU-Aware Income Calculation Across 8,760 Hours
 
-## Problem
+# Replace TOU Toggle with High/Low Demand Season Toggle
 
-The financial engine currently multiplies total annual kWh by a single blended average rate (`tariff.averageRatePerKwh`). This is inaccurate -- each hour of every day in the year has a specific TOU rate (peak/standard/off-peak) that differs by season (high/low) and day type (weekday/saturday/sunday). The income should be calculated by iterating through all 8,760 hours of the year.
+## What Changes
 
-## Approach
+The current "TOU" on/off toggle on each simulation chart tab will be replaced with a "High Demand" / "Low Demand" season toggle. TOU background colours will **always** be visible on the charts -- no option to hide them.
 
-Build a new function that iterates day-by-day through a full 365-day year. For each day it determines the season (high/low from `TOUSettings.highSeasonMonths`), the day type (weekday/saturday/sunday), and then for each of the 24 hours looks up the TOU period and its corresponding tariff rate from the `tariffRates` array. It multiplies each hour's kWh (from the energy simulation's hourly profile) by the applicable rate, accumulating total income and total kWh per stream (solar direct, battery discharge, export, grid charge).
+## Changes Required
 
-The derived "Solar Rate" becomes `totalIncome / totalKwh` -- a weighted reference value.
+### 1. Replace `showTOU` state with `showHighSeason` state in `SimulationPanel.tsx`
 
-## Day-by-Day Calendar Logic
+- Remove the `showTOU` boolean state and its localStorage persistence
+- Add a new `showHighSeason` boolean state (default `false` = Low Demand, `true` = High Demand), persisted to localStorage
+- Replace every `showTOU={showTOU}` prop with `showTOU={true}` (always on)
+- Replace every `isWeekend={loadProfileIsWeekend}` with logic that also passes the season context
+- Pass `showHighSeason` to chart components so they can determine the correct TOU period map
+- Remove all `{showTOU && <TOULegend />}` conditionals -- always render `<TOULegend />`
+- Replace the TOU Switch UI with a season toggle labelled "High Demand" / "Low Demand"
 
-Using the `SEASONAL_DAYS` distribution already defined in `tariffCalculations.ts`:
-- High season: 66 weekdays, 13 saturdays, 13 sundays (92 days)
-- Low season: 195 weekdays, 39 saturdays, 39 sundays (273 days)
+### 2. Update chart component interfaces
 
-For each combination (6 total: high-weekday, high-saturday, high-sunday, low-weekday, low-saturday, low-sunday), iterate over 24 hours, look up the rate, multiply by hourly kWh, then multiply by the number of days in that category. This produces exact annual totals without needing to simulate 8,760 individual days.
+**Files:** `LoadChart.tsx`, `GridFlowChart.tsx`, `BuildingProfileChart.tsx`, `SolarChart.tsx`
 
-## Implementation Steps
+- Add an `isHighSeason` prop (boolean) to each chart's props interface
+- Update the `getTOUPeriod()` calls inside each chart to pass a representative month based on `isHighSeason`:
+  - High season: pass a month from `touSettings.highSeasonMonths` (e.g. month index 6 for July)
+  - Low season: pass a month NOT in `highSeasonMonths` (e.g. month index 0 for January)
+- Remove dependency on the `showTOU` boolean for rendering `ReferenceArea` blocks (always render them)
 
-### 1. New utility function in `AdvancedSimulationEngine.ts`
+### 3. Update `TOULegend` component
 
-Create `calculateAnnualHourlyIncome()`:
+- Always rendered (no conditional). Optionally display the current season label ("High-Demand Season" or "Low-Demand Season") for context.
 
+### 4. Toggle UI Design
+
+Replace:
 ```text
-Inputs:
-  - hourlyData: HourlyEnergyData[] (24 hours from energy engine)
-  - tariffRates: TariffRate[] (from DB)
-  - touSettings: TOUSettings (from localStorage)
-  - tariff?: { legacy_charge_per_kwh?: number }
-
-Outputs:
-  - annualSolarDirectIncome: number (R)
-  - annualBatteryDischargeIncome: number (R)
-  - annualExportIncome: number (R)
-  - annualGridChargeCost: number (R)
-  - derivedSolarDirectRate: number (R/kWh)
-  - derivedBatteryDischargeRate: number (R/kWh)
-  - derivedExportRate: number (R/kWh)
-  - derivedGridChargeRate: number (R/kWh)
-  - totalAnnualSolarDirectKwh: number
-  - totalAnnualBatteryDischargeKwh: number
-  - totalAnnualExportKwh: number
-  - totalAnnualGridChargeKwh: number
+[Switch] TOU
 ```
 
-Logic:
-- For each of the 6 (season x dayType) combinations:
-  - Get the TOU hour map from `touSettings`
-  - Get the day count from `SEASONAL_DAYS`
-  - For each hour 0-23:
-    - Determine TOU period from the hour map
-    - Look up rate via `getCombinedRate(tariffRates, touPeriod, season, tariff)`
-    - Multiply: `hourlyData[h].solarUsed * rate * dayCount` (accumulate to solarDirectIncome)
-    - Same for `batteryDischarge`, `gridExport`, and `batteryChargeFromGrid` (if tracked)
-- Derive weighted rates: `derivedRate = totalIncome / totalKwh`
-
-### 2. Update `runAdvancedSimulation` signature
-
-Add optional parameters:
-- `tariffRates?: TariffRate[]`
-- `touSettings?: TOUSettings`
-
-When these are provided, use the hourly-weighted calculation instead of `baseEnergyRate * kWh`. The base annual income (Year 1) comes from `calculateAnnualHourlyIncome()`. For subsequent years, apply escalation index and degradation as before.
-
-### 3. Update `SimulationPanel.tsx`
-
-Pass `tariffRates` and TOU settings into `runAdvancedSimulation`:
-
+With:
 ```text
-runAdvancedSimulation(
-  energyResults,
-  tariffData,
-  systemCosts,
-  solarCapacity,
-  batteryCapacity,
-  advancedConfig,
-  tariffRates,     // NEW
-  touSettings      // NEW (from useTOUSettings hook)
-)
+[Switch] High Demand / Low Demand
 ```
 
-Add `useTOUSettings()` hook import to `SimulationPanel.tsx`.
-
-### 4. Update `AdvancedConfigComparison.tsx`
-
-Same parameter additions for the comparison panel's call to `runAdvancedSimulation`.
-
-### 5. Yearly projection logic changes in `AdvancedSimulationEngine.ts`
-
-When hourly income data is available:
-- Year 1 base values come from the hourly calculation (already annualised)
-- `solarDirectIncomeR = baseAnnualSolarDirectIncome * (panelEfficiency/100) * energyRateIndex`
-- `solarDirectRateR` becomes the derived rate (reference only)
-- Same pattern for battery discharge, export, and grid charge cost
-- Grid charge cost: `gridChargeCostR = baseAnnualGridChargeCost * (panelEfficiency/100) * energyRateIndex`
-
-### 6. No changes to types
-
-The `YearlyProjection` and `ColumnTotals` interfaces already have all needed fields. The rate fields (`solarDirectRateR`, `batteryDischargeRateR`, `exportRateR`) will now contain derived weighted averages instead of the single blended rate.
+The label will read the active season name. When toggled, the TOU background colours on the chart will update to reflect the selected season's TOU period map (different peak/standard/off-peak hour boundaries).
 
 ## Files Modified
 
-1. **`src/components/projects/simulation/AdvancedSimulationEngine.ts`** -- Add `calculateAnnualHourlyIncome()`, update `runAdvancedSimulation` signature and income logic
-2. **`src/components/projects/SimulationPanel.tsx`** -- Pass `tariffRates` and TOU settings; add `useTOUSettings` hook
-3. **`src/components/projects/simulation/AdvancedConfigComparison.tsx`** -- Pass `tariffRates` and TOU settings
+1. **`src/components/projects/SimulationPanel.tsx`** -- Replace `showTOU` with `showHighSeason`, update all chart prop passing, update toggle UI (5 tab sections)
+2. **`src/components/projects/load-profile/charts/LoadChart.tsx`** -- Add `isHighSeason` prop, always render TOU backgrounds, pass month to `getTOUPeriod`
+3. **`src/components/projects/load-profile/charts/GridFlowChart.tsx`** -- Same as above
+4. **`src/components/projects/load-profile/charts/BuildingProfileChart.tsx`** -- Same as above
+5. **`src/components/projects/load-profile/charts/SolarChart.tsx`** -- Same as above
+6. **`src/components/projects/load-profile/components/TOULegend.tsx`** -- Optionally show active season label
 
 ## Backward Compatibility
 
-- If `tariffRates` is not provided, falls back to the current blended rate approach (no breaking changes)
-- All existing interfaces remain unchanged
-- The function signature uses optional parameters
+- No data model changes
+- No financial engine changes
+- Only visual/UI behaviour changes
