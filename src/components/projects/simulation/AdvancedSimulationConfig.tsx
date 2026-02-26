@@ -1009,7 +1009,8 @@ function ChargeSourcesList({
                     { value: 'standard' as const, label: 'Standard' },
                     { value: 'peak' as const, label: 'Peak' },
                   ]).map((period) => {
-                    const periods = source.chargeTouPeriods ?? (source.chargeTouPeriod ? [source.chargeTouPeriod] : ['off-peak']);
+                    const defaultPeriods = source.id === 'pv' ? ['off-peak', 'standard', 'peak'] as const : ['off-peak'] as const;
+                    const periods = source.chargeTouPeriods ?? (source.chargeTouPeriod ? [source.chargeTouPeriod] : [...defaultPeriods]);
                     const checked = periods.includes(period.value);
                     return (
                       <label key={period.value} className="flex items-center gap-1 text-[10px] cursor-pointer shrink-0">
