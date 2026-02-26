@@ -316,7 +316,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   // Derive date label and metadata from dayIndex
   const dayDateInfo = useMemo(() => {
-    const date = new Date(2024, 0, 1 + selectedDayIndex); // 2024 is a leap year but we cap at 364
+    const date = new Date(2026, 0, 1 + selectedDayIndex); // 2026: Jan 1 is Thursday
     const dayOfWeek = date.getDay(); // 0=Sun..6=Sat
     const month = date.getMonth(); // 0-indexed
     const dayLabel = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
