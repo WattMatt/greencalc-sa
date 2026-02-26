@@ -116,6 +116,7 @@ interface ExtractedTariff {
   legacy_charge_per_kwh?: number;
   service_charge_per_day?: number;
   administration_charge_per_day?: number;
+  urban_low_voltage_subsidy_per_kva?: number;
   effective_from?: string;
   effective_to?: string;
   rates: Array<{
@@ -866,7 +867,7 @@ Deno.serve(async (req) => {
       
       // Build extraction prompt (keeping AI prompt logic intact - well-tuned for SA tariff docs)
       const extractPrompt = isEskomExtraction 
-        ? `TASK: Extract ${currentBatch?.name || "Eskom"} tariffs from Eskom 2025-2026 tariff data.\n\nBATCH FOCUS: ${currentBatch?.name || "All"} - ${currentBatch?.description || "Extract all tariffs"}\nBatch ${currentBatchIndex + 1}/${eskomBatches.length}\n\nSOURCE DATA:\n${municipalityText.slice(0, 15000)}\n${existingContext}\n\n=== ESKOM 2025-2026 UNBUNDLED TARIFF STRUCTURE ===\n\n=== TABLE STRUCTURE GUIDE (for Miniflex, Megaflex, Ruraflex families) ===\nThese tariff families use a 4-dimensional grid table:\n1. TRANSMISSION ZONE (row groups): <=300km, >300km&<=600km, >600km&<=900km, >900km\n2. VOLTAGE LEVEL (sub-rows per zone): <500V→LV, >=500V&<66kV→MV, >=66kV&<=132kV→HV, >132kV→HV\n3. SEASON (column groups): High demand [Jun-Aug], Low demand [Sep-May]\n4. TOU PERIOD (sub-columns): Peak, Standard, Off-Peak\n\nRIGHT-SIDE COLUMNS (per row) — extract ALL of these for each tariff:\n- Legacy charge [c/kWh] → legacy_charge_per_kwh\n- Generation capacity charge [R/kVA/m] → generation_capacity_charge_per_kva\n- Transmission network charges [R/kVA/m] → network_charge_per_kva\n- Service charge [R/account/day] → service_charge_per_day\n- Administration charge [c/kWh] → administration_charge_per_kwh\n- Ancillary services charge [c/kWh] → ancillary_services_per_kwh\n- Network demand charge [R/kVA/m] → network_demand_charge_per_kva\n- Urban low voltage subsidy charge [c/kWh] → urban_low_voltage_subsidy_per_kwh\n- Electrification and rural network subsidy charge [c/kWh] → electrification_rural_per_kwh\n- Affordability subsidy charge [c/kWh] → affordability_subsidy_per_kwh\n- Reactive energy charge [c/kVArh] → reactive_energy_charge_per_kvarh\n\nCRITICAL: Create ONE tariff per zone+voltage combination = 16 tariffs total.\nNaming: "${currentBatch?.name || "Miniflex"} <zone> <voltage>" e.g. "Miniflex <= 300km < 500V"\nSet transmission_zone field to the zone label (e.g. "<= 300km").\nExtract ALL right-side column charges listed above. Use 0 if a charge is not applicable for this tariff variant.\n\n=== END TABLE STRUCTURE GUIDE ===\n\nExtract ALL variants of ${currentBatch?.name || "Eskom"} tariffs with these fields:\n- category: "Domestic", "Commercial", "Industrial", "Agricultural", "Public Lighting", or "Other"\n- tariff_name: Full name from document (include zone + voltage for grid tariffs)\n- tariff_type: "Fixed", "IBT", or "TOU"\n- voltage_level: "LV", "MV", or "HV"\n- phase_type: "Single Phase" or "Three Phase"\n- is_prepaid: boolean\n- tariff_family: "${currentBatch?.name || "Megaflex"}"\n- transmission_zone: Zone label e.g. "<= 300km" (for grid table tariffs)\n- fixed_monthly_charge: Basic/service charge in R/month\n- demand_charge_per_kva: Network access charge in R/kVA\n- legacy_charge_per_kwh: Legacy surcharge in c/kWh (we convert later)\n- generation_capacity_charge_per_kva: Gen capacity in R/kVA/m\n- network_charge_per_kva: Transmission network in R/kVA/m\n- ancillary_services_per_kwh: Ancillary services charge in c/kWh (we convert later)\n- electrification_rural_per_kwh: Electrification and rural network subsidy in c/kWh (we convert later)\n- service_charge_per_day: Service charge in R/account/day\n- administration_charge_per_kwh: Administration charge in c/kWh (we convert later)\n- network_demand_charge_per_kva: Network demand charge in R/kVA/month\n- urban_low_voltage_subsidy_per_kwh: Urban low voltage subsidy in c/kWh (we convert later)\n- affordability_subsidy_per_kwh: Affordability subsidy in c/kWh (we convert later)\n- reactive_energy_charge_per_kvarh: Reactive energy charge in c/kVArh (we convert later)\n- rates: Array of energy rates in R/kWh (convert c/kWh ÷ 100)\n  - Each rate: { rate_per_kwh, season ("All Year"/"High/Winter"/"Low/Summer"), time_of_use ("Any"/"Peak"/"Standard"/"Off-Peak"), block_start_kwh, block_end_kwh }\n\nKEY RULES:\n1. CRITICAL: The PDF shows TWO values per cell — VAT-exclusive and VAT-inclusive (15% VAT). ONLY extract the VAT-EXCLUSIVE value (the LOWER of the two numbers). NEVER include VAT-inclusive values. Each tariff should have exactly 6 energy rates (3 TOU periods x 2 seasons), NOT 12.\n2. c/kWh → R/kWh: divide by 100\n3. TOU tariffs need 6 rates minimum (Peak/Standard/Off-Peak × High/Low seasons)\n4. Include all voltage and zone variants\n5. For grid table tariffs: 16 tariffs × 9 rates each = 144 rate rows expected\n6. Extract ALL 11 right-side charges per tariff variant (legacy, gen capacity, tx network, service, admin, ancillary, network demand, urban LV subsidy, electrification/rural, affordability, reactive energy)\n\nExtract EVERY variant with COMPLETE rate data!`
+        ? `TASK: Extract ${currentBatch?.name || "Eskom"} tariffs from Eskom 2025-2026 tariff data.\n\nBATCH FOCUS: ${currentBatch?.name || "All"} - ${currentBatch?.description || "Extract all tariffs"}\nBatch ${currentBatchIndex + 1}/${eskomBatches.length}\n\nSOURCE DATA:\n${municipalityText.slice(0, 15000)}\n${existingContext}\n\n=== ESKOM 2025-2026 UNBUNDLED TARIFF STRUCTURE ===\n\n=== TABLE STRUCTURE GUIDE (for Miniflex, Megaflex, Ruraflex families) ===\nThese tariff families use a 4-dimensional grid table:\n1. TRANSMISSION ZONE (row groups): <=300km, >300km&<=600km, >600km&<=900km, >900km\n2. VOLTAGE LEVEL (sub-rows per zone): <500V→LV, >=500V&<66kV→MV, >=66kV&<=132kV→HV, >132kV→HV\n3. SEASON (column groups): High demand [Jun-Aug], Low demand [Sep-May]\n4. TOU PERIOD (sub-columns): Peak, Standard, Off-Peak\n\nRIGHT-SIDE COLUMNS (per row) — extract ALL of these for each tariff:\n- Legacy charge [c/kWh] → legacy_charge_per_kwh\n- Generation capacity charge [R/kVA/m] → generation_capacity_charge_per_kva\n- Transmission network charges [R/kVA/m] → network_charge_per_kva\n- Ancillary services charge [c/kWh] → ancillary_services_per_kwh\n- Electrification and rural network subsidy charge [c/kWh] → electrification_rural_per_kwh\n- Affordability subsidy charge [c/kWh] → affordability_subsidy_per_kwh\n- Reactive energy charge [c/kVArh] → reactive_energy_charge_per_kvarh\n\n=== SEPARATE LOOKUP TABLES (NOT in the main per-tariff matrix) ===\nThe following three charges are in SEPARATE tables in the PDF, indexed by customer category or voltage level. You MUST cross-reference these tables and map the correct value to each tariff variant:\n\n1. SERVICE CHARGE [R/POD/day] → service_charge_per_day\n   - Found in a table indexed by CUSTOMER CATEGORY (kVA ranges, e.g. <= 100 kVA, > 100 kVA & <= 500 kVA, > 500 kVA & <= 1 MVA, etc.)\n   - Match each tariff variant to the correct row based on its capacity_kva or the kVA range implied by the tariff family\n\n2. ADMINISTRATION CHARGE [R/POD/day] → administration_charge_per_day\n   - Same table as Service charge, indexed by the same customer category / kVA ranges\n   - Value is in R/POD/day (NOT c/kWh). Return the value as-is in Rands.\n\n3. URBAN LOW VOLTAGE SUBSIDY [R/kVA/month] → urban_low_voltage_subsidy_per_kva\n   - Found in a table indexed by VOLTAGE LEVEL (e.g. < 500V, >= 500V & < 66kV, >= 66kV & <= 132kV, > 132kV)\n   - Match each tariff variant to the correct row based on its voltage_level\n   - Value is in R/kVA/month (NOT c/kWh). Return the value as-is in Rands.\n\nCRITICAL: Create ONE tariff per zone+voltage combination = 16 tariffs total.\nNaming: "${currentBatch?.name || "Miniflex"} <zone> <voltage>" e.g. "Miniflex <= 300km < 500V"\nSet transmission_zone field to the zone label (e.g. "<= 300km").\nExtract ALL charges listed above. Use 0 if a charge is not applicable for this tariff variant.\n\n=== END TABLE STRUCTURE GUIDE ===\n\nExtract ALL variants of ${currentBatch?.name || "Eskom"} tariffs with these fields:\n- category: "Domestic", "Commercial", "Industrial", "Agricultural", "Public Lighting", or "Other"\n- tariff_name: Full name from document (include zone + voltage for grid tariffs)\n- tariff_type: "Fixed", "IBT", or "TOU"\n- voltage_level: "LV", "MV", or "HV"\n- is_prepaid: boolean\n- tariff_family: "${currentBatch?.name || "Megaflex"}"\n- transmission_zone: Zone label e.g. "<= 300km" (for grid table tariffs)\n- fixed_monthly_charge: Basic/service charge in R/month\n- demand_charge_per_kva: Network access charge in R/kVA\n- legacy_charge_per_kwh: Legacy surcharge in c/kWh (we convert later)\n- generation_capacity_charge_per_kva: Gen capacity in R/kVA/m\n- network_charge_per_kva: Transmission network in R/kVA/m\n- ancillary_services_per_kwh: Ancillary services charge in c/kWh (we convert later)\n- electrification_rural_per_kwh: Electrification and rural network subsidy in c/kWh (we convert later)\n- service_charge_per_day: Service charge in R/POD/day (from separate lookup table)\n- administration_charge_per_day: Administration charge in R/POD/day (from separate lookup table, NOT c/kWh)\n- urban_low_voltage_subsidy_per_kva: Urban low voltage subsidy in R/kVA/month (from separate lookup table, NOT c/kWh)\n- affordability_subsidy_per_kwh: Affordability subsidy in c/kWh (we convert later)\n- reactive_energy_charge_per_kvarh: Reactive energy charge in c/kVArh (we convert later)\n- rates: Array of energy rates in R/kWh (convert c/kWh ÷ 100)\n  - Each rate: { rate_per_kwh, season ("All Year"/"High/Winter"/"Low/Summer"), time_of_use ("Any"/"Peak"/"Standard"/"Off-Peak"), block_start_kwh, block_end_kwh }\n\nKEY RULES:\n1. CRITICAL: The PDF shows TWO values per cell — VAT-exclusive and VAT-inclusive (15% VAT). ONLY extract the VAT-EXCLUSIVE value (the LOWER of the two numbers). NEVER include VAT-inclusive values. Each tariff should have exactly 6 energy rates (3 TOU periods x 2 seasons), NOT 12.\n2. c/kWh → R/kWh: divide by 100\n3. TOU tariffs need 6 rates minimum (Peak/Standard/Off-Peak × High/Low seasons)\n4. Include all voltage and zone variants\n5. For grid table tariffs: 16 tariffs × 9 rates each = 144 rate rows expected\n6. DO NOT include phase_type for Eskom tariffs (Eskom tariffs are not phase-specific)\n7. Service charge and Administration charge come from a SEPARATE customer-category table — look for it and cross-reference by kVA range\n8. Urban low voltage subsidy comes from a SEPARATE voltage-level table — look for it and cross-reference by voltage\n\nExtract EVERY variant with COMPLETE rate data!`
         : `TASK: Extract electricity tariffs for "${municipality}" municipality.${knownMuniContext}\n\nSOURCE DATA:\n${municipalityText.slice(0, 15000)}\n\n=== EXTRACTION RULES ===\n\n1. TARIFF IDENTIFICATION: Look for "Domestic", "Commercial", "Industrial", "Agricultural", "Prepaid" sections.\n\n2. TARIFF TYPE DETECTION:\n   - IBT: Different rates for different kWh levels → tariff_type: "IBT"\n   - TOU: High/Low Demand or Peak/Standard/Off-Peak → tariff_type: "TOU"  \n   - Fixed: Single flat rate → tariff_type: "Fixed"\n\n3. IBT BLOCKS: EVERY IBT rate MUST have block_start_kwh and block_end_kwh!\n   - "Block 1 (0-50)kWh" → block_start_kwh: 0, block_end_kwh: 50\n   - ">600kWh" → block_start_kwh: 600, block_end_kwh: null\n\n4. CHARGES:\n   - "Basic Charge (R/month)" → fixed_monthly_charge\n   - "Per kVA" charges → demand_charge_per_kva\n   - "Energy Charge (c/kWh)" → rates array\n\n5. RATE CONVERSION: c/kWh → R/kWh (divide by 100). Use VAT-EXCLUSIVE values.\n\n6. CATEGORIES: Domestic, Commercial, Industrial, Agriculture\n\n7. PHASE: "Single Phase" or "Three Phase"\n\n8. PREPAID: is_prepaid: true if "Prepaid" in name\n\n9. TOU RATES must have at least 6 entries:\n   - High/Winter: Peak, Standard, Off-Peak\n   - Low/Summer: Peak, Standard, Off-Peak\n\n10. VOLTAGE: "LV" (≤400V), "MV" (11kV/22kV), "HV" (≥44kV)\n\n11. EFFECTIVE DATES: If the document mentions effective dates, financial year, or validity period (e.g. "Effective 1 July 2024", "2024/2025 tariffs"), extract them as:\n   - effective_from: YYYY-MM-DD (e.g. "2024-07-01")\n   - effective_to: YYYY-MM-DD (e.g. "2025-06-30")\n\nExtract ALL tariffs with COMPLETE rate data!`;
 
       // Retry logic for AI call
@@ -926,9 +927,8 @@ Deno.serve(async (req) => {
                             ancillary_services_per_kwh: { type: "number", description: "Ancillary services charge in c/kWh" },
                             electrification_rural_per_kwh: { type: "number", description: "Electrification and rural network subsidy charge in c/kWh" },
                             service_charge_per_day: { type: "number", description: "Service charge in R/account/day" },
-                            administration_charge_per_kwh: { type: "number", description: "Administration charge in c/kWh" },
-                            network_demand_charge_per_kva: { type: "number", description: "Network demand charge in R/kVA/month" },
-                            urban_low_voltage_subsidy_per_kwh: { type: "number", description: "Urban low voltage subsidy in c/kWh" },
+                            administration_charge_per_day: { type: "number", description: "Administration charge in R/POD/day" },
+                            urban_low_voltage_subsidy_per_kva: { type: "number", description: "Urban low voltage subsidy in R/kVA/month" },
                             affordability_subsidy_per_kwh: { type: "number", description: "Affordability subsidy in c/kWh" },
                             reactive_energy_charge_per_kvarh: { type: "number", description: "Reactive energy charge in c/kVArh" },
                             capacity_kva: { type: "number" },
@@ -1055,7 +1055,7 @@ Deno.serve(async (req) => {
               : mapCategory(tariff.customer_category || tariff.category),
             structure: mapStructure(tariff.tariff_type),
             voltage: mapVoltage(tariff.voltage_level),
-            phase: tariff.phase_type || "Single Phase",
+            phase: isEskomExtraction ? (tariff.phase_type || null) : (tariff.phase_type || "Single Phase"),
             scale_code: tariff.tariff_family || null,
             metering: mapMetering(tariff.is_prepaid),
             min_amps: tariff.amperage_limit ? parseFloat(tariff.amperage_limit.replace(/[^0-9.]/g, '')) || null : null,
@@ -1234,39 +1234,26 @@ Deno.serve(async (req) => {
             });
           }
 
-          // Add administration charge (c/kWh → R/kWh)
-          if (tariff.administration_charge_per_kwh && tariff.administration_charge_per_kwh > 0) {
+          // Add administration charge (R/POD/day)
+          if (tariff.administration_charge_per_day && tariff.administration_charge_per_day > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
               charge: "admin",
-              amount: tariff.administration_charge_per_kwh / 100,
-              unit: "R/kWh",
+              amount: tariff.administration_charge_per_day,
+              unit: "R/day",
               season: "all",
               tou: "all",
               notes: "Administration charge",
             });
           }
 
-          // Add network demand charge (R/kVA)
-          if (tariff.network_demand_charge_per_kva && tariff.network_demand_charge_per_kva > 0) {
-            rateRows.push({
-              tariff_plan_id: tariffPlanId,
-              charge: "network_demand",
-              amount: tariff.network_demand_charge_per_kva,
-              unit: "R/kVA",
-              season: "all",
-              tou: "all",
-              notes: "Network demand",
-            });
-          }
-
-          // Add urban low voltage subsidy (c/kWh → R/kWh)
-          if (tariff.urban_low_voltage_subsidy_per_kwh && tariff.urban_low_voltage_subsidy_per_kwh > 0) {
+          // Add urban low voltage subsidy (R/kVA/month)
+          if (tariff.urban_low_voltage_subsidy_per_kva && tariff.urban_low_voltage_subsidy_per_kva > 0) {
             rateRows.push({
               tariff_plan_id: tariffPlanId,
               charge: "subsidy",
-              amount: tariff.urban_low_voltage_subsidy_per_kwh / 100,
-              unit: "R/kWh",
+              amount: tariff.urban_low_voltage_subsidy_per_kva,
+              unit: "R/kVA",
               season: "all",
               tou: "all",
               notes: "Urban low voltage subsidy",
