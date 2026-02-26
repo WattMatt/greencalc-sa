@@ -1,9 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, Fragment } from "react";
 import { ChevronDown, ChevronUp, Settings2, TrendingUp, Battery, Zap, Building2, Sun, Sparkles, Save, Trash2, User, GripVertical } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { BatteryDispatchStrategy, DispatchConfig, TimeWindow, ChargeSource, DischargeSource } from "./EnergySimulationEngine";
 import { getDefaultDispatchConfig, DEFAULT_CHARGE_SOURCES, DEFAULT_DISCHARGE_SOURCES } from "./EnergySimulationEngine";
+import { DischargeTOUSelection, DEFAULT_DISCHARGE_TOU_SELECTION } from "@/components/projects/load-profile/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -52,8 +53,8 @@ interface AdvancedSimulationConfigProps {
   onDispatchConfigChange?: (config: DispatchConfig) => void;
   chargeTouPeriod?: TOUPeriod;
   onChargeTouPeriodChange?: (period: TOUPeriod) => void;
-  dischargeTouPeriod?: TOUPeriod;
-  onDischargeTouPeriodChange?: (period: TOUPeriod) => void;
+  dischargeTouSelection?: DischargeTOUSelection;
+  onDischargeTouSelectionChange?: (selection: DischargeTOUSelection) => void;
   touPeriodToWindows?: (period: TOUPeriod) => TimeWindow[];
   // Discharge sources props
   dischargeSources?: DischargeSource[];
@@ -79,8 +80,8 @@ export function AdvancedSimulationConfigPanel({
   onDispatchConfigChange,
   chargeTouPeriod = 'off-peak',
   onChargeTouPeriodChange,
-  dischargeTouPeriod = 'peak',
-  onDischargeTouPeriodChange,
+  dischargeTouSelection = DEFAULT_DISCHARGE_TOU_SELECTION,
+  onDischargeTouSelectionChange,
   touPeriodToWindows,
   dischargeSources,
   onDischargeSourcesChange,
@@ -314,8 +315,8 @@ export function AdvancedSimulationConfigPanel({
                   onDispatchConfigChange={onDispatchConfigChange}
                   chargeTouPeriod={chargeTouPeriod}
                   onChargeTouPeriodChange={onChargeTouPeriodChange}
-                  dischargeTouPeriod={dischargeTouPeriod}
-                  onDischargeTouPeriodChange={onDischargeTouPeriodChange}
+                  dischargeTouSelection={dischargeTouSelection}
+                  onDischargeTouSelectionChange={onDischargeTouSelectionChange}
                   touPeriodToWindows={touPeriodToWindows}
                 />
               </CollapsibleSection>
@@ -1179,8 +1180,8 @@ function BatteryCharacteristicsSection({
   onDispatchConfigChange,
   chargeTouPeriod = 'off-peak',
   onChargeTouPeriodChange,
-  dischargeTouPeriod = 'peak',
-  onDischargeTouPeriodChange,
+  dischargeTouSelection = DEFAULT_DISCHARGE_TOU_SELECTION,
+  onDischargeTouSelectionChange,
   touPeriodToWindows,
 }: {
   chargeCRate: number;
@@ -1198,8 +1199,8 @@ function BatteryCharacteristicsSection({
   onDispatchConfigChange?: (config: DispatchConfig) => void;
   chargeTouPeriod?: TOUPeriod;
   onChargeTouPeriodChange?: (period: TOUPeriod) => void;
-  dischargeTouPeriod?: TOUPeriod;
-  onDischargeTouPeriodChange?: (period: TOUPeriod) => void;
+  dischargeTouSelection?: DischargeTOUSelection;
+  onDischargeTouSelectionChange?: (selection: DischargeTOUSelection) => void;
   touPeriodToWindows?: (period: TOUPeriod) => TimeWindow[];
 }) {
   const effectiveDispatchConfig = dispatchConfig ?? getDefaultDispatchConfig(batteryStrategy);
@@ -1304,10 +1305,16 @@ function BatteryCharacteristicsSection({
                 allowGridCharging: effectiveDispatchConfig.allowGridCharging,
               };
               if (v === 'tou-arbitrage' && touPeriodToWindows) {
+                const flags = dischargeTouSelection.lowSeason.weekday;
+                const windows: TimeWindow[] = [];
+                if (flags.peak) windows.push(...touPeriodToWindows('peak'));
+                if (flags.standard) windows.push(...touPeriodToWindows('standard'));
+                if (flags.offPeak) windows.push(...touPeriodToWindows('off-peak'));
                 onDispatchConfigChange?.({
                   ...newConfig,
                   ...preservedChargeConfig,
-                  dischargeWindows: touPeriodToWindows(dischargeTouPeriod),
+                  dischargeWindows: windows.length > 0 ? windows : [{ start: 0, end: 0 }],
+                  dischargeTouSelection,
                 });
               } else {
                 onDispatchConfigChange?.({
@@ -1333,29 +1340,96 @@ function BatteryCharacteristicsSection({
         {/* TOU Arbitrage: period selectors (no more "Charge from" here) */}
         {batteryStrategy === 'tou-arbitrage' && (
           <div className="space-y-2 text-xs">
-            <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground">Discharge during</Label>
-              <Select
-                value={dischargeTouPeriod}
-                onValueChange={(v: TOUPeriod) => {
-                  onDischargeTouPeriodChange?.(v);
-                  if (touPeriodToWindows) {
-                    onDispatchConfigChange?.({
-                      ...effectiveDispatchConfig,
-                      dischargeWindows: touPeriodToWindows(v),
-                    });
-                  }
-                }}
-              >
-                <SelectTrigger className="h-7 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off-peak">Off-Peak (22:00–06:00)</SelectItem>
-                  <SelectItem value="standard">Standard (06–07, 10–18, 20–22)</SelectItem>
-                  <SelectItem value="peak">Peak (07–10, 18–20)</SelectItem>
-                </SelectContent>
-              </Select>
+            <Label className="text-[10px] text-muted-foreground">Discharge during</Label>
+            <div className="grid grid-cols-2 gap-3">
+              {/* High Demand Season */}
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-semibold text-center" style={{ color: 'hsl(230 70% 50%)' }}>High Demand</div>
+                <div className="grid grid-cols-[auto_1fr_1fr] gap-x-2 gap-y-1 items-center">
+                  <div />
+                  <div className="text-[9px] text-muted-foreground text-center">Wkday</div>
+                  <div className="text-[9px] text-muted-foreground text-center">Wkend</div>
+                  {(['peak', 'standard', 'offPeak'] as const).map(period => {
+                    const label = period === 'peak' ? 'Peak' : period === 'standard' ? 'Std' : 'Off-Pk';
+                    const color = period === 'peak' ? 'hsl(0 72% 51%)' : period === 'standard' ? 'hsl(38 92% 50%)' : 'hsl(160 84% 39%)';
+                    return (
+                      <Fragment key={period}>
+                        <span className="text-[9px] font-medium" style={{ color }}>{label}</span>
+                        <div className="flex justify-center">
+                          <Checkbox
+                            checked={dischargeTouSelection.highSeason.weekday[period]}
+                            onCheckedChange={(checked) => {
+                              const updated = {
+                                ...dischargeTouSelection,
+                                highSeason: { ...dischargeTouSelection.highSeason, weekday: { ...dischargeTouSelection.highSeason.weekday, [period]: !!checked } },
+                              };
+                              onDischargeTouSelectionChange?.(updated);
+                            }}
+                            className="h-3.5 w-3.5"
+                          />
+                        </div>
+                        <div className="flex justify-center">
+                          <Checkbox
+                            checked={dischargeTouSelection.highSeason.weekend[period]}
+                            onCheckedChange={(checked) => {
+                              const updated = {
+                                ...dischargeTouSelection,
+                                highSeason: { ...dischargeTouSelection.highSeason, weekend: { ...dischargeTouSelection.highSeason.weekend, [period]: !!checked } },
+                              };
+                              onDischargeTouSelectionChange?.(updated);
+                            }}
+                            className="h-3.5 w-3.5"
+                          />
+                        </div>
+                      </Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Low Demand Season */}
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-semibold text-center" style={{ color: 'hsl(270 50% 60%)' }}>Low Demand</div>
+                <div className="grid grid-cols-[auto_1fr_1fr] gap-x-2 gap-y-1 items-center">
+                  <div />
+                  <div className="text-[9px] text-muted-foreground text-center">Wkday</div>
+                  <div className="text-[9px] text-muted-foreground text-center">Wkend</div>
+                  {(['peak', 'standard', 'offPeak'] as const).map(period => {
+                    const label = period === 'peak' ? 'Peak' : period === 'standard' ? 'Std' : 'Off-Pk';
+                    const color = period === 'peak' ? 'hsl(0 72% 51%)' : period === 'standard' ? 'hsl(38 92% 50%)' : 'hsl(160 84% 39%)';
+                    return (
+                      <Fragment key={period}>
+                        <span className="text-[9px] font-medium" style={{ color }}>{label}</span>
+                        <div className="flex justify-center">
+                          <Checkbox
+                            checked={dischargeTouSelection.lowSeason.weekday[period]}
+                            onCheckedChange={(checked) => {
+                              const updated = {
+                                ...dischargeTouSelection,
+                                lowSeason: { ...dischargeTouSelection.lowSeason, weekday: { ...dischargeTouSelection.lowSeason.weekday, [period]: !!checked } },
+                              };
+                              onDischargeTouSelectionChange?.(updated);
+                            }}
+                            className="h-3.5 w-3.5"
+                          />
+                        </div>
+                        <div className="flex justify-center">
+                          <Checkbox
+                            checked={dischargeTouSelection.lowSeason.weekend[period]}
+                            onCheckedChange={(checked) => {
+                              const updated = {
+                                ...dischargeTouSelection,
+                                lowSeason: { ...dischargeTouSelection.lowSeason, weekend: { ...dischargeTouSelection.lowSeason.weekend, [period]: !!checked } },
+                              };
+                              onDischargeTouSelectionChange?.(updated);
+                            }}
+                            className="h-3.5 w-3.5"
+                          />
+                        </div>
+                      </Fragment>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         )}

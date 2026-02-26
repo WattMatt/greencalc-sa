@@ -85,6 +85,36 @@ export const DEFAULT_PROFILE_PERCENT = Array(24).fill(4.17);
 
 export type TOUPeriod = "peak" | "standard" | "off-peak";
 
+// --- Discharge TOU Selection Grid ---
+
+export interface DischargeTOUPeriodFlags {
+  peak: boolean;
+  standard: boolean;
+  offPeak: boolean;
+}
+
+export interface DischargeTOUSelection {
+  highSeason: {
+    weekday: DischargeTOUPeriodFlags;
+    weekend: DischargeTOUPeriodFlags;
+  };
+  lowSeason: {
+    weekday: DischargeTOUPeriodFlags;
+    weekend: DischargeTOUPeriodFlags;
+  };
+}
+
+export const DEFAULT_DISCHARGE_TOU_SELECTION: DischargeTOUSelection = {
+  highSeason: {
+    weekday: { peak: true, standard: false, offPeak: false },
+    weekend: { peak: false, standard: false, offPeak: false },
+  },
+  lowSeason: {
+    weekday: { peak: true, standard: false, offPeak: false },
+    weekend: { peak: false, standard: false, offPeak: false },
+  },
+};
+
 // --- Configurable TOU Settings ---
 
 export type TOUHourMap = Record<number, TOUPeriod>; // hours 0-23
