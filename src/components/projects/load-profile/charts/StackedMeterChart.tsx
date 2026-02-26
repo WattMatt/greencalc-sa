@@ -44,7 +44,7 @@ export function StackedMeterChart({ data, tenantKeys, showTOU, isWeekend, unit, 
               ))}
             </defs>
 
-            {showTOU && !isWeekend &&
+            {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getTOUPeriod(h, isWeekend);
                 const nextHour = h + 1;

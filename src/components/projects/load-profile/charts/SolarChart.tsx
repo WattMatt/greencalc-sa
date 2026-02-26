@@ -159,7 +159,7 @@ export function SolarChart({ chartData, showTOU, isWeekend, dcAcRatio, show1to1C
             </defs>
 
             {/* TOU Background */}
-            {showTOU && !isWeekend &&
+            {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
                 const nextHour = h + 1;

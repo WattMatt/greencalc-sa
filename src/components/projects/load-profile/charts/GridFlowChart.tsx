@@ -48,7 +48,7 @@ export function GridFlowChart({ chartData, showTOU, isWeekend, unit, isHighSeaso
               </linearGradient>
             </defs>
 
-            {showTOU && !isWeekend &&
+            {showTOU &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
                 const nextHour = h + 1;
