@@ -1,110 +1,111 @@
 
 
-# Financial Analysis Refinement — Revenue Accounting Correction
+# Cashflow Table Restructure — LCOE Fix + Shared Energy Index + Source Split
 
-## Problem
+## Overview
 
-The current financial engine (`AdvancedSimulationEngine.ts`) calculates **Energy Income** as:
+Three changes:
+1. **LCOE denominator**: Change from total solar generation (`energyYield`) to total delivered kWh (`solarDirectKwh + batteryDischargeKwh + exportKwh`)
+2. **Remove Energy Yield column**: No longer needed in the table since LCOE uses delivered kWh
+3. **Single shared Energy Index column**: One index column used by all four income groups (Solar PV, Battery, Export, Demand), followed by each group's kWh, Rate, and Income columns
+
+## New Table Layout
 
 ```text
-Energy Income = Total Solar Generation x Tariff Rate
+Year | Index | Solar kWh | Solar Rate | Solar Income | Batt kWh | Batt Rate | Batt Income | Export kWh | Export Rate | Export Income | Demand kVA | Demand Rate | Demand Income | Total Income | Insurance | O&M | Replacements | Total Cost | Net Cashflow | PV Factor | Present Value | Cumulative
 ```
 
-This is incorrect because solar energy used to **charge the battery** is not revenue — it is intermediate energy storage. Revenue should only be recognised when energy actually **displaces grid consumption** (serves load directly or via battery discharge) or is **exported to the grid**.
+The **Index** column (escalation factor: 1.00, 1.10, 1.21...) applies equally to all four groups. Each group then shows its own kWh (or kVA), Rate (base rate x index), and Income (kWh x Rate).
 
-## Correct Revenue Model
+**Total Income = Solar Income + Battery Income + Export Income + Demand Income**
 
-Revenue-generating kWh = Solar directly used by load (`totalSolarUsed`) + Battery discharge to load (`totalBatteryDischarge`) + Grid export (`totalGridExport`)
+## Technical Changes
 
-The battery absorbs round-trip losses (charging/discharging efficiency), so the kWh discharged is already net of losses — no double-counting.
+### 1. `AdvancedSimulationTypes.ts`
 
-## Changes Required
+Add new fields to `YearlyProjection`:
+- `solarDirectKwh: number` — kWh solar consumed directly by load
+- `solarDirectRateR: number` — R/kWh (base energy rate x index)
+- `solarDirectIncomeR: number` — R (solarDirectKwh x solarDirectRateR)
+- `batteryDischargeKwh: number` — kWh battery discharged to load
+- `batteryDischargeRateR: number` — R/kWh (base energy rate x index)
+- `batteryDischargeIncomeR: number` — R (batteryDischargeKwh x batteryDischargeRateR)
+- `exportRateR: number` — R/kWh (export rate x index)
 
-### 1. `EnergySimulationEngine.ts` — Add revenue-relevant totals to results
+Update `discountedEnergyYield` comment to clarify it now discounts delivered kWh, not total generation.
 
-Add a new field `revenueKwh` to `EnergySimulationResults` that sums `totalSolarUsed + totalBatteryDischarge + totalGridExport`. This makes the revenue-generating quantity explicit and available to all consumers.
+Update `ColumnTotals` to include sums for each new column.
 
-Also add `totalGridExportRevenue` concept awareness: grid export may earn at a different rate (feed-in tariff), so the engine should separate:
-- `directSolarToLoad` (displaces grid at full tariff)
-- `batteryDischargeToLoad` (displaces grid at full tariff)
-- `gridExport` (earns at export rate, which may differ)
+### 2. `AdvancedSimulationEngine.ts`
 
-### 2. `AdvancedSimulationEngine.ts` — Fix income calculation
+**Split revenue calculation** (in the yearly loop, ~lines 387-433):
+```
+baseSolarDirectKwh = baseEnergyResults.totalSolarUsed * 365
+baseBatteryDischargeKwh = baseEnergyResults.totalBatteryDischarge * 365
+baseExportKwh = baseEnergyResults.totalGridExport * 365
 
-**Current (incorrect):**
-```typescript
-const energyYield = baseAnnualSolar * (panelEfficiency / 100);
-const energyIncomeR = energyYield * baseEnergyRate * energyRateIndex;
+// Apply degradation
+solarDirectKwh = baseSolarDirectKwh * (panelEfficiency / 100)
+batteryDischargeKwh = baseBatteryDischargeKwh * (panelEfficiency / 100)
+exportKwh = baseExportKwh * (panelEfficiency / 100)
+
+// Income per source
+solarDirectIncomeR = solarDirectKwh * baseEnergyRate * energyRateIndex
+batteryDischargeIncomeR = batteryDischargeKwh * baseEnergyRate * energyRateIndex
+exportIncomeR = exportKwh * exportRate * energyRateIndex
+
+energyIncomeR = solarDirectIncomeR + batteryDischargeIncomeR + exportIncomeR
 ```
 
-**Corrected:**
-```typescript
-// Revenue-generating energy = solar directly used + battery discharge + export
-const baseRevenueKwh = baseEnergyResults.totalSolarUsed * 365 
-                     + baseEnergyResults.totalBatteryDischarge * 365;
-const baseExportKwh = baseEnergyResults.totalGridExport * 365;
-
-// Apply degradation to revenue kWh (proportional to generation decline)
-const revenueKwh = baseRevenueKwh * (panelEfficiency / 100);
-const exportKwh = baseExportKwh * (panelEfficiency / 100);
-
-// Energy Income = revenue kWh at tariff rate + export kWh at export rate
-const energyIncomeR = revenueKwh * baseEnergyRate * energyRateIndex
-                    + exportKwh * exportRate * energyRateIndex;
+**Fix LCOE denominator** (~line 493):
+Change `discountedEnergyYield` to use delivered kWh instead of total generation:
+```
+const deliveredKwh = solarDirectKwh + batteryDischargeKwh + exportKwh;
+const discountedEnergyYield = deliveredKwh / Math.pow(1 + lcoeRate / 100, year);
 ```
 
-The `energyYield` field (total solar generation) remains for the **Energy Yield column** in the cashflow table and LCOE denominator — it represents production, not revenue.
+The `energyYield` field (total generation) remains calculated for legacy compatibility and charts, but is no longer displayed in the cashflow table or used for LCOE.
 
-A new `revenueKwh` field will be added to `YearlyProjection` so the table can display both total generation and revenue-earning kWh.
+Push all new fields into the projection object.
 
-### 3. `AdvancedSimulationTypes.ts` — Extend `YearlyProjection`
+### 3. `AdvancedResultsDisplay.tsx`
 
-Add fields to the projection type:
-- `revenueKwh: number` — kWh that actually earn revenue (solar-to-load + battery-to-load)
-- `exportKwh: number` — kWh exported to grid (earns at export rate)
-- `exportIncomeR: number` — Revenue from grid export (separate line)
+**Replace table headers** (~lines 294-316):
+- Remove: "Energy Yield (kWh)", "Revenue kWh", "Export kWh" columns
+- Remove: "Energy Index", "Energy Rate", "Energy Income", "Export Income" columns
+- Remove: "Demand Index" column
+- Add: Single "Index" column (shared escalation factor)
+- Add: "Solar kWh", "Solar Rate", "Solar Income" group
+- Add: "Batt kWh", "Batt Rate", "Batt Income" group
+- Add: "Export kWh", "Export Rate", "Export Income" group
+- Keep: "Demand kVA", "Demand Rate", "Demand Income" group (remove separate Demand Index)
 
-Update `energyIncomeR` description to clarify it covers load-displacement revenue only.
+**Update row cells** (~lines 349-425):
+Map each row to the new column structure using the new projection fields.
 
-### 4. `AdvancedResultsDisplay.tsx` — Show revenue breakdown in cashflow table
+**Update Year 0 row** (~lines 320-348):
+Adjust dash placeholders to match new column count.
 
-Add columns or sub-columns to distinguish:
-- **Energy Yield** (total production — unchanged)
-- **Revenue kWh** (load displacement + battery discharge)
-- **Export kWh** (grid export, if applicable)
-- **Energy Income** (revenue at tariff rate)
-- **Export Income** (export at feed-in rate, shown separately if export rate exists)
+**Update totals row** (~lines 427-449):
+Sum each kWh and income column; show "-" for rate and index columns.
 
-### 5. `FinancialAnalysis.ts` (basic engine) — Already correct
+### 4. `LoadSheddingScenarios.ts`
 
-The basic `calculateFinancials` function uses a cost-avoidance model (`gridOnlyCost - withSolarCost = savings`), which inherently only counts grid displacement. No changes needed here.
+Add default values (0) for all new fields to maintain compatibility.
 
-### 6. `SimulationPanel.tsx` — Financial Return Outputs table
-
-Update the **Financial Return Outputs** metrics to use revenue-based kWh where appropriate:
-- **ZAR / kWh (Incl. 3-Yr O&M)**: Should use revenue kWh (not total generation) in denominator for an accurate cost-per-useful-kWh metric
-- **Initial Yield**: Already correct (uses totalIncomeR which will now be revenue-based)
-- Tooltip formulas updated to reflect the new revenue breakdown
-
-### 7. `EnergySimulationResults` — Surface battery-to-load explicitly
-
-Currently `totalSolarUsed` tracks direct solar-to-load and `totalBatteryDischarge` tracks battery-to-load. These are already separate in the engine results. No structural change needed — just ensure the advanced engine uses them correctly.
-
-## Summary of File Changes
+## Summary
 
 | File | Change |
 |------|--------|
-| `EnergySimulationEngine.ts` | Add `revenueKwh` computed field to results |
-| `AdvancedSimulationTypes.ts` | Add `revenueKwh`, `exportKwh`, `exportIncomeR` to `YearlyProjection` |
-| `AdvancedSimulationEngine.ts` | Fix income calculation to use revenue kWh instead of total generation |
-| `AdvancedResultsDisplay.tsx` | Add Revenue kWh column to cashflow table; show export income if applicable |
-| `SimulationPanel.tsx` | Update Financial Return Outputs tooltips to reflect revenue-based accounting |
+| `AdvancedSimulationTypes.ts` | Add solarDirect/batteryDischarge fields to YearlyProjection |
+| `AdvancedSimulationEngine.ts` | Split revenue into 3 sources; fix LCOE to use delivered kWh |
+| `AdvancedResultsDisplay.tsx` | Restructure table: single Index + 4 source groups |
+| `LoadSheddingScenarios.ts` | Add default values for new fields |
 
 ## Key Principle
 
-- **Energy Yield** = total solar production (for LCOE, degradation tracking)
-- **Revenue kWh** = energy that displaces grid or is exported (for income calculations)
-- **Battery charging** = intermediate storage, not revenue
-
-This ensures the financial model accurately reflects that storing energy in a battery does not create value — only discharging it to serve load or export does.
+- **LCOE denominator** = NPV of delivered kWh (Solar Direct + Battery + Export) — not total solar generation
+- **Index** = single escalation factor column shared by all income sources
+- **Each source** = kWh + Rate + Income (3 columns per source)
+- **Total Income** = Solar Income + Battery Income + Export Income + Demand Income
 
