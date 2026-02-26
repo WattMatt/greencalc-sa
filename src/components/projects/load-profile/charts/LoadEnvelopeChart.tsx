@@ -174,7 +174,7 @@ export function LoadEnvelopeChart({
                 </linearGradient>
               </defs>
 
-              {showTOU &&
+              {showTOU && !isWeekend &&
                 Array.from({ length: 24 }, (_, h) => {
                   const period = getTOUPeriod(h, isWeekend);
                   const nextHour = h + 1;
