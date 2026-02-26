@@ -315,10 +315,36 @@ function dispatchSelfConsumption(
     gridExport = gridExportAllowed ? remainder : 0;
   }
 
-  return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid: 0, newBatteryState };
+  return netBatteryFlows({ gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid: 0, newBatteryState });
 }
 
-/** Check whether battery discharge is permitted for the given TOU context using the 12-cell selection matrix */
+/** Net simultaneous battery charge and discharge to physically realistic single-direction flow */
+function netBatteryFlows(result: HourResult): HourResult {
+  if (result.batteryCharge > 0 && result.batteryDischarge > 0) {
+    const netCharge = result.batteryCharge - result.batteryDischarge;
+    if (netCharge >= 0) {
+      const offset = result.batteryDischarge;
+      return {
+        ...result,
+        solarUsed: result.solarUsed + offset,
+        batteryCharge: netCharge,
+        batteryDischarge: 0,
+        gridImport: Math.max(0, result.gridImport - offset),
+      };
+    } else {
+      const offset = result.batteryCharge;
+      return {
+        ...result,
+        solarUsed: result.solarUsed + offset,
+        batteryCharge: 0,
+        batteryDischarge: -netCharge,
+        gridImport: Math.max(0, result.gridImport - offset),
+      };
+    }
+  }
+  return result;
+}
+
 function isDischargePermittedByTouSelection(
   season: 'high' | 'low',
   dayType: 'weekday' | 'saturday' | 'sunday',
@@ -412,7 +438,7 @@ function dispatchTouArbitrage(
     return dispatchSelfConsumption(s, permissions);
   }
 
-  return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState };
+  return netBatteryFlows({ gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState });
 }
 
 function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions): HourResult {
@@ -470,7 +496,7 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig,
     }
   }
 
-  return { gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState };
+  return netBatteryFlows({ gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState });
 }
 
 function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions, touContext?: TouContext): HourResult {
@@ -755,12 +781,12 @@ function monthFromDayIndex(dayIndex: number): number {
 
 /**
  * Build a 365-day calendar with season, dayType, and TOU hourMap per day.
- * Starts on a Wednesday (Jan 1) to give a balanced day-of-week distribution.
+ * Uses 2026 calendar where 1 January is a Thursday.
  */
 export function buildAnnualCalendar(touSettings: TOUSettings): DayCalendarInfo[] {
   const calendar: DayCalendarInfo[] = [];
-  // Start on Wednesday (dayOfWeek=3) for a representative year
-  const startDayOfWeek = 3; // 0=Sun,1=Mon,...,6=Sat → 3=Wed
+  // 1 January 2026 is a Thursday
+  const startDayOfWeek = new Date(2026, 0, 1).getDay(); // 4 = Thursday
 
   for (let d = 0; d < 365; d++) {
     const month = monthFromDayIndex(d);
