@@ -42,6 +42,7 @@ import {
 } from "./PVSystemConfig";
 import {
   runEnergySimulation,
+  runAnnualEnergySimulation,
   calculateFinancials,
   scaleToAnnual,
   DEFAULT_SYSTEM_COSTS,
@@ -857,6 +858,12 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     [loadProfile, effectiveSolarProfile, energyConfig]
   );
 
+  // 8,760-hour annual simulation for financial engine (battery SoC carries over day-to-day)
+  const annualEnergyResults = useMemo(() =>
+    runAnnualEnergySimulation(loadProfile, effectiveSolarProfile, energyConfig, touSettingsData),
+    [loadProfile, effectiveSolarProfile, energyConfig, touSettingsData]
+  );
+
   const energyResultsGeneric = useMemo(() =>
     runEnergySimulation(loadProfile, solarProfileGeneric, energyConfig),
     [loadProfile, solarProfileGeneric, energyConfig]
@@ -1033,10 +1040,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       solarCapacity,
       batteryCapacity,
       advancedConfig,
-      useHourlyTouRates ? (tariffRates ?? undefined) : undefined,
-      touSettingsData
+      tariffRates ?? undefined,
+      touSettingsData,
+      annualEnergyResults
     );
-  }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData, useHourlyTouRates]);
+  }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData, annualEnergyResults]);
 
   // Compute unified payback period from advancedResults (same logic as AdvancedResultsDisplay)
   // This ensures consistency between the MetricCard, Break-even badge, and Financial Return Outputs table

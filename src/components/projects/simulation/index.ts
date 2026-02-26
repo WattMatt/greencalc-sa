@@ -22,12 +22,16 @@
 
 export {
   runEnergySimulation,
+  runAnnualEnergySimulation,
+  buildAnnualCalendar,
   scaleToAnnual,
   scaleToMonthly,
   getDefaultDispatchConfig,
   type EnergySimulationConfig,
   type EnergySimulationResults,
   type HourlyEnergyData,
+  type AnnualHourlyEnergyData,
+  type AnnualEnergySimulationResults,
   type BatteryDispatchStrategy,
   type DispatchConfig,
   type TimeWindow,
