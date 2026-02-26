@@ -66,13 +66,13 @@ export function DayNavigationHeader({
         ) : (
           <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
             <PopoverTrigger asChild>
-              <button className="text-left cursor-pointer hover:opacity-80 transition-opacity">
+              <button className="text-left cursor-pointer hover:opacity-80 transition-opacity w-[260px]">
                 <CardTitle className="text-base">
                   {dayDateInfo.dayName}, {dayDateInfo.dayLabel} (Day {dayDateInfo.dayNumber})
                 </CardTitle>
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
+            <PopoverContent className="w-[280px] p-0" align="start">
               <Calendar
                 mode="single"
                 selected={selectedDate}
