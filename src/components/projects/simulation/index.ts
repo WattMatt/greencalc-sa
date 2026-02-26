@@ -39,6 +39,7 @@ export {
 
 export {
   calculateFinancials,
+  calculateFinancialsFromAnnual,
   compareTariffs,
   DEFAULT_SYSTEM_COSTS,
   type TariffData,
