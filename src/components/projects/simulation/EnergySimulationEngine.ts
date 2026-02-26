@@ -139,6 +139,7 @@ export interface HourlyEnergyData {
   gridImport: number; // kWh from grid
   gridExport: number; // kWh exported to grid
   solarUsed: number; // kWh self-consumed
+  solarDirectToLoad?: number; // kWh intentionally dispatched to load (for financial income, excludes netting inflation)
   batteryCharge: number; // kWh charged
   batteryDischarge: number; // kWh discharged
   batterySOC: number; // State of charge (%)
@@ -263,6 +264,7 @@ interface HourResult {
   gridImport: number;
   gridExport: number;
   solarUsed: number;
+  solarDirectToLoad: number; // Intentional solar-to-load (before netting) — used for financial income
   batteryCharge: number;
   batteryDischarge: number;
   batteryChargeFromGrid: number;
@@ -315,7 +317,7 @@ function dispatchSelfConsumption(
     gridExport = gridExportAllowed ? remainder : 0;
   }
 
-  return netBatteryFlows({ gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid: 0, newBatteryState });
+  return netBatteryFlows({ gridImport, gridExport, solarUsed, solarDirectToLoad: solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid: 0, newBatteryState });
 }
 
 /** Net simultaneous battery charge and discharge to physically realistic single-direction flow */
@@ -327,6 +329,7 @@ function netBatteryFlows(result: HourResult): HourResult {
       return {
         ...result,
         solarUsed: result.solarUsed + offset,
+        solarDirectToLoad: result.solarDirectToLoad, // Preserve intentional value — do NOT inflate
         batteryCharge: netCharge,
         batteryDischarge: 0,
         gridImport: Math.max(0, result.gridImport - offset),
@@ -336,6 +339,7 @@ function netBatteryFlows(result: HourResult): HourResult {
       return {
         ...result,
         solarUsed: result.solarUsed + offset,
+        solarDirectToLoad: result.solarDirectToLoad, // Preserve intentional value — do NOT inflate
         batteryCharge: 0,
         batteryDischarge: -netCharge,
         gridImport: Math.max(0, result.gridImport - offset),
@@ -440,7 +444,7 @@ function dispatchTouArbitrage(
     return dispatchSelfConsumption(s, { ...permissions, batteryDischargeAllowed: false });
   }
 
-  return netBatteryFlows({ gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState });
+  return netBatteryFlows({ gridImport, gridExport, solarUsed, solarDirectToLoad: solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState });
 }
 
 function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions): HourResult {
@@ -498,7 +502,7 @@ function dispatchPeakShaving(s: HourState, hour: number, config: DispatchConfig,
     }
   }
 
-  return netBatteryFlows({ gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState });
+  return netBatteryFlows({ gridImport, gridExport, solarUsed, solarDirectToLoad: solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState });
 }
 
 function dispatchScheduled(s: HourState, hour: number, config: DispatchConfig, permissions: DispatchPermissions, touContext?: TouContext): HourResult {
@@ -617,6 +621,7 @@ export function runEnergySimulation(
       gridImport: result.gridImport,
       gridExport: result.gridExport,
       solarUsed: result.solarUsed,
+      solarDirectToLoad: result.solarDirectToLoad,
       batteryCharge: result.batteryCharge,
       batteryDischarge: result.batteryDischarge,
       batterySOC: (batteryState / batteryCapacity) * 100,
@@ -739,6 +744,7 @@ export interface AnnualEnergySimulationResults {
   totalAnnualGridImport: number;
   totalAnnualGridExport: number;
   totalAnnualSolarUsed: number;
+  totalAnnualSolarDirectToLoad: number;
   totalAnnualBatteryCharge: number;
   totalAnnualBatteryDischarge: number;
   totalAnnualBatteryChargeFromGrid: number;
@@ -870,6 +876,7 @@ export function runAnnualEnergySimulation(
   let totalGridImport = 0;
   let totalGridExport = 0;
   let totalSolarUsed = 0;
+  let totalSolarDirectToLoad = 0;
   let totalBatteryCharge = 0;
   let totalBatteryDischarge = 0;
   let totalBatteryChargeFromGrid = 0;
@@ -924,6 +931,7 @@ export function runAnnualEnergySimulation(
       totalGridImport += result.gridImport;
       totalGridExport += result.gridExport;
       totalSolarUsed += result.solarUsed;
+      totalSolarDirectToLoad += result.solarDirectToLoad;
       totalBatteryCharge += result.batteryCharge;
       totalBatteryDischarge += result.batteryDischarge;
       totalBatteryChargeFromGrid += result.batteryChargeFromGrid;
@@ -938,6 +946,7 @@ export function runAnnualEnergySimulation(
         gridImport: result.gridImport,
         gridExport: result.gridExport,
         solarUsed: result.solarUsed,
+        solarDirectToLoad: result.solarDirectToLoad,
         batteryCharge: result.batteryCharge,
         batteryDischarge: result.batteryDischarge,
         batterySOC: (batteryState / batteryCapacity) * 100,
@@ -964,6 +973,7 @@ export function runAnnualEnergySimulation(
     totalAnnualGridImport: totalGridImport,
     totalAnnualGridExport: totalGridExport,
     totalAnnualSolarUsed: totalSolarUsed,
+    totalAnnualSolarDirectToLoad: totalSolarDirectToLoad,
     totalAnnualBatteryCharge: totalBatteryCharge,
     totalAnnualBatteryDischarge: totalBatteryDischarge,
     totalAnnualBatteryChargeFromGrid: totalBatteryChargeFromGrid,

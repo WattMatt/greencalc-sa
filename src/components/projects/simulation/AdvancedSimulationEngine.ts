@@ -80,9 +80,10 @@ export function calculateAnnualHourlyIncome(
     const rateLabel = touPeriodToRateLabel(hour.touPeriod);
     const rate = getCombinedRate(tariffRates, rateLabel, hour.season, tariff);
 
-    // Solar Direct
-    totalSolarDirectKwh += hour.solarUsed;
-    totalSolarDirectIncome += hour.solarUsed * rate;
+    // Solar Direct — use intentional solar-to-load (excludes netting inflation)
+    const solarDirect = hour.solarDirectToLoad ?? hour.solarUsed;
+    totalSolarDirectKwh += solarDirect;
+    totalSolarDirectIncome += solarDirect * rate;
 
     // Battery Discharge
     totalBatteryDischargeKwh += hour.batteryDischarge;
@@ -492,7 +493,7 @@ export function runAdvancedSimulation(
     const energyYield = baseAnnualSolar * (panelEfficiency / 100);
     
     // Split revenue sources into individual streams (use annual totals directly)
-    const baseSolarDirectKwh = annualEnergyResults?.totalAnnualSolarUsed ?? baseEnergyResults.totalSolarUsed * 365;
+    const baseSolarDirectKwh = annualEnergyResults?.totalAnnualSolarDirectToLoad ?? annualEnergyResults?.totalAnnualSolarUsed ?? baseEnergyResults.totalSolarUsed * 365;
     const baseBatteryDischargeKwh = annualEnergyResults?.totalAnnualBatteryDischarge ?? baseEnergyResults.totalBatteryDischarge * 365;
     const baseExportKwh = annualEnergyResults?.totalAnnualGridExport ?? baseEnergyResults.totalGridExport * 365;
     const baseRevenueKwh = baseSolarDirectKwh + baseBatteryDischargeKwh;
