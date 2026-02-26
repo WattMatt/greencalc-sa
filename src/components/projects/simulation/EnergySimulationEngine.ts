@@ -379,7 +379,15 @@ function dispatchTouArbitrage(
 ): HourResult {
   const { load, solar, batteryState, minBatteryLevel, maxBatteryLevel, batteryChargePower, batteryDischargePower } = s;
   const { pvChargeAllowed, gridChargeAllowed, loadDischargeAllowed, batteryDischargeAllowed, gridExportAllowed } = permissions;
-  const isChargeHour = isInAnyWindow(hour, config.chargeWindows);
+
+  // When chargeSources are configured, the permissions system already handles per-hour
+  // TOU filtering via isSourceActiveAtHour.  Treat charging as always structurally
+  // allowed here so we don't double-gate behind the legacy static chargeWindows.
+  const hasChargeSources = config.chargeSources && config.chargeSources.some(s => s.enabled);
+  const isChargeHour = hasChargeSources
+    ? (pvChargeAllowed || gridChargeAllowed) // Source-level permissions already applied
+    : isInAnyWindow(hour, config.chargeWindows); // Legacy static windows
+
   // Use TOU selection matrix when context is available; fall back to static windows
   const isDischargeHour = touContext
     ? isDischargePermittedByTouSelection(touContext.season, touContext.dayType, touContext.touPeriod, config.dischargeTouSelection)
