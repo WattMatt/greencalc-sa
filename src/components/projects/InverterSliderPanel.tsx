@@ -123,11 +123,28 @@ export function InverterSliderPanel({
 
       {/* Quick Select Buttons + Custom AC Input */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-xs text-muted-foreground">
-            Quick Select System Size (AC)
-          </Label>
-          <div className="flex items-center gap-1.5">
+        <Label className="text-xs text-muted-foreground">
+          Quick Select System Size (AC)
+        </Label>
+        <div className="flex items-center gap-2">
+          <div className="flex flex-wrap gap-2 flex-1">
+            {validSizes.slice(0, 6).map((size) => (
+              <Button
+                key={size.inverterCount}
+                variant={
+                  config.inverterCount === size.inverterCount
+                    ? "default"
+                    : "outline"
+                }
+                size="sm"
+                onClick={() => handleQuickSelect(size.inverterCount)}
+                className="text-xs"
+              >
+                {size.acCapacity} kW
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
             <Label className="text-xs text-muted-foreground">Custom</Label>
             <Input
               type="number"
@@ -148,23 +165,6 @@ export function InverterSliderPanel({
             />
             <span className="text-xs text-muted-foreground">kW</span>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {validSizes.slice(0, 6).map((size) => (
-            <Button
-              key={size.inverterCount}
-              variant={
-                config.inverterCount === size.inverterCount
-                  ? "default"
-                  : "outline"
-              }
-              size="sm"
-              onClick={() => handleQuickSelect(size.inverterCount)}
-              className="text-xs"
-            >
-              {size.acCapacity} kW
-            </Button>
-          ))}
         </div>
       </div>
 
