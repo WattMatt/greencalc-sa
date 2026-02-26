@@ -1,91 +1,46 @@
 
-# Fix Double-Counting of Solar and Battery kWh in Cashflow
 
-## The Bug
+# Fix Jumping Layout in Day Navigation Header
 
-When PV is configured to charge the battery only (not serve load directly), and the battery then discharges to load or grid, the cashflow table shows **both** Solar Direct kWh income **and** Battery Discharge kWh income -- double-counting the same energy.
+## Problem
 
-### Root Cause
+The date label text changes width as you navigate days (e.g. "Wednesday, 1 January" vs "Monday, 5 May"), causing the left and right arrow buttons to shift position. The calendar popover also resizes with different months.
 
-The `netBatteryFlows` function in `EnergySimulationEngine.ts` (lines 322-346) resolves simultaneous battery charge + discharge by reclassifying energy. When PV charges battery (`batteryCharge > 0`) while battery also discharges to load (`batteryDischarge > 0`), netting inflates `solarUsed` by the offset amount -- even when `loadDischargeAllowed` was `false`.
+## Root Cause
 
-```text
-// netBatteryFlows inflates solarUsed regardless of user config:
-solarUsed: result.solarUsed + offset,   // <-- adds to solarUsed even if solar-to-load was disabled
-batteryCharge: netCharge,
-batteryDischarge: 0,
-```
+1. The date label between the arrows has no fixed width -- it auto-sizes to its text content, pushing the right arrow around.
+2. The arrows are conditionally rendered (`{!showAnnualAverage && ...}`) separately on either side of the date label, so the left arrow position depends on nothing but the right arrow shifts with the label width.
+3. The calendar `PopoverContent` uses `w-auto`, letting it resize per month.
 
-The financial engine then uses `solarUsed` as "Solar Direct" income (line 84 of `AdvancedSimulationEngine.ts`), AND counts `batteryDischarge` separately. The same kWh gets monetised twice.
+## Fix (single file: `DayNavigationHeader.tsx`)
 
-### The Fix: Track intentional solar-to-load separately
+### 1. Fixed-width date label
 
-Add a `solarDirectToLoad` field that captures only the **intentional** solar-to-load dispatch (before netting). The financial engine uses this field for income instead of `solarUsed`.
+Give the date trigger button a fixed width (e.g. `w-[280px]`) so the text area never changes size regardless of the day/month name length. The arrows stay pinned.
 
-## Changes
+### 2. Always render arrows (even in annual mode, just hidden)
 
-### 1. EnergySimulationEngine.ts -- Add `solarDirectToLoad` field
+Replace the conditional rendering of arrows with `visibility: hidden` or `opacity-0 pointer-events-none` when in annual average mode. This keeps the layout stable -- the arrows always occupy space.
 
-**HourResult interface** (line 262): Add `solarDirectToLoad: number`.
+Alternatively, since the arrows already have `shrink-0`, just fixing the centre label width is sufficient. The simpler approach: give the centre element a fixed `min-w` so it never collapses or expands.
 
-**Each dispatch function** (`dispatchSelfConsumption`, `dispatchTouArbitrage`, `dispatchPeakShaving`, `dispatchScheduled`): Set `solarDirectToLoad` to the pre-netting `solarUsed` value (i.e., what was explicitly dispatched to load based on permissions).
+### 3. Fixed calendar popover dimensions
 
-**`netBatteryFlows`** (line 322): Preserve `solarDirectToLoad` from the input -- do NOT inflate it. Only `solarUsed` gets adjusted for energy balance.
+Change `PopoverContent` from `w-auto` to a fixed width (e.g. `w-[280px]`) so it doesn't resize between months.
 
-**HourlyEnergyData interface** (line 135): Add `solarDirectToLoad: number`.
-
-**AnnualEnergySimulationResults interface**: Add `totalAnnualSolarDirectToLoad: number`.
-
-**Hourly data push** (lines 613, 924): Include `solarDirectToLoad` from the dispatch result.
-
-**Annual totals**: Accumulate `totalAnnualSolarDirectToLoad` alongside existing totals.
-
-### 2. AdvancedSimulationEngine.ts -- Use `solarDirectToLoad` for income
-
-**`calculateAnnualHourlyIncome`** (line 84): Replace `hour.solarUsed` with `hour.solarDirectToLoad` (falling back to `solarUsed` for backward compatibility if the field is undefined).
+## Technical Detail
 
 ```text
-// Before:
-totalSolarDirectKwh += hour.solarUsed;
-totalSolarDirectIncome += hour.solarUsed * rate;
+// Line 69: Add fixed width to the trigger button
+<button className="text-left cursor-pointer hover:opacity-80 transition-opacity w-[260px]">
 
-// After:
-const solarDirect = hour.solarDirectToLoad ?? hour.solarUsed;
-totalSolarDirectKwh += solarDirect;
-totalSolarDirectIncome += solarDirect * rate;
+// Line 75: Fixed popover width
+<PopoverContent className="w-[280px] p-0" align="start">
 ```
-
-**Cashflow yearly projection** (line 495): Use `totalAnnualSolarDirectToLoad` instead of `totalAnnualSolarUsed` for `baseSolarDirectKwh`.
-
-```text
-// Before:
-const baseSolarDirectKwh = annualEnergyResults?.totalAnnualSolarUsed ?? ...
-
-// After:
-const baseSolarDirectKwh = annualEnergyResults?.totalAnnualSolarDirectToLoad
-  ?? annualEnergyResults?.totalAnnualSolarUsed
-  ?? baseEnergyResults.totalSolarUsed * 365;
-```
-
-### 3. No chart or UI changes
-
-`solarUsed` remains unchanged for energy balance in charts (Building Profile, Load, Grid, Solar, Battery). Only the **financial income** calculation switches to using the new `solarDirectToLoad` field.
-
-## Expected Result
-
-When PV is configured to charge battery only (load discharge disabled):
-- Solar Direct kWh in cashflow = **0** (no PV-to-load income)
-- Battery Discharge kWh = actual discharge (sole income source for stored energy)
-- No double-counting
-
-When PV serves load directly AND charges battery:
-- Solar Direct kWh = only the portion that directly offset load (as configured)
-- Battery Discharge kWh = battery output to load
-- Both are legitimate, non-overlapping income streams
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/projects/simulation/EnergySimulationEngine.ts` | Add `solarDirectToLoad` to `HourResult`, `HourlyEnergyData`, `AnnualEnergySimulationResults`; set it in all dispatch functions; preserve it through `netBatteryFlows`; accumulate in annual totals |
-| `src/components/projects/simulation/AdvancedSimulationEngine.ts` | Use `solarDirectToLoad` instead of `solarUsed` in `calculateAnnualHourlyIncome` and in cashflow projection base kWh |
+| `src/components/projects/simulation/DayNavigationHeader.tsx` | Fixed width on date label trigger + fixed calendar popover width |
+
