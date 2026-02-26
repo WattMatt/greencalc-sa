@@ -82,7 +82,7 @@ export function BuildingProfileChart({ chartData, showTOU, isWeekend, unit, incl
               </linearGradient>
             </defs>
 
-            {showTOU &&
+            {showTOU && !isWeekend &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
                 return (

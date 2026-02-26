@@ -40,7 +40,7 @@ export function LoadChart({ chartData, showTOU, isWeekend, unit, isLoading, isHi
               </linearGradient>
             </defs>
 
-            {showTOU &&
+            {showTOU && !isWeekend &&
               Array.from({ length: 24 }, (_, h) => {
                 const period = getTOUPeriod(h, isWeekend, undefined, representativeMonth);
                 const nextHour = h + 1;
