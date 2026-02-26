@@ -246,6 +246,129 @@ export function calculateFinancials(
 }
 
 /**
+ * Calculate financial results from annual 8,760-hour simulation (single source of truth).
+ * Uses pre-summed annual totals directly — no daily scaling.
+ */
+export function calculateFinancialsFromAnnual(
+  annualResults: AnnualEnergySimulationResultsInput,
+  tariff: TariffData,
+  systemCosts: SystemCosts,
+  solarCapacity: number,
+  batteryCapacity: number
+): FinancialResults {
+  const {
+    totalAnnualLoad,
+    totalAnnualGridImport,
+    totalAnnualGridExport,
+    totalAnnualSolar,
+    peakLoad,
+    peakGridImport,
+  } = annualResults;
+
+  const {
+    fixedMonthlyCharge,
+    demandChargePerKva,
+    averageRatePerKwh,
+    exportRatePerKwh = 0,
+  } = tariff;
+
+  const {
+    solarCostPerKwp,
+    batteryCostPerKwh,
+    maintenancePerYear = 0,
+  } = systemCosts;
+
+  // === Grid-only scenario (annual-first) ===
+  const gridOnlyAnnualEnergyCost = totalAnnualLoad * averageRatePerKwh;
+  const powerFactor = 0.9;
+  const peakLoadKva = peakLoad / powerFactor;
+  const gridOnlyAnnualDemandCost = peakLoadKva * demandChargePerKva * 12; // Monthly charge × 12
+  const gridOnlyAnnualFixedCost = fixedMonthlyCharge * 12;
+  const gridOnlyAnnualCost = gridOnlyAnnualEnergyCost + gridOnlyAnnualDemandCost + gridOnlyAnnualFixedCost;
+  const gridOnlyMonthlyCost = gridOnlyAnnualCost / 12;
+  const gridOnlyDailyCost = gridOnlyAnnualCost / 365;
+
+  // === With solar+battery scenario (annual-first) ===
+  const solarAnnualEnergyCost = totalAnnualGridImport * averageRatePerKwh;
+  const peakGridImportKva = peakGridImport / powerFactor;
+  const solarAnnualDemandCost = peakGridImportKva * demandChargePerKva * 12;
+  const solarAnnualFixedCost = fixedMonthlyCharge * 12;
+  const annualExportRevenue = totalAnnualGridExport * exportRatePerKwh;
+
+  const solarAnnualCost = solarAnnualEnergyCost + solarAnnualDemandCost + solarAnnualFixedCost - annualExportRevenue;
+  const solarMonthlyCost = solarAnnualCost / 12;
+  const solarDailyCost = solarAnnualCost / 365;
+
+  // === Savings ===
+  const annualSavings = gridOnlyAnnualCost - solarAnnualCost;
+  const monthlySavings = annualSavings / 12;
+  const dailySavings = annualSavings / 365;
+  const savingsPercentage = gridOnlyAnnualCost > 0
+    ? (annualSavings / gridOnlyAnnualCost) * 100
+    : 0;
+
+  // === Investment analysis ===
+  const additionalCosts =
+    (systemCosts.healthAndSafetyCost ?? 0) +
+    (systemCosts.waterPointsCost ?? 0) +
+    (systemCosts.cctvCost ?? 0) +
+    (systemCosts.mvSwitchGearCost ?? 0);
+
+  const baseCost =
+    (solarCapacity * solarCostPerKwp) +
+    (batteryCapacity * batteryCostPerKwh);
+
+  const subtotalBeforeFees = baseCost + additionalCosts;
+  const professionalFees = subtotalBeforeFees * ((systemCosts.professionalFeesPercent ?? 0) / 100);
+  const projectManagementFees = subtotalBeforeFees * ((systemCosts.projectManagementPercent ?? 0) / 100);
+  const subtotalWithFees = subtotalBeforeFees + professionalFees + projectManagementFees;
+  const contingency = subtotalWithFees * ((systemCosts.contingencyPercent ?? 0) / 100);
+  const systemCost = subtotalWithFees + contingency;
+
+  const netAnnualSavings = annualSavings - maintenancePerYear;
+  const paybackYears = netAnnualSavings > 0
+    ? systemCost / netAnnualSavings
+    : Infinity;
+  const roi = systemCost > 0
+    ? (netAnnualSavings / systemCost) * 100
+    : 0;
+
+  return {
+    gridOnlyDailyCost,
+    gridOnlyMonthlyCost,
+    gridOnlyAnnualCost,
+    solarDailyCost,
+    solarMonthlyCost,
+    solarAnnualCost,
+    dailyExportRevenue: annualExportRevenue / 365,
+    annualExportRevenue,
+    dailySavings,
+    monthlySavings,
+    annualSavings,
+    savingsPercentage,
+    systemCost,
+    paybackYears,
+    roi,
+    gridOnlyEnergyCost: gridOnlyAnnualEnergyCost / 365,
+    gridOnlyDemandCost: gridOnlyAnnualDemandCost / 365,
+    gridOnlyFixedCost: gridOnlyAnnualFixedCost / 365,
+    solarEnergyCost: solarAnnualEnergyCost / 365,
+    solarDemandCost: solarAnnualDemandCost / 365,
+    solarFixedCost: solarAnnualFixedCost / 365,
+  };
+}
+
+/** Minimal shape for annual results accepted by calculateFinancialsFromAnnual */
+interface AnnualEnergySimulationResultsInput {
+  totalAnnualLoad: number;
+  totalAnnualSolar: number;
+  totalAnnualGridImport: number;
+  totalAnnualGridExport: number;
+  peakLoad: number;
+  peakGridImport: number;
+}
+
+/**
  * Compare multiple tariffs against same energy results
  */
 export function compareTariffs(

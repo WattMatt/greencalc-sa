@@ -41,10 +41,8 @@ import {
   HourlyIrradianceData
 } from "./PVSystemConfig";
 import {
-  runEnergySimulation,
   runAnnualEnergySimulation,
-  calculateFinancials,
-  scaleToAnnual,
+  calculateFinancialsFromAnnual,
   DEFAULT_SYSTEM_COSTS,
   type TariffData,
 } from "./simulation";
@@ -855,26 +853,32 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
 
   const effectiveSolarProfile = includesSolar ? chartSolarProfile : loadProfile.map(() => 0);
 
-  const energyResults = useMemo(() =>
-    runEnergySimulation(loadProfile, effectiveSolarProfile, energyConfig),
-    [loadProfile, effectiveSolarProfile, energyConfig]
-  );
-
-  // 8,760-hour annual simulation for financial engine (battery SoC carries over day-to-day)
+  // 8,760-hour annual simulation — single source of truth for all kWh and financial data
   const annualEnergyResults = useMemo(() =>
     runAnnualEnergySimulation(loadProfile, effectiveSolarProfile, energyConfig, touSettingsData),
     [loadProfile, effectiveSolarProfile, energyConfig, touSettingsData]
   );
 
-  const energyResultsGeneric = useMemo(() =>
-    runEnergySimulation(loadProfile, solarProfileGeneric, energyConfig),
-    [loadProfile, solarProfileGeneric, energyConfig]
+  const annualEnergyResultsGeneric = useMemo(() =>
+    runAnnualEnergySimulation(loadProfile, solarProfileGeneric, energyConfig, touSettingsData),
+    [loadProfile, solarProfileGeneric, energyConfig, touSettingsData]
   );
 
-  const energyResultsSolcast = useMemo(() =>
-    solarProfileSolcast ? runEnergySimulation(loadProfile, solarProfileSolcast, energyConfig) : null,
-    [loadProfile, solarProfileSolcast, energyConfig]
+  const annualEnergyResultsSolcast = useMemo(() =>
+    solarProfileSolcast ? runAnnualEnergySimulation(loadProfile, solarProfileSolcast, energyConfig, touSettingsData) : null,
+    [loadProfile, solarProfileSolcast, energyConfig, touSettingsData]
   );
+
+  // Extract a representative 24-hour day from annual data for chart overlay
+  const representativeDay = useMemo(() => {
+    if (!annualEnergyResults?.hourlyData) return [];
+    const season = showHighSeason ? 'high' : 'low';
+    const startIdx = annualEnergyResults.hourlyData.findIndex(
+      h => h.season === season && h.dayType === 'weekday'
+    );
+    if (startIdx === -1) return [];
+    return annualEnergyResults.hourlyData.slice(startIdx, startIdx + 24);
+  }, [annualEnergyResults, showHighSeason]);
 
   // ========================================
   // PHASE 2: Financial Analysis (tariff-dependent)
@@ -918,20 +922,20 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   }), [tariff, selectedBlendedRate]);
 
   const financialResults = useMemo(() =>
-    calculateFinancials(energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity),
-    [energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity]
+    calculateFinancialsFromAnnual(annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity),
+    [annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity]
   );
 
   const financialResultsGeneric = useMemo(() =>
-    calculateFinancials(energyResultsGeneric, tariffData, systemCosts, solarCapacity, batteryCapacity),
-    [energyResultsGeneric, tariffData, systemCosts, solarCapacity, batteryCapacity]
+    calculateFinancialsFromAnnual(annualEnergyResultsGeneric, tariffData, systemCosts, solarCapacity, batteryCapacity),
+    [annualEnergyResultsGeneric, tariffData, systemCosts, solarCapacity, batteryCapacity]
   );
 
   const financialResultsSolcast = useMemo(() =>
-    energyResultsSolcast
-      ? calculateFinancials(energyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity)
+    annualEnergyResultsSolcast
+      ? calculateFinancialsFromAnnual(annualEnergyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity)
       : null,
-    [energyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity]
+    [annualEnergyResultsSolcast, tariffData, systemCosts, solarCapacity, batteryCapacity]
   );
 
   // Calculate basic financial metrics (NPV, IRR, LCOE) using systemCosts parameters
@@ -943,7 +947,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     const reinvestmentRate = (systemCosts.mirrReinvestmentRate ?? 10) / 100;
     const annualSavings = financialResults.annualSavings;
     const systemCost = financialResults.systemCost;
-    const annualGeneration = energyResults.totalDailySolar * 365;
+    const annualGeneration = annualEnergyResults.totalAnnualSolar;
     
     // Build cash flows: Year 0 is negative (investment), Years 1-n are savings
     const cashFlows = [-systemCost];
@@ -995,16 +999,15 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       projectLifeYears,
       discountRate: discountRate * 100, // Convert back to percentage for display
     };
-  }, [financialResults, energyResults, systemCosts]);
+  }, [financialResults, annualEnergyResults, systemCosts]);
 
-  // Annual scaling
-  const annualEnergy = useMemo(() => scaleToAnnual(energyResults), [energyResults]);
+
 
   // Merge authoritative battery + grid data from EnergySimulationEngine onto load profile chart data
   const simulationChartData = useMemo(() => {
-    if (!loadProfileChartData || !energyResults?.hourlyData) return loadProfileChartData;
+    if (!loadProfileChartData || !representativeDay.length) return loadProfileChartData;
     return loadProfileChartData.map((hour, i) => {
-      const engineHour = energyResults.hourlyData[i];
+      const engineHour = representativeDay[i];
       if (!engineHour) return hour;
       return {
         ...hour,
@@ -1018,7 +1021,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         solarUsed: engineHour.solarUsed,
       };
     });
-  }, [loadProfileChartData, energyResults]);
+  }, [loadProfileChartData, representativeDay]);
 
   // Check if financial analysis is available (moved up for use in advanced simulation)
   const hasFinancialData = !!project.tariff_id;
@@ -1035,8 +1038,29 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
   const advancedResults = useMemo<AdvancedFinancialResults | null>(() => {
     if (!isAdvancedEnabled || !hasFinancialData) return null;
 
+    // Build a daily-equivalent adapter from annual results for backwards compatibility
+    const dailyAdapter = {
+      totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,
+      totalDailySolar: annualEnergyResults.totalAnnualSolar / 365,
+      totalGridImport: annualEnergyResults.totalAnnualGridImport / 365,
+      totalGridExport: annualEnergyResults.totalAnnualGridExport / 365,
+      totalSolarUsed: annualEnergyResults.totalAnnualSolarUsed / 365,
+      totalBatteryCharge: annualEnergyResults.totalAnnualBatteryCharge / 365,
+      totalBatteryDischarge: annualEnergyResults.totalAnnualBatteryDischarge / 365,
+      totalBatteryChargeFromGrid: annualEnergyResults.totalAnnualBatteryChargeFromGrid / 365,
+      selfConsumptionRate: annualEnergyResults.selfConsumptionRate,
+      solarCoverageRate: annualEnergyResults.solarCoverageRate,
+      peakLoad: annualEnergyResults.peakLoad,
+      peakGridImport: annualEnergyResults.peakGridImport,
+      peakReduction: annualEnergyResults.peakReduction,
+      batteryCycles: annualEnergyResults.batteryCycles,
+      batteryUtilization: 0,
+      revenueKwh: 0,
+      hourlyData: [],
+    };
+
     return runAdvancedSimulation(
-      energyResults,
+      dailyAdapter,
       tariffData,
       systemCosts,
       solarCapacity,
@@ -1046,7 +1070,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       touSettingsData,
       annualEnergyResults
     );
-  }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData, annualEnergyResults]);
+  }, [isAdvancedEnabled, hasFinancialData, annualEnergyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData]);
 
   // Compute unified payback period from advancedResults (same logic as AdvancedResultsDisplay)
   // This ensures consistency between the MetricCard, Break-even badge, and Financial Return Outputs table
@@ -1103,20 +1127,20 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         solar_orientation: pvConfig.location,
         solar_tilt_degrees: pvConfig.tilt,
         annual_solar_savings: hasFinancialData ? financialResults.annualSavings : 0,
-        annual_grid_cost: energyResults.totalGridImport * 2.5 * 365,
+        annual_grid_cost: annualEnergyResults.totalAnnualGridImport * 2.5,
         payback_years: hasFinancialData ? financialResults.paybackYears : 0,
         roi_percentage: hasFinancialData ? financialResults.roi : 0,
         results_json: JSON.parse(JSON.stringify({
-          totalDailyLoad: energyResults.totalDailyLoad,
-          totalDailySolar: energyResults.totalDailySolar,
-          totalGridImport: energyResults.totalGridImport,
-          totalSolarUsed: energyResults.totalSolarUsed,
+          totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,
+          totalDailySolar: annualEnergyResults.totalAnnualSolar / 365,
+          totalGridImport: annualEnergyResults.totalAnnualGridImport / 365,
+          totalSolarUsed: annualEnergyResults.totalAnnualSolarUsed / 365,
           annualSavings: hasFinancialData ? financialResults.annualSavings : 0,
           systemCost: financialResults.systemCost,
           paybackYears: hasFinancialData ? financialResults.paybackYears : 0,
           roi: hasFinancialData ? financialResults.roi : 0,
-          peakDemand: energyResults.peakLoad,
-          newPeakDemand: energyResults.peakGridImport,
+          peakDemand: annualEnergyResults.peakLoad,
+          newPeakDemand: annualEnergyResults.peakGridImport,
           pvConfig,
           solarDataSource,
           inverterConfig,
@@ -1522,7 +1546,25 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       {hasFinancialData && isAdvancedEnabled && (
         <AdvancedConfigComparison
           currentConfig={advancedConfig}
-          energyResults={energyResults}
+          energyResults={{
+            totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,
+            totalDailySolar: annualEnergyResults.totalAnnualSolar / 365,
+            totalGridImport: annualEnergyResults.totalAnnualGridImport / 365,
+            totalGridExport: annualEnergyResults.totalAnnualGridExport / 365,
+            totalSolarUsed: annualEnergyResults.totalAnnualSolarUsed / 365,
+            totalBatteryCharge: annualEnergyResults.totalAnnualBatteryCharge / 365,
+            totalBatteryDischarge: annualEnergyResults.totalAnnualBatteryDischarge / 365,
+            totalBatteryChargeFromGrid: annualEnergyResults.totalAnnualBatteryChargeFromGrid / 365,
+            selfConsumptionRate: annualEnergyResults.selfConsumptionRate,
+            solarCoverageRate: annualEnergyResults.solarCoverageRate,
+            peakLoad: annualEnergyResults.peakLoad,
+            peakGridImport: annualEnergyResults.peakGridImport,
+            peakReduction: annualEnergyResults.peakReduction,
+            batteryCycles: annualEnergyResults.batteryCycles,
+            batteryUtilization: 0,
+            revenueKwh: 0,
+            hourlyData: [],
+          }}
           tariffData={tariffData}
           systemCosts={systemCosts}
           solarCapacity={solarCapacity}
@@ -1595,7 +1637,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                           type="number"
                           value={dailyOutputOverride ?? (annualPVsystResult 
                             ? Math.round(annualPVsystResult.eGrid / 365)
-                            : Math.round(energyResults.totalDailySolar))}
+                            : Math.round(annualEnergyResults.totalAnnualSolar / 365))}
                           onChange={(e) => setDailyOutputOverride(parseInt(e.target.value) || 0)}
                           className="h-6 w-20 text-right text-xs"
                         />
@@ -1612,7 +1654,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                           type="number"
                           value={specificYieldOverride ?? (annualPVsystResult 
                             ? Math.round(annualPVsystResult.specificYield)
-                            : Math.round((energyResults.totalDailySolar * 365) / solarCapacity))}
+                            : Math.round(annualEnergyResults.totalAnnualSolar / solarCapacity))}
                           onChange={(e) => setSpecificYieldOverride(parseInt(e.target.value) || 0)}
                           className="h-6 w-20 text-right text-xs"
                         />
@@ -1722,11 +1764,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     </div>
                     <div className="flex justify-between">
                       <span>Daily cycles</span>
-                      <span className="text-foreground">{energyResults.batteryCycles.toFixed(2)}</span>
+                      <span className="text-foreground">{annualEnergyResults.batteryCycles.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Energy throughput</span>
-                      <span className="text-foreground">{energyResults.totalBatteryDischarge.toFixed(0)} kWh</span>
+                      <span className="text-foreground">{(annualEnergyResults.totalAnnualBatteryDischarge / 365).toFixed(0)} kWh</span>
                     </div>
                   </div>
                 </CardContent>
@@ -1850,13 +1892,13 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                       <div className="divide-y divide-border text-sm">
                         <FinancialMetricRow
                           label="ZAR / kWh (Incl. 3-Yr O&M)"
-                          value={((financialResults.systemCost + threeYearOM) / ((annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365) * reductionFactor)).toFixed(2)}
+                          value={((financialResults.systemCost + threeYearOM) / ((annualPVsystResult?.eGrid ?? annualEnergyResults.totalAnnualSolar) * reductionFactor)).toFixed(2)}
                           breakdown={{
                             formula: "(System Cost + 3-Yr O&M) ÷ (Annual Production × Reduction)",
                             inputs: [
                               { label: "System Cost", value: `R ${financialResults.systemCost.toLocaleString()}` },
                               { label: "3-Yr O&M Total", value: `R ${Math.round(threeYearOM).toLocaleString()}` },
-                              { label: "Annual Production", value: `${Math.round(annualPVsystResult?.eGrid ?? energyResults.totalDailySolar * 365).toLocaleString()} kWh` },
+                              { label: "Annual Production", value: `${Math.round(annualPVsystResult?.eGrid ?? annualEnergyResults.totalAnnualSolar).toLocaleString()} kWh` },
                               { label: "Reduction Factor", value: `${(reductionFactor * 100).toFixed(0)}%` },
                               { label: "Note", value: "Uses total production (LCOE basis). Revenue kWh shown in cashflow table." },
                             ],
@@ -2008,7 +2050,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Daily Load</CardDescription>
-            <CardTitle className="text-2xl">{Math.round(energyResults.totalDailyLoad)} kWh</CardTitle>
+            <CardTitle className="text-2xl">{Math.round(annualEnergyResults.totalAnnualLoad / 365)} kWh</CardTitle>
           </CardHeader>
         </Card>
         {includesSolar && (
@@ -2016,7 +2058,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <CardHeader className="pb-2">
               <CardDescription>Solar Generated</CardDescription>
               <CardTitle className="text-2xl text-amber-500">
-                {Math.round(energyResults.totalDailySolar)} kWh
+                {Math.round(annualEnergyResults.totalAnnualSolar / 365)} kWh
               </CardTitle>
             </CardHeader>
           </Card>
@@ -2028,7 +2070,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
               <CardTitle className="text-2xl text-chart-2">
                 {annualPVsystResult 
                   ? Math.round(annualPVsystResult.eGrid * reductionFactor).toLocaleString()
-                  : Math.round(energyResults.totalDailySolar * 365).toLocaleString()} kWh
+                  : Math.round(annualEnergyResults.totalAnnualSolar).toLocaleString()} kWh
               </CardTitle>
               {annualPVsystResult && (
                 <p className="text-xs text-muted-foreground">
@@ -2041,14 +2083,14 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Grid Import</CardDescription>
-            <CardTitle className="text-2xl">{Math.round(energyResults.totalGridImport)} kWh</CardTitle>
+            <CardTitle className="text-2xl">{Math.round(annualEnergyResults.totalAnnualGridImport / 365)} kWh</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Self-Consumption</CardDescription>
             <CardTitle className="text-2xl text-green-600">
-              {Math.round(energyResults.selfConsumptionRate)}%
+              {Math.round(annualEnergyResults.selfConsumptionRate)}%
             </CardTitle>
           </CardHeader>
         </Card>
@@ -2056,7 +2098,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           <CardHeader className="pb-2">
             <CardDescription>Peak Reduction</CardDescription>
             <CardTitle className="text-2xl">
-              {Math.round(energyResults.peakReduction)}%
+              {Math.round(annualEnergyResults.peakReduction)}%
             </CardTitle>
           </CardHeader>
         </Card>
@@ -2081,16 +2123,16 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           moduleCount: moduleMetrics.moduleCount,
         }}
         currentResults={{
-          totalDailyLoad: energyResults.totalDailyLoad,
-          totalDailySolar: energyResults.totalDailySolar,
-          totalGridImport: energyResults.totalGridImport,
-          totalSolarUsed: energyResults.totalSolarUsed,
+          totalDailyLoad: annualEnergyResults.totalAnnualLoad / 365,
+          totalDailySolar: annualEnergyResults.totalAnnualSolar / 365,
+          totalGridImport: annualEnergyResults.totalAnnualGridImport / 365,
+          totalSolarUsed: annualEnergyResults.totalAnnualSolarUsed / 365,
           annualSavings: hasFinancialData ? financialResults.annualSavings : 0,
           systemCost: financialResults.systemCost,
           paybackYears: hasFinancialData ? financialResults.paybackYears : 0,
           roi: hasFinancialData ? financialResults.roi : 0,
-          peakDemand: energyResults.peakLoad,
-          newPeakDemand: energyResults.peakGridImport,
+          peakDemand: annualEnergyResults.peakLoad,
+          newPeakDemand: annualEnergyResults.peakGridImport,
         }}
         onLoadSimulation={(config) => {
           setSolarCapacity(config.solarCapacity);
@@ -2263,7 +2305,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
             <Zap className="h-3 w-3" />
             Load Shedding
           </TabsTrigger>
-          {energyResultsSolcast && (
+          {annualEnergyResultsSolcast && (
             <TabsTrigger value="compare" className="gap-1">
               <Cloud className="h-3 w-3" />
               Data Comparison
@@ -2476,7 +2518,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
         </TabsContent>
 
         {/* Data Comparison Tab - Solcast vs Generic */}
-        {energyResultsSolcast && (
+        {annualEnergyResultsSolcast && (
           <TabsContent value="compare" className="mt-4 space-y-4">
             {/* Solar Profile Comparison Chart */}
             <Card>
@@ -2554,19 +2596,19 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Daily Solar</p>
-                      <p className="text-lg font-semibold">{energyResultsGeneric.totalDailySolar.toFixed(0)} kWh</p>
+                      <p className="text-lg font-semibold">{(annualEnergyResultsGeneric.totalAnnualSolar / 365).toFixed(0)} kWh</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Grid Import</p>
-                      <p className="text-lg font-semibold">{energyResultsGeneric.totalGridImport.toFixed(0)} kWh</p>
+                      <p className="text-lg font-semibold">{(annualEnergyResultsGeneric.totalAnnualGridImport / 365).toFixed(0)} kWh</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Self-Consumption</p>
-                      <p className="text-lg font-semibold">{Math.round(energyResultsGeneric.selfConsumptionRate)}%</p>
+                      <p className="text-lg font-semibold">{Math.round(annualEnergyResultsGeneric.selfConsumptionRate)}%</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Peak Reduction</p>
-                      <p className="text-lg font-semibold">{Math.round(energyResultsGeneric.peakReduction)}%</p>
+                      <p className="text-lg font-semibold">{Math.round(annualEnergyResultsGeneric.peakReduction)}%</p>
                     </div>
                   </div>
                   {hasFinancialData && (
@@ -2601,31 +2643,31 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Daily Solar</p>
                       <p className="text-lg font-semibold">
-                        {energyResultsSolcast.totalDailySolar.toFixed(0)} kWh
+                        {(annualEnergyResultsSolcast!.totalAnnualSolar / 365).toFixed(0)} kWh
                         <DifferenceIndicator
-                          baseValue={energyResultsGeneric.totalDailySolar}
-                          compareValue={energyResultsSolcast.totalDailySolar}
+                          baseValue={annualEnergyResultsGeneric.totalAnnualSolar / 365}
+                          compareValue={annualEnergyResultsSolcast!.totalAnnualSolar / 365}
                         />
                       </p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Grid Import</p>
                       <p className="text-lg font-semibold">
-                        {energyResultsSolcast.totalGridImport.toFixed(0)} kWh
+                        {(annualEnergyResultsSolcast!.totalAnnualGridImport / 365).toFixed(0)} kWh
                         <DifferenceIndicator
-                          baseValue={energyResultsGeneric.totalGridImport}
-                          compareValue={energyResultsSolcast.totalGridImport}
+                          baseValue={annualEnergyResultsGeneric.totalAnnualGridImport / 365}
+                          compareValue={annualEnergyResultsSolcast!.totalAnnualGridImport / 365}
                           invert
                         />
                       </p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Self-Consumption</p>
-                      <p className="text-lg font-semibold">{Math.round(energyResultsSolcast.selfConsumptionRate)}%</p>
+                      <p className="text-lg font-semibold">{Math.round(annualEnergyResultsSolcast!.selfConsumptionRate)}%</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Peak Reduction</p>
-                      <p className="text-lg font-semibold">{Math.round(energyResultsSolcast.peakReduction)}%</p>
+                      <p className="text-lg font-semibold">{Math.round(annualEnergyResultsSolcast!.peakReduction)}%</p>
                     </div>
                   </div>
                   {hasFinancialData && financialResultsSolcast && (
@@ -2669,20 +2711,20 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                 <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
                   <div className="text-center p-3 rounded-lg bg-muted/50">
                     <p className="text-xs text-muted-foreground mb-1">Solar Output</p>
-                    <p className={`text-lg font-semibold ${energyResultsSolcast.totalDailySolar >= energyResultsGeneric.totalDailySolar
+                    <p className={`text-lg font-semibold ${annualEnergyResultsSolcast!.totalAnnualSolar >= annualEnergyResultsGeneric.totalAnnualSolar
                         ? "text-green-600" : "text-amber-600"
                       }`}>
-                      {((energyResultsSolcast.totalDailySolar - energyResultsGeneric.totalDailySolar) /
-                        energyResultsGeneric.totalDailySolar * 100).toFixed(1)}%
+                      {((annualEnergyResultsSolcast!.totalAnnualSolar - annualEnergyResultsGeneric.totalAnnualSolar) /
+                        annualEnergyResultsGeneric.totalAnnualSolar * 100).toFixed(1)}%
                     </p>
                   </div>
                   <div className="text-center p-3 rounded-lg bg-muted/50">
                     <p className="text-xs text-muted-foreground mb-1">Grid Import</p>
-                    <p className={`text-lg font-semibold ${energyResultsSolcast.totalGridImport <= energyResultsGeneric.totalGridImport
+                    <p className={`text-lg font-semibold ${annualEnergyResultsSolcast!.totalAnnualGridImport <= annualEnergyResultsGeneric.totalAnnualGridImport
                         ? "text-green-600" : "text-amber-600"
                       }`}>
-                      {((energyResultsSolcast.totalGridImport - energyResultsGeneric.totalGridImport) /
-                        energyResultsGeneric.totalGridImport * 100).toFixed(1)}%
+                      {((annualEnergyResultsSolcast!.totalAnnualGridImport - annualEnergyResultsGeneric.totalAnnualGridImport) /
+                        annualEnergyResultsGeneric.totalAnnualGridImport * 100).toFixed(1)}%
                     </p>
                   </div>
                   {hasFinancialData && financialResultsSolcast && (
