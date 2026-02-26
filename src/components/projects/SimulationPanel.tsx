@@ -56,7 +56,7 @@ import {
 
 type TOUPeriod = 'off-peak' | 'standard' | 'peak';
 
-import { getTOUSettingsFromStorage } from "@/hooks/useTOUSettings";
+import { getTOUSettingsFromStorage, useTOUSettings } from "@/hooks/useTOUSettings";
 
 /** Convert a TOU period name to hour windows, derived from stored TOU settings */
 function touPeriodToWindows(period: TOUPeriod): TimeWindow[] {
@@ -169,7 +169,8 @@ function DifferenceIndicator({ baseValue, compareValue, suffix = "", invert = fa
 
 export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, includesSolar = true, onRequestEnableFeature, blendedRateType = 'solarHours', onBlendedRateTypeChange }, ref) => {
   const queryClient = useQueryClient();
-  
+  const { touSettings: touSettingsData } = useTOUSettings();
+
   // Fetch the most recent saved simulation FIRST
   const { data: lastSavedSimulation, isLoading: isLoadingLastSaved, isFetched } = useQuery({
     queryKey: ["last-simulation", projectId],
@@ -1029,9 +1030,11 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       systemCosts,
       solarCapacity,
       batteryCapacity,
-      advancedConfig
+      advancedConfig,
+      tariffRates ?? undefined,
+      touSettingsData
     );
-  }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig]);
+  }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData]);
 
   // Compute unified payback period from advancedResults (same logic as AdvancedResultsDisplay)
   // This ensures consistency between the MetricCard, Break-even badge, and Financial Return Outputs table
@@ -1512,6 +1515,8 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           solarCapacity={solarCapacity}
           batteryCapacity={batteryCapacity}
           onApplyConfig={setAdvancedConfig}
+          tariffRates={tariffRates ?? undefined}
+          touSettings={touSettingsData}
         />
       )}
 
