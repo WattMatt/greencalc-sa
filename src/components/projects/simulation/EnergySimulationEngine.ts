@@ -165,6 +165,9 @@ export interface EnergySimulationResults {
   // Battery metrics
   batteryCycles: number; // Approximate daily cycles
   batteryUtilization: number; // % of capacity used
+  
+  // Revenue metrics (daily kWh that actually generate revenue)
+  revenueKwh: number; // totalSolarUsed + totalBatteryDischarge + totalGridExport
 }
 
 // ── Source-aware helpers ──
@@ -561,6 +564,9 @@ export function runEnergySimulation(
     ? ((totalBatteryCharge + totalBatteryDischarge) / 2 / batteryCapacity) * 100 
     : 0;
 
+  // Revenue kWh = energy that displaces grid or is exported (not battery charging)
+  const revenueKwh = totalSolarUsed + totalBatteryDischarge + totalGridExport;
+
   return {
     hourlyData,
     totalDailyLoad,
@@ -577,6 +583,7 @@ export function runEnergySimulation(
     peakReduction,
     batteryCycles,
     batteryUtilization,
+    revenueKwh,
   };
 }
 
