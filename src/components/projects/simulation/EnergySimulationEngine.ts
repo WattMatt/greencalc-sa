@@ -187,6 +187,8 @@ function isSourceActiveAtHour(
   defaultPeriods: ('off-peak' | 'standard' | 'peak')[],
   touPeriodToWindowsFn?: (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[],
 ): boolean {
+  // If no TOU periods configured and no defaults provided, source is unrestricted
+  if (touPeriods === undefined && defaultPeriods.length === 0) return true;
   const periods = touPeriods ?? defaultPeriods;
   if (!touPeriodToWindowsFn) return true; // No resolver = always active (backwards compat)
   for (const p of periods) {
