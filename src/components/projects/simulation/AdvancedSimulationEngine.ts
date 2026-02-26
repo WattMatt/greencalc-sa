@@ -384,14 +384,17 @@ export function runAdvancedSimulation(
     // Energy yield (total kWh production) with degradation — for LCOE & display, NOT revenue
     const energyYield = baseAnnualSolar * (panelEfficiency / 100);
     
-    // Revenue-generating kWh = solar directly used by load + battery discharge to load
-    // Battery charging is intermediate storage, not revenue
-    const baseRevenueKwh = (baseEnergyResults.totalSolarUsed + baseEnergyResults.totalBatteryDischarge) * 365;
+    // Split revenue sources into individual streams
+    const baseSolarDirectKwh = baseEnergyResults.totalSolarUsed * 365;
+    const baseBatteryDischargeKwh = baseEnergyResults.totalBatteryDischarge * 365;
     const baseExportKwh = baseEnergyResults.totalGridExport * 365;
+    const baseRevenueKwh = (baseEnergyResults.totalSolarUsed + baseEnergyResults.totalBatteryDischarge) * 365;
     
-    // Apply degradation proportionally to revenue kWh
-    const revenueKwh = baseRevenueKwh * (panelEfficiency / 100);
+    // Apply degradation proportionally
+    const solarDirectKwh = baseSolarDirectKwh * (panelEfficiency / 100);
+    const batteryDischargeKwh = baseBatteryDischargeKwh * (panelEfficiency / 100);
     const exportKwh = baseExportKwh * (panelEfficiency / 100);
+    const revenueKwh = baseRevenueKwh * (panelEfficiency / 100);
     
     // Calculate load with growth
     const yearlyLoad = getYearlyLoad(baseAnnualLoad, year, loadGrowth);
@@ -423,14 +426,20 @@ export function runAdvancedSimulation(
     const energyRateR = baseEnergyRate * energyRateIndex; // R/kWh
     const demandRateR = baseDemandRate * demandRateIndex; // R/kVA
     
-    // Energy Income = Revenue kWh × Base Rate × Escalation Index
-    // Only kWh that displace grid (solar-to-load + battery-to-load) earn at tariff rate
-    const energyIncomeR = revenueKwh * baseEnergyRate * energyRateIndex;
+    // Per-source income calculations
+    const solarDirectRateR = baseEnergyRate * energyRateIndex;
+    const solarDirectIncomeR = solarDirectKwh * solarDirectRateR;
+    
+    const batteryDischargeRateR = baseEnergyRate * energyRateIndex;
+    const batteryDischargeIncomeR = batteryDischargeKwh * batteryDischargeRateR;
     
     // Export Income = Export kWh × Export Rate × Escalation Index
-    // Grid export may earn at a different (feed-in) rate; for now use same tariff
     const exportRate = baseEnergyRate; // TODO: support separate feed-in tariff
-    const exportIncomeR = exportKwh * exportRate * energyRateIndex;
+    const exportRateR = exportRate * energyRateIndex;
+    const exportIncomeR = exportKwh * exportRateR;
+    
+    // Combined energy income (sum of three sources)
+    const energyIncomeR = solarDirectIncomeR + batteryDischargeIncomeR + exportIncomeR;
     
     // Demand Income = kVA Saving × Base Demand Rate × 12 months × Escalation Index
     const demandIncomeR = demandSavingKva * baseDemandRate * 12 * demandRateIndex;
@@ -488,9 +497,10 @@ export function runAdvancedSimulation(
       ? netCashFlow / Math.pow(1 + financial.discountRate / 100, year)
       : netCashFlow;
     
-    // Discounted energy yield for LCOE denominator (uses LCOE discount rate)
+    // Discounted energy yield for LCOE denominator — uses delivered kWh (Solar Direct + Battery + Export)
     const lcoeRate = systemCosts.lcoeDiscountRate ?? (financial.enabled ? financial.discountRate : 10);
-    const discountedEnergyYield = energyYield / Math.pow(1 + lcoeRate / 100, year);
+    const deliveredKwh = solarDirectKwh + batteryDischargeKwh + exportKwh;
+    const discountedEnergyYield = deliveredKwh / Math.pow(1 + lcoeRate / 100, year);
     
     // PV Reduction Factor using discount rate: 1 / (1 + r)^year
     const pvDiscountRate = financial.enabled ? financial.discountRate : 10;
@@ -518,13 +528,21 @@ export function runAdvancedSimulation(
       discountedCashFlow,
       // Income-based fields (revenue accounting)
       energyYield,
-      discountedEnergyYield, // For LCOE denominator
-      revenueKwh,
+      discountedEnergyYield, // For LCOE denominator (now uses delivered kWh)
+      revenueKwh, // Legacy: kept for backwards compat
       exportKwh,
       energyRateIndex,
       energyRateR,
       energyIncomeR,
       exportIncomeR,
+      // Split source fields (new)
+      solarDirectKwh,
+      solarDirectRateR,
+      solarDirectIncomeR,
+      batteryDischargeKwh,
+      batteryDischargeRateR,
+      batteryDischargeIncomeR,
+      exportRateR,
       demandSavingKva,
       demandRateIndex,
       demandRateR,
@@ -620,6 +638,13 @@ export function runAdvancedSimulation(
   const columnTotals: ColumnTotals = {
     totalEnergyYield: lifetimeGeneration,
     npvEnergyYield,
+    totalSolarDirectKwh: yearlyProjections.reduce((s, p) => s + (p.solarDirectKwh || 0), 0),
+    totalSolarDirectIncome: yearlyProjections.reduce((s, p) => s + (p.solarDirectIncomeR || 0), 0),
+    totalBatteryDischargeKwh: yearlyProjections.reduce((s, p) => s + (p.batteryDischargeKwh || 0), 0),
+    totalBatteryDischargeIncome: yearlyProjections.reduce((s, p) => s + (p.batteryDischargeIncomeR || 0), 0),
+    totalExportKwh: yearlyProjections.reduce((s, p) => s + (p.exportKwh || 0), 0),
+    totalExportIncome: yearlyProjections.reduce((s, p) => s + (p.exportIncomeR || 0), 0),
+    totalDemandIncome: yearlyProjections.reduce((s, p) => s + (p.demandIncomeR || 0), 0),
     totalIncome: lifetimeSavings,
     totalInsurance: yearlyProjections.reduce((s, p) => s + (p.insuranceCostR || 0), 0),
     totalOM: yearlyProjections.reduce((s, p) => s + p.maintenanceCost, 0),

@@ -125,6 +125,13 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
     return {
       energyYield: projections.reduce((sum, p) => sum + (p.energyYield ?? p.solarGeneration ?? 0), 0),
       discountedEnergyYield: projections.reduce((sum, p) => sum + (p.discountedEnergyYield ?? 0), 0),
+      solarDirectKwh: projections.reduce((sum, p) => sum + (p.solarDirectKwh ?? 0), 0),
+      solarDirectIncome: projections.reduce((sum, p) => sum + (p.solarDirectIncomeR ?? 0), 0),
+      batteryDischargeKwh: projections.reduce((sum, p) => sum + (p.batteryDischargeKwh ?? 0), 0),
+      batteryDischargeIncome: projections.reduce((sum, p) => sum + (p.batteryDischargeIncomeR ?? 0), 0),
+      exportKwh: projections.reduce((sum, p) => sum + (p.exportKwh ?? 0), 0),
+      exportIncome: projections.reduce((sum, p) => sum + (p.exportIncomeR ?? 0), 0),
+      demandIncome: projections.reduce((sum, p) => sum + (p.demandIncomeR ?? 0), 0),
       totalIncome: projections.reduce((sum, p) => sum + (p.totalIncomeR ?? p.energySavings ?? 0), 0),
       insurance: projections.reduce((sum, p) => sum + (p.insuranceCostR ?? 0), 0),
       oAndM: projections.reduce((sum, p) => sum + (p.maintenanceCost ?? 0), 0),
@@ -293,16 +300,18 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
                       <TableHead className="w-12 text-center sticky left-0 bg-background">Year</TableHead>
-                      <TableHead className="text-right">Energy Yield (kWh)</TableHead>
-                      <TableHead className="text-right">Revenue kWh</TableHead>
-                      <TableHead className="text-right">Export kWh</TableHead>
-                      <TableHead className="text-right">Energy Index</TableHead>
-                      <TableHead className="text-right">Energy Rate (R/kWh)</TableHead>
-                      <TableHead className="text-right">Energy Income</TableHead>
-                      <TableHead className="text-right">Export Income</TableHead>
+                      <TableHead className="text-right">Index</TableHead>
+                      <TableHead className="text-right bg-yellow-500/5">Solar kWh</TableHead>
+                      <TableHead className="text-right bg-yellow-500/5">Solar Rate</TableHead>
+                      <TableHead className="text-right bg-yellow-500/5">Solar Income</TableHead>
+                      <TableHead className="text-right bg-blue-500/5">Batt kWh</TableHead>
+                      <TableHead className="text-right bg-blue-500/5">Batt Rate</TableHead>
+                      <TableHead className="text-right bg-blue-500/5">Batt Income</TableHead>
+                      <TableHead className="text-right bg-purple-500/5">Export kWh</TableHead>
+                      <TableHead className="text-right bg-purple-500/5">Export Rate</TableHead>
+                      <TableHead className="text-right bg-purple-500/5">Export Income</TableHead>
                       <TableHead className="text-right">Demand kVA</TableHead>
-                      <TableHead className="text-right">Demand Index</TableHead>
-                      <TableHead className="text-right">Demand Rate (R/kVA)</TableHead>
+                      <TableHead className="text-right">Demand Rate</TableHead>
                       <TableHead className="text-right">Demand Income</TableHead>
                       <TableHead className="text-right bg-green-500/5">Total Income</TableHead>
                       <TableHead className="text-right">Insurance</TableHead>
@@ -310,7 +319,7 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                       <TableHead className="text-right">Replacements</TableHead>
                       <TableHead className="text-right bg-amber-500/5">Total Cost</TableHead>
                       <TableHead className="text-right">Net Cashflow</TableHead>
-                      <TableHead className="text-right text-muted-foreground">PV Reduction Factor</TableHead>
+                      <TableHead className="text-right text-muted-foreground">PV Factor</TableHead>
                       <TableHead className="text-right">Present Value</TableHead>
                       <TableHead className="text-right">Cumulative</TableHead>
                     </TableRow>
@@ -319,6 +328,8 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                     {/* Year 0 - Initial Investment */}
                     <TableRow className="bg-destructive/5">
                       <TableCell className="text-center font-medium sticky left-0 bg-destructive/5">0</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
@@ -357,34 +368,40 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                             {proj.year}
                             {isPaybackYear && <Badge variant="outline" className="ml-1 text-[10px] px-1">Payback</Badge>}
                           </TableCell>
-                          <TableCell className="text-right">
-                            {formatNumber(proj.energyYield ?? proj.solarGeneration, 0)}
-                          </TableCell>
-                          <TableCell className="text-right text-blue-600">
-                            {formatNumber(proj.revenueKwh ?? 0, 0)}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatNumber(proj.exportKwh ?? 0, 0)}
-                          </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {formatNumber(proj.energyRateIndex ?? 1, 2)}
                           </TableCell>
-                          <TableCell className="text-right text-primary">
-                            R{formatNumber(proj.energyRateR ?? proj.tariffRate ?? 0, 4)}
+                          <TableCell className="text-right bg-yellow-500/5">
+                            {formatNumber(proj.solarDirectKwh ?? 0, 0)}
                           </TableCell>
-                          <TableCell className="text-right text-green-600">
-                            {formatCurrency(proj.energyIncomeR ?? proj.energySavings)}
+                          <TableCell className="text-right bg-yellow-500/5">
+                            R{formatNumber(proj.solarDirectRateR ?? proj.energyRateR ?? 0, 4)}
                           </TableCell>
-                          <TableCell className="text-right text-green-600">
+                          <TableCell className="text-right text-green-600 bg-yellow-500/5">
+                            {formatCurrency(proj.solarDirectIncomeR ?? 0)}
+                          </TableCell>
+                          <TableCell className="text-right bg-blue-500/5">
+                            {formatNumber(proj.batteryDischargeKwh ?? 0, 0)}
+                          </TableCell>
+                          <TableCell className="text-right bg-blue-500/5">
+                            R{formatNumber(proj.batteryDischargeRateR ?? proj.energyRateR ?? 0, 4)}
+                          </TableCell>
+                          <TableCell className="text-right text-green-600 bg-blue-500/5">
+                            {formatCurrency(proj.batteryDischargeIncomeR ?? 0)}
+                          </TableCell>
+                          <TableCell className="text-right bg-purple-500/5">
+                            {formatNumber(proj.exportKwh ?? 0, 0)}
+                          </TableCell>
+                          <TableCell className="text-right bg-purple-500/5">
+                            R{formatNumber(proj.exportRateR ?? proj.energyRateR ?? 0, 4)}
+                          </TableCell>
+                          <TableCell className="text-right text-green-600 bg-purple-500/5">
                             {(proj.exportIncomeR ?? 0) > 0 ? formatCurrency(proj.exportIncomeR) : <span className="text-muted-foreground">-</span>}
                           </TableCell>
                           <TableCell className="text-right">
                             {formatNumber(proj.demandSavingKva ?? 0, 1)}
                           </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatNumber(proj.demandRateIndex ?? 1, 2)}
-                          </TableCell>
-                          <TableCell className="text-right text-primary">
+                          <TableCell className="text-right">
                             {(proj.demandRateR ?? 0) > 0 
                               ? `R${formatNumber(proj.demandRateR, 2)}`
                               : <span className="text-muted-foreground">-</span>
@@ -426,17 +443,19 @@ export function AdvancedResultsDisplay({ results }: AdvancedResultsDisplayProps)
                     {/* Totals Row */}
                     <TableRow className="bg-muted/50 font-bold border-t-2">
                       <TableCell className="text-center sticky left-0 bg-muted/50 font-bold">TOTAL</TableCell>
-                      <TableCell className="text-right font-bold">{formatNumber(totals.energyYield, 0)}</TableCell>
-                      <TableCell className="text-right font-bold text-blue-600">{formatNumber(results.yearlyProjections.reduce((s, p) => s + (p.revenueKwh ?? 0), 0), 0)}</TableCell>
-                      <TableCell className="text-right font-bold">{formatNumber(results.yearlyProjections.reduce((s, p) => s + (p.exportKwh ?? 0), 0), 0)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right font-bold bg-yellow-500/5">{formatNumber(totals.solarDirectKwh, 0)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground bg-yellow-500/5">-</TableCell>
+                      <TableCell className="text-right font-bold text-green-600 bg-yellow-500/5">{formatCurrency(totals.solarDirectIncome)}</TableCell>
+                      <TableCell className="text-right font-bold bg-blue-500/5">{formatNumber(totals.batteryDischargeKwh, 0)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground bg-blue-500/5">-</TableCell>
+                      <TableCell className="text-right font-bold text-green-600 bg-blue-500/5">{formatCurrency(totals.batteryDischargeIncome)}</TableCell>
+                      <TableCell className="text-right font-bold bg-purple-500/5">{formatNumber(totals.exportKwh, 0)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground bg-purple-500/5">-</TableCell>
+                      <TableCell className="text-right font-bold text-green-600 bg-purple-500/5">{formatCurrency(totals.exportIncome)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
                       <TableCell className="text-right text-muted-foreground">-</TableCell>
-                      <TableCell className="text-right text-muted-foreground">-</TableCell>
-                      <TableCell className="text-right text-muted-foreground">-</TableCell>
-                      <TableCell className="text-right text-muted-foreground">-</TableCell>
-                      <TableCell className="text-right text-muted-foreground">-</TableCell>
-                      <TableCell className="text-right text-muted-foreground">-</TableCell>
-                      <TableCell className="text-right text-muted-foreground">-</TableCell>
+                      <TableCell className="text-right font-bold text-green-600">{formatCurrency(totals.demandIncome)}</TableCell>
                       <TableCell className="text-right font-bold text-green-600 bg-green-500/10">{formatCurrency(totals.totalIncome)}</TableCell>
                       <TableCell className="text-right font-bold text-amber-600">-{formatCurrency(totals.insurance)}</TableCell>
                       <TableCell className="text-right font-bold text-amber-600">-{formatCurrency(totals.oAndM)}</TableCell>
