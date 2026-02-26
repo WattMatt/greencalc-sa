@@ -435,7 +435,9 @@ function dispatchTouArbitrage(
       }
     }
   } else {
-    return dispatchSelfConsumption(s, permissions);
+    // Hour is neither a discharge nor charge hour per the TOU matrix — disable battery discharge
+    // so the self-consumption fallback cannot bypass the user's TOU selection
+    return dispatchSelfConsumption(s, { ...permissions, batteryDischargeAllowed: false });
   }
 
   return netBatteryFlows({ gridImport, gridExport, solarUsed, batteryCharge, batteryDischarge, batteryChargeFromGrid, newBatteryState });
