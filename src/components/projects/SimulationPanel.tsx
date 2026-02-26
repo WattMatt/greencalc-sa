@@ -2533,9 +2533,29 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           <TabsContent value="battery" className="mt-4">
             <Card>
               <CardHeader className="pb-3">
-                <div>
-                  <CardTitle>{showAnnualAverage ? "Annual Average (Year 1)" : "Battery Storage"}</CardTitle>
-                  <CardDescription>Charging power and discharging power</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {!showAnnualAverage && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("prev")} disabled={selectedDayIndex === 0}>
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <div>
+                      <CardTitle className="text-base">
+                        {showAnnualAverage ? "Annual Average (Year 1)" : `${dayDateInfo.dayLabel} (Day ${dayDateInfo.dayNumber})`}
+                      </CardTitle>
+                      <CardDescription className="text-xs">Charging power and discharging power</CardDescription>
+                    </div>
+                    {!showAnnualAverage && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigateDayIndex("next")} disabled={selectedDayIndex === 364}>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <Label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <Switch checked={showAnnualAverage} onCheckedChange={setShowAnnualAverage} className="scale-75" />
+                    Annual Avg
+                  </Label>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
