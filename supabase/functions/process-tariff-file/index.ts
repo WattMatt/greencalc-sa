@@ -660,6 +660,24 @@ Deno.serve(async (req) => {
           .eq("municipality_id", muniData.id)
           .order("batch_index");
         
+        if (existingBatches && existingBatches.length > 0) {
+          const allCompleted = existingBatches.every(b => b.status === "completed");
+          if (allCompleted) {
+            // Check if tariff_plans actually exist -- if not, batches are stale
+            const { count: actualTariffCount } = await supabase
+              .from("tariff_plans")
+              .select("*", { count: "exact", head: true })
+              .eq("municipality_id", muniData.id);
+            
+            if (!actualTariffCount || actualTariffCount === 0) {
+              console.log("Resetting stale Eskom batch statuses -- tariffs were deleted");
+              await supabase.from("eskom_batch_status")
+                .update({ status: "pending", tariffs_extracted: 0, updated_at: new Date().toISOString() })
+                .eq("municipality_id", muniData.id);
+            }
+          }
+        }
+        
         if (!existingBatches || existingBatches.length === 0) {
           const batchRecords = eskomBatches.map((batch, index) => ({
             municipality_id: muniData.id,
