@@ -34,6 +34,15 @@ export function InverterSliderPanel({
   onSolarCapacityChange,
   maxSolarKva,
 }: InverterSliderPanelProps) {
+  // System size (AC) is now the primary input — stored as currentSolarCapacity
+  const desiredAcCapacity = currentSolarCapacity;
+  const derivedInverterCount = Math.max(1, Math.ceil(desiredAcCapacity / config.inverterSize));
+
+  // Keep config.inverterCount in sync as a derived value
+  if (config.inverterCount !== derivedInverterCount) {
+    onChange({ ...config, inverterCount: derivedInverterCount });
+  }
+
   const selectedModule =
     config.selectedModuleId === "custom"
       ? config.customModule
@@ -41,28 +50,30 @@ export function InverterSliderPanel({
         SOLAR_MODULE_PRESETS[0];
 
   const validSizes = calculateValidSizes(config.inverterSize, config.dcAcRatio);
-  const acCapacity = config.inverterSize * config.inverterCount;
-  const nearestValid = validSizes.find((s) => s.acCapacity === acCapacity);
   const moduleMetrics = selectedModule
-    ? calculateModuleMetrics(acCapacity, config.dcAcRatio, selectedModule)
+    ? calculateModuleMetrics(desiredAcCapacity, config.dcAcRatio, selectedModule)
     : null;
 
-  const handleInverterCountChange = (value: number[]) => {
-    const newCount = value[0];
+  const handleSystemSizeQuickSelect = (acKw: number) => {
+    const newCount = Math.max(1, Math.ceil(acKw / config.inverterSize));
     onChange({ ...config, inverterCount: newCount });
-    onSolarCapacityChange(config.inverterSize * newCount);
+    onSolarCapacityChange(acKw);
+  };
+
+  const handleCustomSystemSize = (value: string) => {
+    const val = parseFloat(value);
+    if (!isNaN(val) && val > 0) {
+      const newCount = Math.max(1, Math.ceil(val / config.inverterSize));
+      onChange({ ...config, inverterCount: newCount });
+      onSolarCapacityChange(val);
+    }
   };
 
   const handleDcAcRatioChange = (value: number[]) => {
     onChange({ ...config, dcAcRatio: value[0] });
   };
 
-  const handleQuickSelect = (inverterCount: number) => {
-    onChange({ ...config, inverterCount });
-    onSolarCapacityChange(config.inverterSize * inverterCount);
-  };
-
-  const isExceedingLimit = maxSolarKva && acCapacity > maxSolarKva;
+  const isExceedingLimit = maxSolarKva && desiredAcCapacity > maxSolarKva;
 
   const isCustomSize = !INVERTER_SIZES.some(
     (size) => size.kw === config.inverterSize
@@ -71,24 +82,60 @@ export function InverterSliderPanel({
   const handleInverterSizeChange = (value: string) => {
     if (value === "custom") return;
     const newSize = parseInt(value);
-    onChange({ ...config, inverterSize: newSize });
-    onSolarCapacityChange(newSize * config.inverterCount);
+    const newCount = Math.max(1, Math.ceil(desiredAcCapacity / newSize));
+    onChange({ ...config, inverterSize: newSize, inverterCount: newCount });
   };
 
   const handleCustomInverterSize = (value: string) => {
     const newSize = parseInt(value) || 0;
     if (newSize > 0) {
-      onChange({ ...config, inverterSize: newSize });
-      onSolarCapacityChange(newSize * config.inverterCount);
+      const newCount = Math.max(1, Math.ceil(desiredAcCapacity / newSize));
+      onChange({ ...config, inverterSize: newSize, inverterCount: newCount });
     }
   };
 
   return (
     <div className="space-y-4">
-      {/* Inverter Size Dropdown */}
+      {/* 1. Quick Select System Size (AC) — PRIMARY INPUT */}
       <div className="space-y-2">
         <Label className="flex items-center gap-2 text-sm font-medium">
           <Zap className="h-4 w-4" />
+          System Size (AC)
+        </Label>
+        <div className="flex items-center gap-2">
+          <div className="flex flex-wrap gap-2 flex-1">
+            {validSizes.slice(0, 6).map((size) => (
+              <Button
+                key={size.acCapacity}
+                variant={
+                  desiredAcCapacity === size.acCapacity ? "default" : "outline"
+                }
+                size="sm"
+                onClick={() => handleSystemSizeQuickSelect(size.acCapacity)}
+                className="text-xs"
+              >
+                {size.acCapacity} kW
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Label className="text-xs text-muted-foreground">Custom</Label>
+            <Input
+              type="number"
+              value={desiredAcCapacity}
+              onChange={(e) => handleCustomSystemSize(e.target.value)}
+              className="w-24 h-8 text-right text-sm font-semibold"
+              min={1}
+            />
+            <span className="text-xs text-muted-foreground">kW</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Inverter Size Dropdown */}
+      <div className="space-y-2">
+        <Label className="flex items-center gap-2 text-sm font-medium">
+          <Settings className="h-4 w-4" />
           Inverter Size (AC)
         </Label>
         <div className="flex gap-2">
@@ -121,78 +168,32 @@ export function InverterSliderPanel({
         </div>
       </div>
 
-      {/* Quick Select Buttons + Custom AC Input */}
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">
-          Quick Select System Size (AC)
-        </Label>
-        <div className="flex items-center gap-2">
-          <div className="flex flex-wrap gap-2 flex-1">
-            {validSizes.slice(0, 6).map((size) => (
-              <Button
-                key={size.inverterCount}
-                variant={
-                  config.inverterCount === size.inverterCount
-                    ? "default"
-                    : "outline"
-                }
-                size="sm"
-                onClick={() => handleQuickSelect(size.inverterCount)}
-                className="text-xs"
-              >
-                {size.acCapacity} kW
-              </Button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Label className="text-xs text-muted-foreground">Custom</Label>
-            <Input
-              type="number"
-              value={acCapacity}
-              onChange={(e) => {
-                const val = parseFloat(e.target.value);
-                if (!isNaN(val) && val > 0) {
-                  const newCount = Math.round(val / config.inverterSize);
-                  const clampedCount = Math.max(1, Math.min(10, newCount));
-                  onChange({ ...config, inverterCount: clampedCount });
-                  onSolarCapacityChange(config.inverterSize * clampedCount);
-                }
-              }}
-              className="w-24 h-8 text-right text-sm font-semibold"
-              step={config.inverterSize}
-              min={config.inverterSize}
-              max={config.inverterSize * 10}
-            />
-            <span className="text-xs text-muted-foreground">kW</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Number of Inverters Slider */}
+      {/* 3. Number of Inverters — READ-ONLY DERIVED */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="flex items-center gap-2 text-sm font-medium">
-            <Settings className="h-4 w-4" />
             Number of Inverters
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>
+                    Auto-calculated: ⌈ System Size ÷ Inverter Size ⌉ = ⌈ {desiredAcCapacity} ÷ {config.inverterSize} ⌉ = {derivedInverterCount}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </Label>
-          <span className="text-lg font-semibold">{config.inverterCount}</span>
+          <span className="text-lg font-semibold">{derivedInverterCount}</span>
         </div>
-        <Slider
-          value={[config.inverterCount]}
-          onValueChange={handleInverterCountChange}
-          min={1}
-          max={10}
-          step={1}
-          className="w-full"
-        />
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>1</span>
-          <span>5</span>
-          <span>10</span>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          {derivedInverterCount}× {config.inverterSize} kW = {derivedInverterCount * config.inverterSize} kW inverter capacity
+        </p>
       </div>
 
-      {/* DC/AC Ratio Slider */}
+      {/* 4. DC/AC Ratio Slider */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="flex items-center gap-2 text-sm font-medium">
@@ -204,8 +205,8 @@ export function InverterSliderPanel({
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
                   <p>
-                    The ratio of DC panel capacity to AC inverter capacity.
-                    Higher ratios maximize energy harvest but increase clipping
+                    The ratio of DC panel capacity to AC system size.
+                    Higher ratios maximise energy harvest but increase clipping
                     losses.
                   </p>
                 </TooltipContent>
@@ -242,17 +243,17 @@ export function InverterSliderPanel({
         </div>
       </div>
 
-      {/* Calculated Metrics */}
+      {/* 5. Calculated Metrics */}
       <div className="rounded-md border bg-muted/30 p-3 space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">System Size (AC)</span>
-          <span className="font-medium">{acCapacity} kW</span>
+          <span className="font-medium">{desiredAcCapacity} kW</span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">DC Panel Capacity</span>
           <span className="font-medium">
             {moduleMetrics?.actualDcCapacityKwp.toFixed(2) ||
-              (acCapacity * config.dcAcRatio).toFixed(2)}{" "}
+              (desiredAcCapacity * config.dcAcRatio).toFixed(2)}{" "}
             kWp
           </span>
         </div>
@@ -284,13 +285,12 @@ export function InverterSliderPanel({
         )}
       </div>
 
-      {/* Validation Status */}
-      {nearestValid && !isExceedingLimit && (
+      {/* 6. Validation Status */}
+      {!isExceedingLimit && (
         <div className="flex items-center gap-2 text-sm text-primary">
           <CheckCircle2 className="h-4 w-4" />
           <span>
-            Valid: {config.inverterCount}× {config.inverterSize}kW inverters ={" "}
-            {acCapacity}kW AC
+            {derivedInverterCount}× {config.inverterSize} kW inverters for {desiredAcCapacity} kW system
           </span>
         </div>
       )}
@@ -300,15 +300,6 @@ export function InverterSliderPanel({
           <AlertCircle className="h-4 w-4" />
           <span>
             Exceeds grid connection limit ({maxSolarKva?.toFixed(0)} kVA)
-          </span>
-        </div>
-      )}
-
-      {!nearestValid && !isExceedingLimit && (
-        <div className="flex items-center gap-2 text-sm text-warning">
-          <AlertCircle className="h-4 w-4" />
-          <span>
-            Current capacity ({acCapacity} kW) is not a standard configuration
           </span>
         </div>
       )}
