@@ -1,73 +1,103 @@
 
+# Remove 24-Hour Simulation Dependency: Annual 8,760-Hour as Single Source of Truth
 
-# Fix: Annual Simulation Accumulators Not Incremented + Chart TOU Context Missing
+## Overview
 
-## Two Bugs Found
+Every kWh figure, financial calculation, summary card, and chart overlay in the Simulation tab will be driven exclusively by the 8,760-hour annual simulation (`runAnnualEnergySimulation`). The 24-hour `runEnergySimulation` calls and `scaleToAnnual` helper will be removed from `SimulationPanel.tsx`. The chart will extract a representative 24-hour slice from the annual data for visualisation.
 
-### Bug 1: Annual 8,760-hour simulation returns zeroed totals (Critical)
+## What Changes
 
-In `runAnnualEnergySimulation` (EnergySimulationEngine.ts), the accumulator variables (`totalGridImport`, `totalGridExport`, `totalSolarUsed`, `totalBatteryCharge`, `totalBatteryDischarge`, `totalBatteryChargeFromGrid`, `totalLoad`, `totalSolar`, `peakGridImport`) are declared at lines 822-830 but **never incremented** inside the 8,760-hour loop. Only `batteryState` is updated.
+### 1. Remove 24-hour simulation calls from SimulationPanel.tsx
 
-Compare with the 24-hour `runEnergySimulation` which correctly increments at lines 558-563:
-```text
-totalGridImport += result.gridImport;
-totalGridExport += result.gridExport;
-totalSolarUsed += result.solarUsed;
-...
-```
+- Remove `energyResults` (line 858-861), `energyResultsGeneric` (line 869-872), `energyResultsSolcast` (line 874-877)
+- Remove `annualEnergy = scaleToAnnual(energyResults)` (line 1001)
+- Keep only `annualEnergyResults` as the single energy source
 
-The annual function is missing this entirely, so:
-- `totalAnnualSolarUsed` = 0
-- `totalAnnualGridImport` = 0
-- `totalAnnualBatteryDischarge` = 0
-- All derived rates in the financial model are broken (divide by zero or NaN)
+### 2. Add annual simulation variants for Generic and Solcast profiles
 
-**Fix:** Add accumulator increments after line 875, matching the pattern from the 24-hour simulation. Also track `peakGridImport` as the max of each hour's grid import.
-
-### Bug 2: 24-hour chart simulation ignores TOU selection matrix
-
-The 24-hour `runEnergySimulation` at line 543 calls `dispatchTouArbitrage(hourState, h, effectiveDispatchConfig, permissions)` without passing `touContext`. The function then falls back to static `dischargeWindows` instead of the `dischargeTouSelection` matrix. This causes the building profile chart to show battery discharge at fixed clock hours regardless of which season/day-type the user is viewing.
-
-**Fix:** The 24-hour simulation needs to receive a representative `touContext` for chart visualisation (based on the `showHighSeason` toggle state). This requires passing the TOU settings and season selection into `runEnergySimulation`, or adding a `touContext` override to the config.
-
-The simpler approach: add an optional `touSettings` and `representativeSeason` to `EnergySimulationConfig`. When present, `runEnergySimulation` resolves each hour's TOU period from the appropriate hour map and passes the `touContext` to dispatch functions.
-
-## Changes
-
-### File: `src/components/projects/simulation/EnergySimulationEngine.ts`
-
-1. **Add accumulator increments** inside `runAnnualEnergySimulation` loop (after line 875):
+Currently `energyResultsGeneric` and `energyResultsSolcast` run the 24-hour engine with alternative solar profiles. These need to become annual simulations too:
 
 ```text
-totalGridImport += result.gridImport;
-totalGridExport += result.gridExport;
-totalSolarUsed += result.solarUsed;
-totalBatteryCharge += result.batteryCharge;
-totalBatteryDischarge += result.batteryDischarge;
-totalBatteryChargeFromGrid += result.batteryChargeFromGrid;
-totalLoad += load;
-totalSolar += solar;
-peakGridImport = Math.max(peakGridImport, result.gridImport);
+annualEnergyResultsGeneric = runAnnualEnergySimulation(loadProfile, solarProfileGeneric, energyConfig, touSettingsData)
+annualEnergyResultsSolcast = runAnnualEnergySimulation(loadProfile, solarProfileSolcast, energyConfig, touSettingsData)
 ```
 
-2. **Add optional TOU context support to `EnergySimulationConfig`**: New optional fields `touSettings` and `representativeSeason` (default `'high'`). When present, the 24-hour simulation resolves `touContext` per hour and passes it to dispatch functions.
+### 3. Update `calculateFinancials` to accept `AnnualEnergySimulationResults`
 
-3. **Update `runEnergySimulation`** to use `touSettings` when available: derive `dayType` from a representative day (weekday), resolve `hourMap` from the settings, and pass `touContext` to `dispatchTouArbitrage` and `dispatchScheduled`.
+The `FinancialAnalysis.ts` function currently takes `EnergySimulationResults` (24-hour daily totals). It needs an overload or update to accept `AnnualEnergySimulationResults` directly, using the pre-summed annual totals instead of daily values multiplied by scaling factors.
 
-### File: `src/components/projects/SimulationPanel.tsx`
+Key mapping:
+- `totalDailyLoad` becomes `totalAnnualLoad / 365` (for daily cost pro-rating) or direct annual use
+- `totalGridImport` becomes `totalAnnualGridImport / 365`
+- `peakLoad` and `peakGridImport` come directly from the annual results
+- All cost outputs recalculated as annual-first (no `* 365` on daily)
 
-4. **Pass `touSettings` and `representativeSeason` into `energyConfig`**: Use `touSettingsData` and `showHighSeason` to inform the 24-hour engine of the correct TOU context for chart display.
+### 4. Extract representative day from annual data for chart overlay
 
-## Impact
+The building profile chart needs 24 hourly data points. Instead of the 24-hour simulation, extract a representative day from the 8,760-hour dataset:
 
-- Financial model receives correct annual totals instead of zeros
-- Building profile chart shows battery behaviour that matches the TOU selection matrix for the selected season
-- Battery rate in cashflow will correctly reflect peak-only discharge when configured
+```text
+// Filter annual hourly data by current season + weekday, take first matching day
+const representativeDay = annualEnergyResults.hourlyData
+  .filter(h => h.season === currentSeason && h.dayType === 'weekday')
+  .slice(0, 24);
+```
 
-## Files Changed
+This means the chart will show actual dispatch behaviour from the annual simulation (with carried-over battery SoC) for a representative weekday in the selected season, rather than an isolated 24-hour cycle.
+
+### 5. Replace all `energyResults.*` references
+
+Every reference to the old 24-hour results in `SimulationPanel.tsx` will be replaced:
+
+| Old Reference | New Source |
+|---|---|
+| `energyResults.totalDailyLoad` | `annualEnergyResults.totalAnnualLoad / 365` |
+| `energyResults.totalDailySolar` | `annualEnergyResults.totalAnnualSolar / 365` |
+| `energyResults.totalDailySolar * 365` | `annualEnergyResults.totalAnnualSolar` |
+| `energyResults.totalGridImport` | `annualEnergyResults.totalAnnualGridImport / 365` |
+| `energyResults.totalGridImport * 2.5 * 365` | `annualEnergyResults.totalAnnualGridImport * 2.5` |
+| `energyResults.totalSolarUsed` | `annualEnergyResults.totalAnnualSolarUsed / 365` |
+| `energyResults.selfConsumptionRate` | `annualEnergyResults.selfConsumptionRate` |
+| `energyResults.peakLoad` | `annualEnergyResults.peakLoad` |
+| `energyResults.peakGridImport` | `annualEnergyResults.peakGridImport` |
+| `energyResults.peakReduction` | `annualEnergyResults.peakReduction` |
+| `energyResults.batteryCycles` | `annualEnergyResults.batteryCycles` |
+| `energyResults.totalBatteryDischarge` | `annualEnergyResults.totalAnnualBatteryDischarge / 365` |
+| `energyResults.hourlyData` | Representative day slice from annual data |
+
+### 6. Update `runAdvancedSimulation` call
+
+Remove `energyResults` as first argument. The function already supports `annualEnergyResults` and falls back to `baseEnergyResults` only when annual data is missing. With this change, the annual data is always present, so we can simplify the interface or pass a derived `EnergySimulationResults` adapter from the annual totals.
+
+### 7. Update summary cards
+
+The "Daily Load", "Solar Generated", "Grid Import" cards (lines 2009-2060) will show annual averages derived from the 8,760-hour totals (dividing by 365), ensuring they reflect the true annual simulation rather than a single representative day.
+
+## Technical Details
+
+### Files Changed
 
 | File | Change |
-|------|--------|
-| `src/components/projects/simulation/EnergySimulationEngine.ts` | Add missing accumulator increments in annual loop; add optional TOU context to 24-hour simulation |
-| `src/components/projects/SimulationPanel.tsx` | Pass `touSettings` and season into energy config for chart accuracy |
+|---|---|
+| `src/components/projects/simulation/EnergySimulationEngine.ts` | Remove `scaleToAnnual` export (or keep for backwards compat but unused). No other changes needed -- the annual engine is already correct. |
+| `src/components/projects/simulation/FinancialAnalysis.ts` | Add `calculateFinancialsFromAnnual(annualResults, tariff, systemCosts, ...)` that reads pre-summed annual totals directly. |
+| `src/components/projects/SimulationPanel.tsx` | Remove 3 `runEnergySimulation` calls. Add 2 `runAnnualEnergySimulation` variants (Generic, Solcast). Replace all `energyResults.*` references. Extract representative day for chart. Update `calculateFinancials` calls to use new annual function. |
+| `src/components/projects/simulation/index.ts` | Export `calculateFinancialsFromAnnual` if added as new function. |
 
+### Chart Representative Day Logic
+
+```text
+const chartRepresentativeDay = useMemo(() => {
+  if (!annualEnergyResults?.hourlyData) return [];
+  const season = showHighSeason ? 'high' : 'low';
+  // Find first weekday in selected season
+  const startIdx = annualEnergyResults.hourlyData
+    .findIndex(h => h.season === season && h.dayType === 'weekday');
+  if (startIdx === -1) return [];
+  return annualEnergyResults.hourlyData.slice(startIdx, startIdx + 24);
+}, [annualEnergyResults, showHighSeason]);
+```
+
+### Performance
+
+No performance concern. The annual simulation already runs in sub-millisecond time. Removing the separate 24-hour simulation reduces total computation.
