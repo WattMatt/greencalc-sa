@@ -322,9 +322,13 @@ export function FileUploadImport() {
       if (muniData) {
         const { data: existingPlans } = await supabase.from("tariff_plans").select("id").eq("municipality_id", muniData.id);
         if (existingPlans && existingPlans.length > 0) {
-          const planIds = existingPlans.map((t: any) => t.id);
+        const planIds = existingPlans.map((t: any) => t.id);
           await supabase.from("tariff_rates").delete().in("tariff_plan_id", planIds);
           await supabase.from("tariff_plans").delete().eq("municipality_id", muniData.id);
+        }
+        // Reset Eskom batch status so extraction starts fresh
+        if (muni.name.toLowerCase().includes("eskom")) {
+          await supabase.from("eskom_batch_status").delete().eq("municipality_id", muniData.id);
         }
       }
 
