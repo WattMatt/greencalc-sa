@@ -843,7 +843,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
     dispatchStrategy: batteryStrategy,
     dispatchConfig,
     touPeriodToWindows,
-  }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig]);
+    touSettings: touSettingsData,
+    representativeSeason: showHighSeason ? 'high' as const : 'low' as const,
+  }), [effectiveSolarCapacity, batteryCapacity, batteryPower, batteryChargePower, batteryDischargePower, batteryMinSoC, batteryMaxSoC, batteryStrategy, dispatchConfig, touSettingsData, showHighSeason]);
 
   // Extract solar from chart data (same source as pvGeneration) for engine input
   // This ensures the engine receives exactly the same solar values that appear in the charts

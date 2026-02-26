@@ -126,6 +126,10 @@ export interface EnergySimulationConfig {
   dispatchConfig?: DispatchConfig;
   /** Resolve a TOU period name ('off-peak'|'standard'|'peak') to TimeWindows */
   touPeriodToWindows?: (period: 'off-peak' | 'standard' | 'peak') => TimeWindow[];
+  /** Optional TOU settings for 24-hour chart context (resolves touContext per hour) */
+  touSettings?: TOUSettings;
+  /** Which season to represent in the 24-hour chart (default 'high') */
+  representativeSeason?: 'high' | 'low';
 }
 
 export interface HourlyEnergyData {
@@ -518,6 +522,15 @@ export function runEnergySimulation(
   let totalBatteryDischarge = 0;
   let totalBatteryChargeFromGrid = 0;
 
+  // Resolve representative TOU context for chart display (if touSettings provided)
+  const repSeason = config.representativeSeason ?? 'high';
+  const repDayType: 'weekday' | 'saturday' | 'sunday' = 'weekday'; // chart shows weekday by default
+  let repHourMap: TOUHourMap | undefined;
+  if (config.touSettings) {
+    const seasonSettings = repSeason === 'high' ? config.touSettings.highSeason : config.touSettings.lowSeason;
+    repHourMap = seasonSettings[repDayType];
+  }
+
   for (let h = 0; h < 24; h++) {
     const load = loadProfile[h] || 0;
     const solar = solarProfile[h] || 0;
@@ -533,6 +546,13 @@ export function runEnergySimulation(
     const dischargePerms = getDischargePermissions(h, effectiveDispatchConfig, touPeriodToWindowsFn);
     const permissions: DispatchPermissions = { ...chargePerms, ...dischargePerms };
 
+    // Build touContext from representative hour map if available
+    let touContext: TouContext | undefined;
+    if (repHourMap) {
+      const touPeriod: TOUPeriod = repHourMap[h] || 'off-peak';
+      touContext = { season: repSeason, dayType: repDayType, touPeriod };
+    }
+
     let result: HourResult;
     switch (dispatchStrategy) {
       case 'none':
@@ -540,13 +560,13 @@ export function runEnergySimulation(
         result = dispatchSelfConsumption(hourState, { ...permissions, batteryDischargeAllowed: false });
         break;
       case 'tou-arbitrage':
-        result = dispatchTouArbitrage(hourState, h, effectiveDispatchConfig, permissions);
+        result = dispatchTouArbitrage(hourState, h, effectiveDispatchConfig, permissions, touContext);
         break;
       case 'peak-shaving':
         result = dispatchPeakShaving(hourState, h, effectiveDispatchConfig, permissions);
         break;
       case 'scheduled':
-        result = dispatchScheduled(hourState, h, effectiveDispatchConfig, permissions);
+        result = dispatchScheduled(hourState, h, effectiveDispatchConfig, permissions, touContext);
         break;
       case 'self-consumption':
       default:
@@ -873,6 +893,15 @@ export function runAnnualEnergySimulation(
       }
 
       batteryState = result.newBatteryState;
+      totalGridImport += result.gridImport;
+      totalGridExport += result.gridExport;
+      totalSolarUsed += result.solarUsed;
+      totalBatteryCharge += result.batteryCharge;
+      totalBatteryDischarge += result.batteryDischarge;
+      totalBatteryChargeFromGrid += result.batteryChargeFromGrid;
+      totalLoad += load;
+      totalSolar += solar;
+      peakGridImport = Math.max(peakGridImport, result.gridImport);
 
       hourlyData.push({
         hour: `${h.toString().padStart(2, '0')}:00`,
