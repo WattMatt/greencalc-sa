@@ -31,8 +31,8 @@ export interface ChargeSource {
 }
 
 export const DEFAULT_CHARGE_SOURCES: ChargeSource[] = [
-  { id: 'pv', enabled: true },
-  { id: 'grid', enabled: true },
+  { id: 'pv', enabled: true, chargeTouPeriods: ['off-peak', 'standard', 'peak'] },
+  { id: 'grid', enabled: true, chargeTouPeriods: ['off-peak'] },
   { id: 'generator', enabled: false },
 ];
 
@@ -213,7 +213,9 @@ function getChargePermissions(
 
   for (const src of sources) {
     if (!src.enabled) continue;
-    const active = isSourceActiveAtHour(hour, src.chargeTouPeriods, ['off-peak'], touPeriodToWindowsFn);
+    const defaultPeriods: ('off-peak' | 'standard' | 'peak')[] =
+      src.id === 'pv' ? ['off-peak', 'standard', 'peak'] : ['off-peak'];
+    const active = isSourceActiveAtHour(hour, src.chargeTouPeriods, defaultPeriods, touPeriodToWindowsFn);
     if (src.id === 'pv' && active) pvChargeAllowed = true;
     if (src.id === 'grid' && active) gridChargeAllowed = true;
   }
