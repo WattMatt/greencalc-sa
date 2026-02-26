@@ -125,6 +125,8 @@ interface SimulationPanelProps {
   onRequestEnableFeature?: (feature: string) => void;
   blendedRateType?: BlendedRateType;
   onBlendedRateTypeChange?: (type: BlendedRateType) => void;
+  useHourlyTouRates?: boolean;
+  onUseHourlyTouRatesChange?: (value: boolean) => void;
 }
 
 export interface SimulationPanelRef {
@@ -167,7 +169,7 @@ function DifferenceIndicator({ baseValue, compareValue, suffix = "", invert = fa
   );
 }
 
-export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, includesSolar = true, onRequestEnableFeature, blendedRateType = 'solarHours', onBlendedRateTypeChange }, ref) => {
+export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelProps>(({ projectId, project, tenants, shopTypes, systemCosts, onSystemCostsChange, includesBattery = false, includesSolar = true, onRequestEnableFeature, blendedRateType = 'solarHours', onBlendedRateTypeChange, useHourlyTouRates = true, onUseHourlyTouRatesChange }, ref) => {
   const queryClient = useQueryClient();
   const { touSettings: touSettingsData } = useTOUSettings();
 
@@ -1031,10 +1033,10 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
       solarCapacity,
       batteryCapacity,
       advancedConfig,
-      tariffRates ?? undefined,
+      useHourlyTouRates ? (tariffRates ?? undefined) : undefined,
       touSettingsData
     );
-  }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData]);
+  }, [isAdvancedEnabled, hasFinancialData, energyResults, tariffData, systemCosts, solarCapacity, batteryCapacity, advancedConfig, tariffRates, touSettingsData, useHourlyTouRates]);
 
   // Compute unified payback period from advancedResults (same logic as AdvancedResultsDisplay)
   // This ensures consistency between the MetricCard, Break-even badge, and Financial Return Outputs table
@@ -1112,6 +1114,7 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
           // Blended solar rate for IRR/financial modeling
           blendedSolarRate: selectedBlendedRate,
           blendedRateType,
+          useHourlyTouRates,
           blendedRates: annualBlendedRates ? {
             allHours: annualBlendedRates.allHours.annual,
             solarHours: annualBlendedRates.solarHours.annual,
@@ -1743,8 +1746,9 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                         <Select 
                           value={blendedRateType} 
                           onValueChange={(value: BlendedRateType) => onBlendedRateTypeChange?.(value)}
+                          disabled={useHourlyTouRates}
                         >
-                          <SelectTrigger className="w-56">
+                          <SelectTrigger className={`w-56 ${useHourlyTouRates ? 'opacity-50' : ''}`}>
                             <SelectValue placeholder="Select rate type" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1786,18 +1790,35 @@ export const SimulationPanel = forwardRef<SimulationPanelRef, SimulationPanelPro
                             </SelectItem>
                           </SelectContent>
                         </Select>
-                        <span className={`text-lg font-bold ml-auto ${blendedRateType?.startsWith('solarHours') ? 'text-amber-600' : ''}`}>
-                          R{(() => {
-                            switch (blendedRateType) {
-                              case 'solarHours': return annualBlendedRates.solarHours.annual;
-                              case 'solarHoursHigh': return annualBlendedRates.solarHours.high;
-                              case 'solarHoursLow': return annualBlendedRates.solarHours.low;
-                              case 'allHours': return annualBlendedRates.allHours.annual;
-                              case 'allHoursHigh': return annualBlendedRates.allHours.high;
-                              case 'allHoursLow': return annualBlendedRates.allHours.low;
-                              default: return annualBlendedRates.solarHours.annual;
-                            }
-                          })().toFixed(4)}/kWh
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id="hourly-rates-toggle"
+                            checked={useHourlyTouRates}
+                            onCheckedChange={(checked) => onUseHourlyTouRatesChange?.(checked)}
+                          />
+                          <Label htmlFor="hourly-rates-toggle" className="text-xs font-medium cursor-pointer whitespace-nowrap">
+                            Hourly Rates
+                          </Label>
+                        </div>
+                        <span className={`text-lg font-bold ml-auto ${useHourlyTouRates ? 'text-primary' : blendedRateType?.startsWith('solarHours') ? 'text-amber-600' : ''}`}>
+                          {useHourlyTouRates ? (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-4 w-4" />
+                              Hourly TOU
+                            </span>
+                          ) : (
+                            <>R{(() => {
+                              switch (blendedRateType) {
+                                case 'solarHours': return annualBlendedRates.solarHours.annual;
+                                case 'solarHoursHigh': return annualBlendedRates.solarHours.high;
+                                case 'solarHoursLow': return annualBlendedRates.solarHours.low;
+                                case 'allHours': return annualBlendedRates.allHours.annual;
+                                case 'allHoursHigh': return annualBlendedRates.allHours.high;
+                                case 'allHoursLow': return annualBlendedRates.allHours.low;
+                                default: return annualBlendedRates.solarHours.annual;
+                              }
+                            })().toFixed(4)}/kWh</>
+                          )}
                         </span>
                       </div>
                     </CardContent>

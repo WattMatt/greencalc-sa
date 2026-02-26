@@ -698,6 +698,7 @@ export default function ProjectDetail() {
   const [blendedRateType, setBlendedRateType] = useState<
     'allHours' | 'allHoursHigh' | 'allHoursLow' | 'solarHours' | 'solarHoursHigh' | 'solarHoursLow'
   >('solarHours');
+  const [useHourlyTouRates, setUseHourlyTouRates] = useState(true);
   const dashboardRef = useRef<DashboardTabContentRef>(null);
   const simulationRef = useRef<SimulationModesRef>(null);
   
@@ -822,6 +823,10 @@ export default function ProjectDetail() {
       // Load blended rate type preference
       if (savedJson?.blendedRateType) {
         setBlendedRateType(savedJson.blendedRateType);
+      }
+      // Load hourly TOU rates preference
+      if (savedJson?.useHourlyTouRates !== undefined) {
+        setUseHourlyTouRates(savedJson.useHourlyTouRates);
       }
       costsInitializedRef.current = true;
     }
@@ -1351,6 +1356,8 @@ export default function ProjectDetail() {
             onRequestEnableFeature={handleRequestEnableFeature}
             blendedRateType={blendedRateType}
             onBlendedRateTypeChange={setBlendedRateType}
+            useHourlyTouRates={useHourlyTouRates}
+            onUseHourlyTouRatesChange={setUseHourlyTouRates}
           />
         </TabsContent>
 
