@@ -601,48 +601,6 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
-              {(() => {
-                const isEskom = provinceData.province.name?.toLowerCase() === 'eskom';
-                
-                if (isEskom) {
-                  // Auto-load tariffs for the single Eskom municipality
-                  const eskomMuni = provinceData.municipalities[0];
-                  if (eskomMuni && !municipalityTariffs[eskomMuni.name] && !loadingMunicipalities.has(eskomMuni.name)) {
-                    loadTariffsForMunicipality(eskomMuni.name);
-                  }
-                  
-                  const allEskomTariffs = provinceData.municipalities.flatMap(m => m.tariffs);
-                  
-                  if (loadingMunicipalities.has(eskomMuni?.name)) {
-                    return (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
-                        <span className="text-sm text-muted-foreground">Loading tariffs...</span>
-                      </div>
-                    );
-                  }
-                  
-                  if (allEskomTariffs.length === 0) {
-                    return (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        No tariffs loaded yet.
-                      </p>
-                    );
-                  }
-                  
-                  return (
-                    <EskomTariffMatrix
-                      tariffs={allEskomTariffs}
-                      tariffRates={tariffRates}
-                      loadRatesForTariff={loadRatesForTariff}
-                      loadingRates={loadingRates}
-                      onDeleteTariff={(id) => deleteTariff.mutate(id)}
-                    />
-                  );
-                }
-                
-                // Non-Eskom: render municipality-level accordion
-                return (
               <Accordion type="multiple" className="space-y-2" onValueChange={(values) => {
                 values.forEach((municipalityName) => {
                   loadTariffsForMunicipality(municipalityName);
@@ -902,8 +860,6 @@ export function TariffList({ filterMunicipalityId, filterMunicipalityName, onCle
                   </AccordionItem>
                 ))}
               </Accordion>
-                );
-              })()}
             </AccordionContent>
           </AccordionItem>
         ))}
