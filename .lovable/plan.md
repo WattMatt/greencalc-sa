@@ -1,80 +1,110 @@
 
 
-# TOU Arbitrage Discharge Grid — Checkbox Matrix
+# Financial Analysis Refinement — Revenue Accounting Correction
 
-## Overview
-Replace the single "Discharge during" dropdown with a dual-table checkbox grid. Users can select exactly which season/day-type/period combinations the battery should discharge during.
+## Problem
 
-## UI Layout
+The current financial engine (`AdvancedSimulationEngine.ts`) calculates **Energy Income** as:
 
 ```text
-Discharge Strategy: [TOU Arbitrage v]
-
-  High Demand                    Low Demand
-  Weekday  Weekend               Weekday  Weekend
-  [x] Peak    [ ] Peak           [ ] Peak    [ ] Peak
-  [ ] Std     [ ] Std            [ ] Std     [ ] Std
-  [ ] Off-Pk  [ ] Off-Pk         [ ] Off-Pk  [ ] Off-Pk
+Energy Income = Total Solar Generation x Tariff Rate
 ```
 
-- Two mini-tables side by side (grid-cols-2), each with a header ("High Demand" / "Low Demand") using the standard season colours (Indigo / Violet)
-- Within each table: 2 columns (Weekday, Weekend) and 3 rows (Peak, Standard, Off-Peak)
-- Each cell is a small checkbox with a label
-- Default: only Peak Weekday checked for both seasons (matching current "peak" default)
+This is incorrect because solar energy used to **charge the battery** is not revenue — it is intermediate energy storage. Revenue should only be recognised when energy actually **displaces grid consumption** (serves load directly or via battery discharge) or is **exported to the grid**.
 
-## Data Model Change
+## Correct Revenue Model
 
-### New type: `DischargeTOUSelection`
+Revenue-generating kWh = Solar directly used by load (`totalSolarUsed`) + Battery discharge to load (`totalBatteryDischarge`) + Grid export (`totalGridExport`)
+
+The battery absorbs round-trip losses (charging/discharging efficiency), so the kWh discharged is already net of losses — no double-counting.
+
+## Changes Required
+
+### 1. `EnergySimulationEngine.ts` — Add revenue-relevant totals to results
+
+Add a new field `revenueKwh` to `EnergySimulationResults` that sums `totalSolarUsed + totalBatteryDischarge + totalGridExport`. This makes the revenue-generating quantity explicit and available to all consumers.
+
+Also add `totalGridExportRevenue` concept awareness: grid export may earn at a different rate (feed-in tariff), so the engine should separate:
+- `directSolarToLoad` (displaces grid at full tariff)
+- `batteryDischargeToLoad` (displaces grid at full tariff)
+- `gridExport` (earns at export rate, which may differ)
+
+### 2. `AdvancedSimulationEngine.ts` — Fix income calculation
+
+**Current (incorrect):**
 ```typescript
-interface DischargeTOUSelection {
-  highSeason: {
-    weekday: { peak: boolean; standard: boolean; offPeak: boolean };
-    weekend: { peak: boolean; standard: boolean; offPeak: boolean };
-  };
-  lowSeason: {
-    weekday: { peak: boolean; standard: boolean; offPeak: boolean };
-    weekend: { peak: boolean; standard: boolean; offPeak: boolean };
-  };
-}
+const energyYield = baseAnnualSolar * (panelEfficiency / 100);
+const energyIncomeR = energyYield * baseEnergyRate * energyRateIndex;
 ```
 
-This replaces the single `dischargeTouPeriod: TOUPeriod` string.
+**Corrected:**
+```typescript
+// Revenue-generating energy = solar directly used + battery discharge + export
+const baseRevenueKwh = baseEnergyResults.totalSolarUsed * 365 
+                     + baseEnergyResults.totalBatteryDischarge * 365;
+const baseExportKwh = baseEnergyResults.totalGridExport * 365;
 
-### Default value
-Peak weekday checked for both seasons, everything else unchecked.
+// Apply degradation to revenue kWh (proportional to generation decline)
+const revenueKwh = baseRevenueKwh * (panelEfficiency / 100);
+const exportKwh = baseExportKwh * (panelEfficiency / 100);
 
-## Simulation Engine Integration
+// Energy Income = revenue kWh at tariff rate + export kWh at export rate
+const energyIncomeR = revenueKwh * baseEnergyRate * energyRateIndex
+                    + exportKwh * exportRate * energyRateIndex;
+```
 
-### Updated `touPeriodToWindows` approach
-Currently the engine checks `isSourceActiveAtHour()` using a flat list of TOU period names. With the new grid, the discharge window resolver must also consider:
-1. Which **season** the current month falls in (high vs low) — already available from TOU settings
-2. Which **day type** the current day is (weekday vs weekend)
-3. Which **periods** are checked for that season+day combination
+The `energyYield` field (total solar generation) remains for the **Energy Yield column** in the cashflow table and LCOE denominator — it represents production, not revenue.
 
-The `dischargeWindows` in `DispatchConfig` will be computed dynamically based on month/day context, or the engine's `getDischargePermissions` function will be extended to accept the new selection grid.
+A new `revenueKwh` field will be added to `YearlyProjection` so the table can display both total generation and revenue-earning kWh.
 
-**Preferred approach**: Extend the existing `dischargeTouPeriods` array on `DischargeSource` items to carry the full grid, and update `isSourceActiveAtHour` to resolve against season+day+period.
+### 3. `AdvancedSimulationTypes.ts` — Extend `YearlyProjection`
 
-## Files to Modify
+Add fields to the projection type:
+- `revenueKwh: number` — kWh that actually earn revenue (solar-to-load + battery-to-load)
+- `exportKwh: number` — kWh exported to grid (earns at export rate)
+- `exportIncomeR: number` — Revenue from grid export (separate line)
 
-1. **`src/components/projects/load-profile/types.ts`** — Add `DischargeTOUSelection` type and default
-2. **`src/components/projects/simulation/AdvancedSimulationConfig.tsx`**:
-   - Replace the "Discharge during" dropdown (lines 1334-1361) with the new checkbox grid component
-   - The grid is rendered inline (no separate file needed — it's small)
-   - Wire checkbox changes to update dispatch config
-3. **`src/components/projects/SimulationPanel.tsx`**:
-   - Replace `dischargeTouPeriod` state (single string) with `dischargeTouSelection` state (the grid object)
-   - Update `touPeriodToWindows` or create a new resolver that factors in season + day type
-   - Pass new state to `AdvancedSimulationConfig`
-4. **`src/components/projects/simulation/EnergySimulationEngine.ts`**:
-   - Update `isSourceActiveAtHour` to accept and resolve the grid-based selection when the strategy is `tou-arbitrage`
-   - The hour-by-hour loop already has access to determine if a given hour is weekday/weekend and which month it is; extend to check the correct grid cell
-5. **`src/components/projects/SavedSimulations.tsx`** — Update serialisation/deserialisation to persist the new grid object instead of the single string
+Update `energyIncomeR` description to clarify it covers load-displacement revenue only.
 
-## Technical Details
+### 4. `AdvancedResultsDisplay.tsx` — Show revenue breakdown in cashflow table
 
-- The checkbox grid is compact (~6 checkboxes per season table, 12 total) and fits cleanly in the existing panel width
-- Season header colours follow the existing standard: Deep Indigo for High Demand, Soft Violet for Low Demand
-- Period row labels use the existing TOU colours: Red (Peak), Amber (Standard), Teal (Off-Peak)
-- No new dependencies required — uses existing Checkbox component from Shadcn
+Add columns or sub-columns to distinguish:
+- **Energy Yield** (total production — unchanged)
+- **Revenue kWh** (load displacement + battery discharge)
+- **Export kWh** (grid export, if applicable)
+- **Energy Income** (revenue at tariff rate)
+- **Export Income** (export at feed-in rate, shown separately if export rate exists)
+
+### 5. `FinancialAnalysis.ts` (basic engine) — Already correct
+
+The basic `calculateFinancials` function uses a cost-avoidance model (`gridOnlyCost - withSolarCost = savings`), which inherently only counts grid displacement. No changes needed here.
+
+### 6. `SimulationPanel.tsx` — Financial Return Outputs table
+
+Update the **Financial Return Outputs** metrics to use revenue-based kWh where appropriate:
+- **ZAR / kWh (Incl. 3-Yr O&M)**: Should use revenue kWh (not total generation) in denominator for an accurate cost-per-useful-kWh metric
+- **Initial Yield**: Already correct (uses totalIncomeR which will now be revenue-based)
+- Tooltip formulas updated to reflect the new revenue breakdown
+
+### 7. `EnergySimulationResults` — Surface battery-to-load explicitly
+
+Currently `totalSolarUsed` tracks direct solar-to-load and `totalBatteryDischarge` tracks battery-to-load. These are already separate in the engine results. No structural change needed — just ensure the advanced engine uses them correctly.
+
+## Summary of File Changes
+
+| File | Change |
+|------|--------|
+| `EnergySimulationEngine.ts` | Add `revenueKwh` computed field to results |
+| `AdvancedSimulationTypes.ts` | Add `revenueKwh`, `exportKwh`, `exportIncomeR` to `YearlyProjection` |
+| `AdvancedSimulationEngine.ts` | Fix income calculation to use revenue kWh instead of total generation |
+| `AdvancedResultsDisplay.tsx` | Add Revenue kWh column to cashflow table; show export income if applicable |
+| `SimulationPanel.tsx` | Update Financial Return Outputs tooltips to reflect revenue-based accounting |
+
+## Key Principle
+
+- **Energy Yield** = total solar production (for LCOE, degradation tracking)
+- **Revenue kWh** = energy that displaces grid or is exported (for income calculations)
+- **Battery charging** = intermediate storage, not revenue
+
+This ensures the financial model accurately reflects that storing energy in a battery does not create value — only discharging it to serve load or export does.
 
